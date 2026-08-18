@@ -15,6 +15,7 @@
  */
 
 import { parse as babelParse } from '@babel/parser';
+import { keyName, toCssProp, toCssValue } from './inline.mjs';
 
 const PLUGINS = ['jsx', 'typescript', 'decorators-legacy', 'classProperties', 'importAttributes'];
 
@@ -57,6 +58,44 @@ function classesFrom(strings) {
 		}
 	}
 	return out;
+}
+
+/**
+ * Read a `style={{ … }}` attribute into CSS declarations.
+ *
+ * `dynamic` counts the parts we cannot evaluate — a spread, a computed key, an
+ * identifier value. They produce no per-declaration finding (naming a property
+ * whose value is unknown is noise) but they still mean the element carries an
+ * inline style, which is what the component-level rule keys on.
+ */
+function readStyleAttr(value) {
+	const decls = [];
+	let dynamic = 0;
+	const container = value?.type === 'JSXExpressionContainer' ? value.expression : value;
+	if (!container) return { decls, dynamic, present: false };
+	if (container.type !== 'ObjectExpression') {
+		// `style={someObject}` — present, entirely opaque.
+		return { decls, dynamic: 1, present: true };
+	}
+	for (const prop of container.properties) {
+		if (prop.type !== 'ObjectProperty') {
+			dynamic++; // SpreadElement, ObjectMethod
+			continue;
+		}
+		const key = keyName(prop);
+		if (!key) {
+			dynamic++;
+			continue;
+		}
+		const cssProp = toCssProp(key);
+		const cssValue = toCssValue(cssProp, prop.value);
+		if (cssValue === null) {
+			dynamic++;
+			continue;
+		}
+		decls.push({ prop: cssProp, value: cssValue, line: prop.loc?.start?.line ?? null });
+	}
+	return { decls, dynamic, present: true };
 }
 
 function walkAst(node, visit) {
@@ -104,22 +143,24 @@ function systemImports(ast, ds) {
 }
 
 /**
- * @returns {{ bindings, rawEls, referenced, stems, parseError }}
- *   bindings: { cls, tag, isSystem, isText, isLayout, file, line }
- *   rawEls:   { tag, classes, file, line }
+ * @returns {{ bindings, rawEls, inlineStyles, referenced, stems, parseError }}
+ *   bindings:     { cls, tag, isSystem, isText, isLayout, file, line }
+ *   rawEls:       { tag, classes, file, line, inlineStyled }
+ *   inlineStyles: { tag, isSystem, isText, isLayout, decls, dynamic, file, line }
  */
 export function scanMarkup(text, relPath, ds) {
 	const referenced = harvestTokens(text);
 	const stems = harvestStems(text);
 	const bindings = [];
 	const rawEls = [];
+	const inlineStyles = [];
 
 	let ast;
 	try {
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return { bindings, rawEls, referenced, stems, parseError: err.message.split('\n')[0] };
+		return { bindings, rawEls, inlineStyles, referenced, stems, parseError: err.message.split('\n')[0] };
 	}
 
 	const { known, text: textLike, layout } = systemImports(ast, ds);
@@ -137,17 +178,33 @@ export function scanMarkup(text, relPath, ds) {
 		const line = node.loc?.start?.line ?? 1;
 
 		const strings = [];
+		let style = null;
 		for (const attr of node.attributes) {
 			if (attr.type !== 'JSXAttribute') continue;
 			const an = attr.name?.name;
-			if (an !== 'className' && an !== 'class') continue;
-			stringsIn(attr.value, strings);
+			if (an === 'className' || an === 'class') stringsIn(attr.value, strings);
+			else if (an === 'style') style = readStyleAttr(attr.value);
 		}
 		const classes = classesFrom(strings);
 
 		const root = tag.split('.')[0];
-		if (/^[A-Z]/.test(root)) {
-			if (!known.has(root)) return;
+		const isComponent = /^[A-Z]/.test(root);
+		const isSystem = isComponent && known.has(root);
+
+		if (style?.present)
+			inlineStyles.push({
+				tag: isComponent ? root : tag.toLowerCase(),
+				isSystem,
+				isText: isSystem && textLike.has(root),
+				isLayout: isSystem && layout.has(root),
+				decls: style.decls,
+				dynamic: style.dynamic,
+				file: relPath,
+				line,
+			});
+
+		if (isComponent) {
+			if (!isSystem) return;
 			const isText = textLike.has(root);
 			const isLayout = layout.has(root);
 			for (const cls of classes)
@@ -156,10 +213,17 @@ export function scanMarkup(text, relPath, ds) {
 			const lower = tag.toLowerCase();
 			const mapped = ds.elementMap.get(lower);
 			if (!mapped) return;
-			if (mapped.styledOnly && !classes.length) return;
-			rawEls.push({ tag: lower, classes, file: relPath, line, suggest: mapped.component, styledOnly: mapped.styledOnly });
+			// An inline style is styling too. Requiring a CSS-styled class here
+			// exempted exactly the shape agents write most: a bare <div> laid
+			// out with style={{ display: 'flex' }} and no className at all.
+			if (mapped.styledOnly && !classes.length && !style?.present) return;
+			rawEls.push({
+				tag: lower, classes, file: relPath, line,
+				suggest: mapped.component, styledOnly: mapped.styledOnly,
+				inlineStyled: Boolean(style?.present),
+			});
 		}
 	});
 
-	return { bindings, rawEls, referenced, stems, parseError: null };
+	return { bindings, rawEls, inlineStyles, referenced, stems, parseError: null };
 }

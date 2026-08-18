@@ -1,7 +1,7 @@
 ---
 name: wpds-remediation
 description: >-
-  Load when fixing WPDS conformance findings — output from `ds-hygiene`, the `/wpds-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/raw-element`, `tokens/hardcoded-value`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Carries the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the ds-hygiene findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `wpds-authoring` for the underlying rules.
+  Load when fixing WPDS conformance findings — output from `ds-hygiene`, the `/wpds-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `tokens/hardcoded-value`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Carries the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the ds-hygiene findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `wpds-authoring` for the underlying rules.
 compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Needs the plugin's engine (node >=18)."
 ---
 
@@ -27,7 +27,8 @@ findings say:
 
 1. `stylesheet/unparsed` — a file nobody read, so its findings do not exist yet
 2. `suppression/malformed` — a broken directive is muting nothing
-3. `system/override`, `typography/in-css` — the component is being fought
+3. `system/override`, `system/inline-style`, `typography/in-css` — the
+   component is being fought
 4. `layout/*` — structure
 5. `tokens/hardcoded-value`, `typography/untokenized` — values
 6. `css/dead-class` — once the rest has settled
@@ -92,6 +93,21 @@ supported fix: the selector depends on markup that will change without notice.
 Find the supported API, or accept the default. If neither works, that is worth
 raising rather than routing around — and if you must keep it, the suppression
 reason should say it is a known-fragile coupling.
+
+### `system/inline-style`
+
+A `style={{ … }}` attribute on a WPDS component. One finding covers the whole
+attribute, because the remedy is the component's API rather than a better value
+for each declaration.
+
+Map each declaration to a prop — `Text` has `size`, `weight`, `color`,
+`variant`, `align`; layout primitives have `spacing`, `justify`, `alignment`,
+`expanded`. Spacing between children moves to the parent's `spacing`/`gap`.
+
+Keep inline only what no stylesheet could express: a value computed at runtime,
+such as a measured width or a drag offset. A constant is never that. When some
+declarations are dynamic and some are not, move the constants out and leave the
+computed ones — then suppress with a reason naming what is computed.
 
 ### `system/raw-element`
 

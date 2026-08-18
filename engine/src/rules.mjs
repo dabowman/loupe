@@ -71,6 +71,12 @@ export const RULES = {
 		needs: ['components'],
 		title: 'overrides a design-system component — restyle via its props/tokens, not CSS',
 	},
+	'system/inline-style': {
+		severity: 'warn',
+		rank: 13,
+		needs: ['components'],
+		title: 'inline style on a design-system component \u2014 use its props, which the style attribute overrides',
+	},
 	'system/raw-element': {
 		severity: 'warn',
 		rank: 7,

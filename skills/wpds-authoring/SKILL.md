@@ -27,6 +27,25 @@ further down than necessary is the drift.
 4. **Raw CSS.** Only with a reason you would defend out loud. See
    [Legitimate CSS](#when-css-is-the-right-answer).
 
+## `style={{ … }}` is not an exemption
+
+An inline style is the same decision as the equivalent stylesheet rule, made
+somewhere the cascade cannot reach it. `style={{ marginBottom: 16 }}` is
+`margin-bottom: 16px` with worse ergonomics: it cannot be themed, cannot be
+overridden without `!important`, and on a design-system component it silently
+beats the props that are supposed to drive it.
+
+The checker treats both channels identically, so there is no fast path here.
+
+```jsx
+<Button style={{ marginRight: 12 }}>Save</Button>   // no — beats the props
+<HStack spacing={3}><Button>Save</Button></HStack>  // yes
+```
+
+Legitimate inline styles are the ones no stylesheet could express: a value
+computed at runtime (a measured width, a drag offset, a progress percentage).
+If the value is a constant, it belongs in a prop or a token.
+
 ## Layout: gap, never margin
 
 **WPDS ships no margin token.** The dimension scale covers `padding`, `gap`,

@@ -1,0 +1,78 @@
+/**
+ * React style objects, translated into the CSS declarations the rules speak.
+ *
+ * `style={{ marginBottom: 16 }}` is the same violation as `margin-bottom: 16px`
+ * in a stylesheet, and it is the one an agent reaches for when it wants
+ * something to look right immediately. Checking only stylesheets meant the
+ * tighter the CSS gate got, the more attractive the unchecked channel became.
+ *
+ * Two React-specific conversions stand between the JSX and the rules:
+ * camelCase property names, and bare numbers that React silently suffixes with
+ * `px` — except on the properties where a number is already the unit.
+ */
+
+/**
+ * Properties where a bare number is a ratio or a count, not a length. React
+ * leaves these unsuffixed; treating `fontWeight: 600` as `600px` would classify
+ * a perfectly ordinary weight as a hardcoded length.
+ */
+const UNITLESS = new Set([
+	'animation-iteration-count', 'aspect-ratio', 'border-image-outset', 'border-image-slice',
+	'border-image-width', 'box-flex', 'box-flex-group', 'box-ordinal-group', 'column-count',
+	'columns', 'flex', 'flex-grow', 'flex-positive', 'flex-shrink', 'flex-negative', 'flex-order',
+	'font-weight', 'grid-area', 'grid-row', 'grid-row-end', 'grid-row-start', 'grid-column',
+	'grid-column-end', 'grid-column-start', 'line-clamp', 'line-height', 'opacity', 'order',
+	'orphans', 'scale', 'tab-size', 'widows', 'z-index', 'zoom', 'fill-opacity', 'flood-opacity',
+	'stop-opacity', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-miterlimit', 'stroke-opacity',
+	'stroke-width',
+]);
+
+/**
+ * `marginBottom` -> `margin-bottom`, `WebkitBoxShadow` -> `-webkit-box-shadow`.
+ * A key that already contains a hyphen is passed through: React accepts
+ * `'margin-bottom'` as a quoted key and custom properties must survive intact.
+ */
+export function toCssProp(key) {
+	if (key.startsWith('--')) return key;
+	if (key.includes('-')) return key.toLowerCase();
+	const kebab = key.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`);
+	// A leading capital is a vendor prefix (`WebkitFoo`), which needs the dash.
+	return /^[A-Z]/.test(key) ? `-${kebab.replace(/^-/, '')}` : kebab;
+}
+
+/**
+ * The CSS value a React style value produces.
+ * Returns null when the value is dynamic — an identifier, a call, a spread —
+ * because "width: [expression]" is noise, not a finding.
+ */
+export function toCssValue(prop, node) {
+	if (!node) return null;
+	switch (node.type) {
+		case 'StringLiteral':
+			return node.value;
+		case 'NumericLiteral':
+			return numeric(prop, node.value);
+		case 'UnaryExpression':
+			if (node.operator === '-' && node.argument?.type === 'NumericLiteral')
+				return numeric(prop, -node.argument.value);
+			return null;
+		case 'TemplateLiteral':
+			// Only a template with no interpolation is knowable.
+			return node.expressions.length === 0 ? (node.quasis[0]?.value?.cooked ?? null) : null;
+		default:
+			return null;
+	}
+}
+
+function numeric(prop, n) {
+	if (n === 0) return '0';
+	return UNITLESS.has(prop) ? String(n) : `${n}px`;
+}
+
+/** The property name a style-object key carries, or null if it isn't static. */
+export function keyName(node) {
+	if (!node) return null;
+	if (node.key?.type === 'Identifier' && !node.computed) return node.key.name;
+	if (node.key?.type === 'StringLiteral') return node.key.value;
+	return null;
+}

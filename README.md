@@ -33,6 +33,12 @@ styles that class. That correlation is what lets it say *"this `font-size` is on
 a `<Text>` — use its `size` prop"* rather than *"this `font-size` isn't a
 token."*
 
+Both channels are checked. `style={{ marginBottom: 16 }}` is the same violation
+as `margin-bottom: 16px` in a stylesheet, and runs through the same classifier
+so the two cannot drift into different verdicts. On a design-system component
+one attribute-level finding supersedes the per-declaration ones, because the
+remedy there is the component's props, not a better value.
+
 ```bash
 node engine/bin/ds-hygiene.mjs check --all --preset wpds
 node engine/bin/ds-hygiene.mjs explain layout/margin-on-child
@@ -51,6 +57,7 @@ fixes need judgment that a codemod does not have.
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own | error |
 | `typography/in-css` | A text component typed in CSS instead of via props | error |
 | `system/override` | CSS restyling a WPDS component, or reaching into a library's internals | error |
+| `system/inline-style` | `style={{ … }}` on a WPDS component — it overrides the props | error |
 | `layout/negative-margin` | A bleed — confirm it is deliberate | warn |
 | `typography/untokenized` | Raw type styling with no token and no text component | warn |
 | `system/raw-element` | A raw element that has a WPDS analog | warn |
@@ -132,21 +139,21 @@ expensive of the two — drop it to `Stop` only if it drags.
 
 ## Status
 
-Working: the engine, all three skills, commands, hooks, the registry.
+Working: the engine (stylesheets and inline styles), all three skills,
+commands, hooks, the registry.
+
+CSS-in-JS template literals (`styled.div\`…\``, emotion's `css\`…\``) are still
+unchecked — the inline pass reads `style={{ … }}` object expressions only.
 
 Not yet built, in rough priority order:
 
-1. **JSX and inline styles are not checked for violations.** JS is parsed only
-   to build the binding index, so `style={{ marginBottom: 16 }}` passes through
-   invisibly. This matters more than its size suggests: tightening the CSS gate
-   pushes agents toward the unchecked channel.
-2. **Composite rules.** `patterns/index.json` carries signatures, but
+1. **Composite rules.** `patterns/index.json` carries signatures, but
    `patterns/duplicate-composite` and `patterns/unregistered-composite` are not
    implemented. Until they are, `wpds-patterns` is the enforcement.
-3. **Token and prop maps.** Findings name a namespace, not a token, so an agent
+2. **Token and prop maps.** Findings name a namespace, not a token, so an agent
    told "13px is hardcoded" will invent `--wpds-font-size-13`. Generating a map
    from the WPDS MCP would let findings name the exact replacement.
-4. `tokenPrefixes` is currently cosmetic — it shapes the message but nothing
+3. `tokenPrefixes` is currently cosmetic — it shapes the message but nothing
    validates a `var()` against the known token set.
 
 ## Tests

@@ -1,0 +1,5 @@
+{
+  "extends": "wpds",
+  "namespaces": { "project": ["wf-"], "neverDead": ["wf-*"] },
+  "sources": { "styles": [], "references": [], "markup": ["src/**/*.jsx"] }
+}
