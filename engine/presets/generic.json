@@ -1,0 +1,16 @@
+{
+  "designSystem": {
+    "packages": [],
+    "tokenPrefixes": [],
+    "components": { "layout": [], "text": [] },
+    "elementMap": {}
+  },
+  "namespaces": { "project": [], "external": [], "neverDead": [] },
+  "sources": {
+    "styles": ["**/*.css", "**/*.scss"],
+    "markup": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
+    "references": ["**/*.php", "**/*.html", "**/*.twig"],
+    "ignore": ["**/node_modules/**", "**/build/**", "**/dist/**", "**/vendor/**", "**/.git/**", "**/*.min.css"]
+  },
+  "suppression": { "keyword": "ds-allow", "blanket": ["ds-disable"] }
+}

@@ -1,0 +1,8 @@
+{
+  "note": "Both system tags carry a nested brace in an attribute; the old regex scanner dropped them entirely, which downgraded the label finding to typography/untokenized and lost the body class binding.",
+  "findings": [
+    { "rule": "typography/in-css", "file": "styles/panel.css", "line": 1 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/panel.css", "line": 2 },
+    { "rule": "system/raw-element", "file": "src/Panel.jsx", "line": 6 }
+  ]
+}

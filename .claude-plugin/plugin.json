@@ -1,0 +1,20 @@
+{
+  "name": "wpds-quality",
+  "displayName": "WPDS Quality",
+  "description": "Keeps agent-written wp-admin interfaces on the WordPress Design System. An authoring skill that sets the rules before the first draft, a conformance engine that correlates JSX component bindings with the CSS styling them, and hooks that catch drift at write time rather than at review time.",
+  "version": "0.1.0",
+  "author": {
+    "name": "David Bowman"
+  },
+  "keywords": ["wordpress", "wpds", "design-system", "code-quality", "linting"],
+  "skills": [
+    "./skills/wpds-authoring",
+    "./skills/wpds-patterns",
+    "./skills/wpds-remediation"
+  ],
+  "commands": [
+    "./commands/wpds-audit.md",
+    "./commands/wpds-fix.md",
+    "./commands/wpds-baseline.md"
+  ]
+}

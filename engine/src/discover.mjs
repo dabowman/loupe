@@ -1,0 +1,95 @@
+/**
+ * File discovery.
+ *
+ * One walk of the tree, matched against the three source globs. Directories are
+ * pruned against the ignore globs during traversal rather than filtered
+ * afterwards, so a large node_modules is never enumerated.
+ */
+
+import { readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { join, relative, sep } from 'node:path';
+import picomatch from 'picomatch';
+
+export const toPosix = (p) => p.split(sep).join('/').split('\\').join('/');
+
+/** Directory names always skipped, regardless of config — cheap traversal guard. */
+const HARD_SKIP = new Set(['.git', 'node_modules']);
+
+export function discover({ root, sources }) {
+	const ignore = picomatch(sources.ignore || []);
+	const matchers = {
+		styles: picomatch(sources.styles || []),
+		markup: picomatch(sources.markup || []),
+		references: picomatch(sources.references || []),
+	};
+	const out = { styles: [], markup: [], references: [] };
+
+	const walk = (dir) => {
+		let entries;
+		try {
+			entries = readdirSync(dir, { withFileTypes: true });
+		} catch {
+			return; // unreadable directory: skip, don't crash the gate
+		}
+		for (const e of entries) {
+			const full = join(dir, e.name);
+			const rel = toPosix(relative(root, full));
+			if (e.isDirectory()) {
+				if (HARD_SKIP.has(e.name)) continue;
+				// Probe both bare and trailing-slash forms so `**/build/**` prunes `build`.
+				if (ignore(rel) || ignore(`${rel}/`)) continue;
+				walk(full);
+			} else if (e.isFile()) {
+				if (ignore(rel)) continue;
+				for (const kind of ['styles', 'markup', 'references']) {
+					if (matchers[kind](rel)) out[kind].push({ abs: full, rel });
+				}
+			}
+		}
+	};
+	walk(root);
+	for (const kind of Object.keys(out)) out[kind].sort((a, b) => a.rel.localeCompare(b.rel));
+	return out;
+}
+
+/**
+ * Files changed relative to HEAD, plus untracked ones. Returns null when this
+ * isn't a git worktree — callers map that to the "couldn't run" exit code
+ * rather than silently analyzing everything.
+ */
+export function changedFiles(root) {
+	const git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+	try {
+		git(['rev-parse', '--is-inside-work-tree']);
+	} catch {
+		return null;
+	}
+	const set = new Set();
+	const add = (out) => {
+		for (const line of out.split('\n')) {
+			const f = line.trim();
+			if (f) set.add(toPosix(f));
+		}
+	};
+	// `diff HEAD` spans index + worktree, so it already covers staged files.
+	// Without a HEAD it fails outright, and `ls-files --others` below does NOT
+	// cover the gap: staging a file stops it being "other", so a fresh repo
+	// whose work is staged reported an empty scope and the gate passed clean.
+	// Before the first commit, every tracked file is new by definition.
+	try {
+		add(git(['diff', '--name-only', 'HEAD']));
+	} catch {
+		try {
+			add(git(['ls-files', '--cached']));
+		} catch {
+			/* not even an index yet: untracked files below are the whole story */
+		}
+	}
+	try {
+		add(git(['ls-files', '--others', '--exclude-standard']));
+	} catch {
+		/* ignore */
+	}
+	return set;
+}

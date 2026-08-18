@@ -1,0 +1,10 @@
+{
+  "note": "postcss walkDecls is recursive. The child's font-size must NOT be attributed to <Text> (the parent binding) and must not be reported twice; the @media padding belongs to .wf-tile itself; the &:hover colour resolves to .wf-tile and is still an override.",
+  "findings": [
+    { "rule": "system/override", "file": "styles/tile.css", "line": 2 },
+    { "rule": "system/override", "file": "styles/tile.css", "line": 3 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/tile.css", "line": 5 },
+    { "rule": "typography/untokenized", "file": "styles/tile.css", "line": 4 },
+    { "rule": "system/raw-element", "file": "src/Tile.jsx", "line": 5 }
+  ]
+}

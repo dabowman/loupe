@@ -1,0 +1,5 @@
+{
+  "extends": "generic",
+  "namespaces": { "project": ["wf-"], "neverDead": ["wf-*"] },
+  "sources": { "markup": [], "references": [] }
+}

@@ -1,0 +1,5 @@
+{
+  "extends": "wordpress-components",
+  "namespaces": { "project": ["wf-"] },
+  "rules": { "css/dead-class": "error" }
+}

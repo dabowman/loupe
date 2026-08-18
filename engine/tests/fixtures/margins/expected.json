@@ -1,0 +1,9 @@
+{
+  "note": "The margin rule fires only where a gap remedy actually exists. Zero (any form), `auto` centering, and keywords have nothing to move to a parent, so reporting them just trains people to suppress the one rule that matters most. Negative margins are a real bleed technique and get their own rule, because 'move it to gap' would be wrong advice.",
+  "findings": [
+    { "rule": "layout/margin-on-child", "file": "styles/m.css", "line": 6 },
+    { "rule": "layout/margin-on-child", "file": "styles/m.css", "line": 7 },
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 8 },
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 9 }
+  ]
+}

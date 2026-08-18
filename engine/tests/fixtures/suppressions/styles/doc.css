@@ -1,0 +1,14 @@
+/* ds-allow tokens/hardcoded-value -- brand hex is fixed by the style guide */
+.wf-doc { color: #bada55; }
+
+/* ds-allow layout/margin-on-child, tokens/hardcoded-value -- legacy block */
+.wf-legacy {
+	margin: 8px;
+	padding: 4px;
+}
+
+/* ds-disable */
+.wf-sloppy { margin: 12px; }
+
+/* ds-allow tokens/hardcoded-value */
+.wf-noreason { color: #123456; }

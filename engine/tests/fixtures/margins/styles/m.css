@@ -1,0 +1,9 @@
+.wf-reset      { margin: 0; }
+.wf-reset-all  { margin: 0 0 0 0; }
+.wf-center     { margin: 0 auto; }
+.wf-center-log { margin-inline: auto; }
+.wf-none       { margin: none; }
+.wf-space      { margin-bottom: 16px; }
+.wf-space-var  { margin-top: var(--wpds-dimension-gap-sm); }
+.wf-bleed      { margin-inline: -16px; }
+.wf-bleed-one  { margin-left: -8px; }

@@ -1,0 +1,12 @@
+// A line-one `//` comment is what vanilla postcss chokes on, dropping the
+// whole file and reporting a clean run over code it never read.
+$brand: #3858e9;
+
+.wf-panel {
+	color: $brand;
+	margin-bottom: 16px;
+
+	.wf-panel__title {
+		font-size: 13px;
+	}
+}

@@ -1,0 +1,13 @@
+{
+  "note": "Prose describing the grammar inside a doc comment is not a directive. A directive on the selector line mutes that rule's own declarations. A blanket disable and a directive without a reason are each violations, not mutes.",
+  "findings": [
+    { "rule": "suppression/malformed", "file": "styles/doc.css", "line": 10 },
+    { "rule": "suppression/malformed", "file": "styles/doc.css", "line": 13 },
+    { "rule": "layout/margin-on-child", "file": "styles/doc.css", "line": 11 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/doc.css", "line": 14 },
+    { "rule": "css/dead-class", "file": "styles/doc.css", "line": 5 },
+    { "rule": "css/dead-class", "file": "styles/doc.css", "line": 11 },
+    { "rule": "css/dead-class", "file": "styles/doc.css", "line": 14 },
+    { "rule": "system/raw-element", "file": "src/Doc.jsx", "line": 7 }
+  ]
+}

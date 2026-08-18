@@ -1,0 +1,7 @@
+{
+  "note": "Sass parses through postcss-scss, so nesting resolves and declarations are attributed to the key selector. Without the syntax package this file was skipped in silence and the run reported clean.",
+  "findings": [
+    { "rule": "layout/margin-on-child", "file": "styles/legacy.scss", "line": 7 },
+    { "rule": "typography/untokenized", "file": "styles/legacy.scss", "line": 10 }
+  ]
+}

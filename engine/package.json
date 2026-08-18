@@ -1,0 +1,37 @@
+{
+  "name": "@dvdbwmn/ds-hygiene",
+  "version": "0.1.0",
+  "description": "Design-system conformance checking: correlates markup bindings with the CSS that styles them.",
+  "type": "module",
+  "bin": {
+    "ds-hygiene": "./bin/ds-hygiene.mjs"
+  },
+  "exports": {
+    ".": "./src/analyze.mjs",
+    "./config": "./src/config.mjs",
+    "./rules": "./src/rules.mjs",
+    "./presets/*": "./presets/*.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "presets",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node tests/run.mjs"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.24.0",
+    "picomatch": "^4.0.0",
+    "postcss": "^8.4.0"
+  },
+  "license": "MIT",
+  "optionalDependencies": {
+    "postcss-scss": "^4.0.9",
+    "postcss-less": "^6.0.0"
+  }
+}

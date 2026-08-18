@@ -1,0 +1,8 @@
+.theme-hero {
+	display: flex;
+	gap: 16px;
+	font-size: 18px;
+	padding: 24px;
+	color: var(--wp--preset--color--primary);
+}
+.theme-gone { color: #fff; }

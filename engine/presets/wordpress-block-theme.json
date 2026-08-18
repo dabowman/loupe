@@ -1,0 +1,25 @@
+{
+  "extends": "generic",
+  "designSystem": {
+    "packages": [],
+    "tokenPrefixes": ["--wp--preset--", "--wp--style--", "--wp--custom--"],
+    "components": { "layout": [], "text": [] },
+    "elementMap": {}
+  },
+  "namespaces": {
+    "external": ["wp-block-", "wp-elements-", "wp-container-", "is-layout-"],
+    "neverDead": [
+      "wp-block-*", "wp-elements-*", "wp-container-*", "is-layout-*",
+      "is-style-*", "has-*", "alignwide", "alignfull", "alignleft",
+      "alignright", "aligncenter", "screen-reader-text", "wp-site-blocks"
+    ]
+  },
+  "sources": {
+    "styles": ["**/*.css", "**/*.scss", "assets/**/*.css"],
+    "markup": [],
+    "references": [
+      "**/*.php", "templates/**/*.html", "parts/**/*.html",
+      "patterns/**/*.php", "**/theme.json", "**/block.json", "**/*.html"
+    ]
+  }
+}

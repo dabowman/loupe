@@ -1,0 +1,6 @@
+{
+  "note": "Text imported as __experimentalText must still resolve to a text component, so this is typography/in-css and not a generic system/override. gap on a bound layout primitive is intended usage, not a finding.",
+  "findings": [
+    { "rule": "typography/in-css", "file": "styles/card.css", "line": 1 }
+  ]
+}

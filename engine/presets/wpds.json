@@ -1,0 +1,53 @@
+{
+  "extends": "wordpress-components",
+  "designSystem": {
+    "packages": [
+      "@wordpress/components",
+      "@wordpress/ui"
+    ],
+    "tokenPrefixes": [
+      "--wpds-"
+    ],
+    "normalizeExports": "^__(experimental|unstable)",
+    "components": {
+      "layout": [
+        "Stack",
+        "HStack",
+        "VStack",
+        "Flex",
+        "FlexBlock",
+        "FlexItem",
+        "Grid",
+        "Spacer",
+        "Divider",
+        "__unstableMotion"
+      ],
+      "text": [
+        "Text",
+        "Heading",
+        "Truncate"
+      ]
+    }
+  },
+  "suppression": {
+    "keyword": "wpds-allow",
+    "blanket": [
+      "wpds-disable",
+      "wpds-allow-file",
+      "ds-disable"
+    ]
+  },
+  "rules": {
+    "stylesheet/unparsed": "error",
+    "suppression/malformed": "error",
+    "layout/margin-on-child": "error",
+    "layout/in-css": "error",
+    "typography/in-css": "error",
+    "system/override": "error",
+    "layout/negative-margin": "warn",
+    "typography/untokenized": "warn",
+    "system/raw-element": "warn",
+    "tokens/hardcoded-value": "warn",
+    "css/dead-class": "warn"
+  }
+}

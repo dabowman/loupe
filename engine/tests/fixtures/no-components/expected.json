@@ -1,0 +1,9 @@
+{
+  "note": "No JSX and no component layer: the correlation rules disable themselves rather than firing on nothing. Everything reported here is decidable from CSS alone. layout/in-css needs layout components, so display/gap stay quiet.",
+  "findings": [
+    { "rule": "typography/untokenized", "file": "styles/theme.css", "line": 4 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/theme.css", "line": 5 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/theme.css", "line": 8 },
+    { "rule": "css/dead-class", "file": "styles/theme.css", "line": 8 }
+  ]
+}

@@ -1,0 +1,6 @@
+.wf-tile {
+	color: #333;
+	&:hover { color: #000; }
+	.wf-tile__meta { font-size: 12px; }
+	@media (min-width: 600px) { padding: 24px; }
+}

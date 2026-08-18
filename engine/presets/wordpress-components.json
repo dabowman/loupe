@@ -1,0 +1,36 @@
+{
+  "extends": "generic",
+  "designSystem": {
+    "packages": ["@wordpress/components", "@wordpress/ui"],
+    "tokenPrefixes": ["--wp-admin-theme-", "--wp-components-"],
+    "normalizeExports": "^__(experimental|unstable)",
+    "components": {
+      "layout": ["Flex", "FlexBlock", "FlexItem", "HStack", "VStack", "Grid", "Spacer", "Divider"],
+      "text": ["Text", "Heading", "Truncate"]
+    },
+    "elementMap": {
+      "p": "Text",
+      "h1": "Heading", "h2": "Heading", "h3": "Heading",
+      "h4": "Heading", "h5": "Heading", "h6": "Heading",
+      "div": { "component": "HStack/VStack", "styledOnly": true },
+      "span": { "component": "Text", "styledOnly": true }
+    }
+  },
+  "namespaces": {
+    "external": [
+      "components-", "wp-", "block-editor-", "editor-", "interface-",
+      "edit-post-", "edit-site-", "dataviews-", "dashicon"
+    ],
+    "neverDead": [
+      "has-*", "is-*", "wp-*", "alignwide", "alignfull", "alignleft",
+      "alignright", "aligncenter", "screen-reader-text"
+    ]
+  },
+  "sources": {
+    "markup": ["**/src/**/*.js", "**/src/**/*.jsx", "**/src/**/*.ts", "**/src/**/*.tsx"],
+    "references": [
+      "**/*.php", "**/*.html", "**/block.json", "**/theme.json",
+      "**/patterns/**/*.php", "**/patterns/**/*.html"
+    ]
+  }
+}
