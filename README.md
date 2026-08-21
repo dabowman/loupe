@@ -50,9 +50,16 @@ value that depends on one produces no finding, and a template whose *structure*
 depends on one is recorded as a parse diagnostic rather than guessed at.
 
 ```bash
-node engine/bin/ds-hygiene.mjs check --all
-node engine/bin/ds-hygiene.mjs explain layout/margin-on-child
+ds-hygiene check --all
+ds-hygiene explain layout/margin-on-child
 ```
+
+`bin/ds-hygiene` is on PATH inside any Claude Code session — Claude Code adds
+each enabled plugin's `bin/` to the environment it runs commands in — and
+`install.sh` links it into `~/.local/bin` for plain terminals. It runs against
+whatever directory you are in and adds nothing to that project: the engine
+carries its own dependencies and writes nothing into your repo. It also passes
+the shipped pattern registry unless you name your own with `--patterns`.
 
 Pure analysis — it never edits. Fixing is `wpds-remediation`'s job, because the
 fixes need judgment that a codemod does not have.
