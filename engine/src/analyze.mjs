@@ -165,6 +165,7 @@ export async function analyze(config, { scope = null } = {}) {
 	const cssInJs = [];
 	const composites = [];
 	const importsByFile = new Map();
+	const componentImports = [];
 
 	for (const { abs, rel } of files.markup) {
 		if (tooBig(abs)) continue;
@@ -188,6 +189,7 @@ export async function analyze(config, { scope = null } = {}) {
 		cssInJs.push(...(scanned.cssInJs || []));
 		composites.push(...(scanned.composites || []));
 		if (scanned.imports) importsByFile.set(rel, scanned.imports);
+		for (const ci of scanned.componentImports || []) componentImports.push({ ...ci, file: rel });
 		suppressionsFor(rel, text);
 	}
 
@@ -539,6 +541,38 @@ export async function analyze(config, { scope = null } = {}) {
 			if (files.size < 3) continue;
 			for (const c of files.values())
 				emitComposite('patterns/unregistered-composite', c, `${sig} \u2014 assembled in ${files.size} files, registered in none`);
+		}
+	}
+
+	// ── component currency ────────────────────────────────────────────────────
+	// Whether the import itself — independent of any CSS — is still the
+	// current best-practice choice. `experimental`-status entries never fire
+	// here: WPDS itself flags those not-yet-safe to recommend, so the call is
+	// contextual, not mechanical, and belongs in the authoring skill, not a
+	// blocking check.
+	if (config.enabled['system/locked-component'] || config.enabled['system/superseded-component']) {
+		const seen = new Set(); // one finding per file+component+package, not per usage
+		for (const ci of componentImports) {
+			const entry = config.componentRegistry.get(`${ci.package}::${ci.canonical}`);
+			if (!entry || (entry.status !== 'legacy' && entry.status !== 'locked')) continue;
+			const rule = entry.status === 'locked' ? 'system/locked-component' : 'system/superseded-component';
+			if (!config.enabled[rule] || !reports(ci.file)) continue;
+			const key = `${ci.file} ${rule} ${ci.canonical} ${ci.package}`;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			const supp = suppByFile.get(ci.file);
+			if (supp && isSuppressed(supp.byLine, ci.line, rule)) continue;
+			const remedy = entry.supersededBy ? ` → ${entry.supersededBy}` : '';
+			const note = entry.note ? ` (${entry.note})` : '';
+			findings.push({
+				rule,
+				severity: config.severityOf(rule),
+				file: ci.file,
+				line: ci.line,
+				message: `${ci.canonical} (${ci.package})${remedy}${note}`,
+				code: `${rule}:${ci.package}:${ci.canonical}`,
+				rank: RULES[rule].rank,
+			});
 		}
 	}
 

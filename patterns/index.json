@@ -26,14 +26,16 @@
       "instead_of": [
         "A hand-built Modal + Stack + Button pair reimplementing confirm/cancel — ConfirmDialog already does this, controlled or uncontrolled",
         "window.confirm()"
-      ]
+      ],
+      "note": "@wordpress/ui ships a newer AlertDialog for exactly this case, but components/index.json marks it experimental (not yet safe alongside @wordpress/components) — do not swap to it preemptively."
     },
     {
       "id": "form-modal",
       "summary": "Modal wrapping a form, with submit and cancel in the standard position.",
       "use": "Creating or editing a record without leaving the current screen.",
       "signature": ["Modal", "Stack", ["Stack", "Button", "Button"]],
-      "instead_of": ["Modal with an inline form and per-instance submit placement"]
+      "instead_of": ["Modal with an inline form and per-instance submit placement"],
+      "note": "@wordpress/ui's Dialog/Drawer are Modal's eventual replacements, chosen by field count/complexity (see wpds-authoring), but both are marked experimental in components/index.json — stay on Modal until that clears."
     },
     {
       "id": "notice-stack",
@@ -44,7 +46,8 @@
       "signature": ["Stack", "Notice"],
       "instead_of": [
         "Individually placed Notice components with local margins — NoticeList already takes notices + onRemove"
-      ]
+      ],
+      "note": "@wordpress/ui ships a newer compound Notice (Root/Title/Description/Actions), but components/index.json marks it experimental — do not swap to it preemptively."
     },
     {
       "id": "detail-sidebar",

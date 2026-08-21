@@ -21,13 +21,17 @@ extending it. Check the registry before you assemble.
 1. **Look first.** Read `patterns/index.json` in this plugin and the project's
    own `patterns/` directory if it has one. If a pattern covers what you need,
    use it — import the shared implementation rather than copying its structure.
-2. **Check the MCP second.** Before assembling anything from primitives, check
-   the bundled `design-system` MCP's `get_components` — the shape you're about
-   to hand-roll (an empty state, a form field, a card) may already ship as a
-   single real compound component (`EmptyState.*`, `Field.*`, `Card.*`), not
-   something to compose. `confirm-modal`, `notice-stack`, `empty-state` and
-   `form-row` in this registry all turned out to be this case: use the real
-   component, not the pattern's hand-rolled shape.
+2. **Check `components/index.json` second.** Before assembling anything from
+   primitives, check whether the shape you're about to hand-roll (an empty
+   state, a form field, a card) already ships as a single real compound
+   component (`EmptyState.*`, `Field.*`, `Card.*`) — and check its `status`,
+   not just that it exists. `empty-state` and `form-row` turned out to be this
+   case (both `recommended`); `confirm-modal` and `notice-stack` do too, in
+   the other direction — `@wordpress/ui` ships newer `AlertDialog`/`Notice`
+   compounds that *look* like the obvious replacement, but the registry marks
+   both `experimental`, so the pattern correctly stays on
+   `ConfirmDialog`/`NoticeList` (`@wordpress/components`) until that clears.
+   Existence alone is not the signal — current status is.
 3. **Search the codebase third.** If nothing is registered and nothing ships,
    grep for the shape before writing it. Two existing near-copies mean the
    pattern already exists informally and should be extracted, not tripled.

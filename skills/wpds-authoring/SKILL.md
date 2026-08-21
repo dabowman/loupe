@@ -1,7 +1,7 @@
 ---
 name: wpds-authoring
 description: >-
-  Load BEFORE writing or editing any UI that uses the WordPress Design System — `@wordpress/components`, `@wordpress/ui`, or `--wpds-*` tokens — in wp-admin, Gutenberg, WordPress.com, Jetpack, or any React surface built on WPDS. Carries the authoring rules that keep generated code from drifting: use the component before the element (`Text` with `variant="heading-*"` over `<p>`/`<h2>`), the prop before the stylesheet (`variant`/`gap`/`direction` over `font-size`/`margin`/`display:flex`), and `gap` on a layout primitive over margin anywhere — WPDS ships no margin token at all. Also covers token selection by role, when writing CSS is legitimate, and the `wpds-allow` escape hatch. Triggers on building admin screens, settings panels, modals, sidebar plugins, DataViews surfaces, toolbars, or any JSX importing from `@wordpress/components`/`@wordpress/ui`. Pair with `wpds-patterns` before assembling a composite and `wpds-remediation` when fixing findings.
+  Load BEFORE writing or editing any UI that uses the WordPress Design System — `@wordpress/components`, `@wordpress/ui`, or `--wpds-*` tokens — in wp-admin, Gutenberg, WordPress.com, Jetpack, or any React surface built on WPDS. Carries the authoring rules that keep generated code from drifting: which component is current (`components/index.json` — WPDS runs two live packages at once, and not everything in the newer one is safe to use yet), the component before the element (`Text` with `variant="heading-*"` over `<p>`/`<h2>`), the prop before the stylesheet (`variant`/`gap`/`direction` over `font-size`/`margin`/`display:flex`), and `gap` on a layout primitive over margin anywhere — WPDS ships no margin token at all. Also covers token selection by role, when writing CSS is legitimate, and the `wpds-allow` escape hatch. Triggers on building admin screens, settings panels, modals, sidebar plugins, DataViews surfaces, toolbars, or any JSX importing from `@wordpress/components`/`@wordpress/ui`. Pair with `wpds-patterns` before assembling a composite and `wpds-remediation` when fixing findings.
 compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Conformance checking needs the plugin's engine (node >=18)."
 ---
 
@@ -17,17 +17,90 @@ That drift is cheap to avoid while writing and expensive to unwind afterwards,
 because by then the pattern is load-bearing and every argument for keeping it is
 locally true. Decide correctly the first time.
 
-## Verify against the MCP, not memory
+## Two different questions, two different sources
 
-This plugin bundles the `design-system` MCP server
-(`.mcp.json` → `@wordpress/design-system-mcp`) for exactly this reason: WPDS
-ships twice yearly, and trained knowledge of it goes stale within months —
-this doc's own examples have drifted before (`HStack`/`VStack` → `Stack`,
-`Heading` → `Text` with `variant`). Before asserting a component's props, a
-token's name, or that something "doesn't exist," check
-`get_components`/`get_component_details`/`get_design_tokens` rather than
-recalling it. Never assert a negative — "there's no prop for that" — without
+"Which component should this be" and "what are that component's props" are
+different questions, and WPDS's two live packages (`@wordpress/components`,
+stable; `@wordpress/ui`, the actively-growing target) make it easy to answer
+the first one wrong by asking the second tool.
+
+**Which component — `${CLAUDE_PLUGIN_ROOT}/components/index.json`.** A
+verified-once, versioned registry of every known component's currency:
+`recommended` (use it), `legacy` (works, but a recommended replacement now
+covers the job), `locked` (a private API — do not use outside Gutenberg core,
+can break without notice), `experimental` (real and documented, but WPDS's
+own metadata flags it not yet safe to recommend broadly — informational, not
+a migration target). The engine mechanically flags `locked`/`legacy` imports
+(`system/locked-component`, `system/superseded-component`); `experimental`
+never fires automatically, because whether it's safe here is contextual, not
+mechanical — see [Choosing a component](#choosing-a-component) below.
+
+**What are its props — the bundled `design-system` MCP**
+(`.mcp.json` → `@wordpress/design-system-mcp`). Use `get_component_details`
+once you've picked the component. It has **no maturity signal at all** — it
+shows an `experimental` component with the same confidence as a `recommended`
+one, and it's measurably behind trunk for several newer `@wordpress/ui`
+additions (`Dialog`, `AlertDialog`, `Drawer`, `IconButton`, `LinkButton`
+return nothing from it). Before asserting a prop or a token's name, or that
+something "doesn't exist," check `get_components`/`get_component_details`/
+`get_design_tokens` rather than recalling it — this doc's own examples have
+drifted before (`HStack`/`VStack` → `Stack`, `Heading` → `Text` with
+`variant`). Never assert a negative — "there's no prop for that" — without
 having actually looked.
+
+## Choosing a component
+
+Past the basics (`Stack`, `Text`, `Card`, `Badge`, `Icon` — check the
+registry, but these are settled), a handful of families need a real decision,
+not a lookup. Check `components/index.json` for current status before
+treating any of these as settled — WPDS ships twice yearly and this
+section's calls can go stale.
+
+**Button, IconButton, Link, LinkButton** — choose by what happens on
+activation, not appearance:
+
+| Goal | Component |
+| --- | --- |
+| Action on the current page (submit, open an overlay, run JS) | `Button` |
+| Same, icon-only | `IconButton` |
+| Navigate to another page/URL | `Link` |
+| Navigate, styled as a button (standalone CTA, card action) | `LinkButton` |
+
+`Button` and `IconButton` (`@wordpress/ui`) are `experimental` — not yet safe
+alongside `@wordpress/components`, which is most real codebases today. Use
+`Button` from `@wordpress/components` (`recommended`) until that clears;
+`size`: `default` for text buttons, `compact` for toggle/icon buttons,
+`small` for icon buttons on advanced/auxiliary features. One prominent
+(primary) action per layout, secondary for the rest, tertiary sparingly.
+Label with `{verb}+{noun}` (Save/Close/Cancel/OK exempted), strip filler
+words. Never `Button`+`onClick` for actual navigation — that belongs to
+`Link`.
+
+**Modal, Dialog, AlertDialog, Drawer** — `Modal` (`@wordpress/components`) is
+still `recommended`; `Dialog`/`AlertDialog`/`Drawer` (`@wordpress/ui`) are its
+eventual replacements but are `experimental`, not yet safe alongside
+`@wordpress/components`. Stay on `Modal`/`ConfirmDialog` until the registry
+says otherwise. The decision for when it does clear: `Dialog` for a focused,
+single-decision, scannable-without-scrolling task reachable from multiple
+entry points; `AlertDialog` specifically for destructive/irreversible
+confirmations (dismissal behavior and button emphasis match the severity);
+`Drawer` for editing something already on screen, or a flow with multiple
+fields/sections/drill-down steps that a `Dialog` would cramp.
+
+**Menu vs. Select vs. Autocomplete vs. SelectControl** — by what the options
+represent: `Menu` (commands, actions, navigation destinations — `Menu.Item`
+for commands, `Menu.LinkItem` for navigation, `Menu.CheckboxItem`/
+`Menu.RadioItem` for settings within the menu) vs. `SelectControl`/`Select`
+(choosing one predefined value — the trigger represents the current value)
+vs. `Autocomplete` (free-form filtering of suggestions). The
+`@wordpress/components` `Menu` is `locked` — a private API, never use it.
+The `@wordpress/ui` `Menu` is real but `experimental` — same
+not-yet-safe-alongside-`@wordpress/components` gate as the Button family.
+
+**Field, Fieldset** — low-level form primitives (`@wordpress/ui`,
+`recommended`, no caution flag — they're stable, just low-altitude). Check
+for a higher-level `*Control` component (either package) or `DataForm` first;
+most UI should not need `Field`/`Fieldset` directly.
 
 ## The order of resort
 

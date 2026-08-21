@@ -11,6 +11,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { RULES, SEVERITIES, canonicalRuleId } from './rules.mjs';
 import { loadPatterns } from './patterns.mjs';
+import { loadComponents } from './components.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRESET_DIR = join(HERE, '..', 'presets');
@@ -42,6 +43,10 @@ export const DEFAULTS = {
 	suppression: { keyword: 'ds-allow', blanket: ['ds-disable'] },
 	rules: {},
 	patterns: null,
+	// The component-currency registry (recommended/legacy/locked/experimental
+	// per component+package). Named distinctly from `designSystem.components`
+	// (the layout/text categorization) — same word, unrelated concern.
+	componentRegistry: null,
 	baseline: '.ds-hygiene-baseline.json',
 	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 120000 },
 };
@@ -166,6 +171,19 @@ export function normalize(raw, { root }) {
 		}
 	}
 
+	// Same inline-or-path shape as patterns, for the same reason: a bad path
+	// disables the rules that need it rather than throwing.
+	let componentRegistry = new Map();
+	if (Array.isArray(cfg.componentRegistry)) componentRegistry = loadComponents(cfg.componentRegistry);
+	else if (typeof cfg.componentRegistry === 'string') {
+		const p = isAbsolute(cfg.componentRegistry) ? cfg.componentRegistry : join(root, cfg.componentRegistry);
+		try {
+			componentRegistry = loadComponents(JSON.parse(readFileSync(p, 'utf8')));
+		} catch {
+			componentRegistry = new Map();
+		}
+	}
+
 	// Rule severities + options. Accepts "warn" | ["warn", {opts}] | "off".
 	const rules = {};
 	for (const [id, def] of Object.entries(RULES)) rules[id] = { severity: def.severity, options: {} };
@@ -196,6 +214,7 @@ export function normalize(raw, { root }) {
 		elementMap: elementMap.size > 0,
 		tokenPrefixes: (ds.tokenPrefixes || []).length > 0,
 		patternRegistry: hasComponents && patterns.length > 0,
+		componentRegistry: componentRegistry.size > 0,
 		projectNamespace: (cfg.namespaces.project || []).length > 0,
 	};
 
@@ -224,6 +243,7 @@ export function normalize(raw, { root }) {
 			elementMap,
 		},
 		patterns,
+		componentRegistry,
 		sources: cfg.sources,
 		suppression: cfg.suppression,
 		baselinePath: cfg.baseline,
@@ -251,6 +271,16 @@ export function setPatterns(config, patterns) {
 		config.patterns.length > 0 &&
 		config.designSystem.knownComponents.size > 0 &&
 		config.severityOf('patterns/duplicate-composite') !== 'off';
+	return config;
+}
+
+/** Same after-the-fact attachment as {@link setPatterns}, for the component registry. */
+export function setComponentRegistry(config, componentRegistry) {
+	config.componentRegistry = componentRegistry || new Map();
+	config.enabled['system/locked-component'] =
+		config.componentRegistry.size > 0 && config.severityOf('system/locked-component') !== 'off';
+	config.enabled['system/superseded-component'] =
+		config.componentRegistry.size > 0 && config.severityOf('system/superseded-component') !== 'off';
 	return config;
 }
 

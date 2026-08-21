@@ -24,7 +24,7 @@ in a JS channel, is left for the passes below.
 ## 2. Get the current state
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --all --format json --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --all --format json --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
 ```
 
 If `$ARGUMENTS` names a rule id or a path, narrow to that. Otherwise work upward

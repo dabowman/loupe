@@ -24,6 +24,7 @@ that report drift on the file just touched, not forty tool calls later).
 | `commands/` | `/wpds-audit`, `/wpds-fix`, `/wpds-baseline` |
 | `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
 | `patterns/index.json` | The composite registry |
+| `components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
 | `engine/` | `ds-hygiene` — the conformance engine |
 
 ## The engine
@@ -60,7 +61,8 @@ each enabled plugin's `bin/` to the environment it runs commands in — and
 `install.sh` links it into `~/.local/bin` for plain terminals. It runs against
 whatever directory you are in and adds nothing to that project: the engine
 carries its own dependencies and writes nothing into your repo. It also passes
-the shipped pattern registry unless you name your own with `--patterns`.
+the shipped pattern and component registries unless you name your own with
+`--patterns`/`--components`.
 
 Pure analysis — it never edits. Fixing is `wpds-remediation`'s job, because the
 fixes need judgment that a codemod does not have.
@@ -76,9 +78,11 @@ fixes need judgment that a codemod does not have.
 | `typography/in-css` | A text component typed in CSS instead of via props | error |
 | `system/override` | CSS restyling a WPDS component, or reaching into a library's internals | error |
 | `system/inline-style` | `style={{ … }}` on a WPDS component — it overrides the props | error |
+| `system/locked-component` | A private API WPDS does not recommend outside Gutenberg core | error |
 | `layout/negative-margin` | A bleed — confirm it is deliberate | warn |
 | `typography/untokenized` | Raw type styling with no token and no text component | warn |
 | `system/raw-element` | A raw element that has a WPDS analog | warn |
+| `system/superseded-component` | A current, recommended component now covers this job | warn |
 | `tokens/hardcoded-value` | A literal colour or length where a token exists | warn |
 | `css/dead-class` | A namespaced class referenced in no markup or reference file | warn |
 | `tokens/unknown-token` | A `var()` naming no token the design system defines | warn |
@@ -150,6 +154,42 @@ on.
 The registry reaches the engine via `--patterns`, which the hooks and commands
 pass automatically. A project's own registry is merged over the shipped one,
 winning on `id`.
+
+### Component currency
+
+Components and patterns are the same drift at two altitudes: a pattern is a
+shape rebuilt when a composite already exists; component currency is a name
+used when a *different* name is now the right one. WPDS runs two live
+packages at once — `@wordpress/components` and `@wordpress/ui` — and the same
+name can mean a stable component in one and an early one in the other
+(`Button` is stable in `@wordpress/components` today; the newer `Button` in
+`@wordpress/ui` is real but explicitly not yet safe to mix with it).
+
+`components/index.json` is the verified-once answer: every known component,
+its package, and whether it is `recommended`, `legacy` (works, but a
+recommended replacement covers the job), `locked` (a private API WPDS does
+not recommend outside Gutenberg core — can break without notice), or
+`experimental` (real and documented, but WPDS's own metadata flags it not yet
+safe to recommend broadly — informational only, never enforced).
+
+- `system/locked-component` — importing a `locked` entry. `error`, because
+  this is a real risk, not a style preference.
+- `system/superseded-component` — importing a `legacy` entry whose
+  replacement is itself `recommended`. `warn`.
+
+`experimental` entries never fire either rule — WPDS's own Storybook metadata
+says those aren't yet safe to recommend for most codebases, so pushing
+migration would be wrong, not just premature. That call stays in
+`wpds-authoring`, as prose, for an agent to reason about contextually.
+
+The MCP has no maturity signal at all — it presents an `experimental`
+component with the same confidence as a `recommended` one, and it's
+measurably behind trunk for several `@wordpress/ui` additions besides. Use it
+for prop/usage detail on a component already chosen; use this registry to
+decide which component that should be.
+
+Same delivery as patterns — `--components`, passed automatically, merged over
+a project's own registry.
 
 ### Config
 

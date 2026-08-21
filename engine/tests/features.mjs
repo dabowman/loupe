@@ -8,16 +8,18 @@
  * *fewer* findings, which no failing build ever reveals.
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.mjs';
-import { loadConfig, setPatterns } from '../src/config.mjs';
+import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.mjs';
 import { loadPatterns, matches, toNode } from '../src/patterns.mjs';
+import { loadComponents } from '../src/components.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REGISTRY = join(HERE, '..', '..', 'patterns', 'index.json');
+const COMPONENT_REGISTRY = join(HERE, '..', '..', 'components', 'index.json');
 
 let failed = 0;
 const check = async (name, fn) => {
@@ -34,7 +36,7 @@ const assert = (cond, msg) => {
 };
 
 /** Analyze a throwaway repo. `files` maps relative path to contents. */
-async function run(files, { patterns } = {}) {
+async function run(files, { patterns, components } = {}) {
 	const root = mkdtempSync(join(tmpdir(), 'dsh-feat-'));
 	try {
 		for (const [rel, body] of Object.entries(files)) {
@@ -44,6 +46,7 @@ async function run(files, { patterns } = {}) {
 		}
 		const config = await loadConfig({ root, configPath: join(root, 'ds-hygiene.config.json') });
 		if (patterns) setPatterns(config, patterns);
+		if (components) setComponentRegistry(config, components);
 		const result = await analyze(config, { scope: null });
 		return result;
 	} finally {
@@ -179,6 +182,7 @@ await check('a tagged template from an unrelated library is left alone', async (
 // ── composites ──────────────────────────────────────────────────────────────
 
 const registry = loadPatterns(JSON.parse(await import('node:fs').then((m) => m.readFileSync(REGISTRY, 'utf8'))));
+const componentRegistry = loadComponents(JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')));
 
 await check('a registered pattern matches through nesting and extra siblings', () => {
 	const formModal = registry.find((p) => p.id === 'form-modal');
@@ -259,6 +263,73 @@ await check('an unregistered shape needs three files before it is house style', 
 		{ patterns: registry }
 	);
 	assert(at(three, 'patterns/unregistered-composite').length === 3, 'three is a pattern');
+});
+
+// ── component currency ────────────────────────────────────────────────────
+
+await check('a locked component is reported, its recommended sibling is not', async () => {
+	const src = [
+		"import { Badge } from '@wordpress/components';",
+		"import { Badge as UiBadge } from '@wordpress/ui';",
+		'export const A = () => (<><Badge>old</Badge><UiBadge>new</UiBadge></>);',
+	].join('\n');
+	const r = await run(
+		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ components: componentRegistry }
+	);
+	const locked = at(r, 'system/locked-component');
+	assert(locked.length === 1, `expected one locked finding, got ${locked.length}`);
+	assert(locked[0].message.includes('@wordpress/components'), `wrong package named: ${locked[0].message}`);
+	assert(!at(r, 'system/superseded-component').length, 'the @wordpress/ui sibling should not also be flagged legacy');
+});
+
+await check('a superseded component names its replacement, once per file', async () => {
+	const src = [
+		"import { __experimentalHStack as HStack, Button } from '@wordpress/components';",
+		'export const A = () => (<HStack><Button>a</Button><Button>b</Button></HStack>);',
+		'export const B = () => (<HStack><Button>c</Button></HStack>);',
+	].join('\n');
+	const r = await run(
+		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ components: componentRegistry }
+	);
+	const superseded = at(r, 'system/superseded-component');
+	assert(superseded.length === 1, `two HStack usages in one file should collapse to one finding, got ${superseded.length}`);
+	assert(superseded[0].message.includes('Stack'), `did not name the replacement: ${superseded[0].message}`);
+});
+
+await check('a recommended component is never flagged', async () => {
+	const src = ["import { Stack } from '@wordpress/ui';", 'export const A = () => <Stack>x</Stack>;'].join('\n');
+	const r = await run(
+		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ components: componentRegistry }
+	);
+	assert(!at(r, 'system/locked-component').length && !at(r, 'system/superseded-component').length, 'Stack is recommended');
+});
+
+await check('an experimental component is not flagged — the call is contextual, not mechanical', async () => {
+	const src = ["import { Dialog } from '@wordpress/ui';", 'export const A = () => <Dialog.Root />;'].join('\n');
+	const r = await run(
+		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ components: componentRegistry }
+	);
+	assert(
+		!at(r, 'system/locked-component').length && !at(r, 'system/superseded-component').length,
+		'experimental status must never auto-fire — WPDS itself says this is not yet safe to recommend broadly'
+	);
+});
+
+await check('a locked-component finding can be suppressed like any other', async () => {
+	const src = [
+		'/* wpds-allow system/locked-component -- reviewed, migrating later */',
+		"import { Badge } from '@wordpress/components';",
+		'export const A = () => <Badge>old</Badge>;',
+	].join('\n');
+	const r = await run(
+		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ components: componentRegistry }
+	);
+	assert(!at(r, 'system/locked-component').length, 'a well-formed suppression mutes the finding');
 });
 
 console.log(`\n${failed ? `${failed} failed` : 'all passed'}`);

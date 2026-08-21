@@ -41,6 +41,8 @@ would work as a stylelint plugin, and are included because you want one report.
 | `system/override` | CSS restyling a design-system component, or reaching into a library's internals |
 | `system/raw-element` | A raw element that has a design-system analog |
 | `typography/in-css` | A text component typed in CSS instead of via its props |
+| `system/locked-component` | A private API the design system does not recommend outside its own core |
+| `system/superseded-component` | A current, recommended component now covers this job |
 
 `ds-hygiene explain <rule>` prints the guidance and whether the rule is active
 under your config.
@@ -252,6 +254,7 @@ const { findings, blocking, directives } = analyze(config, { scope: null });
 | `designSystem.tokenSources` | Paths (file or directory) holding the token definitions. Read even under `node_modules`, which the project walk prunes — that is where a design system's tokens live. Missing paths are skipped. |
 | `designSystem.cssInJsPackages` | Packages whose tagged templates are CSS. Defaults cover styled-components and emotion. |
 | `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on `id`. |
+| `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
 `scope` filters what is *reported*. The index is always built repo-wide —
 building it from changed files alone would make every unchanged reference look

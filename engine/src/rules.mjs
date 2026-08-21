@@ -35,6 +35,18 @@ export const RULES = {
 		needs: ['projectNamespace'],
 		title: 'dead CSS class — referenced in no markup or reference file; delete the rule',
 	},
+	'system/locked-component': {
+		severity: 'error',
+		rank: 24,
+		needs: ['componentRegistry'],
+		title: 'private API — WordPress does not recommend using this outside Gutenberg core; it can break without notice on any update',
+	},
+	'system/superseded-component': {
+		severity: 'warn',
+		rank: 6,
+		needs: ['componentRegistry'],
+		title: 'a current, recommended component now covers this job — see the finding for what replaces it',
+	},
 	'patterns/duplicate-composite': {
 		severity: 'warn',
 		rank: 15,

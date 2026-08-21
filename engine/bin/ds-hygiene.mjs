@@ -13,12 +13,13 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { analyze } from '../src/analyze.mjs';
 import { applyTokenFixes } from '../src/autofix.mjs';
 import { applyBaseline, readBaseline, writeBaseline } from '../src/baseline.mjs';
-import { findConfig, listPresets, loadConfig, setPatterns } from '../src/config.mjs';
+import { findConfig, listPresets, loadConfig, setComponentRegistry, setPatterns } from '../src/config.mjs';
 import { changedFiles, isSource, toPosix } from '../src/discover.mjs';
 import { RULES, canonicalRuleId, renderTitle } from '../src/rules.mjs';
 import { formatAgent, formatJson, formatSarif, formatSummary } from '../src/report.mjs';
 import { detectConfig } from '../src/detect.mjs';
 import { loadPatterns } from '../src/patterns.mjs';
+import { loadComponents } from '../src/components.mjs';
 import { findExistingBaseline, isPluginContext, stateDir } from '../src/paths.mjs';
 import {
 	bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot,
@@ -36,7 +37,7 @@ function parseArgs(argv) {
 			continue;
 		}
 		const [key, inline] = a.slice(2).split(/=(.*)/s);
-		const needsValue = ['format', 'config', 'root', 'preset', 'files', 'max-findings', 'severity', 'baseline', 'patterns'].includes(key);
+		const needsValue = ['format', 'config', 'root', 'preset', 'files', 'max-findings', 'severity', 'baseline', 'patterns', 'components'].includes(key);
 		if (needsValue) args.flags[key] = inline ?? argv[++i];
 		else args.flags[key] = inline === undefined ? true : inline !== 'false';
 	}
@@ -69,6 +70,7 @@ Options:
   --force               Overwrite an existing config (init)
   --preset <name>       Use a bundled preset instead of discovering config
   --patterns <path>     Composite pattern registry (JSON)
+  --components <path>   Component currency registry (JSON)
   --config <path>       Explicit config file
   --root <path>         Project root (default: cwd, or CLAUDE_PROJECT_DIR under hook)
 
@@ -169,6 +171,18 @@ async function main() {
 			setPatterns(config, [...(config.patterns || []), ...shipped.filter((p) => !own.has(p.id))]);
 		} catch (err) {
 			if (!isHook) process.stderr.write(`ds-hygiene: could not read --patterns \u2014 ${err.message}\n`);
+		}
+	}
+
+	// Same merge as --patterns: the project's own entries win on `package::name`.
+	if (args.flags.components) {
+		try {
+			const shipped = loadComponents(JSON.parse(readFileSync(resolve(args.flags.components), 'utf8')));
+			const merged = new Map(config.componentRegistry || []);
+			for (const [key, entry] of shipped) if (!merged.has(key)) merged.set(key, entry);
+			setComponentRegistry(config, merged);
+		} catch (err) {
+			if (!isHook) process.stderr.write(`ds-hygiene: could not read --components \u2014 ${err.message}\n`);
 		}
 	}
 

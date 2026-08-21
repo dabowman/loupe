@@ -1,7 +1,7 @@
 ---
 name: wpds-remediation
 description: >-
-  Load when fixing WPDS conformance findings — output from `ds-hygiene`, the `/wpds-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `tokens/hardcoded-value`, `tokens/unknown-token`, `patterns/duplicate-composite`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Carries the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the ds-hygiene findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `wpds-authoring` for the underlying rules.
+  Load when fixing WPDS conformance findings — output from `ds-hygiene`, the `/wpds-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `patterns/duplicate-composite`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Carries the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the ds-hygiene findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `wpds-authoring` for the underlying rules.
 compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Needs the plugin's engine (node >=18)."
 ---
 
@@ -24,6 +24,10 @@ Before reaching for a prop or token name below, check it against the bundled
 `design-system` MCP (`get_component_details`, `get_design_tokens`) rather than
 recalling it — the remedies here name real current props, but WPDS moves
 twice a year and a remedy that's right today can be stale by the next release.
+The MCP is for prop/usage detail on a component already chosen — it carries no
+maturity signal at all, so it is the wrong tool for "is this still the right
+component." That question is `components/index.json`'s job; see
+`system/locked-component`/`system/superseded-component` below.
 
 ## Work in this order
 
@@ -32,16 +36,53 @@ findings say:
 
 1. `stylesheet/unparsed` — a file nobody read, so its findings do not exist yet
 2. `suppression/malformed` — a broken directive is muting nothing
-3. `system/override`, `system/inline-style`, `typography/in-css` — the
+3. `system/locked-component`, `system/superseded-component` — is this even the
+   right component; swapping it can change what every finding below says
+4. `system/override`, `system/inline-style`, `typography/in-css` — the
    component is being fought
-4. `layout/*` — structure
-5. `patterns/*` — composites, once individual components are conformant
-6. `tokens/hardcoded-value`, `tokens/unknown-token`, `typography/untokenized` — values
-7. `css/dead-class` — once the rest has settled
+5. `layout/*` — structure
+6. `patterns/*` — composites, once individual components are conformant
+7. `tokens/hardcoded-value`, `tokens/unknown-token`, `typography/untokenized` — values
+8. `css/dead-class` — once the rest has settled
 
 Re-run between stages rather than fixing from a stale list.
 
 ## Per-rule remedies
+
+### `system/locked-component`
+
+The import is a private API — WordPress does not recommend using it outside
+Gutenberg core, and it can change or break without notice on any update. The
+finding names the public replacement; import that instead. `error` severity,
+never `warn`, because this is a real risk, not a style preference.
+
+If the finding is wrong — the file genuinely is Gutenberg core, or there is no
+usable replacement yet — suppress with that specific reason. "It still works"
+is not a reason; that is true of every locked API right up until it isn't.
+
+### `system/superseded-component`
+
+A current, recommended component now covers this job — the finding names it.
+Check `components/index.json`'s entry for the *target* before swapping: some
+replacements are a straight rename (`HStack`/`VStack` → `Stack` with a
+`direction` prop), others change the prop surface entirely (`Text` from
+`@wordpress/components` had `size`/`weight`/`color`; `Text` from
+`@wordpress/ui` has only `variant`). Read the target's real props via the MCP
+before writing the replacement — do not assume the old props carry over.
+
+Only fires when the replacement's own status in `components/index.json` is
+`recommended` — an `experimental`-status alternative (most of the newer
+`@wordpress/ui` overlay components right now — `Dialog`, `AlertDialog`,
+`Drawer`, `Menu`, `Button`, `IconButton`, `LinkButton`, `Notice`, `Popover`)
+never generates this finding, because WPDS itself flags those not yet safe to
+mix with `@wordpress/components`. If you see one of those names and no finding
+fired, that is correct — do not "fix" it preemptively.
+
+A stale registry entry is a real possibility — WPDS ships twice yearly and
+this file is a point-in-time snapshot. If the named replacement does not
+match what the MCP or trunk source actually shows, treat the finding as
+suspect and say so rather than forcing a mismatched swap; that is worth
+surfacing to whoever maintains this plugin, not silently working around.
 
 ### `layout/margin-on-child`
 
