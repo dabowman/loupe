@@ -11,6 +11,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { analyze } from '../src/analyze.mjs';
+import { applyTokenFixes } from '../src/autofix.mjs';
 import { applyBaseline, readBaseline, writeBaseline } from '../src/baseline.mjs';
 import { findConfig, listPresets, loadConfig, setPatterns } from '../src/config.mjs';
 import { changedFiles, isSource, toPosix } from '../src/discover.mjs';
@@ -46,6 +47,7 @@ const USAGE = `ds-hygiene <command> [options]
 
 Commands:
   check                 Analyze the project (default)
+  fix                   Apply the fixes the engine can make without judgement
   baseline              Record current findings as the accepted backlog
   suppressions          List every active suppression directive
   explain <rule>        Print a rule's guidance
@@ -63,6 +65,7 @@ Options:
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn — minimum severity to report
   --no-baseline         Ignore the baseline file for this run
+  --dry-run             Report what 'fix' would change without writing
   --force               Overwrite an existing config (init)
   --preset <name>       Use a bundled preset instead of discovering config
   --patterns <path>     Composite pattern registry (JSON)
@@ -302,6 +305,37 @@ async function main() {
 		const { directives } = await analyze(config, { scope: null });
 		if (args.flags.format === 'json') process.stdout.write(`${JSON.stringify(directives, null, 2)}\n`);
 		else for (const d of directives) process.stdout.write(`${d.file}:${d.line}  ${d.rules.join(',')}  ${d.reason}\n`);
+		return EXIT.OK;
+	}
+
+	// ── fix ───────────────────────────────────────────────────────────────────
+	// Only substitutions the engine resolved to exactly one on-role token. The
+	// baseline is deliberately ignored: it exists to stop the gate blocking on an
+	// accepted backlog, and burning that backlog down is the point of this
+	// command.
+	if (command === 'fix') {
+		const fixScope = resolveScope(config, args, { defaultChanged: false });
+		if (fixScope && fixScope.error) {
+			process.stderr.write(`ds-hygiene: ${fixScope.error}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		let toFix;
+		try {
+			toFix = await analyze(config, { scope: fixScope });
+		} catch (err) {
+			process.stderr.write(`ds-hygiene: ${err.message}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		const dry = Boolean(args.flags['dry-run']);
+		const { applied, skipped } = applyTokenFixes(root, toFix.findings, { dry });
+		const verb = dry ? 'would fix' : 'fixed';
+		for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${f.prop}: ${f.value} \u2192 var(${f.token})\n`);
+		for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${f.prop}: ${f.value} \u2014 ${f.why}\n`);
+		const left = toFix.findings.length - applied.length;
+		process.stdout.write(
+			`\nds-hygiene: ${verb} ${applied.length} finding(s)${skipped.length ? `, skipped ${skipped.length}` : ''}. ` +
+				`${left} left for review.\n`
+		);
 		return EXIT.OK;
 	}
 

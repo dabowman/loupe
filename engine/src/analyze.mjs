@@ -18,7 +18,7 @@ import { makeSuppressionParser, isSuppressed } from './suppressions.mjs';
 import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.mjs';
 import { syntaxFor } from './syntax.mjs';
 import { SUBSTANTIAL, matches } from './patterns.mjs';
-import { emptyTokenSet, harvestTokenDefs, readTokenSources, suggestionFor, tokenRefsIn } from './tokens.mjs';
+import { emptyTokenSet, harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.mjs';
 import {
 	APPEARANCE_PROPS, FLEX_PROPS, GAP_PROPS, TYPE_PROPS,
 	classesIn, classifyMargin, isHardcodedTokenValue, isInertValue, keySelector, ownDecls,
@@ -567,6 +567,13 @@ for (const f of findings) {
 	f.message =
 		f.hints.map(({ prop, value }) => `${prop}: ${value}${suggestionFor(tokenSet, prop, value)}`).join('; ') +
 		(f.suffix ?? '');
+	// Keep the match structured as well as rendered. The prose is for a reader;
+	// an unambiguous substitution should not need a model to parse it back out
+	// of a sentence in order to apply it.
+	const suggest = f.hints
+		.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) }))
+		.filter((s) => s.tokens.length);
+	if (suggest.length) f.suggest = suggest;
 	delete f.hints;
 	delete f.suffix;
 }

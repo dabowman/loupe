@@ -20,6 +20,7 @@ that report drift on the file just touched, not forty tool calls later).
 | `skills/wpds-authoring` | The authoring rules — order of resort, gap over margin, props over CSS, tokens by role. Load before writing UI. |
 | `skills/wpds-patterns` | Registry of sanctioned composites. Load before assembling a header, modal, action bar, sidebar. |
 | `skills/wpds-remediation` | Per-rule remedies, and the checks that stop a "fix" from silently changing rendering. |
+| `agents/wpds-fixer` | Per-file remediation agent. `/wpds-fix` fans it out once the work spans enough files to be worth it. |
 | `commands/` | `/wpds-audit`, `/wpds-fix`, `/wpds-baseline` |
 | `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
 | `patterns/index.json` | The composite registry |
@@ -111,6 +112,19 @@ nothing on-role matches, the finding names no token rather than a plausible one.
 `tokens/unknown-token` catches the other direction — a `var()` naming nothing the
 design system defines. It stays silent when no definitions were found at all,
 because an empty token set proves nothing.
+
+Because the engine resolved that substitution itself, it can also apply it:
+
+```bash
+ds-hygiene fix          # --dry-run to see it first
+```
+
+Only where exactly one on-role token carries the value, and only in stylesheets
+— the same rule fires on `style={{ padding: '13px' }}`, where a CSS-shaped
+substitution would write a syntax error with a clean report. Two candidate
+tokens is a semantic choice, so it is left alone. Paying a model to read a file
+back and retype an answer nothing had to reason about is the expensive way to
+apply a substitution, and this is usually the highest-volume rule in a report.
 
 ### Composites
 
@@ -227,6 +241,18 @@ The baseline and the hook's retry counter live in the plugin's data directory,
 keyed by project — carrying the plugin between repos writes nothing into them.
 A baseline already committed to a project still wins. `status` prints which.
 
+## Remediation
+
+`/wpds-fix` runs `ds-hygiene fix` first, so what remains is the work that needs
+judgement: did that `margin-bottom` do something `gap` will not, is this `<div>`
+editor content that should stay raw, is that inline style computed at runtime.
+
+Above five affected files it dispatches one `wpds-fixer` agent per file. Per
+file, never per rule — two agents editing one file collide. `css/dead-class` and
+`patterns/*` are never dispatched: both are cross-file judgements a single-file
+agent cannot make. Verification is one repo-wide re-run by the caller, because
+every run re-indexes the whole repo regardless of `--files` scope.
+
 ## Settings
 
 Configured where you enable the plugin, read by the hook from the environment:
@@ -295,7 +321,7 @@ Known limits, in rough priority order:
 cd engine && npm test
 ```
 
-Four suites. `tests/run.mjs` is fixture-driven, one directory per behaviour,
+Five suites. `tests/run.mjs` is fixture-driven, one directory per behaviour,
 each with a note explaining what it pins down — since behaviour is config-driven,
 this is the only thing standing between a preset edit and a rule silently
 switching itself off. `tests/detect.mjs` covers inference, which runs in every
@@ -304,6 +330,8 @@ reported *success*: a scan that never finished, a project's own class reported a
 a third-party internal, an absolute path that matched nothing and returned clean.
 `tests/features.mjs` covers the three channels and the two cross-file rules —
 everything that reports across a boundary a single-file linter cannot see.
+`tests/autofix.mjs` covers `fix`, where every failure is invisible: the value is
+right, the file parses, the report goes clean, and the meaning has changed.
 
 Those are the ones worth a test. A gate that errors gets noticed; a gate that
 says "clean" for the wrong reason does not, and every failure mode here breaks

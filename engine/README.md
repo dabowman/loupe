@@ -147,6 +147,26 @@ override findings.
   as reference sources, no component layer
 - `generic` — namespaces and token prefixes only
 
+## Fixing
+
+```bash
+ds-hygiene fix              # apply; --dry-run to preview
+```
+
+Applies only `tokens/hardcoded-value` findings the engine already resolved to
+exactly **one** on-role token, and only in stylesheets. Two candidate tokens is
+a semantic choice — the right pixels with the wrong meaning is the failure the
+suggestion machinery exists to prevent — and the JS channels (`style={{ … }}`,
+CSS-in-JS) are left alone because a CSS-shaped substitution there writes a
+syntax error with a clean report.
+
+A declaration that is not on its reported line exactly once is skipped and
+named: the file moved under the report, and substituting against a stale line
+number edits the wrong declaration. `!important` and the terminator survive.
+
+The baseline is ignored here. It exists to stop the gate blocking on an accepted
+backlog; burning that backlog down is what this command is for.
+
 ## Baseline
 
 The first run on an existing codebase is the adoption blocker. Record the
@@ -209,6 +229,12 @@ ds-hygiene suppressions                  # audit every active directive
 Exit codes are a contract: `0` clean or advisory-only, `1` blocking findings,
 `2` could not run.
 
+JSON findings carry `suggest` when the engine matched a value against the token
+set: `[{ prop, value, tokens }]`, most specific first. The prose message says the
+same thing for a reader; `suggest` is there so a consumer does not have to parse
+it back out of a sentence. `ds-hygiene fix` is that consumer for the
+single-token case.
+
 ## Programmatic use
 
 ```js
@@ -242,8 +268,9 @@ never silent).
 npm test
 ```
 
-Four suites: `tests/run.mjs` (fixtures, one directory per behaviour),
+Five suites: `tests/run.mjs` (fixtures, one directory per behaviour),
 `tests/detect.mjs` (inference), `tests/regressions.mjs` (failures that reported
-success), `tests/features.mjs` (the three channels and the two cross-file rules).
+success), `tests/features.mjs` (the three channels and the two cross-file rules),
+`tests/autofix.mjs` (the fix path, where a wrong substitution is invisible).
 Once behaviour is config-driven, these are the only thing standing between a
 preset edit and a rule silently switching itself off.
