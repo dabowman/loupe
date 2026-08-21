@@ -18,7 +18,8 @@
   },
   "namespaces": {
     "external": [
-      "components-", "wp-", "block-editor-", "editor-", "interface-",
+      "components-", "wp-components-", "wp-block-", "wp-admin-", "wp-core-ui",
+      "block-editor-", "editor-", "interface-",
       "edit-post-", "edit-site-", "dataviews-", "dashicon"
     ],
     "neverDead": [
@@ -27,7 +28,7 @@
     ]
   },
   "sources": {
-    "markup": ["**/src/**/*.js", "**/src/**/*.jsx", "**/src/**/*.ts", "**/src/**/*.tsx"],
+    "markup": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs"],
     "references": [
       "**/*.php", "**/*.html", "**/block.json", "**/theme.json",
       "**/patterns/**/*.php", "**/patterns/**/*.html"

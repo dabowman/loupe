@@ -16,6 +16,9 @@
 
 import { parse as babelParse } from '@babel/parser';
 import { keyName, toCssProp, toCssValue } from './inline.mjs';
+import { FLEX_PROPS, GAP_PROPS } from './styles.mjs';
+import { cssInJsLocals, parseTemplate, templateText } from './cssinjs.mjs';
+import { depthOf, nodeCount, signatureOf, systemTree } from './patterns.mjs';
 
 const PLUGINS = ['jsx', 'typescript', 'decorators-legacy', 'classProperties', 'importAttributes'];
 
@@ -25,10 +28,30 @@ export function harvestTokens(text, into = new Set()) {
 	return into;
 }
 
-/** `wf-item-${id}` → stem `wf-item-`, so every `.wf-item-*` rule counts as live. */
+/**
+ * `wf-item-${id}` → stem `wf-item-`, so every `.wf-item-*` rule counts as live.
+ *
+ * Scans forward for `${` and walks the identifier backwards. The obvious
+ * `/([A-Za-z_][\w-]*)\$\{/g` backtracks quadratically on any long run of word
+ * characters with no `${` after it, and one 10MB generated file (an emscripten
+ * blob checked in as .ts) turned a whole-repo scan into a hundred seconds — past
+ * every hook timeout, so the gate silently never ran.
+ */
+const MAX_STEM = 128;
 export function harvestStems(text, into = new Set()) {
-	for (const m of text.matchAll(/([A-Za-z_][\w-]*)\$\{/g)) if (m[1].includes('-')) into.add(m[1]);
+	for (let i = text.indexOf('${'); i !== -1; i = text.indexOf('${', i + 2)) {
+		let s = i;
+		const floor = Math.max(0, i - MAX_STEM);
+		while (s > floor && isWordChar(text.charCodeAt(s - 1))) s--;
+		const stem = text.slice(s, i);
+		if (stem.includes('-') && /^[A-Za-z_]/.test(stem)) into.add(stem);
+	}
 	return into;
+}
+
+/** [A-Za-z0-9_-] */
+function isWordChar(c) {
+	return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95 || c === 45;
 }
 
 function stringsIn(node, out = []) {
@@ -98,6 +121,22 @@ function readStyleAttr(value) {
 	return { decls, dynamic, present: true };
 }
 
+/**
+ * Does this declaration lay anything out?
+ *
+ * `<div>` maps to a layout primitive, so the suggestion is only true when the
+ * div is actually laying something out. A `<div className="acme-card">` whose
+ * class sets a border and a colour has no layout primitive analog, and telling
+ * an agent to make it an `HStack` is wrong advice at scale — it was the single
+ * largest source of findings in a real repo.
+ */
+export const isLayoutDecl = ({ prop, value }) =>
+	FLEX_PROPS.has(prop) ||
+	GAP_PROPS.has(prop) ||
+	(prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value)) ||
+	prop.startsWith('grid-template') ||
+	prop.startsWith('grid-auto');
+
 function walkAst(node, visit) {
 	if (!node || typeof node !== 'object') return;
 	if (Array.isArray(node)) {
@@ -143,7 +182,7 @@ function systemImports(ast, ds) {
 }
 
 /**
- * @returns {{ bindings, rawEls, inlineStyles, referenced, stems, parseError }}
+ * @returns {{ bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, parseError }}
  *   bindings:     { cls, tag, isSystem, isText, isLayout, file, line }
  *   rawEls:       { tag, classes, file, line, inlineStyled }
  *   inlineStyles: { tag, isSystem, isText, isLayout, decls, dynamic, file, line }
@@ -154,18 +193,119 @@ export function scanMarkup(text, relPath, ds) {
 	const bindings = [];
 	const rawEls = [];
 	const inlineStyles = [];
+	const cssInJs = [];
+	const composites = [];
+	const imports = new Set();
 
 	let ast;
 	try {
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return { bindings, rawEls, inlineStyles, referenced, stems, parseError: err.message.split('\n')[0] };
+		return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, parseError: err.message.split('\n')[0] };
 	}
 
 	const { known, text: textLike, layout } = systemImports(ast, ds);
+	const tags = cssInJsLocals(ast, ds.cssInJsPackages);
+	// `<Button css={css`…`}>` binds a template to an element the walk sees
+	// first, so the owner is recorded before the template is reached.
+	const cssPropOwner = new Map();
+	for (const node of ast.program.body)
+		if (node.type === 'ImportDeclaration') for (const sp of node.specifiers) imports.add(sp.local.name);
+
+	/**
+ * A CSS-in-JS tagged template, resolved to the thing it styles.
+ *
+ * `styled(Button)` styles a design-system component, so its declarations get
+ * that component's binding and the "use the props" remedy — the same verdict
+ * the stylesheet pass reaches for a class bound to the same component.
+ */
+	/**
+ * Direct design-system children of a JSX element.
+ *
+ * Descends through anything that is not itself an element — expression
+ * containers, fragments, conditionals — because `{items.map((i) => <Button />)}`
+ * is a child in every sense that matters here, and stopping at the container
+ * would make a mapped list look empty.
+ */
+	const jsxChildElements = (el) => {
+		const out = [];
+		const dig = (n) => {
+			if (!n || typeof n !== 'object') return;
+			if (Array.isArray(n)) return n.forEach(dig);
+			if (n.type === 'JSXElement') return void out.push(n);
+			for (const k of Object.keys(n)) if (k !== 'loc' && k !== 'start' && k !== 'end') dig(n[k]);
+		};
+		for (const c of el.children || []) dig(c);
+		return out;
+	};
+
+	const jsxName = (el) => {
+		const n = el?.openingElement?.name;
+		if (n?.type === 'JSXIdentifier') return n.name;
+		if (n?.type === 'JSXMemberExpression') return n.object?.name ?? null;
+		return null;
+	};
+
+	const readComposite = (el) => {
+		const name = jsxName(el);
+		if (!name || !known.has(name)) return;
+		const tree = systemTree(
+			{ ...el, line: el.loc?.start?.line ?? 1 },
+			(n) => known.has(n),
+			jsxChildElements,
+			jsxName
+		);
+		// A lone component is not a composition, and reporting one would drown
+		// every real finding in the file.
+		if (!tree || nodeCount(tree) < 2) return;
+		composites.push({
+			file: relPath,
+			line: el.loc?.start?.line ?? 1,
+			signature: signatureOf(tree),
+			tree,
+			size: nodeCount(tree),
+			depth: depthOf(tree),
+		});
+	};
+
+	const readTaggedTemplate = (node) => {
+		if (!tags.any) return;
+		const t = node.tag;
+		const owner = cssPropOwner.get(node.start);
+		let target = null;
+		let isSystem = false;
+		if (owner) {
+			({ target, isSystem } = owner);
+			if (!tags.bare.has(t.name) && !tags.styled.has(t.object?.name) && !tags.styled.has(t.callee?.name)) return;
+		} else if (t.type === 'MemberExpression' && tags.styled.has(t.object?.name)) {
+			target = t.property?.name ?? null; // styled.div
+		} else if (t.type === 'CallExpression' && tags.styled.has(t.callee?.name)) {
+			target = t.arguments?.[0]?.name ?? null; // styled(Button)
+			isSystem = Boolean(target && known.has(target));
+		} else if (t.type === 'Identifier' && tags.bare.has(t.name)) {
+			target = null; // css`…`, createGlobalStyle`…`
+		} else {
+			return; // gql`…`, html`…`, keyframes`…` — not CSS we own
+		}
+
+		const line = node.quasi.quasis[0]?.loc?.start?.line ?? node.loc?.start?.line ?? 1;
+		const { groups, error } = parseTemplate(templateText(node.quasi), line);
+		cssInJs.push({
+			file: relPath,
+			line,
+			target,
+			isSystem,
+			isText: isSystem && textLike.has(target),
+			isLayout: isSystem && layout.has(target),
+			groups,
+			error,
+		});
+	};
 
 	walkAst(ast.program, (node) => {
+		if (node.type === 'TaggedTemplateExpression') return readTaggedTemplate(node);
+		if (node.type === 'JSXElement') readComposite(node);
 		if (node.type !== 'JSXOpeningElement') return;
 		const name = node.name;
 		const tag =
@@ -179,17 +319,28 @@ export function scanMarkup(text, relPath, ds) {
 
 		const strings = [];
 		let style = null;
+		let cssAttr = null;
 		for (const attr of node.attributes) {
 			if (attr.type !== 'JSXAttribute') continue;
 			const an = attr.name?.name;
 			if (an === 'className' || an === 'class') stringsIn(attr.value, strings);
 			else if (an === 'style') style = readStyleAttr(attr.value);
+			else if (an === 'css') cssAttr = attr.value;
 		}
 		const classes = classesFrom(strings);
 
 		const root = tag.split('.')[0];
 		const isComponent = /^[A-Z]/.test(root);
 		const isSystem = isComponent && known.has(root);
+
+		const owned = cssAttr?.type === 'JSXExpressionContainer' ? cssAttr.expression : null;
+		if (owned?.type === 'TaggedTemplateExpression')
+			cssPropOwner.set(owned.start, {
+				target: isComponent ? root : tag.toLowerCase(),
+				isSystem,
+				isText: isSystem && textLike.has(root),
+				isLayout: isSystem && layout.has(root),
+			});
 
 		if (style?.present)
 			inlineStyles.push({
@@ -221,9 +372,10 @@ export function scanMarkup(text, relPath, ds) {
 				tag: lower, classes, file: relPath, line,
 				suggest: mapped.component, styledOnly: mapped.styledOnly,
 				inlineStyled: Boolean(style?.present),
+				inlineLayout: Boolean(style?.decls?.some(isLayoutDecl)),
 			});
 		}
 	});
 
-	return { bindings, rawEls, inlineStyles, referenced, stems, parseError: null };
+	return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, parseError: null };
 }

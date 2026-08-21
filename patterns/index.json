@@ -1,68 +1,68 @@
 {
   "version": 1,
-  "note": "Sanctioned WPDS compositions. `signature` is the normalized component tree (element names only, props and text dropped) — it is what makes a pattern checkable rather than merely documented. Entries ship without `canonical` or `import` on purpose: the real shape is project-specific, and an implementation invented here would be wrong everywhere. Fill each in from the project's own code the first time you build it.",
+  "note": "Sanctioned WPDS compositions. `signature` is the normalized component tree — it is what makes a pattern checkable rather than merely documented. A node is `[name, ...children]`; each child is either a bare component name or another node. Only design-system components appear: raw elements between them are transparent, so an intervening `<div>` never hides a match. Matching is containment, not equality — extra children are fine, and a registered child may sit anywhere beneath the root rather than as a direct sibling, because a footer recorded beside the body and a footer nested inside it are the same composition. A signature under four nodes is documentation rather than a check: `HStack(Button,Button)` describes an action bar truthfully and matches half a codebase. Entries ship without `canonical` or `import` on purpose: the real shape is project-specific, and an implementation invented here would be wrong everywhere. Fill each in from the project's own code the first time you build it — `canonical` also tells the checker which import already satisfies the pattern, so a file using the shared implementation stops being reported.",
   "patterns": [
     {
       "id": "page-header",
       "summary": "Screen title with an optional description and a trailing action cluster.",
       "use": "The top of any admin screen or panel.",
-      "signature": ["HStack", ["VStack", ["Heading", "Text"]], ["HStack", ["Button"]]],
+      "signature": ["HStack", ["VStack", "Heading", "Text"], ["HStack", "Button"]],
       "instead_of": ["An ad-hoc HStack + Heading + buttons rebuilt per screen"]
     },
     {
       "id": "action-bar",
       "summary": "Horizontal group of actions with consistent order, spacing and alignment.",
       "use": "Anywhere two or more actions sit together; primary action last.",
-      "signature": ["HStack", ["Button", "Button"]],
+      "signature": ["HStack", "Button", "Button"],
       "instead_of": ["div.actions with hand-set margins", "Buttons spaced with margin-right"]
     },
     {
       "id": "confirm-modal",
       "summary": "Destructive-action confirmation with a titled Modal and a right-aligned action pair.",
       "use": "Any irreversible action needing explicit consent.",
-      "signature": ["Modal", ["Text"], ["HStack", ["Button", "Button"]]],
+      "signature": ["Modal", "Text", ["HStack", "Button", "Button"]],
       "instead_of": ["A bare Modal with a hand-built div footer", "window.confirm()"]
     },
     {
       "id": "form-modal",
       "summary": "Modal wrapping a form, with submit and cancel in the standard position.",
       "use": "Creating or editing a record without leaving the current screen.",
-      "signature": ["Modal", ["VStack"], ["HStack", ["Button", "Button"]]],
+      "signature": ["Modal", "VStack", ["HStack", "Button", "Button"]],
       "instead_of": ["Modal with an inline form and per-instance submit placement"]
     },
     {
       "id": "notice-stack",
       "summary": "Container owning the spacing and order of a run of Notices.",
       "use": "Any screen that can show more than one notice at a time.",
-      "signature": ["VStack", ["Notice"]],
+      "signature": ["VStack", "Notice"],
       "instead_of": ["Individually placed Notice components with local margins"]
     },
     {
       "id": "detail-sidebar",
       "summary": "Secondary panel beside a main region, with its own header and scroll area.",
       "use": "Inspector and detail views alongside a list or canvas.",
-      "signature": ["VStack", ["HStack", ["Heading", "Button"]], ["VStack"]],
+      "signature": ["VStack", ["HStack", "Heading", "Button"], "VStack"],
       "instead_of": ["One-off panel layouts with bespoke headers"]
     },
     {
       "id": "empty-state",
       "summary": "Centred explanation of why a region is empty, with the action that fills it.",
       "use": "Any list, table or canvas that can legitimately have no content.",
-      "signature": ["VStack", ["Heading", "Text", "Button"]],
+      "signature": ["VStack", "Heading", "Text", "Button"],
       "instead_of": ["A centred div with a paragraph and a button"]
     },
     {
       "id": "form-row",
       "summary": "Label, control and help text in the standard arrangement.",
       "use": "Every field in a settings or record form.",
-      "signature": ["VStack", ["Text"], ["Text"]],
+      "signature": ["VStack", "Text", "Text"],
       "instead_of": ["Label/control/help rebuilt per field"]
     },
     {
       "id": "dataviews-toolbar",
       "summary": "Search, filters and bulk actions above a DataViews list.",
       "use": "Any DataViews surface with filtering or bulk operations.",
-      "signature": ["HStack", ["SearchControl"], ["HStack", ["Button"]]],
+      "signature": ["HStack", "SearchControl", ["HStack", "Button"]],
       "instead_of": ["Custom filter/search/action clusters per list"]
     }
   ]

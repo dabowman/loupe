@@ -54,6 +54,19 @@ export function discover({ root, sources }) {
 }
 
 /**
+ * Could this path contribute anything at all?
+ *
+ * The PostToolUse hook fires on every Edit and Write, and without this a README
+ * edit paid for a whole-repo index to be told there was nothing to say about a
+ * README. On a large repo that alone was past the hook timeout.
+ */
+export function isSource(sources, rel) {
+	const match = picomatch(sources.ignore || []);
+	if (match(rel)) return false;
+	return ['styles', 'markup', 'references'].some((kind) => picomatch(sources[kind] || [])(rel));
+}
+
+/**
  * Files changed relative to HEAD, plus untracked ones. Returns null when this
  * isn't a git worktree — callers map that to the "couldn't run" exit code
  * rather than silently analyzing everything.

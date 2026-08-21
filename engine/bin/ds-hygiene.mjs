@@ -8,15 +8,21 @@
  *   2  could not run (bad usage, not a git worktree, config error)
  */
 
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { analyze } from '../src/analyze.mjs';
 import { applyBaseline, readBaseline, writeBaseline } from '../src/baseline.mjs';
-import { listPresets, loadConfig } from '../src/config.mjs';
-import { changedFiles, toPosix } from '../src/discover.mjs';
+import { findConfig, listPresets, loadConfig, setPatterns } from '../src/config.mjs';
+import { changedFiles, isSource, toPosix } from '../src/discover.mjs';
 import { RULES, canonicalRuleId, renderTitle } from '../src/rules.mjs';
 import { formatAgent, formatJson, formatSarif, formatSummary } from '../src/report.mjs';
-import { bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot, parsePayload, payloadFile, readStdin } from '../src/hook.mjs';
+import { detectConfig } from '../src/detect.mjs';
+import { loadPatterns } from '../src/patterns.mjs';
+import { findExistingBaseline, isPluginContext, stateDir } from '../src/paths.mjs';
+import {
+	bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot,
+	parsePayload, payloadFile, pluginOptions, readStdin,
+} from '../src/hook.mjs';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 
@@ -29,7 +35,7 @@ function parseArgs(argv) {
 			continue;
 		}
 		const [key, inline] = a.slice(2).split(/=(.*)/s);
-		const needsValue = ['format', 'config', 'root', 'preset', 'files', 'max-findings', 'severity', 'baseline'].includes(key);
+		const needsValue = ['format', 'config', 'root', 'preset', 'files', 'max-findings', 'severity', 'baseline', 'patterns'].includes(key);
 		if (needsValue) args.flags[key] = inline ?? argv[++i];
 		else args.flags[key] = inline === undefined ? true : inline !== 'false';
 	}
@@ -44,7 +50,10 @@ Commands:
   suppressions          List every active suppression directive
   explain <rule>        Print a rule's guidance
   presets               List bundled presets
-  hook                  Claude Code Stop-hook mode (reads payload on stdin)
+  detect                Show the config that would be inferred for this project
+  init                  Write the inferred config to ds-hygiene.config.json
+  status                Show the effective config: rules, severities, what blocks
+  hook                  Claude Code hook mode (reads payload on stdin)
 
 Options:
   --changed             Only report findings in files changed vs. HEAD (default for hook)
@@ -54,16 +63,29 @@ Options:
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn — minimum severity to report
   --no-baseline         Ignore the baseline file for this run
+  --force               Overwrite an existing config (init)
   --preset <name>       Use a bundled preset instead of discovering config
+  --patterns <path>     Composite pattern registry (JSON)
   --config <path>       Explicit config file
   --root <path>         Project root (default: cwd, or CLAUDE_PROJECT_DIR under hook)
+
+With no config file present, the project is inspected and a config inferred.
+Run 'ds-hygiene detect' to see what that produces, 'init' to write it down.
 `;
 
 function resolveScope(config, args, { defaultChanged = false }) {
 	const given = ['all', 'changed', 'files'].filter((f) => args.flags[f]);
 	if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(' ')}` };
 	if (args.flags.all) return null;
-	if (args.flags.files) return args.flags.files.split(',').map((f) => toPosix(f.trim())).filter(Boolean);
+	if (args.flags.files)
+		return args.flags.files
+			.split(',')
+			.map((f) => f.trim())
+			.filter(Boolean)
+			// Findings are keyed repo-relative, so an absolute path matched nothing
+			// and the run reported clean — the worst answer a gate can give.
+			.map((f) => toPosix(isAbsolute(f) ? relative(config.root, resolve(f)) : f))
+			.filter((f) => f && !f.startsWith('..'));
 	if (args.flags.changed || defaultChanged) {
 		const changed = changedFiles(config.root);
 		if (changed === null) return { error: 'not a git worktree; use --all or --files' };
@@ -95,17 +117,74 @@ async function main() {
 	const isHook = command === 'hook';
 	const root = resolve(args.flags.root || (isHook ? hookRoot() : process.cwd()));
 	if (!existsSync(root)) {
+		if (isHook) return emitClean(`ds-hygiene: skipped \u2014 root does not exist: ${root}`);
 		process.stderr.write(`ds-hygiene: root does not exist: ${root}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
+	const options = isHook ? pluginOptions() : {};
+
 	let config;
+	let detected = null;
 	try {
-		config = await loadConfig({ root, configPath: args.flags.config, preset: args.flags.preset });
+		// An explicit path or preset wins; then a discovered project config; then
+		// whatever the project itself implies. Without the last step a project
+		// with no config file fell through to `generic`, which declares no
+		// component layer and therefore silently disables every correlation rule.
+		const explicitPreset =
+			args.flags.preset || (options.preset && options.preset !== 'auto' ? options.preset : null);
+		if (!args.flags.config && !explicitPreset && !findConfig(root)) {
+			detected = detectConfig(root);
+			if (options.projectPrefixes?.length) detected.config.namespaces.project = options.projectPrefixes;
+		}
+		config = await loadConfig({
+			root,
+			configPath: args.flags.config,
+			preset: explicitPreset,
+			inline: detected?.config,
+			inferred: Boolean(detected),
+		});
 	} catch (err) {
+		// Under the hook, EXIT.CANNOT_RUN is exit 2 — which blocks the turn. A
+		// mistyped preset in the plugin settings would then block every turn in
+		// every project with nothing the agent could do about it. A gate that
+		// cannot configure itself stands aside and says so.
+		if (isHook) return emitClean(`ds-hygiene: skipped \u2014 config error: ${err.message}`);
 		process.stderr.write(`ds-hygiene: config error \u2014 ${err.message}\n`);
 		return EXIT.CANNOT_RUN;
 	}
+
+	// The registry travels with the plugin; the project may also ship one. Merge
+	// them with the project winning on id, because a project that has written
+	// down its own version of `page-header` means that one, not the generic.
+	if (args.flags.patterns) {
+		try {
+			const shipped = loadPatterns(JSON.parse(readFileSync(resolve(args.flags.patterns), 'utf8')));
+			const own = new Set((config.patterns || []).map((p) => p.id));
+			setPatterns(config, [...(config.patterns || []), ...shipped.filter((p) => !own.has(p.id))]);
+		} catch (err) {
+			if (!isHook) process.stderr.write(`ds-hygiene: could not read --patterns \u2014 ${err.message}\n`);
+		}
+	}
+
+	// An inferred namespace list is a guess, and css/dead-class tells an agent to
+	// delete code. Never let a guess drive a destructive rule at error severity.
+	if (config.inferred && config.rules['css/dead-class']?.severity === 'error')
+		config.rules['css/dead-class'].severity = 'warn';
+
+	// Whether the gate may stop a turn.
+	//
+	// A config file is a deliberate statement about THIS project, so its
+	// severities stand. An inferred config is a guess about a project the plugin
+	// has just met, and blocking someone's turn on a guess is hostile — so a
+	// guessed config is advisory-only unless blocking is explicitly turned on.
+	// The plugin option can force advisory either way.
+	const blockingAllowed = options.blocking === true || (!config.inferred && options.blocking !== false);
+	if (isHook && !blockingAllowed) {
+		for (const def of Object.values(config.rules)) if (def.severity === 'error') def.severity = 'warn';
+	}
+	if (options.maxAttempts) config.hook.maxAttempts = options.maxAttempts;
+	if (options.maxFindings) config.hook.maxFindings = options.maxFindings;
 
 	if (command === 'explain') {
 		const id = canonicalRuleId(args._[1] || '');
@@ -118,10 +197,95 @@ async function main() {
 		return EXIT.OK;
 	}
 
+	if (command === 'status') {
+		const src =
+			config.source.kind === 'file'
+				? config.source.path
+				: config.source.kind === 'preset'
+					? `preset ${config.source.name}`
+					: config.source.kind === 'inferred'
+						? 'inferred (no config file found)'
+						: config.source.kind;
+		const state = stateDir(root);
+		const lines = [
+			`config:     ${src}`,
+			`namespaces: ${(config.raw.namespaces?.project || []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
+			`suppress:   ${config.suppression.keyword} <ruleId> -- <reason>`,
+			`state:      ${state.dir}${state.scope === 'plugin-data' ? '  (outside your repo)' : ''}`,
+			`plugin:     ${isPluginContext() ? 'enabled, options read from plugin settings' : 'not running as a plugin'}`,
+			'',
+			'rules:',
+		];
+		for (const [id, def] of Object.entries(RULES)) {
+			const sev = config.severityOf(id);
+			// Report what will actually happen, not the configured severity: an
+			// error-severity rule under a gate that isn't allowed to block is
+			// advisory in practice, and saying otherwise here is how you end up
+			// debugging a gate that "should" be blocking and isn't.
+			const note = config.enabled[id]
+				? sev === 'error' && blockingAllowed
+					? 'BLOCKS'
+					: sev === 'error'
+						? 'advisory (would block if enabled)'
+						: 'advisory'
+				: `off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`;
+			lines.push(`  ${id.padEnd(32)} ${note}`);
+		}
+		const blockers = Object.keys(RULES).filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
+		lines.push(
+			'',
+			blockingAllowed && blockers.length
+				? `Turns are blocked by: ${blockers.join(', ')}`
+				: 'Nothing blocks turns; every finding is advisory.'
+		);
+		if (config.inferred) {
+			lines.push('css/dead-class is held to advisory because the namespaces were inferred, not configured.');
+			if (!blockingAllowed)
+				lines.push(
+					'The gate reports only: this config was inferred. Write one with `ds-hygiene init`, or turn on "Block turns on findings" in the plugin settings.'
+				);
+		} else if (!blockingAllowed) {
+			lines.push('The gate reports only: "Block turns on findings" is off in the plugin settings.');
+		}
+		process.stdout.write(`${lines.join('\n')}\n`);
+		return EXIT.OK;
+	}
+
+	if (command === 'detect' || command === 'init') {
+		const info = detected || detectConfig(root);
+		if (args.flags.format === 'json') {
+			process.stdout.write(`${JSON.stringify(info, null, 2)}\n`);
+			return EXIT.OK;
+		}
+		const lines = [
+			`preset:     ${info.preset}  [${info.presetConfidence} confidence]`,
+			`            ${info.presetReasons.join('; ')}`,
+			`namespaces: ${info.namespaces.project.join(', ') || '(none found)'}  [${info.namespaceConfidence} confidence]`,
+			`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`,
+			`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)`,
+		];
+		if (command === 'detect') {
+			lines.push('', 'Inferred config:', JSON.stringify(info.config, null, 2));
+			if (config.source.kind === 'file') lines.push('', `Note: ${config.source.path} exists and takes precedence.`);
+			process.stdout.write(`${lines.join('\n')}\n`);
+			return EXIT.OK;
+		}
+		const target = join(root, 'ds-hygiene.config.json');
+		if (existsSync(target) && !args.flags.force) {
+			process.stderr.write(`ds-hygiene: ${target} already exists (use --force)\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		writeFileSync(target, `${JSON.stringify(info.config, null, 2)}\n`);
+		process.stdout.write(`${lines.join('\n')}\n\nWrote ${target}\n`);
+		return EXIT.OK;
+	}
+
 	if (command === 'baseline') {
 		const result = await analyze(config, { scope: null });
-		const { path, count } = writeBaseline(root, args.flags.baseline || config.baselinePath, result);
-		process.stdout.write(`ds-hygiene: baselined ${count} finding(s) \u2192 ${path}\n`);
+		const { path: target, scope } = findExistingBaseline(root, args.flags.baseline, config.baselinePath, { create: true });
+		const { path, count } = writeBaseline(root, target, result);
+		const where = scope === 'plugin-data' ? ' (plugin data \u2014 nothing written to your repo)' : '';
+		process.stdout.write(`ds-hygiene: baselined ${count} finding(s) \u2192 ${path}${where}\n`);
 		return EXIT.OK;
 	}
 
@@ -145,6 +309,8 @@ async function main() {
 	// reported at write time. Stop payloads carry no file and fall through to
 	// the changed-file scope.
 	const touched = isHook ? payloadFile(payload, root) : null;
+	if (touched && !isSource(config.sources, touched))
+		return emitClean('ds-hygiene: skipped \u2014 not a checked file type.');
 	const scope = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
 	if (scope && scope.error) {
 		if (isHook) return emitClean(`ds-hygiene: skipped \u2014 ${scope.error}`);
@@ -162,8 +328,8 @@ async function main() {
 	}
 
 	if (!args.flags['no-baseline']) {
-		const baseline = readBaseline(root, args.flags.baseline || config.baselinePath);
-		result = applyBaseline(result, baseline);
+		const { path: bPath } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+		result = applyBaseline(result, readBaseline(root, bPath));
 	}
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
 

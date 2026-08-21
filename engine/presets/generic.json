@@ -2,6 +2,8 @@
   "designSystem": {
     "packages": [],
     "tokenPrefixes": [],
+    "tokenSources": [],
+    "cssInJsPackages": ["styled-components", "@emotion/styled", "@emotion/react", "@emotion/css", "@emotion/native"],
     "components": { "layout": [], "text": [] },
     "elementMap": {}
   },
@@ -10,7 +12,12 @@
     "styles": ["**/*.css", "**/*.scss"],
     "markup": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
     "references": ["**/*.php", "**/*.html", "**/*.twig"],
-    "ignore": ["**/node_modules/**", "**/build/**", "**/dist/**", "**/vendor/**", "**/.git/**", "**/*.min.css"]
+    "ignore": [
+      "**/node_modules/**", "**/build/**", "**/dist/**", "**/vendor/**", "**/.git/**",
+      "**/coverage/**", "**/.next/**", "**/out/**", "**/storybook-static/**",
+      "**/build-style/**", "**/build-module/**", "**/build-types/**",
+      "**/__snapshots__/**", "**/*.min.css", "**/*.min.js", "**/*.bundle.js"
+    ]
   },
   "suppression": { "keyword": "ds-allow", "blanket": ["ds-disable"] }
 }

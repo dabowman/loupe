@@ -1,9 +1,8 @@
 {
-  "note": "Both system tags carry a nested brace in an attribute; the old regex scanner dropped them entirely, which downgraded the label finding to typography/untokenized and lost the body class binding. The VStack's style attribute is also a real finding — inline styling a design-system component overrides the props that are supposed to drive it.",
+  "note": "Both system tags carry a nested brace in an attribute; the old regex scanner dropped them entirely, which downgraded the label finding to typography/untokenized and lost the body class binding. The VStack's style attribute is also a real finding \u2014 inline styling a design-system component overrides the props that are supposed to drive it. .wf-panel__body is a colour-only <div>, so it gets no layout-primitive suggestion.",
   "findings": [
     { "rule": "typography/in-css", "file": "styles/panel.css", "line": 1 },
     { "rule": "tokens/hardcoded-value", "file": "styles/panel.css", "line": 2 },
-    { "rule": "system/inline-style", "file": "src/Panel.jsx", "line": 4 },
-    { "rule": "system/raw-element", "file": "src/Panel.jsx", "line": 6 }
+    { "rule": "system/inline-style", "file": "src/Panel.jsx", "line": 4 }
   ]
 }

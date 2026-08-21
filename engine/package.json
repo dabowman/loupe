@@ -22,7 +22,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node tests/run.mjs"
+    "test": "node tests/run.mjs && node tests/detect.mjs && node tests/regressions.mjs && node tests/features.mjs"
   },
   "dependencies": {
     "@babel/parser": "^7.24.0",

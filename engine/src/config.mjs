@@ -6,10 +6,11 @@
  * nothing about WordPress, or about any particular design system.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { RULES, SEVERITIES, canonicalRuleId } from './rules.mjs';
+import { loadPatterns } from './patterns.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRESET_DIR = join(HERE, '..', 'presets');
@@ -25,6 +26,8 @@ export const DEFAULTS = {
 	designSystem: {
 		packages: [],
 		tokenPrefixes: [],
+		tokenSources: [],
+		cssInJsPackages: [],
 		normalizeExports: '',
 		components: { layout: [], text: [] },
 		elementMap: {},
@@ -38,6 +41,7 @@ export const DEFAULTS = {
 	},
 	suppression: { keyword: 'ds-allow', blanket: ['ds-disable'] },
 	rules: {},
+	patterns: null,
 	baseline: '.ds-hygiene-baseline.json',
 	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 120000 },
 };
@@ -97,11 +101,21 @@ async function loadChain(path, seen = new Set()) {
 	if (seen.has(real)) throw new Error(`circular extends at ${real}`);
 	seen.add(real);
 	const raw = (await readConfigFile(real)) || {};
-	if (!raw.extends) return raw;
+	return expandExtends(raw, dirname(real), seen);
+}
+
+/**
+ * Resolve `extends` on an already-parsed object.
+ *
+ * Split out of loadChain so a config that never touched disk — the one
+ * auto-detection produces — goes through the same resolution as a file.
+ */
+async function expandExtends(raw, fromDir, seen = new Set()) {
+	if (!raw?.extends) return raw || {};
 	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
 	let base = {};
 	for (const spec of specs) {
-		const { path: p } = await resolveExtends(spec, dirname(real));
+		const { path: p } = await resolveExtends(spec, fromDir);
 		base = merge(base, await loadChain(p, seen));
 	}
 	const { extends: _drop, ...rest } = raw;
@@ -109,8 +123,19 @@ async function loadChain(path, seen = new Set()) {
 }
 
 export function listPresets() {
-	return ['wpds', 'wordpress-components', 'wordpress-block-theme', 'generic'];
+	// Read the directory rather than hardcode: a list maintained by hand drifts
+	// the moment someone adds a preset and forgets this line.
+	try {
+		return readdirSync(PRESET_DIR)
+			.filter((f) => f.endsWith('.json'))
+			.map((f) => f.replace(/\.json$/, ''))
+			.sort((a, b) => (a === 'generic' ? 1 : b === 'generic' ? -1 : a.localeCompare(b)));
+	} catch {
+		return ['wpds', 'wordpress-components', 'wordpress-block-theme', 'generic'];
+	}
 }
+
+export const presetExists = (name) => existsSync(join(PRESET_DIR, `${name}.json`));
 
 /** Compile `has-*` style patterns into anchored regexes. */
 function compilePatterns(patterns) {
@@ -126,6 +151,20 @@ function compilePatterns(patterns) {
 export function normalize(raw, { root }) {
 	const cfg = merge(DEFAULTS, raw || {});
 	const ds = cfg.designSystem;
+
+	// A registry may be inline or a path. A path that does not resolve leaves the
+	// registry empty, which disables the rules that need one rather than throwing
+	// — the engine has to keep working in a project that ships no patterns.
+	let patterns = [];
+	if (Array.isArray(cfg.patterns)) patterns = loadPatterns(cfg.patterns);
+	else if (typeof cfg.patterns === 'string') {
+		const p = isAbsolute(cfg.patterns) ? cfg.patterns : join(root, cfg.patterns);
+		try {
+			patterns = loadPatterns(JSON.parse(readFileSync(p, 'utf8')));
+		} catch {
+			patterns = [];
+		}
+	}
 
 	// Rule severities + options. Accepts "warn" | ["warn", {opts}] | "off".
 	const rules = {};
@@ -155,6 +194,8 @@ export function normalize(raw, { root }) {
 		layoutComponents: hasComponents && layoutComponents.length > 0,
 		textComponents: hasComponents && textComponents.length > 0,
 		elementMap: elementMap.size > 0,
+		tokenPrefixes: (ds.tokenPrefixes || []).length > 0,
+		patternRegistry: hasComponents && patterns.length > 0,
 		projectNamespace: (cfg.namespaces.project || []).length > 0,
 	};
 
@@ -174,12 +215,15 @@ export function normalize(raw, { root }) {
 		designSystem: {
 			packages: ds.packages || [],
 			tokenPrefixes: ds.tokenPrefixes || [],
+			tokenSources: ds.tokenSources || [],
+			cssInJsPackages: ds.cssInJsPackages || [],
 			normalizeExports: ds.normalizeExports ? new RegExp(ds.normalizeExports) : null,
 			layoutComponents,
 			textComponents,
 			knownComponents: new Set([...layoutComponents, ...textComponents]),
 			elementMap,
 		},
+		patterns,
 		sources: cfg.sources,
 		suppression: cfg.suppression,
 		baselinePath: cfg.baseline,
@@ -194,14 +238,60 @@ export function normalize(raw, { root }) {
 	};
 }
 
-/** Load config for `root`, falling back to the generic preset when none exists. */
-export async function loadConfig({ root, configPath, preset }) {
+/**
+ * Attach a pattern registry after the fact, keeping `enabled` in step.
+ *
+ * `patternRegistry` is a capability computed during normalization, so assigning
+ * `config.patterns` on its own leaves the rule disabled and the registry
+ * silently unused — which looks exactly like "no composite drift found".
+ */
+export function setPatterns(config, patterns) {
+	config.patterns = patterns || [];
+	config.enabled['patterns/duplicate-composite'] =
+		config.patterns.length > 0 &&
+		config.designSystem.knownComponents.size > 0 &&
+		config.severityOf('patterns/duplicate-composite') !== 'off';
+	return config;
+}
+
+/**
+ * Load config for `root`.
+ *
+ * Resolution order, most explicit first:
+ *   1. an explicit --config path
+ *   2. an explicit --preset
+ *   3. a discovered project config file
+ *   4. an inline object (what auto-detection produces)
+ *   5. the generic preset
+ *
+ * `source` records which of those won, and `inferred` marks a config nobody
+ * wrote down — the CLI uses it to hold guessed settings to a lower bar.
+ */
+export async function loadConfig({ root, configPath, preset, inline, inferred = false }) {
 	let raw;
-	if (configPath) raw = await loadChain(resolve(configPath));
-	else if (preset) raw = await loadChain(join(PRESET_DIR, `${preset}.json`));
-	else {
+	let source;
+	if (configPath) {
+		raw = await loadChain(resolve(configPath));
+		source = { kind: 'file', path: resolve(configPath) };
+	} else if (preset) {
+		if (!presetExists(preset)) throw new Error(`unknown preset: ${preset}`);
+		raw = await loadChain(join(PRESET_DIR, `${preset}.json`));
+		source = { kind: 'preset', name: preset };
+	} else {
 		const found = findConfig(root);
-		raw = found ? await loadChain(found) : await loadChain(join(PRESET_DIR, 'generic.json'));
+		if (found) {
+			raw = await loadChain(found);
+			source = { kind: 'file', path: found };
+		} else if (inline) {
+			raw = await expandExtends(inline, root);
+			source = { kind: inferred ? 'inferred' : 'inline' };
+		} else {
+			raw = await loadChain(join(PRESET_DIR, 'generic.json'));
+			source = { kind: 'preset', name: 'generic' };
+		}
 	}
-	return normalize(raw, { root });
+	const normalized = normalize(raw, { root });
+	normalized.source = source;
+	normalized.inferred = source.kind === 'inferred';
+	return normalized;
 }

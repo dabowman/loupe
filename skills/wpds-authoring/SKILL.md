@@ -35,7 +35,13 @@ somewhere the cascade cannot reach it. `style={{ marginBottom: 16 }}` is
 overridden without `!important`, and on a design-system component it silently
 beats the props that are supposed to drive it.
 
-The checker treats both channels identically, so there is no fast path here.
+The same goes for a template literal. ``styled.div`margin-bottom: 16px` `` and
+emotion's ``css`margin-bottom: 16px` `` are the same decision again, and
+``styled(Button)`background: red` `` overrides the component exactly the way a
+CSS rule bound to it would.
+
+The checker treats all three channels identically — stylesheets, `style={{ … }}`
+and CSS-in-JS run through one classifier — so there is no fast path here.
 
 ```jsx
 <Button style={{ marginRight: 12 }}>Save</Button>   // no — beats the props

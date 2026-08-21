@@ -35,11 +35,29 @@ export const RULES = {
 		needs: ['projectNamespace'],
 		title: 'dead CSS class — referenced in no markup or reference file; delete the rule',
 	},
+	'patterns/duplicate-composite': {
+		severity: 'warn',
+		rank: 15,
+		needs: ['patternRegistry'],
+		title: 'rebuilds a registered pattern — import the shared implementation instead of reassembling it',
+	},
+	'patterns/unregistered-composite': {
+		severity: 'warn',
+		rank: 14,
+		needs: ['components'],
+		title: 'the same composite is assembled in several files — extract it and register it as a pattern',
+	},
+	'tokens/unknown-token': {
+		severity: 'warn',
+		rank: 22,
+		needs: ['tokenPrefixes'],
+		title: 'unknown token — no {tokenPrefix} token by this name is defined; check the spelling against the design system',
+	},
 	'tokens/hardcoded-value': {
 		severity: 'warn',
 		rank: 9,
 		needs: [],
-		title: 'hardcoded value — replace with the matching {tokenPrefix} token',
+		title: 'hardcoded value — replace with a {tokenPrefix} token',
 	},
 	'layout/margin-on-child': {
 		severity: 'warn',
@@ -119,6 +137,6 @@ export function renderTitle(ruleId, ds, keyword) {
 	return RULES[ruleId].title
 		.replace('{layout}', list(ds.layoutComponents, 'a layout primitive'))
 		.replace('{text}', list(ds.textComponents, 'a text component'))
-		.replace('{tokenPrefix}', ds.tokenPrefixes?.[0] ? `${ds.tokenPrefixes[0]}*` : 'a design')
+		.replace(/\{tokenPrefix\}/g, ds.tokenPrefixes?.[0] ? `${ds.tokenPrefixes[0]}*` : 'design-system')
 		.replace('{kw}', keyword);
 }

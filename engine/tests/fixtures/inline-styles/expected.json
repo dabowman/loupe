@@ -1,90 +1,17 @@
 {
-  "note": "style={{ \u2026 }} is the same violation as the equivalent stylesheet rule and runs through the same classifier, so the two channels cannot drift into different verdicts. On a design-system component one attribute-level finding supersedes the per-declaration ones \u2014 the remedy is the props, not a better value. React semantics matter: a bare number becomes px except on unitless properties, and unitless affects the value only, never whether the property is checked. Zero and auto margins, tokens, grid and dynamic values are non-findings; suppressions work in JSX.",
+  "note": "style={{ \u2026 }} is the same violation as the equivalent stylesheet rule and runs through the same classifier, so the two channels cannot drift into different verdicts. On a design-system component one attribute-level finding supersedes the per-declaration ones \u2014 the remedy is the props, not a better value. React semantics matter: a bare number becomes px except on unitless properties, and unitless affects the value only, never whether the property is checked. Zero and auto margins, tokens, grid and dynamic values are non-findings; suppressions work in JSX. <div> earns the layout-primitive suggestion only when it lays something out \u2014 the flex and grid divs do, the opacity/margin/lineHeight/dynamic ones do not. <span> earns <Text> on any styling.",
   "findings": [
-    {
-      "rule": "layout/in-css",
-      "file": "src/Inline.jsx",
-      "line": 5
-    },
-    {
-      "rule": "layout/in-css",
-      "file": "src/Inline.jsx",
-      "line": 5
-    },
-    {
-      "rule": "layout/margin-on-child",
-      "file": "src/Inline.jsx",
-      "line": 5
-    },
-    {
-      "rule": "typography/untokenized",
-      "file": "src/Inline.jsx",
-      "line": 5
-    },
-    {
-      "rule": "system/raw-element",
-      "file": "src/Inline.jsx",
-      "line": 5
-    },
-    {
-      "rule": "typography/untokenized",
-      "file": "src/Inline.jsx",
-      "line": 6
-    },
-    {
-      "rule": "tokens/hardcoded-value",
-      "file": "src/Inline.jsx",
-      "line": 6
-    },
-    {
-      "rule": "system/raw-element",
-      "file": "src/Inline.jsx",
-      "line": 6
-    },
-    {
-      "rule": "system/inline-style",
-      "file": "src/Inline.jsx",
-      "line": 14
-    },
-    {
-      "rule": "system/inline-style",
-      "file": "src/Inline.jsx",
-      "line": 15
-    },
-    {
-      "rule": "system/raw-element",
-      "file": "src/Inline.jsx",
-      "line": 23
-    },
-    {
-      "rule": "system/raw-element",
-      "file": "src/Inline.jsx",
-      "line": 24
-    },
-    {
-      "rule": "typography/untokenized",
-      "file": "src/Inline.jsx",
-      "line": 31
-    },
-    {
-      "rule": "system/raw-element",
-      "file": "src/Inline.jsx",
-      "line": 31
-    },
-    {
-      "rule": "system/raw-element",
-      "file": "src/Inline.jsx",
-      "line": 35
-    },
-    {
-      "rule": "system/raw-element",
-      "file": "src/Inline.jsx",
-      "line": 36
-    },
-    {
-      "rule": "system/raw-element",
-      "file": "src/Inline.jsx",
-      "line": 43
-    }
+    { "rule": "layout/in-css", "file": "src/Inline.jsx", "line": 5 },
+    { "rule": "layout/in-css", "file": "src/Inline.jsx", "line": 5 },
+    { "rule": "layout/margin-on-child", "file": "src/Inline.jsx", "line": 5 },
+    { "rule": "typography/untokenized", "file": "src/Inline.jsx", "line": 5 },
+    { "rule": "system/raw-element", "file": "src/Inline.jsx", "line": 5 },
+    { "rule": "typography/untokenized", "file": "src/Inline.jsx", "line": 6 },
+    { "rule": "tokens/hardcoded-value", "file": "src/Inline.jsx", "line": 6 },
+    { "rule": "system/raw-element", "file": "src/Inline.jsx", "line": 6 },
+    { "rule": "system/inline-style", "file": "src/Inline.jsx", "line": 14 },
+    { "rule": "system/inline-style", "file": "src/Inline.jsx", "line": 15 },
+    { "rule": "typography/untokenized", "file": "src/Inline.jsx", "line": 31 },
+    { "rule": "system/raw-element", "file": "src/Inline.jsx", "line": 35 }
   ]
 }

@@ -26,6 +26,11 @@ export const TYPE_PROPS = new Set([
 	'font', 'font-size', 'font-weight', 'font-family', 'line-height', 'letter-spacing',
 ]);
 export const GAP_PROPS = new Set(['gap', 'row-gap', 'column-gap']);
+/** Token-backed too: the design system ships a border-width scale. */
+export const BORDER_WIDTH_PROPS = new Set([
+	'border-width', 'border-top-width', 'border-right-width',
+	'border-bottom-width', 'border-left-width', 'outline-width',
+]);
 export const FLEX_PROPS = new Set([
 	'flex-direction', 'align-items', 'justify-content', 'align-content',
 	'justify-items', 'flex-wrap', 'place-items', 'place-content',
@@ -80,13 +85,25 @@ export function classifyMargin(value) {
 	return 'spacing';
 }
 
+/**
+ * A value with nothing to tokenize: a keyword, or a zero.
+ *
+ * `font-family: inherit` and `line-height: 0` are not untokenized type styling —
+ * there is no token that means "whatever the parent said", and a rule that
+ * demands one for every reset is a rule people turn off.
+ */
+export const isInertValue = (value) => {
+	const parts = String(value).trim().split(/\s+/).filter(Boolean);
+	return parts.length > 0 && parts.every((p) => ZERO.test(p) || KEYWORD.test(p));
+};
+
 /** A token-backed prop carrying a raw literal instead of a token reference. */
 export function isHardcodedTokenValue(prop, value, { allowZero = true } = {}) {
 	const v = value.trim();
 	if (usesToken(value) || KEYWORD.test(v)) return false;
 	if (allowZero && v.split(/\s+/).every((part) => ZERO.test(part))) return false;
 	if (COLOR_PROPS.has(prop)) return isLiteralColor(value);
-	if (SPACING_PROPS.has(prop) || RADIUS_PROPS.has(prop)) return isLiteralLength(value);
+	if (SPACING_PROPS.has(prop) || RADIUS_PROPS.has(prop) || BORDER_WIDTH_PROPS.has(prop)) return isLiteralLength(value);
 	return false;
 }
 

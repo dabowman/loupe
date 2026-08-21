@@ -15,11 +15,10 @@
  * passes, then the gate stands down and says so.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, sep } from 'node:path';
+import { attemptsPath } from './paths.mjs';
 
-const STATE_DIR = '.ds-hygiene';
-const STATE_FILE = 'attempts.json';
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 export async function readStdin() {
@@ -29,13 +28,11 @@ export async function readStdin() {
 	return Buffer.concat(chunks).toString('utf8');
 }
 
-function statePath(root) {
-	return join(root, STATE_DIR, STATE_FILE);
-}
-
 function readState(root) {
 	try {
-		const raw = JSON.parse(readFileSync(statePath(root), 'utf8'));
+		const p = attemptsPath(root);
+		if (!p) return { sessions: {} };
+		const raw = JSON.parse(readFileSync(p, 'utf8'));
 		const now = Date.now();
 		const sessions = {};
 		for (const [id, entry] of Object.entries(raw.sessions || {}))
@@ -48,11 +45,11 @@ function readState(root) {
 
 function writeState(root, state) {
 	try {
-		mkdirSync(join(root, STATE_DIR), { recursive: true });
-		writeFileSync(statePath(root), JSON.stringify(state));
+		const p = attemptsPath(root, true);
+		if (p) writeFileSync(p, JSON.stringify(state));
 	} catch {
-		// A read-only or missing project dir just means no retry budget tracking;
-		// never let bookkeeping failure take down the gate.
+		// No writable state dir just means no retry budget tracking; never let
+		// bookkeeping failure take down the gate.
 	}
 }
 
@@ -108,6 +105,51 @@ export function hookRoot() {
 	const fromEnv = process.env.CLAUDE_PROJECT_DIR;
 	if (fromEnv && existsSync(fromEnv)) return fromEnv;
 	return process.cwd();
+}
+
+/**
+ * Options the user set when enabling the plugin.
+ *
+ * Claude Code refuses to substitute ${user_config.*} into a shell-form hook
+ * command — the value would reach a shell — but it does export every option to
+ * hook processes as CLAUDE_PLUGIN_OPTION_<KEY>. So read the environment.
+ */
+export function pluginOptions() {
+	const get = (key) => {
+		const v = process.env[`CLAUDE_PLUGIN_OPTION_${key.toUpperCase()}`];
+		return v === undefined || v === '' ? undefined : v;
+	};
+	const bool = (key) => {
+		const v = get(key);
+		return v === undefined ? undefined : /^(1|true|yes|on)$/i.test(v);
+	};
+	const num = (key) => {
+		const v = Number(get(key));
+		return Number.isFinite(v) ? v : undefined;
+	};
+	const list = (key) => {
+		const v = get(key);
+		if (v === undefined) return undefined;
+		// The option is a comma-separated string, but a `multiple: true` option
+		// would arrive JSON-encoded — accept both rather than silently adopting
+		// `["wf-` as a class prefix.
+		if (v.startsWith('[')) {
+			try {
+				const parsed = JSON.parse(v);
+				if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+			} catch {
+				/* not JSON after all; fall through to the split */
+			}
+		}
+		return v.split(/[,\s]+/).filter(Boolean);
+	};
+	return {
+		preset: get('preset'),
+		projectPrefixes: list('project_prefixes'),
+		blocking: bool('blocking'),
+		maxAttempts: num('max_attempts'),
+		maxFindings: num('max_findings'),
+	};
 }
 
 export function emitClean(message) {

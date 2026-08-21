@@ -31,6 +31,9 @@ would work as a stylelint plugin, and are included because you want one report.
 | --- | --- |
 | `suppression/malformed` | A blanket disable, or a directive missing a rule id or reason |
 | `css/dead-class` | A project-namespaced class referenced in no markup or reference file |
+| `tokens/unknown-token` | A `var()` naming no token any known source defines |
+| `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
+| `patterns/unregistered-composite` | The same composite in 3+ files, registered in none |
 | `tokens/hardcoded-value` | A literal colour/length where a design token exists |
 | `layout/margin-on-child` | Margin, which belongs on the parent's `gap` |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own |
@@ -75,6 +78,25 @@ the grammar isn't mistaken for an instance of it.
 `ds-hygiene.config.json` (or `.mjs`, or a `dsHygiene` key in `package.json`),
 discovered by walking up from the working directory.
 
+With no config file anywhere, the project is inspected and one is inferred —
+preset from project markers (`@wordpress/components` or `@wordpress/ui` in
+`package.json` → `wpds`; `theme.json` + `templates/` → `wordpress-block-theme`),
+namespaces from the class prefixes that appear in **both** the CSS and the
+markup. A prefix present only in CSS is exactly what a dead class looks like, so
+CSS evidence alone is never enough to adopt one.
+
+```bash
+ds-hygiene detect            # what would be inferred, and why
+ds-hygiene init              # write it to ds-hygiene.config.json
+ds-hygiene status            # the effective config: rules, severities, what blocks
+```
+
+An inferred config is held to a lower bar than one somebody wrote down:
+`css/dead-class` is forced to advisory (its remedy is "delete this CSS", and a
+guess must not drive that), and in hook mode nothing blocks unless blocking is
+turned on explicitly. `check` is unaffected — it still exits 1 on
+error-severity findings, so CI behaviour does not depend on this.
+
 ```jsonc
 {
   "extends": "wordpress-components",
@@ -118,6 +140,8 @@ override findings.
 
 ### Bundled presets
 
+- `wpds` — extends `wordpress-components` with `--wpds-*` tokens, the
+  `wpds-allow` suppression keyword, and a severity policy that blocks
 - `wordpress-components` — the Gutenberg/admin surface
 - `wordpress-block-theme` — `--wp--preset--*` tokens, `templates/`+`parts/` HTML
   as reference sources, no component layer
@@ -129,12 +153,18 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
-ds-hygiene baseline          # writes .ds-hygiene-baseline.json
+ds-hygiene baseline          # record the current findings
 ds-hygiene check --changed   # only what's new
 ```
 
 Entries key on rule + file + normalized code, not line number, so reformatting
 doesn't resurrect the whole file.
+
+Under a plugin the baseline goes to `${CLAUDE_PLUGIN_DATA}/projects/<project>/`,
+so carrying the tool between repos writes nothing into them. Outside one it
+falls back to the project. An existing project-local baseline always wins — a
+committed baseline is a deliberate choice — and `--baseline <path>` always
+writes where you name it. `ds-hygiene status` prints the location in use.
 
 ## Claude Code hook
 
@@ -155,6 +185,12 @@ hook protocol directly — no `jq`, no wrapper script.
 On blocking findings it exits 2 and hands a budgeted report back to the agent:
 guidance printed once per rule, a sample of each rule rather than a flood of
 the first one. On a clean run it exits 0 with a one-line tally.
+
+Installed as a Claude Code plugin, the hook reads its settings from
+`CLAUDE_PLUGIN_OPTION_*` — whether it may block, which preset to force, the
+class prefixes the project owns, and the attempt and finding caps. (Claude Code
+won't substitute `${user_config.*}` into a shell-form hook command, since the
+value would reach a shell, but it does export the options to the hook process.)
 
 Each session gets `hook.maxAttempts` gated passes (default 3), then the gate
 stands down and says so. Bailing out entirely on `stop_hook_active` — the
@@ -183,9 +219,22 @@ const config = await loadConfig({ root: process.cwd() });
 const { findings, blocking, directives } = analyze(config, { scope: null });
 ```
 
+### Config keys added for these rules
+
+| key | |
+| --- | --- |
+| `designSystem.tokenSources` | Paths (file or directory) holding the token definitions. Read even under `node_modules`, which the project walk prunes — that is where a design system's tokens live. Missing paths are skipped. |
+| `designSystem.cssInJsPackages` | Packages whose tagged templates are CSS. Defaults cover styled-components and emotion. |
+| `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on `id`. |
+
 `scope` filters what is *reported*. The index is always built repo-wide —
 building it from changed files alone would make every unchanged reference look
 absent and every class look dead.
+
+Two guards bound the cost: a hook payload naming a file no source glob matches
+returns before indexing, and any file over 1.5MB is skipped as generated (a
+stylesheet skipped this way still reports `stylesheet/unparsed`, so the hole is
+never silent).
 
 ## Tests
 
@@ -193,6 +242,8 @@ absent and every class look dead.
 npm test
 ```
 
-Fixture-driven, one directory per behaviour, each with a note explaining what it
-pins down. Once behaviour is config-driven this is the only thing standing
-between a preset edit and a rule silently switching itself off.
+Four suites: `tests/run.mjs` (fixtures, one directory per behaviour),
+`tests/detect.mjs` (inference), `tests/regressions.mjs` (failures that reported
+success), `tests/features.mjs` (the three channels and the two cross-file rules).
+Once behaviour is config-driven, these are the only thing standing between a
+preset edit and a rule silently switching itself off.

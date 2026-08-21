@@ -1,45 +1,12 @@
 {
-  "note": "Live via JSX, via a template-literal stem, and via block markup in templates/*.html. Only .wf-orphan is dead. Render-time classes (has-*, wp-block-*) are never dead; .wp-block-group is a library internal, and that override supersedes the per-declaration advice inside it.",
+  "note": "Live via JSX, via a template-literal stem, and via block markup in templates/*.html. Only .wf-orphan is dead. Render-time classes (has-*, wp-block-*) are never dead; .wp-block-group is a library internal, and that override supersedes the per-declaration advice inside it. .wf-live is a colour-only <div>: no layout, so no layout-primitive analog.",
   "findings": [
-    {
-      "rule": "css/dead-class",
-      "file": "styles/app.css",
-      "line": 4
-    },
-    {
-      "rule": "system/override",
-      "file": "styles/app.css",
-      "line": 6
-    },
-    {
-      "rule": "tokens/hardcoded-value",
-      "file": "styles/app.css",
-      "line": 1
-    },
-    {
-      "rule": "tokens/hardcoded-value",
-      "file": "styles/app.css",
-      "line": 2
-    },
-    {
-      "rule": "tokens/hardcoded-value",
-      "file": "styles/app.css",
-      "line": 3
-    },
-    {
-      "rule": "tokens/hardcoded-value",
-      "file": "styles/app.css",
-      "line": 4
-    },
-    {
-      "rule": "tokens/hardcoded-value",
-      "file": "styles/app.css",
-      "line": 5
-    },
-    {
-      "rule": "system/raw-element",
-      "file": "src/App.jsx",
-      "line": 1
-    }
+    { "rule": "css/dead-class", "file": "styles/app.css", "line": 4 },
+    { "rule": "system/override", "file": "styles/app.css", "line": 6 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/app.css", "line": 1 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/app.css", "line": 2 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/app.css", "line": 3 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/app.css", "line": 4 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/app.css", "line": 5 }
   ]
 }

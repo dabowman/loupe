@@ -1,7 +1,7 @@
 ---
 name: wpds-remediation
 description: >-
-  Load when fixing WPDS conformance findings — output from `ds-hygiene`, the `/wpds-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `tokens/hardcoded-value`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Carries the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the ds-hygiene findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `wpds-authoring` for the underlying rules.
+  Load when fixing WPDS conformance findings — output from `ds-hygiene`, the `/wpds-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `tokens/hardcoded-value`, `tokens/unknown-token`, `patterns/duplicate-composite`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Carries the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the ds-hygiene findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `wpds-authoring` for the underlying rules.
 compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Needs the plugin's engine (node >=18)."
 ---
 
@@ -30,8 +30,9 @@ findings say:
 3. `system/override`, `system/inline-style`, `typography/in-css` — the
    component is being fought
 4. `layout/*` — structure
-5. `tokens/hardcoded-value`, `typography/untokenized` — values
-6. `css/dead-class` — once the rest has settled
+5. `patterns/*` — composites, once individual components are conformant
+6. `tokens/hardcoded-value`, `tokens/unknown-token`, `typography/untokenized` — values
+7. `css/dead-class` — once the rest has settled
 
 Re-run between stages rather than fixing from a stale list.
 
@@ -121,15 +122,57 @@ scales.
 
 ### `tokens/hardcoded-value`
 
-Replace with the token whose *role* matches — never the token whose value
-happens to match. Body text is `--wpds-color-foreground-content-neutral` because
-of what it is, not because the hex lines up. Look the token up with the WPDS MCP
-(`get_design_tokens`) rather than guessing; invented names resolve to nothing
-and fail silently.
+When the finding names a token — `border-radius: 4px → var(--wpds-border-radius-md)`
+— it read that from the design system's own definitions. Use it.
+
+When it names none, the engine found no token on-role for that value. Do not
+substitute one that merely matches: body text is
+`--wpds-color-foreground-content-neutral` because of what it is, not because the
+hex lines up. Look it up with the WPDS MCP (`get_design_tokens`) rather than
+guessing; invented names resolve to nothing and fail silently.
 
 If no token fits the role, the value may be genuinely outside the system.
 Suppress with that reason rather than forcing an approximate token — a wrong
 token is worse than a literal, because it will move when the system moves.
+
+### `tokens/unknown-token`
+
+The `var()` names a token nothing defines — almost always a typo or a name
+carried over from an older version of the system. It resolves to nothing at
+runtime, so the declaration is silently doing whatever the fallback does, or
+nothing at all.
+
+Look up the intended token rather than inventing a definition for this one. A
+token defined locally to satisfy the checker is a fork of the design system with
+one member.
+
+If the token is real but defined somewhere the engine cannot see, the fix is
+`designSystem.tokenSources` in config, which fixes every finding of this shape at
+once.
+
+### `patterns/duplicate-composite`
+
+The shape is a registered pattern, rebuilt by hand here and in at least one other
+file. If the registry entry carries a `canonical`, import it. If it does not,
+that is the work: extract one implementation from the instances that exist, then
+fill in `import` and `canonical` so the next session finds it.
+
+Read `wpds-patterns` before extracting — the entry records what the pattern is
+*for*, and an extraction that misses the intent produces a shared component
+nobody uses.
+
+This is never fixed by making the markup look less like the pattern. That
+silences the finding and keeps the duplication.
+
+### `patterns/unregistered-composite`
+
+The same composite in three or more files, in no registry. Two would be a
+coincidence; three is house style that nobody wrote down.
+
+Extract it, register it in `patterns/index.json` with a `summary` saying what it
+is *for*, and point `import`/`canonical` at the new implementation. If the three
+instances are genuinely different things that happen to share a shape, say so in
+the entry's `instead_of` — or suppress with that reason, which is a real one.
 
 ### `css/dead-class`
 

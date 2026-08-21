@@ -43,7 +43,7 @@ cat "${CLAUDE_PLUGIN_ROOT}/patterns/index.json"
   "use": "Any irreversible action needing explicit consent.",
   "import": "@acme/ui",          // where the shared implementation lives, if extracted
   "canonical": "confirm-modal.jsx",
-  "signature": ["Modal", ["Text"], ["HStack", ["Button", "Button"]]],
+  "signature": ["Modal", "Text", ["HStack", "Button", "Button"]],
   "instead_of": [
     "A bare Modal with a hand-built div.actions footer",
     "window.confirm()"
@@ -51,13 +51,44 @@ cat "${CLAUDE_PLUGIN_ROOT}/patterns/index.json"
 }
 ```
 
-`signature` is the normalized component tree — element names only, props and
-text dropped. It is what makes a pattern checkable rather than merely
-documented: two composites with the same signature are the same pattern, no
-matter how their classes are named.
+`signature` is the normalized component tree. A node is `[name, ...children]`;
+each child is either a bare component name or another node. Only design-system
+components appear — raw elements between them are transparent, so
+`<HStack><div><Button/></div></HStack>` and `<HStack><Button/></HStack>` have the
+same signature, which is right, because they are the same composition.
 
-The engine's composite rules read this file. An entry without a `signature`
-still documents the pattern for you; it just cannot be enforced.
+Matching is **containment, not equality**:
+
+- Extra children are fine. A header with one more button is still that header.
+- A registered child may sit anywhere beneath the root, not just as a direct
+  sibling. `form-modal` records its footer beside the body; real code nests the
+  footer inside the body, and both are the same composition. Demanding the
+  recorded shape exactly would mean the rule only ever matched code that had
+  already been generated from the pattern — the one case with nothing to report.
+- Each registered child claims a distinct node, so `["VStack", "Text", "Text"]`
+  needs two `Text`s rather than matching one twice.
+
+**A signature under four nodes is documentation, not a check.** The engine skips
+it. `HStack(Button,Button)` is a true description of an action bar and a useless
+finding — it matched 48 files in one repo, and "you have 48 action bars" is not a
+defect anyone can act on. `action-bar`, `form-row` and `notice-stack` are in the
+registry for you to read, not for the engine to enforce.
+
+`canonical` earns its keep the moment you fill it in: a file that imports it is
+using the pattern rather than rebuilding it, and stops being reported. Until
+then the remedy the engine offers is "extract one shared implementation", because
+telling an agent to import something that does not exist sends it hunting for a
+module.
+
+The two rules this drives:
+
+| | |
+| --- | --- |
+| `patterns/duplicate-composite` | A registered pattern reassembled by hand in two or more files |
+| `patterns/unregistered-composite` | The same shape in three or more files, in no registry — two is a coincidence, three is house style |
+
+The engine reads this file when the hooks and commands pass `--patterns`. A
+project's own registry is merged over the shipped one, winning on `id`.
 
 ## The starting set
 
@@ -84,13 +115,15 @@ Add the entry, then keep it honest:
 - **`summary` says what it is for**, not what it contains. "Destructive-action
   confirmation" is useful; "Modal with two buttons" is not — the second
   describes a shape anyone could match by accident.
-- **`signature` is the structure that matters**, not every node. Depth 2–3 is
-  usually right. Over-specify and near-identical variants stop matching;
-  under-specify and unrelated composites collide.
+- **`signature` is the structure that matters**, not every node. Four to six
+  nodes at depth 2–3 is the useful band. Under four the engine ignores it as too
+  generic to check; over-specify and near-identical variants stop matching.
 - **`instead_of` names the anti-pattern** you have actually seen in this
   codebase. That is the line that stops the next rebuild.
-- **`import` earns the entry.** A pattern documented but never extracted still
-  gets rebuilt. Once two call sites exist, extract and point `import` at it.
+- **`import` and `canonical` earn the entry.** A pattern documented but never
+  extracted still gets rebuilt. Once two call sites exist, extract it, point
+  `import` at the module and `canonical` at the component name — the engine then
+  stops reporting files that already use it, and starts naming it as the remedy.
 
 ## When a pattern does not fit
 

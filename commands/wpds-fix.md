@@ -11,7 +11,7 @@ the checks that stop a fix from silently changing how the UI renders.
 Get the current state:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --all --format json
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --all --format json --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json"
 ```
 
 If `$ARGUMENTS` names a rule id or a path, narrow to that. Otherwise work upward

@@ -27,7 +27,12 @@
         "Heading",
         "Truncate"
       ]
-    }
+    },
+    "tokenSources": [
+      "node_modules/@wordpress/theme/src/prebuilt/css/design-tokens.css",
+      "node_modules/@wordpress/theme/build-style",
+      "node_modules/@wordpress/components/build-style"
+    ]
   },
   "suppression": {
     "keyword": "wpds-allow",
@@ -49,6 +54,9 @@
     "typography/untokenized": "warn",
     "system/raw-element": "warn",
     "tokens/hardcoded-value": "warn",
-    "css/dead-class": "warn"
+    "css/dead-class": "warn",
+    "tokens/unknown-token": "warn",
+    "patterns/duplicate-composite": "warn",
+    "patterns/unregistered-composite": "warn"
   }
 }

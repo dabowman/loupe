@@ -11,15 +11,17 @@
  * every unchanged reference look absent and every class look dead.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { RULES } from './rules.mjs';
 import { discover } from './discover.mjs';
 import { makeSuppressionParser, isSuppressed } from './suppressions.mjs';
-import { scanMarkup, harvestTokens } from './markup.mjs';
+import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.mjs';
 import { syntaxFor } from './syntax.mjs';
+import { SUBSTANTIAL, matches } from './patterns.mjs';
+import { emptyTokenSet, harvestTokenDefs, readTokenSources, suggestionFor, tokenRefsIn } from './tokens.mjs';
 import {
 	APPEARANCE_PROPS, FLEX_PROPS, GAP_PROPS, TYPE_PROPS,
-	classesIn, classifyMargin, isHardcodedTokenValue, keySelector, ownDecls,
+	classesIn, classifyMargin, isHardcodedTokenValue, isInertValue, keySelector, ownDecls,
 	resolvedSelectors, ruleIsGrid, usesToken,
 } from './styles.mjs';
 
@@ -58,7 +60,8 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
 		if (marginKind === 'negative') finding = { rule: 'layout/negative-margin', message: `${prop}: ${value}`, code: prop };
 		else if (marginKind) finding = { rule: 'layout/margin-on-child', message: `${prop}: ${value}`, code: prop };
 	} else if (TYPE_PROPS.has(prop)) {
-		if (!usesToken(value)) finding = { rule: 'typography/untokenized', message: `${prop}: ${value}` };
+		if (!usesToken(value) && !isInertValue(value))
+			finding = { rule: 'typography/untokenized', message: `${prop}: ${value}`, hint: { prop, value } };
 	} else if (GAP_PROPS.has(prop)) {
 		// Skipped on a component-bound class (component-internal flex, or a class
 		// already on a layout primitive) and on a grid, neither of which is
@@ -68,15 +71,78 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
 		const gridDisplay = prop === 'display' && /\bgrid\b/.test(value);
 		if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: 'layout/in-css', message: `${prop}: ${value}` };
 	} else if (hardcoded) {
-		finding = { rule: 'tokens/hardcoded-value', message: `${prop}: ${value}` };
+		finding = { rule: 'tokens/hardcoded-value', message: `${prop}: ${value}`, hint: { prop, value } };
 	}
 	return { finding, styling };
+}
+
+/**
+ * Rules whose remedy is one action for the whole rule, not one per declaration.
+ *
+ * `display:flex; flex-direction:column; align-items:center; gap:8px` is four
+ * findings for a single decision — replace this with a layout primitive — and a
+ * real repo produced 702 of them. Four times the report buys nothing, and a rule
+ * that floods the report crowds out every rule with a cheaper remedy.
+ *
+ * Values are kept in the message because they are what the agent needs to carry
+ * across to the primitive; `code` drops them so baseline identity survives a
+ * value tweak.
+ */
+const COLLAPSE_PER_RULE = new Set(['layout/in-css', 'typography/untokenized']);
+
+function collapsePerRule(pending) {
+	const out = [];
+	const groups = new Map();
+	for (const f of pending) {
+		if (!COLLAPSE_PER_RULE.has(f.rule)) {
+			out.push(f);
+			continue;
+		}
+		if (!groups.has(f.rule)) groups.set(f.rule, []);
+		groups.get(f.rule).push(f);
+	}
+	for (const [rule, group] of groups) {
+		if (group.length === 1) {
+			out.push(group[0]);
+			continue;
+		}
+		const props = [...new Set(group.map((f) => String(f.message).split(':')[0].trim()))];
+		out.push({
+			...group[0],
+			rule,
+			message: group.map((f) => f.message).join('; '),
+			hints: group.flatMap((f) => f.hints || (f.hint ? [f.hint] : [])),
+			suffix: group[0].suffix,
+			code: `${rule}:${props.sort().join(',')}`,
+		});
+	}
+	return out;
 }
 
 export async function analyze(config, { scope = null } = {}) {
 	const ds = config.designSystem;
 	const parseSuppressions = makeSuppressionParser(config.suppression);
 	const files = discover({ root: config.root, sources: config.sources });
+
+	// Nothing a person wrote is this big. A generated blob costs more to parse
+	// than every finding it could produce, and one 10MB checked-in emscripten
+	// file was on its own enough to push a repo scan past every hook timeout.
+	const MAX_BYTES = 1_500_000;
+	const tooBig = (abs) => {
+		try {
+			return statSync(abs).size > MAX_BYTES;
+		} catch {
+			return false;
+		}
+	};
+
+	// Seeded from the design system's shipped token stylesheet, then topped up
+	// with anything the project defines itself. Without it a finding can only
+	// name a namespace, and an agent told `13px` is hardcoded invents
+	// `--wpds-font-size-13` rather than looking one up.
+	const tokenPrefixes = ds.tokenPrefixes || [];
+	const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
+	const unknownTokens = []; // resolved after the walk: an empty token set proves nothing
 
 	const findings = [];
 	const directives = [];
@@ -96,8 +162,12 @@ export async function analyze(config, { scope = null } = {}) {
 	const bindings = new Map(); // class -> binding[]
 	const rawEls = [];
 	const inlineStyles = [];
+	const cssInJs = [];
+	const composites = [];
+	const importsByFile = new Map();
 
 	for (const { abs, rel } of files.markup) {
+		if (tooBig(abs)) continue;
 		let text;
 		try {
 			text = readFileSync(abs, 'utf8');
@@ -115,10 +185,14 @@ export async function analyze(config, { scope = null } = {}) {
 		}
 		rawEls.push(...scanned.rawEls);
 		inlineStyles.push(...(scanned.inlineStyles || []));
+		cssInJs.push(...(scanned.cssInJs || []));
+		composites.push(...(scanned.composites || []));
+		if (scanned.imports) importsByFile.set(rel, scanned.imports);
 		suppressionsFor(rel, text);
 	}
 
 	for (const { abs } of files.references) {
+		if (tooBig(abs)) continue;
 		try {
 			harvestTokens(readFileSync(abs, 'utf8'), referenced);
 			diagnostics.filesScanned++;
@@ -133,6 +207,7 @@ export async function analyze(config, { scope = null } = {}) {
 
 	// ── walk CSS ──────────────────────────────────────────────────────────────
 	const styledClasses = new Set(); // classes CSS actually styles — feeds system/raw-element
+	const layoutClasses = new Set(); // classes whose CSS lays something out — feeds the same rule for div/span
 	const seenDead = new Set(); // `${file}\u0000${class}` — report each once per file
 
 	for (const { abs, rel } of files.styles) {
@@ -160,6 +235,11 @@ export async function analyze(config, { scope = null } = {}) {
 				});
 		};
 
+		if (tooBig(abs)) {
+			unparsed(`stylesheet over ${Math.round(MAX_BYTES / 1000)}kB — skipped as generated`);
+			continue;
+		}
+
 		const syntax = await syntaxFor(rel);
 		if (syntax.missing) {
 			unparsed(`needs \`npm i -D ${syntax.missing}\` to be checked`);
@@ -174,7 +254,7 @@ export async function analyze(config, { scope = null } = {}) {
 			continue;
 		}
 
-		const emit = ({ rule, line, message, code, scopeLines = [] }) => {
+		const emit = ({ rule, line, message, code, scopeLines = [], hint, hints }) => {
 			if (!config.enabled[rule] || !reports(rel)) return;
 			if (isSuppressed(supp.byLine, line, rule, scopeLines)) return;
 			findings.push({
@@ -185,8 +265,12 @@ export async function analyze(config, { scope = null } = {}) {
 				message,
 				code: code ?? message,
 				rank: RULES[rule].rank,
+				hints: hints || (hint ? [hint] : undefined),
+				suffix: undefined,
 			});
 		};
+
+		harvestTokenDefs(root, tokenPrefixes, tokenSet);
 
 		root.walkRules((cssRule) => {
 			const ruleLine = cssRule.source?.start?.line ?? 1;
@@ -203,6 +287,7 @@ export async function analyze(config, { scope = null } = {}) {
 			const isGrid = ruleIsGrid(cssRule);
 			const scopeLines = [ruleLine, ruleLine - 1];
 			let touchesStyle = false;
+			let touchesLayout = false;
 
 			// Held rather than emitted directly: if this rule turns out to target a
 			// third-party component's internals, "stop styling this" supersedes
@@ -217,17 +302,24 @@ export async function analyze(config, { scope = null } = {}) {
 					{ boundSystem, boundText, isGrid, options: config.optionsOf('tokens/hardcoded-value') }
 				);
 				if (styling) touchesStyle = true;
+				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
+				for (const name of tokenRefsIn(decl.value, tokenPrefixes))
+					unknownTokens.push({ file: rel, line, name, scopeLines, supp });
 				if (finding) pending.push({ ...finding, line, scopeLines });
 			}
 
 			if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
+			if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
 
 			// Reaching into a third-party component's internals. One per rule, and
 			// it replaces the per-declaration findings rather than adding to them.
-			const external = keyClasses.find(config.isExternal);
+			// A project prefix wins over a library one. `wp-parsely-*` matches the
+			// `wp-` external prefix, and reporting a project's own class as a
+			// library internal sends the agent to fix something it does not own.
+			const external = keyClasses.find((c) => config.isExternal(c) && !config.isProject(c));
 			if (external && touchesStyle)
 				emit({ rule: 'system/override', line: ruleLine, message: `.${external} (library internal)`, scopeLines });
-			else for (const f of pending) emit(f);
+			else for (const f of collapsePerRule(pending)) emit(f);
 
 			// Dead class: only namespaces we own, and only the classes this rule
 			// actually declares (ancestors belong to their own rule).
@@ -250,7 +342,7 @@ export async function analyze(config, { scope = null } = {}) {
 		const supp = suppByFile.get(el.file);
 		const muted = (rule, line) => supp && isSuppressed(supp.byLine, line, rule, [el.line, el.line - 1]);
 
-		const push = (rule, line, message, code) => {
+		const push = (rule, line, message, code, hints, suffix) => {
 			if (!config.enabled[rule] || muted(rule, line)) return;
 			findings.push({
 				rule,
@@ -260,6 +352,8 @@ export async function analyze(config, { scope = null } = {}) {
 				message,
 				code: code ?? message,
 				rank: RULES[rule].rank,
+				hints,
+				suffix,
 			});
 		};
 
@@ -282,9 +376,64 @@ export async function analyze(config, { scope = null } = {}) {
 		const isGrid = el.decls.some(
 			(d) => (d.prop === 'display' && /\bgrid\b/.test(d.value)) || d.prop.startsWith('grid-template') || d.prop.startsWith('grid-auto')
 		);
+		const pending = [];
 		for (const d of el.decls) {
 			const { finding } = classifyDeclaration(d, { isGrid, options: config.optionsOf('tokens/hardcoded-value') });
-			if (finding) push(finding.rule, d.line ?? el.line, `${finding.message} (inline)`, finding.code ?? finding.message);
+			if (finding)
+				pending.push({ ...finding, line: d.line ?? el.line, code: finding.code ?? finding.message, suffix: ' (inline)' });
+		}
+		for (const f of collapsePerRule(pending))
+			push(f.rule, f.line, `${f.message}${f.suffix ?? ''}`, f.code, f.hints || (f.hint ? [f.hint] : undefined), f.suffix);
+	}
+
+	// ── CSS-in-JS template literals ───────────────────────────────────────────
+// The third channel, through the same classifier as the other two. A
+// `styled(Button)` template is the stylesheet pass's "class bound to a
+// design-system component", written somewhere no stylesheet can see.
+	for (const tpl of cssInJs) {
+		if (!reports(tpl.file)) continue;
+		const supp = suppByFile.get(tpl.file);
+		if (tpl.error) {
+			// Not a finding: an interpolation-driven template is opaque by design,
+			// and a rule that fired on every one of them would just be turned off.
+			// It is still recorded, so a clean report can be checked against it.
+			diagnostics.parseErrors.push({ file: tpl.file, message: `css-in-js at line ${tpl.line}: ${tpl.error}` });
+			continue;
+		}
+
+		const boundSystem = tpl.isSystem ? [{ tag: tpl.target, isSystem: true }] : [];
+		const boundText = tpl.isText ? [{ tag: tpl.target, isText: true }] : [];
+
+		for (const group of tpl.groups) {
+			const onTarget = group.onTarget;
+			const pending = [];
+			for (const d of group.decls) {
+				for (const name of tokenRefsIn(d.value, tokenPrefixes))
+					unknownTokens.push({ file: tpl.file, line: d.line, name, scopeLines: [tpl.line], supp });
+				const { finding } = classifyDeclaration(d, {
+					boundSystem: onTarget ? boundSystem : [],
+					boundText: onTarget ? boundText : [],
+					isGrid: group.isGrid,
+					options: config.optionsOf('tokens/hardcoded-value'),
+				});
+				if (finding) pending.push({ ...finding, line: d.line });
+			}
+			const where = group.selector ? ` in \`${group.selector}\`` : '';
+			for (const f of collapsePerRule(pending)) {
+				if (!config.enabled[f.rule]) continue;
+				if (supp && isSuppressed(supp.byLine, f.line, f.rule, [tpl.line, tpl.line - 1])) continue;
+				findings.push({
+					rule: f.rule,
+					severity: config.severityOf(f.rule),
+					file: tpl.file,
+					line: f.line,
+					message: `${f.message}${where} (css-in-js)`,
+				suffix: `${where} (css-in-js)`,
+					code: `css-in-js:${f.code ?? f.message}`,
+					rank: RULES[f.rule].rank,
+					hints: f.hints || (f.hint ? [f.hint] : undefined),
+				});
+			}
 		}
 	}
 
@@ -293,7 +442,20 @@ export async function analyze(config, { scope = null } = {}) {
 		if (!config.enabled['system/raw-element'] || !reports(el.file)) continue;
 		const supp = suppByFile.get(el.file);
 		if (supp && isSuppressed(supp.byLine, el.line, 'system/raw-element')) continue;
-		if (el.styledOnly && !el.inlineStyled && !el.classes.some((c) => styledClasses.has(c))) continue;
+		// A `styledOnly` mapping only earns its suggestion when the element is doing
+		// what the suggested component is for. `<span>` → `<Text>` needs styling of
+		// any kind; `<div>` → a layout primitive needs the div to actually lay
+		// something out. Accepting any styling for both told agents to turn every
+		// bordered `<div>` into an `<HStack>` — the largest single source of
+		// findings in a real repo, and wrong nearly every time.
+		if (el.styledOnly) {
+			const suggestsLayout = String(el.suggest)
+				.split('/')
+				.some((n) => ds.layoutComponents.includes(n.trim()));
+			const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
+			const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
+			if (suggestsLayout ? !laidOut : !styled) continue;
+		}
 		findings.push({
 			rule: 'system/raw-element',
 			severity: config.severityOf('system/raw-element'),
@@ -303,6 +465,81 @@ export async function analyze(config, { scope = null } = {}) {
 			code: `<${el.tag}>`,
 			rank: RULES['system/raw-element'].rank,
 		});
+	}
+
+	// ── composite drift ───────────────────────────────────────────────────────
+// The only findings here that cannot exist in one file. A sixth bespoke page
+// header is not a defect anywhere in particular — it is a defect in the set,
+// so the index has to be whole-repo even when the report is scoped to one file.
+	const dupEnabled = config.enabled['patterns/duplicate-composite'];
+	const newEnabled = config.enabled['patterns/unregistered-composite'];
+	if ((dupEnabled || newEnabled) && composites.length) {
+		const registry = config.patterns || [];
+
+		// Largest match wins: a page header contains an action bar, and reporting
+		// both says the same thing twice at two levels of the same tree.
+		const bestMatch = (c) =>
+			registry
+				.filter((p) => p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree))
+				.sort((a, b) => b.size - a.size)[0] || null;
+
+		const byPattern = new Map(); // pattern id -> file -> best instance
+		const bySignature = new Map(); // signature -> file -> best instance
+		for (const c of composites) {
+			const hit = dupEnabled ? bestMatch(c) : null;
+			if (hit) {
+				// A file that already imports the shared implementation is using the
+				// pattern, not rebuilding it.
+				if (hit.canonical && importsByFile.get(c.file)?.has(hit.canonical)) continue;
+				const key = hit.id;
+				if (!byPattern.has(key)) byPattern.set(key, new Map());
+				const prev = byPattern.get(key).get(c.file);
+				if (!prev || c.size > prev.size) byPattern.get(key).set(c.file, { ...c, pattern: hit });
+				continue;
+			}
+			if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
+			if (!bySignature.has(c.signature)) bySignature.set(c.signature, new Map());
+			const prev = bySignature.get(c.signature).get(c.file);
+			if (!prev || c.line < prev.line) bySignature.get(c.signature).set(c.file, c);
+		}
+
+		const emitComposite = (rule, c, message) => {
+			if (!reports(c.file)) return;
+			const supp = suppByFile.get(c.file);
+			if (supp && isSuppressed(supp.byLine, c.line, rule)) return;
+			findings.push({
+				rule,
+				severity: config.severityOf(rule),
+				file: c.file,
+				line: c.line,
+				message,
+				code: c.signature,
+				rank: RULES[rule].rank,
+			});
+		};
+
+		// Two files is already a pattern being rebuilt; one is just the first use.
+		for (const [id, files] of byPattern) {
+			if (files.size < 2) continue;
+			for (const c of files.values()) {
+				// With no canonical implementation recorded there is nothing to import
+				// yet, and telling an agent to import it would send it looking for a
+				// module that does not exist.
+				const remedy = c.pattern.canonical ? `import \`${c.pattern.canonical}\`` : 'extract one shared implementation';
+				emitComposite(
+					'patterns/duplicate-composite',
+					c,
+					`${c.signature} \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`
+				);
+			}
+		}
+		// Three for an unregistered shape: nothing says the second one was wrong,
+		// but a third means it is the house style and belongs in the registry.
+		for (const [sig, files] of bySignature) {
+			if (files.size < 3) continue;
+			for (const c of files.values())
+				emitComposite('patterns/unregistered-composite', c, `${sig} \u2014 assembled in ${files.size} files, registered in none`);
+		}
 	}
 
 	// ── malformed suppressions ────────────────────────────────────────────────
@@ -317,6 +554,46 @@ export async function analyze(config, { scope = null } = {}) {
 				rank: RULES['suppression/malformed'].rank,
 			});
 	}
+
+	// ── the token pass ────────────────────────────────────────────────────────
+// Deferred to here because the token set is only complete once every stylesheet
+// has been read, and a rule that fires against a half-built set reports the
+// design system's own tokens as unknown.
+
+// Name the replacement instead of the namespace. A finding that says
+// "13px is hardcoded — use a --wpds-* token" leaves the agent to invent one.
+for (const f of findings) {
+	if (!f.hints?.length) continue;
+	f.message =
+		f.hints.map(({ prop, value }) => `${prop}: ${value}${suggestionFor(tokenSet, prop, value)}`).join('; ') +
+		(f.suffix ?? '');
+	delete f.hints;
+	delete f.suffix;
+}
+
+// An empty token set means nothing was found to check against — not that every
+// token is unknown. Staying silent is the only honest answer there.
+if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
+	const seenUnknown = new Set();
+	for (const { file, line, name, scopeLines, supp } of unknownTokens) {
+		if (tokenSet.known.has(name) || !reports(file)) continue;
+		const key = `${file}\u0000${name}`;
+		if (seenUnknown.has(key)) continue;
+		seenUnknown.add(key);
+		if (isSuppressed(supp.byLine, line, 'tokens/unknown-token', scopeLines)) continue;
+		findings.push({
+			rule: 'tokens/unknown-token',
+			severity: config.severityOf('tokens/unknown-token'),
+			file,
+			line,
+			message: `var(${name})`,
+			code: name,
+			rank: RULES['tokens/unknown-token'].rank,
+		});
+	}
+}
+
+	for (const f of findings) delete f.suffix;
 
 	// Dedupe: nesting and multi-selector rules can legitimately reach the same
 	// declaration twice.
