@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "design-system": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@wordpress/design-system-mcp@latest"],
+      "env": {}
+    }
+  }
+}

@@ -20,6 +20,11 @@ considered.
 The test for any change: *would I have written it this way from scratch?* If
 yes, it is a fix. If it only exists to satisfy the checker, stop.
 
+Before reaching for a prop or token name below, check it against the bundled
+`design-system` MCP (`get_component_details`, `get_design_tokens`) rather than
+recalling it — the remedies here name real current props, but WPDS moves
+twice a year and a remedy that's right today can be stale by the next release.
+
 ## Work in this order
 
 Fix upward through the layers, because the lower fixes change what the higher

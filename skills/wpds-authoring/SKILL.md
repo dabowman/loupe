@@ -17,6 +17,18 @@ That drift is cheap to avoid while writing and expensive to unwind afterwards,
 because by then the pattern is load-bearing and every argument for keeping it is
 locally true. Decide correctly the first time.
 
+## Verify against the MCP, not memory
+
+This plugin bundles the `design-system` MCP server
+(`.mcp.json` → `@wordpress/design-system-mcp`) for exactly this reason: WPDS
+ships twice yearly, and trained knowledge of it goes stale within months —
+this doc's own examples have drifted before (`HStack`/`VStack` → `Stack`,
+`Heading` → `Text` with `variant`). Before asserting a component's props, a
+token's name, or that something "doesn't exist," check
+`get_components`/`get_component_details`/`get_design_tokens` rather than
+recalling it. Never assert a negative — "there's no prop for that" — without
+having actually looked.
+
 ## The order of resort
 
 For any visual requirement, work down this list and stop at the first hit. Going
