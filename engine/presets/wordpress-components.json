@@ -5,14 +5,14 @@
     "tokenPrefixes": ["--wp-admin-theme-", "--wp-components-"],
     "normalizeExports": "^__(experimental|unstable)",
     "components": {
-      "layout": ["Flex", "FlexBlock", "FlexItem", "HStack", "VStack", "Grid", "Spacer", "Divider"],
+      "layout": ["Stack", "Flex", "FlexBlock", "FlexItem", "HStack", "VStack", "Grid", "Spacer", "Divider"],
       "text": ["Text", "Heading", "Truncate"]
     },
     "elementMap": {
       "p": "Text",
       "h1": "Heading", "h2": "Heading", "h3": "Heading",
       "h4": "Heading", "h5": "Heading", "h6": "Heading",
-      "div": { "component": "HStack/VStack", "styledOnly": true },
+      "div": { "component": "Stack", "styledOnly": true },
       "span": { "component": "Text", "styledOnly": true }
     }
   },

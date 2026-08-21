@@ -4,7 +4,7 @@ Keeps agent-written wp-admin interfaces on the WordPress Design System.
 
 An agent writing UI produces code that compiles, renders correctly, passes
 review, and quietly reimplements things WPDS already provides: a hand-rolled
-flex row beside `HStack`, a `font-size` beside `Text`'s `size` prop, a
+flex row beside `Stack`, a `font-size` beside `Text`'s `variant` prop, a
 `margin-bottom` where the parent has a `gap`. None of it is an error. All of it
 is drift, and it is expensive to unwind once the pattern is load-bearing —
 because by then every argument for keeping it is locally true.
@@ -128,7 +128,7 @@ body, real code nests it inside, and both are the same composition.
 - `patterns/unregistered-composite` — the same shape in three or more files and
   in no registry. Two is a coincidence; three is house style.
 
-Signatures below four nodes are documentation, not checks. `HStack(Button,Button)`
+Signatures below four nodes are documentation, not checks. `Stack(Button,Button)`
 is a true description of an action bar and a useless finding — it matched 48
 files in one repo, and *"you have 48 action bars"* is not a defect anyone can act
 on.

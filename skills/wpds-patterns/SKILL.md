@@ -68,7 +68,7 @@ Matching is **containment, not equality**:
   footer inside the body, and both are the same composition. Demanding the
   recorded shape exactly would mean the rule only ever matched code that had
   already been generated from the pattern — the one case with nothing to report.
-- Each registered child claims a distinct node, so `["VStack", "Text", "Text"]`
+- Each registered child claims a distinct node, so `["Stack", "Text", "Text"]`
   needs two `Text`s rather than matching one twice.
 
 **A signature under four nodes is documentation, not a check.** The engine skips

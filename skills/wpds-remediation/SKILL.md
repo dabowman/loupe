@@ -44,7 +44,7 @@ Move the spacing to the parent. Delete the margin, then give the container the
 gap:
 
 ```jsx
-<HStack spacing={3}>…</HStack>
+<Stack direction="row" gap="md">…</Stack>
 // or, when you don't own the wrapper:
 .acme-parent { display: flex; gap: var(--wpds-dimension-gap-md); }
 ```
@@ -65,18 +65,20 @@ naming the effect. Do not convert it to `gap` — that is the wrong remedy.
 
 ### `layout/in-css`
 
-Replace the hand-rolled flexbox with a primitive: `HStack` for a row, `VStack`
-for a column, `Grid` where it is a grid. When the element must stay a plain
-container, keep `display: flex` and `gap` but drive values from
-`--wpds-dimension-gap-*`. CSS Grid is never reported — flex primitives cannot
-express it.
+Replace the hand-rolled flexbox with `Stack`: `direction="row"` for a row,
+`direction="column"` for a column, `gap` for spacing. When the element must
+stay a plain container — or lays out with CSS Grid, which no primitive
+expresses — keep the CSS but drive values from `--wpds-dimension-gap-*`. CSS
+Grid is never reported — flex primitives cannot express it.
 
 ### `typography/in-css`
 
-The class is on a `Text` or `Heading`. Delete the type declarations and use the
-props — `size`, `weight`, `variant`, `lineHeight`, `align`, `color`. If the
-exact value has no prop, that is a system gap: use `--wpds-typography-*` and
-leave a comment naming the missing prop.
+The class is on a `Text`. Delete the type declarations and use `variant`
+(`heading-2xl`…`body-sm`) — that is `Text`'s whole styling surface, headings
+included via `render`. `variant` has no color axis; if the finding is on
+`color`, that is a system gap — set it via `style` with a
+`--wpds-color-foreground-content-*` token (the one sanctioned inline-style case
+on a WPDS component) and leave a comment naming the missing prop.
 
 ### `typography/untokenized`
 
@@ -101,19 +103,24 @@ A `style={{ … }}` attribute on a WPDS component. One finding covers the whole
 attribute, because the remedy is the component's API rather than a better value
 for each declaration.
 
-Map each declaration to a prop — `Text` has `size`, `weight`, `color`,
-`variant`, `align`; layout primitives have `spacing`, `justify`, `alignment`,
-`expanded`. Spacing between children moves to the parent's `spacing`/`gap`.
+Map each declaration to a prop — `Text` has only `variant`; `Stack` has
+`direction`, `gap`, `align`, `justify`, `wrap`. Spacing between children moves
+to the parent's `gap`.
 
-Keep inline only what no stylesheet could express: a value computed at runtime,
-such as a measured width or a drag offset. A constant is never that. When some
-declarations are dynamic and some are not, move the constants out and leave the
-computed ones — then suppress with a reason naming what is computed.
+A declaration `variant`/layout props genuinely can't express — most often
+`color`, which `Text` has no prop for — is the one case where `style` on a
+WPDS component is the sanctioned path rather than an override; see
+`wpds-authoring`. Everything else: keep inline only what no stylesheet could
+express, a value computed at runtime such as a measured width or a drag
+offset. A constant is never that. When some declarations are dynamic and some
+are not, move the constants out and leave the computed ones — then suppress
+with a reason naming what is computed.
 
 ### `system/raw-element`
 
-`<p>` → `Text`, `<h1>`–`<h6>` → `Heading` with the matching `level`, a styled
-`<div>` → `HStack` / `VStack`, a styled `<span>` → `Text`.
+`<p>` → `Text` (`variant="body-md"`), `<h1>`–`<h6>` → `Text` with
+`variant="heading-*"` and `render` supplying the semantic element, a styled
+`<div>` → `Stack`, a styled `<span>` → `Text`.
 
 Not every raw element should convert. Content rendered from the editor, docs
 prose, and third-party render props are legitimately raw — suppress those with

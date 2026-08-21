@@ -5,7 +5,7 @@ Design-system conformance checking for front-end codebases.
 Linters see one file at a time. This correlates the two sides no single linter
 can hold at once: the markup that binds a class to a component, and the CSS that
 styles that class. That correlation is what lets it say *"this `font-size` is on
-a `<Text>` — use its `size` prop"* rather than *"this `font-size` isn't a
+a `<Text>` — use its `variant` prop"* rather than *"this `font-size` isn't a
 token."*
 
 Pure analysis. It never edits.
@@ -17,7 +17,7 @@ npx ds-hygiene check --all
 ## Why
 
 An agent writing front-end code will produce CSS that lints clean and still
-ignores your design system: hand-rolled flexbox next to your `<HStack>`, a
+ignores your design system: hand-rolled flexbox next to your `<Stack>`, a
 hardcoded hex next to your token, a `<p>` where the system has a `<Text>`, an
 override reaching into a third-party component's internals. None of that is a
 syntax error. All of it is drift.
@@ -124,10 +124,10 @@ is what makes a preset:
     "packages": ["@wordpress/components"],
     "tokenPrefixes": ["--wp-admin-theme-"],
     "normalizeExports": "^__(experimental|unstable)",
-    "components": { "layout": ["HStack", "VStack"], "text": ["Text", "Heading"] },
+    "components": { "layout": ["Stack"], "text": ["Text"] },
     "elementMap": {
       "p": "Text",
-      "div": { "component": "HStack/VStack", "styledOnly": true }
+      "div": { "component": "Stack", "styledOnly": true }
     }
   }
 }

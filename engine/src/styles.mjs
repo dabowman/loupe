@@ -35,6 +35,13 @@ export const FLEX_PROPS = new Set([
 	'flex-direction', 'align-items', 'justify-content', 'align-content',
 	'justify-items', 'flex-wrap', 'place-items', 'place-content',
 ]);
+/** Token-backed: the design system ships duration and easing scales. */
+export const MOTION_PROPS = new Set([
+	'transition-duration', 'animation-duration',
+	'transition-timing-function', 'animation-timing-function',
+]);
+/** Token-backed: the design system ships a cursor scale for interactive controls. */
+export const CURSOR_PROPS = new Set(['cursor']);
 
 /**
  * Appearance-only. Layout and box-model props are deliberately excluded: on a
@@ -57,6 +64,10 @@ export const usesToken = (value) => /var\(\s*--/.test(value);
 export const isLiteralColor = (v) => /#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|oklch|lab|color)\(/i.test(v);
 export const isLiteralLength = (v) =>
 	/(^|\s|,)-?\d*\.?\d+(px|rem|em|%|vh|vw|vmin|vmax|pt|ch)\b/.test(v) || /(^|\s)-?\d+(\s|$)/.test(v);
+export const isLiteralDuration = (v) => /^-?\d*\.?\d+m?s$/i.test(v.trim());
+export const isLiteralEasing = (v) =>
+	/^(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$/i.test(v.trim()) ||
+	/^(cubic-bezier|steps)\(/i.test(v.trim());
 
 /**
  * Classify a margin declaration: `'spacing' | 'negative' | null`.
@@ -104,6 +115,10 @@ export function isHardcodedTokenValue(prop, value, { allowZero = true } = {}) {
 	if (allowZero && v.split(/\s+/).every((part) => ZERO.test(part))) return false;
 	if (COLOR_PROPS.has(prop)) return isLiteralColor(value);
 	if (SPACING_PROPS.has(prop) || RADIUS_PROPS.has(prop) || BORDER_WIDTH_PROPS.has(prop)) return isLiteralLength(value);
+	if (MOTION_PROPS.has(prop)) return isLiteralDuration(value) || isLiteralEasing(value);
+	// Cursor has no length/color shape to check — anything left after the var()
+	// and CSS-wide-keyword bail-outs above is a literal keyword (`pointer`, `grab`, …).
+	if (CURSOR_PROPS.has(prop)) return true;
 	return false;
 }
 

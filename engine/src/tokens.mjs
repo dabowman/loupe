@@ -45,6 +45,9 @@ const ROLE_HINTS = [
 	[/^letter-spacing$/, /letter-spacing/],
 	[/^font-family$|^font$/, /font-family/],
 	[/padding|^gap$|gap$|^inset$|^top$|^right$|^bottom$|^left$/, /dimension|spac|padding|gap/],
+	[/^cursor$/, /cursor/],
+	[/^transition-duration$|^animation-duration$/, /motion-duration/],
+	[/^transition-timing-function$|^animation-timing-function$/, /motion-easing/],
 ];
 
 /** Comparable form of a CSS value: case, spacing, shorthand hex, `!important`. */

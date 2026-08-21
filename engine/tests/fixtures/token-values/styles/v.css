@@ -6,4 +6,7 @@
 	border-radius: inherit;
 	inset: 0 0 0 0;
 	top: 12px;
+	cursor: pointer;
+	transition-duration: 200ms;
+	transition-timing-function: ease-in-out;
 }

@@ -183,9 +183,9 @@ const registry = loadPatterns(JSON.parse(await import('node:fs').then((m) => m.r
 await check('a registered pattern matches through nesting and extra siblings', () => {
 	const formModal = registry.find((p) => p.id === 'form-modal');
 	// The registry records the footer as a sibling of the body; real code nests it.
-	const real = toNode(['Modal', ['VStack', 'TextControl', ['HStack', 'Button', 'Button']]]);
+	const real = toNode(['Modal', ['Stack', 'TextControl', ['Stack', 'Button', 'Button']]]);
 	assert(matches(formModal.node, real), 'nested footer should still be a form-modal');
-	const noFooter = toNode(['Modal', ['VStack', 'TextControl']]);
+	const noFooter = toNode(['Modal', ['Stack', 'TextControl']]);
 	assert(!matches(formModal.node, noFooter), 'a modal with no action pair is not a form-modal');
 });
 
@@ -197,12 +197,13 @@ await check('a registered child must claim a distinct node', () => {
 
 const composite = (n) =>
 	[
-		"import { __experimentalHStack as HStack, __experimentalVStack as VStack, __experimentalHeading as Heading, __experimentalText as Text, Button } from '@wordpress/components';",
+		"import { EmptyState, Button } from '@wordpress/ui';",
 		`export const Screen${n} = () => (`,
-		'\t<VStack>',
-		'\t\t<Heading>T</Heading><Text>S</Text>',
-		'\t\t<div className="acme-actions"><HStack><Button>A</Button><Button>B</Button></HStack></div>',
-		'\t</VStack>',
+		'\t<EmptyState.Root>',
+		'\t\t<EmptyState.Title>Nothing here</EmptyState.Title>',
+		'\t\t<EmptyState.Description>Try a different filter.</EmptyState.Description>',
+		'\t\t<div className="acme-actions"><EmptyState.Actions><Button>A</Button></EmptyState.Actions></div>',
+		'\t</EmptyState.Root>',
 		');',
 	].join('\n');
 

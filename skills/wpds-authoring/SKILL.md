@@ -1,7 +1,7 @@
 ---
 name: wpds-authoring
 description: >-
-  Load BEFORE writing or editing any UI that uses the WordPress Design System — `@wordpress/components`, `@wordpress/ui`, or `--wpds-*` tokens — in wp-admin, Gutenberg, WordPress.com, Jetpack, or any React surface built on WPDS. Carries the authoring rules that keep generated code from drifting: use the component before the element (`Text`/`Heading` over `<p>`/`<h2>`), the prop before the stylesheet (`size`/`weight`/`variant` over `font-size`/`font-weight`), and `gap` on a layout primitive over margin anywhere — WPDS ships no margin token at all. Also covers token selection by role, when writing CSS is legitimate, and the `wpds-allow` escape hatch. Triggers on building admin screens, settings panels, modals, sidebar plugins, DataViews surfaces, toolbars, or any JSX importing from `@wordpress/components`. Pair with `wpds-patterns` before assembling a composite and `wpds-remediation` when fixing findings.
+  Load BEFORE writing or editing any UI that uses the WordPress Design System — `@wordpress/components`, `@wordpress/ui`, or `--wpds-*` tokens — in wp-admin, Gutenberg, WordPress.com, Jetpack, or any React surface built on WPDS. Carries the authoring rules that keep generated code from drifting: use the component before the element (`Text` with `variant="heading-*"` over `<p>`/`<h2>`), the prop before the stylesheet (`variant`/`gap`/`direction` over `font-size`/`margin`/`display:flex`), and `gap` on a layout primitive over margin anywhere — WPDS ships no margin token at all. Also covers token selection by role, when writing CSS is legitimate, and the `wpds-allow` escape hatch. Triggers on building admin screens, settings panels, modals, sidebar plugins, DataViews surfaces, toolbars, or any JSX importing from `@wordpress/components`/`@wordpress/ui`. Pair with `wpds-patterns` before assembling a composite and `wpds-remediation` when fixing findings.
 compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Conformance checking needs the plugin's engine (node >=18)."
 ---
 
@@ -9,8 +9,9 @@ compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Conformance checking needs
 
 The failure this prevents is not broken code. It is code that compiles, renders
 correctly, passes review, and quietly reimplements something the design system
-already provides — a hand-rolled flex row beside `HStack`, a `font-size` beside
-`Text`'s `size` prop, a `margin-bottom` where the parent has a `gap`.
+already provides — a hand-rolled flex row beside `Stack`, a `font-size` where
+`Text`'s `variant` prop already covers it, a `margin-bottom` where the parent
+has a `gap`.
 
 That drift is cheap to avoid while writing and expensive to unwind afterwards,
 because by then the pattern is load-bearing and every argument for keeping it is
@@ -21,11 +22,12 @@ locally true. Decide correctly the first time.
 For any visual requirement, work down this list and stop at the first hit. Going
 further down than necessary is the drift.
 
-1. **A component prop.** `<Text size="small" weight="emphasis">`.
-2. **A layout primitive.** `<HStack spacing={2}>`, `<VStack>`, `<Grid>`.
+1. **A component prop.** `<Text variant="body-sm">`.
+2. **A layout primitive.** `<Stack direction="row" gap="sm">`, `<Stack direction="column">`.
 3. **A token, applied in CSS.** `padding: var(--wpds-dimension-padding-md)`.
-4. **Raw CSS.** Only with a reason you would defend out loud. See
-   [Legitimate CSS](#when-css-is-the-right-answer).
+4. **Raw CSS.** Only with a reason you would defend out loud, or for what has no
+   primitive at all — CSS Grid is never reported, because no flex primitive
+   expresses it. See [Legitimate CSS](#when-css-is-the-right-answer).
 
 ## `style={{ … }}` is not an exemption
 
@@ -44,8 +46,8 @@ The checker treats all three channels identically — stylesheets, `style={{ …
 and CSS-in-JS run through one classifier — so there is no fast path here.
 
 ```jsx
-<Button style={{ marginRight: 12 }}>Save</Button>   // no — beats the props
-<HStack spacing={3}><Button>Save</Button></HStack>  // yes
+<Button style={{ marginRight: 12 }}>Save</Button>                    // no — beats the props
+<Stack direction="row" gap="md"><Button>Save</Button></Stack>        // yes
 ```
 
 Legitimate inline styles are the ones no stylesheet could express: a value
@@ -70,10 +72,10 @@ parent.
 </div>
 
 // Right — the container owns the rhythm; children stay reusable.
-<HStack spacing={3} justify="flex-start">
+<Stack direction="row" gap="md" justify="flex-start">
 	<Button variant="primary">Save</Button>
 	<Button>Cancel</Button>
-</HStack>
+</Stack>
 ```
 
 When a layout primitive genuinely cannot be used — you do not control the
@@ -86,22 +88,33 @@ Three margins carry no drift and are not flagged: `margin: 0` (a reset),
 express), and negative margins used for a deliberate bleed — that last one is
 reported separately so you confirm the intent rather than defend the technique.
 
-## Typography: props, not properties
+## Typography: variant, not properties
 
-`Text` and `Heading` expose the type scale as props. Reaching past them to CSS
-recreates a system decision by hand and detaches it from the system's future.
+There is one text component, `Text`, and one styling prop, `variant`
+(`heading-2xl`…`heading-sm`, `body-xl`…`body-sm`) — that is the entire
+surface, headings included. A heading is `Text` at a heading variant with
+`render` supplying the semantic element, not a separate `Heading` component:
 
 ```jsx
-<Text size="small" weight="emphasis" color="warning">Draft</Text>   // yes
-<span className="status">Draft</span>                               // no
+<Text variant="heading-lg" render={<h2 />}>Section title</Text>   // yes
+<Text variant="body-sm">Draft</Text>                               // yes
+<span className="status">Draft</span>                              // no
 ```
 
 Never set `font-size`, `font-weight`, `line-height`, `letter-spacing` or
-`font-family` on a class bound to a `Text` or `Heading`. If the size you need
-has no prop, that is a design-system conversation, not a local override — reach
-for `--wpds-typography-*` and leave a comment saying which prop was missing.
+`font-family` on a class bound to `Text` — `variant` already carries all of
+them together, and a class that touches one drifts them out of sync with each
+other.
 
-Raw `<p>`, `<h1>`–`<h6>` and styled `<span>` all have analogs. Use them.
+`variant` has no color axis, and `Text` has no `color` prop — the component's
+own docs set color via `style` when a variant alone can't express it (e.g.
+`style={{ color: 'var(--wpds-color-foreground-content-warning)' }}`), which
+makes this the one sanctioned case for `style` on a WPDS component rather than
+an override. If the codebase's `system/inline-style` rule doesn't yet know that
+exception, suppress it with that reason rather than inventing a `color` prop
+that does not exist.
+
+Raw `<p>` and `<h1>`–`<h6>` both have a `Text` analog. Use it.
 
 ## Tokens by role, not by value
 

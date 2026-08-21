@@ -1,7 +1,10 @@
 {
-  "note": "var() is a token reference, keywords are not literals, and bare zero has no token to reach for. `margin: 0 auto` is horizontal centering, which no gap prop can express, so it is not a margin finding.",
+  "note": "var() is a token reference, keywords are not literals, and bare zero has no token to reach for. `margin: 0 auto` is horizontal centering, which no gap prop can express, so it is not a margin finding. cursor/transition-duration/transition-timing-function are token-backed too (--wpds-cursor-*, --wpds-motion-*).",
   "findings": [
     { "rule": "tokens/hardcoded-value", "file": "styles/v.css", "line": 3 },
-    { "rule": "tokens/hardcoded-value", "file": "styles/v.css", "line": 8 }
+    { "rule": "tokens/hardcoded-value", "file": "styles/v.css", "line": 8 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/v.css", "line": 9 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/v.css", "line": 10 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/v.css", "line": 11 }
   ]
 }
