@@ -68,6 +68,37 @@ const CASES = [
 		},
 		expect: { preset: 'generic', project: [] },
 	},
+	{
+		// The root manifest carries @wordpress/env and a build script; the plugin
+		// that imports the component library is a directory down. Reading only the
+		// root detected `generic`, which switches off every rule this exists to run.
+		name: 'monorepo → the nested plugin decides the preset',
+		files: (r) => {
+			write(r, 'package.json', JSON.stringify({ devDependencies: { '@wordpress/env': '^9.0.0' } }));
+			write(r, 'my-plugin/package.json', JSON.stringify({ dependencies: { '@wordpress/components': '^28.0.0' } }));
+			for (let i = 0; i < 4; i++) {
+				write(r, `my-plugin/src/B${i}.jsx`, `export const B${i} = () => <div className="acme-panel acme-p${i}" />;`);
+				write(r, `my-plugin/css/b${i}.css`, `.acme-panel { gap: 8px; }\n.acme-p${i} { color: #111; }`);
+			}
+		},
+		expect: { preset: 'wpds', project: ['acme-'], packageDir: 'my-plugin', tokenSourcesUnder: 'my-plugin/' },
+	},
+	{
+		// `rbc-` (react-big-calendar) appears in the project's CSS and its markup,
+		// which is indistinguishable from a namespace the project owns — until you
+		// look at where the class is defined. Every dead-class finding in a real
+		// repo came from this, and all of them were false.
+		name: 'a prefix an installed dependency defines is not the project’s',
+		files: (r) => {
+			write(r, 'package.json', '{}');
+			for (let i = 0; i < 4; i++) {
+				write(r, `src/A${i}.jsx`, `export const A${i} = () => <div className="own-box own-b${i} rbc-event rbc-e${i}" />;`);
+				write(r, `styles/a${i}.css`, `.own-box{color:#111}\n.own-b${i}{color:#222}\n.rbc-event{color:#333}\n.rbc-e${i}{color:#444}`);
+			}
+			write(r, 'node_modules/react-big-calendar/lib/css/react-big-calendar.css', '.rbc-event{padding:2px}\n.rbc-calendar{display:flex}');
+		},
+		expect: { preset: 'generic', project: ['own-'] },
+	},
 ];
 
 let failed = 0;
@@ -78,13 +109,20 @@ for (const c of CASES) {
 		const got = detectConfig(root);
 		const okPreset = got.preset === c.expect.preset;
 		const okNs = JSON.stringify(got.namespaces.project) === JSON.stringify(c.expect.project);
-		if (okPreset && okNs) {
+		const okDir = c.expect.packageDir === undefined || got.packageDir === c.expect.packageDir;
+		const sources = got.config.designSystem?.tokenSources || [];
+		const okTokens =
+			c.expect.tokenSourcesUnder === undefined ||
+			(sources.length > 0 && sources.every((p) => p.startsWith(c.expect.tokenSourcesUnder)));
+		if (okPreset && okNs && okDir && okTokens) {
 			console.log(`ok   ${c.name}`);
 		} else {
 			failed++;
 			console.log(`FAIL ${c.name}`);
 			if (!okPreset) console.log(`  preset: want ${c.expect.preset}, got ${got.preset}`);
 			if (!okNs) console.log(`  namespaces: want ${JSON.stringify(c.expect.project)}, got ${JSON.stringify(got.namespaces.project)}`);
+			if (!okDir) console.log(`  packageDir: want ${JSON.stringify(c.expect.packageDir)}, got ${JSON.stringify(got.packageDir)}`);
+			if (!okTokens) console.log(`  tokenSources: want all under ${c.expect.tokenSourcesUnder}, got ${JSON.stringify(sources)}`);
 		}
 	} finally {
 		rmSync(root, { recursive: true, force: true });

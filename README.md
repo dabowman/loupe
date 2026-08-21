@@ -157,9 +157,16 @@ Presets: `wpds` (WPDS tokens + a severity policy that actually blocks),
 `generic`.
 
 Without a config file, one is inferred: `@wordpress/components` or
-`@wordpress/ui` in `package.json` selects `wpds`, `theme.json` plus
-`templates/` selects `wordpress-block-theme`, and the class prefixes you own are
-read off the classes appearing in **both** your CSS and your markup. The
+`@wordpress/ui` in **any** `package.json` within three levels selects `wpds`
+(a WordPress repo is usually a monorepo, and the manifest that imports the
+component library is rarely the root one); `theme.json` plus `templates/`
+selects `wordpress-block-theme`; and the class prefixes you own are read off the
+classes appearing in **both** your CSS and your markup, minus any a dependency
+defines — `rbc-` looks exactly like a namespace you own until you notice
+react-big-calendar ships the stylesheet that declares it.
+
+Token sources follow the winning manifest, so the design system is found where
+it is actually installed rather than only at the root. The
 alternative is falling through to `generic`, which declares no component layer —
 and a config with no component layer silently switches off every rule that
 correlates the two sides, leaving the gate green on exactly the drift it exists

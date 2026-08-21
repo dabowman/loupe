@@ -16,7 +16,8 @@
       "**/node_modules/**", "**/build/**", "**/dist/**", "**/vendor/**", "**/.git/**",
       "**/coverage/**", "**/.next/**", "**/out/**", "**/storybook-static/**",
       "**/build-style/**", "**/build-module/**", "**/build-types/**",
-      "**/__snapshots__/**", "**/*.min.css", "**/*.min.js", "**/*.bundle.js"
+      "**/__snapshots__/**", "**/.claude/worktrees/**", "**/*.min.css", "**/*.min.js",
+      "**/*.bundle.js"
     ]
   },
   "suppression": { "keyword": "ds-allow", "blanket": ["ds-disable"] }
