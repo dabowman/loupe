@@ -184,6 +184,11 @@ block at all unless you turn blocking on. Run `status` when a gate isn't
 behaving — it names the preset, the namespaces and the blocking switch, which is
 the whole space of reasons a gate misbehaves.
 
+`status` reads the plugin settings from `~/.claude` and says where it got them,
+because Claude Code exports plugin options to hook processes only — a terminal
+sees none of them, and a diagnostic that silently guesses at the switch it is
+diagnosing is worse than no diagnostic.
+
 ### Sass, Less
 
 Parsed through `postcss-scss` / `postcss-less`, declared as optional deps. When

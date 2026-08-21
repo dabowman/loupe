@@ -16,7 +16,9 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { attemptsPath } from './paths.mjs';
 
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
@@ -149,6 +151,75 @@ export function pluginOptions() {
 		blocking: bool('blocking'),
 		maxAttempts: num('max_attempts'),
 		maxFindings: num('max_findings'),
+	};
+}
+
+/**
+ * The same options, for a run that is not a hook.
+ *
+ * Claude Code exports `CLAUDE_PLUGIN_OPTION_*` to hook processes only — not to
+ * terminals, and not to tool calls. So `status`, whose entire job is to say
+ * what the gate will actually do, could never see the blocking switch and
+ * reported every inferred config as advisory no matter how it was configured.
+ * A diagnostic that cannot observe the setting it is diagnosing is worse than
+ * no diagnostic: it sends you looking for the bug somewhere else.
+ *
+ * The values are in the settings file, under a key naming this plugin. Read
+ * them there when the environment has nothing to say, and report the source so
+ * a stale answer is recognizable as one.
+ *
+ * @returns {{ options: object, source: 'environment'|'settings'|'none' }}
+ */
+export function resolvedOptions() {
+	const fromEnv = pluginOptions();
+	if (Object.values(fromEnv).some((v) => v !== undefined)) return { options: fromEnv, source: 'environment' };
+
+	const name = pluginName();
+	if (!name) return { options: fromEnv, source: 'none' };
+	for (const file of ['settings.local.json', 'settings.json']) {
+		try {
+			const raw = JSON.parse(readFileSync(join(homedir(), '.claude', file), 'utf8'));
+			const key = Object.keys(raw.pluginConfigs || {}).find((k) => k === name || k.startsWith(`${name}@`));
+			const opts = key && raw.pluginConfigs[key]?.options;
+			if (opts) return { options: coerce(opts), source: 'settings' };
+		} catch {
+			/* no settings file, or not ours to read */
+		}
+	}
+	return { options: fromEnv, source: 'none' };
+}
+
+/** This plugin's name, from the manifest two levels above the engine. */
+function pluginName() {
+	const roots = [
+		process.env.CLAUDE_PLUGIN_ROOT,
+		join(dirname(fileURLToPath(import.meta.url)), '..', '..'),
+	].filter(Boolean);
+	for (const root of roots) {
+		try {
+			return JSON.parse(readFileSync(join(root, '.claude-plugin', 'plugin.json'), 'utf8')).name || null;
+		} catch {
+			/* try the next candidate */
+		}
+	}
+	return null;
+}
+
+/** Settings hold real JSON types; the env path hands us strings. Normalize. */
+function coerce(opts) {
+	const str = (v) => (v === undefined || v === null || v === '' ? undefined : String(v));
+	const num = (v) => (Number.isFinite(Number(v)) && str(v) !== undefined ? Number(v) : undefined);
+	const list = (v) => {
+		if (Array.isArray(v)) return v.map(String).filter(Boolean);
+		const t = str(v);
+		return t === undefined ? undefined : t.split(/[,\s]+/).filter(Boolean);
+	};
+	return {
+		preset: str(opts.preset),
+		projectPrefixes: list(opts.project_prefixes),
+		blocking: opts.blocking === undefined ? undefined : /^(1|true|yes|on)$/i.test(String(opts.blocking)),
+		maxAttempts: num(opts.max_attempts),
+		maxFindings: num(opts.max_findings),
 	};
 }
 

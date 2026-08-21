@@ -21,7 +21,7 @@ import { loadPatterns } from '../src/patterns.mjs';
 import { findExistingBaseline, isPluginContext, stateDir } from '../src/paths.mjs';
 import {
 	bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot,
-	parsePayload, payloadFile, pluginOptions, readStdin,
+	parsePayload, payloadFile, readStdin, resolvedOptions,
 } from '../src/hook.mjs';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
@@ -122,7 +122,9 @@ async function main() {
 		return EXIT.CANNOT_RUN;
 	}
 
-	const options = isHook ? pluginOptions() : {};
+	// Resolved for every command, not just the hook. `status` exists to say what
+	// the gate will do, and it cannot do that without the settings the gate reads.
+	const { options, source: optionsSource } = resolvedOptions();
 
 	let config;
 	let detected = null;
@@ -212,7 +214,14 @@ async function main() {
 			`namespaces: ${(config.raw.namespaces?.project || []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
 			`suppress:   ${config.suppression.keyword} <ruleId> -- <reason>`,
 			`state:      ${state.dir}${state.scope === 'plugin-data' ? '  (outside your repo)' : ''}`,
-			`plugin:     ${isPluginContext() ? 'enabled, options read from plugin settings' : 'not running as a plugin'}`,
+			`options:    ${
+				optionsSource === 'environment'
+					? 'from the plugin environment (hook context)'
+					: optionsSource === 'settings'
+						? 'from ~/.claude settings'
+						: 'none found — plugin defaults apply'
+			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
+			`plugin:     ${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
 			'',
 			'rules:',
 		];
@@ -242,7 +251,7 @@ async function main() {
 			lines.push('css/dead-class is held to advisory because the namespaces were inferred, not configured.');
 			if (!blockingAllowed)
 				lines.push(
-					'The gate reports only: this config was inferred. Write one with `ds-hygiene init`, or turn on "Block turns on findings" in the plugin settings.'
+					'The gate reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `ds-hygiene init`, or turn the setting on.'
 				);
 		} else if (!blockingAllowed) {
 			lines.push('The gate reports only: "Block turns on findings" is off in the plugin settings.');

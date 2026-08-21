@@ -160,5 +160,60 @@ await check('markup outside src/ still counts as a reference', async () => {
 	}
 });
 
+// Claude Code exports CLAUDE_PLUGIN_OPTION_* to hook processes only. `status`
+// therefore never saw the blocking switch and reported every inferred config as
+// advisory, however it was configured — while the hook happily blocked. A
+// diagnostic that cannot observe the setting it diagnoses sends you hunting for
+// the bug somewhere else.
+await check('status reports the blocking switch it cannot see in the environment', () => {
+	const home = mkdtempSync(join(tmpdir(), 'dsh-home-'));
+	const root = tmpRepo({
+		'ds-hygiene.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx': 'export const A = () => <div className="acme-a" />;',
+	});
+	try {
+		mkdirSync(join(home, '.claude'), { recursive: true });
+		writeFileSync(
+			join(home, '.claude', 'settings.json'),
+			JSON.stringify({ pluginConfigs: { 'wpds-quality@somewhere': { options: { blocking: true } } } })
+		);
+		const env = { ...process.env, HOME: home };
+		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
+		delete env.CLAUDE_PLUGIN_ROOT;
+		const out = execFileSync('node', [CLI, 'status', '--root', root], { encoding: 'utf8', env });
+		assert(/blocking on/.test(out), `status did not read the setting:\n${out}`);
+		assert(/Turns are blocked by/.test(out), `status still claims nothing blocks:\n${out}`);
+	} finally {
+		rmSync(home, { recursive: true, force: true });
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+// The other half of the same bug: what status promises has to be what the hook
+// does, or the diagnostic is just a different kind of wrong.
+await check('the hook blocks when the setting says it should', () => {
+	const root = tmpRepo({
+		'ds-hygiene.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	try {
+		execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"blk","tool_input":{"file_path":"styles/a.css"}}',
+			env: { ...process.env, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		throw new Error('hook exited 0 — it did not block');
+	} catch (err) {
+		if (err.message.includes('did not block')) throw err;
+		assert(err.status === 2, `expected exit 2, got ${err.status}`);
+		assert(/system\/override|typography\/in-css/.test(err.stderr), `no report handed back:\n${err.stderr}`);
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
 console.log(`\n${failed ? `${failed} failed` : 'all passed'}`);
 process.exit(failed ? 1 : 0);
