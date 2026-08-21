@@ -6,63 +6,90 @@
       "id": "page-header",
       "summary": "Screen title with an optional description and a trailing action cluster.",
       "use": "The top of any admin screen or panel.",
-      "signature": ["HStack", ["VStack", "Heading", "Text"], ["HStack", "Button"]],
-      "instead_of": ["An ad-hoc HStack + Heading + buttons rebuilt per screen"]
+      "signature": ["Stack", ["Stack", "Text", "Text"], ["Stack", "Button"]],
+      "instead_of": ["An ad-hoc row Stack + heading Text + buttons rebuilt per screen"]
     },
     {
       "id": "action-bar",
       "summary": "Horizontal group of actions with consistent order, spacing and alignment.",
       "use": "Anywhere two or more actions sit together; primary action last.",
-      "signature": ["HStack", "Button", "Button"],
+      "signature": ["Stack", "Button", "Button"],
       "instead_of": ["div.actions with hand-set margins", "Buttons spaced with margin-right"]
     },
     {
       "id": "confirm-modal",
-      "summary": "Destructive-action confirmation with a titled Modal and a right-aligned action pair.",
+      "summary": "Destructive-action confirmation dialog with confirm/cancel actions.",
       "use": "Any irreversible action needing explicit consent.",
-      "signature": ["Modal", "Text", ["HStack", "Button", "Button"]],
-      "instead_of": ["A bare Modal with a hand-built div footer", "window.confirm()"]
+      "import": "@wordpress/components",
+      "canonical": "__experimentalConfirmDialog as ConfirmDialog",
+      "signature": ["Modal", "Text", ["Stack", "Button", "Button"]],
+      "instead_of": [
+        "A hand-built Modal + Stack + Button pair reimplementing confirm/cancel — ConfirmDialog already does this, controlled or uncontrolled",
+        "window.confirm()"
+      ]
     },
     {
       "id": "form-modal",
       "summary": "Modal wrapping a form, with submit and cancel in the standard position.",
       "use": "Creating or editing a record without leaving the current screen.",
-      "signature": ["Modal", "VStack", ["HStack", "Button", "Button"]],
+      "signature": ["Modal", "Stack", ["Stack", "Button", "Button"]],
       "instead_of": ["Modal with an inline form and per-instance submit placement"]
     },
     {
       "id": "notice-stack",
-      "summary": "Container owning the spacing and order of a run of Notices.",
+      "summary": "Container owning the spacing, order and dismissal of a run of Notices.",
       "use": "Any screen that can show more than one notice at a time.",
-      "signature": ["VStack", "Notice"],
-      "instead_of": ["Individually placed Notice components with local margins"]
+      "import": "@wordpress/components",
+      "canonical": "NoticeList",
+      "signature": ["Stack", "Notice"],
+      "instead_of": [
+        "Individually placed Notice components with local margins — NoticeList already takes notices + onRemove"
+      ]
     },
     {
       "id": "detail-sidebar",
       "summary": "Secondary panel beside a main region, with its own header and scroll area.",
       "use": "Inspector and detail views alongside a list or canvas.",
-      "signature": ["VStack", ["HStack", "Heading", "Button"], "VStack"],
+      "signature": ["Stack", ["Stack", "Text", "Button"], "Stack"],
       "instead_of": ["One-off panel layouts with bespoke headers"]
     },
     {
       "id": "empty-state",
       "summary": "Centred explanation of why a region is empty, with the action that fills it.",
       "use": "Any list, table or canvas that can legitimately have no content.",
-      "signature": ["VStack", "Heading", "Text", "Button"],
-      "instead_of": ["A centred div with a paragraph and a button"]
+      "import": "@wordpress/ui",
+      "canonical": "EmptyState.Root",
+      "signature": ["EmptyState.Root", "EmptyState.Title", "EmptyState.Description", "EmptyState.Actions"],
+      "instead_of": [
+        "A centred div (or hand-built Stack + Text + Button) with a paragraph and a button — EmptyState.Root/Title/Description/Actions already ships this"
+      ]
     },
     {
       "id": "form-row",
       "summary": "Label, control and help text in the standard arrangement.",
       "use": "Every field in a settings or record form.",
-      "signature": ["VStack", "Text", "Text"],
-      "instead_of": ["Label/control/help rebuilt per field"]
+      "import": "@wordpress/ui",
+      "canonical": "Field.Root",
+      "signature": ["Field.Root", "Field.Label", "Field.Control", "Field.Description"],
+      "instead_of": [
+        "Label/control/help rebuilt per field with a hand-built Stack — Field.Root already handles the layout, association and a11y",
+        "Fieldset.Root for a group of controls sharing one legend, instead of Field.Root per control"
+      ]
+    },
+    {
+      "id": "card",
+      "summary": "Visually contained surface grouping related content and actions, with an optional header.",
+      "use": "Any block of related content that needs a visible boundary — settings groups, list items, dashboard tiles.",
+      "import": "@wordpress/ui",
+      "canonical": "Card.Root",
+      "signature": ["Card.Root", "Card.Header", "Card.Title", "Card.Content"],
+      "instead_of": ["A styled div with a border/shadow rebuilt per surface"]
     },
     {
       "id": "dataviews-toolbar",
       "summary": "Search, filters and bulk actions above a DataViews list.",
       "use": "Any DataViews surface with filtering or bulk operations.",
-      "signature": ["HStack", "SearchControl", ["HStack", "Button"]],
+      "signature": ["Stack", "SearchControl", ["Stack", "Button"]],
       "instead_of": ["Custom filter/search/action clusters per list"]
     }
   ]

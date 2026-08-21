@@ -240,19 +240,24 @@ export function scanMarkup(text, relPath, ds) {
 		return out;
 	};
 
+	// `Card.Root`, `Card.Header`, `Card.Content`, … are distinct nodes in a
+	// composite tree even though only `Card` is ever imported — keep the full
+	// dotted name so they don't collapse into one indistinguishable node, but
+	// test import membership against the object half.
 	const jsxName = (el) => {
 		const n = el?.openingElement?.name;
 		if (n?.type === 'JSXIdentifier') return n.name;
-		if (n?.type === 'JSXMemberExpression') return n.object?.name ?? null;
+		if (n?.type === 'JSXMemberExpression') return n.object?.name ? `${n.object.name}.${n.property?.name ?? '?'}` : null;
 		return null;
 	};
+	const baseOf = (name) => name.split('.', 1)[0];
 
 	const readComposite = (el) => {
 		const name = jsxName(el);
-		if (!name || !known.has(name)) return;
+		if (!name || !known.has(baseOf(name))) return;
 		const tree = systemTree(
 			{ ...el, line: el.loc?.start?.line ?? 1 },
-			(n) => known.has(n),
+			(n) => known.has(baseOf(n)),
 			jsxChildElements,
 			jsxName
 		);

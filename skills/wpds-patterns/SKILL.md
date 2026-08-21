@@ -39,13 +39,13 @@ cat "${CLAUDE_PLUGIN_ROOT}/patterns/index.json"
 ```jsonc
 {
   "id": "confirm-modal",
-  "summary": "Destructive-action confirmation with a titled Modal and a right-aligned action pair.",
+  "summary": "Destructive-action confirmation dialog with confirm/cancel actions.",
   "use": "Any irreversible action needing explicit consent.",
-  "import": "@acme/ui",          // where the shared implementation lives, if extracted
-  "canonical": "confirm-modal.jsx",
-  "signature": ["Modal", "Text", ["HStack", "Button", "Button"]],
+  "import": "@wordpress/components",   // where the shared implementation lives
+  "canonical": "__experimentalConfirmDialog as ConfirmDialog",
+  "signature": ["Modal", "Text", ["Stack", "Button", "Button"]],
   "instead_of": [
-    "A bare Modal with a hand-built div.actions footer",
+    "A hand-built Modal + Stack + Button pair reimplementing confirm/cancel",
     "window.confirm()"
   ]
 }
@@ -54,8 +54,11 @@ cat "${CLAUDE_PLUGIN_ROOT}/patterns/index.json"
 `signature` is the normalized component tree. A node is `[name, ...children]`;
 each child is either a bare component name or another node. Only design-system
 components appear — raw elements between them are transparent, so
-`<HStack><div><Button/></div></HStack>` and `<HStack><Button/></HStack>` have the
+`<Stack><div><Button/></div></Stack>` and `<Stack><Button/></Stack>` have the
 same signature, which is right, because they are the same composition.
+A compound component's sub-parts (`Card.Root`, `Card.Header`, `EmptyState.Title`,
+`Field.Control`, …) are distinct nodes even though only the root name is ever
+imported — write the full dotted name in the signature.
 
 Matching is **containment, not equality**:
 
@@ -69,7 +72,7 @@ Matching is **containment, not equality**:
   needs two `Text`s rather than matching one twice.
 
 **A signature under four nodes is documentation, not a check.** The engine skips
-it. `HStack(Button,Button)` is a true description of an action bar and a useless
+it. `Stack(Button,Button)` is a true description of an action bar and a useless
 finding — it matched 48 files in one repo, and "you have 48 action bars" is not a
 defect anyone can act on. `action-bar`, `form-row` and `notice-stack` are in the
 registry for you to read, not for the engine to enforce.
@@ -92,21 +95,34 @@ project's own registry is merged over the shipped one, winning on `id`.
 
 ## The starting set
 
-These ship empty of canonical source deliberately — the shapes are project
-specific, and a canonical file invented here would be wrong everywhere. Fill
-each one in from the project's real implementation the first time you build it.
+Some of these are genuinely project-specific compositions — the shapes vary
+per codebase, and a canonical file invented here would be wrong everywhere.
+Fill `canonical`/`import` in from the project's real implementation the first
+time you build one:
 
 | Pattern | Replaces |
 | --- | --- |
-| `page-header` | Ad-hoc `HStack` + `Heading` + action cluster per screen |
+| `page-header` | Ad-hoc row `Stack` + heading `Text` + action cluster per screen |
 | `action-bar` | Bespoke button rows with hand-set spacing and alignment |
-| `confirm-modal` | Bare `Modal` + hand-built footer, or `window.confirm()` |
 | `form-modal` | `Modal` with an inline form and inconsistent submit placement |
-| `notice-stack` | Individually-placed `Notice` components with local spacing |
 | `detail-sidebar` | One-off panel layouts beside a main region |
-| `empty-state` | A centred `<div>` with a paragraph and a button |
-| `form-row` | Label/control/help arrangements rebuilt per field |
 | `dataviews-toolbar` | Custom filter/search/action clusters above a list |
+
+The rest already have `canonical`/`import` filled in, because WPDS ships the
+composition as a real component — the pattern exists to point at it, not to
+describe a shape to reassemble:
+
+| Pattern | Canonical component |
+| --- | --- |
+| `confirm-modal` | `ConfirmDialog` (`@wordpress/components`) — wraps `Modal` with confirm/cancel already built |
+| `notice-stack` | `NoticeList` (`@wordpress/components`) |
+| `empty-state` | `EmptyState.Root/Title/Description/Actions` (`@wordpress/ui`) |
+| `form-row` | `Field.Root/Label/Control/Description` (`@wordpress/ui`) |
+| `card` | `Card.Root/Header/Title/Content` (`@wordpress/ui`) |
+
+A file that imports the canonical component stops being reported by
+`patterns/duplicate-composite` — check for it before assembling any of these
+five by hand.
 
 ## Registering a pattern
 
@@ -142,7 +158,8 @@ node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --all
 ```
 
 Composite detection (`patterns/duplicate-composite`,
-`patterns/unregistered-composite`) is not implemented yet — the registry is
-live and read by humans and agents, the rules that enforce it are the next
-build step. Until then this skill is the enforcement, which means reading the
-registry before assembling is not optional.
+`patterns/unregistered-composite`) is implemented — the engine builds a
+component tree per JSX subtree and runs it against the registry. It only sees
+what a project's `ds-hygiene.config.json` passes as `--patterns`; without that,
+this skill is still the enforcement, which means reading the registry before
+assembling is not optional.
