@@ -17,6 +17,19 @@ This plugin works at two moments: **before** the code is written (skills that
 set the rules and the sanctioned compositions) and **as** it is written (hooks
 that report drift on the file just touched, not forty tool calls later).
 
+## Install
+
+```
+/plugin marketplace add dabowman/loupe
+/plugin install loupe@loupe
+```
+
+Nothing else to run. The engine ships pre-bundled with its dependencies, so a
+fresh install is a working install on any machine with Node 18 or newer — no
+`npm install`, no toolchain, no build step. See
+[Working on the engine](#working-on-the-engine) if you are changing it rather
+than using it.
+
 ## What's in it
 
 | | |
@@ -61,13 +74,18 @@ loupe check --all
 loupe explain layout/margin-on-child
 ```
 
-`bin/loupe` is on PATH inside any Claude Code session — Claude Code adds
-each enabled plugin's `bin/` to the environment it runs commands in — and
-`install.sh` links it into `~/.local/bin` for plain terminals. It runs against
-whatever directory you are in and adds nothing to that project: the engine
-carries its own dependencies and writes nothing into your repo. It also passes
-the shipped pattern and component registries unless you name your own with
-`--patterns`/`--components`.
+`bin/loupe` is on PATH inside any Claude Code session — Claude Code adds each
+enabled plugin's `bin/` to the environment it runs commands in. For plain
+terminals, symlink it somewhere on your `PATH`:
+
+```bash
+ln -s "$HOME/.claude/plugins/<marketplace>/loupe/bin/loupe" ~/.local/bin/loupe
+```
+
+It runs against whatever directory you are in and adds nothing to that project:
+the engine carries its own dependencies and writes nothing into your repo. It
+also passes the shipped pattern and component registries unless you name your
+own with `--patterns`/`--components`.
 
 Pure analysis — it never edits. Fixing is `loupe-remediation`'s job, because the
 fixes need judgment that a codemod does not have.
@@ -285,14 +303,14 @@ diagnosing is worse than no diagnostic.
 
 ### Sass, Less
 
-Parsed through `postcss-scss` / `postcss-less`, declared as optional deps. When
-one is missing the file reports as `stylesheet/unparsed` rather than being
-skipped in silence — a clean run should mean *checked and clean*, never
-*couldn't read it*.
+Parsed through `postcss-scss` / `postcss-less`, both folded into the shipped
+bundle — Sass works out of the box on a plain install. `postcss-sass` and
+`postcss-styl` are not shipped; they are resolved from the host if it happens to
+have them.
 
-```bash
-cd engine && npm install     # installs the optional syntaxes
-```
+When a syntax is missing the file reports as `stylesheet/unparsed` rather than
+being skipped in silence — a clean run should mean *checked and clean*, never
+*couldn't read it*.
 
 ### Suppression
 
@@ -398,6 +416,44 @@ Known limits, in rough priority order:
 5. **No index cache.** Every hook run rebuilds the repo index. At four seconds on
    the largest repo in the ecosystem this has not been worth the complexity —
    revisit if a project drags.
+
+## Working on the engine
+
+```bash
+cd engine
+npm install
+npm test
+npm run build      # rebuild dist/loupe.mjs, and commit it
+```
+
+The engine exists twice on purpose. `engine/src/` is the code. `engine/dist/loupe.mjs`
+is that code bundled with `@babel/parser`, `picomatch` and `postcss`, committed
+to the repo, and rebuilt by `npm run build`.
+
+Committing a build artifact is not free, and the reason is narrow: nothing in a
+marketplace install runs `npm install` on a plugin's behalf. Without the bundle,
+an engine that imports `picomatch` at load time throws on every hook run for
+everyone who installed this the normal way, which is the only way most people
+will.
+
+Two things keep the artifact from becoming a second source of truth:
+
+- `engine/bin/loupe.mjs` — the entry point the hooks, the commands and the
+  `loupe` shim all reach — runs **source** wherever the deps are installed, and
+  the bundle everywhere else. A checkout with `node_modules` in it is a checkout
+  someone is editing, and pinning that to a bundle would mean edits to `src/`
+  silently doing nothing until a rebuild. That is a gate reporting yesterday's
+  verdict on today's code — the exact failure this engine exists to refuse.
+- `npm run build:check` re-bundles and compares. It is what CI runs, and it is
+  the only thing standing between a `src/` change and a marketplace install
+  still serving the version before it, because the staleness is invisible on the
+  machine where the edit happened.
+
+`dist/` sits at the same depth as `src/` so the engine's three `import.meta.url`
+lookups — the preset directory, the plugin manifest — resolve identically from
+either entry. Presets stay on disk as JSON next to the bundle rather than inside
+it: `loupe presets` lists that directory, and a preset you can read is a preset
+you can copy.
 
 ## Tests
 

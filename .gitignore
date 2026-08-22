@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Deps. `engine/dist/` is deliberately NOT ignored — the committed bundle is
+# what makes this installable without a toolchain.
+node_modules/
+
+# Engine state written into a project under check
+.loupe/

@@ -15,6 +15,7 @@
   "files": [
     "bin",
     "src",
+    "dist",
     "presets",
     "README.md"
   ],
@@ -22,6 +23,8 @@
     "node": ">=18"
   },
   "scripts": {
+    "build": "node build.mjs",
+    "build:check": "node build.mjs --check",
     "test": "node tests/run.mjs && node tests/detect.mjs && node tests/regressions.mjs && node tests/features.mjs && node tests/autofix.mjs && node tests/multi-ds.mjs"
   },
   "dependencies": {
@@ -33,5 +36,8 @@
   "optionalDependencies": {
     "postcss-scss": "^4.0.9",
     "postcss-less": "^6.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   }
 }

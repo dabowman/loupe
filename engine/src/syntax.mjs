@@ -12,6 +12,12 @@
  * without `postcss-scss` still gets a working gate on its plain CSS plus an
  * explicit finding naming every file it could not read, rather than a quiet
  * hole in coverage. That is the difference between degraded and dishonest.
+ *
+ * The two declared as optional deps are imported by literal specifier so the
+ * bundler can see them and fold them into `dist/`, which is the only reason a
+ * marketplace install parses Sass at all. The other two stay behind a computed
+ * specifier: not shipped, resolved from the host's `node_modules` when it
+ * happens to have them, reported missing when it doesn't.
  */
 
 import postcss from 'postcss';
@@ -22,6 +28,16 @@ const SYNTAX_PACKAGES = {
 	'.sass': 'postcss-sass',
 	'.less': 'postcss-less',
 	'.styl': 'postcss-styl',
+};
+
+/**
+ * Literal-specifier loaders for the syntaxes this package ships as optional
+ * deps. Anything not listed here falls back to a computed import, which a
+ * bundler cannot follow and therefore leaves for the host to resolve.
+ */
+const BUNDLED_LOADERS = {
+	'postcss-scss': () => import('postcss-scss'),
+	'postcss-less': () => import('postcss-less'),
 };
 
 const cache = new Map();
@@ -46,7 +62,8 @@ export async function syntaxFor(path) {
 
 	let resolved;
 	try {
-		const mod = await import(pkg);
+		const load = BUNDLED_LOADERS[pkg] ?? (() => import(pkg));
+		const mod = await load();
 		const syntax = mod.default ?? mod;
 		const parse = syntax.parse ?? syntax;
 		if (typeof parse !== 'function') throw new Error(`${pkg} exposes no parse()`);

@@ -351,6 +351,26 @@ returns before indexing, and any file over 1.5MB is skipped as generated (a
 stylesheet skipped this way still reports `stylesheet/unparsed`, so the hole is
 never silent).
 
+## Source and bundle
+
+`src/` is the engine. `dist/loupe.mjs` is the same code bundled with its three
+dependencies, committed, and rebuilt by `npm run build` — a marketplace install
+runs no `npm install`, so without the bundle the engine throws on load for
+anyone who installed the plugin rather than cloned it.
+
+`bin/loupe.mjs` is the entry point every caller reaches, and it picks between
+them: source wherever `node_modules` is present (a checkout with deps installed
+is a checkout someone is editing, and running a bundle there would mean `src/`
+edits silently doing nothing), the bundle everywhere else. `npm run build:check`
+re-bundles and compares — CI runs it, because a stale `dist/` is invisible on
+the machine that made it stale.
+
+```bash
+npm install
+npm run build        # rebuild dist/loupe.mjs, and commit it
+npm run build:check  # fail if dist/ no longer matches src/
+```
+
 ## Tests
 
 ```bash

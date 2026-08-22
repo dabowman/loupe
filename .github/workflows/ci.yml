@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm test
+
+      # dist/ is a committed build artifact, so it can go stale in exactly one
+      # way: someone edits src/ and forgets to rebuild. Locally that is
+      # invisible — bin/loupe.mjs runs source wherever the deps are installed —
+      # so this is the only thing standing between a src/ change and a
+      # marketplace install still running the previous version of it.
+      - run: npm run build:check
+
+  bundle:
+    name: bundle runs with no dependencies installed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # No `npm install` anywhere: this is what a marketplace install looks
+      # like, and the whole point of shipping dist/ is that it works there.
+      - run: node engine/bin/loupe.mjs presets
+      - run: node engine/bin/loupe.mjs explain layout/margin-on-child
