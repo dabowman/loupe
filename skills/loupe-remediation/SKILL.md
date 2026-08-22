@@ -26,7 +26,7 @@ recalling it — the remedies here name real current props, but WPDS moves
 twice a year and a remedy that's right today can be stale by the next release.
 The MCP is for prop/usage detail on a component already chosen — it carries no
 maturity signal at all, so it is the wrong tool for "is this still the right
-component." That question is `components/index.json`'s job; see
+component." That question is `profiles/wpds/components/index.json`'s job; see
 `system/locked-component`/`system/superseded-component` below.
 
 ## Work in this order
@@ -63,14 +63,14 @@ is not a reason; that is true of every locked API right up until it isn't.
 ### `system/superseded-component`
 
 A current, recommended component now covers this job — the finding names it.
-Check `components/index.json`'s entry for the *target* before swapping: some
+Check `profiles/wpds/components/index.json`'s entry for the *target* before swapping: some
 replacements are a straight rename (`HStack`/`VStack` → `Stack` with a
 `direction` prop), others change the prop surface entirely (`Text` from
 `@wordpress/components` had `size`/`weight`/`color`; `Text` from
 `@wordpress/ui` has only `variant`). Read the target's real props via the MCP
 before writing the replacement — do not assume the old props carry over.
 
-Only fires when the replacement's own status in `components/index.json` is
+Only fires when the replacement's own status in `profiles/wpds/components/index.json` is
 `recommended` — an `experimental`-status alternative (most of the newer
 `@wordpress/ui` overlay components right now — `Dialog`, `AlertDialog`,
 `Drawer`, `Menu`, `Button`, `IconButton`, `LinkButton`, `Notice`, `Popover`)
@@ -222,7 +222,7 @@ silences the finding and keeps the duplication.
 The same composite in three or more files, in no registry. Two would be a
 coincidence; three is house style that nobody wrote down.
 
-Extract it, register it in `patterns/index.json` with a `summary` saying what it
+Extract it, register it in `profiles/wpds/patterns/index.json` with a `summary` saying what it
 is *for*, and point `import`/`canonical` at the new implementation. If the three
 instances are genuinely different things that happen to share a shape, say so in
 the entry's `instead_of` — or suppress with that reason, which is a real one.

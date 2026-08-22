@@ -8,7 +8,7 @@
  *   2  could not run (bad usage, not a git worktree, config error)
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { analyze } from '../src/analyze.mjs';
 import { applyTokenFixes } from '../src/autofix.mjs';
@@ -18,8 +18,7 @@ import { changedFiles, isSource, toPosix } from '../src/discover.mjs';
 import { RULES, canonicalRuleId, renderTitle } from '../src/rules.mjs';
 import { formatAgent, formatJson, formatSarif, formatSummary } from '../src/report.mjs';
 import { detectConfig } from '../src/detect.mjs';
-import { loadPatterns } from '../src/patterns.mjs';
-import { loadComponents } from '../src/components.mjs';
+import { applyRegistries, readProfiles, selectProfiles } from '../src/profiles.mjs';
 import { findExistingBaseline, isPluginContext, stateDir } from '../src/paths.mjs';
 import {
 	bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot,
@@ -37,7 +36,7 @@ function parseArgs(argv) {
 			continue;
 		}
 		const [key, inline] = a.slice(2).split(/=(.*)/s);
-		const needsValue = ['format', 'config', 'root', 'preset', 'files', 'max-findings', 'severity', 'baseline', 'patterns', 'components'].includes(key);
+		const needsValue = ['format', 'config', 'root', 'preset', 'files', 'max-findings', 'severity', 'baseline', 'patterns', 'components', 'profiles', 'profile'].includes(key);
 		if (needsValue) args.flags[key] = inline ?? argv[++i];
 		else args.flags[key] = inline === undefined ? true : inline !== 'false';
 	}
@@ -71,6 +70,9 @@ Options:
   --preset <name>       Use a bundled preset instead of discovering config
   --patterns <path>     Composite pattern registry (JSON)
   --components <path>   Component currency registry (JSON)
+  --profiles <dir>      Directory of design-system profiles; the ones matching
+                        this project's imports supply their registries
+  --profile <id>        Use this profile regardless of what the project imports
   --config <path>       Explicit config file
   --root <path>         Project root (default: cwd, or CLAUDE_PROJECT_DIR under hook)
 
@@ -161,29 +163,26 @@ async function main() {
 		return EXIT.CANNOT_RUN;
 	}
 
-	// The registry travels with the plugin; the project may also ship one. Merge
-	// them with the project winning on id, because a project that has written
-	// down its own version of `page-header` means that one, not the generic.
-	if (args.flags.patterns) {
-		try {
-			const shipped = loadPatterns(JSON.parse(readFileSync(resolve(args.flags.patterns), 'utf8')));
-			const own = new Set((config.patterns || []).map((p) => p.id));
-			setPatterns(config, [...(config.patterns || []), ...shipped.filter((p) => !own.has(p.id))]);
-		} catch (err) {
-			if (!isHook) process.stderr.write(`loupe: could not read --patterns \u2014 ${err.message}\n`);
-		}
-	}
+	// Registries reach the engine two ways: named directly, or carried by a
+	// design-system profile that the project's own imports selected. Both merge
+	// with the project winning on id, because a repo that has written down its
+	// own `page-header` means that one, not the shipped generic.
+	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
+	const active = selectProfiles(profiles, config, args.flags.profile || null);
+	const sources = active.map((p) => ({ label: `profile ${p.id}`, patterns: p.patterns, components: p.components }));
+	if (args.flags.patterns || args.flags.components)
+		sources.push({ label: 'flags', patterns: args.flags.patterns, components: args.flags.components });
 
-	// Same merge as --patterns: the project's own entries win on `package::name`.
-	if (args.flags.components) {
-		try {
-			const shipped = loadComponents(JSON.parse(readFileSync(resolve(args.flags.components), 'utf8')));
-			const merged = new Map(config.componentRegistry || []);
-			for (const [key, entry] of shipped) if (!merged.has(key)) merged.set(key, entry);
-			setComponentRegistry(config, merged);
-		} catch (err) {
-			if (!isHook) process.stderr.write(`loupe: could not read --components \u2014 ${err.message}\n`);
-		}
+	const registries = applyRegistries(config, sources, { setPatterns, setComponentRegistry });
+	config.profiles = { available: profiles, active, ...registries };
+	if (!isHook) {
+		for (const err of registries.errors) process.stderr.write(`loupe: ${err}\n`);
+		// A registry handed over and then ignored has to say so: silently dropping
+		// it is indistinguishable from running it and finding nothing.
+		for (const s of registries.skipped)
+			process.stderr.write(
+				`loupe: ${s.label} ${s.kind} registry skipped \u2014 it is scoped to ${s.packages.join(', ')}, which this project does not import\n`
+			);
 	}
 
 	// An inferred namespace list is a guess, and css/dead-class tells an agent to
@@ -239,6 +238,16 @@ async function main() {
 						: 'none found — plugin defaults apply'
 			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
 			`plugin:     ${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
+			// Which design system's registries are in play, and — when none are —
+			// which ones were on offer. "No composite findings" and "no composite
+			// registry" look identical in a report; they must not look identical here.
+			`profile:    ${
+				config.profiles?.active?.length
+					? config.profiles.active.map((p) => `${p.id} (${p.name})`).join(', ')
+					: config.profiles?.available?.length
+						? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(', ')}`
+						: 'none available'
+			}`,
 			'',
 			'rules:',
 		];

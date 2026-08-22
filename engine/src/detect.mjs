@@ -12,7 +12,7 @@
  * inferred config run a destructive rule at error severity.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { discover } from './discover.mjs';
@@ -65,63 +65,143 @@ function manifests(root, maxDepth = 3, budget = 60) {
 	return out;
 }
 
-/** Is there a `theme.json` at the root or one level down? */
-function blockThemeMarkers(root) {
-	const probe = (dir, rel) => ({
-		themeJson: existsSync(join(dir, 'theme.json')),
-		dirs: existsSync(join(dir, 'templates')) || existsSync(join(dir, 'parts')),
-		rel,
-	});
-	const hits = [probe(root, '')];
+/** Preset names on disk, so a new design system is a file rather than an edit here. */
+function presetNames() {
+	try {
+		return readdirSync(PRESET_DIR)
+			.filter((f) => f.endsWith('.json'))
+			.map((f) => f.replace(/\.json$/, ''));
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Does `dir` contain `marker`? A trailing slash means "must be a directory",
+ * which is also how the marker reads back in the reason text.
+ */
+function markerAt(dir, marker) {
+	const name = marker.replace(/\/$/, '');
+	const full = join(dir, name);
+	if (!existsSync(full)) return false;
+	if (!marker.endsWith('/')) return true;
+	try {
+		return statSync(full).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
+/** The root and each immediate subdirectory, which is as deep as file markers look. */
+function probeDirs(root) {
+	const out = [{ dir: root, rel: '' }];
 	let entries = [];
 	try {
 		entries = readdirSync(root, { withFileTypes: true });
 	} catch {
-		/* unreadable root just yields the root probe */
+		return out;
 	}
 	for (const e of entries) {
 		if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
-		hits.push(probe(join(root, e.name), e.name));
+		out.push({ dir: join(root, e.name), rel: e.name });
 	}
-	return hits.find((h) => h.themeJson && h.dirs) || hits.find((h) => h.themeJson) || null;
+	return out;
+}
+
+const confidenceOf = (detect, kind) =>
+	typeof detect.confidence === 'string' ? detect.confidence : detect.confidence?.[kind] || null;
+
+/**
+ * Match one preset's declared markers against the project.
+ *
+ * Two kinds, because there are two kinds of evidence a design system leaves: a
+ * dependency in a manifest, and files on disk. A preset declaring neither is
+ * never inferred — `wordpress-components` is a parent others extend, not a
+ * conclusion, and `generic` is the fallback rather than a match.
+ */
+function matchPreset(name, detect, root, found) {
+	if (detect.dependencies?.length) {
+		// Shallowest manifest declaring the library wins, so a root that happens to
+		// list it beats a nested one, and `packageDir` names where its
+		// `node_modules` — and therefore the token stylesheet — will be.
+		for (const { rel } of found) {
+			const pkg = readJson(join(root, rel, 'package.json')) || {};
+			const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
+			const hit = detect.dependencies.filter((d) => deps[d] !== undefined);
+			if (!hit.length) continue;
+			const reasons = [`${hit[0]} in ${rel ? `${rel}/package.json` : 'package.json'}`];
+			if (found.length > 1) reasons.push(`${found.length} package.json files scanned`);
+			return { preset: name, reasons, confidence: confidenceOf(detect, 'full') || 'high', packageDir: rel };
+		}
+	}
+
+	if (detect.files) {
+		const all = detect.files.all || [];
+		const any = detect.files.any || [];
+		const describe = (list) => list.join(' or ');
+		let partial = null;
+		for (const { dir, rel } of probeDirs(root)) {
+			if (all.length && !all.every((m) => markerAt(dir, m))) continue;
+			const where = rel ? ` in ${rel}/` : '';
+			if (!any.length || any.some((m) => markerAt(dir, m))) {
+				const what = [...all, ...(any.length ? [describe(any)] : [])].join(' + ');
+				return {
+					preset: name,
+					reasons: [`${what}${where}`],
+					confidence: confidenceOf(detect, 'full') || 'high',
+					packageDir: rel,
+				};
+			}
+			// `all` without `any` is weaker evidence, not none — but only when the
+			// preset says what a partial match is worth.
+			const weak = confidenceOf(detect, 'partial');
+			if (weak && !partial)
+				partial = {
+					preset: name,
+					reasons: [`${describe(all)} present, no ${describe(any)}${where}`],
+					confidence: weak,
+					packageDir: rel,
+				};
+		}
+		if (partial) return partial;
+	}
+
+	return null;
 }
 
 /**
  * Which preset fits this project?
  *
- * Ordered most-specific first. `wpds` wins over `wordpress-components` for
- * anything importing the component library: it extends that preset and adds the
- * token prefix and severities this plugin exists to enforce, so selecting the
- * weaker parent would silently drop them.
+ * The markers live in the presets, not here: a preset declares a `detect` block
+ * and this walks them by descending priority. That is the whole difference
+ * between "add a design system" meaning a JSON file and meaning a patch to the
+ * engine — and the reason the WordPress markers that used to be hardcoded in
+ * this function now sit in `wpds.json` and `wordpress-block-theme.json`.
+ *
+ * Priority matters where two presets both match: `wpds` outranks any weaker
+ * WordPress preset because it extends one and adds the token prefix and
+ * severities the plugin exists to enforce, so selecting the parent would
+ * silently drop them.
  */
 export function detectPreset(root) {
-	const reasons = [];
 	const found = manifests(root);
+	const candidates = presetNames()
+		.map((name) => ({ name, detect: preset(name).detect }))
+		.filter((c) => c.detect)
+		.sort((a, b) => (b.detect.priority || 0) - (a.detect.priority || 0) || a.name.localeCompare(b.name));
 
-	// Shallowest manifest declaring the component library wins, so a root that
-	// happens to list it beats a nested one, and `packageDir` names where its
-	// `node_modules` — and therefore the token stylesheet — will be.
-	for (const { rel } of found) {
-		const pkg = readJson(join(root, rel, 'package.json')) || {};
-		const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
-		const hit = Object.keys(deps).filter((d) => d === '@wordpress/components' || d === '@wordpress/ui');
-		if (!hit.length) continue;
-		reasons.push(`${hit[0]} in ${rel ? `${rel}/package.json` : 'package.json'}`);
-		if (found.length > 1) reasons.push(`${found.length} package.json files scanned`);
-		return { preset: 'wpds', reasons, confidence: 'high', packageDir: rel };
+	for (const { name, detect } of candidates) {
+		const hit = matchPreset(name, detect, root, found);
+		if (hit) return hit;
 	}
 
-	const theme = blockThemeMarkers(root);
-	if (theme?.dirs) {
-		reasons.push(`theme.json + templates/ or parts/${theme.rel ? ` in ${theme.rel}/` : ''}`);
-		return { preset: 'wordpress-block-theme', reasons, confidence: 'high', packageDir: theme.rel };
-	}
-	if (theme) {
-		reasons.push('theme.json present, no templates/ or parts/');
-		return { preset: 'wordpress-block-theme', reasons, confidence: 'medium', packageDir: theme.rel };
-	}
-	reasons.push(`no WordPress markers found in ${found.length} package.json file(s)`);
-	return { preset: 'generic', reasons, confidence: 'low', packageDir: '' };
+	const tried = candidates.map((c) => c.name).join(', ') || 'none';
+	return {
+		preset: 'generic',
+		reasons: [`no design-system markers found in ${found.length} package.json file(s) (looked for: ${tried})`],
+		confidence: 'low',
+		packageDir: '',
+	};
 }
 
 const CLASS_RE = /\.(-?[_a-zA-Z][\w-]*)/g;
@@ -223,16 +303,21 @@ export function detectNamespaces(root, presetName, packageDir = '') {
 	const sources = { ...generic.sources, ...(base.sources || {}) };
 	const files = discover({ root, sources });
 
-	// Library prefixes from every WordPress preset, so a project styling only
-	// third-party classes yields no namespace rather than adopting theirs.
+	// Library prefixes from *every* shipped preset, not just the detected one, so
+	// a project styling only third-party classes yields no namespace rather than
+	// adopting theirs. Every preset rather than a named few: each one lists the
+	// prefixes its design system owns, and a prefix owned by any of them is
+	// somebody's library whichever preset this project turned out to be.
+	const others = presetNames()
+		.filter((n) => n !== presetName)
+		.map((n) => resolvePreset(n));
 	const external = [
 		...(base.namespaces?.external || []),
-		...(resolvePreset('wordpress-components').namespaces?.external || []),
-		...(resolvePreset('wordpress-block-theme').namespaces?.external || []),
+		...others.flatMap((p) => p.namespaces?.external || []),
 	];
 	const neverDead = [
 		...(base.namespaces?.neverDead || []),
-		...(resolvePreset('wordpress-components').namespaces?.neverDead || []),
+		...others.flatMap((p) => p.namespaces?.neverDead || []),
 	].map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`));
 	const isExcluded = (cls) => external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
 

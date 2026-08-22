@@ -1,6 +1,7 @@
 {
   "extends": "generic",
   "designSystem": {
+    "name": "WordPress",
     "packages": ["@wordpress/components", "@wordpress/ui"],
     "tokenPrefixes": ["--wp-admin-theme-", "--wp-components-"],
     "normalizeExports": "^__(experimental|unstable)",

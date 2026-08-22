@@ -21,10 +21,15 @@ while [ -L "$target" ]; do
 done
 here=$(CDPATH= cd -- "$(dirname -- "$target")" && pwd -P)
 
-# Default the composite registry to the one shipped beside the engine, the same
-# one the hooks and commands pass. An explicit --patterns still wins: the flag
-# is only added when the caller gave none.
+# Default to the shipped design-system profiles, the same ones the hooks and
+# commands pass. A profile only supplies its registries to a project that
+# imports its packages, so pointing this at every project is safe: a repo on a
+# different design system selects no profile and gets no registry.
+#
+# An explicit --profiles/--profile/--patterns still wins: the flag is only added
+# when the caller named none of them.
 case " $* " in
-	*" --patterns "*|*" --patterns="*) exec node "$here/../engine/bin/loupe.mjs" "$@" ;;
+	*" --profiles "*|*" --profiles="*|*" --profile "*|*" --profile="*|*" --patterns "*|*" --patterns="*)
+		exec node "$here/../engine/bin/loupe.mjs" "$@" ;;
 esac
-exec node "$here/../engine/bin/loupe.mjs" "$@" --patterns "$here/../patterns/index.json"
+exec node "$here/../engine/bin/loupe.mjs" "$@" --profiles "$here/../profiles"

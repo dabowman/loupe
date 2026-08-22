@@ -39,7 +39,7 @@ export const RULES = {
 		severity: 'error',
 		rank: 24,
 		needs: ['componentRegistry'],
-		title: 'private API — WordPress does not recommend using this outside Gutenberg core; it can break without notice on any update',
+		title: 'private API — {system} does not recommend using this outside its own core; it can break without notice on any update',
 	},
 	'system/superseded-component': {
 		severity: 'warn',
@@ -150,5 +150,6 @@ export function renderTitle(ruleId, ds, keyword) {
 		.replace('{layout}', list(ds.layoutComponents, 'a layout primitive'))
 		.replace('{text}', list(ds.textComponents, 'a text component'))
 		.replace(/\{tokenPrefix\}/g, ds.tokenPrefixes?.[0] ? `${ds.tokenPrefixes[0]}*` : 'design-system')
+		.replace('{system}', ds.name || 'the design system')
 		.replace('{kw}', keyword);
 }

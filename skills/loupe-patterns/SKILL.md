@@ -18,10 +18,10 @@ extending it. Check the registry before you assemble.
 
 ## How to use this
 
-1. **Look first.** Read `patterns/index.json` in this plugin and the project's
+1. **Look first.** Read `profiles/wpds/patterns/index.json` in this plugin and the project's
    own `patterns/` directory if it has one. If a pattern covers what you need,
    use it — import the shared implementation rather than copying its structure.
-2. **Check `components/index.json` second.** Before assembling anything from
+2. **Check `profiles/wpds/components/index.json` second.** Before assembling anything from
    primitives, check whether the shape you're about to hand-roll (an empty
    state, a form field, a card) already ships as a single real compound
    component (`EmptyState.*`, `Field.*`, `Card.*`) — and check its `status`,
@@ -40,12 +40,12 @@ extending it. Check the registry before you assemble.
 
 ```bash
 # What is already sanctioned?
-cat "${CLAUDE_PLUGIN_ROOT}/patterns/index.json"
+cat "${CLAUDE_PLUGIN_ROOT}/profiles/wpds/patterns/index.json"
 ```
 
 ## The registry
 
-`patterns/index.json` holds one entry per sanctioned composite:
+`profiles/wpds/patterns/index.json` holds one entry per sanctioned composite:
 
 ```jsonc
 {

@@ -1,0 +1,9 @@
+{
+  "id": "wpds",
+  "name": "WordPress Design System",
+  "preset": "wpds",
+  "packages": ["@wordpress/components", "@wordpress/ui"],
+  "patterns": "./patterns/index.json",
+  "components": "./components/index.json",
+  "skills": ["loupe-authoring", "loupe-patterns", "loupe-remediation"]
+}

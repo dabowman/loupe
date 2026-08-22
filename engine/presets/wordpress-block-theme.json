@@ -1,6 +1,12 @@
 {
   "extends": "generic",
+  "detect": {
+    "priority": 20,
+    "confidence": { "full": "high", "partial": "medium" },
+    "files": { "all": ["theme.json"], "any": ["templates/", "parts/"] }
+  },
   "designSystem": {
+    "name": "WordPress",
     "packages": [],
     "tokenPrefixes": ["--wp--preset--", "--wp--style--", "--wp--custom--"],
     "components": { "layout": [], "text": [] },

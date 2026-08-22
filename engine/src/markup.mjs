@@ -165,6 +165,9 @@ function systemImports(ast, ds) {
 	// the same canonical name can mean a stable component in one package and an
 	// experimental one in the other (Button, Notice, Popover, ...).
 	const componentImports = [];
+	// local name -> the package it came from, so a composite signature can say
+	// *whose* `Stack` this is. Names are the one thing design systems share.
+	const packages = new Map();
 	const canonical = (name) => (ds.normalizeExports ? name.replace(ds.normalizeExports, '') : name);
 	const fromPackage = (src) => ds.packages.some((p) => src === p || src.startsWith(`${p}/`));
 
@@ -180,10 +183,11 @@ function systemImports(ast, ds) {
 			known.add(local);
 			if (ds.textComponents.includes(c)) text.add(local);
 			if (ds.layoutComponents.includes(c)) layout.add(local);
+			packages.set(local, node.source.value);
 			componentImports.push({ canonical: c, package: node.source.value, line: node.loc?.start?.line ?? 1 });
 		}
 	}
-	return { known, text, layout, componentImports };
+	return { known, text, layout, componentImports, packages };
 }
 
 /**
@@ -211,7 +215,7 @@ export function scanMarkup(text, relPath, ds) {
 		return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, componentImports: [], parseError: err.message.split('\n')[0] };
 	}
 
-	const { known, text: textLike, layout, componentImports } = systemImports(ast, ds);
+	const { known, text: textLike, layout, componentImports, packages } = systemImports(ast, ds);
 	const tags = cssInJsLocals(ast, ds.cssInJsPackages);
 	// `<Button css={css`…`}>` binds a template to an element the walk sees
 	// first, so the owner is recorded before the template is reached.
@@ -265,7 +269,8 @@ export function scanMarkup(text, relPath, ds) {
 			{ ...el, line: el.loc?.start?.line ?? 1 },
 			(n) => known.has(baseOf(n)),
 			jsxChildElements,
-			jsxName
+			jsxName,
+			(n) => packages.get(baseOf(n)) || null
 		);
 		// A lone component is not a composition, and reporting one would drown
 		// every real finding in the file.

@@ -8,7 +8,7 @@ what exists now goes quiet, anything new surfaces immediately.
 Show the scale of what is being accepted first:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --format json --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --format json --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
 Report the count by rule and confirm before writing — a baseline is a decision
@@ -18,7 +18,7 @@ get to a clean report.
 On confirmation:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" baseline --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" baseline --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
 Then tell the user to commit `.loupe-baseline.json`, and note that entries

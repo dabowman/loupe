@@ -1,7 +1,7 @@
 ---
 name: loupe-authoring
 description: >-
-  Load BEFORE writing or editing any UI that uses the WordPress Design System — `@wordpress/components`, `@wordpress/ui`, or `--wpds-*` tokens — in wp-admin, Gutenberg, WordPress.com, Jetpack, or any React surface built on WPDS. Carries the authoring rules that keep generated code from drifting: which component is current (`components/index.json` — WPDS runs two live packages at once, and not everything in the newer one is safe to use yet), the component before the element (`Text` with `variant="heading-*"` over `<p>`/`<h2>`), the prop before the stylesheet (`variant`/`gap`/`direction` over `font-size`/`margin`/`display:flex`), and `gap` on a layout primitive over margin anywhere — WPDS ships no margin token at all. Also covers token selection by role, when writing CSS is legitimate, and the `wpds-allow` escape hatch. Triggers on building admin screens, settings panels, modals, sidebar plugins, DataViews surfaces, toolbars, or any JSX importing from `@wordpress/components`/`@wordpress/ui`. Pair with `loupe-patterns` before assembling a composite and `loupe-remediation` when fixing findings.
+  Load BEFORE writing or editing any UI that uses the WordPress Design System — `@wordpress/components`, `@wordpress/ui`, or `--wpds-*` tokens — in wp-admin, Gutenberg, WordPress.com, Jetpack, or any React surface built on WPDS. Carries the authoring rules that keep generated code from drifting: which component is current (`profiles/wpds/components/index.json` — WPDS runs two live packages at once, and not everything in the newer one is safe to use yet), the component before the element (`Text` with `variant="heading-*"` over `<p>`/`<h2>`), the prop before the stylesheet (`variant`/`gap`/`direction` over `font-size`/`margin`/`display:flex`), and `gap` on a layout primitive over margin anywhere — WPDS ships no margin token at all. Also covers token selection by role, when writing CSS is legitimate, and the `wpds-allow` escape hatch. Triggers on building admin screens, settings panels, modals, sidebar plugins, DataViews surfaces, toolbars, or any JSX importing from `@wordpress/components`/`@wordpress/ui`. Pair with `loupe-patterns` before assembling a composite and `loupe-remediation` when fixing findings.
 compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Conformance checking needs the plugin's engine (node >=18)."
 ---
 
@@ -24,7 +24,7 @@ different questions, and WPDS's two live packages (`@wordpress/components`,
 stable; `@wordpress/ui`, the actively-growing target) make it easy to answer
 the first one wrong by asking the second tool.
 
-**Which component — `${CLAUDE_PLUGIN_ROOT}/components/index.json`.** A
+**Which component — `${CLAUDE_PLUGIN_ROOT}/profiles/wpds/components/index.json`.** A
 verified-once, versioned registry of every known component's currency:
 `recommended` (use it), `legacy` (works, but a recommended replacement now
 covers the job), `locked` (a private API — do not use outside Gutenberg core,
@@ -52,7 +52,7 @@ having actually looked.
 
 Past the basics (`Stack`, `Text`, `Card`, `Badge`, `Icon` — check the
 registry, but these are settled), a handful of families need a real decision,
-not a lookup. Check `components/index.json` for current status before
+not a lookup. Check `profiles/wpds/components/index.json` for current status before
 treating any of these as settled — WPDS ships twice yearly and this
 section's calls can go stale.
 

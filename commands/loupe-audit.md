@@ -6,7 +6,7 @@ argument-hint: "[--changed] [--suppressions] [path]"
 Run the WPDS conformance engine and report what it finds.
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
 Adjust for the arguments given in `$ARGUMENTS`:

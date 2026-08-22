@@ -17,11 +17,23 @@
  * rules only ever fired on code that already came from the pattern.
  */
 
-/** `[name, ...children]` → `{ name, children }`. A bare string is a leaf. */
+/**
+ * `"Stack"` → any `Stack`; `"@wordpress/components::Stack"` → that package's.
+ *
+ * Qualifying is opt-in per node. A registry scoped by its own `packages` field
+ * (see registry.mjs) needs none of this; qualification is for the project that
+ * imports two systems at once and needs `Stack` to mean one of them.
+ */
+const split = (spec) => {
+	const i = spec.indexOf('::');
+	return i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
+};
+
+/** `[name, ...children]` → `{ name, pkg, children }`. A bare string is a leaf. */
 export function toNode(spec) {
-	if (typeof spec === 'string') return { name: spec, children: [] };
+	if (typeof spec === 'string') return { ...split(spec), children: [] };
 	if (!Array.isArray(spec) || !spec.length || typeof spec[0] !== 'string') return null;
-	return { name: spec[0], children: spec.slice(1).map(toNode).filter(Boolean) };
+	return { ...split(spec[0]), children: spec.slice(1).map(toNode).filter(Boolean) };
 }
 
 export const signatureOf = (node) =>
@@ -56,6 +68,10 @@ function descendants(tree, out = []) {
  */
 export function matches(pattern, tree) {
 	if (pattern.name !== tree.name) return false;
+	// Only when both sides know: an unqualified pattern node matches any package,
+	// and a tree node whose import could not be resolved is not evidence of a
+	// mismatch. Qualification narrows a match, it never invents one.
+	if (pattern.pkg && tree.pkg && pattern.pkg !== tree.pkg) return false;
 	if (!pattern.children.length) return true;
 	const pool = descendants(tree);
 	const used = new Set();
@@ -94,18 +110,23 @@ export function loadPatterns(raw) {
  * and `<HStack><Button/></HStack>` have the same signature — which is the point,
  * since they are the same composition.
  */
-export function systemTree(el, isSystemName, childrenOf, nameOf) {
+export function systemTree(el, isSystemName, childrenOf, nameOf, packageOf = () => null) {
 	const name = nameOf(el);
 	if (!name || !isSystemName(name)) return null;
-	return { name, children: systemChildren(el, isSystemName, childrenOf, nameOf), line: el.line };
+	return {
+		name,
+		pkg: packageOf(name),
+		children: systemChildren(el, isSystemName, childrenOf, nameOf, packageOf),
+		line: el.line,
+	};
 }
 
-function systemChildren(el, isSystemName, childrenOf, nameOf) {
+function systemChildren(el, isSystemName, childrenOf, nameOf, packageOf) {
 	const out = [];
 	for (const child of childrenOf(el)) {
 		const cname = nameOf(child);
-		if (cname && isSystemName(cname)) out.push(systemTree(child, isSystemName, childrenOf, nameOf));
-		else out.push(...systemChildren(child, isSystemName, childrenOf, nameOf));
+		if (cname && isSystemName(cname)) out.push(systemTree(child, isSystemName, childrenOf, nameOf, packageOf));
+		else out.push(...systemChildren(child, isSystemName, childrenOf, nameOf, packageOf));
 	}
 	return out.filter(Boolean);
 }

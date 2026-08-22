@@ -18,8 +18,10 @@ import { loadPatterns, matches, toNode } from '../src/patterns.mjs';
 import { loadComponents } from '../src/components.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const REGISTRY = join(HERE, '..', '..', 'patterns', 'index.json');
-const COMPONENT_REGISTRY = join(HERE, '..', '..', 'components', 'index.json');
+// The shipped registries live in the design-system profile that owns them.
+const PROFILE = join(HERE, '..', '..', 'profiles', 'wpds');
+const REGISTRY = join(PROFILE, 'patterns', 'index.json');
+const COMPONENT_REGISTRY = join(PROFILE, 'components', 'index.json');
 
 let failed = 0;
 const check = async (name, fn) => {

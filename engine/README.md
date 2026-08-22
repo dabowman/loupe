@@ -81,10 +81,10 @@ the grammar isn't mistaken for an instance of it.
 discovered by walking up from the working directory.
 
 With no config file anywhere, the project is inspected and one is inferred —
-preset from project markers (`@wordpress/components` or `@wordpress/ui` in
-`package.json` → `wpds`; `theme.json` + `templates/` → `wordpress-block-theme`),
-namespaces from the class prefixes that appear in **both** the CSS and the
-markup. A prefix present only in CSS is exactly what a dead class looks like, so
+preset from the markers each preset declares for itself (`@wordpress/components`
+or `@wordpress/ui` in `package.json` → `wpds`; `theme.json` + `templates/` →
+`wordpress-block-theme`), namespaces from the class prefixes that appear in
+**both** the CSS and the markup. A prefix present only in CSS is exactly what a dead class looks like, so
 CSS evidence alone is never enough to adopt one.
 
 ```bash
@@ -123,6 +123,7 @@ is what makes a preset:
 ```jsonc
 {
   "designSystem": {
+    "name": "WordPress",                 // what findings call it
     "packages": ["@wordpress/components"],
     "tokenPrefixes": ["--wp-admin-theme-"],
     "normalizeExports": "^__(experimental|unstable)",
@@ -148,6 +149,91 @@ override findings.
 - `wordpress-block-theme` — `--wp--preset--*` tokens, `templates/`+`parts/` HTML
   as reference sources, no component layer
 - `generic` — namespaces and token prefixes only
+
+### Adding a design system
+
+Nothing about WordPress is compiled into this engine — it is one configuration
+of it, and the rules gate on what the config can support rather than on what
+design system it is. A second one is data, in up to three pieces:
+
+**1. A preset.** Drop `presets/<name>.json` in. It is listed by `loupe presets`
+and usable as `--preset <name>` immediately. Give it a `detect` block and it is
+also inferred with no config at all:
+
+```jsonc
+{
+  "extends": "generic",
+  "detect": {
+    "priority": 30,                          // higher wins when two match
+    "confidence": "high",
+    "dependencies": ["@acme/ui"]             // a marker in any package.json
+  },
+  "designSystem": {
+    "name": "Acme",
+    "packages": ["@acme/ui"],
+    "tokenPrefixes": ["--acme-"],
+    "tokenSources": ["node_modules/@acme/tokens/dist/tokens.css"],
+    "components": { "layout": ["Row", "Column"], "text": ["Label"] },
+    "elementMap": { "p": "Label" }
+  }
+}
+```
+
+File markers work too, for a system that leaves no dependency — `"files": {
+"all": ["theme.json"], "any": ["templates/", "parts/"] }`, probed at the root and
+one level down, with `"confidence": { "full": "high", "partial": "medium" }` to
+say what an `all`-without-`any` match is worth. A preset with no `detect` block
+is never inferred, which is how a parent preset stays a parent rather than
+becoming a conclusion.
+
+**2. Registries, scoped.** A pattern signature is component *names*, and names
+are the one thing design systems do not keep to themselves — `Stack(Stack(Text,
+Text),Stack(Button))` is a WPDS page header and a Chakra one. So a registry
+declares who it is for, and applies to nothing else:
+
+```jsonc
+{
+  "packages": ["@acme/ui"],
+  "patterns": [ /* … */ ]
+}
+```
+
+A registry that declares no `packages` applies everywhere, which is what a
+project's own registry wants. Where one project genuinely runs two systems at
+once, a signature node can name its package directly:
+`"@acme/ui::Stack"`. Bare names stay permissive, and a node whose import cannot
+be resolved never blocks a match — qualifying narrows a match, it never invents
+one.
+
+**3. A profile**, if the registries ship with the tool rather than the project.
+See `--profiles` below.
+
+The one hard limit is the markup parser: Babel with the JSX and TypeScript
+plugins, so any React-family design system works and Vue SFCs, Svelte and
+Angular templates do not.
+
+### Profiles
+
+A profile is a design system's bundle — its preset, the packages that identify
+it, and the registries describing its components and composites:
+
+```
+profiles/
+  acme/
+    profile.json       { id, name, packages, preset, patterns, components }
+    patterns/index.json
+    components/index.json
+```
+
+`--profiles <dir>` reads them all and applies the ones whose packages the
+project actually imports; `--profile <id>` forces one. A profile declaring no
+packages is never selected automatically — there is nothing to recognize it by.
+
+This is what keeps a shipped registry off the wrong repo. Point `--profiles` at
+every project you like: one on a different design system selects nothing and is
+checked by the rules that need no registry at all. `loupe status` prints which
+profile is active, and a registry passed but not applied says so on stderr
+rather than looking like a registry that found nothing.
 
 ## Fixing
 

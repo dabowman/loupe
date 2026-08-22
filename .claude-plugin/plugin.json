@@ -33,7 +33,7 @@
     "preset": {
       "type": "string",
       "title": "Preset",
-      "description": "auto, wpds, wordpress-components, wordpress-block-theme, or generic. 'auto' infers the preset per project. A project's own loupe.config.json always wins.",
+      "description": "auto, or any bundled preset (`loupe presets` lists them \u2014 wpds, wordpress-components, wordpress-block-theme, generic). 'auto' infers the preset from the markers each preset declares. A project's own loupe.config.json always wins.",
       "default": "auto"
     },
     "project_prefixes": {

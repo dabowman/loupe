@@ -11,6 +11,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { RULES, SEVERITIES, canonicalRuleId } from './rules.mjs';
 import { loadPatterns } from './patterns.mjs';
+import { registryApplies } from './registry.mjs';
 import { loadComponents } from './components.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -25,6 +26,10 @@ const CONFIG_NAMES = [
 
 export const DEFAULTS = {
 	designSystem: {
+		// What to call this design system in a finding. Rule guidance that names
+		// the system reads as advice about *your* stack; a generic phrase reads as
+		// advice about linting.
+		name: '',
 		packages: [],
 		tokenPrefixes: [],
 		tokenSources: [],
@@ -136,7 +141,9 @@ export function listPresets() {
 			.map((f) => f.replace(/\.json$/, ''))
 			.sort((a, b) => (a === 'generic' ? 1 : b === 'generic' ? -1 : a.localeCompare(b)));
 	} catch {
-		return ['wpds', 'wordpress-components', 'wordpress-block-theme', 'generic'];
+		// An unreadable preset directory is a broken install, not a design system
+		// list to guess at; name only the one the engine falls back to anyway.
+		return ['generic'];
 	}
 }
 
@@ -165,7 +172,10 @@ export function normalize(raw, { root }) {
 	else if (typeof cfg.patterns === 'string') {
 		const p = isAbsolute(cfg.patterns) ? cfg.patterns : join(root, cfg.patterns);
 		try {
-			patterns = loadPatterns(JSON.parse(readFileSync(p, 'utf8')));
+			const raw = JSON.parse(readFileSync(p, 'utf8'));
+			// A registry scoped to packages this project does not import applies to
+			// some other design system that happens to name its components the same.
+			patterns = registryApplies(raw, ds.packages) ? loadPatterns(raw) : [];
 		} catch {
 			patterns = [];
 		}
@@ -178,7 +188,8 @@ export function normalize(raw, { root }) {
 	else if (typeof cfg.componentRegistry === 'string') {
 		const p = isAbsolute(cfg.componentRegistry) ? cfg.componentRegistry : join(root, cfg.componentRegistry);
 		try {
-			componentRegistry = loadComponents(JSON.parse(readFileSync(p, 'utf8')));
+			const raw = JSON.parse(readFileSync(p, 'utf8'));
+			componentRegistry = registryApplies(raw, ds.packages) ? loadComponents(raw) : new Map();
 		} catch {
 			componentRegistry = new Map();
 		}
@@ -232,6 +243,7 @@ export function normalize(raw, { root }) {
 		root,
 		raw: cfg,
 		designSystem: {
+			name: ds.name || '',
 			packages: ds.packages || [],
 			tokenPrefixes: ds.tokenPrefixes || [],
 			tokenSources: ds.tokenSources || [],

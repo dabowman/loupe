@@ -27,8 +27,9 @@ that report drift on the file just touched, not forty tool calls later).
 | `agents/loupe-fixer` | Per-file remediation agent. `/loupe-fix` fans it out once the work spans enough files to be worth it. |
 | `commands/` | `/loupe-audit`, `/loupe-fix`, `/loupe-baseline` |
 | `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
-| `patterns/index.json` | The composite registry |
-| `components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
+| `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, and its two registries |
+| `profiles/wpds/patterns/index.json` | The composite registry |
+| `profiles/wpds/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
 | `engine/` | `loupe` — the conformance engine |
 
 ## The engine
@@ -155,9 +156,10 @@ is a true description of an action bar and a useless finding — it matched 48
 files in one repo, and *"you have 48 action bars"* is not a defect anyone can act
 on.
 
-The registry reaches the engine via `--patterns`, which the hooks and commands
-pass automatically. A project's own registry is merged over the shipped one,
-winning on `id`.
+The registry reaches the engine through the `wpds` profile, which the hooks and
+commands pass automatically and which applies only to projects importing
+`@wordpress/components` or `@wordpress/ui` — see [Profiles](#profiles). A
+project's own registry is merged over the shipped one, winning on `id`.
 
 ### Component currency
 
@@ -169,7 +171,7 @@ name can mean a stable component in one and an early one in the other
 (`Button` is stable in `@wordpress/components` today; the newer `Button` in
 `@wordpress/ui` is real but explicitly not yet safe to mix with it).
 
-`components/index.json` is the verified-once answer: every known component,
+`profiles/wpds/components/index.json` is the verified-once answer: every known component,
 its package, and whether it is `recommended`, `legacy` (works, but a
 recommended replacement covers the job), `locked` (a private API WPDS does
 not recommend outside Gutenberg core — can break without notice), or
@@ -192,8 +194,42 @@ measurably behind trunk for several `@wordpress/ui` additions besides. Use it
 for prop/usage detail on a component already chosen; use this registry to
 decide which component that should be.
 
-Same delivery as patterns — `--components`, passed automatically, merged over
-a project's own registry.
+Same delivery as patterns: carried by the `wpds` profile, merged over a
+project's own registry, and keyed on `package::name` so a `Button` from another
+design system is never mistaken for one of these.
+
+### Profiles
+
+Everything above that is specific to WPDS — the two registries, the preset that
+configures them, the packages that identify it — lives in `profiles/wpds/`. The
+engine takes `--profiles`, which the hooks, commands and `bin/loupe` all pass,
+and applies a profile only to a project importing its packages.
+
+```jsonc
+// profiles/wpds/profile.json
+{
+  "id": "wpds",
+  "name": "WordPress Design System",
+  "preset": "wpds",
+  "packages": ["@wordpress/components", "@wordpress/ui"],
+  "patterns": "./patterns/index.json",
+  "components": "./components/index.json",
+  "skills": ["loupe-authoring", "loupe-patterns", "loupe-remediation"]
+}
+```
+
+This matters because composite signatures match on component *names*, and
+`Stack`, `Text`, `Button` and `Modal` are names nearly every design system uses.
+`Stack(Stack(Text,Text),Stack(Button))` is a WPDS page header and a Chakra one,
+so before profiles the hook reported a React repo as rebuilding a WordPress
+pattern it had never heard of. Now the same code is reported on a WordPress
+project and silent on a Chakra one.
+
+`loupe status` names the active profile. Adding a second design system is
+adding a directory here plus a preset in `engine/presets/` — see **Adding a
+design system** in the [engine README](engine/README.md#adding-a-design-system).
+Its authoring prose goes in `skills/` and is listed in its `profile.json`, so
+which skills belong to which design system stays written down.
 
 ### Config
 
@@ -336,26 +372,30 @@ five seconds.
 
 Working: all three channels (stylesheets, `style={{ … }}`, CSS-in-JS template
 literals), the token set, both composite rules, all three skills, commands,
-hooks, the registry.
+hooks, the registries, and profile selection.
 
 A whole-repo scan of Gutenberg — 6,100 markup files, 1,300 stylesheets — takes
 about four seconds.
 
 Known limits, in rough priority order:
 
-1. **Prop maps.** A finding can now name the token that replaces a value, but
+1. **React-family only.** Markup is parsed with Babel's JSX and TypeScript
+   plugins, so any React-based design system works and Vue SFCs, Svelte and
+   Angular templates do not — their markup never parses, so the correlation
+   rules have nothing to bind a class to. The stylesheet-only rules still run.
+2. **Prop maps.** A finding can now name the token that replaces a value, but
    not the *prop* that replaces a declaration: `system/override` says "restyle
    via its props" without naming which one. That needs a per-component prop map,
    which the WPDS MCP could generate.
-2. **Structural interpolation.** A template whose shape depends on an
+3. **Structural interpolation.** A template whose shape depends on an
    interpolation (``styled.div`${mixin}` ``) parses only when the interpolation
    sits where a whole statement would. Anything else is recorded as a parse
    diagnostic and left unchecked — visible in the report footer and in
    `parseErrors`, never silent.
-3. **Composite matching is greedy.** A registered child claims the first node it
+4. **Composite matching is greedy.** A registered child claims the first node it
    fits. For registries of a handful of nodes this is exact; a large pattern with
    several interchangeable children could in principle miss a match.
-4. **No index cache.** Every hook run rebuilds the repo index. At four seconds on
+5. **No index cache.** Every hook run rebuilds the repo index. At four seconds on
    the largest repo in the ecosystem this has not been worth the complexity —
    revisit if a project drags.
 
