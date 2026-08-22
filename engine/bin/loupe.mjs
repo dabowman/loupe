@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ds-hygiene — design-system conformance checking for front-end codebases.
+ * loupe — design-system conformance checking for front-end codebases.
  *
  * Exit codes are a contract; callers (CI, hooks, quality runners) depend on them:
  *   0  clean, or advisory findings only
@@ -44,7 +44,7 @@ function parseArgs(argv) {
 	return args;
 }
 
-const USAGE = `ds-hygiene <command> [options]
+const USAGE = `loupe <command> [options]
 
 Commands:
   check                 Analyze the project (default)
@@ -54,7 +54,7 @@ Commands:
   explain <rule>        Print a rule's guidance
   presets               List bundled presets
   detect                Show the config that would be inferred for this project
-  init                  Write the inferred config to ds-hygiene.config.json
+  init                  Write the inferred config to loupe.config.json
   status                Show the effective config: rules, severities, what blocks
   hook                  Claude Code hook mode (reads payload on stdin)
 
@@ -75,7 +75,7 @@ Options:
   --root <path>         Project root (default: cwd, or CLAUDE_PROJECT_DIR under hook)
 
 With no config file present, the project is inspected and a config inferred.
-Run 'ds-hygiene detect' to see what that produces, 'init' to write it down.
+Run 'loupe detect' to see what that produces, 'init' to write it down.
 `;
 
 function resolveScope(config, args, { defaultChanged = false }) {
@@ -122,8 +122,8 @@ async function main() {
 	const isHook = command === 'hook';
 	const root = resolve(args.flags.root || (isHook ? hookRoot() : process.cwd()));
 	if (!existsSync(root)) {
-		if (isHook) return emitClean(`ds-hygiene: skipped \u2014 root does not exist: ${root}`);
-		process.stderr.write(`ds-hygiene: root does not exist: ${root}\n`);
+		if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root}`);
+		process.stderr.write(`loupe: root does not exist: ${root}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -156,8 +156,8 @@ async function main() {
 		// mistyped preset in the plugin settings would then block every turn in
 		// every project with nothing the agent could do about it. A gate that
 		// cannot configure itself stands aside and says so.
-		if (isHook) return emitClean(`ds-hygiene: skipped \u2014 config error: ${err.message}`);
-		process.stderr.write(`ds-hygiene: config error \u2014 ${err.message}\n`);
+		if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${err.message}`);
+		process.stderr.write(`loupe: config error \u2014 ${err.message}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -170,7 +170,7 @@ async function main() {
 			const own = new Set((config.patterns || []).map((p) => p.id));
 			setPatterns(config, [...(config.patterns || []), ...shipped.filter((p) => !own.has(p.id))]);
 		} catch (err) {
-			if (!isHook) process.stderr.write(`ds-hygiene: could not read --patterns \u2014 ${err.message}\n`);
+			if (!isHook) process.stderr.write(`loupe: could not read --patterns \u2014 ${err.message}\n`);
 		}
 	}
 
@@ -182,7 +182,7 @@ async function main() {
 			for (const [key, entry] of shipped) if (!merged.has(key)) merged.set(key, entry);
 			setComponentRegistry(config, merged);
 		} catch (err) {
-			if (!isHook) process.stderr.write(`ds-hygiene: could not read --components \u2014 ${err.message}\n`);
+			if (!isHook) process.stderr.write(`loupe: could not read --components \u2014 ${err.message}\n`);
 		}
 	}
 
@@ -208,7 +208,7 @@ async function main() {
 	if (command === 'explain') {
 		const id = canonicalRuleId(args._[1] || '');
 		if (!RULES[id]) {
-			process.stderr.write(`ds-hygiene: unknown rule "${args._[1]}"\n`);
+			process.stderr.write(`loupe: unknown rule "${args._[1]}"\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		const state = config.enabled[id] ? config.severityOf(id) : 'disabled (config does not satisfy its requirements)';
@@ -268,7 +268,7 @@ async function main() {
 			lines.push('css/dead-class is held to advisory because the namespaces were inferred, not configured.');
 			if (!blockingAllowed)
 				lines.push(
-					'The gate reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `ds-hygiene init`, or turn the setting on.'
+					'The gate reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.'
 				);
 		} else if (!blockingAllowed) {
 			lines.push('The gate reports only: "Block turns on findings" is off in the plugin settings.');
@@ -296,9 +296,9 @@ async function main() {
 			process.stdout.write(`${lines.join('\n')}\n`);
 			return EXIT.OK;
 		}
-		const target = join(root, 'ds-hygiene.config.json');
+		const target = join(root, 'loupe.config.json');
 		if (existsSync(target) && !args.flags.force) {
-			process.stderr.write(`ds-hygiene: ${target} already exists (use --force)\n`);
+			process.stderr.write(`loupe: ${target} already exists (use --force)\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		writeFileSync(target, `${JSON.stringify(info.config, null, 2)}\n`);
@@ -311,7 +311,7 @@ async function main() {
 		const { path: target, scope } = findExistingBaseline(root, args.flags.baseline, config.baselinePath, { create: true });
 		const { path, count } = writeBaseline(root, target, result);
 		const where = scope === 'plugin-data' ? ' (plugin data \u2014 nothing written to your repo)' : '';
-		process.stdout.write(`ds-hygiene: baselined ${count} finding(s) \u2192 ${path}${where}\n`);
+		process.stdout.write(`loupe: baselined ${count} finding(s) \u2192 ${path}${where}\n`);
 		return EXIT.OK;
 	}
 
@@ -330,14 +330,14 @@ async function main() {
 	if (command === 'fix') {
 		const fixScope = resolveScope(config, args, { defaultChanged: false });
 		if (fixScope && fixScope.error) {
-			process.stderr.write(`ds-hygiene: ${fixScope.error}\n`);
+			process.stderr.write(`loupe: ${fixScope.error}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		let toFix;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
 		} catch (err) {
-			process.stderr.write(`ds-hygiene: ${err.message}\n`);
+			process.stderr.write(`loupe: ${err.message}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		const dry = Boolean(args.flags['dry-run']);
@@ -347,14 +347,14 @@ async function main() {
 		for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${f.prop}: ${f.value} \u2014 ${f.why}\n`);
 		const left = toFix.findings.length - applied.length;
 		process.stdout.write(
-			`\nds-hygiene: ${verb} ${applied.length} finding(s)${skipped.length ? `, skipped ${skipped.length}` : ''}. ` +
+			`\nloupe: ${verb} ${applied.length} finding(s)${skipped.length ? `, skipped ${skipped.length}` : ''}. ` +
 				`${left} left for review.\n`
 		);
 		return EXIT.OK;
 	}
 
 	if (command !== 'check' && !isHook) {
-		process.stderr.write(`ds-hygiene: unknown command "${command}"\n\n${USAGE}`);
+		process.stderr.write(`loupe: unknown command "${command}"\n\n${USAGE}`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -367,11 +367,11 @@ async function main() {
 	// the changed-file scope.
 	const touched = isHook ? payloadFile(payload, root) : null;
 	if (touched && !isSource(config.sources, touched))
-		return emitClean('ds-hygiene: skipped \u2014 not a checked file type.');
+		return emitClean('loupe: skipped \u2014 not a checked file type.');
 	const scope = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
 	if (scope && scope.error) {
-		if (isHook) return emitClean(`ds-hygiene: skipped \u2014 ${scope.error}`);
-		process.stderr.write(`ds-hygiene: ${scope.error}\n`);
+		if (isHook) return emitClean(`loupe: skipped \u2014 ${scope.error}`);
+		process.stderr.write(`loupe: ${scope.error}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -379,8 +379,8 @@ async function main() {
 	try {
 		result = await analyze(config, { scope });
 	} catch (err) {
-		if (isHook) return emitClean(`ds-hygiene: skipped \u2014 ${err.message}`);
-		process.stderr.write(`ds-hygiene: ${err.message}\n`);
+		if (isHook) return emitClean(`loupe: skipped \u2014 ${err.message}`);
+		process.stderr.write(`loupe: ${err.message}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -401,11 +401,11 @@ async function main() {
 		if (!sessionId && payload.stop_hook_active) {
 			// No session id to budget against: fall back to the conservative
 			// single-pass behaviour rather than risk looping the turn.
-			return emitClean('ds-hygiene: blocking findings remain (retry budget unavailable).');
+			return emitClean('loupe: blocking findings remain (retry budget unavailable).');
 		}
 		if (attempts > max) {
 			clearAttempts(root, touched ? `${sessionId}\u0000${touched}` : sessionId);
-			return emitClean(`ds-hygiene: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}`);
+			return emitClean(`loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}`);
 		}
 		const report = formatAgent({ ...result, findings: result.findings.filter((f) => f.severity === 'error') }, config, {
 			maxFindings: config.hook.maxFindings,
@@ -432,6 +432,6 @@ main()
 		process.exitCode = code;
 	})
 	.catch((err) => {
-		process.stderr.write(`ds-hygiene: ${err?.stack || err}\n`);
+		process.stderr.write(`loupe: ${err?.stack || err}\n`);
 		process.exitCode = EXIT.CANNOT_RUN;
 	});

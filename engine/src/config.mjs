@@ -17,10 +17,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const PRESET_DIR = join(HERE, '..', 'presets');
 
 const CONFIG_NAMES = [
-	'ds-hygiene.config.mjs',
-	'ds-hygiene.config.js',
-	'ds-hygiene.config.json',
-	'.ds-hygienerc.json',
+	'loupe.config.mjs',
+	'loupe.config.js',
+	'loupe.config.json',
+	'.louperc.json',
 ];
 
 export const DEFAULTS = {
@@ -47,7 +47,7 @@ export const DEFAULTS = {
 	// per component+package). Named distinctly from `designSystem.components`
 	// (the layout/text categorization) — same word, unrelated concern.
 	componentRegistry: null,
-	baseline: '.ds-hygiene-baseline.json',
+	baseline: '.loupe-baseline.json',
 	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 120000 },
 };
 
@@ -61,7 +61,7 @@ function merge(base, over) {
 	return out;
 }
 
-/** Walk up from `start` looking for a config file or a `dsHygiene` package.json key. */
+/** Walk up from `start` looking for a config file or a `loupe` package.json key. */
 export function findConfig(start) {
 	let dir = resolve(start);
 	for (;;) {
@@ -72,7 +72,7 @@ export function findConfig(start) {
 		const pkg = join(dir, 'package.json');
 		if (existsSync(pkg)) {
 			try {
-				if (JSON.parse(readFileSync(pkg, 'utf8')).dsHygiene) return pkg;
+				if (JSON.parse(readFileSync(pkg, 'utf8')).loupe) return pkg;
 			} catch {
 				/* unreadable package.json is not our problem here */
 			}
@@ -86,7 +86,7 @@ export function findConfig(start) {
 async function readConfigFile(path) {
 	if (path.endsWith('.json')) {
 		const parsed = JSON.parse(readFileSync(path, 'utf8'));
-		return path.endsWith('package.json') ? parsed.dsHygiene : parsed;
+		return path.endsWith('package.json') ? parsed.loupe : parsed;
 	}
 	const mod = await import(pathToFileURL(path).href);
 	return mod.default ?? mod;
@@ -94,7 +94,7 @@ async function readConfigFile(path) {
 
 /** Resolve `extends`, which may name a shipped preset or a path. */
 async function resolveExtends(spec, fromDir) {
-	const asPreset = join(PRESET_DIR, `${spec.replace(/^ds-hygiene\/presets\//, '')}.json`);
+	const asPreset = join(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, '')}.json`);
 	if (existsSync(asPreset)) return { path: asPreset, dir: PRESET_DIR };
 	const asPath = isAbsolute(spec) ? spec : join(fromDir, spec);
 	if (existsSync(asPath)) return { path: asPath, dir: dirname(asPath) };

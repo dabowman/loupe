@@ -18,7 +18,7 @@ import { loadConfig } from '../src/config.mjs';
 import { analyze } from '../src/analyze.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CLI = join(HERE, '..', 'bin', 'ds-hygiene.mjs');
+const CLI = join(HERE, '..', 'bin', 'loupe.mjs');
 
 let failed = 0;
 // Awaited, so an async body's rejection fails the run instead of surfacing as
@@ -82,7 +82,7 @@ await check('isSource rejects files no rule can reach', () => {
 // library internal — sending the agent to stop styling a class the project owns.
 await check('a project prefix beats a library prefix', async () => {
 	const root = tmpRepo({
-		'ds-hygiene.config.json': JSON.stringify({
+		'loupe.config.json': JSON.stringify({
 			extends: 'wordpress-components',
 			namespaces: { project: ['wp-parsely-'] },
 		}),
@@ -90,7 +90,7 @@ await check('a project prefix beats a library prefix', async () => {
 		'style.css': '.wp-parsely-loading { color: #f00; }',
 	});
 	try {
-		const config = await loadConfig({ root, configPath: join(root, 'ds-hygiene.config.json') });
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		const { findings } = await analyze(config, { scope: null });
 		const internal = findings.filter((f) => String(f.message).includes('library internal'));
 		assert(!internal.length, `reported as a library internal: ${JSON.stringify(internal)}`);
@@ -100,10 +100,10 @@ await check('a project prefix beats a library prefix', async () => {
 });
 
 // `--files /abs/path` matched no repo-relative finding, so the run reported
-// clean. `/wpds-audit <path>` hands it absolute paths routinely.
+// clean. `/loupe-audit <path>` hands it absolute paths routinely.
 await check('--files accepts an absolute path', () => {
 	const root = tmpRepo({
-		'ds-hygiene.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'warn' } }),
+		'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'warn' } }),
 		'style.css': '.a { margin-bottom: 16px; }',
 	});
 	try {
@@ -143,7 +143,7 @@ await check('a config error never blocks a turn', () => {
 // repo invisible — and every class referenced only there reported as dead.
 await check('markup outside src/ still counts as a reference', async () => {
 	const root = tmpRepo({
-		'ds-hygiene.config.json': JSON.stringify({
+		'loupe.config.json': JSON.stringify({
 			extends: 'wordpress-components',
 			namespaces: { project: ['acme-'] },
 		}),
@@ -151,7 +151,7 @@ await check('markup outside src/ still counts as a reference', async () => {
 		'routes/panel/style.css': '.acme-panel { color: #f00; }',
 	});
 	try {
-		const config = await loadConfig({ root, configPath: join(root, 'ds-hygiene.config.json') });
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		const { findings } = await analyze(config, { scope: null });
 		const dead = findings.filter((f) => f.rule === 'css/dead-class');
 		assert(!dead.length, `reported live classes as dead: ${JSON.stringify(dead.map((f) => f.message))}`);
@@ -168,14 +168,14 @@ await check('markup outside src/ still counts as a reference', async () => {
 await check('status reports the blocking switch it cannot see in the environment', () => {
 	const home = mkdtempSync(join(tmpdir(), 'dsh-home-'));
 	const root = tmpRepo({
-		'ds-hygiene.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx': 'export const A = () => <div className="acme-a" />;',
 	});
 	try {
 		mkdirSync(join(home, '.claude'), { recursive: true });
 		writeFileSync(
 			join(home, '.claude', 'settings.json'),
-			JSON.stringify({ pluginConfigs: { 'wpds-quality@somewhere': { options: { blocking: true } } } })
+			JSON.stringify({ pluginConfigs: { 'loupe@somewhere': { options: { blocking: true } } } })
 		);
 		const env = { ...process.env, HOME: home };
 		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
@@ -193,7 +193,7 @@ await check('status reports the blocking switch it cannot see in the environment
 // does, or the diagnostic is just a different kind of wrong.
 await check('the hook blocks when the setting says it should', () => {
 	const root = tmpRepo({
-		'ds-hygiene.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
 			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
 		'styles/a.css': '.acme-t { color: #f00; }',

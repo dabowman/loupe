@@ -7,7 +7,7 @@ it as `wpds-allow` and every existing suppression comment in the repo keeps
 working unchanged, including the `R2,R3` style ids.
 
 ```jsonc
-// ds-hygiene.config.json — repo root
+// loupe.config.json — repo root
 {
   "extends": "wordpress-components",
 
@@ -71,7 +71,7 @@ Delete `vip-workflow-quality-stop.sh`. In `.claude/settings.local.json`:
 {
   "hooks": {
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "npx ds-hygiene hook" }] }
+      { "hooks": [{ "type": "command", "command": "npx loupe hook" }] }
     ]
   }
 }
@@ -79,11 +79,11 @@ Delete `vip-workflow-quality-stop.sh`. In `.claude/settings.local.json`:
 
 If you want the whole existing gate (phpcs, lint-js, unit tests) to keep running
 alongside, leave your `quality.mjs` wired as a second `Stop` hook and have it
-call ds-hygiene as a library rather than reimplementing the exit mapping:
+call loupe as a library rather than reimplementing the exit mapping:
 
 ```js
-import { analyze } from 'ds-hygiene';
-import { loadConfig } from 'ds-hygiene/config';
+import { analyze } from 'loupe';
+import { loadConfig } from 'loupe/config';
 
 const config = await loadConfig({ root });
 const { findings, blocking } = analyze(config, { scope: changedFiles });
@@ -95,8 +95,8 @@ encodes is now the CLI's own contract, so it survives without a wrapper.
 ## 3. Baseline the backlog
 
 ```bash
-npx ds-hygiene baseline
-git add .ds-hygiene-baseline.json
+npx loupe baseline
+git add .loupe-baseline.json
 ```
 
 The advisory backlog stops flooding every run, and anything new surfaces
@@ -113,8 +113,8 @@ CSS at all is the finding.
 Audit and re-point in one pass:
 
 ```bash
-npx ds-hygiene suppressions --format json > /tmp/before.json   # canonicalized ids
-npx ds-hygiene check --all --format json | \
+npx loupe suppressions --format json > /tmp/before.json     # canonicalized ids
+npx loupe check --all --format json | \
   jq -r '.findings[] | "\(.file):\(.line)\t\(.rule)"'       # what fires now
 ```
 

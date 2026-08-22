@@ -1,6 +1,6 @@
 ---
-name: wpds-fixer
-description: Apply WPDS conformance fixes to ONE file, given that file's findings. Dispatched by /wpds-fix once the engine's deterministic substitutions have already been applied — what reaches this agent is the judgement work. Never use for `css/dead-class` or `patterns/*`, which cannot be judged from a single file. Returns a per-finding report; the caller re-runs the checker.
+name: loupe-fixer
+description: Apply WPDS conformance fixes to ONE file, given that file's findings. Dispatched by /loupe-fix once the engine's deterministic substitutions have already been applied — what reaches this agent is the judgement work. Never use for `css/dead-class` or `patterns/*`, which cannot be judged from a single file. Returns a per-finding report; the caller re-runs the checker.
 tools: Read, Edit, Grep, Glob
 model: sonnet
 ---

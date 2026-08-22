@@ -1,8 +1,8 @@
 /**
  * Zero-config project detection.
  *
- * The hook runs `ds-hygiene hook` with no `--preset`, so a project without a
- * `ds-hygiene.config.json` fell through to `generic` — which declares no
+ * The hook runs `loupe hook` with no `--preset`, so a project without a
+ * `loupe.config.json` fell through to `generic` — which declares no
  * component layer, which disables every correlation rule. The gate stayed
  * green and quiet on exactly the wp-admin code it exists to check. A preset
  * that has to be selected by hand is a preset that mostly isn't.
@@ -193,7 +193,7 @@ function resolvePreset(name, seen = new Set()) {
 	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
 	let base = {};
 	for (const spec of specs) {
-		const parent = resolvePreset(String(spec).replace(/^ds-hygiene\/presets\//, ''), seen);
+		const parent = resolvePreset(String(spec).replace(/^loupe\/presets\//, ''), seen);
 		base = {
 			...base,
 			...parent,

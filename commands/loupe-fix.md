@@ -5,7 +5,7 @@ argument-hint: "[rule-id] [path]"
 
 Fix WPDS conformance findings.
 
-**Load the `wpds-remediation` skill first** — it carries the per-rule remedy and
+**Load the `loupe-remediation` skill first** — it carries the per-rule remedy and
 the checks that stop a fix from silently changing how the UI renders.
 
 ## 1. Apply what needs no judgement
@@ -14,7 +14,7 @@ The engine resolved some findings to exactly one on-role token when it ran. Let
 it apply those itself rather than reading files back to retype them:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" fix
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix
 ```
 
 Add `--dry-run` first if the repo has uncommitted work. This only substitutes
@@ -24,7 +24,7 @@ in a JS channel, is left for the passes below.
 ## 2. Get the current state
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --all --format json --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --format json --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
 ```
 
 If `$ARGUMENTS` names a rule id or a path, narrow to that. Otherwise work upward
@@ -40,14 +40,14 @@ Count the files holding findings for the stage you are on.
 **Fewer than five files:** fix them yourself. Dispatch overhead exceeds the
 saving.
 
-**Five or more:** dispatch one `wpds-fixer` agent per file, in batches of about
+**Five or more:** dispatch one `loupe-fixer` agent per file, in batches of about
 six so they run concurrently. Give each agent:
 
 - the one file it owns,
 - that file's findings verbatim from the JSON — rule id, line, and message, the
   message included because it carries the token the engine already resolved,
 - the absolute path to
-  `${CLAUDE_PLUGIN_ROOT}/skills/wpds-remediation/SKILL.md`, which it reads for
+  `${CLAUDE_PLUGIN_ROOT}/skills/loupe-remediation/SKILL.md`, which it reads for
   the remedy.
 
 One agent per file, never per rule: two agents editing one file collide.
@@ -66,7 +66,7 @@ it would need to see. Handle those yourself.
   finding wrong here. "Legacy code" and "matches existing style" are not reasons.
 - **Never suppress `stylesheet/unparsed`** — it hides a blind spot rather than
   muting a finding.
-- If the backlog is large, propose `/wpds-baseline` instead of a giant diff.
+- If the backlog is large, propose `/loupe-baseline` instead of a giant diff.
 
 ## 4. Verify
 

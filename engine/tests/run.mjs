@@ -8,7 +8,7 @@
  * turning itself off.
  *
  *   tests/fixtures/<name>/
- *     ds-hygiene.config.json   config for the fixture
+ *     loupe.config.json   config for the fixture
  *     expected.json            { note, findings: [{ rule, file, line }] }
  *     <sources>
  */
@@ -35,7 +35,7 @@ for (const name of readdirSync(FIXTURES).sort()) {
 
 	let actual;
 	try {
-		const config = await loadConfig({ root, configPath: join(root, 'ds-hygiene.config.json') });
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		actual = await analyze(config, { scope: null });
 	} catch (err) {
 		console.log(`FAIL ${name}\n  threw: ${err.stack}`);

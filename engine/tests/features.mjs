@@ -44,7 +44,7 @@ async function run(files, { patterns, components } = {}) {
 			mkdirSync(dirname(p), { recursive: true });
 			writeFileSync(p, body);
 		}
-		const config = await loadConfig({ root, configPath: join(root, 'ds-hygiene.config.json') });
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		if (patterns) setPatterns(config, patterns);
 		if (components) setComponentRegistry(config, components);
 		const result = await analyze(config, { scope: null });
@@ -64,7 +64,7 @@ const at = (r, rule) => r.findings.filter((f) => f.rule === rule);
 
 await check('a hardcoded value names the token that carries it', async () => {
 	const r = await run({
-		'ds-hygiene.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
+		'loupe.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
 		'tokens.css': TOKENS,
 		'styles/a.css': '.acme-card { border-radius: 4px; }',
 		'src/A.jsx': 'export const A = () => <div className="acme-card" />;',
@@ -78,7 +78,7 @@ await check('a hardcoded value names the token that carries it', async () => {
 // the right pixels and the wrong meaning, and that survives review.
 await check('an off-role token is never offered', async () => {
 	const r = await run({
-		'ds-hygiene.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
+		'loupe.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
 		'tokens.css': TOKENS,
 		'styles/a.css': '.acme-card { color: #fcfcfc; }',
 		'src/A.jsx': 'export const A = () => <div className="acme-card" />;',
@@ -90,7 +90,7 @@ await check('an off-role token is never offered', async () => {
 
 await check('unknown-token stays silent when no token set was found', async () => {
 	const r = await run({
-		'ds-hygiene.config.json': CONFIG(),
+		'loupe.config.json': CONFIG(),
 		'styles/a.css': '.acme-card { color: var(--wpds-definitely-not-a-token); }',
 		'src/A.jsx': 'export const A = () => <div className="acme-card" />;',
 	});
@@ -99,7 +99,7 @@ await check('unknown-token stays silent when no token set was found', async () =
 
 await check('unknown-token fires once a token set exists', async () => {
 	const r = await run({
-		'ds-hygiene.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
+		'loupe.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
 		'tokens.css': TOKENS,
 		'styles/a.css': '.acme-card { color: var(--wpds-nope); border-radius: var(--wpds-border-radius-md); }',
 		'src/A.jsx': 'export const A = () => <div className="acme-card" />;',
@@ -113,7 +113,7 @@ await check('unknown-token fires once a token set exists', async () => {
 // how a rule gets switched off.
 await check('a keyword or zero is not untokenized type styling', async () => {
 	const r = await run({
-		'ds-hygiene.config.json': CONFIG(),
+		'loupe.config.json': CONFIG(),
 		'styles/a.css': '.acme-t { font-family: inherit; line-height: 0; font-weight: normal; }',
 		'src/A.jsx': 'export const A = () => <span className="acme-t" />;',
 	});
@@ -139,7 +139,7 @@ const STYLED = [
 ].join('\n');
 
 await check('styled.div declarations are classified and located exactly', async () => {
-	const r = await run({ 'ds-hygiene.config.json': CONFIG(), 'src/Card.tsx': STYLED });
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED });
 	const layout = at(r, 'layout/in-css');
 	const margin = at(r, 'layout/margin-on-child');
 	assert(layout.length === 1 && layout[0].line === 4, `layout at ${layout.map((f) => f.line)}, want [4]`);
@@ -148,7 +148,7 @@ await check('styled.div declarations are classified and located exactly', async 
 });
 
 await check('styled(Component) inherits that component’s verdict', async () => {
-	const r = await run({ 'ds-hygiene.config.json': CONFIG(), 'src/Card.tsx': STYLED });
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED });
 	const override = at(r, 'system/override');
 	const typo = at(r, 'typography/in-css');
 	assert(override.some((f) => f.line === 9), `styled(Button) should be an override; got ${override.map((f) => f.line)}`);
@@ -156,7 +156,7 @@ await check('styled(Component) inherits that component’s verdict', async () =>
 });
 
 await check('an interpolated value produces no finding', async () => {
-	const r = await run({ 'ds-hygiene.config.json': CONFIG(), 'src/Card.tsx': STYLED });
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED });
 	assert(!r.findings.some((f) => f.line === 6), `guessed at an opaque value: ${r.findings.filter((f) => f.line === 6).map((f) => f.message)}`);
 });
 
@@ -168,14 +168,14 @@ await check('a descendant selector does not answer for the styled component', as
 		'\t.child { background: #f00; }',
 		'`;',
 	].join('\n');
-	const r = await run({ 'ds-hygiene.config.json': CONFIG(), 'src/F.tsx': src });
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/F.tsx': src });
 	assert(!at(r, 'system/override').length, 'a .child rule is not an override of the component');
 	assert(at(r, 'tokens/hardcoded-value').length === 1, 'it is still a hardcoded value');
 });
 
 await check('a tagged template from an unrelated library is left alone', async () => {
 	const src = ["import gql from 'graphql-tag';", 'const q = gql`{ user { margin } }`;'].join('\n');
-	const r = await run({ 'ds-hygiene.config.json': CONFIG(), 'src/q.ts': src });
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/q.ts': src });
 	assert(!r.findings.length, `read a GraphQL document as CSS: ${r.findings.map((f) => f.message)}`);
 });
 
@@ -214,7 +214,7 @@ const composite = (n) =>
 await check('a registered pattern rebuilt in two files is reported in both', async () => {
 	const r = await run(
 		{
-			'ds-hygiene.config.json': CONFIG(),
+			'loupe.config.json': CONFIG(),
 			'src/A.jsx': composite('A'),
 			'src/B.jsx': composite('B'),
 		},
@@ -227,7 +227,7 @@ await check('a registered pattern rebuilt in two files is reported in both', asy
 
 await check('one file is a first use, not a duplicate', async () => {
 	const r = await run(
-		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': composite('A') },
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': composite('A') },
 		{ patterns: registry }
 	);
 	assert(!at(r, 'patterns/duplicate-composite').length, 'a single instance is not drift');
@@ -241,7 +241,7 @@ await check('a signature below the floor is documentation, not a check', async (
 		'export const Bar = () => (<HStack><Button>A</Button><Button>B</Button></HStack>);',
 	].join('\n');
 	const r = await run(
-		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src, 'src/B.jsx': src.replace('Bar', 'Bar2') },
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/B.jsx': src.replace('Bar', 'Bar2') },
 		{ patterns: registry }
 	);
 	assert(!at(r, 'patterns/duplicate-composite').length, 'action-bar is too generic to check');
@@ -254,12 +254,12 @@ await check('an unregistered shape needs three files before it is house style', 
 			`export const W${n} = () => (<VStack><Notice>n</Notice><HStack><Text>t</Text><Button>b</Button></HStack></VStack>);`,
 		].join('\n');
 	const two = await run(
-		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': shape('A'), 'src/B.jsx': shape('B') },
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': shape('A'), 'src/B.jsx': shape('B') },
 		{ patterns: registry }
 	);
 	assert(!at(two, 'patterns/unregistered-composite').length, 'two is a coincidence');
 	const three = await run(
-		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': shape('A'), 'src/B.jsx': shape('B'), 'src/C.jsx': shape('C') },
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': shape('A'), 'src/B.jsx': shape('B'), 'src/C.jsx': shape('C') },
 		{ patterns: registry }
 	);
 	assert(at(three, 'patterns/unregistered-composite').length === 3, 'three is a pattern');
@@ -274,7 +274,7 @@ await check('a locked component is reported, its recommended sibling is not', as
 		'export const A = () => (<><Badge>old</Badge><UiBadge>new</UiBadge></>);',
 	].join('\n');
 	const r = await run(
-		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
 		{ components: componentRegistry }
 	);
 	const locked = at(r, 'system/locked-component');
@@ -290,7 +290,7 @@ await check('a superseded component names its replacement, once per file', async
 		'export const B = () => (<HStack><Button>c</Button></HStack>);',
 	].join('\n');
 	const r = await run(
-		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
 		{ components: componentRegistry }
 	);
 	const superseded = at(r, 'system/superseded-component');
@@ -301,7 +301,7 @@ await check('a superseded component names its replacement, once per file', async
 await check('a recommended component is never flagged', async () => {
 	const src = ["import { Stack } from '@wordpress/ui';", 'export const A = () => <Stack>x</Stack>;'].join('\n');
 	const r = await run(
-		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
 		{ components: componentRegistry }
 	);
 	assert(!at(r, 'system/locked-component').length && !at(r, 'system/superseded-component').length, 'Stack is recommended');
@@ -310,7 +310,7 @@ await check('a recommended component is never flagged', async () => {
 await check('an experimental component is not flagged — the call is contextual, not mechanical', async () => {
 	const src = ["import { Dialog } from '@wordpress/ui';", 'export const A = () => <Dialog.Root />;'].join('\n');
 	const r = await run(
-		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
 		{ components: componentRegistry }
 	);
 	assert(
@@ -326,7 +326,7 @@ await check('a locked-component finding can be suppressed like any other', async
 		'export const A = () => <Badge>old</Badge>;',
 	].join('\n');
 	const r = await run(
-		{ 'ds-hygiene.config.json': CONFIG(), 'src/A.jsx': src },
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
 		{ components: componentRegistry }
 	);
 	assert(!at(r, 'system/locked-component').length, 'a well-formed suppression mutes the finding');

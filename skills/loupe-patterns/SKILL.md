@@ -1,7 +1,7 @@
 ---
-name: wpds-patterns
+name: loupe-patterns
 description: >-
-  Load BEFORE assembling any composite UI out of WordPress Design System components — a page or panel header, an action bar, a confirmation or form modal, a notice or notification stack, a detail sidebar, an empty state, a form row, or a DataViews toolbar. Carries the registry of sanctioned WPDS compositions in `patterns/`: what each one is for, its canonical structure, and the anti-patterns it replaces. Use it to check whether a composite already exists before writing a new one, and to register a new pattern when it genuinely does not. Prevents the failure where an agent assembles a fifth bespoke header, each locally reasonable and collectively unmaintainable. Triggers on "build a header", "add a modal", "confirmation dialog", "action buttons", "notice", "sidebar", "empty state", "toolbar", or any JSX composing two or more `@wordpress/components` into a reusable shape. Pair with `wpds-authoring` for the styling rules.
+  Load BEFORE assembling any composite UI out of WordPress Design System components — a page or panel header, an action bar, a confirmation or form modal, a notice or notification stack, a detail sidebar, an empty state, a form row, or a DataViews toolbar. Carries the registry of sanctioned WPDS compositions in `patterns/`: what each one is for, its canonical structure, and the anti-patterns it replaces. Use it to check whether a composite already exists before writing a new one, and to register a new pattern when it genuinely does not. Prevents the failure where an agent assembles a fifth bespoke header, each locally reasonable and collectively unmaintainable. Triggers on "build a header", "add a modal", "confirmation dialog", "action buttons", "notice", "sidebar", "empty state", "toolbar", or any JSX composing two or more `@wordpress/components` into a reusable shape. Pair with `loupe-authoring` for the styling rules.
 compatibility: "Targets WPDS on WordPress 6.5+ / 7.0."
 ---
 
@@ -165,12 +165,12 @@ duplication is the problem being solved, not evidence for its own correctness.
 ## Checking
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --all
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all
 ```
 
 Composite detection (`patterns/duplicate-composite`,
 `patterns/unregistered-composite`) is implemented — the engine builds a
 component tree per JSX subtree and runs it against the registry. It only sees
-what a project's `ds-hygiene.config.json` passes as `--patterns`; without that,
+what a project's `loupe.config.json` passes as `--patterns`; without that,
 this skill is still the enforcement, which means reading the registry before
 assembling is not optional.

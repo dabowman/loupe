@@ -1,6 +1,10 @@
-# wpds-quality
+# Loupe
 
 Keeps agent-written wp-admin interfaces on the WordPress Design System.
+
+A loupe is what a printer holds over a proof before the run: close enough to
+see the dot, early enough that fixing it costs nothing. Same idea here — the
+drift is caught on the file just written, not in review.
 
 An agent writing UI produces code that compiles, renders correctly, passes
 review, and quietly reimplements things WPDS already provides: a hand-rolled
@@ -17,15 +21,15 @@ that report drift on the file just touched, not forty tool calls later).
 
 | | |
 | --- | --- |
-| `skills/wpds-authoring` | The authoring rules — order of resort, gap over margin, props over CSS, tokens by role. Load before writing UI. |
-| `skills/wpds-patterns` | Registry of sanctioned composites. Load before assembling a header, modal, action bar, sidebar. |
-| `skills/wpds-remediation` | Per-rule remedies, and the checks that stop a "fix" from silently changing rendering. |
-| `agents/wpds-fixer` | Per-file remediation agent. `/wpds-fix` fans it out once the work spans enough files to be worth it. |
-| `commands/` | `/wpds-audit`, `/wpds-fix`, `/wpds-baseline` |
+| `skills/loupe-authoring` | The authoring rules — order of resort, gap over margin, props over CSS, tokens by role. Load before writing UI. |
+| `skills/loupe-patterns` | Registry of sanctioned composites. Load before assembling a header, modal, action bar, sidebar. |
+| `skills/loupe-remediation` | Per-rule remedies, and the checks that stop a "fix" from silently changing rendering. |
+| `agents/loupe-fixer` | Per-file remediation agent. `/loupe-fix` fans it out once the work spans enough files to be worth it. |
+| `commands/` | `/loupe-audit`, `/loupe-fix`, `/loupe-baseline` |
 | `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
 | `patterns/index.json` | The composite registry |
 | `components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
-| `engine/` | `ds-hygiene` — the conformance engine |
+| `engine/` | `loupe` — the conformance engine |
 
 ## The engine
 
@@ -52,11 +56,11 @@ value that depends on one produces no finding, and a template whose *structure*
 depends on one is recorded as a parse diagnostic rather than guessed at.
 
 ```bash
-ds-hygiene check --all
-ds-hygiene explain layout/margin-on-child
+loupe check --all
+loupe explain layout/margin-on-child
 ```
 
-`bin/ds-hygiene` is on PATH inside any Claude Code session — Claude Code adds
+`bin/loupe` is on PATH inside any Claude Code session — Claude Code adds
 each enabled plugin's `bin/` to the environment it runs commands in — and
 `install.sh` links it into `~/.local/bin` for plain terminals. It runs against
 whatever directory you are in and adds nothing to that project: the engine
@@ -64,7 +68,7 @@ carries its own dependencies and writes nothing into your repo. It also passes
 the shipped pattern and component registries unless you name your own with
 `--patterns`/`--components`.
 
-Pure analysis — it never edits. Fixing is `wpds-remediation`'s job, because the
+Pure analysis — it never edits. Fixing is `loupe-remediation`'s job, because the
 fixes need judgment that a codemod does not have.
 
 ### Rules
@@ -120,7 +124,7 @@ because an empty token set proves nothing.
 Because the engine resolved that substitution itself, it can also apply it:
 
 ```bash
-ds-hygiene fix          # --dry-run to see it first
+loupe fix   # --dry-run to see it first
 ```
 
 Only where exactly one on-role token carries the value, and only in stylesheets
@@ -180,7 +184,7 @@ safe to recommend broadly — informational only, never enforced).
 `experimental` entries never fire either rule — WPDS's own Storybook metadata
 says those aren't yet safe to recommend for most codebases, so pushing
 migration would be wrong, not just premature. That call stays in
-`wpds-authoring`, as prose, for an agent to reason about contextually.
+`loupe-authoring`, as prose, for an agent to reason about contextually.
 
 The MCP has no maturity signal at all — it presents an `experimental`
 component with the same confidence as a `recommended` one, and it's
@@ -193,7 +197,7 @@ a project's own registry.
 
 ### Config
 
-`ds-hygiene.config.json` at the repo root, discovered by walking up:
+`loupe.config.json` at the repo root, discovered by walking up:
 
 ```jsonc
 {
@@ -227,9 +231,9 @@ correlates the two sides, leaving the gate green on exactly the drift it exists
 to catch.
 
 ```bash
-node engine/bin/ds-hygiene.mjs detect   # what would be inferred, and why
-node engine/bin/ds-hygiene.mjs init     # write it down as ds-hygiene.config.json
-node engine/bin/ds-hygiene.mjs status   # effective rules, severities, what blocks
+node engine/bin/loupe.mjs detect   # what would be inferred, and why
+node engine/bin/loupe.mjs init     # write it down as loupe.config.json
+node engine/bin/loupe.mjs status   # effective rules, severities, what blocks
 ```
 
 A guess is held to a lower bar than a decision: with an inferred config,
@@ -263,7 +267,7 @@ cd engine && npm install     # installs the optional syntaxes
 
 Rule id and reason are both mandatory; anything looser is its own finding. That
 inversion keeps the escape hatch available and legible. Audit with
-`ds-hygiene suppressions`.
+`loupe suppressions`.
 
 ### Baseline
 
@@ -271,7 +275,7 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
-node engine/bin/ds-hygiene.mjs baseline
+node engine/bin/loupe.mjs baseline
 ```
 
 Entries key on rule + file + normalized code, not line number, so reformatting
@@ -283,11 +287,11 @@ A baseline already committed to a project still wins. `status` prints which.
 
 ## Remediation
 
-`/wpds-fix` runs `ds-hygiene fix` first, so what remains is the work that needs
+`/loupe-fix` runs `loupe fix` first, so what remains is the work that needs
 judgement: did that `margin-bottom` do something `gap` will not, is this `<div>`
 editor content that should stay raw, is that inline style computed at runtime.
 
-Above five affected files it dispatches one `wpds-fixer` agent per file. Per
+Above five affected files it dispatches one `loupe-fixer` agent per file. Per
 file, never per rule — two agents editing one file collide. `css/dead-class` and
 `patterns/*` are never dispatched: both are cross-file judgements a single-file
 agent cannot make. Verification is one repo-wide re-run by the caller, because
@@ -300,7 +304,7 @@ Configured where you enable the plugin, read by the hook from the environment:
 | | |
 | --- | --- |
 | **Block turns on findings** | Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. |
-| **Preset** | `auto` infers per project. A project's own `ds-hygiene.config.json` always wins over both. |
+| **Preset** | `auto` infers per project. A project's own `loupe.config.json` always wins over both. |
 | **Project class prefixes** | Comma-separated, e.g. `vip-workflow-, wf-`. Empty infers them. Only these can be reported dead. |
 | **Fix attempts** / **Findings shown** | The retry budget and the per-report cap. |
 

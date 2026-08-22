@@ -1,7 +1,7 @@
 ---
-name: wpds-remediation
+name: loupe-remediation
 description: >-
-  Load when fixing WPDS conformance findings — output from `ds-hygiene`, the `/wpds-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `patterns/duplicate-composite`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Carries the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the ds-hygiene findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `wpds-authoring` for the underlying rules.
+  Load when fixing WPDS conformance findings — output from `loupe`, the `/loupe-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `patterns/duplicate-composite`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Carries the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the loupe findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `loupe-authoring` for the underlying rules.
 compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Needs the plugin's engine (node >=18)."
 ---
 
@@ -156,7 +156,7 @@ to the parent's `gap`.
 A declaration `variant`/layout props genuinely can't express — most often
 `color`, which `Text` has no prop for — is the one case where `style` on a
 WPDS component is the sanctioned path rather than an override; see
-`wpds-authoring`. Everything else: keep inline only what no stylesheet could
+`loupe-authoring`. Everything else: keep inline only what no stylesheet could
 express, a value computed at runtime such as a measured width or a drag
 offset. A constant is never that. When some declarations are dynamic and some
 are not, move the constants out and leave the computed ones — then suppress
@@ -210,7 +210,7 @@ file. If the registry entry carries a `canonical`, import it. If it does not,
 that is the work: extract one implementation from the instances that exist, then
 fill in `import` and `canonical` so the next session finds it.
 
-Read `wpds-patterns` before extracting — the entry records what the pattern is
+Read `loupe-patterns` before extracting — the entry records what the pattern is
 *for*, and an extraction that misses the intent produces a shared component
 nobody uses.
 
@@ -264,7 +264,7 @@ describe nothing and the third is the drift restating itself.
 Audit them periodically; constraints expire:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" suppressions
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" suppressions
 ```
 
 ## Large backlogs
@@ -273,7 +273,7 @@ Do not fix hundreds of findings in one pass. Baseline the backlog, which
 silences existing findings and surfaces new ones immediately:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" baseline
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" baseline
 ```
 
 Then burn it down by rule — one rule across the whole codebase is a far more

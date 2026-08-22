@@ -1,4 +1,4 @@
-# ds-hygiene
+# Loupe
 
 Design-system conformance checking for front-end codebases.
 
@@ -11,7 +11,7 @@ token."*
 Pure analysis. It never edits.
 
 ```bash
-npx ds-hygiene check --all
+npx loupe check --all
 ```
 
 ## Why
@@ -44,7 +44,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `system/locked-component` | A private API the design system does not recommend outside its own core |
 | `system/superseded-component` | A current, recommended component now covers this job |
 
-`ds-hygiene explain <rule>` prints the guidance and whether the rule is active
+`loupe explain <rule>` prints the guidance and whether the rule is active
 under your config.
 
 Legacy `R0`–`R8` ids are accepted everywhere a rule id is, in config and in
@@ -77,7 +77,7 @@ the grammar isn't mistaken for an instance of it.
 
 ## Config
 
-`ds-hygiene.config.json` (or `.mjs`, or a `dsHygiene` key in `package.json`),
+`loupe.config.json` (or `.mjs`, or a `loupe` key in `package.json`),
 discovered by walking up from the working directory.
 
 With no config file anywhere, the project is inspected and one is inferred —
@@ -88,9 +88,9 @@ markup. A prefix present only in CSS is exactly what a dead class looks like, so
 CSS evidence alone is never enough to adopt one.
 
 ```bash
-ds-hygiene detect            # what would be inferred, and why
-ds-hygiene init              # write it to ds-hygiene.config.json
-ds-hygiene status            # the effective config: rules, severities, what blocks
+loupe detect   # what would be inferred, and why
+loupe init     # write it to loupe.config.json
+loupe status   # the effective config: rules, severities, what blocks
 ```
 
 An inferred config is held to a lower bar than one somebody wrote down:
@@ -152,7 +152,7 @@ override findings.
 ## Fixing
 
 ```bash
-ds-hygiene fix              # apply; --dry-run to preview
+loupe fix   # apply; --dry-run to preview
 ```
 
 Applies only `tokens/hardcoded-value` findings the engine already resolved to
@@ -175,8 +175,8 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
-ds-hygiene baseline          # record the current findings
-ds-hygiene check --changed   # only what's new
+loupe baseline          # record the current findings
+loupe check --changed   # only what's new
 ```
 
 Entries key on rule + file + normalized code, not line number, so reformatting
@@ -186,7 +186,7 @@ Under a plugin the baseline goes to `${CLAUDE_PLUGIN_DATA}/projects/<project>/`,
 so carrying the tool between repos writes nothing into them. Outside one it
 falls back to the project. An existing project-local baseline always wins — a
 committed baseline is a deliberate choice — and `--baseline <path>` always
-writes where you name it. `ds-hygiene status` prints the location in use.
+writes where you name it. `loupe status` prints the location in use.
 
 ## Claude Code hook
 
@@ -195,7 +195,7 @@ writes where you name it. `ds-hygiene status` prints the location in use.
 {
   "hooks": {
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "npx ds-hygiene hook" }] }
+      { "hooks": [{ "type": "command", "command": "npx loupe hook" }] }
     ]
   }
 }
@@ -222,10 +222,10 @@ you never confirm the fix.
 ## Output
 
 ```bash
-ds-hygiene check --all --format json     # stable, versioned schema
-ds-hygiene check --all --format sarif    # GitHub code scanning
-ds-hygiene check --changed --max-findings 20
-ds-hygiene suppressions                  # audit every active directive
+loupe check --all --format json     # stable, versioned schema
+loupe check --all --format sarif    # GitHub code scanning
+loupe check --changed --max-findings 20
+loupe suppressions                  # audit every active directive
 ```
 
 Exit codes are a contract: `0` clean or advisory-only, `1` blocking findings,
@@ -234,14 +234,14 @@ Exit codes are a contract: `0` clean or advisory-only, `1` blocking findings,
 JSON findings carry `suggest` when the engine matched a value against the token
 set: `[{ prop, value, tokens }]`, most specific first. The prose message says the
 same thing for a reader; `suggest` is there so a consumer does not have to parse
-it back out of a sentence. `ds-hygiene fix` is that consumer for the
+it back out of a sentence. `loupe fix` is that consumer for the
 single-token case.
 
 ## Programmatic use
 
 ```js
-import { analyze } from 'ds-hygiene';
-import { loadConfig } from 'ds-hygiene/config';
+import { analyze } from 'loupe';
+import { loadConfig } from 'loupe/config';
 
 const config = await loadConfig({ root: process.cwd() });
 const { findings, blocking, directives } = analyze(config, { scope: null });

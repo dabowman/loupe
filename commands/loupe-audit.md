@@ -6,7 +6,7 @@ argument-hint: "[--changed] [--suppressions] [path]"
 Run the WPDS conformance engine and report what it finds.
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --all --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
 ```
 
 Adjust for the arguments given in `$ARGUMENTS`:
@@ -25,7 +25,7 @@ Then summarize for the user rather than pasting raw output:
    will stop a turn on.
 3. **Call out `stylesheet/unparsed` first if present** — those files were not
    checked at all, so the rest of the report is incomplete until they are.
-4. **Do not start fixing.** This command reports. Offer `/wpds-fix` as the next
+4. **Do not start fixing.** This command reports. Offer `/loupe-fix` as the next
    step, or ask which subset to take on.
 
 If the repo has no config, say so and note that `--preset wpds` runs the

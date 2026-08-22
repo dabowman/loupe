@@ -43,13 +43,13 @@ const TOKENS = `:root {
 async function fixture(files) {
 	const root = mkdtempSync(join(tmpdir(), 'dsh-fix-'));
 	try {
-		const all = { 'ds-hygiene.config.json': CONFIG, 'styles/tokens.css': TOKENS, ...files };
+		const all = { 'loupe.config.json': CONFIG, 'styles/tokens.css': TOKENS, ...files };
 		for (const [rel, body] of Object.entries(all)) {
 			const p = join(root, rel);
 			mkdirSync(dirname(p), { recursive: true });
 			writeFileSync(p, body);
 		}
-		const config = await loadConfig({ root, configPath: join(root, 'ds-hygiene.config.json') });
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		const result = await analyze(config, { scope: null });
 		const outcome = applyTokenFixes(root, result.findings);
 		// Read before the cleanup below: a closure over `root` would resolve

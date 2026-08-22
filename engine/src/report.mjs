@@ -17,7 +17,7 @@ export function formatAgent(result, config, { maxFindings = 0, showSuppressed = 
 	const lines = [];
 
 	if (!findings.length) {
-		lines.push('ds-hygiene: clean.');
+		lines.push('loupe: clean.');
 	} else {
 		const byRule = new Map();
 		for (const f of findings) {
@@ -59,7 +59,7 @@ export function formatAgent(result, config, { maxFindings = 0, showSuppressed = 
 		}
 		if (hidden) {
 			lines.push('');
-			lines.push(`${hidden} finding(s) not shown \u2014 run \`ds-hygiene check --all --max-findings 0\` for the full list.`);
+			lines.push(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`);
 		}
 		lines.push('');
 		lines.push(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`);
@@ -79,7 +79,7 @@ export function formatAgent(result, config, { maxFindings = 0, showSuppressed = 
 
 /** One-line tally for the hook's success path. */
 export function formatSummary(result, { prefix = true } = {}) {
-	const tag = prefix ? 'ds-hygiene: ' : '';
+	const tag = prefix ? 'loupe: ' : '';
 	const { findings } = result;
 	if (!findings.length) return `${tag}clean.`;
 	const errors = findings.filter((f) => f.severity === 'error').length;
@@ -95,7 +95,7 @@ export function formatJson(result, config) {
 	return JSON.stringify(
 		{
 			version: 1,
-			tool: 'ds-hygiene',
+			tool: 'loupe',
 			blocking: result.blocking,
 			summary: {
 				total: result.findings.length,
@@ -124,8 +124,8 @@ export function formatSarif(result, config) {
 				{
 					tool: {
 						driver: {
-							name: 'ds-hygiene',
-							informationUri: 'https://github.com/dvdbwmn/ds-hygiene',
+							name: 'Loupe',
+							informationUri: 'https://github.com/dvdbwmn/loupe',
 							rules: used.map((id) => ({
 								id,
 								shortDescription: { text: RULES[id].title },

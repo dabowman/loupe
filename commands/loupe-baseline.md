@@ -8,7 +8,7 @@ what exists now goes quiet, anything new surfaces immediately.
 Show the scale of what is being accepted first:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --all --format json --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --format json --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
 ```
 
 Report the count by rule and confirm before writing — a baseline is a decision
@@ -18,12 +18,12 @@ get to a clean report.
 On confirmation:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" baseline --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" baseline --patterns "${CLAUDE_PLUGIN_ROOT}/patterns/index.json" --components "${CLAUDE_PLUGIN_ROOT}/components/index.json"
 ```
 
-Then tell the user to commit `.ds-hygiene-baseline.json`, and note that entries
+Then tell the user to commit `.loupe-baseline.json`, and note that entries
 key on rule + file + normalized code rather than line number, so reformatting
 will not resurrect the whole file.
 
-Suggest burning the backlog down one rule at a time with `/wpds-fix <rule-id>`,
+Suggest burning the backlog down one rule at a time with `/loupe-fix <rule-id>`,
 and deleting the baseline once it is empty.

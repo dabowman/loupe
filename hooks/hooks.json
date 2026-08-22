@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs\" hook --patterns \"${CLAUDE_PLUGIN_ROOT}/patterns/index.json\" --components \"${CLAUDE_PLUGIN_ROOT}/components/index.json\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs\" hook --patterns \"${CLAUDE_PLUGIN_ROOT}/patterns/index.json\" --components \"${CLAUDE_PLUGIN_ROOT}/components/index.json\"",
             "timeout": 60
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs\" hook --patterns \"${CLAUDE_PLUGIN_ROOT}/patterns/index.json\" --components \"${CLAUDE_PLUGIN_ROOT}/components/index.json\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs\" hook --patterns \"${CLAUDE_PLUGIN_ROOT}/patterns/index.json\" --components \"${CLAUDE_PLUGIN_ROOT}/components/index.json\"",
             "timeout": 120
           }
         ]

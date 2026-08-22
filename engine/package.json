@@ -1,10 +1,10 @@
 {
-  "name": "@dvdbwmn/ds-hygiene",
+  "name": "@dvdbwmn/loupe",
   "version": "0.1.0",
   "description": "Design-system conformance checking: correlates markup bindings with the CSS that styles them.",
   "type": "module",
   "bin": {
-    "ds-hygiene": "./bin/ds-hygiene.mjs"
+    "loupe": "./bin/loupe.mjs"
   },
   "exports": {
     ".": "./src/analyze.mjs",

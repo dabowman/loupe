@@ -1,6 +1,6 @@
 {
-  "name": "wpds-quality",
-  "displayName": "WPDS Quality",
+  "name": "loupe",
+  "displayName": "Loupe",
   "description": "Keeps agent-written wp-admin interfaces on the WordPress Design System. An authoring skill that sets the rules before the first draft, a conformance engine that correlates JSX component bindings with the CSS styling them \u2014 across stylesheets, inline styles and CSS-in-JS \u2014 names the exact token that replaces a hardcoded value, and catches composites rebuilt across files, plus hooks that report drift at write time rather than at review time.",
   "version": "0.1.0",
   "author": {
@@ -14,26 +14,26 @@
     "linting"
   ],
   "skills": [
-    "./skills/wpds-authoring",
-    "./skills/wpds-patterns",
-    "./skills/wpds-remediation"
+    "./skills/loupe-authoring",
+    "./skills/loupe-patterns",
+    "./skills/loupe-remediation"
   ],
   "commands": [
-    "./commands/wpds-audit.md",
-    "./commands/wpds-fix.md",
-    "./commands/wpds-baseline.md"
+    "./commands/loupe-audit.md",
+    "./commands/loupe-fix.md",
+    "./commands/loupe-baseline.md"
   ],
   "userConfig": {
     "blocking": {
       "type": "boolean",
       "title": "Block turns on findings",
-      "description": "When on, error-severity findings stop the turn and hand the report back. When off, the gate reports only. A project with no ds-hygiene.config.json is always advisory unless this is on.",
+      "description": "When on, error-severity findings stop the turn and hand the report back. When off, the gate reports only. A project with no loupe.config.json is always advisory unless this is on.",
       "default": false
     },
     "preset": {
       "type": "string",
       "title": "Preset",
-      "description": "auto, wpds, wordpress-components, wordpress-block-theme, or generic. 'auto' infers the preset per project. A project's own ds-hygiene.config.json always wins.",
+      "description": "auto, wpds, wordpress-components, wordpress-block-theme, or generic. 'auto' infers the preset per project. A project's own loupe.config.json always wins.",
       "default": "auto"
     },
     "project_prefixes": {

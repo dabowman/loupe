@@ -1,5 +1,5 @@
 #!/bin/sh
-# ds-hygiene, on PATH.
+# loupe, on PATH.
 #
 # Claude Code adds each enabled plugin's top-level bin/ to the environment it
 # runs commands in, so this shim is reachable by name from any project without
@@ -25,6 +25,6 @@ here=$(CDPATH= cd -- "$(dirname -- "$target")" && pwd -P)
 # one the hooks and commands pass. An explicit --patterns still wins: the flag
 # is only added when the caller gave none.
 case " $* " in
-	*" --patterns "*|*" --patterns="*) exec node "$here/../engine/bin/ds-hygiene.mjs" "$@" ;;
+	*" --patterns "*|*" --patterns="*) exec node "$here/../engine/bin/loupe.mjs" "$@" ;;
 esac
-exec node "$here/../engine/bin/ds-hygiene.mjs" "$@" --patterns "$here/../patterns/index.json"
+exec node "$here/../engine/bin/loupe.mjs" "$@" --patterns "$here/../patterns/index.json"

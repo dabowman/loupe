@@ -1,7 +1,7 @@
 ---
-name: wpds-authoring
+name: loupe-authoring
 description: >-
-  Load BEFORE writing or editing any UI that uses the WordPress Design System — `@wordpress/components`, `@wordpress/ui`, or `--wpds-*` tokens — in wp-admin, Gutenberg, WordPress.com, Jetpack, or any React surface built on WPDS. Carries the authoring rules that keep generated code from drifting: which component is current (`components/index.json` — WPDS runs two live packages at once, and not everything in the newer one is safe to use yet), the component before the element (`Text` with `variant="heading-*"` over `<p>`/`<h2>`), the prop before the stylesheet (`variant`/`gap`/`direction` over `font-size`/`margin`/`display:flex`), and `gap` on a layout primitive over margin anywhere — WPDS ships no margin token at all. Also covers token selection by role, when writing CSS is legitimate, and the `wpds-allow` escape hatch. Triggers on building admin screens, settings panels, modals, sidebar plugins, DataViews surfaces, toolbars, or any JSX importing from `@wordpress/components`/`@wordpress/ui`. Pair with `wpds-patterns` before assembling a composite and `wpds-remediation` when fixing findings.
+  Load BEFORE writing or editing any UI that uses the WordPress Design System — `@wordpress/components`, `@wordpress/ui`, or `--wpds-*` tokens — in wp-admin, Gutenberg, WordPress.com, Jetpack, or any React surface built on WPDS. Carries the authoring rules that keep generated code from drifting: which component is current (`components/index.json` — WPDS runs two live packages at once, and not everything in the newer one is safe to use yet), the component before the element (`Text` with `variant="heading-*"` over `<p>`/`<h2>`), the prop before the stylesheet (`variant`/`gap`/`direction` over `font-size`/`margin`/`display:flex`), and `gap` on a layout primitive over margin anywhere — WPDS ships no margin token at all. Also covers token selection by role, when writing CSS is legitimate, and the `wpds-allow` escape hatch. Triggers on building admin screens, settings panels, modals, sidebar plugins, DataViews surfaces, toolbars, or any JSX importing from `@wordpress/components`/`@wordpress/ui`. Pair with `loupe-patterns` before assembling a composite and `loupe-remediation` when fixing findings.
 compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Conformance checking needs the plugin's engine (node >=18)."
 ---
 
@@ -279,7 +279,7 @@ When a finding is genuinely wrong, suppress it precisely and say why:
 The rule id and the reason are both mandatory; a bare or blanket disable is
 itself a blocking finding. This inversion is deliberate — the escape hatch stays
 available and stays legible, so suppressions can be audited later with
-`wpds-audit --suppressions`.
+`loupe-audit --suppressions`.
 
 A reason that amounts to "this is how it was already written" is not a reason.
 
@@ -287,14 +287,14 @@ A reason that amounts to "this is how it was already written" is not a reason.
 
 Headers, action bars, modals, notices, sidebars, empty states and form rows are
 where duplication accumulates fastest — each one looks like a small local
-decision. Load **`wpds-patterns`** before building one, and use the registered
+decision. Load **`loupe-patterns`** before building one, and use the registered
 pattern if it exists.
 
 ## Checking your work
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/ds-hygiene.mjs" check --changed
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --changed
 ```
 
 `--all` for the whole repo, `explain <rule>` for a rule's guidance and whether
-it is active. Fixing what it reports is **`wpds-remediation`**.
+it is active. Fixing what it reports is **`loupe-remediation`**.

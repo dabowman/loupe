@@ -25,7 +25,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CLI = join(HERE, 'bin', 'ds-hygiene.mjs');
+const CLI = join(HERE, 'bin', 'loupe.mjs');
 
 const root = resolve(process.argv[2] || process.cwd());
 const extra = process.argv.slice(3);
@@ -48,7 +48,7 @@ const run = (args) => {
 				/* fall through */
 			}
 		}
-		console.error(`failed: ds-hygiene ${args.join(' ')}\n${err.stderr || err.message}`);
+		console.error(`failed: loupe ${args.join(' ')}\n${err.stderr || err.message}`);
 		process.exit(2);
 	}
 };

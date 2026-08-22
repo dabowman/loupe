@@ -35,7 +35,7 @@
       "use": "Creating or editing a record without leaving the current screen.",
       "signature": ["Modal", "Stack", ["Stack", "Button", "Button"]],
       "instead_of": ["Modal with an inline form and per-instance submit placement"],
-      "note": "@wordpress/ui's Dialog/Drawer are Modal's eventual replacements, chosen by field count/complexity (see wpds-authoring), but both are marked experimental in components/index.json — stay on Modal until that clears."
+      "note": "@wordpress/ui's Dialog/Drawer are Modal's eventual replacements, chosen by field count/complexity (see loupe-authoring), but both are marked experimental in components/index.json — stay on Modal until that clears."
     },
     {
       "id": "notice-stack",
