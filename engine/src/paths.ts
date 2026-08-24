@@ -14,19 +14,23 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
+import type { StateScope } from './types.ts';
 
-export const pluginDataDir = () => process.env.CLAUDE_PLUGIN_DATA || null;
-export const isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
+/** Where a baseline was found: one of the state scopes, or a path someone named. */
+type BaselineScope = StateScope | 'explicit';
+
+export const pluginDataDir = (): string | null => process.env.CLAUDE_PLUGIN_DATA ?? null;
+export const isPluginContext = (): boolean => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
 
 /** Stable per-project key: basename for legibility, path hash for uniqueness. */
-export function projectKey(root) {
+export function projectKey(root: string): string {
 	const full = resolve(root);
 	const hash = createHash('sha256').update(full).digest('hex').slice(0, 10);
-	const name = full.split(/[/\\]/).filter(Boolean).pop() || 'project';
+	const name = full.split(/[/\\]/).filter(Boolean).pop() ?? 'project';
 	return `${name.replace(/[^\w.-]/g, '-')}-${hash}`;
 }
 
-function ensureDir(dir) {
+function ensureDir(dir: string): string | null {
 	try {
 		mkdirSync(dir, { recursive: true });
 		return dir;
@@ -41,11 +45,13 @@ function ensureDir(dir) {
  * `create` is off by default: reporting on where state *would* live should not
  * litter a repo with an empty `.loupe/`. Only the write paths create it.
  *
- * @param {object} opts
- * @param {boolean} opts.preferProject force project-local (an explicit --baseline path, or CI)
- * @param {boolean} opts.create make the directory now
+ * @param opts.preferProject force project-local (an explicit --baseline path, or CI)
+ * @param opts.create make the directory now
  */
-export function stateDir(root, { preferProject = false, create = false } = {}) {
+export function stateDir(
+	root: string,
+	{ preferProject = false, create = false }: { preferProject?: boolean; create?: boolean } = {},
+): { dir: string | null; scope: StateScope } {
 	const data = pluginDataDir();
 	if (!preferProject && data) {
 		const dir = join(data, 'projects', projectKey(root));
@@ -69,7 +75,11 @@ export function stateDir(root, { preferProject = false, create = false } = {}) {
  * for a baseline must not leave an empty `.loupe/` behind in the project.
  * Only the `baseline` command, which is about to write one, passes it.
  */
-export function baselinePath(root, explicit, { create = false } = {}) {
+export function baselinePath(
+	root: string,
+	explicit?: string | null,
+	{ create = false }: { create?: boolean } = {},
+): { path: string; scope: BaselineScope } {
 	if (explicit) {
 		return { path: isAbsolute(explicit) ? explicit : join(root, explicit), scope: 'explicit' };
 	}
@@ -82,17 +92,23 @@ export function baselinePath(root, explicit, { create = false } = {}) {
  * Existing project-local baselines keep working: if one is checked in, it wins
  * over plugin-data state, because a committed baseline is a deliberate choice.
  */
-export function findExistingBaseline(root, explicit, configured, { create = false } = {}) {
+export function findExistingBaseline(
+	root: string,
+	explicit?: string | null,
+	configured?: string | null,
+	{ create = false }: { create?: boolean } = {},
+): { path: string; scope: BaselineScope } {
 	if (explicit) return baselinePath(root, explicit);
-	for (const candidate of [configured, '.loupe-baseline.json'].filter(Boolean)) {
+	const candidates = [configured, '.loupe-baseline.json'].filter((c): c is string => Boolean(c));
+	for (const candidate of candidates) {
 		const p = isAbsolute(candidate) ? candidate : join(root, candidate);
 		if (existsSync(p)) return { path: p, scope: 'project' };
 	}
 	return baselinePath(root, null, { create });
 }
 
-/** @param {boolean} create make the state directory (writers pass true) */
-export function attemptsPath(root, create = false) {
+/** @param create make the state directory (writers pass true) */
+export function attemptsPath(root: string, create = false): string | null {
 	const { dir } = stateDir(root, { create });
 	return dir ? join(dir, 'attempts.json') : null;
 }

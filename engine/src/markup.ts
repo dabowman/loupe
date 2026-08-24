@@ -15,16 +15,58 @@
  */
 
 import { parse as babelParse } from '@babel/parser';
-import { keyName, toCssProp, toCssValue } from './inline.mjs';
-import { FLEX_PROPS, GAP_PROPS } from './styles.mjs';
-import { cssInJsLocals, parseTemplate, templateText } from './cssinjs.mjs';
-import { depthOf, nodeCount, signatureOf, systemTree } from './patterns.mjs';
+import type { ParserPlugin } from '@babel/parser';
+import type { Expression, File, JSXAttribute, JSXElement, Node, TaggedTemplateExpression } from '@babel/types';
+import { keyName, toCssProp, toCssValue } from './inline.ts';
+import { FLEX_PROPS, GAP_PROPS } from './styles.ts';
+import { cssInJsLocals, parseTemplate, templateText } from './cssinjs.ts';
+import { depthOf, nodeCount, signatureOf, systemTree } from './patterns.ts';
+import type {
+	Binding,
+	ComponentImport,
+	Composite,
+	CssInJsTemplate,
+	Decl,
+	DesignSystem,
+	InlineStyleElement,
+	RawElement,
+	ScanResult,
+} from './types.ts';
 
-const PLUGINS = ['jsx', 'typescript', 'decorators-legacy', 'classProperties', 'importAttributes'];
+const PLUGINS: ParserPlugin[] = ['jsx', 'typescript', 'decorators-legacy', 'classProperties', 'importAttributes'];
+
+/**
+ * Narrow reads of the shapes a CSS-in-JS tag can take.
+ *
+ * `styled.div`, `styled(Button)` and a bare `css` are three different
+ * expression types, and the chain of optional reads this replaces returned
+ * `undefined` for every mismatch — which `Set.has` then answered `false` to,
+ * so a genuinely unhandled tag shape was indistinguishable from a rejected one.
+ */
+const memberObject = (t: Expression): string | undefined =>
+	t.type === 'MemberExpression' && t.object.type === 'Identifier' ? t.object.name : undefined;
+const memberProperty = (t: Expression): string | undefined =>
+	t.type === 'MemberExpression' && t.property.type === 'Identifier' ? t.property.name : undefined;
+const calleeOf = (t: Expression): string | undefined =>
+	t.type === 'CallExpression' && t.callee.type === 'Identifier' ? t.callee.name : undefined;
+const firstArgOf = (t: Expression): string | undefined => {
+	if (t.type !== 'CallExpression') return undefined;
+	const arg = t.arguments[0];
+	return arg?.type === 'Identifier' ? arg.name : undefined;
+};
+const identifierOf = (t: Expression): string | undefined => (t.type === 'Identifier' ? t.name : undefined);
+
+/** `Set.has` for a name that may not exist. */
+const held = (set: ReadonlySet<string>, name: string | undefined): boolean =>
+	name !== undefined && set.has(name);
+
+/** First line of an unknown throw — a parser may reject with anything. */
+const messageOf = (err: unknown): string =>
+	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
 
 /** Every identifier-like token in the source. See note (2) above. */
-export function harvestTokens(text, into = new Set()) {
-	for (const t of text.match(/[A-Za-z_][\w-]*/g) || []) into.add(t);
+export function harvestTokens(text: string, into: Set<string> = new Set()): Set<string> {
+	for (const t of text.match(/[A-Za-z_][\w-]*/g) ?? []) into.add(t);
 	return into;
 }
 
@@ -38,7 +80,7 @@ export function harvestTokens(text, into = new Set()) {
  * every hook timeout, so the gate silently never ran.
  */
 const MAX_STEM = 128;
-export function harvestStems(text, into = new Set()) {
+export function harvestStems(text: string, into: Set<string> = new Set()): Set<string> {
 	for (let i = text.indexOf('${'); i !== -1; i = text.indexOf('${', i + 2)) {
 		let s = i;
 		const floor = Math.max(0, i - MAX_STEM);
@@ -50,28 +92,40 @@ export function harvestStems(text, into = new Set()) {
 }
 
 /** [A-Za-z0-9_-] */
-function isWordChar(c) {
+function isWordChar(c: number): boolean {
 	return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95 || c === 45;
 }
 
-function stringsIn(node, out = []) {
+/**
+ * Every string literal anywhere below a node.
+ *
+ * Genuinely untyped by design: this runs over whatever a `className` expression
+ * turns out to be — a conditional, a `clsx()` call, a template — so it reads
+ * shapes rather than node types, and says so in its signature.
+ */
+function stringsIn(node: unknown, out: string[] = []): string[] {
 	if (!node || typeof node !== 'object') return out;
 	if (Array.isArray(node)) {
 		for (const n of node) stringsIn(n, out);
 		return out;
 	}
-	if (node.type === 'StringLiteral') out.push(node.value);
-	else if (node.type === 'TemplateElement') out.push(node.value?.cooked ?? node.value?.raw ?? '');
-	for (const key of Object.keys(node)) {
+	const rec = node as Record<string, unknown>;
+	if (rec['type'] === 'StringLiteral') {
+		if (typeof rec['value'] === 'string') out.push(rec['value']);
+	} else if (rec['type'] === 'TemplateElement') {
+		const v = rec['value'] as { cooked?: string; raw?: string } | undefined;
+		out.push(v?.cooked ?? v?.raw ?? '');
+	}
+	for (const key of Object.keys(rec)) {
 		if (key === 'loc' || key === 'type' || key === 'start' || key === 'end') continue;
-		stringsIn(node[key], out);
+		stringsIn(rec[key], out);
 	}
 	return out;
 }
 
 const CLASS_TOKEN = /^[a-z_][\w-]*$/i;
-function classesFrom(strings) {
-	const out = [];
+function classesFrom(strings: readonly string[]): string[] {
+	const out: string[] = [];
 	for (const s of strings) {
 		for (const t of s.split(/\s+/)) {
 			const c = t.trim();
@@ -91,8 +145,12 @@ function classesFrom(strings) {
  * whose value is unknown is noise) but they still mean the element carries an
  * inline style, which is what the component-level rule keys on.
  */
-function readStyleAttr(value) {
-	const decls = [];
+function readStyleAttr(value: JSXAttribute['value']): {
+	decls: Decl[];
+	dynamic: number;
+	present: boolean;
+} {
+	const decls: Decl[] = [];
 	let dynamic = 0;
 	const container = value?.type === 'JSXExpressionContainer' ? value.expression : value;
 	if (!container) return { decls, dynamic, present: false };
@@ -130,24 +188,25 @@ function readStyleAttr(value) {
  * an agent to make it an `HStack` is wrong advice at scale — it was the single
  * largest source of findings in a real repo.
  */
-export const isLayoutDecl = ({ prop, value }) =>
+export const isLayoutDecl = ({ prop, value }: Decl): boolean =>
 	FLEX_PROPS.has(prop) ||
 	GAP_PROPS.has(prop) ||
 	(prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value)) ||
 	prop.startsWith('grid-template') ||
 	prop.startsWith('grid-auto');
 
-function walkAst(node, visit) {
+function walkAst(node: unknown, visit: (n: Node) => void): void {
 	if (!node || typeof node !== 'object') return;
 	if (Array.isArray(node)) {
 		for (const n of node) walkAst(n, visit);
 		return;
 	}
-	if (typeof node.type === 'string') visit(node);
-	for (const key of Object.keys(node)) {
+	const rec = node as Record<string, unknown>;
+	if (typeof rec['type'] === 'string') visit(node as Node);
+	for (const key of Object.keys(rec)) {
 		if (key === 'loc' || key === 'start' || key === 'end' || key === 'leadingComments' || key === 'trailingComments')
 			continue;
-		walkAst(node[key], visit);
+		walkAst(rec[key], visit);
 	}
 }
 
@@ -157,19 +216,29 @@ function walkAst(node, visit) {
  * `__experimentalText`, so matching the raw specifier against `Text` never hits
  * and the typography-in-CSS rule silently degrades into a generic override.
  */
-function systemImports(ast, ds) {
-	const known = new Set();
-	const text = new Set();
-	const layout = new Set();
+function systemImports(
+	ast: File,
+	ds: DesignSystem,
+): {
+	known: Set<string>;
+	text: Set<string>;
+	layout: Set<string>;
+	componentImports: ComponentImport[];
+	packages: Map<string, string>;
+} {
+	const known = new Set<string>();
+	const text = new Set<string>();
+	const layout = new Set<string>();
 	// One entry per imported local: which package it actually came from, since
 	// the same canonical name can mean a stable component in one package and an
 	// experimental one in the other (Button, Notice, Popover, ...).
-	const componentImports = [];
+	const componentImports: ComponentImport[] = [];
 	// local name -> the package it came from, so a composite signature can say
 	// *whose* `Stack` this is. Names are the one thing design systems share.
-	const packages = new Map();
-	const canonical = (name) => (ds.normalizeExports ? name.replace(ds.normalizeExports, '') : name);
-	const fromPackage = (src) => ds.packages.some((p) => src === p || src.startsWith(`${p}/`));
+	const packages = new Map<string, string>();
+	const canonical = (name: string): string =>
+		ds.normalizeExports ? name.replace(ds.normalizeExports, '') : name;
+	const fromPackage = (src: string): boolean => ds.packages.some((p) => src === p || src.startsWith(`${p}/`));
 
 	for (const node of ast.program.body) {
 		if (node.type !== 'ImportDeclaration' || !fromPackage(node.source.value)) continue;
@@ -177,7 +246,9 @@ function systemImports(ast, ds) {
 			const local = spec.local.name;
 			const imported =
 				spec.type === 'ImportSpecifier'
-					? spec.imported.name || spec.imported.value
+					? spec.imported.type === 'Identifier'
+						? spec.imported.name
+						: spec.imported.value
 					: local;
 			const c = canonical(imported);
 			known.add(local);
@@ -190,36 +261,32 @@ function systemImports(ast, ds) {
 	return { known, text, layout, componentImports, packages };
 }
 
-/**
- * @returns {{ bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, componentImports, parseError }}
- *   bindings:         { cls, tag, isSystem, isText, isLayout, file, line }
- *   rawEls:           { tag, classes, file, line, inlineStyled }
- *   inlineStyles:     { tag, isSystem, isText, isLayout, decls, dynamic, file, line }
- *   componentImports: { canonical, package, line } — every system import, package-qualified
- */
-export function scanMarkup(text, relPath, ds) {
+export function scanMarkup(text: string, relPath: string, ds: DesignSystem): ScanResult {
 	const referenced = harvestTokens(text);
 	const stems = harvestStems(text);
-	const bindings = [];
-	const rawEls = [];
-	const inlineStyles = [];
-	const cssInJs = [];
-	const composites = [];
-	const imports = new Set();
+	const bindings: Binding[] = [];
+	const rawEls: RawElement[] = [];
+	const inlineStyles: InlineStyleElement[] = [];
+	const cssInJs: CssInJsTemplate[] = [];
+	const composites: Composite[] = [];
+	const imports = new Set<string>();
 
 	let ast;
 	try {
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, componentImports: [], parseError: err.message.split('\n')[0] };
+		return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, componentImports: [], parseError: messageOf(err) };
 	}
 
 	const { known, text: textLike, layout, componentImports, packages } = systemImports(ast, ds);
 	const tags = cssInJsLocals(ast, ds.cssInJsPackages);
 	// `<Button css={css`…`}>` binds a template to an element the walk sees
 	// first, so the owner is recorded before the template is reached.
-	const cssPropOwner = new Map();
+	const cssPropOwner = new Map<
+		number,
+		{ target: string; isSystem: boolean; isText: boolean; isLayout: boolean }
+	>();
 	for (const node of ast.program.body)
 		if (node.type === 'ImportDeclaration') for (const sp of node.specifiers) imports.add(sp.local.name);
 
@@ -238,15 +305,16 @@ export function scanMarkup(text, relPath, ds) {
  * is a child in every sense that matters here, and stopping at the container
  * would make a mapped list look empty.
  */
-	const jsxChildElements = (el) => {
-		const out = [];
-		const dig = (n) => {
+	const jsxChildElements = (el: JSXElement): JSXElement[] => {
+		const out: JSXElement[] = [];
+		const dig = (n: unknown): void => {
 			if (!n || typeof n !== 'object') return;
 			if (Array.isArray(n)) return n.forEach(dig);
-			if (n.type === 'JSXElement') return void out.push(n);
-			for (const k of Object.keys(n)) if (k !== 'loc' && k !== 'start' && k !== 'end') dig(n[k]);
+			const rec = n as Record<string, unknown>;
+			if (rec['type'] === 'JSXElement') return void out.push(n as JSXElement);
+			for (const k of Object.keys(rec)) if (k !== 'loc' && k !== 'start' && k !== 'end') dig(rec[k]);
 		};
-		for (const c of el.children || []) dig(c);
+		for (const c of el.children ?? []) dig(c);
 		return out;
 	};
 
@@ -254,23 +322,25 @@ export function scanMarkup(text, relPath, ds) {
 	// composite tree even though only `Card` is ever imported — keep the full
 	// dotted name so they don't collapse into one indistinguishable node, but
 	// test import membership against the object half.
-	const jsxName = (el) => {
-		const n = el?.openingElement?.name;
-		if (n?.type === 'JSXIdentifier') return n.name;
-		if (n?.type === 'JSXMemberExpression') return n.object?.name ? `${n.object.name}.${n.property?.name ?? '?'}` : null;
+	const jsxName = (el: JSXElement): string | null => {
+		const n = el.openingElement.name;
+		if (n.type === 'JSXIdentifier') return n.name;
+		if (n.type === 'JSXMemberExpression')
+			return n.object.type === 'JSXIdentifier' ? `${n.object.name}.${n.property.name}` : null;
 		return null;
 	};
-	const baseOf = (name) => name.split('.', 1)[0];
+	const baseOf = (name: string): string => name.split('.', 1)[0] ?? name;
 
-	const readComposite = (el) => {
+	const readComposite = (el: JSXElement): void => {
 		const name = jsxName(el);
 		if (!name || !known.has(baseOf(name))) return;
 		const tree = systemTree(
-			{ ...el, line: el.loc?.start?.line ?? 1 },
+			el,
 			(n) => known.has(baseOf(n)),
 			jsxChildElements,
 			jsxName,
-			(n) => packages.get(baseOf(n)) || null
+			(n) => packages.get(baseOf(n)) ?? null,
+			el.loc?.start?.line ?? 1,
 		);
 		// A lone component is not a composition, and reporting one would drown
 		// every real finding in the file.
@@ -285,21 +355,22 @@ export function scanMarkup(text, relPath, ds) {
 		});
 	};
 
-	const readTaggedTemplate = (node) => {
+	const readTaggedTemplate = (node: TaggedTemplateExpression): void => {
 		if (!tags.any) return;
 		const t = node.tag;
-		const owner = cssPropOwner.get(node.start);
-		let target = null;
+		const owner = typeof node.start === 'number' ? cssPropOwner.get(node.start) : undefined;
+		let target: string | null = null;
 		let isSystem = false;
 		if (owner) {
 			({ target, isSystem } = owner);
-			if (!tags.bare.has(t.name) && !tags.styled.has(t.object?.name) && !tags.styled.has(t.callee?.name)) return;
-		} else if (t.type === 'MemberExpression' && tags.styled.has(t.object?.name)) {
-			target = t.property?.name ?? null; // styled.div
-		} else if (t.type === 'CallExpression' && tags.styled.has(t.callee?.name)) {
-			target = t.arguments?.[0]?.name ?? null; // styled(Button)
+			if (!held(tags.bare, identifierOf(t)) && !held(tags.styled, memberObject(t)) && !held(tags.styled, calleeOf(t)))
+				return;
+		} else if (held(tags.styled, memberObject(t))) {
+			target = memberProperty(t) ?? null; // styled.div
+		} else if (held(tags.styled, calleeOf(t))) {
+			target = firstArgOf(t) ?? null; // styled(Button)
 			isSystem = Boolean(target && known.has(target));
-		} else if (t.type === 'Identifier' && tags.bare.has(t.name)) {
+		} else if (held(tags.bare, identifierOf(t))) {
 			target = null; // css`…`, createGlobalStyle`…`
 		} else {
 			return; // gql`…`, html`…`, keyframes`…` — not CSS we own
@@ -312,8 +383,8 @@ export function scanMarkup(text, relPath, ds) {
 			line,
 			target,
 			isSystem,
-			isText: isSystem && textLike.has(target),
-			isLayout: isSystem && layout.has(target),
+			isText: isSystem && target !== null && textLike.has(target),
+			isLayout: isSystem && target !== null && layout.has(target),
 			groups,
 			error,
 		});
@@ -328,29 +399,29 @@ export function scanMarkup(text, relPath, ds) {
 			name.type === 'JSXIdentifier'
 				? name.name
 				: name.type === 'JSXMemberExpression'
-					? `${name.object?.name ?? '?'}.${name.property?.name ?? '?'}`
+					? `${name.object.type === 'JSXIdentifier' ? name.object.name : '?'}.${name.property.name}`
 					: null;
 		if (!tag) return;
 		const line = node.loc?.start?.line ?? 1;
 
-		const strings = [];
-		let style = null;
-		let cssAttr = null;
+		const strings: string[] = [];
+		let style: ReturnType<typeof readStyleAttr> | null = null;
+		let cssAttr: JSXAttribute['value'] = null;
 		for (const attr of node.attributes) {
 			if (attr.type !== 'JSXAttribute') continue;
-			const an = attr.name?.name;
+			const an = attr.name.type === 'JSXIdentifier' ? attr.name.name : attr.name.name.name;
 			if (an === 'className' || an === 'class') stringsIn(attr.value, strings);
 			else if (an === 'style') style = readStyleAttr(attr.value);
 			else if (an === 'css') cssAttr = attr.value;
 		}
 		const classes = classesFrom(strings);
 
-		const root = tag.split('.')[0];
+		const root = tag.split('.')[0] ?? tag;
 		const isComponent = /^[A-Z]/.test(root);
 		const isSystem = isComponent && known.has(root);
 
 		const owned = cssAttr?.type === 'JSXExpressionContainer' ? cssAttr.expression : null;
-		if (owned?.type === 'TaggedTemplateExpression')
+		if (owned?.type === 'TaggedTemplateExpression' && typeof owned.start === 'number')
 			cssPropOwner.set(owned.start, {
 				target: isComponent ? root : tag.toLowerCase(),
 				isSystem,

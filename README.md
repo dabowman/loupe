@@ -422,38 +422,53 @@ Known limits, in rough priority order:
 ```bash
 cd engine
 npm install
-npm test
+npm test           # typecheck, then all six suites
 npm run build      # rebuild dist/loupe.mjs, and commit it
 ```
 
-The engine exists twice on purpose. `engine/src/` is the code. `engine/dist/loupe.mjs`
-is that code bundled with `@babel/parser`, `picomatch` and `postcss`, committed
-to the repo, and rebuilt by `npm run build`.
+The engine is TypeScript, checked with `strict` plus
+`noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. `npm run typecheck`
+is its own gate rather than a side effect of the build: esbuild transpiles
+TypeScript by stripping types, never checking them, so a bundle that builds is
+not a bundle that type-checks. CI runs both.
+
+The engine exists twice on purpose. `engine/src/` is the code.
+`engine/dist/loupe.mjs` is that code transpiled and bundled with
+`@babel/parser`, `picomatch` and `postcss`, committed to the repo, and rebuilt
+by `npm run build`.
 
 Committing a build artifact is not free, and the reason is narrow: nothing in a
-marketplace install runs `npm install` on a plugin's behalf. Without the bundle,
-an engine that imports `picomatch` at load time throws on every hook run for
-everyone who installed this the normal way, which is the only way most people
-will.
+marketplace install runs `npm install` on a plugin's behalf, and no version of
+Node runs `.ts` from a bare `node` invocation. Without the bundle, the engine
+throws on every hook run for everyone who installed this the normal way, which
+is the only way most people will.
 
 Two things keep the artifact from becoming a second source of truth:
 
 - `engine/bin/loupe.mjs` — the entry point the hooks, the commands and the
-  `loupe` shim all reach — runs **source** wherever the deps are installed, and
-  the bundle everywhere else. A checkout with `node_modules` in it is a checkout
-  someone is editing, and pinning that to a bundle would mean edits to `src/`
-  silently doing nothing until a rebuild. That is a gate reporting yesterday's
-  verdict on today's code — the exact failure this engine exists to refuse.
+  `loupe` shim all reach — runs **source** wherever the dev toolchain is
+  installed, and the bundle everywhere else. A checkout with `node_modules` in
+  it is a checkout someone is editing, and pinning that to a bundle would mean
+  edits to `src/` silently doing nothing until a rebuild. That is a gate
+  reporting yesterday's verdict on today's code — the exact failure this engine
+  exists to refuse. (`tsx` is what lets that file import a `.ts` entry point at
+  all; absent it, the bundle.)
 - `npm run build:check` re-bundles and compares. It is what CI runs, and it is
   the only thing standing between a `src/` change and a marketplace install
   still serving the version before it, because the staleness is invisible on the
   machine where the edit happened.
 
-`dist/` sits at the same depth as `src/` so the engine's three `import.meta.url`
+`dist/` sits at the same depth as `src/` so the engine's `import.meta.url`
 lookups — the preset directory, the plugin manifest — resolve identically from
 either entry. Presets stay on disk as JSON next to the bundle rather than inside
 it: `loupe presets` lists that directory, and a preset you can read is a preset
 you can copy.
+
+The type model lives in `engine/src/types.ts`, and two distinctions in it carry
+most of the weight: `AuthoredConfig` (a config file, partial all the way down)
+against `MergedConfig` (every field present, post-`normalize`), and the
+`ClassifiedFinding` → `PendingFinding` → `Finding` progression that separates
+what the shared classifier decided from what a formatter is allowed to see.
 
 ## Tests
 
@@ -461,17 +476,23 @@ you can copy.
 cd engine && npm test
 ```
 
-Five suites. `tests/run.mjs` is fixture-driven, one directory per behaviour,
-each with a note explaining what it pins down — since behaviour is config-driven,
-this is the only thing standing between a preset edit and a rule silently
-switching itself off. `tests/detect.mjs` covers inference, which runs in every
-project that has no config file. `tests/regressions.mjs` covers the failures that
-reported *success*: a scan that never finished, a project's own class reported as
-a third-party internal, an absolute path that matched nothing and returned clean.
-`tests/features.mjs` covers the three channels and the two cross-file rules —
-everything that reports across a boundary a single-file linter cannot see.
-`tests/autofix.mjs` covers `fix`, where every failure is invisible: the value is
-right, the file parses, the report goes clean, and the meaning has changed.
+Five suites over a shared harness. `tests/run.ts` is fixture-driven, one
+directory per behaviour, each with a note explaining what it pins down — since
+behaviour is config-driven, this is the only thing standing between a preset
+edit and a rule silently switching itself off. `tests/detect.ts` covers
+inference, which runs in every project that has no config file.
+`tests/regressions.ts` covers the failures that reported *success*: a scan that
+never finished, a project's own class reported as a third-party internal, an
+absolute path that matched nothing and returned clean. `tests/features.ts`
+covers the three channels and the two cross-file rules — everything that reports
+across a boundary a single-file linter cannot see. `tests/autofix.ts` covers
+`fix`, where every failure is invisible: the value is right, the file parses, the
+report goes clean, and the meaning has changed.
+
+`tests/harness.ts` holds what all five were carrying their own copy of —
+`check`, `assert`, the scratch-repo helpers — plus `one()` and `first()`, which
+read a single expected element out of a result list and fail with the count when
+there isn't one.
 
 Those are the ones worth a test. A gate that errors gets noticed; a gate that
 says "clean" for the wrong reason does not, and every failure mode here breaks

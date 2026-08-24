@@ -9,10 +9,15 @@
  * installable without a toolchain.
  *
  * Two things keep the artifact honest rather than a second source of truth:
- * `bin/loupe.mjs` prefers `src/` wherever the deps are installed, so a checkout
- * someone is editing never runs the bundle; and `--check` re-bundles and
- * compares, which is what CI runs to reject a commit whose `dist/` no longer
- * matches its `src/`.
+ * `bin/loupe.mjs` prefers `src/` wherever the dev toolchain is installed, so a
+ * checkout someone is editing never runs the bundle; and `--check` re-bundles
+ * and compares, which is what CI runs to reject a commit whose `dist/` no
+ * longer matches its `src/`.
+ *
+ * esbuild transpiles TypeScript itself — it strips types, it does not check
+ * them — so this needs no `tsc` step ahead of it. Type checking is `npm run
+ * typecheck`, and both run in CI: a bundle that builds is not a bundle that
+ * type-checks, and neither one substitutes for the other.
  *
  * `dist/` deliberately sits at the same depth as `src/`: the engine resolves the
  * preset directory and the plugin manifest relative to `import.meta.url`, and
@@ -42,7 +47,7 @@ const banner = [
 ].join('\n');
 
 const result = await build({
-	entryPoints: [join(HERE, 'src', 'cli.mjs')],
+	entryPoints: [join(HERE, 'src', 'cli.ts')],
 	bundle: true,
 	platform: 'node',
 	format: 'esm',
@@ -54,14 +59,19 @@ const result = await build({
 	// in that directory, and a preset you can read is a preset you can copy.
 	external: ['postcss-sass', 'postcss-styl'],
 	logOverride: {
-		// `import(pkg)` in syntax.mjs is deliberately unresolvable: the two
+		// `import(pkg)` in syntax.ts is deliberately unresolvable: the two
 		// syntaxes not shipped as deps are left for the host to provide.
 		'unsupported-dynamic-import': 'silent',
 	},
 	legalComments: 'none',
 });
 
-const next = result.outputFiles[0].text;
+const [output] = result.outputFiles;
+if (!output) {
+	process.stderr.write('esbuild produced no output.\n');
+	process.exit(1);
+}
+const next = output.text;
 
 if (check) {
 	const current = existsSync(OUT) ? readFileSync(OUT, 'utf8') : null;

@@ -12,18 +12,44 @@
  */
 
 import { readFileSync, statSync } from 'node:fs';
-import { RULES } from './rules.mjs';
-import { discover } from './discover.mjs';
-import { makeSuppressionParser, isSuppressed } from './suppressions.mjs';
-import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.mjs';
-import { syntaxFor } from './syntax.mjs';
-import { SUBSTANTIAL, matches } from './patterns.mjs';
-import { emptyTokenSet, harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.mjs';
+import { RULES } from './rules.ts';
+import { discover } from './discover.ts';
+import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
+import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.ts';
+import { syntaxFor } from './syntax.ts';
+import { SUBSTANTIAL, matches } from './patterns.ts';
+import { harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
 import {
 	APPEARANCE_PROPS, FLEX_PROPS, GAP_PROPS, TYPE_PROPS,
 	classesIn, classifyMargin, isHardcodedTokenValue, isInertValue, keySelector, ownDecls,
 	resolvedSelectors, ruleIsGrid, usesToken,
-} from './styles.mjs';
+} from './styles.ts';
+import type {
+	AnalyzeResult,
+	Binding,
+	ClassifiedFinding,
+	ClassifyContext,
+	ComponentImport,
+	Composite,
+	Config,
+	CssInJsTemplate,
+	Decl,
+	Diagnostics,
+	Directive,
+	Finding,
+	Hint,
+	InlineStyleElement,
+	Pattern,
+	PendingFinding,
+	RawElement,
+	RuleId,
+	Suppressions,
+	TokenSet,
+} from './types.ts';
+
+/** First line of an unknown throw — a parser may reject with anything. */
+const messageOf = (err: unknown): string =>
+	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
 
 /**
  * Which rule, if any, a single declaration violates.
@@ -41,7 +67,10 @@ import {
  * `styling` reports whether the declaration counts as styling the element at
  * all, which feeds the raw-element and dead-class logic.
  */
-function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {} }) {
+function classifyDeclaration(
+	{ prop, value }: Decl,
+	{ boundSystem = [], boundText = [], isGrid = false, options = {} }: ClassifyContext,
+): { finding: ClassifiedFinding | null; styling: boolean } {
 	const isMargin = prop === 'margin' || prop.startsWith('margin-');
 	const marginKind = isMargin ? classifyMargin(value) : null;
 	const isFlexish = FLEX_PROPS.has(prop) || (prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value));
@@ -49,10 +78,10 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
 	const styling =
 		isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
 
-	let finding = null;
-	if (TYPE_PROPS.has(prop) && boundText.length) {
+	let finding: ClassifiedFinding | null = null;
+	if (TYPE_PROPS.has(prop) && boundText[0]) {
 		finding = { rule: 'typography/in-css', message: `${prop} on <${boundText[0].tag}>` };
-	} else if (boundSystem.length && APPEARANCE_PROPS.has(prop)) {
+	} else if (boundSystem[0] && APPEARANCE_PROPS.has(prop)) {
 		finding = { rule: 'system/override', message: `<${boundSystem[0].tag}> \u2190 ${prop}` };
 	} else if (isMargin) {
 		// Zero and `auto` classify as null: a reset and a centering trick,
@@ -90,36 +119,42 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
  */
 const COLLAPSE_PER_RULE = new Set(['layout/in-css', 'typography/untokenized']);
 
-function collapsePerRule(pending) {
-	const out = [];
-	const groups = new Map();
+function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
+	const out: PendingFinding[] = [];
+	const groups = new Map<RuleId, PendingFinding[]>();
 	for (const f of pending) {
 		if (!COLLAPSE_PER_RULE.has(f.rule)) {
 			out.push(f);
 			continue;
 		}
-		if (!groups.has(f.rule)) groups.set(f.rule, []);
-		groups.get(f.rule).push(f);
+		const group = groups.get(f.rule) ?? [];
+		group.push(f);
+		groups.set(f.rule, group);
 	}
 	for (const [rule, group] of groups) {
+		const first = group[0];
+		if (!first) continue;
 		if (group.length === 1) {
-			out.push(group[0]);
+			out.push(first);
 			continue;
 		}
-		const props = [...new Set(group.map((f) => String(f.message).split(':')[0].trim()))];
+		const props = [...new Set(group.map((f) => (f.message.split(':')[0] ?? f.message).trim()))];
 		out.push({
-			...group[0],
+			...first,
 			rule,
 			message: group.map((f) => f.message).join('; '),
-			hints: group.flatMap((f) => f.hints || (f.hint ? [f.hint] : [])),
-			suffix: group[0].suffix,
+			hints: group.flatMap((f) => f.hints ?? (f.hint ? [f.hint] : [])),
+			suffix: first.suffix,
 			code: `${rule}:${props.sort().join(',')}`,
 		});
 	}
 	return out;
 }
 
-export async function analyze(config, { scope = null } = {}) {
+export async function analyze(
+	config: Config,
+	{ scope = null }: { scope?: readonly string[] | null } = {},
+): Promise<AnalyzeResult> {
 	const ds = config.designSystem;
 	const parseSuppressions = makeSuppressionParser(config.suppression);
 	const files = discover({ root: config.root, sources: config.sources });
@@ -128,7 +163,7 @@ export async function analyze(config, { scope = null } = {}) {
 	// than every finding it could produce, and one 10MB checked-in emscripten
 	// file was on its own enough to push a repo scan past every hook timeout.
 	const MAX_BYTES = 1_500_000;
-	const tooBig = (abs) => {
+	const tooBig = (abs: string): boolean => {
 		try {
 			return statSync(abs).size > MAX_BYTES;
 		} catch {
@@ -140,32 +175,43 @@ export async function analyze(config, { scope = null } = {}) {
 	// with anything the project defines itself. Without it a finding can only
 	// name a namespace, and an agent told `13px` is hardcoded invents
 	// `--wpds-font-size-13` rather than looking one up.
-	const tokenPrefixes = ds.tokenPrefixes || [];
-	const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
-	const unknownTokens = []; // resolved after the walk: an empty token set proves nothing
+	const tokenPrefixes = ds.tokenPrefixes ?? [];
+	const tokenSet: TokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
+	/** Resolved after the walk: an empty token set proves nothing. */
+	const unknownTokens: {
+		file: string;
+		line: number;
+		name: string;
+		scopeLines: number[];
+		supp: Suppressions;
+	}[] = [];
 
-	const findings = [];
-	const directives = [];
-	const diagnostics = { parseErrors: [], filesScanned: 0 };
-	const suppByFile = new Map();
+	const findings: Finding[] = [];
+	const directives: Directive[] = [];
+	const diagnostics: Diagnostics = { parseErrors: [], filesScanned: 0 };
+	const suppByFile = new Map<string, Suppressions>();
 	const inScope = scope ? new Set(scope) : null;
-	const reports = (rel) => !inScope || inScope.has(rel);
+	const reports = (rel: string): boolean => !inScope || inScope.has(rel);
 
-	const suppressionsFor = (rel, text) => {
-		if (!suppByFile.has(rel)) suppByFile.set(rel, parseSuppressions(text, rel));
-		return suppByFile.get(rel);
+	const suppressionsFor = (rel: string, text: string): Suppressions => {
+		const cached = suppByFile.get(rel);
+		if (cached) return cached;
+		const parsed = parseSuppressions(text, rel);
+		suppByFile.set(rel, parsed);
+		return parsed;
 	};
 
 	// ── index markup, repo-wide ───────────────────────────────────────────────
-	const referenced = new Set();
-	const stems = new Set();
-	const bindings = new Map(); // class -> binding[]
-	const rawEls = [];
-	const inlineStyles = [];
-	const cssInJs = [];
-	const composites = [];
-	const importsByFile = new Map();
-	const componentImports = [];
+	const referenced = new Set<string>();
+	const stems = new Set<string>();
+	/** class -> every component binding that carries it */
+	const bindings = new Map<string, Binding[]>();
+	const rawEls: RawElement[] = [];
+	const inlineStyles: InlineStyleElement[] = [];
+	const cssInJs: CssInJsTemplate[] = [];
+	const composites: Composite[] = [];
+	const importsByFile = new Map<string, Set<string>>();
+	const componentImports: ComponentImport[] = [];
 
 	for (const { abs, rel } of files.markup) {
 		if (tooBig(abs)) continue;
@@ -181,15 +227,17 @@ export async function analyze(config, { scope = null } = {}) {
 		scanned.referenced.forEach((t) => referenced.add(t));
 		scanned.stems.forEach((s) => stems.add(s));
 		for (const b of scanned.bindings) {
-			if (!bindings.has(b.cls)) bindings.set(b.cls, []);
-			bindings.get(b.cls).push(b);
+			if (b.cls === undefined) continue;
+			const group = bindings.get(b.cls) ?? [];
+			group.push(b);
+			bindings.set(b.cls, group);
 		}
 		rawEls.push(...scanned.rawEls);
-		inlineStyles.push(...(scanned.inlineStyles || []));
-		cssInJs.push(...(scanned.cssInJs || []));
-		composites.push(...(scanned.composites || []));
+		inlineStyles.push(...scanned.inlineStyles);
+		cssInJs.push(...scanned.cssInJs);
+		composites.push(...scanned.composites);
 		if (scanned.imports) importsByFile.set(rel, scanned.imports);
-		for (const ci of scanned.componentImports || []) componentImports.push({ ...ci, file: rel });
+		for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
 		suppressionsFor(rel, text);
 	}
 
@@ -204,13 +252,13 @@ export async function analyze(config, { scope = null } = {}) {
 	}
 
 	const stemList = [...stems];
-	const isReferenced = (cls) =>
+	const isReferenced = (cls: string): boolean =>
 		referenced.has(cls) || config.isNeverDead(cls) || stemList.some((s) => cls.startsWith(s));
 
 	// ── walk CSS ──────────────────────────────────────────────────────────────
-	const styledClasses = new Set(); // classes CSS actually styles — feeds system/raw-element
-	const layoutClasses = new Set(); // classes whose CSS lays something out — feeds the same rule for div/span
-	const seenDead = new Set(); // `${file}\u0000${class}` — report each once per file
+	const styledClasses = new Set<string>(); // classes CSS actually styles — feeds system/raw-element
+	const layoutClasses = new Set<string>(); // classes whose CSS lays something out — feeds the same rule for div/span
+	const seenDead = new Set<string>(); // `${file}\u0000${class}` — report each once per file
 
 	for (const { abs, rel } of files.styles) {
 		let text;
@@ -223,7 +271,7 @@ export async function analyze(config, { scope = null } = {}) {
 		const supp = suppressionsFor(rel, text);
 		// A stylesheet we cannot read is a hole in coverage, not a diagnostic:
 		// it reports as a finding so a clean run always means "checked and clean".
-		const unparsed = (message) => {
+		const unparsed = (message: string): void => {
 			diagnostics.parseErrors.push({ file: rel, message });
 			if (config.enabled['stylesheet/unparsed'] && reports(rel))
 				findings.push({
@@ -243,7 +291,7 @@ export async function analyze(config, { scope = null } = {}) {
 		}
 
 		const syntax = await syntaxFor(rel);
-		if (syntax.missing) {
+		if (syntax.missing !== undefined) {
 			unparsed(`needs \`npm i -D ${syntax.missing}\` to be checked`);
 			continue;
 		}
@@ -252,11 +300,11 @@ export async function analyze(config, { scope = null } = {}) {
 		try {
 			root = syntax.parse(text, { from: abs });
 		} catch (err) {
-			unparsed(err.message.split('\n')[0]);
+			unparsed(messageOf(err));
 			continue;
 		}
 
-		const emit = ({ rule, line, message, code, scopeLines = [], hint, hints }) => {
+		const emit = ({ rule, line, message, code, scopeLines = [], hint, hints }: PendingFinding): void => {
 			if (!config.enabled[rule] || !reports(rel)) return;
 			if (isSuppressed(supp.byLine, line, rule, scopeLines)) return;
 			findings.push({
@@ -283,7 +331,7 @@ export async function analyze(config, { scope = null } = {}) {
 
 			// Bindings correlate against the KEY selector only: `.card .title`
 			// styles `.title`, so `.card`'s component must not answer for it.
-			const bound = keyClasses.flatMap((c) => bindings.get(c) || []);
+			const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
 			const boundSystem = bound.filter((b) => b.isSystem);
 			const boundText = bound.filter((b) => b.isText);
 			const isGrid = ruleIsGrid(cssRule);
@@ -294,7 +342,7 @@ export async function analyze(config, { scope = null } = {}) {
 			// Held rather than emitted directly: if this rule turns out to target a
 			// third-party component's internals, "stop styling this" supersedes
 			// every per-declaration remedy inside it.
-			const pending = [];
+			const pending: PendingFinding[] = [];
 
 			for (const decl of ownDecls(cssRule)) {
 				const prop = decl.prop.toLowerCase();
@@ -342,9 +390,17 @@ export async function analyze(config, { scope = null } = {}) {
 	for (const el of inlineStyles) {
 		if (!reports(el.file)) continue;
 		const supp = suppByFile.get(el.file);
-		const muted = (rule, line) => supp && isSuppressed(supp.byLine, line, rule, [el.line, el.line - 1]);
+		const muted = (rule: RuleId, line: number): boolean =>
+			supp !== undefined && isSuppressed(supp.byLine, line, rule, [el.line, el.line - 1]);
 
-		const push = (rule, line, message, code, hints, suffix) => {
+		const push = (
+			rule: RuleId,
+			line: number,
+			message: string,
+			code?: string,
+			hints?: Hint[],
+			suffix?: string,
+		): void => {
 			if (!config.enabled[rule] || muted(rule, line)) return;
 			findings.push({
 				rule,
@@ -378,14 +434,14 @@ export async function analyze(config, { scope = null } = {}) {
 		const isGrid = el.decls.some(
 			(d) => (d.prop === 'display' && /\bgrid\b/.test(d.value)) || d.prop.startsWith('grid-template') || d.prop.startsWith('grid-auto')
 		);
-		const pending = [];
+		const pending: PendingFinding[] = [];
 		for (const d of el.decls) {
 			const { finding } = classifyDeclaration(d, { isGrid, options: config.optionsOf('tokens/hardcoded-value') });
 			if (finding)
 				pending.push({ ...finding, line: d.line ?? el.line, code: finding.code ?? finding.message, suffix: ' (inline)' });
 		}
 		for (const f of collapsePerRule(pending))
-			push(f.rule, f.line, `${f.message}${f.suffix ?? ''}`, f.code, f.hints || (f.hint ? [f.hint] : undefined), f.suffix);
+			push(f.rule, f.line, `${f.message}${f.suffix ?? ''}`, f.code, f.hints ?? (f.hint ? [f.hint] : undefined), f.suffix);
 	}
 
 	// ── CSS-in-JS template literals ───────────────────────────────────────────
@@ -403,22 +459,23 @@ export async function analyze(config, { scope = null } = {}) {
 			continue;
 		}
 
-		const boundSystem = tpl.isSystem ? [{ tag: tpl.target, isSystem: true }] : [];
-		const boundText = tpl.isText ? [{ tag: tpl.target, isText: true }] : [];
+		const boundSystem: Binding[] = tpl.isSystem ? [{ tag: tpl.target, isSystem: true }] : [];
+		const boundText: Binding[] = tpl.isText ? [{ tag: tpl.target, isSystem: true, isText: true }] : [];
 
 		for (const group of tpl.groups) {
 			const onTarget = group.onTarget;
-			const pending = [];
+			const pending: PendingFinding[] = [];
 			for (const d of group.decls) {
-				for (const name of tokenRefsIn(d.value, tokenPrefixes))
-					unknownTokens.push({ file: tpl.file, line: d.line, name, scopeLines: [tpl.line], supp });
+				if (supp)
+					for (const name of tokenRefsIn(d.value, tokenPrefixes))
+						unknownTokens.push({ file: tpl.file, line: d.line ?? tpl.line, name, scopeLines: [tpl.line], supp });
 				const { finding } = classifyDeclaration(d, {
 					boundSystem: onTarget ? boundSystem : [],
 					boundText: onTarget ? boundText : [],
 					isGrid: group.isGrid,
 					options: config.optionsOf('tokens/hardcoded-value'),
 				});
-				if (finding) pending.push({ ...finding, line: d.line });
+				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
 			}
 			const where = group.selector ? ` in \`${group.selector}\`` : '';
 			for (const f of collapsePerRule(pending)) {
@@ -433,7 +490,7 @@ export async function analyze(config, { scope = null } = {}) {
 				suffix: `${where} (css-in-js)`,
 					code: `css-in-js:${f.code ?? f.message}`,
 					rank: RULES[f.rule].rank,
-					hints: f.hints || (f.hint ? [f.hint] : undefined),
+					hints: f.hints ?? (f.hint ? [f.hint] : undefined),
 				});
 			}
 		}
@@ -480,32 +537,33 @@ export async function analyze(config, { scope = null } = {}) {
 
 		// Largest match wins: a page header contains an action bar, and reporting
 		// both says the same thing twice at two levels of the same tree.
-		const bestMatch = (c) =>
+		const bestMatch = (c: Composite): Pattern | null =>
 			registry
 				.filter((p) => p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree))
-				.sort((a, b) => b.size - a.size)[0] || null;
+				.sort((a, b) => b.size - a.size)[0] ?? null;
 
-		const byPattern = new Map(); // pattern id -> file -> best instance
-		const bySignature = new Map(); // signature -> file -> best instance
+		const byPattern = new Map<string, Map<string, Composite>>(); // pattern id -> file -> best instance
+		const bySignature = new Map<string, Map<string, Composite>>(); // signature -> file -> best instance
 		for (const c of composites) {
 			const hit = dupEnabled ? bestMatch(c) : null;
 			if (hit) {
 				// A file that already imports the shared implementation is using the
 				// pattern, not rebuilding it.
 				if (hit.canonical && importsByFile.get(c.file)?.has(hit.canonical)) continue;
-				const key = hit.id;
-				if (!byPattern.has(key)) byPattern.set(key, new Map());
-				const prev = byPattern.get(key).get(c.file);
-				if (!prev || c.size > prev.size) byPattern.get(key).set(c.file, { ...c, pattern: hit });
+				const perFile = byPattern.get(hit.id) ?? new Map<string, Composite>();
+				byPattern.set(hit.id, perFile);
+				const prev = perFile.get(c.file);
+				if (!prev || c.size > prev.size) perFile.set(c.file, { ...c, pattern: hit });
 				continue;
 			}
 			if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
-			if (!bySignature.has(c.signature)) bySignature.set(c.signature, new Map());
-			const prev = bySignature.get(c.signature).get(c.file);
-			if (!prev || c.line < prev.line) bySignature.get(c.signature).set(c.file, c);
+			const perFile = bySignature.get(c.signature) ?? new Map<string, Composite>();
+			bySignature.set(c.signature, perFile);
+			const prev = perFile.get(c.file);
+			if (!prev || c.line < prev.line) perFile.set(c.file, c);
 		}
 
-		const emitComposite = (rule, c, message) => {
+		const emitComposite = (rule: RuleId, c: Composite, message: string): void => {
 			if (!reports(c.file)) return;
 			const supp = suppByFile.get(c.file);
 			if (supp && isSuppressed(supp.byLine, c.line, rule)) return;
@@ -527,7 +585,7 @@ export async function analyze(config, { scope = null } = {}) {
 				// With no canonical implementation recorded there is nothing to import
 				// yet, and telling an agent to import it would send it looking for a
 				// module that does not exist.
-				const remedy = c.pattern.canonical ? `import \`${c.pattern.canonical}\`` : 'extract one shared implementation';
+				const remedy = c.pattern?.canonical ? `import \`${c.pattern.canonical}\`` : 'extract one shared implementation';
 				emitComposite(
 					'patterns/duplicate-composite',
 					c,
@@ -551,8 +609,9 @@ export async function analyze(config, { scope = null } = {}) {
 	// contextual, not mechanical, and belongs in the authoring skill, not a
 	// blocking check.
 	if (config.enabled['system/locked-component'] || config.enabled['system/superseded-component']) {
-		const seen = new Set(); // one finding per file+component+package, not per usage
+		const seen = new Set<string>(); // one finding per file+component+package, not per usage
 		for (const ci of componentImports) {
+			if (ci.file === undefined) continue;
 			const entry = config.componentRegistry.get(`${ci.package}::${ci.canonical}`);
 			if (!entry || (entry.status !== 'legacy' && entry.status !== 'locked')) continue;
 			const rule = entry.status === 'locked' ? 'system/locked-component' : 'system/superseded-component';
@@ -638,7 +697,7 @@ if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
 
 	// Dedupe: nesting and multi-selector rules can legitimately reach the same
 	// declaration twice.
-	const seen = new Set();
+	const seen = new Set<string>();
 	const unique = findings.filter((f) => {
 		const k = `${f.rule}|${f.file}|${f.line}|${f.message}`;
 		if (seen.has(k)) return false;
@@ -658,4 +717,5 @@ if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
 }
 
 /** Stable identity for baselining: survives reformatting and unrelated edits. */
-export const findingKey = (f) => `${f.rule}|${f.file}|${String(f.code ?? f.message).replace(/\s+/g, ' ').trim()}`;
+export const findingKey = (f: Pick<Finding, 'rule' | 'file' | 'code' | 'message'>): string =>
+	`${f.rule}|${f.file}|${String(f.code ?? f.message).replace(/\s+/g, ' ').trim()}`;

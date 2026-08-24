@@ -353,33 +353,63 @@ never silent).
 
 ## Source and bundle
 
-`src/` is the engine. `dist/loupe.mjs` is the same code bundled with its three
-dependencies, committed, and rebuilt by `npm run build` — a marketplace install
-runs no `npm install`, so without the bundle the engine throws on load for
+`src/` is the engine, in TypeScript. `dist/loupe.mjs` is the same code
+transpiled and bundled with its three dependencies, committed, and rebuilt by
+`npm run build` — a marketplace install runs no `npm install` and no version of
+Node runs `.ts` unaided, so without the bundle the engine throws on load for
 anyone who installed the plugin rather than cloned it.
 
 `bin/loupe.mjs` is the entry point every caller reaches, and it picks between
-them: source wherever `node_modules` is present (a checkout with deps installed
-is a checkout someone is editing, and running a bundle there would mean `src/`
-edits silently doing nothing), the bundle everywhere else. `npm run build:check`
-re-bundles and compares — CI runs it, because a stale `dist/` is invisible on
-the machine that made it stale.
+them: source wherever the dev toolchain is present (a checkout with
+`node_modules` in it is a checkout someone is editing, and running a bundle
+there would mean `src/` edits silently doing nothing), the bundle everywhere
+else. `npm run build:check` re-bundles and compares — CI runs it, because a
+stale `dist/` is invisible on the machine that made it stale.
+
+esbuild transpiles TypeScript itself; it strips types without checking them. So
+`npm run typecheck` is a separate gate, and both run in CI — a bundle that
+builds is not a bundle that type-checks.
 
 ```bash
 npm install
+npm run typecheck    # tsc, no emit
 npm run build        # rebuild dist/loupe.mjs, and commit it
 npm run build:check  # fail if dist/ no longer matches src/
 ```
 
+### Types
+
+`src/types.ts` holds the shapes more than one module speaks: `Finding`,
+`Config`, `Pattern`, the scan results. Rule ids and capability names are written
+out as unions rather than derived from `RULES`, so a typo is an error where it
+was typed rather than a silently-absent lookup downstream.
+
+Two distinctions in there carry most of the weight:
+
+- **`AuthoredConfig` vs `MergedConfig`.** A config file, a preset and an
+  inferred config are all partial *all the way down*; everything downstream of
+  `normalize` has every field present. Keeping them apart is what stops a
+  defaulted-but-absent field reading as a deliberate empty one.
+- **`ClassifiedFinding` → `PendingFinding` → `Finding`.** What the shared
+  classifier decides, what a channel walk has completed, and what a formatter
+  sees. `hints` and `suffix` exist only on the middle two.
+
+The compiler settings are the strict ones, `noUncheckedIndexedAccess` and
+`exactOptionalPropertyTypes` included. Fields that are deliberately assigned
+`undefined` say so (`suffix?: string | undefined`) rather than turning the flag
+off for everyone.
+
 ## Tests
 
 ```bash
-npm test
+npm test        # typecheck, then all six suites
 ```
 
-Five suites: `tests/run.mjs` (fixtures, one directory per behaviour),
-`tests/detect.mjs` (inference), `tests/regressions.mjs` (failures that reported
-success), `tests/features.mjs` (the three channels and the two cross-file rules),
-`tests/autofix.mjs` (the fix path, where a wrong substitution is invisible).
+Six suites: `tests/run.ts` (fixtures, one directory per behaviour),
+`tests/detect.ts` (inference), `tests/regressions.ts` (failures that reported
+success), `tests/features.ts` (the three channels and the two cross-file rules),
+`tests/autofix.ts` (the fix path, where a wrong substitution is invisible), and
+`tests/harness.ts` — not a suite but the `check`/`assert`/scratch-repo helpers
+the other five share, typed once instead of copied five times.
 Once behaviour is config-driven, these are the only thing standing between a
 preset edit and a rule silently switching itself off.

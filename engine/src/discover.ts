@@ -10,22 +10,25 @@ import { readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, relative, sep } from 'node:path';
 import picomatch from 'picomatch';
+import type { Discovered, DiscoveredFile, SourceGlobs, SourceKind } from './types.ts';
 
-export const toPosix = (p) => p.split(sep).join('/').split('\\').join('/');
+export const toPosix = (p: string): string => p.split(sep).join('/').split('\\').join('/');
+
+const KINDS = ['styles', 'markup', 'references'] as const satisfies readonly SourceKind[];
 
 /** Directory names always skipped, regardless of config — cheap traversal guard. */
 const HARD_SKIP = new Set(['.git', 'node_modules']);
 
-export function discover({ root, sources }) {
-	const ignore = picomatch(sources.ignore || []);
-	const matchers = {
-		styles: picomatch(sources.styles || []),
-		markup: picomatch(sources.markup || []),
-		references: picomatch(sources.references || []),
+export function discover({ root, sources }: { root: string; sources: SourceGlobs }): Discovered {
+	const ignore = picomatch(sources.ignore ?? []);
+	const matchers: Record<SourceKind, (p: string) => boolean> = {
+		styles: picomatch(sources.styles ?? []),
+		markup: picomatch(sources.markup ?? []),
+		references: picomatch(sources.references ?? []),
 	};
-	const out = { styles: [], markup: [], references: [] };
+	const out: Discovered = { styles: [], markup: [], references: [] };
 
-	const walk = (dir) => {
+	const walk = (dir: string): void => {
 		let entries;
 		try {
 			entries = readdirSync(dir, { withFileTypes: true });
@@ -42,14 +45,14 @@ export function discover({ root, sources }) {
 				walk(full);
 			} else if (e.isFile()) {
 				if (ignore(rel)) continue;
-				for (const kind of ['styles', 'markup', 'references']) {
-					if (matchers[kind](rel)) out[kind].push({ abs: full, rel });
+				for (const kind of KINDS) {
+					if (matchers[kind](rel)) out[kind].push({ abs: full, rel } satisfies DiscoveredFile);
 				}
 			}
 		}
 	};
 	walk(root);
-	for (const kind of Object.keys(out)) out[kind].sort((a, b) => a.rel.localeCompare(b.rel));
+	for (const kind of KINDS) out[kind].sort((a, b) => a.rel.localeCompare(b.rel));
 	return out;
 }
 
@@ -60,10 +63,10 @@ export function discover({ root, sources }) {
  * edit paid for a whole-repo index to be told there was nothing to say about a
  * README. On a large repo that alone was past the hook timeout.
  */
-export function isSource(sources, rel) {
-	const match = picomatch(sources.ignore || []);
+export function isSource(sources: SourceGlobs, rel: string): boolean {
+	const match = picomatch(sources.ignore ?? []);
 	if (match(rel)) return false;
-	return ['styles', 'markup', 'references'].some((kind) => picomatch(sources[kind] || [])(rel));
+	return KINDS.some((kind) => picomatch(sources[kind] ?? [])(rel));
 }
 
 /**
@@ -71,15 +74,15 @@ export function isSource(sources, rel) {
  * isn't a git worktree — callers map that to the "couldn't run" exit code
  * rather than silently analyzing everything.
  */
-export function changedFiles(root) {
-	const git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+export function changedFiles(root: string): Set<string> | null {
+	const git = (args: string[]): string => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 	try {
 		git(['rev-parse', '--is-inside-work-tree']);
 	} catch {
 		return null;
 	}
-	const set = new Set();
-	const add = (out) => {
+	const set = new Set<string>();
+	const add = (out: string): void => {
 		for (const line of out.split('\n')) {
 			const f = line.trim();
 			if (f) set.add(toPosix(f));

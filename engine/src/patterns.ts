@@ -17,33 +17,40 @@
  * rules only ever fired on code that already came from the pattern.
  */
 
+import type { Pattern, PatternNode } from './types.ts';
+
 /**
  * `"Stack"` → any `Stack`; `"@wordpress/components::Stack"` → that package's.
  *
  * Qualifying is opt-in per node. A registry scoped by its own `packages` field
- * (see registry.mjs) needs none of this; qualification is for the project that
+ * (see registry.ts) needs none of this; qualification is for the project that
  * imports two systems at once and needs `Stack` to mean one of them.
  */
-const split = (spec) => {
+const split = (spec: string): { name: string; pkg: string | null } => {
 	const i = spec.indexOf('::');
 	return i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
 };
 
 /** `[name, ...children]` → `{ name, pkg, children }`. A bare string is a leaf. */
-export function toNode(spec) {
+export function toNode(spec: unknown): PatternNode | null {
 	if (typeof spec === 'string') return { ...split(spec), children: [] };
 	if (!Array.isArray(spec) || !spec.length || typeof spec[0] !== 'string') return null;
-	return { ...split(spec[0]), children: spec.slice(1).map(toNode).filter(Boolean) };
+	return {
+		...split(spec[0]),
+		children: spec.slice(1).map(toNode).filter((n): n is PatternNode => n !== null),
+	};
 }
 
-export const signatureOf = (node) =>
+export const signatureOf = (node: PatternNode): string =>
 	node.children.length ? `${node.name}(${node.children.map(signatureOf).join(',')})` : node.name;
 
-export const nodeCount = (node) => 1 + node.children.reduce((n, c) => n + nodeCount(c), 0);
-export const depthOf = (node) => (node.children.length ? 1 + Math.max(...node.children.map(depthOf)) : 1);
+export const nodeCount = (node: PatternNode): number =>
+	1 + node.children.reduce((n, c) => n + nodeCount(c), 0);
+export const depthOf = (node: PatternNode): number =>
+	node.children.length ? 1 + Math.max(...node.children.map(depthOf)) : 1;
 
 /** Every node below `tree`, nearest first. */
-function descendants(tree, out = []) {
+function descendants(tree: PatternNode, out: PatternNode[] = []): PatternNode[] {
 	for (const c of tree.children) {
 		out.push(c);
 		descendants(c, out);
@@ -66,7 +73,7 @@ function descendants(tree, out = []) {
  * child first; a registered pattern is a handful of nodes, so the cases where
  * greedy loses to a smarter assignment do not arise in practice.
  */
-export function matches(pattern, tree) {
+export function matches(pattern: PatternNode, tree: PatternNode): boolean {
 	if (pattern.name !== tree.name) return false;
 	// Only when both sides know: an unqualified pattern node matches any package,
 	// and a tree node whose import could not be resolved is not evidence of a
@@ -84,17 +91,27 @@ export function matches(pattern, tree) {
 	return true;
 }
 
+/** A registry entry as authored: only `signature` is load-bearing. */
+interface RawPattern {
+	id?: string;
+	summary?: string;
+	canonical?: string | null;
+	signature?: unknown;
+}
+
 /** Normalize a registry file or inline array into matchable patterns. */
-export function loadPatterns(raw) {
-	const list = Array.isArray(raw) ? raw : raw?.patterns || [];
-	const out = [];
+export function loadPatterns(raw: unknown): Pattern[] {
+	const list: RawPattern[] = Array.isArray(raw)
+		? raw
+		: ((raw as { patterns?: RawPattern[] } | null)?.patterns ?? []);
+	const out: Pattern[] = [];
 	for (const p of list) {
-		const node = toNode(p.signature);
+		const node = toNode(p?.signature);
 		if (!node) continue;
 		out.push({
 			id: p.id || signatureOf(node),
-			summary: p.summary || '',
-			canonical: p.canonical || null,
+			summary: p.summary ?? '',
+			canonical: p.canonical ?? null,
 			node,
 			size: nodeCount(node),
 		});
@@ -110,25 +127,39 @@ export function loadPatterns(raw) {
  * and `<HStack><Button/></HStack>` have the same signature — which is the point,
  * since they are the same composition.
  */
-export function systemTree(el, isSystemName, childrenOf, nameOf, packageOf = () => null) {
+export function systemTree<E extends object>(
+	el: E,
+	isSystemName: (name: string) => boolean,
+	childrenOf: (el: E) => E[],
+	nameOf: (el: E) => string | null,
+	packageOf: (name: string) => string | null = () => null,
+	/** Only the root carries one; the walk descends into the host AST's own nodes. */
+	line?: number,
+): PatternNode | null {
 	const name = nameOf(el);
 	if (!name || !isSystemName(name)) return null;
 	return {
 		name,
 		pkg: packageOf(name),
 		children: systemChildren(el, isSystemName, childrenOf, nameOf, packageOf),
-		line: el.line,
+		...(line === undefined ? {} : { line }),
 	};
 }
 
-function systemChildren(el, isSystemName, childrenOf, nameOf, packageOf) {
-	const out = [];
+function systemChildren<E extends object>(
+	el: E,
+	isSystemName: (name: string) => boolean,
+	childrenOf: (el: E) => E[],
+	nameOf: (el: E) => string | null,
+	packageOf: (name: string) => string | null,
+): PatternNode[] {
+	const out: (PatternNode | null)[] = [];
 	for (const child of childrenOf(el)) {
 		const cname = nameOf(child);
 		if (cname && isSystemName(cname)) out.push(systemTree(child, isSystemName, childrenOf, nameOf, packageOf));
 		else out.push(...systemChildren(child, isSystemName, childrenOf, nameOf, packageOf));
 	}
-	return out.filter(Boolean);
+	return out.filter((n): n is PatternNode => n !== null);
 }
 
 /**

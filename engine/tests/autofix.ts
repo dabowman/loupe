@@ -8,27 +8,13 @@
  * reader, so it is the whole of this suite.
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { dirname } from 'node:path';
-import { analyze } from '../src/analyze.mjs';
-import { applyTokenFixes } from '../src/autofix.mjs';
-import { loadConfig } from '../src/config.mjs';
-
-let failed = 0;
-const check = async (name, fn) => {
-	try {
-		await fn();
-		console.log(`ok   ${name}`);
-	} catch (err) {
-		failed++;
-		console.log(`FAIL ${name}\n     ${err.message}`);
-	}
-};
-const assert = (cond, msg) => {
-	if (!cond) throw new Error(msg);
-};
+import { analyze } from '../src/analyze.ts';
+import { applyTokenFixes } from '../src/autofix.ts';
+import { loadConfig } from '../src/config.ts';
+import { assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
+import type { Finding, FixCandidate, SkippedFix, TokenFix } from '../src/types.ts';
 
 const CONFIG = JSON.stringify({ extends: 'wpds', namespaces: { project: ['wf-'] } });
 
@@ -39,25 +25,36 @@ const TOKENS = `:root {
 	--wpds-dimension-space-md: 8px;
 }`;
 
+interface Fixture {
+	applied: TokenFix[];
+	skipped: SkippedFix[];
+	read: (rel: string) => string;
+	findings: Finding[];
+}
+
 /** Analyze a throwaway repo, apply fixes, hand back what the files now say. */
-async function fixture(files) {
-	const root = mkdtempSync(join(tmpdir(), 'dsh-fix-'));
+async function fixture(files: Record<string, string>): Promise<Fixture> {
+	const root = scratch('dsh-fix-');
 	try {
 		const all = { 'loupe.config.json': CONFIG, 'styles/tokens.css': TOKENS, ...files };
-		for (const [rel, body] of Object.entries(all)) {
-			const p = join(root, rel);
-			mkdirSync(dirname(p), { recursive: true });
-			writeFileSync(p, body);
-		}
+		writeAll(root, all);
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		const result = await analyze(config, { scope: null });
 		const outcome = applyTokenFixes(root, result.findings);
 		// Read before the cleanup below: a closure over `root` would resolve
 		// against a directory this function has already removed.
-		const after = Object.fromEntries(Object.keys(all).map((rel) => [rel, readFileSync(join(root, rel), 'utf8')]));
-		return { ...outcome, read: (rel) => after[rel], findings: result.findings };
+		const after = new Map(Object.keys(all).map((rel) => [rel, readFileSync(join(root, rel), 'utf8')]));
+		return {
+			...outcome,
+			read: (rel: string): string => {
+				const text = after.get(rel);
+				assert(text !== undefined, `fixture did not write ${rel}`);
+				return text;
+			},
+			findings: result.findings,
+		};
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 }
 
@@ -108,36 +105,33 @@ await check('the JS channels are never rewritten as CSS', async () => {
 });
 
 await check('a stale line number skips rather than guesses', async () => {
-	const findings = [
+	const findings: FixCandidate[] = [
 		{ rule: 'tokens/hardcoded-value', file: 'styles/f.css', line: 99, suggest: [{ prop: 'border-radius', value: '4px', tokens: ['--wpds-border-radius-md'] }] },
 	];
-	const root = mkdtempSync(join(tmpdir(), 'dsh-fix-'));
+	const root = scratch('dsh-fix-');
 	try {
-		mkdirSync(join(root, 'styles'), { recursive: true });
-		writeFileSync(join(root, 'styles/f.css'), '.wf-f { border-radius: 4px; }');
+		write(root, 'styles/f.css', '.wf-f { border-radius: 4px; }');
 		const { applied, skipped } = applyTokenFixes(root, findings);
 		assert(!applied.length && skipped.length === 1, 'a line that does not exist must skip');
 		assert(readFileSync(join(root, 'styles/f.css'), 'utf8').includes('4px'), 'file must be untouched');
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
 await check('--dry-run reports without writing', async () => {
-	const root = mkdtempSync(join(tmpdir(), 'dsh-fix-'));
+	const root = scratch('dsh-fix-');
 	try {
-		mkdirSync(join(root, 'styles'), { recursive: true });
-		writeFileSync(join(root, 'styles/g.css'), '.wf-g { border-radius: 4px; }');
-		const findings = [
+		write(root, 'styles/g.css', '.wf-g { border-radius: 4px; }');
+		const findings: FixCandidate[] = [
 			{ rule: 'tokens/hardcoded-value', file: 'styles/g.css', line: 1, suggest: [{ prop: 'border-radius', value: '4px', tokens: ['--wpds-border-radius-md'] }] },
 		];
 		const { applied } = applyTokenFixes(root, findings, { dry: true });
 		assert(applied.length === 1, 'dry run still reports the fix');
 		assert(readFileSync(join(root, 'styles/g.css'), 'utf8').includes('4px'), 'dry run must not write');
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
-console.log(`\n${failed ? `${failed} failed` : 'all passed'}`);
-process.exit(failed ? 1 : 0);
+finish();

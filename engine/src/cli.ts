@@ -9,37 +9,84 @@
 
 import { existsSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { analyze } from './analyze.mjs';
-import { applyTokenFixes } from './autofix.mjs';
-import { applyBaseline, readBaseline, writeBaseline } from './baseline.mjs';
-import { findConfig, listPresets, loadConfig, setComponentRegistry, setPatterns } from './config.mjs';
-import { changedFiles, isSource, toPosix } from './discover.mjs';
-import { RULES, canonicalRuleId, renderTitle } from './rules.mjs';
-import { formatAgent, formatJson, formatSarif, formatSummary } from './report.mjs';
-import { detectConfig } from './detect.mjs';
-import { applyRegistries, readProfiles, selectProfiles } from './profiles.mjs';
-import { findExistingBaseline, isPluginContext, stateDir } from './paths.mjs';
+import { analyze } from './analyze.ts';
+import { applyTokenFixes } from './autofix.ts';
+import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
+import { findConfig, listPresets, loadConfig, setComponentRegistry, setPatterns } from './config.ts';
+import { changedFiles, isSource, toPosix } from './discover.ts';
+import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
+import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
+import { detectConfig } from './detect.ts';
+import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
+import type { RegistrySource } from './profiles.ts';
+import { findExistingBaseline, isPluginContext, stateDir } from './paths.ts';
+import { RULE_IDS } from './rules.ts';
 import {
 	bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot,
 	parsePayload, payloadFile, readStdin, resolvedOptions,
-} from './hook.mjs';
+} from './hook.ts';
+import type { HookPayload } from './hook.ts';
+import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
+import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 
-function parseArgs(argv) {
-	const args = { _: [], flags: {} };
+/** First line of an unknown throw. Anything can be thrown; only Errors carry a message. */
+const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * The flags that take a value. Everything else is a boolean switch.
+ *
+ * Declared `as const` so the two halves cannot drift: this list decides what
+ * consumes the next argv entry, and {@link Flags} decides what type comes back.
+ */
+const VALUE_FLAGS = [
+	'format', 'config', 'root', 'preset', 'files', 'max-findings',
+	'severity', 'baseline', 'patterns', 'components', 'profiles', 'profile',
+] as const;
+
+type ValueFlag = (typeof VALUE_FLAGS)[number];
+
+/**
+ * Parsed command-line flags.
+ *
+ * Written out rather than left as a string-keyed record: `--files` carries a
+ * path list and `--all` carries nothing, and a record that types both as
+ * `string | boolean` pushes that distinction to every read site — which is
+ * where it used to get lost.
+ */
+type Flags = { [K in ValueFlag]?: string } & {
+	help?: boolean;
+	all?: boolean;
+	changed?: boolean;
+	'no-baseline'?: boolean;
+	'dry-run'?: boolean;
+	force?: boolean;
+};
+
+interface Args {
+	_: string[];
+	flags: Flags;
+}
+
+const isValueFlag = (key: string): key is ValueFlag => (VALUE_FLAGS as readonly string[]).includes(key);
+
+function parseArgs(argv: readonly string[]): Args {
+	const positional: string[] = [];
+	const flags: Record<string, string | boolean | undefined> = {};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
+		if (a === undefined) continue;
 		if (!a.startsWith('--')) {
-			args._.push(a);
+			positional.push(a);
 			continue;
 		}
 		const [key, inline] = a.slice(2).split(/=(.*)/s);
-		const needsValue = ['format', 'config', 'root', 'preset', 'files', 'max-findings', 'severity', 'baseline', 'patterns', 'components', 'profiles', 'profile'].includes(key);
-		if (needsValue) args.flags[key] = inline ?? argv[++i];
-		else args.flags[key] = inline === undefined ? true : inline !== 'false';
+		if (key === undefined) continue;
+		if (isValueFlag(key)) flags[key] = inline ?? argv[++i];
+		else flags[key] = inline === undefined ? true : inline !== 'false';
 	}
-	return args;
+	return { _: positional, flags: flags as Flags };
 }
 
 const USAGE = `loupe <command> [options]
@@ -79,8 +126,18 @@ With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
 `;
 
-function resolveScope(config, args, { defaultChanged = false }) {
-	const given = ['all', 'changed', 'files'].filter((f) => args.flags[f]);
+/**
+ * Which files to report on: every file (`null`), a named set, or a refusal.
+ * `null` is a real answer here, so the failure case has to be its own shape.
+ */
+type ScopeResult = string[] | null | { error: string };
+
+function resolveScope(
+	config: Config,
+	args: Args,
+	{ defaultChanged = false }: { defaultChanged?: boolean },
+): ScopeResult {
+	const given = (['all', 'changed', 'files'] as const).filter((f) => args.flags[f]);
 	if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(' ')}` };
 	if (args.flags.all) return null;
 	if (args.flags.files)
@@ -100,16 +157,17 @@ function resolveScope(config, args, { defaultChanged = false }) {
 	return null;
 }
 
-function filterSeverity(result, min) {
+function filterSeverity<T extends AnalyzeResult>(result: T, min: string): T {
 	if (min !== 'error') return result;
 	const findings = result.findings.filter((f) => f.severity === 'error');
 	return { ...result, findings };
 }
 
-async function main() {
+async function main(): Promise<number> {
 	const argv = process.argv.slice(2);
 	const args = parseArgs(argv);
-	const command = args._[0] && !args._[0].startsWith('-') ? args._[0] : 'check';
+	const first = args._[0];
+	const command = first && !first.startsWith('-') ? first : 'check';
 
 	if (args.flags.help || command === 'help') {
 		process.stdout.write(USAGE);
@@ -121,7 +179,7 @@ async function main() {
 	}
 
 	const isHook = command === 'hook';
-	const root = resolve(args.flags.root || (isHook ? hookRoot() : process.cwd()));
+	const root = resolve(args.flags.root ?? (isHook ? hookRoot() : process.cwd()));
 	if (!existsSync(root)) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root}`);
 		process.stderr.write(`loupe: root does not exist: ${root}\n`);
@@ -132,24 +190,25 @@ async function main() {
 	// the gate will do, and it cannot do that without the settings the gate reads.
 	const { options, source: optionsSource } = resolvedOptions();
 
-	let config;
-	let detected = null;
+	let config: Config;
+	let detected: DetectedConfig | null = null;
 	try {
 		// An explicit path or preset wins; then a discovered project config; then
 		// whatever the project itself implies. Without the last step a project
 		// with no config file fell through to `generic`, which declares no
 		// component layer and therefore silently disables every correlation rule.
 		const explicitPreset =
-			args.flags.preset || (options.preset && options.preset !== 'auto' ? options.preset : null);
+			args.flags.preset ?? (options.preset && options.preset !== 'auto' ? options.preset : null);
 		if (!args.flags.config && !explicitPreset && !findConfig(root)) {
 			detected = detectConfig(root);
-			if (options.projectPrefixes?.length) detected.config.namespaces.project = options.projectPrefixes;
+			if (options.projectPrefixes?.length)
+				detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
 		}
 		config = await loadConfig({
 			root,
-			configPath: args.flags.config,
+			configPath: args.flags.config ?? null,
 			preset: explicitPreset,
-			inline: detected?.config,
+			inline: detected?.config ?? null,
 			inferred: Boolean(detected),
 		});
 	} catch (err) {
@@ -157,8 +216,8 @@ async function main() {
 		// mistyped preset in the plugin settings would then block every turn in
 		// every project with nothing the agent could do about it. A gate that
 		// cannot configure itself stands aside and says so.
-		if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${err.message}`);
-		process.stderr.write(`loupe: config error \u2014 ${err.message}\n`);
+		if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf(err)}`);
+		process.stderr.write(`loupe: config error \u2014 ${messageOf(err)}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -167,10 +226,18 @@ async function main() {
 	// with the project winning on id, because a repo that has written down its
 	// own `page-header` means that one, not the shipped generic.
 	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
-	const active = selectProfiles(profiles, config, args.flags.profile || null);
-	const sources = active.map((p) => ({ label: `profile ${p.id}`, patterns: p.patterns, components: p.components }));
+	const active = selectProfiles(profiles, config, args.flags.profile ?? null);
+	const sources: RegistrySource[] = active.map((p) => ({
+		label: `profile ${p.id}`,
+		patterns: p.patterns,
+		components: p.components,
+	}));
 	if (args.flags.patterns || args.flags.components)
-		sources.push({ label: 'flags', patterns: args.flags.patterns, components: args.flags.components });
+		sources.push({
+			label: 'flags',
+			patterns: args.flags.patterns ?? null,
+			components: args.flags.components ?? null,
+		});
 
 	const registries = applyRegistries(config, sources, { setPatterns, setComponentRegistry });
 	config.profiles = { available: profiles, active, ...registries };
@@ -204,9 +271,9 @@ async function main() {
 	if (options.maxFindings) config.hook.maxFindings = options.maxFindings;
 
 	if (command === 'explain') {
-		const id = canonicalRuleId(args._[1] || '');
-		if (!RULES[id]) {
-			process.stderr.write(`loupe: unknown rule "${args._[1]}"\n`);
+		const id = canonicalRuleId(args._[1] ?? '');
+		if (!isRuleId(id)) {
+			process.stderr.write(`loupe: unknown rule "${args._[1] ?? ''}"\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		const state = config.enabled[id] ? config.severityOf(id) : 'disabled (config does not satisfy its requirements)';
@@ -226,7 +293,7 @@ async function main() {
 		const state = stateDir(root);
 		const lines = [
 			`config:     ${src}`,
-			`namespaces: ${(config.raw.namespaces?.project || []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
+			`namespaces: ${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
 			`suppress:   ${config.suppression.keyword} <ruleId> -- <reason>`,
 			`state:      ${state.dir}${state.scope === 'plugin-data' ? '  (outside your repo)' : ''}`,
 			`options:    ${
@@ -250,7 +317,8 @@ async function main() {
 			'',
 			'rules:',
 		];
-		for (const [id, def] of Object.entries(RULES)) {
+		for (const id of RULE_IDS) {
+			const def = RULES[id];
 			const sev = config.severityOf(id);
 			// Report what will actually happen, not the configured severity: an
 			// error-severity rule under a gate that isn't allowed to block is
@@ -265,7 +333,7 @@ async function main() {
 				: `off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`;
 			lines.push(`  ${id.padEnd(32)} ${note}`);
 		}
-		const blockers = Object.keys(RULES).filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
+		const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
 		lines.push(
 			'',
 			blockingAllowed && blockers.length
@@ -337,15 +405,15 @@ async function main() {
 	// command.
 	if (command === 'fix') {
 		const fixScope = resolveScope(config, args, { defaultChanged: false });
-		if (fixScope && fixScope.error) {
+		if (fixScope !== null && !Array.isArray(fixScope)) {
 			process.stderr.write(`loupe: ${fixScope.error}\n`);
 			return EXIT.CANNOT_RUN;
 		}
-		let toFix;
+		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
 		} catch (err) {
-			process.stderr.write(`loupe: ${err.message}\n`);
+			process.stderr.write(`loupe: ${messageOf(err)}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		const dry = Boolean(args.flags['dry-run']);
@@ -367,7 +435,7 @@ async function main() {
 	}
 
 	// ── check / hook ──────────────────────────────────────────────────────────
-	let payload = {};
+	let payload: HookPayload = {};
 	if (isHook) payload = parsePayload(await readStdin());
 
 	// A PostToolUse payload names the file just written; scope to it so drift is
@@ -376,19 +444,19 @@ async function main() {
 	const touched = isHook ? payloadFile(payload, root) : null;
 	if (touched && !isSource(config.sources, touched))
 		return emitClean('loupe: skipped \u2014 not a checked file type.');
-	const scope = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
-	if (scope && scope.error) {
+	const scope: ScopeResult = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
+	if (scope !== null && !Array.isArray(scope)) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${scope.error}`);
 		process.stderr.write(`loupe: ${scope.error}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
-	let result;
+	let result: AnalyzeResult | BaselinedResult;
 	try {
 		result = await analyze(config, { scope });
 	} catch (err) {
-		if (isHook) return emitClean(`loupe: skipped \u2014 ${err.message}`);
-		process.stderr.write(`loupe: ${err.message}\n`);
+		if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
+		process.stderr.write(`loupe: ${messageOf(err)}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -399,7 +467,7 @@ async function main() {
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
 
 	if (isHook) {
-		const sessionId = payload.session_id || payload.sessionId || '';
+		const sessionId = payload.session_id ?? payload.sessionId ?? '';
 		if (!result.blocking) {
 			clearAttempts(root, touched ? `${sessionId}\u0000${touched}` : sessionId);
 			return emitClean(formatSummary(result));
@@ -422,12 +490,13 @@ async function main() {
 	}
 
 	const maxFindings = Number(args.flags['max-findings'] ?? 0) || 0;
-	const format = args.flags.format || 'agent';
+	const format = args.flags.format ?? 'agent';
 	if (format === 'json') process.stdout.write(`${formatJson(result, config)}\n`);
 	else if (format === 'sarif') process.stdout.write(`${formatSarif(result, config)}\n`);
 	else {
 		process.stdout.write(`${formatAgent(result, config, { maxFindings })}\n`);
-		if (result.baselined) process.stdout.write(`\n${result.baselined} baselined finding(s) hidden.\n`);
+		if ('baselined' in result && result.baselined)
+			process.stdout.write(`\n${result.baselined} baselined finding(s) hidden.\n`);
 	}
 	return result.blocking ? EXIT.BLOCKED : EXIT.OK;
 }
@@ -439,7 +508,7 @@ main()
 	.then((code) => {
 		process.exitCode = code;
 	})
-	.catch((err) => {
-		process.stderr.write(`loupe: ${err?.stack || err}\n`);
+	.catch((err: unknown) => {
+		process.stderr.write(`loupe: ${err instanceof Error ? err.stack : String(err)}\n`);
 		process.exitCode = EXIT.CANNOT_RUN;
 	});

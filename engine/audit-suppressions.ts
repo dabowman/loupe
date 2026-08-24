@@ -17,20 +17,27 @@
  * different rule.
  *
  * Usage, from the engine directory:
- *   node audit-suppressions.mjs /path/to/repo [--preset wpds]
+ *   npx tsx audit-suppressions.ts /path/to/repo [--preset wpds]
  */
 
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Directive, Finding } from './src/types.ts';
+
+/** The `--format json` report, in the two shapes this reads. */
+interface JsonReport {
+	findings: Finding[];
+	suppressions: Directive[];
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, 'bin', 'loupe.mjs');
 
-const root = resolve(process.argv[2] || process.cwd());
+const root = resolve(process.argv[2] ?? process.cwd());
 const extra = process.argv.slice(3);
 
-const run = (args) => {
+const run = <T>(args: string[]): T => {
 	try {
 		return JSON.parse(
 			execFileSync('node', [CLI, ...args, '--root', root, '--format', 'json'], {
@@ -38,23 +45,25 @@ const run = (args) => {
 				maxBuffer: 64 * 1024 * 1024,
 				stdio: ['ignore', 'pipe', 'pipe'],
 			})
-		);
+		) as T;
 	} catch (err) {
+		const e = err as { stdout?: string; stderr?: string } | null;
 		// A blocking exit code still produced valid stdout.
-		if (err.stdout) {
+		if (e?.stdout) {
 			try {
-				return JSON.parse(err.stdout);
+				return JSON.parse(e.stdout) as T;
 			} catch {
 				/* fall through */
 			}
 		}
-		console.error(`failed: loupe ${args.join(' ')}\n${err.stderr || err.message}`);
+		const why = e?.stderr || (err instanceof Error ? err.message : String(err));
+		console.error(`failed: loupe ${args.join(' ')}\n${why}`);
 		process.exit(2);
 	}
 };
 
-const directives = run(['suppressions', ...extra]);
-const { findings } = run(['check', '--all', '--no-baseline', ...extra]);
+const directives = run<Directive[]>(['suppressions', ...extra]);
+const { findings } = run<JsonReport>(['check', '--all', '--no-baseline', ...extra]);
 
 // Findings indexed by the lines a directive could plausibly cover: the line
 // itself and the two below it (a directive sits above the code it mutes, and a
@@ -69,7 +78,7 @@ const stale = [];
 const orphaned = [];
 
 for (const d of directives) {
-	const nearby = (byFile.get(d.file) || []).filter((f) => f.line >= d.line && f.line <= d.line + 8);
+	const nearby = (byFile.get(d.file) || []).filter((f: Finding) => f.line >= d.line && f.line <= d.line + 8);
 	if (!nearby.length) {
 		// Either it's working, or the code it covered is gone. Not distinguishable
 		// from here, and a working suppression is the common case — so this is
@@ -78,7 +87,7 @@ for (const d of directives) {
 		continue;
 	}
 	const covered = new Set(d.rules);
-	const uncovered = nearby.filter((f) => !covered.has(f.rule));
+	const uncovered = nearby.filter((f: Finding) => !covered.has(f.rule));
 	if (uncovered.length) stale.push({ directive: d, findings: uncovered });
 }
 
@@ -89,7 +98,7 @@ if (!stale.length) {
 	for (const { directive: d, findings: fs } of stale) {
 		console.log(`  ${d.file}:${d.line}`);
 		console.log(`    suppresses: ${d.rules.join(', ')}`);
-		console.log(`    now fires:  ${[...new Set(fs.map((f) => f.rule))].join(', ')}`);
+		console.log(`    now fires:  ${[...new Set(fs.map((f: Finding) => f.rule))].join(', ')}`);
 		console.log(`    reason:     ${d.reason}`);
 		console.log('');
 	}

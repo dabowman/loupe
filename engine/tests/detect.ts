@@ -6,21 +6,25 @@
  * regression here silently changes behaviour in every project at once.
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { detectConfig } from '../src/detect.mjs';
+import { detectConfig } from '../src/detect.ts';
+import { cleanup, fail, failures, finish, scratch, write } from './harness.ts';
 
-const write = (root, rel, body) => {
-	const p = join(root, rel);
-	mkdirSync(dirname(p), { recursive: true });
-	writeFileSync(p, body);
-};
+/** One detection scenario: a repo to build, and what should come back. */
+interface Case {
+	name: string;
+	files: (root: string) => void;
+	expect: {
+		preset: string;
+		project: string[];
+		packageDir?: string;
+		tokenSourcesUnder?: string;
+	};
+}
 
-const CASES = [
+const CASES: Case[] = [
 	{
 		name: 'wp editor plugin → wpds (not the weaker parent preset)',
-		files: (r) => {
+		files: (r: string) => {
 			write(r, 'package.json', JSON.stringify({ devDependencies: { '@wordpress/components': '^28.0.0' } }));
 			for (let i = 0; i < 4; i++) {
 				write(r, `src/B${i}.jsx`, `export const B${i} = () => <div className="acme-panel acme-panel--${i}" />;`);
@@ -31,7 +35,7 @@ const CASES = [
 	},
 	{
 		name: 'block theme → wordpress-block-theme',
-		files: (r) => {
+		files: (r: string) => {
 			write(r, 'theme.json', '{"version":3}');
 			write(r, 'templates/index.html', '<div class="wp-block-group ridge-hero has-text-color"></div>');
 			write(r, 'parts/header.html', '<div class="ridge-nav ridge-nav__inner"></div>');
@@ -41,7 +45,7 @@ const CASES = [
 	},
 	{
 		name: 'plain react → generic',
-		files: (r) => {
+		files: (r: string) => {
 			write(r, 'package.json', JSON.stringify({ dependencies: { react: '^18.0.0' } }));
 			for (let i = 0; i < 3; i++) {
 				write(r, `src/C${i}.jsx`, `export const C${i} = () => <div className="app-box app-box--${i}" />;`);
@@ -52,7 +56,7 @@ const CASES = [
 	},
 	{
 		name: 'CSS-only prefix is not adopted (would self-confirm as dead)',
-		files: (r) => {
+		files: (r: string) => {
 			write(r, 'package.json', '{}');
 			write(r, 'src/A.jsx', 'export const A = () => <div className="live-a live-b live-c" />;');
 			write(r, 'styles/a.css', '.live-a{color:#111}\n.live-b{color:#222}\n.live-c{color:#333}\n.ghost-a{color:#444}\n.ghost-b{color:#555}\n.ghost-c{color:#666}');
@@ -61,7 +65,7 @@ const CASES = [
 	},
 	{
 		name: 'library-only CSS yields no project namespace',
-		files: (r) => {
+		files: (r: string) => {
 			write(r, 'package.json', '{}');
 			write(r, 'src/A.jsx', 'export const A = () => <div className="components-button" />;');
 			write(r, 'styles/a.css', '.components-button{color:#111}\n.wp-block-group{color:#222}\n.has-text-color{color:#333}');
@@ -73,7 +77,7 @@ const CASES = [
 		// that imports the component library is a directory down. Reading only the
 		// root detected `generic`, which switches off every rule this exists to run.
 		name: 'monorepo → the nested plugin decides the preset',
-		files: (r) => {
+		files: (r: string) => {
 			write(r, 'package.json', JSON.stringify({ devDependencies: { '@wordpress/env': '^9.0.0' } }));
 			write(r, 'my-plugin/package.json', JSON.stringify({ dependencies: { '@wordpress/components': '^28.0.0' } }));
 			for (let i = 0; i < 4; i++) {
@@ -89,7 +93,7 @@ const CASES = [
 		// look at where the class is defined. Every dead-class finding in a real
 		// repo came from this, and all of them were false.
 		name: 'a prefix an installed dependency defines is not the project’s',
-		files: (r) => {
+		files: (r: string) => {
 			write(r, 'package.json', '{}');
 			for (let i = 0; i < 4; i++) {
 				write(r, `src/A${i}.jsx`, `export const A${i} = () => <div className="own-box own-b${i} rbc-event rbc-e${i}" />;`);
@@ -101,23 +105,21 @@ const CASES = [
 	},
 ];
 
-let failed = 0;
 for (const c of CASES) {
-	const root = mkdtempSync(join(tmpdir(), 'dsh-detect-'));
+	const root = scratch('dsh-detect-');
 	try {
 		c.files(root);
 		const got = detectConfig(root);
+		const under = c.expect.tokenSourcesUnder;
 		const okPreset = got.preset === c.expect.preset;
 		const okNs = JSON.stringify(got.namespaces.project) === JSON.stringify(c.expect.project);
 		const okDir = c.expect.packageDir === undefined || got.packageDir === c.expect.packageDir;
-		const sources = got.config.designSystem?.tokenSources || [];
-		const okTokens =
-			c.expect.tokenSourcesUnder === undefined ||
-			(sources.length > 0 && sources.every((p) => p.startsWith(c.expect.tokenSourcesUnder)));
+		const sources = got.config.designSystem?.tokenSources ?? [];
+		const okTokens = under === undefined || (sources.length > 0 && sources.every((p) => p.startsWith(under)));
 		if (okPreset && okNs && okDir && okTokens) {
 			console.log(`ok   ${c.name}`);
 		} else {
-			failed++;
+			fail();
 			console.log(`FAIL ${c.name}`);
 			if (!okPreset) console.log(`  preset: want ${c.expect.preset}, got ${got.preset}`);
 			if (!okNs) console.log(`  namespaces: want ${JSON.stringify(c.expect.project)}, got ${JSON.stringify(got.namespaces.project)}`);
@@ -125,8 +127,7 @@ for (const c of CASES) {
 			if (!okTokens) console.log(`  tokenSources: want all under ${c.expect.tokenSourcesUnder}, got ${JSON.stringify(sources)}`);
 		}
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 }
-console.log(`\n${CASES.length - failed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+finish(`\n${CASES.length - failures()} passed, ${failures()} failed`);

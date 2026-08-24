@@ -15,12 +15,60 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { discover } from './discover.mjs';
+import { discover } from './discover.ts';
+import type { AuthoredConfig, SourceGlobs } from './types.ts';
+
+/** How much a match is worth. Presets name these; nothing else interprets them. */
+export type Confidence = 'high' | 'low' | 'none' | (string & {});
+
+/** A preset's declared evidence: what this design system leaves behind. */
+interface DetectBlock {
+	priority?: number;
+	dependencies?: string[];
+	files?: { all?: string[]; any?: string[] };
+	/** One value for every kind, or one per kind (`full`, `partial`). */
+	confidence?: string | Record<string, string>;
+}
+
+/** A preset file: an authored config, plus the evidence that selects it. */
+interface PresetFile extends AuthoredConfig {
+	detect?: DetectBlock;
+}
+
+/** Which preset fits, and the evidence for saying so. */
+export interface PresetMatch {
+	preset: string;
+	reasons: string[];
+	confidence: Confidence;
+	/** Where the manifest that matched lives — its `node_modules` holds the tokens. */
+	packageDir: string;
+}
+
+export interface NamespaceDetection {
+	project: string[];
+	coverage: number;
+	confidence: Confidence;
+	sampled: { styles: number; markup: number; references: number };
+}
+
+/** Everything inference concluded, with the config it produced. */
+export interface DetectedConfig {
+	inferred: true;
+	preset: string;
+	presetReasons: string[];
+	presetConfidence: Confidence;
+	packageDir: string;
+	namespaces: { project: string[] };
+	namespaceConfidence: Confidence;
+	coverage: number;
+	sampled: NamespaceDetection['sampled'];
+	config: AuthoredConfig;
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRESET_DIR = join(HERE, '..', 'presets');
 
-const readJson = (p) => {
+const readJson = (p: string): unknown => {
 	try {
 		return JSON.parse(readFileSync(p, 'utf8'));
 	} catch {
@@ -28,7 +76,7 @@ const readJson = (p) => {
 	}
 };
 
-const preset = (name) => readJson(join(PRESET_DIR, `${name}.json`)) || {};
+const preset = (name: string): PresetFile => (readJson(join(PRESET_DIR, `${name}.json`)) as PresetFile) ?? {};
 
 /** Directories never worth descending into when looking for a manifest. */
 const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'build', 'dist', '.claude']);
@@ -43,9 +91,9 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'build', 'dist', '.
  * therefore switched off every rule this plugin exists to run — silently, and
  * on exactly the code it was pointed at.
  */
-function manifests(root, maxDepth = 3, budget = 60) {
-	const out = [];
-	const walk = (dir, rel, depth) => {
+function manifests(root: string, maxDepth = 3, budget = 60): { dir: string; rel: string }[] {
+	const out: { dir: string; rel: string }[] = [];
+	const walk = (dir: string, rel: string, depth: number): void => {
 		if (depth > maxDepth || out.length >= budget) return;
 		const pkg = join(dir, 'package.json');
 		if (existsSync(pkg)) out.push({ dir, rel });
@@ -66,7 +114,7 @@ function manifests(root, maxDepth = 3, budget = 60) {
 }
 
 /** Preset names on disk, so a new design system is a file rather than an edit here. */
-function presetNames() {
+function presetNames(): string[] {
 	try {
 		return readdirSync(PRESET_DIR)
 			.filter((f) => f.endsWith('.json'))
@@ -80,7 +128,7 @@ function presetNames() {
  * Does `dir` contain `marker`? A trailing slash means "must be a directory",
  * which is also how the marker reads back in the reason text.
  */
-function markerAt(dir, marker) {
+function markerAt(dir: string, marker: string): boolean {
 	const name = marker.replace(/\/$/, '');
 	const full = join(dir, name);
 	if (!existsSync(full)) return false;
@@ -93,9 +141,9 @@ function markerAt(dir, marker) {
 }
 
 /** The root and each immediate subdirectory, which is as deep as file markers look. */
-function probeDirs(root) {
+function probeDirs(root: string): { dir: string; rel: string }[] {
 	const out = [{ dir: root, rel: '' }];
-	let entries = [];
+	let entries: import('node:fs').Dirent[] = [];
 	try {
 		entries = readdirSync(root, { withFileTypes: true });
 	} catch {
@@ -108,8 +156,8 @@ function probeDirs(root) {
 	return out;
 }
 
-const confidenceOf = (detect, kind) =>
-	typeof detect.confidence === 'string' ? detect.confidence : detect.confidence?.[kind] || null;
+const confidenceOf = (detect: DetectBlock, kind: string): string | null =>
+	typeof detect.confidence === 'string' ? detect.confidence : (detect.confidence?.[kind] ?? null);
 
 /**
  * Match one preset's declared markers against the project.
@@ -119,27 +167,37 @@ const confidenceOf = (detect, kind) =>
  * never inferred — `wordpress-components` is a parent others extend, not a
  * conclusion, and `generic` is the fallback rather than a match.
  */
-function matchPreset(name, detect, root, found) {
+function matchPreset(
+	name: string,
+	detect: DetectBlock,
+	root: string,
+	found: readonly { dir: string; rel: string }[],
+): PresetMatch | null {
 	if (detect.dependencies?.length) {
 		// Shallowest manifest declaring the library wins, so a root that happens to
 		// list it beats a nested one, and `packageDir` names where its
 		// `node_modules` — and therefore the token stylesheet — will be.
 		for (const { rel } of found) {
-			const pkg = readJson(join(root, rel, 'package.json')) || {};
+			const pkg = (readJson(join(root, rel, 'package.json')) as {
+				dependencies?: Record<string, string>;
+				devDependencies?: Record<string, string>;
+				peerDependencies?: Record<string, string>;
+			} | null) ?? {};
 			const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
 			const hit = detect.dependencies.filter((d) => deps[d] !== undefined);
-			if (!hit.length) continue;
-			const reasons = [`${hit[0]} in ${rel ? `${rel}/package.json` : 'package.json'}`];
+			const first = hit[0];
+			if (first === undefined) continue;
+			const reasons = [`${first} in ${rel ? `${rel}/package.json` : 'package.json'}`];
 			if (found.length > 1) reasons.push(`${found.length} package.json files scanned`);
-			return { preset: name, reasons, confidence: confidenceOf(detect, 'full') || 'high', packageDir: rel };
+			return { preset: name, reasons, confidence: confidenceOf(detect, 'full') ?? 'high', packageDir: rel };
 		}
 	}
 
 	if (detect.files) {
-		const all = detect.files.all || [];
-		const any = detect.files.any || [];
-		const describe = (list) => list.join(' or ');
-		let partial = null;
+		const all = detect.files.all ?? [];
+		const any = detect.files.any ?? [];
+		const describe = (list: readonly string[]): string => list.join(' or ');
+		let partial: PresetMatch | null = null;
 		for (const { dir, rel } of probeDirs(root)) {
 			if (all.length && !all.every((m) => markerAt(dir, m))) continue;
 			const where = rel ? ` in ${rel}/` : '';
@@ -148,7 +206,7 @@ function matchPreset(name, detect, root, found) {
 				return {
 					preset: name,
 					reasons: [`${what}${where}`],
-					confidence: confidenceOf(detect, 'full') || 'high',
+					confidence: confidenceOf(detect, 'full') ?? 'high',
 					packageDir: rel,
 				};
 			}
@@ -183,12 +241,12 @@ function matchPreset(name, detect, root, found) {
  * severities the plugin exists to enforce, so selecting the parent would
  * silently drop them.
  */
-export function detectPreset(root) {
+export function detectPreset(root: string): PresetMatch {
 	const found = manifests(root);
 	const candidates = presetNames()
 		.map((name) => ({ name, detect: preset(name).detect }))
-		.filter((c) => c.detect)
-		.sort((a, b) => (b.detect.priority || 0) - (a.detect.priority || 0) || a.name.localeCompare(b.name));
+		.filter((c): c is { name: string; detect: DetectBlock } => c.detect !== undefined)
+		.sort((a, b) => (b.detect.priority ?? 0) - (a.detect.priority ?? 0) || a.name.localeCompare(b.name));
 
 	for (const { name, detect } of candidates) {
 		const hit = matchPreset(name, detect, root, found);
@@ -221,13 +279,13 @@ const CLASS_RE = /\.(-?[_a-zA-Z][\w-]*)/g;
  * `node_modules`. Stops as soon as every candidate is decided, so the usual
  * case costs a fraction of the budget.
  */
-function libraryPrefixes(dirs, candidates) {
+function libraryPrefixes(dirs: readonly string[], candidates: readonly string[]): Set<string> {
 	const want = new Set(candidates);
-	const found = new Set();
+	const found = new Set<string>();
 	if (!want.size) return found;
 	let budget = 600;
 
-	const walk = (dir, depth) => {
+	const walk = (dir: string, depth: number): void => {
 		if (depth > 4 || budget <= 0 || !want.size) return;
 		let entries;
 		try {
@@ -251,9 +309,11 @@ function libraryPrefixes(dirs, candidates) {
 				}
 				if (text.length > 2_000_000) continue;
 				for (const m of text.matchAll(CLASS_RE)) {
-					const i = m[1].indexOf('-');
+					const cls = m[1];
+					if (cls === undefined) continue;
+					const i = cls.indexOf('-');
 					if (i < 1) continue;
-					const prefix = m[1].slice(0, i + 1);
+					const prefix = cls.slice(0, i + 1);
 					if (want.delete(prefix)) found.add(prefix);
 				}
 			}
@@ -265,27 +325,27 @@ function libraryPrefixes(dirs, candidates) {
 }
 
 /** Resolve a preset's `extends` chain far enough to read namespaces and sources. */
-function resolvePreset(name, seen = new Set()) {
+function resolvePreset(name: string, seen = new Set<string>()): PresetFile {
 	if (seen.has(name)) return {};
 	seen.add(name);
 	const raw = preset(name);
 	if (!raw.extends) return raw;
 	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
-	let base = {};
+	let base: PresetFile = {};
 	for (const spec of specs) {
 		const parent = resolvePreset(String(spec).replace(/^loupe\/presets\//, ''), seen);
 		base = {
 			...base,
 			...parent,
-			namespaces: { ...(base.namespaces || {}), ...(parent.namespaces || {}) },
-			sources: { ...(base.sources || {}), ...(parent.sources || {}) },
+			namespaces: { ...(base.namespaces ?? {}), ...(parent.namespaces ?? {}) },
+			sources: { ...(base.sources ?? {}), ...(parent.sources ?? {}) },
 		};
 	}
 	return {
 		...base,
 		...raw,
-		namespaces: { ...(base.namespaces || {}), ...(raw.namespaces || {}) },
-		sources: { ...(base.sources || {}), ...(raw.sources || {}) },
+		namespaces: { ...(base.namespaces ?? {}), ...(raw.namespaces ?? {}) },
+		sources: { ...(base.sources ?? {}), ...(raw.sources ?? {}) },
 	};
 }
 
@@ -297,10 +357,14 @@ function resolvePreset(name, seen = new Set()) {
  * on CSS evidence alone would let the dead-class rule bootstrap its own false
  * positives.
  */
-export function detectNamespaces(root, presetName, packageDir = '') {
+export function detectNamespaces(
+	root: string,
+	presetName: string,
+	packageDir = '',
+): NamespaceDetection {
 	const base = resolvePreset(presetName);
 	const generic = resolvePreset('generic');
-	const sources = { ...generic.sources, ...(base.sources || {}) };
+	const sources = { ...generic.sources, ...(base.sources ?? {}) } as SourceGlobs;
 	const files = discover({ root, sources });
 
 	// Library prefixes from *every* shipped preset, not just the detected one, so
@@ -312,16 +376,17 @@ export function detectNamespaces(root, presetName, packageDir = '') {
 		.filter((n) => n !== presetName)
 		.map((n) => resolvePreset(n));
 	const external = [
-		...(base.namespaces?.external || []),
-		...others.flatMap((p) => p.namespaces?.external || []),
+		...(base.namespaces?.external ?? []),
+		...others.flatMap((p) => p.namespaces?.external ?? []),
 	];
 	const neverDead = [
-		...(base.namespaces?.neverDead || []),
-		...others.flatMap((p) => p.namespaces?.neverDead || []),
+		...(base.namespaces?.neverDead ?? []),
+		...others.flatMap((p) => p.namespaces?.neverDead ?? []),
 	].map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`));
-	const isExcluded = (cls) => external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
+	const isExcluded = (cls: string): boolean =>
+		external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
 
-	const cssCounts = new Map();
+	const cssCounts = new Map<string, number>();
 	for (const { abs } of files.styles) {
 		let text;
 		try {
@@ -331,15 +396,15 @@ export function detectNamespaces(root, presetName, packageDir = '') {
 		}
 		for (const m of text.matchAll(CLASS_RE)) {
 			const cls = m[1];
-			if (isExcluded(cls)) continue;
+			if (cls === undefined || isExcluded(cls)) continue;
 			const idx = cls.indexOf('-');
 			if (idx < 1) continue;
 			const prefix = cls.slice(0, idx + 1);
-			cssCounts.set(prefix, (cssCounts.get(prefix) || 0) + 1);
+			cssCounts.set(prefix, (cssCounts.get(prefix) ?? 0) + 1);
 		}
 	}
 
-	const markupText = [];
+	const markupText: string[] = [];
 	for (const { abs } of [...files.markup, ...files.references].slice(0, 2000)) {
 		try {
 			markupText.push(readFileSync(abs, 'utf8'));
@@ -361,7 +426,7 @@ export function detectNamespaces(root, presetName, packageDir = '') {
 	);
 
 	// Drop prefixes already covered by a shorter accepted one (`wf-card-` under `wf-`).
-	const accepted = [];
+	const accepted: [string, number][] = [];
 	for (const [prefix, count] of candidates) {
 		if (vendored.has(prefix)) continue;
 		if (accepted.some(([p]) => prefix.startsWith(p))) continue;
@@ -387,17 +452,17 @@ export function detectNamespaces(root, presetName, packageDir = '') {
  * `inferred: true` travels with the result so the CLI can hold guessed settings
  * to a lower bar than ones somebody wrote down.
  */
-export function detectConfig(root) {
+export function detectConfig(root: string): DetectedConfig {
 	const { preset: name, reasons, confidence: presetConfidence, packageDir } = detectPreset(root);
 	const ns = detectNamespaces(root, name, packageDir);
-	const config = { extends: name, namespaces: { project: ns.project } };
+	const config: AuthoredConfig = { extends: name, namespaces: { project: ns.project } };
 
 	// A preset's token sources are written relative to the project root. In a
 	// monorepo the design system is installed beside the manifest that asked for
 	// it, so without this the token set comes back empty and every finding goes
 	// back to naming a namespace instead of a token.
 	if (packageDir) {
-		const sources = resolvePreset(name).designSystem?.tokenSources || [];
+		const sources = resolvePreset(name).designSystem?.tokenSources ?? [];
 		if (sources.length)
 			config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
 	}
