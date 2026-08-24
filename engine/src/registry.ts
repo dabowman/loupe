@@ -14,18 +14,25 @@
  * field existed gets.
  */
 
+/** A registry file's optional scoping field. An inline array declares nothing. */
+type ScopedRegistry = { packages?: unknown } | null | undefined;
+
+const declaredPackages = (raw: unknown): string[] => {
+	const packages = (raw as ScopedRegistry)?.packages;
+	return Array.isArray(packages) ? packages.filter((p): p is string => typeof p === 'string' && p !== '') : [];
+};
+
 /**
- * @param {object} raw parsed registry file (or an inline array, which declares nothing)
- * @param {string[]} dsPackages the active config's `designSystem.packages`
+ * @param raw parsed registry file (or an inline array, which declares nothing)
+ * @param dsPackages the active config's `designSystem.packages`
  */
-export function registryApplies(raw, dsPackages) {
-	const declared = Array.isArray(raw?.packages) ? raw.packages.filter(Boolean) : [];
+export function registryApplies(raw: unknown, dsPackages: readonly string[] | undefined): boolean {
+	const declared = declaredPackages(raw);
 	if (!declared.length) return true;
 	// A project with no packages of its own has no component layer, so a scoped
 	// registry has nothing it could legitimately match.
-	return (dsPackages || []).some((p) => declared.includes(p));
+	return (dsPackages ?? []).some((p) => declared.includes(p));
 }
 
 /** The `packages` a registry declares, for reporting why it was skipped. */
-export const registryPackages = (raw) =>
-	Array.isArray(raw?.packages) ? raw.packages.filter(Boolean) : [];
+export const registryPackages = (raw: unknown): string[] => declaredPackages(raw);

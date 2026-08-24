@@ -16,6 +16,8 @@
  * engine without emitting garbage.
  */
 
+import type { DesignSystem, RuleDef, RuleId, Severity } from './types.ts';
+
 export const RULES = {
 	'suppression/malformed': {
 		severity: 'error',
@@ -119,7 +121,10 @@ export const RULES = {
 		needs: ['textComponents'],
 		title: 'text component typed in CSS — use its style/size prop instead',
 	},
-};
+} satisfies Record<RuleId, RuleDef>;
+
+/** Every rule id, once, in declaration order — `Object.keys` loses the union. */
+export const RULE_IDS = Object.keys(RULES) as RuleId[];
 
 /** Legacy R0–R8 ids, honored in config and in suppression comments. */
 export const ALIASES = {
@@ -132,19 +137,32 @@ export const ALIASES = {
 	R6: 'system/override',
 	R7: 'system/raw-element',
 	R8: 'typography/in-css',
-};
+} satisfies Record<string, RuleId>;
 
-export const canonicalRuleId = (id) => ALIASES[id] || id;
+/**
+ * Resolve a legacy id, returning a plain string rather than a `RuleId`: the
+ * input is whatever someone typed in a config or a comment, and claiming it is
+ * a known rule is exactly the lie that would let an unknown id reach a lookup
+ * unchecked. Callers narrow with {@link isRuleId}.
+ */
+export const canonicalRuleId = (id: string): string => ALIASES[id as keyof typeof ALIASES] ?? id;
 
-export const SEVERITIES = new Set(['error', 'warn', 'off']);
+/** Narrow an arbitrary string to a rule the engine actually has. */
+export const isRuleId = (id: string): id is RuleId => Object.hasOwn(RULES, id);
+
+export const SEVERITIES: ReadonlySet<string> = new Set<Severity>(['error', 'warn', 'off']);
+
+/** Narrow an arbitrary string to a severity. */
+export const isSeverity = (v: unknown): v is Severity =>
+	typeof v === 'string' && SEVERITIES.has(v);
 
 /**
  * Interpolate {placeholders} in a rule title from the resolved design system, so
  * guidance names the actual components in play ("use <Stack>") rather than a
  * generic phrase.
  */
-export function renderTitle(ruleId, ds, keyword) {
-	const list = (arr, fallback) =>
+export function renderTitle(ruleId: RuleId, ds: DesignSystem, keyword: string): string {
+	const list = (arr: readonly string[] | undefined, fallback: string): string =>
 		arr && arr.length ? arr.slice(0, 2).map((c) => `<${c}>`).join('/') : fallback;
 	return RULES[ruleId].title
 		.replace('{layout}', list(ds.layoutComponents, 'a layout primitive'))

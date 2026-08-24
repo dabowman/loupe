@@ -16,6 +16,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { FixCandidate, SkippedFix, TokenFix } from './types.ts';
 
 /**
  * Stylesheet channels only.
@@ -26,16 +27,17 @@ import { join } from 'node:path';
  */
 const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The findings that carry one property, one value, and one token for it. */
-export function tokenFixes(findings) {
-	const out = [];
+export function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
+	const out: TokenFix[] = [];
 	for (const f of findings) {
 		if (f.rule !== 'tokens/hardcoded-value' || !CSS_FILE.test(f.file)) continue;
-		if (f.suggest?.length !== 1 || f.suggest[0].tokens.length !== 1) continue;
-		const { prop, value, tokens } = f.suggest[0];
-		out.push({ file: f.file, line: f.line, prop, value, token: tokens[0] });
+		const only = f.suggest?.length === 1 ? f.suggest[0] : undefined;
+		const token = only?.tokens.length === 1 ? only.tokens[0] : undefined;
+		if (!only || token === undefined) continue;
+		out.push({ file: f.file, line: f.line, prop: only.prop, value: only.value, token });
 	}
 	return out;
 }
@@ -48,22 +50,28 @@ export function tokenFixes(findings) {
  * report, and a substitution against a stale line number edits the wrong
  * declaration.
  */
-export function applyTokenFixes(root, findings, { dry = false } = {}) {
-	const byFile = new Map();
+export function applyTokenFixes(
+	root: string,
+	findings: readonly FixCandidate[],
+	{ dry = false }: { dry?: boolean } = {},
+): { applied: TokenFix[]; skipped: SkippedFix[] } {
+	const byFile = new Map<string, TokenFix[]>();
 	for (const fix of tokenFixes(findings)) {
-		if (!byFile.has(fix.file)) byFile.set(fix.file, []);
-		byFile.get(fix.file).push(fix);
+		const group = byFile.get(fix.file) ?? [];
+		group.push(fix);
+		byFile.set(fix.file, group);
 	}
 
-	const applied = [];
-	const skipped = [];
+	const applied: TokenFix[] = [];
+	const skipped: SkippedFix[] = [];
 	for (const [file, group] of byFile) {
 		const abs = join(root, file);
 		let text;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch (err) {
-			for (const fix of group) skipped.push({ ...fix, why: err.message });
+			const why = err instanceof Error ? err.message : String(err);
+			for (const fix of group) skipped.push({ ...fix, why });
 			continue;
 		}
 		const lines = text.split('\n');

@@ -17,6 +17,22 @@
  */
 
 import postcss from 'postcss';
+import type { Container, Rule } from 'postcss';
+import type { File, ImportDeclaration, TemplateLiteral } from '@babel/types';
+import type { CssInJsLocals, Decl, TemplateGroup } from './types.ts';
+
+/**
+ * The export name an import specifier binds, or `'default'`.
+ *
+ * `import x from 'y'` and `import { css as x } from 'y'` reach the same local
+ * name by different shapes, and the imported half can be a string literal
+ * (`import { 'a-b' as x }`), so the three specifier kinds need telling apart
+ * rather than a chain of optional reads that silently yields undefined.
+ */
+const importedName = (spec: ImportDeclaration['specifiers'][number]): string => {
+	if (spec.type !== 'ImportSpecifier') return 'default';
+	return spec.imported.type === 'Identifier' ? spec.imported.name : spec.imported.value;
+};
 
 /** Packages whose tagged templates are CSS. Config can extend this. */
 export const DEFAULT_CSS_IN_JS_PACKAGES = [
@@ -35,18 +51,17 @@ export const DEFAULT_CSS_IN_JS_PACKAGES = [
  * body is animation stops, where a literal is the point and there is no token
  * to reach for.
  */
-export function cssInJsLocals(ast, packages) {
-	const styled = new Set();
-	const bare = new Set();
+export function cssInJsLocals(ast: File, packages: readonly string[] | undefined): CssInJsLocals {
+	const styled = new Set<string>();
+	const bare = new Set<string>();
 	if (!packages?.length) return { styled, bare, any: false };
-	const fromPackage = (src) => packages.some((p) => src === p || src.startsWith(`${p}/`));
+	const fromPackage = (src: string): boolean => packages.some((p) => src === p || src.startsWith(`${p}/`));
 
 	for (const node of ast.program.body) {
 		if (node.type !== 'ImportDeclaration' || !fromPackage(node.source.value)) continue;
 		for (const spec of node.specifiers) {
 			const local = spec.local.name;
-			const imported =
-				spec.type === 'ImportSpecifier' ? spec.imported?.name || spec.imported?.value : 'default';
+			const imported = importedName(spec);
 			if (imported === 'default' || imported === 'styled') styled.add(local);
 			else if (imported === 'css' || imported === 'createGlobalStyle' || imported === 'injectGlobal') bare.add(local);
 		}
@@ -66,10 +81,10 @@ export function cssInJsLocals(ast, packages) {
  * anywhere else it is part of a value or selector, so it becomes an identifier.
  * Neither introduces a newline, which is what keeps the line map exact.
  */
-export function templateText(quasi) {
+export function templateText(quasi: TemplateLiteral): string {
 	let out = '';
 	for (let i = 0; i < quasi.quasis.length; i++) {
-		out += quasi.quasis[i].value.raw ?? '';
+		out += quasi.quasis[i]?.value.raw ?? '';
 		if (i < quasi.expressions.length) {
 			const prev = out.replace(/\s+$/, '').slice(-1);
 			out += prev === '' || prev === ';' || prev === '{' || prev === '}' ? '/*dsh*/' : 'dsh-e';
@@ -78,7 +93,7 @@ export function templateText(quasi) {
 	return out;
 }
 
-const GRID_DECL = (p, v) =>
+const GRID_DECL = (p: string, v: string): boolean =>
 	(p === 'display' && /\bgrid\b/.test(v)) || p === 'grid' || p.startsWith('grid-template') || p.startsWith('grid-auto');
 
 /**
@@ -88,23 +103,26 @@ const GRID_DECL = (p, v) =>
  * is bare declarations, which is not a stylesheet. The wrapper is prepended
  * without a newline so every line number still maps straight back to source.
  *
- * @returns {{ groups: Array<{selector, decls, isGrid, onTarget}>, error: string|null }}
  */
-export function parseTemplate(cssText, startLine) {
+export function parseTemplate(
+	cssText: string,
+	startLine: number,
+): { groups: TemplateGroup[]; error: string | null } {
 	let root;
 	try {
 		root = postcss.parse(`.dsh-root{${cssText}\n}`, { from: undefined });
 	} catch (err) {
-		return { groups: [], error: err.message.split('\n')[0] };
+		return { groups: [], error: messageOf(err) };
 	}
-	const groups = [];
-	const at = (node) => startLine + ((node.source?.start?.line ?? 1) - 1);
+	const groups: TemplateGroup[] = [];
+	const at = (node: { source?: { start?: { line: number } } }): number =>
+		startLine + ((node.source?.start?.line ?? 1) - 1);
 
-	const collect = (rule, selector, onTarget) => {
-		const decls = [];
-		const nested = [];
-		const walk = (container) => {
-			for (const node of container.nodes || []) {
+	const collect = (rule: Container, selector: string | null, onTarget: boolean): void => {
+		const decls: Decl[] = [];
+		const nested: Rule[] = [];
+		const walk = (container: Container): void => {
+			for (const node of container.nodes ?? []) {
 				if (node.type === 'decl') {
 					// A value that came from an interpolation is unknowable, and naming a
 					// property whose value we cannot see is noise, not a finding.
@@ -116,13 +134,14 @@ export function parseTemplate(cssText, startLine) {
 			}
 		};
 		walk(rule);
-		if (decls.length)
+		const first = decls[0];
+		if (first)
 			groups.push({
 				selector,
 				decls,
 				isGrid: decls.some((d) => GRID_DECL(d.prop, d.value)),
 				onTarget,
-				line: decls[0].line,
+				line: first.line ?? startLine,
 			});
 		for (const child of nested) {
 			const sel = child.selectors.join(', ');
@@ -132,7 +151,11 @@ export function parseTemplate(cssText, startLine) {
 		}
 	};
 
-	const top = root.nodes.find((n) => n.type === 'rule');
+	const top = root.nodes.find((n): n is Rule => n.type === 'rule');
 	if (top) collect(top, null, true);
 	return { groups, error: null };
 }
+
+/** First line of an unknown throw. A parser can reject anything, including non-Errors. */
+const messageOf = (err: unknown): string =>
+	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';

@@ -8,41 +8,21 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { harvestStems } from '../src/markup.mjs';
-import { isSource } from '../src/discover.mjs';
-import { loadConfig } from '../src/config.mjs';
-import { analyze } from '../src/analyze.mjs';
+import { harvestStems } from '../src/markup.ts';
+import { isSource } from '../src/discover.ts';
+import { loadConfig } from '../src/config.ts';
+import { analyze } from '../src/analyze.ts';
+import { assert, check, cleanup, execFailure, finish, scratch, writeAll } from './harness.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, '..', 'bin', 'loupe.mjs');
 
-let failed = 0;
-// Awaited, so an async body's rejection fails the run instead of surfacing as
-// an unhandled rejection after the summary has already printed "all passed".
-const check = async (name, fn) => {
-	try {
-		await fn();
-		console.log(`ok   ${name}`);
-	} catch (err) {
-		failed++;
-		console.log(`FAIL ${name}\n     ${err.message}`);
-	}
-};
-const assert = (cond, msg) => {
-	if (!cond) throw new Error(msg);
-};
-
-const tmpRepo = (files) => {
-	const root = mkdtempSync(join(tmpdir(), 'dsh-regress-'));
-	for (const [rel, body] of Object.entries(files)) {
-		const p = join(root, rel);
-		mkdirSync(dirname(p), { recursive: true });
-		writeFileSync(p, body);
-	}
+const tmpRepo = (files: Record<string, string>): string => {
+	const root = scratch('dsh-regress-');
+	writeAll(root, files);
 	return root;
 };
 
@@ -95,7 +75,7 @@ await check('a project prefix beats a library prefix', async () => {
 		const internal = findings.filter((f) => String(f.message).includes('library internal'));
 		assert(!internal.length, `reported as a library internal: ${JSON.stringify(internal)}`);
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
@@ -107,16 +87,16 @@ await check('--files accepts an absolute path', () => {
 		'style.css': '.a { margin-bottom: 16px; }',
 	});
 	try {
-		const run = (arg) =>
+		const run = (arg: string): string =>
 			execFileSync('node', [CLI, 'check', '--root', root, '--files', arg, '--format', 'json'], {
 				encoding: 'utf8',
 			});
-		const abs = JSON.parse(run(join(root, 'style.css')));
-		const rel = JSON.parse(run('style.css'));
+		const abs = JSON.parse(run(join(root, 'style.css'))) as { summary: { total: number } };
+		const rel = JSON.parse(run('style.css')) as { summary: { total: number } };
 		assert(rel.summary.total > 0, 'fixture should produce a finding');
 		assert(abs.summary.total === rel.summary.total, `absolute path found ${abs.summary.total}, relative found ${rel.summary.total}`);
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
@@ -131,11 +111,13 @@ await check('a config error never blocks a turn', () => {
 			input: '{"session_id":"x","tool_input":{"file_path":"src/App.jsx"}}',
 			env: { ...process.env, CLAUDE_PLUGIN_OPTION_PRESET: 'no-such-preset' },
 		});
-		assert(JSON.parse(out).systemMessage.includes('config error'), `unexpected output: ${out}`);
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(parsed.systemMessage?.includes('config error'), `unexpected output: ${out}`);
 	} catch (err) {
-		throw new Error(`hook exited non-zero on a config error: ${err.status} ${err.stderr}`);
+		const f = execFailure(err);
+		throw new Error(`hook exited non-zero on a config error: ${f.status} ${f.stderr}`);
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
@@ -156,7 +138,7 @@ await check('markup outside src/ still counts as a reference', async () => {
 		const dead = findings.filter((f) => f.rule === 'css/dead-class');
 		assert(!dead.length, `reported live classes as dead: ${JSON.stringify(dead.map((f) => f.message))}`);
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
@@ -166,7 +148,7 @@ await check('markup outside src/ still counts as a reference', async () => {
 // diagnostic that cannot observe the setting it diagnoses sends you hunting for
 // the bug somewhere else.
 await check('status reports the blocking switch it cannot see in the environment', () => {
-	const home = mkdtempSync(join(tmpdir(), 'dsh-home-'));
+	const home = scratch('dsh-home-');
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx': 'export const A = () => <div className="acme-a" />;',
@@ -177,15 +159,15 @@ await check('status reports the blocking switch it cannot see in the environment
 			join(home, '.claude', 'settings.json'),
 			JSON.stringify({ pluginConfigs: { 'loupe@somewhere': { options: { blocking: true } } } })
 		);
-		const env = { ...process.env, HOME: home };
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
 		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
-		delete env.CLAUDE_PLUGIN_ROOT;
+		delete env['CLAUDE_PLUGIN_ROOT'];
 		const out = execFileSync('node', [CLI, 'status', '--root', root], { encoding: 'utf8', env });
 		assert(/blocking on/.test(out), `status did not read the setting:\n${out}`);
 		assert(/Turns are blocked by/.test(out), `status still claims nothing blocks:\n${out}`);
 	} finally {
-		rmSync(home, { recursive: true, force: true });
-		rmSync(root, { recursive: true, force: true });
+		cleanup(home);
+		cleanup(root);
 	}
 });
 
@@ -207,13 +189,13 @@ await check('the hook blocks when the setting says it should', () => {
 		});
 		throw new Error('hook exited 0 — it did not block');
 	} catch (err) {
-		if (err.message.includes('did not block')) throw err;
-		assert(err.status === 2, `expected exit 2, got ${err.status}`);
-		assert(/system\/override|typography\/in-css/.test(err.stderr), `no report handed back:\n${err.stderr}`);
+		const f = execFailure(err);
+		if (f.message.includes('did not block')) throw err;
+		assert(f.status === 2, `expected exit 2, got ${f.status}`);
+		assert(/system\/override|typography\/in-css/.test(f.stderr), `no report handed back:\n${f.stderr}`);
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
-console.log(`\n${failed ? `${failed} failed` : 'all passed'}`);
-process.exit(failed ? 1 : 0);
+finish();

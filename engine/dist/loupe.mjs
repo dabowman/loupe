@@ -23493,14 +23493,14 @@ var require_lib2 = __commonJS({
   }
 });
 
-// src/cli.mjs
+// src/cli.ts
 import { existsSync as existsSync7, writeFileSync as writeFileSync4 } from "node:fs";
 import { isAbsolute as isAbsolute6, join as join10, relative as relative3, resolve as resolve4 } from "node:path";
 
-// src/analyze.mjs
+// src/analyze.ts
 import { readFileSync as readFileSync2, statSync as statSync2 } from "node:fs";
 
-// src/rules.mjs
+// src/rules.ts
 var RULES = {
   "suppression/malformed": {
     severity: "error",
@@ -23605,6 +23605,7 @@ var RULES = {
     title: "text component typed in CSS \u2014 use its style/size prop instead"
   }
 };
+var RULE_IDS = Object.keys(RULES);
 var ALIASES = {
   R0: "suppression/malformed",
   R1: "css/dead-class",
@@ -23616,26 +23617,29 @@ var ALIASES = {
   R7: "system/raw-element",
   R8: "typography/in-css"
 };
-var canonicalRuleId = (id) => ALIASES[id] || id;
+var canonicalRuleId = (id) => ALIASES[id] ?? id;
+var isRuleId = (id) => Object.hasOwn(RULES, id);
 var SEVERITIES = /* @__PURE__ */ new Set(["error", "warn", "off"]);
+var isSeverity = (v) => typeof v === "string" && SEVERITIES.has(v);
 function renderTitle(ruleId, ds, keyword) {
   const list2 = (arr, fallback) => arr && arr.length ? arr.slice(0, 2).map((c) => `<${c}>`).join("/") : fallback;
   return RULES[ruleId].title.replace("{layout}", list2(ds.layoutComponents, "a layout primitive")).replace("{text}", list2(ds.textComponents, "a text component")).replace(/\{tokenPrefix\}/g, ds.tokenPrefixes?.[0] ? `${ds.tokenPrefixes[0]}*` : "design-system").replace("{system}", ds.name || "the design system").replace("{kw}", keyword);
 }
 
-// src/discover.mjs
+// src/discover.ts
 var import_picomatch = __toESM(require_picomatch2(), 1);
 import { readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join, relative, sep } from "node:path";
 var toPosix = (p) => p.split(sep).join("/").split("\\").join("/");
+var KINDS = ["styles", "markup", "references"];
 var HARD_SKIP = /* @__PURE__ */ new Set([".git", "node_modules"]);
 function discover({ root: root2, sources }) {
-  const ignore = (0, import_picomatch.default)(sources.ignore || []);
+  const ignore = (0, import_picomatch.default)(sources.ignore ?? []);
   const matchers = {
-    styles: (0, import_picomatch.default)(sources.styles || []),
-    markup: (0, import_picomatch.default)(sources.markup || []),
-    references: (0, import_picomatch.default)(sources.references || [])
+    styles: (0, import_picomatch.default)(sources.styles ?? []),
+    markup: (0, import_picomatch.default)(sources.markup ?? []),
+    references: (0, import_picomatch.default)(sources.references ?? [])
   };
   const out = { styles: [], markup: [], references: [] };
   const walk = (dir) => {
@@ -23654,20 +23658,20 @@ function discover({ root: root2, sources }) {
         walk(full);
       } else if (e.isFile()) {
         if (ignore(rel)) continue;
-        for (const kind of ["styles", "markup", "references"]) {
+        for (const kind of KINDS) {
           if (matchers[kind](rel)) out[kind].push({ abs: full, rel });
         }
       }
     }
   };
   walk(root2);
-  for (const kind of Object.keys(out)) out[kind].sort((a, b) => a.rel.localeCompare(b.rel));
+  for (const kind of KINDS) out[kind].sort((a, b) => a.rel.localeCompare(b.rel));
   return out;
 }
 function isSource(sources, rel) {
-  const match = (0, import_picomatch.default)(sources.ignore || []);
+  const match = (0, import_picomatch.default)(sources.ignore ?? []);
   if (match(rel)) return false;
-  return ["styles", "markup", "references"].some((kind) => (0, import_picomatch.default)(sources[kind] || [])(rel));
+  return KINDS.some((kind) => (0, import_picomatch.default)(sources[kind] ?? [])(rel));
 }
 function changedFiles(root2) {
   const git = (args) => execFileSync("git", args, { cwd: root2, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
@@ -23698,11 +23702,14 @@ function changedFiles(root2) {
   return set;
 }
 
-// src/suppressions.mjs
+// src/suppressions.ts
 var ID = "(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)";
 var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 var OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\/\*+|<!--|#+)?\s*/;
-function makeSuppressionParser({ keyword, blanket = [] }) {
+function makeSuppressionParser({
+  keyword,
+  blanket = []
+}) {
   const strict = new RegExp(`^${esc(keyword)}\\s+(${ID}(?:\\s*,\\s*${ID})*)\\s*--\\s*(\\S.*?)(?:\\*/|-->|\\}|$)`);
   const prefixes = [keyword, ...blanket];
   return function scan(text, relPath) {
@@ -23712,12 +23719,12 @@ function makeSuppressionParser({ keyword, blanket = [] }) {
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
-      if (!prefixes.some((p) => raw.includes(p))) continue;
+      if (raw === void 0 || !prefixes.some((p) => raw.includes(p))) continue;
       const stripped = raw.replace(OPENER, "");
       if (!prefixes.some((p) => stripped.startsWith(p))) continue;
       const line = i + 1;
       const m = stripped.match(strict);
-      if (m) {
+      if (m?.[1] !== void 0 && m[2] !== void 0) {
         const ids = m[1].split(",").map((s) => canonicalRuleId(s.trim()));
         byLine.set(line, new Set(ids));
         directives.push({ file: relPath, line, rules: ids, reason: m[2].trim() });
@@ -23741,10 +23748,10 @@ function isSuppressed(byLine, line, ruleId, scopeLines = []) {
   return false;
 }
 
-// src/markup.mjs
+// src/markup.ts
 var import_parser = __toESM(require_lib(), 1);
 
-// src/inline.mjs
+// src/inline.ts
 var UNITLESS = /* @__PURE__ */ new Set([
   "animation-iteration-count",
   "aspect-ratio",
@@ -23818,12 +23825,12 @@ function numeric(prop, n) {
 }
 function keyName(node) {
   if (!node) return null;
-  if (node.key?.type === "Identifier" && !node.computed) return node.key.name;
-  if (node.key?.type === "StringLiteral") return node.key.value;
+  if (node.key.type === "Identifier" && !node.computed) return node.key.name;
+  if (node.key.type === "StringLiteral") return node.key.value;
   return null;
 }
 
-// src/styles.mjs
+// src/styles.ts
 var COLOR_PROPS = /* @__PURE__ */ new Set([
   "color",
   "background",
@@ -23953,7 +23960,7 @@ function isHardcodedTokenValue(prop, value, { allowZero = true } = {}) {
   return false;
 }
 function* ownDecls(rule2) {
-  for (const node of rule2.nodes || []) {
+  for (const node of rule2.nodes ?? []) {
     if (node.type === "decl") yield node;
     else if (node.type === "atrule") yield* ownDecls(node);
   }
@@ -23962,14 +23969,15 @@ function resolvedSelectors(rule2) {
   const own = rule2.selectors;
   const p = rule2.parent;
   if (!p || p.type === "root") return own;
-  const ancestor = p.type === "rule" ? p : p.parent?.type === "rule" ? p.parent : null;
+  const grandparent = p.parent;
+  const ancestor = p.type === "rule" ? p : grandparent?.type === "rule" ? grandparent : null;
   if (!ancestor) return own;
   return resolvedSelectors(ancestor).flatMap(
     (base) => own.map((s) => s.includes("&") ? s.replace(/&/g, base) : `${base} ${s}`)
   );
 }
-var keySelector = (sel) => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() || sel;
-var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].map((m) => m[1]);
+var keySelector = (sel) => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() ?? sel;
+var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => m[1] === void 0 ? [] : [m[1]]);
 function ruleIsGrid(rule2) {
   for (const d of ownDecls(rule2)) {
     const p = d.prop.toLowerCase();
@@ -24007,7 +24015,11 @@ var Rule = import_postcss.default.Rule;
 var Root = import_postcss.default.Root;
 var Node = import_postcss.default.Node;
 
-// src/cssinjs.mjs
+// src/cssinjs.ts
+var importedName = (spec) => {
+  if (spec.type !== "ImportSpecifier") return "default";
+  return spec.imported.type === "Identifier" ? spec.imported.name : spec.imported.value;
+};
 function cssInJsLocals(ast, packages) {
   const styled = /* @__PURE__ */ new Set();
   const bare = /* @__PURE__ */ new Set();
@@ -24017,7 +24029,7 @@ function cssInJsLocals(ast, packages) {
     if (node.type !== "ImportDeclaration" || !fromPackage(node.source.value)) continue;
     for (const spec of node.specifiers) {
       const local = spec.local.name;
-      const imported = spec.type === "ImportSpecifier" ? spec.imported?.name || spec.imported?.value : "default";
+      const imported = importedName(spec);
       if (imported === "default" || imported === "styled") styled.add(local);
       else if (imported === "css" || imported === "createGlobalStyle" || imported === "injectGlobal") bare.add(local);
     }
@@ -24027,7 +24039,7 @@ function cssInJsLocals(ast, packages) {
 function templateText(quasi) {
   let out = "";
   for (let i = 0; i < quasi.quasis.length; i++) {
-    out += quasi.quasis[i].value.raw ?? "";
+    out += quasi.quasis[i]?.value.raw ?? "";
     if (i < quasi.expressions.length) {
       const prev = out.replace(/\s+$/, "").slice(-1);
       out += prev === "" || prev === ";" || prev === "{" || prev === "}" ? "/*dsh*/" : "dsh-e";
@@ -24042,7 +24054,7 @@ function parseTemplate(cssText, startLine) {
     root2 = postcss_default.parse(`.dsh-root{${cssText}
 }`, { from: void 0 });
   } catch (err) {
-    return { groups: [], error: err.message.split("\n")[0] };
+    return { groups: [], error: messageOf(err) };
   }
   const groups = [];
   const at = (node) => startLine + ((node.source?.start?.line ?? 1) - 1);
@@ -24050,7 +24062,7 @@ function parseTemplate(cssText, startLine) {
     const decls = [];
     const nested = [];
     const walk = (container) => {
-      for (const node of container.nodes || []) {
+      for (const node of container.nodes ?? []) {
         if (node.type === "decl") {
           if (node.value.includes("dsh-e")) continue;
           decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
@@ -24059,13 +24071,14 @@ function parseTemplate(cssText, startLine) {
       }
     };
     walk(rule2);
-    if (decls.length)
+    const first = decls[0];
+    if (first)
       groups.push({
         selector,
         decls,
         isGrid: decls.some((d) => GRID_DECL(d.prop, d.value)),
         onTarget,
-        line: decls[0].line
+        line: first.line ?? startLine
       });
     for (const child of nested) {
       const sel = child.selectors.join(", ");
@@ -24076,8 +24089,9 @@ function parseTemplate(cssText, startLine) {
   if (top) collect(top, null, true);
   return { groups, error: null };
 }
+var messageOf = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
 
-// src/patterns.mjs
+// src/patterns.ts
 var split = (spec) => {
   const i = spec.indexOf("::");
   return i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
@@ -24085,7 +24099,10 @@ var split = (spec) => {
 function toNode(spec) {
   if (typeof spec === "string") return { ...split(spec), children: [] };
   if (!Array.isArray(spec) || !spec.length || typeof spec[0] !== "string") return null;
-  return { ...split(spec[0]), children: spec.slice(1).map(toNode).filter(Boolean) };
+  return {
+    ...split(spec[0]),
+    children: spec.slice(1).map(toNode).filter((n) => n !== null)
+  };
 }
 var signatureOf = (node) => node.children.length ? `${node.name}(${node.children.map(signatureOf).join(",")})` : node.name;
 var nodeCount = (node) => 1 + node.children.reduce((n, c) => n + nodeCount(c), 0);
@@ -24112,29 +24129,29 @@ function matches(pattern, tree) {
   return true;
 }
 function loadPatterns(raw) {
-  const list2 = Array.isArray(raw) ? raw : raw?.patterns || [];
+  const list2 = Array.isArray(raw) ? raw : raw?.patterns ?? [];
   const out = [];
   for (const p of list2) {
-    const node = toNode(p.signature);
+    const node = toNode(p?.signature);
     if (!node) continue;
     out.push({
       id: p.id || signatureOf(node),
-      summary: p.summary || "",
-      canonical: p.canonical || null,
+      summary: p.summary ?? "",
+      canonical: p.canonical ?? null,
       node,
       size: nodeCount(node)
     });
   }
   return out;
 }
-function systemTree(el, isSystemName, childrenOf, nameOf, packageOf = () => null) {
+function systemTree(el, isSystemName, childrenOf, nameOf, packageOf = () => null, line) {
   const name = nameOf(el);
   if (!name || !isSystemName(name)) return null;
   return {
     name,
     pkg: packageOf(name),
     children: systemChildren(el, isSystemName, childrenOf, nameOf, packageOf),
-    line: el.line
+    ...line === void 0 ? {} : { line }
   };
 }
 function systemChildren(el, isSystemName, childrenOf, nameOf, packageOf) {
@@ -24144,14 +24161,25 @@ function systemChildren(el, isSystemName, childrenOf, nameOf, packageOf) {
     if (cname && isSystemName(cname)) out.push(systemTree(child, isSystemName, childrenOf, nameOf, packageOf));
     else out.push(...systemChildren(child, isSystemName, childrenOf, nameOf, packageOf));
   }
-  return out.filter(Boolean);
+  return out.filter((n) => n !== null);
 }
 var SUBSTANTIAL = { minNodes: 4, minDepth: 2 };
 
-// src/markup.mjs
+// src/markup.ts
 var PLUGINS = ["jsx", "typescript", "decorators-legacy", "classProperties", "importAttributes"];
+var memberObject = (t) => t.type === "MemberExpression" && t.object.type === "Identifier" ? t.object.name : void 0;
+var memberProperty = (t) => t.type === "MemberExpression" && t.property.type === "Identifier" ? t.property.name : void 0;
+var calleeOf = (t) => t.type === "CallExpression" && t.callee.type === "Identifier" ? t.callee.name : void 0;
+var firstArgOf = (t) => {
+  if (t.type !== "CallExpression") return void 0;
+  const arg = t.arguments[0];
+  return arg?.type === "Identifier" ? arg.name : void 0;
+};
+var identifierOf = (t) => t.type === "Identifier" ? t.name : void 0;
+var held = (set, name) => name !== void 0 && set.has(name);
+var messageOf2 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
 function harvestTokens(text, into = /* @__PURE__ */ new Set()) {
-  for (const t of text.match(/[A-Za-z_][\w-]*/g) || []) into.add(t);
+  for (const t of text.match(/[A-Za-z_][\w-]*/g) ?? []) into.add(t);
   return into;
 }
 var MAX_STEM = 128;
@@ -24174,11 +24202,16 @@ function stringsIn(node, out = []) {
     for (const n of node) stringsIn(n, out);
     return out;
   }
-  if (node.type === "StringLiteral") out.push(node.value);
-  else if (node.type === "TemplateElement") out.push(node.value?.cooked ?? node.value?.raw ?? "");
-  for (const key of Object.keys(node)) {
+  const rec = node;
+  if (rec["type"] === "StringLiteral") {
+    if (typeof rec["value"] === "string") out.push(rec["value"]);
+  } else if (rec["type"] === "TemplateElement") {
+    const v = rec["value"];
+    out.push(v?.cooked ?? v?.raw ?? "");
+  }
+  for (const key of Object.keys(rec)) {
     if (key === "loc" || key === "type" || key === "start" || key === "end") continue;
-    stringsIn(node[key], out);
+    stringsIn(rec[key], out);
   }
   return out;
 }
@@ -24228,11 +24261,12 @@ function walkAst(node, visit) {
     for (const n of node) walkAst(n, visit);
     return;
   }
-  if (typeof node.type === "string") visit(node);
-  for (const key of Object.keys(node)) {
+  const rec = node;
+  if (typeof rec["type"] === "string") visit(node);
+  for (const key of Object.keys(rec)) {
     if (key === "loc" || key === "start" || key === "end" || key === "leadingComments" || key === "trailingComments")
       continue;
-    walkAst(node[key], visit);
+    walkAst(rec[key], visit);
   }
 }
 function systemImports(ast, ds) {
@@ -24247,7 +24281,7 @@ function systemImports(ast, ds) {
     if (node.type !== "ImportDeclaration" || !fromPackage(node.source.value)) continue;
     for (const spec of node.specifiers) {
       const local = spec.local.name;
-      const imported = spec.type === "ImportSpecifier" ? spec.imported.name || spec.imported.value : local;
+      const imported = spec.type === "ImportSpecifier" ? spec.imported.type === "Identifier" ? spec.imported.name : spec.imported.value : local;
       const c = canonical(imported);
       known.add(local);
       if (ds.textComponents.includes(c)) text.add(local);
@@ -24271,7 +24305,7 @@ function scanMarkup(text, relPath, ds) {
   try {
     ast = (0, import_parser.parse)(text, { sourceType: "unambiguous", errorRecovery: true, plugins: PLUGINS });
   } catch (err) {
-    return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, componentImports: [], parseError: err.message.split("\n")[0] };
+    return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, componentImports: [], parseError: messageOf2(err) };
   }
   const { known, text: textLike, layout, componentImports, packages } = systemImports(ast, ds);
   const tags = cssInJsLocals(ast, ds.cssInJsPackages);
@@ -24283,28 +24317,31 @@ function scanMarkup(text, relPath, ds) {
     const dig = (n) => {
       if (!n || typeof n !== "object") return;
       if (Array.isArray(n)) return n.forEach(dig);
-      if (n.type === "JSXElement") return void out.push(n);
-      for (const k of Object.keys(n)) if (k !== "loc" && k !== "start" && k !== "end") dig(n[k]);
+      const rec = n;
+      if (rec["type"] === "JSXElement") return void out.push(n);
+      for (const k of Object.keys(rec)) if (k !== "loc" && k !== "start" && k !== "end") dig(rec[k]);
     };
-    for (const c of el.children || []) dig(c);
+    for (const c of el.children ?? []) dig(c);
     return out;
   };
   const jsxName = (el) => {
-    const n = el?.openingElement?.name;
-    if (n?.type === "JSXIdentifier") return n.name;
-    if (n?.type === "JSXMemberExpression") return n.object?.name ? `${n.object.name}.${n.property?.name ?? "?"}` : null;
+    const n = el.openingElement.name;
+    if (n.type === "JSXIdentifier") return n.name;
+    if (n.type === "JSXMemberExpression")
+      return n.object.type === "JSXIdentifier" ? `${n.object.name}.${n.property.name}` : null;
     return null;
   };
-  const baseOf = (name) => name.split(".", 1)[0];
+  const baseOf = (name) => name.split(".", 1)[0] ?? name;
   const readComposite = (el) => {
     const name = jsxName(el);
     if (!name || !known.has(baseOf(name))) return;
     const tree = systemTree(
-      { ...el, line: el.loc?.start?.line ?? 1 },
+      el,
       (n) => known.has(baseOf(n)),
       jsxChildElements,
       jsxName,
-      (n) => packages.get(baseOf(n)) || null
+      (n) => packages.get(baseOf(n)) ?? null,
+      el.loc?.start?.line ?? 1
     );
     if (!tree || nodeCount(tree) < 2) return;
     composites.push({
@@ -24319,18 +24356,19 @@ function scanMarkup(text, relPath, ds) {
   const readTaggedTemplate = (node) => {
     if (!tags.any) return;
     const t = node.tag;
-    const owner = cssPropOwner.get(node.start);
+    const owner = typeof node.start === "number" ? cssPropOwner.get(node.start) : void 0;
     let target = null;
     let isSystem = false;
     if (owner) {
       ({ target, isSystem } = owner);
-      if (!tags.bare.has(t.name) && !tags.styled.has(t.object?.name) && !tags.styled.has(t.callee?.name)) return;
-    } else if (t.type === "MemberExpression" && tags.styled.has(t.object?.name)) {
-      target = t.property?.name ?? null;
-    } else if (t.type === "CallExpression" && tags.styled.has(t.callee?.name)) {
-      target = t.arguments?.[0]?.name ?? null;
+      if (!held(tags.bare, identifierOf(t)) && !held(tags.styled, memberObject(t)) && !held(tags.styled, calleeOf(t)))
+        return;
+    } else if (held(tags.styled, memberObject(t))) {
+      target = memberProperty(t) ?? null;
+    } else if (held(tags.styled, calleeOf(t))) {
+      target = firstArgOf(t) ?? null;
       isSystem = Boolean(target && known.has(target));
-    } else if (t.type === "Identifier" && tags.bare.has(t.name)) {
+    } else if (held(tags.bare, identifierOf(t))) {
       target = null;
     } else {
       return;
@@ -24342,8 +24380,8 @@ function scanMarkup(text, relPath, ds) {
       line,
       target,
       isSystem,
-      isText: isSystem && textLike.has(target),
-      isLayout: isSystem && layout.has(target),
+      isText: isSystem && target !== null && textLike.has(target),
+      isLayout: isSystem && target !== null && layout.has(target),
       groups,
       error
     });
@@ -24353,7 +24391,7 @@ function scanMarkup(text, relPath, ds) {
     if (node.type === "JSXElement") readComposite(node);
     if (node.type !== "JSXOpeningElement") return;
     const name = node.name;
-    const tag = name.type === "JSXIdentifier" ? name.name : name.type === "JSXMemberExpression" ? `${name.object?.name ?? "?"}.${name.property?.name ?? "?"}` : null;
+    const tag = name.type === "JSXIdentifier" ? name.name : name.type === "JSXMemberExpression" ? `${name.object.type === "JSXIdentifier" ? name.object.name : "?"}.${name.property.name}` : null;
     if (!tag) return;
     const line = node.loc?.start?.line ?? 1;
     const strings = [];
@@ -24361,17 +24399,17 @@ function scanMarkup(text, relPath, ds) {
     let cssAttr = null;
     for (const attr of node.attributes) {
       if (attr.type !== "JSXAttribute") continue;
-      const an = attr.name?.name;
+      const an = attr.name.type === "JSXIdentifier" ? attr.name.name : attr.name.name.name;
       if (an === "className" || an === "class") stringsIn(attr.value, strings);
       else if (an === "style") style = readStyleAttr(attr.value);
       else if (an === "css") cssAttr = attr.value;
     }
     const classes = classesFrom(strings);
-    const root2 = tag.split(".")[0];
+    const root2 = tag.split(".")[0] ?? tag;
     const isComponent = /^[A-Z]/.test(root2);
     const isSystem = isComponent && known.has(root2);
     const owned = cssAttr?.type === "JSXExpressionContainer" ? cssAttr.expression : null;
-    if (owned?.type === "TaggedTemplateExpression")
+    if (owned?.type === "TaggedTemplateExpression" && typeof owned.start === "number")
       cssPropOwner.set(owned.start, {
         target: isComponent ? root2 : tag.toLowerCase(),
         isSystem,
@@ -24415,7 +24453,7 @@ function scanMarkup(text, relPath, ds) {
   return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, componentImports, parseError: null };
 }
 
-// src/syntax.mjs
+// src/syntax.ts
 var SYNTAX_PACKAGES = {
   ".scss": "postcss-scss",
   ".sass": "postcss-sass",
@@ -24435,7 +24473,8 @@ async function syntaxFor(path) {
   const ext = extOf(path);
   const pkg = SYNTAX_PACKAGES[ext];
   if (!pkg) return { parse: (text, opts) => postcss_default.parse(text, opts) };
-  if (cache.has(pkg)) return cache.get(pkg);
+  const cached = cache.get(pkg);
+  if (cached) return cached;
   let resolved;
   try {
     const load = BUNDLED_LOADERS[pkg] ?? (() => import(pkg));
@@ -24443,7 +24482,8 @@ async function syntaxFor(path) {
     const syntax = mod.default ?? mod;
     const parse3 = syntax.parse ?? syntax;
     if (typeof parse3 !== "function") throw new Error(`${pkg} exposes no parse()`);
-    resolved = { parse: (text, opts) => parse3(text, opts) };
+    const parseFn = parse3;
+    resolved = { parse: (text, opts) => parseFn(text, opts) };
   } catch {
     resolved = { missing: pkg };
   }
@@ -24451,7 +24491,7 @@ async function syntaxFor(path) {
   return resolved;
 }
 
-// src/tokens.mjs
+// src/tokens.ts
 import { readdirSync as readdirSync2, readFileSync, statSync } from "node:fs";
 import { join as join2 } from "node:path";
 var ROLE_HINTS = [
@@ -24489,8 +24529,9 @@ function harvestTokenDefs(root2, prefixes, into) {
     into.known.add(name);
     const v = normalizeValue(decl2.value);
     if (!v || v.includes("var(")) return;
-    if (!into.byValue.has(v)) into.byValue.set(v, []);
-    if (!into.byValue.get(v).includes(name)) into.byValue.get(v).push(name);
+    const names = into.byValue.get(v) ?? [];
+    if (!names.includes(name)) names.push(name);
+    into.byValue.set(v, names);
   });
   return into;
 }
@@ -24527,7 +24568,7 @@ function cssFilesUnder(path, budget = { left: 200 }) {
 function readTokenSources(root2, sources, prefixes) {
   const set = emptyTokenSet();
   if (!prefixes.length) return set;
-  for (const rel of sources || []) {
+  for (const rel of sources ?? []) {
     for (const file of cssFilesUnder(join2(root2, rel))) {
       try {
         harvestTokenDefs(postcss_default.parse(readFileSync(file, "utf8"), { from: file }), prefixes, set);
@@ -24555,12 +24596,15 @@ function suggestionFor(set, prop, value) {
 function tokenRefsIn(value, prefixes) {
   if (!prefixes.length) return [];
   const out = [];
-  for (const m of String(value).matchAll(/var\(\s*(--[\w-]+)/g))
-    if (prefixes.some((p) => m[1].startsWith(p))) out.push(m[1]);
+  for (const m of String(value).matchAll(/var\(\s*(--[\w-]+)/g)) {
+    const name = m[1];
+    if (name !== void 0 && prefixes.some((p) => name.startsWith(p))) out.push(name);
+  }
   return out;
 }
 
-// src/analyze.mjs
+// src/analyze.ts
+var messageOf3 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
 function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {} }) {
   const isMargin = prop === "margin" || prop.startsWith("margin-");
   const marginKind = isMargin ? classifyMargin(value) : null;
@@ -24568,9 +24612,9 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
   const hardcoded = isHardcodedTokenValue(prop, value, options);
   const styling = isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
   let finding = null;
-  if (TYPE_PROPS.has(prop) && boundText.length) {
+  if (TYPE_PROPS.has(prop) && boundText[0]) {
     finding = { rule: "typography/in-css", message: `${prop} on <${boundText[0].tag}>` };
-  } else if (boundSystem.length && APPEARANCE_PROPS.has(prop)) {
+  } else if (boundSystem[0] && APPEARANCE_PROPS.has(prop)) {
     finding = { rule: "system/override", message: `<${boundSystem[0].tag}> \u2190 ${prop}` };
   } else if (isMargin) {
     if (marginKind === "negative") finding = { rule: "layout/negative-margin", message: `${prop}: ${value}`, code: prop };
@@ -24597,21 +24641,24 @@ function collapsePerRule(pending) {
       out.push(f);
       continue;
     }
-    if (!groups.has(f.rule)) groups.set(f.rule, []);
-    groups.get(f.rule).push(f);
+    const group = groups.get(f.rule) ?? [];
+    group.push(f);
+    groups.set(f.rule, group);
   }
   for (const [rule2, group] of groups) {
+    const first = group[0];
+    if (!first) continue;
     if (group.length === 1) {
-      out.push(group[0]);
+      out.push(first);
       continue;
     }
-    const props = [...new Set(group.map((f) => String(f.message).split(":")[0].trim()))];
+    const props = [...new Set(group.map((f) => (f.message.split(":")[0] ?? f.message).trim()))];
     out.push({
-      ...group[0],
+      ...first,
       rule: rule2,
       message: group.map((f) => f.message).join("; "),
-      hints: group.flatMap((f) => f.hints || (f.hint ? [f.hint] : [])),
-      suffix: group[0].suffix,
+      hints: group.flatMap((f) => f.hints ?? (f.hint ? [f.hint] : [])),
+      suffix: first.suffix,
       code: `${rule2}:${props.sort().join(",")}`
     });
   }
@@ -24629,7 +24676,7 @@ async function analyze(config, { scope = null } = {}) {
       return false;
     }
   };
-  const tokenPrefixes = ds.tokenPrefixes || [];
+  const tokenPrefixes = ds.tokenPrefixes ?? [];
   const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
   const unknownTokens = [];
   const findings = [];
@@ -24639,8 +24686,11 @@ async function analyze(config, { scope = null } = {}) {
   const inScope = scope ? new Set(scope) : null;
   const reports = (rel) => !inScope || inScope.has(rel);
   const suppressionsFor = (rel, text) => {
-    if (!suppByFile.has(rel)) suppByFile.set(rel, parseSuppressions(text, rel));
-    return suppByFile.get(rel);
+    const cached = suppByFile.get(rel);
+    if (cached) return cached;
+    const parsed = parseSuppressions(text, rel);
+    suppByFile.set(rel, parsed);
+    return parsed;
   };
   const referenced = /* @__PURE__ */ new Set();
   const stems = /* @__PURE__ */ new Set();
@@ -24665,15 +24715,17 @@ async function analyze(config, { scope = null } = {}) {
     scanned.referenced.forEach((t) => referenced.add(t));
     scanned.stems.forEach((s) => stems.add(s));
     for (const b of scanned.bindings) {
-      if (!bindings.has(b.cls)) bindings.set(b.cls, []);
-      bindings.get(b.cls).push(b);
+      if (b.cls === void 0) continue;
+      const group = bindings.get(b.cls) ?? [];
+      group.push(b);
+      bindings.set(b.cls, group);
     }
     rawEls.push(...scanned.rawEls);
-    inlineStyles.push(...scanned.inlineStyles || []);
-    cssInJs.push(...scanned.cssInJs || []);
-    composites.push(...scanned.composites || []);
+    inlineStyles.push(...scanned.inlineStyles);
+    cssInJs.push(...scanned.cssInJs);
+    composites.push(...scanned.composites);
     if (scanned.imports) importsByFile.set(rel, scanned.imports);
-    for (const ci of scanned.componentImports || []) componentImports.push({ ...ci, file: rel });
+    for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
     suppressionsFor(rel, text);
   }
   for (const { abs } of files.references) {
@@ -24716,7 +24768,7 @@ async function analyze(config, { scope = null } = {}) {
       continue;
     }
     const syntax = await syntaxFor(rel);
-    if (syntax.missing) {
+    if (syntax.missing !== void 0) {
       unparsed(`needs \`npm i -D ${syntax.missing}\` to be checked`);
       continue;
     }
@@ -24724,7 +24776,7 @@ async function analyze(config, { scope = null } = {}) {
     try {
       root2 = syntax.parse(text, { from: abs });
     } catch (err) {
-      unparsed(err.message.split("\n")[0]);
+      unparsed(messageOf3(err));
       continue;
     }
     const emit = ({ rule: rule2, line, message, code, scopeLines = [], hint, hints }) => {
@@ -24749,7 +24801,7 @@ async function analyze(config, { scope = null } = {}) {
       const allClasses = [...new Set(selectors.flatMap(classesIn))];
       const keyClasses = [...new Set(selectors.map(keySelector).flatMap(classesIn))];
       if (!allClasses.length) return;
-      const bound = keyClasses.flatMap((c) => bindings.get(c) || []);
+      const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
       const boundSystem = bound.filter((b) => b.isSystem);
       const boundText = bound.filter((b) => b.isText);
       const isGrid = ruleIsGrid(cssRule);
@@ -24787,7 +24839,7 @@ async function analyze(config, { scope = null } = {}) {
   for (const el of inlineStyles) {
     if (!reports(el.file)) continue;
     const supp = suppByFile.get(el.file);
-    const muted = (rule2, line) => supp && isSuppressed(supp.byLine, line, rule2, [el.line, el.line - 1]);
+    const muted = (rule2, line) => supp !== void 0 && isSuppressed(supp.byLine, line, rule2, [el.line, el.line - 1]);
     const push = (rule2, line, message, code, hints, suffix) => {
       if (!config.enabled[rule2] || muted(rule2, line)) return;
       findings.push({
@@ -24823,7 +24875,7 @@ async function analyze(config, { scope = null } = {}) {
         pending.push({ ...finding, line: d.line ?? el.line, code: finding.code ?? finding.message, suffix: " (inline)" });
     }
     for (const f of collapsePerRule(pending))
-      push(f.rule, f.line, `${f.message}${f.suffix ?? ""}`, f.code, f.hints || (f.hint ? [f.hint] : void 0), f.suffix);
+      push(f.rule, f.line, `${f.message}${f.suffix ?? ""}`, f.code, f.hints ?? (f.hint ? [f.hint] : void 0), f.suffix);
   }
   for (const tpl of cssInJs) {
     if (!reports(tpl.file)) continue;
@@ -24833,20 +24885,21 @@ async function analyze(config, { scope = null } = {}) {
       continue;
     }
     const boundSystem = tpl.isSystem ? [{ tag: tpl.target, isSystem: true }] : [];
-    const boundText = tpl.isText ? [{ tag: tpl.target, isText: true }] : [];
+    const boundText = tpl.isText ? [{ tag: tpl.target, isSystem: true, isText: true }] : [];
     for (const group of tpl.groups) {
       const onTarget = group.onTarget;
       const pending = [];
       for (const d of group.decls) {
-        for (const name of tokenRefsIn(d.value, tokenPrefixes))
-          unknownTokens.push({ file: tpl.file, line: d.line, name, scopeLines: [tpl.line], supp });
+        if (supp)
+          for (const name of tokenRefsIn(d.value, tokenPrefixes))
+            unknownTokens.push({ file: tpl.file, line: d.line ?? tpl.line, name, scopeLines: [tpl.line], supp });
         const { finding } = classifyDeclaration(d, {
           boundSystem: onTarget ? boundSystem : [],
           boundText: onTarget ? boundText : [],
           isGrid: group.isGrid,
           options: config.optionsOf("tokens/hardcoded-value")
         });
-        if (finding) pending.push({ ...finding, line: d.line });
+        if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
       }
       const where = group.selector ? ` in \`${group.selector}\`` : "";
       for (const f of collapsePerRule(pending)) {
@@ -24861,7 +24914,7 @@ async function analyze(config, { scope = null } = {}) {
           suffix: `${where} (css-in-js)`,
           code: `css-in-js:${f.code ?? f.message}`,
           rank: RULES[f.rule].rank,
-          hints: f.hints || (f.hint ? [f.hint] : void 0)
+          hints: f.hints ?? (f.hint ? [f.hint] : void 0)
         });
       }
     }
@@ -24890,23 +24943,24 @@ async function analyze(config, { scope = null } = {}) {
   const newEnabled = config.enabled["patterns/unregistered-composite"];
   if ((dupEnabled || newEnabled) && composites.length) {
     const registry = config.patterns || [];
-    const bestMatch = (c) => registry.filter((p) => p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree)).sort((a, b) => b.size - a.size)[0] || null;
+    const bestMatch = (c) => registry.filter((p) => p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree)).sort((a, b) => b.size - a.size)[0] ?? null;
     const byPattern = /* @__PURE__ */ new Map();
     const bySignature = /* @__PURE__ */ new Map();
     for (const c of composites) {
       const hit = dupEnabled ? bestMatch(c) : null;
       if (hit) {
         if (hit.canonical && importsByFile.get(c.file)?.has(hit.canonical)) continue;
-        const key = hit.id;
-        if (!byPattern.has(key)) byPattern.set(key, /* @__PURE__ */ new Map());
-        const prev2 = byPattern.get(key).get(c.file);
-        if (!prev2 || c.size > prev2.size) byPattern.get(key).set(c.file, { ...c, pattern: hit });
+        const perFile2 = byPattern.get(hit.id) ?? /* @__PURE__ */ new Map();
+        byPattern.set(hit.id, perFile2);
+        const prev2 = perFile2.get(c.file);
+        if (!prev2 || c.size > prev2.size) perFile2.set(c.file, { ...c, pattern: hit });
         continue;
       }
       if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
-      if (!bySignature.has(c.signature)) bySignature.set(c.signature, /* @__PURE__ */ new Map());
-      const prev = bySignature.get(c.signature).get(c.file);
-      if (!prev || c.line < prev.line) bySignature.get(c.signature).set(c.file, c);
+      const perFile = bySignature.get(c.signature) ?? /* @__PURE__ */ new Map();
+      bySignature.set(c.signature, perFile);
+      const prev = perFile.get(c.file);
+      if (!prev || c.line < prev.line) perFile.set(c.file, c);
     }
     const emitComposite = (rule2, c, message) => {
       if (!reports(c.file)) return;
@@ -24925,7 +24979,7 @@ async function analyze(config, { scope = null } = {}) {
     for (const [id, files2] of byPattern) {
       if (files2.size < 2) continue;
       for (const c of files2.values()) {
-        const remedy = c.pattern.canonical ? `import \`${c.pattern.canonical}\`` : "extract one shared implementation";
+        const remedy = c.pattern?.canonical ? `import \`${c.pattern.canonical}\`` : "extract one shared implementation";
         emitComposite(
           "patterns/duplicate-composite",
           c,
@@ -24942,6 +24996,7 @@ async function analyze(config, { scope = null } = {}) {
   if (config.enabled["system/locked-component"] || config.enabled["system/superseded-component"]) {
     const seen2 = /* @__PURE__ */ new Set();
     for (const ci of componentImports) {
+      if (ci.file === void 0) continue;
       const entry = config.componentRegistry.get(`${ci.package}::${ci.canonical}`);
       if (!entry || entry.status !== "legacy" && entry.status !== "locked") continue;
       const rule2 = entry.status === "locked" ? "system/locked-component" : "system/superseded-component";
@@ -25021,7 +25076,7 @@ async function analyze(config, { scope = null } = {}) {
 }
 var findingKey = (f) => `${f.rule}|${f.file}|${String(f.code ?? f.message).replace(/\s+/g, " ").trim()}`;
 
-// src/autofix.mjs
+// src/autofix.ts
 import { readFileSync as readFileSync3, writeFileSync } from "node:fs";
 import { join as join3 } from "node:path";
 var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
@@ -25030,17 +25085,19 @@ function tokenFixes(findings) {
   const out = [];
   for (const f of findings) {
     if (f.rule !== "tokens/hardcoded-value" || !CSS_FILE.test(f.file)) continue;
-    if (f.suggest?.length !== 1 || f.suggest[0].tokens.length !== 1) continue;
-    const { prop, value, tokens } = f.suggest[0];
-    out.push({ file: f.file, line: f.line, prop, value, token: tokens[0] });
+    const only = f.suggest?.length === 1 ? f.suggest[0] : void 0;
+    const token = only?.tokens.length === 1 ? only.tokens[0] : void 0;
+    if (!only || token === void 0) continue;
+    out.push({ file: f.file, line: f.line, prop: only.prop, value: only.value, token });
   }
   return out;
 }
 function applyTokenFixes(root2, findings, { dry = false } = {}) {
   const byFile = /* @__PURE__ */ new Map();
   for (const fix of tokenFixes(findings)) {
-    if (!byFile.has(fix.file)) byFile.set(fix.file, []);
-    byFile.get(fix.file).push(fix);
+    const group = byFile.get(fix.file) ?? [];
+    group.push(fix);
+    byFile.set(fix.file, group);
   }
   const applied = [];
   const skipped = [];
@@ -25050,7 +25107,8 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
     try {
       text = readFileSync3(abs, "utf8");
     } catch (err) {
-      for (const fix of group) skipped.push({ ...fix, why: err.message });
+      const why = err instanceof Error ? err.message : String(err);
+      for (const fix of group) skipped.push({ ...fix, why });
       continue;
     }
     const lines = text.split("\n");
@@ -25080,7 +25138,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
   return { applied, skipped };
 }
 
-// src/baseline.mjs
+// src/baseline.ts
 import { existsSync, readFileSync as readFileSync4, writeFileSync as writeFileSync2 } from "node:fs";
 import { isAbsolute, join as join4 } from "node:path";
 var resolvePath = (root2, p) => isAbsolute(p) ? p : join4(root2, p);
@@ -25089,7 +25147,14 @@ function readBaseline(root2, path) {
   if (!existsSync(full)) return null;
   try {
     const parsed = JSON.parse(readFileSync4(full, "utf8"));
-    return { ...parsed, set: new Set(parsed.entries || []) };
+    const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+    return {
+      version: parsed.version ?? 1,
+      createdAt: parsed.createdAt ?? "",
+      count: parsed.count ?? entries.length,
+      entries,
+      set: new Set(entries)
+    };
   } catch {
     return null;
   }
@@ -25125,31 +25190,36 @@ function applyBaseline(result, baseline) {
   };
 }
 
-// src/config.mjs
+// src/config.ts
 import { existsSync as existsSync2, readFileSync as readFileSync5, readdirSync as readdirSync3 } from "node:fs";
 import { dirname, isAbsolute as isAbsolute2, join as join5, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-// src/registry.mjs
+// src/registry.ts
+var declaredPackages = (raw) => {
+  const packages = raw?.packages;
+  return Array.isArray(packages) ? packages.filter((p) => typeof p === "string" && p !== "") : [];
+};
 function registryApplies(raw, dsPackages) {
-  const declared = Array.isArray(raw?.packages) ? raw.packages.filter(Boolean) : [];
+  const declared = declaredPackages(raw);
   if (!declared.length) return true;
-  return (dsPackages || []).some((p) => declared.includes(p));
+  return (dsPackages ?? []).some((p) => declared.includes(p));
 }
-var registryPackages = (raw) => Array.isArray(raw?.packages) ? raw.packages.filter(Boolean) : [];
+var registryPackages = (raw) => declaredPackages(raw);
 
-// src/components.mjs
+// src/components.ts
+var isEntry = (c) => Boolean(c?.name && c?.package && c?.status);
 function loadComponents(raw) {
-  const list2 = Array.isArray(raw) ? raw : raw?.components || [];
+  const list2 = Array.isArray(raw) ? raw : raw?.components ?? [];
   const map = /* @__PURE__ */ new Map();
   for (const c of list2) {
-    if (!c?.name || !c?.package || !c?.status) continue;
+    if (!isEntry(c)) continue;
     map.set(`${c.package}::${c.name}`, c);
   }
   return map;
 }
 
-// src/config.mjs
+// src/config.ts
 var HERE = dirname(fileURLToPath(import.meta.url));
 var PRESET_DIR = join5(HERE, "..", "presets");
 var CONFIG_NAMES = [
@@ -25189,7 +25259,7 @@ var DEFAULTS = {
   baseline: ".loupe-baseline.json",
   hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 12e4 }
 };
-var isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+var isObj = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 function merge(base, over) {
   if (!isObj(base) || !isObj(over)) return over === void 0 ? base : over;
   const out = { ...base };
@@ -25206,7 +25276,8 @@ function findConfig(start) {
     const pkg = join5(dir, "package.json");
     if (existsSync2(pkg)) {
       try {
-        if (JSON.parse(readFileSync5(pkg, "utf8")).loupe) return pkg;
+        const parsed = JSON.parse(readFileSync5(pkg, "utf8"));
+        if (isObj(parsed) && parsed["loupe"]) return pkg;
       } catch {
       }
     }
@@ -25234,11 +25305,11 @@ async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
   const real = resolve(path);
   if (seen.has(real)) throw new Error(`circular extends at ${real}`);
   seen.add(real);
-  const raw = await readConfigFile(real) || {};
+  const raw = await readConfigFile(real) ?? {};
   return expandExtends(raw, dirname(real), seen);
 }
 async function expandExtends(raw, fromDir, seen = /* @__PURE__ */ new Set()) {
-  if (!raw?.extends) return raw || {};
+  if (!raw?.extends) return raw ?? {};
   const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
   let base = {};
   for (const spec of specs) {
@@ -25257,12 +25328,12 @@ function listPresets() {
 }
 var presetExists = (name) => existsSync2(join5(PRESET_DIR, `${name}.json`));
 function compilePatterns(patterns) {
-  return (patterns || []).map(
+  return (patterns ?? []).map(
     (p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`)
   );
 }
 function normalize(raw, { root: root2 }) {
-  const cfg = merge(DEFAULTS, raw || {});
+  const cfg = merge(DEFAULTS, raw ?? {});
   const ds = cfg.designSystem;
   let patterns = [];
   if (Array.isArray(cfg.patterns)) patterns = loadPatterns(cfg.patterns);
@@ -25286,23 +25357,24 @@ function normalize(raw, { root: root2 }) {
       componentRegistry = /* @__PURE__ */ new Map();
     }
   }
-  const rules = {};
-  for (const [id, def] of Object.entries(RULES)) rules[id] = { severity: def.severity, options: {} };
-  for (const [rawId, value] of Object.entries(cfg.rules || {})) {
+  const rules = Object.fromEntries(
+    RULE_IDS.map((id) => [id, { severity: RULES[id].severity, options: {} }])
+  );
+  for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
     const id = canonicalRuleId(rawId);
-    if (!RULES[id]) throw new Error(`unknown rule in config: ${rawId}`);
+    if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
     const [sev, opts] = Array.isArray(value) ? value : [value, {}];
-    if (!SEVERITIES.has(sev)) throw new Error(`bad severity for ${rawId}: ${sev}`);
+    if (!isSeverity(sev)) throw new Error(`bad severity for ${rawId}: ${String(sev)}`);
     rules[id] = { severity: sev, options: { ...opts } };
   }
   const elementMap = /* @__PURE__ */ new Map();
-  for (const [tag, v] of Object.entries(ds.elementMap || {})) {
+  for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
     const entry = typeof v === "string" ? { component: v, styledOnly: false } : v;
     elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
   }
-  const layoutComponents = ds.components?.layout || [];
-  const textComponents = ds.components?.text || [];
-  const hasComponents = (ds.packages || []).length > 0 && layoutComponents.length + textComponents.length > 0;
+  const layoutComponents = ds.components?.layout ?? [];
+  const textComponents = ds.components?.text ?? [];
+  const hasComponents = (ds.packages ?? []).length > 0 && layoutComponents.length + textComponents.length > 0;
   const capability = {
     components: hasComponents,
     layoutComponents: hasComponents && layoutComponents.length > 0,
@@ -25311,25 +25383,30 @@ function normalize(raw, { root: root2 }) {
     tokenPrefixes: (ds.tokenPrefixes || []).length > 0,
     patternRegistry: hasComponents && patterns.length > 0,
     componentRegistry: componentRegistry.size > 0,
-    projectNamespace: (cfg.namespaces.project || []).length > 0
+    projectNamespace: (cfg.namespaces.project ?? []).length > 0
   };
-  const enabled = {};
-  for (const [id, def] of Object.entries(RULES)) {
-    const met = def.needs.every((n) => capability[n]);
-    enabled[id] = met && rules[id].severity !== "off";
-  }
+  const enabled = Object.fromEntries(
+    RULE_IDS.map((id) => [
+      id,
+      RULES[id].needs.every((n) => capability[n]) && rules[id].severity !== "off"
+    ])
+  );
   const neverDead = compilePatterns(cfg.namespaces.neverDead);
-  const projectPrefixes = cfg.namespaces.project || [];
-  const externalPrefixes = cfg.namespaces.external || [];
+  const projectPrefixes = cfg.namespaces.project ?? [];
+  const externalPrefixes = cfg.namespaces.external ?? [];
   return {
     root: root2,
     raw: cfg,
+    // Overwritten by `loadConfig`, which knows which of the five resolution
+    // paths won. Normalizing a bare object is the inline case by definition.
+    source: { kind: "inline" },
+    inferred: false,
     designSystem: {
       name: ds.name || "",
-      packages: ds.packages || [],
-      tokenPrefixes: ds.tokenPrefixes || [],
-      tokenSources: ds.tokenSources || [],
-      cssInJsPackages: ds.cssInJsPackages || [],
+      packages: ds.packages ?? [],
+      tokenPrefixes: ds.tokenPrefixes ?? [],
+      tokenSources: ds.tokenSources ?? [],
+      cssInJsPackages: ds.cssInJsPackages ?? [],
       normalizeExports: ds.normalizeExports ? new RegExp(ds.normalizeExports) : null,
       layoutComponents,
       textComponents,
@@ -25352,17 +25429,23 @@ function normalize(raw, { root: root2 }) {
   };
 }
 function setPatterns(config, patterns) {
-  config.patterns = patterns || [];
+  config.patterns = patterns ?? [];
   config.enabled["patterns/duplicate-composite"] = config.patterns.length > 0 && config.designSystem.knownComponents.size > 0 && config.severityOf("patterns/duplicate-composite") !== "off";
   return config;
 }
 function setComponentRegistry(config, componentRegistry) {
-  config.componentRegistry = componentRegistry || /* @__PURE__ */ new Map();
+  config.componentRegistry = componentRegistry ?? /* @__PURE__ */ new Map();
   config.enabled["system/locked-component"] = config.componentRegistry.size > 0 && config.severityOf("system/locked-component") !== "off";
   config.enabled["system/superseded-component"] = config.componentRegistry.size > 0 && config.severityOf("system/superseded-component") !== "off";
   return config;
 }
-async function loadConfig({ root: root2, configPath, preset: preset2, inline, inferred = false }) {
+async function loadConfig({
+  root: root2,
+  configPath,
+  preset: preset2,
+  inline,
+  inferred = false
+}) {
   let raw;
   let source;
   if (configPath) {
@@ -25391,7 +25474,7 @@ async function loadConfig({ root: root2, configPath, preset: preset2, inline, in
   return normalized;
 }
 
-// src/report.mjs
+// src/report.ts
 var SEV_MARK = { error: "\u2717", warn: "\u2022" };
 function formatAgent(result, config, { maxFindings = 0, showSuppressed = false } = {}) {
   const { findings, diagnostics } = result;
@@ -25402,8 +25485,9 @@ function formatAgent(result, config, { maxFindings = 0, showSuppressed = false }
   } else {
     const byRule = /* @__PURE__ */ new Map();
     for (const f of findings) {
-      if (!byRule.has(f.rule)) byRule.set(f.rule, []);
-      byRule.get(f.rule).push(f);
+      const group = byRule.get(f.rule) ?? [];
+      group.push(f);
+      byRule.set(f.rule, group);
     }
     const groups = [...byRule.entries()].sort((a, b) => RULES[b[0]].rank - RULES[a[0]].rank);
     const quota = new Map(groups.map(([id]) => [id, 0]));
@@ -25414,8 +25498,9 @@ function formatAgent(result, config, { maxFindings = 0, showSuppressed = false }
         progress = false;
         for (const [id, group] of groups) {
           if (budget <= 0) break;
-          if (quota.get(id) >= group.length) continue;
-          quota.set(id, quota.get(id) + 1);
+          const taken = quota.get(id) ?? 0;
+          if (taken >= group.length) continue;
+          quota.set(id, taken + 1);
           budget--;
           progress = true;
         }
@@ -25425,10 +25510,10 @@ function formatAgent(result, config, { maxFindings = 0, showSuppressed = false }
     }
     let hidden = 0;
     for (const [ruleId, group] of groups) {
-      const sev = group[0].severity;
+      const sev = group[0]?.severity ?? "warn";
       lines.push("");
-      lines.push(`${SEV_MARK[sev] || "\u2022"} ${ruleId} (${group.length}) \u2014 ${renderTitle(ruleId, config.designSystem, kw)}`);
-      const show = group.slice(0, quota.get(ruleId));
+      lines.push(`${SEV_MARK[sev] ?? "\u2022"} ${ruleId} (${group.length}) \u2014 ${renderTitle(ruleId, config.designSystem, kw)}`);
+      const show = group.slice(0, quota.get(ruleId) ?? 0);
       hidden += group.length - show.length;
       for (const f of show) lines.push(`    ${f.file}:${f.line}  ${f.message}`);
       if (group.length > show.length) lines.push(`    \u2026 ${group.length - show.length} more`);
@@ -25525,7 +25610,7 @@ function formatSarif(result, config) {
   );
 }
 
-// src/detect.mjs
+// src/detect.ts
 import { existsSync as existsSync3, readFileSync as readFileSync6, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
 import { dirname as dirname2, join as join6 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
@@ -25538,7 +25623,7 @@ var readJson = (p) => {
     return null;
   }
 };
-var preset = (name) => readJson(join6(PRESET_DIR2, `${name}.json`)) || {};
+var preset = (name) => readJson(join6(PRESET_DIR2, `${name}.json`)) ?? {};
 var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", ".git", "vendor", "build", "dist", ".claude"]);
 function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
@@ -25593,22 +25678,23 @@ function probeDirs(root2) {
   }
   return out;
 }
-var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? detect.confidence : detect.confidence?.[kind] || null;
+var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? detect.confidence : detect.confidence?.[kind] ?? null;
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson(join6(root2, rel, "package.json")) || {};
+      const pkg = readJson(join6(root2, rel, "package.json")) ?? {};
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
-      if (!hit.length) continue;
-      const reasons = [`${hit[0]} in ${rel ? `${rel}/package.json` : "package.json"}`];
+      const first = hit[0];
+      if (first === void 0) continue;
+      const reasons = [`${first} in ${rel ? `${rel}/package.json` : "package.json"}`];
       if (found.length > 1) reasons.push(`${found.length} package.json files scanned`);
-      return { preset: name, reasons, confidence: confidenceOf(detect, "full") || "high", packageDir: rel };
+      return { preset: name, reasons, confidence: confidenceOf(detect, "full") ?? "high", packageDir: rel };
     }
   }
   if (detect.files) {
-    const all = detect.files.all || [];
-    const any = detect.files.any || [];
+    const all = detect.files.all ?? [];
+    const any = detect.files.any ?? [];
     const describe = (list2) => list2.join(" or ");
     let partial = null;
     for (const { dir, rel } of probeDirs(root2)) {
@@ -25619,7 +25705,7 @@ function matchPreset(name, detect, root2, found) {
         return {
           preset: name,
           reasons: [`${what}${where}`],
-          confidence: confidenceOf(detect, "full") || "high",
+          confidence: confidenceOf(detect, "full") ?? "high",
           packageDir: rel
         };
       }
@@ -25638,7 +25724,7 @@ function matchPreset(name, detect, root2, found) {
 }
 function detectPreset(root2) {
   const found = manifests(root2);
-  const candidates = presetNames().map((name) => ({ name, detect: preset(name).detect })).filter((c) => c.detect).sort((a, b) => (b.detect.priority || 0) - (a.detect.priority || 0) || a.name.localeCompare(b.name));
+  const candidates = presetNames().map((name) => ({ name, detect: preset(name).detect })).filter((c) => c.detect !== void 0).sort((a, b) => (b.detect.priority ?? 0) - (a.detect.priority ?? 0) || a.name.localeCompare(b.name));
   for (const { name, detect } of candidates) {
     const hit = matchPreset(name, detect, root2, found);
     if (hit) return hit;
@@ -25681,9 +25767,11 @@ function libraryPrefixes(dirs, candidates) {
         }
         if (text.length > 2e6) continue;
         for (const m of text.matchAll(CLASS_RE)) {
-          const i = m[1].indexOf("-");
+          const cls = m[1];
+          if (cls === void 0) continue;
+          const i = cls.indexOf("-");
           if (i < 1) continue;
-          const prefix = m[1].slice(0, i + 1);
+          const prefix = cls.slice(0, i + 1);
           if (want.delete(prefix)) found.add(prefix);
         }
       }
@@ -25704,30 +25792,30 @@ function resolvePreset(name, seen = /* @__PURE__ */ new Set()) {
     base = {
       ...base,
       ...parent,
-      namespaces: { ...base.namespaces || {}, ...parent.namespaces || {} },
-      sources: { ...base.sources || {}, ...parent.sources || {} }
+      namespaces: { ...base.namespaces ?? {}, ...parent.namespaces ?? {} },
+      sources: { ...base.sources ?? {}, ...parent.sources ?? {} }
     };
   }
   return {
     ...base,
     ...raw,
-    namespaces: { ...base.namespaces || {}, ...raw.namespaces || {} },
-    sources: { ...base.sources || {}, ...raw.sources || {} }
+    namespaces: { ...base.namespaces ?? {}, ...raw.namespaces ?? {} },
+    sources: { ...base.sources ?? {}, ...raw.sources ?? {} }
   };
 }
 function detectNamespaces(root2, presetName, packageDir = "") {
   const base = resolvePreset(presetName);
   const generic = resolvePreset("generic");
-  const sources = { ...generic.sources, ...base.sources || {} };
+  const sources = { ...generic.sources, ...base.sources ?? {} };
   const files = discover({ root: root2, sources });
   const others = presetNames().filter((n) => n !== presetName).map((n) => resolvePreset(n));
   const external = [
-    ...base.namespaces?.external || [],
-    ...others.flatMap((p) => p.namespaces?.external || [])
+    ...base.namespaces?.external ?? [],
+    ...others.flatMap((p) => p.namespaces?.external ?? [])
   ];
   const neverDead = [
-    ...base.namespaces?.neverDead || [],
-    ...others.flatMap((p) => p.namespaces?.neverDead || [])
+    ...base.namespaces?.neverDead ?? [],
+    ...others.flatMap((p) => p.namespaces?.neverDead ?? [])
   ].map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`));
   const isExcluded = (cls) => external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
   const cssCounts = /* @__PURE__ */ new Map();
@@ -25740,11 +25828,11 @@ function detectNamespaces(root2, presetName, packageDir = "") {
     }
     for (const m of text.matchAll(CLASS_RE)) {
       const cls = m[1];
-      if (isExcluded(cls)) continue;
+      if (cls === void 0 || isExcluded(cls)) continue;
       const idx = cls.indexOf("-");
       if (idx < 1) continue;
       const prefix = cls.slice(0, idx + 1);
-      cssCounts.set(prefix, (cssCounts.get(prefix) || 0) + 1);
+      cssCounts.set(prefix, (cssCounts.get(prefix) ?? 0) + 1);
     }
   }
   const markupText = [];
@@ -25782,7 +25870,7 @@ function detectConfig(root2) {
   const ns = detectNamespaces(root2, name, packageDir);
   const config = { extends: name, namespaces: { project: ns.project } };
   if (packageDir) {
-    const sources = resolvePreset(name).designSystem?.tokenSources || [];
+    const sources = resolvePreset(name).designSystem?.tokenSources ?? [];
     if (sources.length)
       config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
   }
@@ -25800,11 +25888,12 @@ function detectConfig(root2) {
   };
 }
 
-// src/profiles.mjs
+// src/profiles.ts
 import { existsSync as existsSync4, readFileSync as readFileSync7, readdirSync as readdirSync5 } from "node:fs";
 import { isAbsolute as isAbsolute3, join as join7, resolve as resolve2 } from "node:path";
 var readJson2 = (p) => JSON.parse(readFileSync7(p, "utf8"));
 var under = (dir, rel) => isAbsolute3(rel) ? rel : join7(dir, rel);
+var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 function readProfiles(root2) {
   if (!root2 || !existsSync4(root2)) return [];
   let entries;
@@ -25824,9 +25913,9 @@ function readProfiles(root2) {
       out.push({
         id: raw.id || e.name,
         name: raw.name || raw.id || e.name,
-        preset: raw.preset || null,
-        packages: Array.isArray(raw.packages) ? raw.packages.filter(Boolean) : [],
-        skills: Array.isArray(raw.skills) ? raw.skills.filter(Boolean) : [],
+        preset: raw.preset ?? null,
+        packages: asStrings(raw.packages),
+        skills: asStrings(raw.skills),
         patterns: raw.patterns ? under(dir, raw.patterns) : null,
         components: raw.components ? under(dir, raw.components) : null,
         dir
@@ -25838,16 +25927,19 @@ function readProfiles(root2) {
 }
 function selectProfiles(profiles, config, force = null) {
   if (force) return profiles.filter((p) => p.id === force);
-  const pkgs = config.designSystem?.packages || [];
+  const pkgs = config.designSystem?.packages ?? [];
   if (!pkgs.length) return [];
   return profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
 }
-function applyRegistries(config, sources, { setPatterns: setPatterns2, setComponentRegistry: setComponentRegistry2 }) {
+function applyRegistries(config, sources, {
+  setPatterns: setPatterns2,
+  setComponentRegistry: setComponentRegistry2
+}) {
   const applied = [];
   const skipped = [];
   const errors = [];
-  let patterns = config.patterns || [];
-  let components = new Map(config.componentRegistry || []);
+  let patterns = config.patterns ?? [];
+  const components = new Map(config.componentRegistry ?? []);
   let sawPatterns = false;
   let sawComponents = false;
   for (const src of sources) {
@@ -25864,7 +25956,7 @@ function applyRegistries(config, sources, { setPatterns: setPatterns2, setCompon
           skipped.push({ label: src.label, kind: "patterns", packages: registryPackages(raw) });
         }
       } catch (err) {
-        errors.push(`could not read ${src.label} patterns \u2014 ${err.message}`);
+        errors.push(`could not read ${src.label} patterns \u2014 ${err instanceof Error ? err.message : String(err)}`);
       }
     }
     if (src.components) {
@@ -25878,7 +25970,7 @@ function applyRegistries(config, sources, { setPatterns: setPatterns2, setCompon
           skipped.push({ label: src.label, kind: "components", packages: registryPackages(raw) });
         }
       } catch (err) {
-        errors.push(`could not read ${src.label} components \u2014 ${err.message}`);
+        errors.push(`could not read ${src.label} components \u2014 ${err instanceof Error ? err.message : String(err)}`);
       }
     }
     if (used) applied.push(src.label);
@@ -25888,16 +25980,16 @@ function applyRegistries(config, sources, { setPatterns: setPatterns2, setCompon
   return { applied, skipped, errors };
 }
 
-// src/paths.mjs
+// src/paths.ts
 import { createHash } from "node:crypto";
 import { existsSync as existsSync5, mkdirSync } from "node:fs";
 import { isAbsolute as isAbsolute4, join as join8, resolve as resolve3 } from "node:path";
-var pluginDataDir = () => process.env.CLAUDE_PLUGIN_DATA || null;
+var pluginDataDir = () => process.env.CLAUDE_PLUGIN_DATA ?? null;
 var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
 function projectKey(root2) {
   const full = resolve3(root2);
   const hash = createHash("sha256").update(full).digest("hex").slice(0, 10);
-  const name = full.split(/[/\\]/).filter(Boolean).pop() || "project";
+  const name = full.split(/[/\\]/).filter(Boolean).pop() ?? "project";
   return `${name.replace(/[^\w.-]/g, "-")}-${hash}`;
 }
 function ensureDir(dir) {
@@ -25931,7 +26023,8 @@ function baselinePath(root2, explicit, { create = false } = {}) {
 }
 function findExistingBaseline(root2, explicit, configured, { create = false } = {}) {
   if (explicit) return baselinePath(root2, explicit);
-  for (const candidate of [configured, ".loupe-baseline.json"].filter(Boolean)) {
+  const candidates = [configured, ".loupe-baseline.json"].filter((c) => Boolean(c));
+  for (const candidate of candidates) {
     const p = isAbsolute4(candidate) ? candidate : join8(root2, candidate);
     if (existsSync5(p)) return { path: p, scope: "project" };
   }
@@ -25942,7 +26035,7 @@ function attemptsPath(root2, create = false) {
   return dir ? join8(dir, "attempts.json") : null;
 }
 
-// src/hook.mjs
+// src/hook.ts
 import { existsSync as existsSync6, readFileSync as readFileSync8, writeFileSync as writeFileSync3 } from "node:fs";
 import { dirname as dirname3, isAbsolute as isAbsolute5, join as join9, relative as relative2, sep as sep2 } from "node:path";
 import { homedir } from "node:os";
@@ -25961,8 +26054,8 @@ function readState(root2) {
     const raw = JSON.parse(readFileSync8(p, "utf8"));
     const now = Date.now();
     const sessions = {};
-    for (const [id, entry] of Object.entries(raw.sessions || {}))
-      if (now - (entry.at || 0) < MAX_AGE_MS) sessions[id] = entry;
+    for (const [id, entry] of Object.entries(raw.sessions ?? {}))
+      if (now - (entry?.at ?? 0) < MAX_AGE_MS) sessions[id] = entry;
     return { sessions };
   } catch {
     return { sessions: {} };
@@ -25978,7 +26071,7 @@ function writeState(root2, state) {
 function bumpAttempts(root2, sessionId) {
   if (!sessionId) return 1;
   const state = readState(root2);
-  const next = (state.sessions[sessionId]?.count || 0) + 1;
+  const next = (state.sessions[sessionId]?.count ?? 0) + 1;
   state.sessions[sessionId] = { count: next, at: Date.now() };
   writeState(root2, state);
   return next;
@@ -26052,8 +26145,9 @@ function resolvedOptions() {
   for (const file of ["settings.local.json", "settings.json"]) {
     try {
       const raw = JSON.parse(readFileSync8(join9(homedir(), ".claude", file), "utf8"));
-      const key = Object.keys(raw.pluginConfigs || {}).find((k) => k === name || k.startsWith(`${name}@`));
-      const opts = key && raw.pluginConfigs[key]?.options;
+      const configs = raw.pluginConfigs ?? {};
+      const key = Object.keys(configs).find((k) => k === name || k.startsWith(`${name}@`));
+      const opts = key === void 0 ? void 0 : configs[key]?.options;
       if (opts) return { options: coerce(opts), source: "settings" };
     } catch {
     }
@@ -26064,10 +26158,13 @@ function pluginName() {
   const roots = [
     process.env.CLAUDE_PLUGIN_ROOT,
     join9(dirname3(fileURLToPath3(import.meta.url)), "..", "..")
-  ].filter(Boolean);
+  ].filter((r) => Boolean(r));
   for (const root2 of roots) {
     try {
-      return JSON.parse(readFileSync8(join9(root2, ".claude-plugin", "plugin.json"), "utf8")).name || null;
+      const manifest = JSON.parse(
+        readFileSync8(join9(root2, ".claude-plugin", "plugin.json"), "utf8")
+      );
+      return manifest.name ?? null;
     } catch {
     }
   }
@@ -26082,11 +26179,11 @@ function coerce(opts) {
     return t === void 0 ? void 0 : t.split(/[,\s]+/).filter(Boolean);
   };
   return {
-    preset: str(opts.preset),
-    projectPrefixes: list2(opts.project_prefixes),
-    blocking: opts.blocking === void 0 ? void 0 : /^(1|true|yes|on)$/i.test(String(opts.blocking)),
-    maxAttempts: num(opts.max_attempts),
-    maxFindings: num(opts.max_findings)
+    preset: str(opts["preset"]),
+    projectPrefixes: list2(opts["project_prefixes"]),
+    blocking: opts["blocking"] === void 0 ? void 0 : /^(1|true|yes|on)$/i.test(String(opts["blocking"])),
+    maxAttempts: num(opts["max_attempts"]),
+    maxFindings: num(opts["max_findings"])
   };
 }
 function emitClean(message) {
@@ -26099,22 +26196,40 @@ function emitBlocking(report) {
   return 2;
 }
 
-// src/cli.mjs
+// src/cli.ts
 var EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
+var messageOf4 = (err) => err instanceof Error ? err.message : String(err);
+var VALUE_FLAGS = [
+  "format",
+  "config",
+  "root",
+  "preset",
+  "files",
+  "max-findings",
+  "severity",
+  "baseline",
+  "patterns",
+  "components",
+  "profiles",
+  "profile"
+];
+var isValueFlag = (key) => VALUE_FLAGS.includes(key);
 function parseArgs(argv) {
-  const args = { _: [], flags: {} };
+  const positional = [];
+  const flags = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    if (a === void 0) continue;
     if (!a.startsWith("--")) {
-      args._.push(a);
+      positional.push(a);
       continue;
     }
     const [key, inline] = a.slice(2).split(/=(.*)/s);
-    const needsValue = ["format", "config", "root", "preset", "files", "max-findings", "severity", "baseline", "patterns", "components", "profiles", "profile"].includes(key);
-    if (needsValue) args.flags[key] = inline ?? argv[++i];
-    else args.flags[key] = inline === void 0 ? true : inline !== "false";
+    if (key === void 0) continue;
+    if (isValueFlag(key)) flags[key] = inline ?? argv[++i];
+    else flags[key] = inline === void 0 ? true : inline !== "false";
   }
-  return args;
+  return { _: positional, flags };
 }
 var USAGE = `loupe <command> [options]
 
@@ -26173,7 +26288,8 @@ function filterSeverity(result, min) {
 async function main() {
   const argv = process.argv.slice(2);
   const args = parseArgs(argv);
-  const command = args._[0] && !args._[0].startsWith("-") ? args._[0] : "check";
+  const first = args._[0];
+  const command = first && !first.startsWith("-") ? first : "check";
   if (args.flags.help || command === "help") {
     process.stdout.write(USAGE);
     return EXIT.OK;
@@ -26184,7 +26300,7 @@ async function main() {
     return EXIT.OK;
   }
   const isHook = command === "hook";
-  const root2 = resolve4(args.flags.root || (isHook ? hookRoot() : process.cwd()));
+  const root2 = resolve4(args.flags.root ?? (isHook ? hookRoot() : process.cwd()));
   if (!existsSync7(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     process.stderr.write(`loupe: root does not exist: ${root2}
@@ -26195,29 +26311,38 @@ async function main() {
   let config;
   let detected = null;
   try {
-    const explicitPreset = args.flags.preset || (options.preset && options.preset !== "auto" ? options.preset : null);
+    const explicitPreset = args.flags.preset ?? (options.preset && options.preset !== "auto" ? options.preset : null);
     if (!args.flags.config && !explicitPreset && !findConfig(root2)) {
       detected = detectConfig(root2);
-      if (options.projectPrefixes?.length) detected.config.namespaces.project = options.projectPrefixes;
+      if (options.projectPrefixes?.length)
+        detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
     }
     config = await loadConfig({
       root: root2,
-      configPath: args.flags.config,
+      configPath: args.flags.config ?? null,
       preset: explicitPreset,
-      inline: detected?.config,
+      inline: detected?.config ?? null,
       inferred: Boolean(detected)
     });
   } catch (err) {
-    if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${err.message}`);
-    process.stderr.write(`loupe: config error \u2014 ${err.message}
+    if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf4(err)}`);
+    process.stderr.write(`loupe: config error \u2014 ${messageOf4(err)}
 `);
     return EXIT.CANNOT_RUN;
   }
   const profiles = readProfiles(args.flags.profiles ? resolve4(args.flags.profiles) : null);
-  const active = selectProfiles(profiles, config, args.flags.profile || null);
-  const sources = active.map((p) => ({ label: `profile ${p.id}`, patterns: p.patterns, components: p.components }));
+  const active = selectProfiles(profiles, config, args.flags.profile ?? null);
+  const sources = active.map((p) => ({
+    label: `profile ${p.id}`,
+    patterns: p.patterns,
+    components: p.components
+  }));
   if (args.flags.patterns || args.flags.components)
-    sources.push({ label: "flags", patterns: args.flags.patterns, components: args.flags.components });
+    sources.push({
+      label: "flags",
+      patterns: args.flags.patterns ?? null,
+      components: args.flags.components ?? null
+    });
   const registries = applyRegistries(config, sources, { setPatterns, setComponentRegistry });
   config.profiles = { available: profiles, active, ...registries };
   if (!isHook) {
@@ -26238,9 +26363,9 @@ async function main() {
   if (options.maxAttempts) config.hook.maxAttempts = options.maxAttempts;
   if (options.maxFindings) config.hook.maxFindings = options.maxFindings;
   if (command === "explain") {
-    const id = canonicalRuleId(args._[1] || "");
-    if (!RULES[id]) {
-      process.stderr.write(`loupe: unknown rule "${args._[1]}"
+    const id = canonicalRuleId(args._[1] ?? "");
+    if (!isRuleId(id)) {
+      process.stderr.write(`loupe: unknown rule "${args._[1] ?? ""}"
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -26255,7 +26380,7 @@ async function main() {
     const state = stateDir(root2);
     const lines = [
       `config:     ${src}`,
-      `namespaces: ${(config.raw.namespaces?.project || []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
+      `namespaces: ${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
       `suppress:   ${config.suppression.keyword} <ruleId> -- <reason>`,
       `state:      ${state.dir}${state.scope === "plugin-data" ? "  (outside your repo)" : ""}`,
       `options:    ${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
@@ -26267,12 +26392,13 @@ async function main() {
       "",
       "rules:"
     ];
-    for (const [id, def] of Object.entries(RULES)) {
+    for (const id of RULE_IDS) {
+      const def = RULES[id];
       const sev = config.severityOf(id);
       const note = config.enabled[id] ? sev === "error" && blockingAllowed ? "BLOCKS" : sev === "error" ? "advisory (would block if enabled)" : "advisory" : `off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`;
       lines.push(`  ${id.padEnd(32)} ${note}`);
     }
-    const blockers = Object.keys(RULES).filter((id) => config.enabled[id] && config.severityOf(id) === "error");
+    const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
     lines.push(
       "",
       blockingAllowed && blockers.length ? `Turns are blocked by: ${blockers.join(", ")}` : "Nothing blocks turns; every finding is advisory."
@@ -26344,7 +26470,7 @@ Wrote ${target}
   }
   if (command === "fix") {
     const fixScope = resolveScope(config, args, { defaultChanged: false });
-    if (fixScope && fixScope.error) {
+    if (fixScope !== null && !Array.isArray(fixScope)) {
       process.stderr.write(`loupe: ${fixScope.error}
 `);
       return EXIT.CANNOT_RUN;
@@ -26353,7 +26479,7 @@ Wrote ${target}
     try {
       toFix = await analyze(config, { scope: fixScope });
     } catch (err) {
-      process.stderr.write(`loupe: ${err.message}
+      process.stderr.write(`loupe: ${messageOf4(err)}
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -26384,7 +26510,7 @@ ${USAGE}`);
   if (touched && !isSource(config.sources, touched))
     return emitClean("loupe: skipped \u2014 not a checked file type.");
   const scope = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
-  if (scope && scope.error) {
+  if (scope !== null && !Array.isArray(scope)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 ${scope.error}`);
     process.stderr.write(`loupe: ${scope.error}
 `);
@@ -26394,8 +26520,8 @@ ${USAGE}`);
   try {
     result = await analyze(config, { scope });
   } catch (err) {
-    if (isHook) return emitClean(`loupe: skipped \u2014 ${err.message}`);
-    process.stderr.write(`loupe: ${err.message}
+    if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf4(err)}`);
+    process.stderr.write(`loupe: ${messageOf4(err)}
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -26405,7 +26531,7 @@ ${USAGE}`);
   }
   if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   if (isHook) {
-    const sessionId = payload.session_id || payload.sessionId || "";
+    const sessionId = payload.session_id ?? payload.sessionId ?? "";
     if (!result.blocking) {
       clearAttempts(root2, touched ? `${sessionId}\0${touched}` : sessionId);
       return emitClean(formatSummary(result));
@@ -26427,7 +26553,7 @@ ${USAGE}`);
 (attempt ${attempts} of ${max})`);
   }
   const maxFindings = Number(args.flags["max-findings"] ?? 0) || 0;
-  const format = args.flags.format || "agent";
+  const format = args.flags.format ?? "agent";
   if (format === "json") process.stdout.write(`${formatJson(result, config)}
 `);
   else if (format === "sarif") process.stdout.write(`${formatSarif(result, config)}
@@ -26435,7 +26561,8 @@ ${USAGE}`);
   else {
     process.stdout.write(`${formatAgent(result, config, { maxFindings })}
 `);
-    if (result.baselined) process.stdout.write(`
+    if ("baselined" in result && result.baselined)
+      process.stdout.write(`
 ${result.baselined} baselined finding(s) hidden.
 `);
   }
@@ -26444,7 +26571,7 @@ ${result.baselined} baselined finding(s) hidden.
 main().then((code) => {
   process.exitCode = code;
 }).catch((err) => {
-  process.stderr.write(`loupe: ${err?.stack || err}
+  process.stderr.write(`loupe: ${err instanceof Error ? err.stack : String(err)}
 `);
   process.exitCode = EXIT.CANNOT_RUN;
 });

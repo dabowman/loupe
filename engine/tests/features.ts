@@ -8,14 +8,22 @@
  * *fewer* findings, which no failing build ever reveals.
  */
 
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze } from '../src/analyze.mjs';
-import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.mjs';
-import { loadPatterns, matches, toNode } from '../src/patterns.mjs';
-import { loadComponents } from '../src/components.mjs';
+import { analyze } from '../src/analyze.ts';
+import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
+import { loadPatterns, matches, toNode } from '../src/patterns.ts';
+import { loadComponents } from '../src/components.ts';
+import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
+import type { AnalyzeResult, ComponentEntry, Pattern, PatternNode, RuleId } from '../src/types.ts';
+
+/** `toNode` is nullable by contract; a signature written in a test is not. */
+const node = (spec: unknown): PatternNode => {
+	const n = toNode(spec);
+	assert(n, `test signature did not parse: ${JSON.stringify(spec)}`);
+	return n;
+};
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // The shipped registries live in the design-system profile that owns them.
@@ -23,44 +31,28 @@ const PROFILE = join(HERE, '..', '..', 'profiles', 'wpds');
 const REGISTRY = join(PROFILE, 'patterns', 'index.json');
 const COMPONENT_REGISTRY = join(PROFILE, 'components', 'index.json');
 
-let failed = 0;
-const check = async (name, fn) => {
-	try {
-		await fn();
-		console.log(`ok   ${name}`);
-	} catch (err) {
-		failed++;
-		console.log(`FAIL ${name}\n     ${err.message}`);
-	}
-};
-const assert = (cond, msg) => {
-	if (!cond) throw new Error(msg);
-};
-
 /** Analyze a throwaway repo. `files` maps relative path to contents. */
-async function run(files, { patterns, components } = {}) {
-	const root = mkdtempSync(join(tmpdir(), 'dsh-feat-'));
+async function run(
+	files: Record<string, string>,
+	{ patterns, components }: { patterns?: Pattern[]; components?: Map<string, ComponentEntry> } = {},
+): Promise<AnalyzeResult> {
+	const root = scratch('dsh-feat-');
 	try {
-		for (const [rel, body] of Object.entries(files)) {
-			const p = join(root, rel);
-			mkdirSync(dirname(p), { recursive: true });
-			writeFileSync(p, body);
-		}
+		writeAll(root, files);
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		if (patterns) setPatterns(config, patterns);
 		if (components) setComponentRegistry(config, components);
-		const result = await analyze(config, { scope: null });
-		return result;
+		return await analyze(config, { scope: null });
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 }
 
-const CONFIG = (extra = {}) =>
+const CONFIG = (extra: Record<string, unknown> = {}): string =>
 	JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, ...extra });
 const TOKENS = ':root { --wpds-border-radius-md: 4px; --wpds-color-fg-content-neutral: #1e1e1e;\n' +
 	'--wpds-color-bg-surface-neutral: #fcfcfc; --wpds-typography-font-size-md: 13px; }';
-const at = (r, rule) => r.findings.filter((f) => f.rule === rule);
+const at = (r: AnalyzeResult, rule: RuleId) => r.findings.filter((f) => f.rule === rule);
 
 // ── the token set ───────────────────────────────────────────────────────────
 
@@ -106,9 +98,8 @@ await check('unknown-token fires once a token set exists', async () => {
 		'styles/a.css': '.acme-card { color: var(--wpds-nope); border-radius: var(--wpds-border-radius-md); }',
 		'src/A.jsx': 'export const A = () => <div className="acme-card" />;',
 	});
-	const found = at(r, 'tokens/unknown-token');
-	assert(found.length === 1, `expected exactly one, got ${found.map((f) => f.message)}`);
-	assert(found[0].message.includes('--wpds-nope'), found[0].message);
+	const found = one(at(r, 'tokens/unknown-token'), 'expected exactly one unknown token');
+	assert(found.message.includes('--wpds-nope'), found.message);
 });
 
 // A reset has no token to reach for, and demanding one for every `inherit` is
@@ -142,11 +133,11 @@ const STYLED = [
 
 await check('styled.div declarations are classified and located exactly', async () => {
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED });
-	const layout = at(r, 'layout/in-css');
-	const margin = at(r, 'layout/margin-on-child');
-	assert(layout.length === 1 && layout[0].line === 4, `layout at ${layout.map((f) => f.line)}, want [4]`);
-	assert(margin.length === 1 && margin[0].line === 5, `margin at ${margin.map((f) => f.line)}, want [5]`);
-	assert(layout[0].message.includes('css-in-js'), 'the channel should be named in the message');
+	const layout = one(at(r, 'layout/in-css'), 'expected one layout finding');
+	const margin = one(at(r, 'layout/margin-on-child'), 'expected one margin finding');
+	assert(layout.line === 4, `layout at ${layout.line}, want 4`);
+	assert(margin.line === 5, `margin at ${margin.line}, want 5`);
+	assert(layout.message.includes('css-in-js'), 'the channel should be named in the message');
 });
 
 await check('styled(Component) inherits that component’s verdict', async () => {
@@ -188,20 +179,21 @@ const componentRegistry = loadComponents(JSON.parse(readFileSync(COMPONENT_REGIS
 
 await check('a registered pattern matches through nesting and extra siblings', () => {
 	const formModal = registry.find((p) => p.id === 'form-modal');
+	assert(formModal, 'the shipped registry should carry form-modal');
 	// The registry records the footer as a sibling of the body; real code nests it.
-	const real = toNode(['Modal', ['Stack', 'TextControl', ['Stack', 'Button', 'Button']]]);
+	const real = node(['Modal', ['Stack', 'TextControl', ['Stack', 'Button', 'Button']]]);
 	assert(matches(formModal.node, real), 'nested footer should still be a form-modal');
-	const noFooter = toNode(['Modal', ['Stack', 'TextControl']]);
+	const noFooter = node(['Modal', ['Stack', 'TextControl']]);
 	assert(!matches(formModal.node, noFooter), 'a modal with no action pair is not a form-modal');
 });
 
 await check('a registered child must claim a distinct node', () => {
-	const twoTexts = toNode(['VStack', 'Text', 'Text']);
-	assert(!matches(twoTexts, toNode(['VStack', 'Text'])), 'one Text should not satisfy two');
-	assert(matches(twoTexts, toNode(['VStack', 'Text', 'Text'])), 'two Texts should');
+	const twoTexts = node(['VStack', 'Text', 'Text']);
+	assert(!matches(twoTexts, node(['VStack', 'Text'])), 'one Text should not satisfy two');
+	assert(matches(twoTexts, node(['VStack', 'Text', 'Text'])), 'two Texts should');
 });
 
-const composite = (n) =>
+const composite = (n: string): string =>
 	[
 		"import { EmptyState, Button } from '@wordpress/ui';",
 		`export const Screen${n} = () => (`,
@@ -224,7 +216,8 @@ await check('a registered pattern rebuilt in two files is reported in both', asy
 	);
 	const dup = at(r, 'patterns/duplicate-composite');
 	assert(dup.length === 2, `expected one per file, got ${dup.length}`);
-	assert(dup[0].message.includes('empty-state'), `named the wrong pattern: ${dup[0].message}`);
+	const named = first(dup, 'expected a duplicate-composite finding');
+	assert(named.message.includes('empty-state'), `named the wrong pattern: ${named.message}`);
 });
 
 await check('one file is a first use, not a duplicate', async () => {
@@ -250,7 +243,7 @@ await check('a signature below the floor is documentation, not a check', async (
 });
 
 await check('an unregistered shape needs three files before it is house style', async () => {
-	const shape = (n) =>
+	const shape = (n: string): string =>
 		[
 			"import { __experimentalVStack as VStack, __experimentalHStack as HStack, __experimentalText as Text, Button, Notice } from '@wordpress/components';",
 			`export const W${n} = () => (<VStack><Notice>n</Notice><HStack><Text>t</Text><Button>b</Button></HStack></VStack>);`,
@@ -279,9 +272,8 @@ await check('a locked component is reported, its recommended sibling is not', as
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
 		{ components: componentRegistry }
 	);
-	const locked = at(r, 'system/locked-component');
-	assert(locked.length === 1, `expected one locked finding, got ${locked.length}`);
-	assert(locked[0].message.includes('@wordpress/components'), `wrong package named: ${locked[0].message}`);
+	const locked = one(at(r, 'system/locked-component'), 'expected one locked finding');
+	assert(locked.message.includes('@wordpress/components'), `wrong package named: ${locked.message}`);
 	assert(!at(r, 'system/superseded-component').length, 'the @wordpress/ui sibling should not also be flagged legacy');
 });
 
@@ -295,9 +287,11 @@ await check('a superseded component names its replacement, once per file', async
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
 		{ components: componentRegistry }
 	);
-	const superseded = at(r, 'system/superseded-component');
-	assert(superseded.length === 1, `two HStack usages in one file should collapse to one finding, got ${superseded.length}`);
-	assert(superseded[0].message.includes('Stack'), `did not name the replacement: ${superseded[0].message}`);
+	const superseded = one(
+		at(r, 'system/superseded-component'),
+		'two HStack usages in one file should collapse to one finding',
+	);
+	assert(superseded.message.includes('Stack'), `did not name the replacement: ${superseded.message}`);
 });
 
 await check('a recommended component is never flagged', async () => {
@@ -334,5 +328,4 @@ await check('a locked-component finding can be suppressed like any other', async
 	assert(!at(r, 'system/locked-component').length, 'a well-formed suppression mutes the finding');
 });
 
-console.log(`\n${failed ? `${failed} failed` : 'all passed'}`);
-process.exit(failed ? 1 : 0);
+finish();

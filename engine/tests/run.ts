@@ -16,13 +16,20 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze } from '../src/analyze.mjs';
-import { loadConfig } from '../src/config.mjs';
+import { analyze } from '../src/analyze.ts';
+import { loadConfig } from '../src/config.ts';
+import type { AnalyzeResult, Finding } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, 'fixtures');
 
-const key = (f) => `${f.rule} @ ${f.file}:${f.line}`;
+/** A fixture's recorded expectation: identity only, never message prose. */
+interface Expected {
+	note?: string;
+	findings: Pick<Finding, 'rule' | 'file' | 'line'>[];
+}
+
+const key = (f: Pick<Finding, 'rule' | 'file' | 'line'>): string => `${f.rule} @ ${f.file}:${f.line}`;
 const only = process.argv[2];
 
 let failed = 0;
@@ -31,14 +38,14 @@ let passed = 0;
 for (const name of readdirSync(FIXTURES).sort()) {
 	if (only && name !== only) continue;
 	const root = join(FIXTURES, name);
-	const expected = JSON.parse(readFileSync(join(root, 'expected.json'), 'utf8'));
+	const expected = JSON.parse(readFileSync(join(root, 'expected.json'), 'utf8')) as Expected;
 
-	let actual;
+	let actual: AnalyzeResult;
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		actual = await analyze(config, { scope: null });
 	} catch (err) {
-		console.log(`FAIL ${name}\n  threw: ${err.stack}`);
+		console.log(`FAIL ${name}\n  threw: ${err instanceof Error ? err.stack : String(err)}`);
 		failed++;
 		continue;
 	}
@@ -60,7 +67,7 @@ for (const name of readdirSync(FIXTURES).sort()) {
 	for (const m of missing) console.log(`  -  missing: ${m}`);
 	for (const e of extra) {
 		const f = actual.findings.find((x) => key(x) === e);
-		console.log(`  +  unexpected: ${e}  "${f.message}"`);
+		console.log(`  +  unexpected: ${e}  "${f?.message ?? ''}"`);
 	}
 	if (actual.diagnostics.parseErrors.length)
 		for (const p of actual.diagnostics.parseErrors) console.log(`  !  parse error ${p.file}: ${p.message}`);

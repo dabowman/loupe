@@ -9,10 +9,22 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { RULES, SEVERITIES, canonicalRuleId } from './rules.mjs';
-import { loadPatterns } from './patterns.mjs';
-import { registryApplies } from './registry.mjs';
-import { loadComponents } from './components.mjs';
+import { RULES, RULE_IDS, canonicalRuleId, isRuleId, isSeverity } from './rules.ts';
+import { loadPatterns } from './patterns.ts';
+import { registryApplies } from './registry.ts';
+import { loadComponents } from './components.ts';
+import type {
+	AuthoredConfig,
+	Capability,
+	ComponentEntry,
+	Config,
+	ConfigSource,
+	ElementMapping,
+	MergedConfig,
+	Pattern,
+	RuleId,
+	RuleSetting,
+} from './types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRESET_DIR = join(HERE, '..', 'presets');
@@ -24,7 +36,7 @@ const CONFIG_NAMES = [
 	'.louperc.json',
 ];
 
-export const DEFAULTS = {
+export const DEFAULTS: MergedConfig = {
 	designSystem: {
 		// What to call this design system in a finding. Rule guidance that names
 		// the system reads as advice about *your* stack; a generic phrase reads as
@@ -56,18 +68,26 @@ export const DEFAULTS = {
 	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 120000 },
 };
 
-const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+const isObj = (v: unknown): v is Record<string, unknown> =>
+	Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
-/** Deep merge; arrays replace rather than concatenate so a preset can be overridden. */
-function merge(base, over) {
-	if (!isObj(base) || !isObj(over)) return over === undefined ? base : over;
-	const out = { ...base };
+/**
+ * Deep merge; arrays replace rather than concatenate so a preset can be overridden.
+ *
+ * Declared as returning the base's type. That is the contract every caller
+ * relies on — merging *onto* `DEFAULTS` is what makes every field present — and
+ * it is what keeps a settled config strict downstream. Extra keys an override
+ * carries do survive at runtime; nothing reads them.
+ */
+function merge<T>(base: T, over: unknown): T {
+	if (!isObj(base) || !isObj(over)) return (over === undefined ? base : (over as T));
+	const out: Record<string, unknown> = { ...base };
 	for (const [k, v] of Object.entries(over)) out[k] = isObj(v) && isObj(base[k]) ? merge(base[k], v) : v;
-	return out;
+	return out as T;
 }
 
 /** Walk up from `start` looking for a config file or a `loupe` package.json key. */
-export function findConfig(start) {
+export function findConfig(start: string): string | null {
 	let dir = resolve(start);
 	for (;;) {
 		for (const name of CONFIG_NAMES) {
@@ -77,7 +97,8 @@ export function findConfig(start) {
 		const pkg = join(dir, 'package.json');
 		if (existsSync(pkg)) {
 			try {
-				if (JSON.parse(readFileSync(pkg, 'utf8')).loupe) return pkg;
+				const parsed: unknown = JSON.parse(readFileSync(pkg, 'utf8'));
+				if (isObj(parsed) && parsed['loupe']) return pkg;
 			} catch {
 				/* unreadable package.json is not our problem here */
 			}
@@ -88,17 +109,19 @@ export function findConfig(start) {
 	}
 }
 
-async function readConfigFile(path) {
+async function readConfigFile(path: string): Promise<AuthoredConfig | undefined> {
 	if (path.endsWith('.json')) {
-		const parsed = JSON.parse(readFileSync(path, 'utf8'));
+		const parsed = JSON.parse(readFileSync(path, 'utf8')) as AuthoredConfig & {
+			loupe?: AuthoredConfig;
+		};
 		return path.endsWith('package.json') ? parsed.loupe : parsed;
 	}
-	const mod = await import(pathToFileURL(path).href);
-	return mod.default ?? mod;
+	const mod = (await import(pathToFileURL(path).href)) as { default?: AuthoredConfig };
+	return mod.default ?? (mod as AuthoredConfig);
 }
 
 /** Resolve `extends`, which may name a shipped preset or a path. */
-async function resolveExtends(spec, fromDir) {
+async function resolveExtends(spec: string, fromDir: string): Promise<{ path: string; dir: string }> {
 	const asPreset = join(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, '')}.json`);
 	if (existsSync(asPreset)) return { path: asPreset, dir: PRESET_DIR };
 	const asPath = isAbsolute(spec) ? spec : join(fromDir, spec);
@@ -106,11 +129,11 @@ async function resolveExtends(spec, fromDir) {
 	throw new Error(`cannot resolve extends: ${spec}`);
 }
 
-async function loadChain(path, seen = new Set()) {
+async function loadChain(path: string, seen = new Set<string>()): Promise<AuthoredConfig> {
 	const real = resolve(path);
 	if (seen.has(real)) throw new Error(`circular extends at ${real}`);
 	seen.add(real);
-	const raw = (await readConfigFile(real)) || {};
+	const raw = (await readConfigFile(real)) ?? {};
 	return expandExtends(raw, dirname(real), seen);
 }
 
@@ -120,10 +143,14 @@ async function loadChain(path, seen = new Set()) {
  * Split out of loadChain so a config that never touched disk — the one
  * auto-detection produces — goes through the same resolution as a file.
  */
-async function expandExtends(raw, fromDir, seen = new Set()) {
-	if (!raw?.extends) return raw || {};
+async function expandExtends(
+	raw: AuthoredConfig | undefined,
+	fromDir: string,
+	seen = new Set<string>(),
+): Promise<AuthoredConfig> {
+	if (!raw?.extends) return raw ?? {};
 	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
-	let base = {};
+	let base: AuthoredConfig = {};
 	for (const spec of specs) {
 		const { path: p } = await resolveExtends(spec, fromDir);
 		base = merge(base, await loadChain(p, seen));
@@ -132,7 +159,7 @@ async function expandExtends(raw, fromDir, seen = new Set()) {
 	return merge(base, rest);
 }
 
-export function listPresets() {
+export function listPresets(): string[] {
 	// Read the directory rather than hardcode: a list maintained by hand drifts
 	// the moment someone adds a preset and forgets this line.
 	try {
@@ -147,11 +174,11 @@ export function listPresets() {
 	}
 }
 
-export const presetExists = (name) => existsSync(join(PRESET_DIR, `${name}.json`));
+export const presetExists = (name: string): boolean => existsSync(join(PRESET_DIR, `${name}.json`));
 
 /** Compile `has-*` style patterns into anchored regexes. */
-function compilePatterns(patterns) {
-	return (patterns || []).map(
+function compilePatterns(patterns: readonly string[] | undefined): RegExp[] {
+	return (patterns ?? []).map(
 		(p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`)
 	);
 }
@@ -160,19 +187,19 @@ function compilePatterns(patterns) {
  * Normalize a merged config: canonicalize rule ids, coerce severities, expand
  * the element map, and precompute the predicates the analyzer uses.
  */
-export function normalize(raw, { root }) {
-	const cfg = merge(DEFAULTS, raw || {});
+export function normalize(raw: AuthoredConfig | undefined, { root }: { root: string }): Config {
+	const cfg = merge(DEFAULTS, raw ?? {});
 	const ds = cfg.designSystem;
 
 	// A registry may be inline or a path. A path that does not resolve leaves the
 	// registry empty, which disables the rules that need one rather than throwing
 	// — the engine has to keep working in a project that ships no patterns.
-	let patterns = [];
+	let patterns: Pattern[] = [];
 	if (Array.isArray(cfg.patterns)) patterns = loadPatterns(cfg.patterns);
 	else if (typeof cfg.patterns === 'string') {
 		const p = isAbsolute(cfg.patterns) ? cfg.patterns : join(root, cfg.patterns);
 		try {
-			const raw = JSON.parse(readFileSync(p, 'utf8'));
+			const raw: unknown = JSON.parse(readFileSync(p, 'utf8'));
 			// A registry scoped to packages this project does not import applies to
 			// some other design system that happens to name its components the same.
 			patterns = registryApplies(raw, ds.packages) ? loadPatterns(raw) : [];
@@ -183,12 +210,12 @@ export function normalize(raw, { root }) {
 
 	// Same inline-or-path shape as patterns, for the same reason: a bad path
 	// disables the rules that need it rather than throwing.
-	let componentRegistry = new Map();
+	let componentRegistry = new Map<string, ComponentEntry>();
 	if (Array.isArray(cfg.componentRegistry)) componentRegistry = loadComponents(cfg.componentRegistry);
 	else if (typeof cfg.componentRegistry === 'string') {
 		const p = isAbsolute(cfg.componentRegistry) ? cfg.componentRegistry : join(root, cfg.componentRegistry);
 		try {
-			const raw = JSON.parse(readFileSync(p, 'utf8'));
+			const raw: unknown = JSON.parse(readFileSync(p, 'utf8'));
 			componentRegistry = registryApplies(raw, ds.packages) ? loadComponents(raw) : new Map();
 		} catch {
 			componentRegistry = new Map();
@@ -196,29 +223,32 @@ export function normalize(raw, { root }) {
 	}
 
 	// Rule severities + options. Accepts "warn" | ["warn", {opts}] | "off".
-	const rules = {};
-	for (const [id, def] of Object.entries(RULES)) rules[id] = { severity: def.severity, options: {} };
-	for (const [rawId, value] of Object.entries(cfg.rules || {})) {
+	// Seeded for every rule first, so the record is complete by construction and
+	// the cast below is describing what the loop guarantees rather than hoping.
+	const rules = Object.fromEntries(
+		RULE_IDS.map((id) => [id, { severity: RULES[id].severity, options: {} }]),
+	) as Record<RuleId, RuleSetting>;
+	for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
 		const id = canonicalRuleId(rawId);
-		if (!RULES[id]) throw new Error(`unknown rule in config: ${rawId}`);
+		if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
 		const [sev, opts] = Array.isArray(value) ? value : [value, {}];
-		if (!SEVERITIES.has(sev)) throw new Error(`bad severity for ${rawId}: ${sev}`);
+		if (!isSeverity(sev)) throw new Error(`bad severity for ${rawId}: ${String(sev)}`);
 		rules[id] = { severity: sev, options: { ...opts } };
 	}
 
 	// Element map: "p": "Text" or "div": { component, styledOnly }.
-	const elementMap = new Map();
-	for (const [tag, v] of Object.entries(ds.elementMap || {})) {
+	const elementMap = new Map<string, ElementMapping>();
+	for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
 		const entry = typeof v === 'string' ? { component: v, styledOnly: false } : v;
 		elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
 	}
 
-	const layoutComponents = ds.components?.layout || [];
-	const textComponents = ds.components?.text || [];
-	const hasComponents = (ds.packages || []).length > 0 && layoutComponents.length + textComponents.length > 0;
+	const layoutComponents = ds.components?.layout ?? [];
+	const textComponents = ds.components?.text ?? [];
+	const hasComponents = (ds.packages ?? []).length > 0 && layoutComponents.length + textComponents.length > 0;
 
 	// A rule is available only if the active config satisfies its `needs`.
-	const capability = {
+	const capability: Record<Capability, boolean> = {
 		components: hasComponents,
 		layoutComponents: hasComponents && layoutComponents.length > 0,
 		textComponents: hasComponents && textComponents.length > 0,
@@ -226,28 +256,33 @@ export function normalize(raw, { root }) {
 		tokenPrefixes: (ds.tokenPrefixes || []).length > 0,
 		patternRegistry: hasComponents && patterns.length > 0,
 		componentRegistry: componentRegistry.size > 0,
-		projectNamespace: (cfg.namespaces.project || []).length > 0,
+		projectNamespace: (cfg.namespaces.project ?? []).length > 0,
 	};
 
-	const enabled = {};
-	for (const [id, def] of Object.entries(RULES)) {
-		const met = def.needs.every((n) => capability[n]);
-		enabled[id] = met && rules[id].severity !== 'off';
-	}
+	const enabled = Object.fromEntries(
+		RULE_IDS.map((id) => [
+			id,
+			RULES[id].needs.every((n: Capability) => capability[n]) && rules[id].severity !== 'off',
+		]),
+	) as Record<RuleId, boolean>;
 
 	const neverDead = compilePatterns(cfg.namespaces.neverDead);
-	const projectPrefixes = cfg.namespaces.project || [];
-	const externalPrefixes = cfg.namespaces.external || [];
+	const projectPrefixes = cfg.namespaces.project ?? [];
+	const externalPrefixes = cfg.namespaces.external ?? [];
 
 	return {
 		root,
 		raw: cfg,
+		// Overwritten by `loadConfig`, which knows which of the five resolution
+		// paths won. Normalizing a bare object is the inline case by definition.
+		source: { kind: 'inline' },
+		inferred: false,
 		designSystem: {
 			name: ds.name || '',
-			packages: ds.packages || [],
-			tokenPrefixes: ds.tokenPrefixes || [],
-			tokenSources: ds.tokenSources || [],
-			cssInJsPackages: ds.cssInJsPackages || [],
+			packages: ds.packages ?? [],
+			tokenPrefixes: ds.tokenPrefixes ?? [],
+			tokenSources: ds.tokenSources ?? [],
+			cssInJsPackages: ds.cssInJsPackages ?? [],
 			normalizeExports: ds.normalizeExports ? new RegExp(ds.normalizeExports) : null,
 			layoutComponents,
 			textComponents,
@@ -262,11 +297,11 @@ export function normalize(raw, { root }) {
 		hook: cfg.hook,
 		rules,
 		enabled,
-		severityOf: (id) => rules[id]?.severity ?? 'warn',
-		optionsOf: (id) => rules[id]?.options ?? {},
-		isProject: (cls) => projectPrefixes.some((p) => cls.startsWith(p)),
-		isExternal: (cls) => externalPrefixes.some((p) => cls.startsWith(p)),
-		isNeverDead: (cls) => neverDead.some((re) => re.test(cls)),
+		severityOf: (id: RuleId) => rules[id]?.severity ?? 'warn',
+		optionsOf: (id: RuleId) => rules[id]?.options ?? {},
+		isProject: (cls: string) => projectPrefixes.some((p) => cls.startsWith(p)),
+		isExternal: (cls: string) => externalPrefixes.some((p) => cls.startsWith(p)),
+		isNeverDead: (cls: string) => neverDead.some((re) => re.test(cls)),
 	};
 }
 
@@ -277,8 +312,8 @@ export function normalize(raw, { root }) {
  * `config.patterns` on its own leaves the rule disabled and the registry
  * silently unused — which looks exactly like "no composite drift found".
  */
-export function setPatterns(config, patterns) {
-	config.patterns = patterns || [];
+export function setPatterns(config: Config, patterns: Pattern[] | null | undefined): Config {
+	config.patterns = patterns ?? [];
 	config.enabled['patterns/duplicate-composite'] =
 		config.patterns.length > 0 &&
 		config.designSystem.knownComponents.size > 0 &&
@@ -287,8 +322,11 @@ export function setPatterns(config, patterns) {
 }
 
 /** Same after-the-fact attachment as {@link setPatterns}, for the component registry. */
-export function setComponentRegistry(config, componentRegistry) {
-	config.componentRegistry = componentRegistry || new Map();
+export function setComponentRegistry(
+	config: Config,
+	componentRegistry: Map<string, ComponentEntry> | null | undefined,
+): Config {
+	config.componentRegistry = componentRegistry ?? new Map();
 	config.enabled['system/locked-component'] =
 		config.componentRegistry.size > 0 && config.severityOf('system/locked-component') !== 'off';
 	config.enabled['system/superseded-component'] =
@@ -309,9 +347,21 @@ export function setComponentRegistry(config, componentRegistry) {
  * `source` records which of those won, and `inferred` marks a config nobody
  * wrote down — the CLI uses it to hold guessed settings to a lower bar.
  */
-export async function loadConfig({ root, configPath, preset, inline, inferred = false }) {
-	let raw;
-	let source;
+export async function loadConfig({
+	root,
+	configPath,
+	preset,
+	inline,
+	inferred = false,
+}: {
+	root: string;
+	configPath?: string | null;
+	preset?: string | null;
+	inline?: AuthoredConfig | null;
+	inferred?: boolean;
+}): Promise<Config> {
+	let raw: AuthoredConfig;
+	let source: ConfigSource;
 	if (configPath) {
 		raw = await loadChain(resolve(configPath));
 		source = { kind: 'file', path: resolve(configPath) };

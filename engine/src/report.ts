@@ -7,29 +7,35 @@
  * findings are worth.
  */
 
-import { RULES, renderTitle } from './rules.mjs';
+import { RULES, renderTitle } from './rules.ts';
+import type { AnalyzeResult, BaselinedResult, Config, Finding, RuleId, Severity } from './types.ts';
 
-const SEV_MARK = { error: '\u2717', warn: '\u2022' };
+const SEV_MARK: Partial<Record<Severity, string>> = { error: '\u2717', warn: '\u2022' };
 
-export function formatAgent(result, config, { maxFindings = 0, showSuppressed = false } = {}) {
+export function formatAgent(
+	result: AnalyzeResult | BaselinedResult,
+	config: Config,
+	{ maxFindings = 0, showSuppressed = false }: { maxFindings?: number; showSuppressed?: boolean } = {},
+): string {
 	const { findings, diagnostics } = result;
 	const kw = config.suppression.keyword;
-	const lines = [];
+	const lines: string[] = [];
 
 	if (!findings.length) {
 		lines.push('loupe: clean.');
 	} else {
-		const byRule = new Map();
+		const byRule = new Map<RuleId, Finding[]>();
 		for (const f of findings) {
-			if (!byRule.has(f.rule)) byRule.set(f.rule, []);
-			byRule.get(f.rule).push(f);
+			const group = byRule.get(f.rule) ?? [];
+			group.push(f);
+			byRule.set(f.rule, group);
 		}
 		const groups = [...byRule.entries()].sort((a, b) => RULES[b[0]].rank - RULES[a[0]].rank);
 
 		// Spend the budget round-robin across rule groups. Filling it first-come
 		// buries every other rule behind whichever one happens to rank highest,
 		// and an agent that only ever sees one rule only ever fixes one rule.
-		const quota = new Map(groups.map(([id]) => [id, 0]));
+		const quota = new Map<RuleId, number>(groups.map(([id]) => [id, 0]));
 		let budget = maxFindings > 0 ? maxFindings : Infinity;
 		if (budget !== Infinity) {
 			let progress = true;
@@ -37,8 +43,9 @@ export function formatAgent(result, config, { maxFindings = 0, showSuppressed = 
 				progress = false;
 				for (const [id, group] of groups) {
 					if (budget <= 0) break;
-					if (quota.get(id) >= group.length) continue;
-					quota.set(id, quota.get(id) + 1);
+					const taken = quota.get(id) ?? 0;
+					if (taken >= group.length) continue;
+					quota.set(id, taken + 1);
 					budget--;
 					progress = true;
 				}
@@ -49,10 +56,10 @@ export function formatAgent(result, config, { maxFindings = 0, showSuppressed = 
 
 		let hidden = 0;
 		for (const [ruleId, group] of groups) {
-			const sev = group[0].severity;
+			const sev = group[0]?.severity ?? 'warn';
 			lines.push('');
-			lines.push(`${SEV_MARK[sev] || '\u2022'} ${ruleId} (${group.length}) \u2014 ${renderTitle(ruleId, config.designSystem, kw)}`);
-			const show = group.slice(0, quota.get(ruleId));
+			lines.push(`${SEV_MARK[sev] ?? '\u2022'} ${ruleId} (${group.length}) \u2014 ${renderTitle(ruleId, config.designSystem, kw)}`);
+			const show = group.slice(0, quota.get(ruleId) ?? 0);
 			hidden += group.length - show.length;
 			for (const f of show) lines.push(`    ${f.file}:${f.line}  ${f.message}`);
 			if (group.length > show.length) lines.push(`    \u2026 ${group.length - show.length} more`);
@@ -78,7 +85,10 @@ export function formatAgent(result, config, { maxFindings = 0, showSuppressed = 
 }
 
 /** One-line tally for the hook's success path. */
-export function formatSummary(result, { prefix = true } = {}) {
+export function formatSummary(
+	result: AnalyzeResult | BaselinedResult,
+	{ prefix = true }: { prefix?: boolean } = {},
+): string {
 	const tag = prefix ? 'loupe: ' : '';
 	const { findings } = result;
 	if (!findings.length) return `${tag}clean.`;
@@ -91,7 +101,7 @@ export function formatSummary(result, { prefix = true } = {}) {
 	return `${tag}${parts.join(', ')}${top ? ` (${top})` : ''}.`;
 }
 
-export function formatJson(result, config) {
+export function formatJson(result: AnalyzeResult | BaselinedResult, config: Config): string {
 	return JSON.stringify(
 		{
 			version: 1,
@@ -114,7 +124,7 @@ export function formatJson(result, config) {
 	);
 }
 
-export function formatSarif(result, config) {
+export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Config): string {
 	const used = [...new Set(result.findings.map((f) => f.rule))];
 	return JSON.stringify(
 		{

@@ -1,0 +1,39 @@
+{
+	"compilerOptions": {
+		"target": "es2022",
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"lib": ["es2023"],
+		"types": ["node"],
+
+		// Nothing is emitted from here. `dist/loupe.mjs` is produced by esbuild,
+		// which transpiles TypeScript natively, so tsc's only job is to be the
+		// type checker — which is what makes `allowImportingTsExtensions` legal
+		// and lets imports name the file that actually exists on disk.
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+
+		// The bootstrap layer stays JavaScript: `bin/loupe.mjs` is what the hooks
+		// invoke on a machine with no toolchain, so it has to run on bare Node.
+		// It is still type-checked, via JSDoc.
+		"allowJs": true,
+		"checkJs": true,
+
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"exactOptionalPropertyTypes": true,
+		"noImplicitOverride": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"noPropertyAccessFromIndexSignature": false,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true,
+		"skipLibCheck": true
+	},
+	"include": ["src/**/*.ts", "tests/*.ts", "bin/*.mjs", "build.mjs", "audit-suppressions.ts"],
+	// Fixtures are deliberately non-conforming sample code — the checker's input,
+	// not the checker.
+	"exclude": ["tests/fixtures", "node_modules", "dist"]
+}

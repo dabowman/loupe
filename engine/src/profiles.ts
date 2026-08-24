@@ -26,20 +26,44 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
-import { loadPatterns } from './patterns.mjs';
-import { loadComponents } from './components.mjs';
-import { registryApplies, registryPackages } from './registry.mjs';
+import { loadPatterns } from './patterns.ts';
+import { loadComponents } from './components.ts';
+import { registryApplies, registryPackages } from './registry.ts';
+import type { ComponentEntry, Config, Pattern, Profile, SkippedRegistry } from './types.ts';
 
-const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'));
+export type { Profile, SkippedRegistry };
+
+/** A registry pair to merge in, labelled for the report. */
+export interface RegistrySource {
+	label: string;
+	patterns?: string | null;
+	components?: string | null;
+}
+
+const readJson = (p: string): unknown => JSON.parse(readFileSync(p, 'utf8'));
 
 /** Resolve a profile-relative path. */
-const under = (dir, rel) => (isAbsolute(rel) ? rel : join(dir, rel));
+const under = (dir: string, rel: string): string => (isAbsolute(rel) ? rel : join(dir, rel));
+
+const asStrings = (v: unknown): string[] =>
+	Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : [];
+
+/** A `profile.json` as authored — every field optional, nothing vouched for. */
+interface RawProfile {
+	id?: string;
+	name?: string;
+	preset?: string;
+	packages?: unknown;
+	skills?: unknown;
+	patterns?: string;
+	components?: string;
+}
 
 /**
  * Every `<root>/<id>/profile.json`. A malformed or unreadable profile is
  * skipped rather than thrown: one bad directory must not take the gate down.
  */
-export function readProfiles(root) {
+export function readProfiles(root: string | null | undefined): Profile[] {
 	if (!root || !existsSync(root)) return [];
 	let entries;
 	try {
@@ -47,20 +71,20 @@ export function readProfiles(root) {
 	} catch {
 		return [];
 	}
-	const out = [];
+	const out: Profile[] = [];
 	for (const e of entries) {
 		if (!e.isDirectory()) continue;
 		const dir = join(root, e.name);
 		const manifest = join(dir, 'profile.json');
 		if (!existsSync(manifest)) continue;
 		try {
-			const raw = readJson(manifest);
+			const raw = readJson(manifest) as RawProfile;
 			out.push({
 				id: raw.id || e.name,
 				name: raw.name || raw.id || e.name,
-				preset: raw.preset || null,
-				packages: Array.isArray(raw.packages) ? raw.packages.filter(Boolean) : [],
-				skills: Array.isArray(raw.skills) ? raw.skills.filter(Boolean) : [],
+				preset: raw.preset ?? null,
+				packages: asStrings(raw.packages),
+				skills: asStrings(raw.skills),
 				patterns: raw.patterns ? under(dir, raw.patterns) : null,
 				components: raw.components ? under(dir, raw.components) : null,
 				dir,
@@ -79,9 +103,16 @@ export function readProfiles(root) {
  * profile that claims it is the one whose composites can legitimately match.
  * `force` names a profile explicitly and skips the question.
  */
-export function selectProfiles(profiles, config, force = null) {
+export function selectProfiles(
+	profiles: readonly Profile[],
+	// Narrower than `Config` on purpose: selection reads the package list and
+	// nothing else, and a caller holding just that should not have to build a
+	// whole config to ask which profiles apply.
+	config: { designSystem?: { packages?: readonly string[] } },
+	force: string | null = null,
+): Profile[] {
 	if (force) return profiles.filter((p) => p.id === force);
-	const pkgs = config.designSystem?.packages || [];
+	const pkgs = config.designSystem?.packages ?? [];
 	if (!pkgs.length) return [];
 	return profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
 }
@@ -94,15 +125,24 @@ export function selectProfiles(profiles, config, force = null) {
  * was skipped, so the CLI can say why a registry it was handed did nothing —
  * a registry silently ignored looks exactly like a registry with no findings.
  *
- * @param {Array<{label: string, patterns?: string, components?: string}>} sources
  */
-export function applyRegistries(config, sources, { setPatterns, setComponentRegistry }) {
-	const applied = [];
-	const skipped = [];
-	const errors = [];
+export function applyRegistries(
+	config: Config,
+	sources: readonly RegistrySource[],
+	{
+		setPatterns,
+		setComponentRegistry,
+	}: {
+		setPatterns: (config: Config, patterns: Pattern[]) => Config;
+		setComponentRegistry: (config: Config, registry: Map<string, ComponentEntry>) => Config;
+	},
+): { applied: string[]; skipped: SkippedRegistry[]; errors: string[] } {
+	const applied: string[] = [];
+	const skipped: SkippedRegistry[] = [];
+	const errors: string[] = [];
 
-	let patterns = config.patterns || [];
-	let components = new Map(config.componentRegistry || []);
+	let patterns: Pattern[] = config.patterns ?? [];
+	const components = new Map<string, ComponentEntry>(config.componentRegistry ?? []);
 	let sawPatterns = false;
 	let sawComponents = false;
 
@@ -120,7 +160,7 @@ export function applyRegistries(config, sources, { setPatterns, setComponentRegi
 					skipped.push({ label: src.label, kind: 'patterns', packages: registryPackages(raw) });
 				}
 			} catch (err) {
-				errors.push(`could not read ${src.label} patterns — ${err.message}`);
+				errors.push(`could not read ${src.label} patterns — ${err instanceof Error ? err.message : String(err)}`);
 			}
 		}
 		if (src.components) {
@@ -134,7 +174,7 @@ export function applyRegistries(config, sources, { setPatterns, setComponentRegi
 					skipped.push({ label: src.label, kind: 'components', packages: registryPackages(raw) });
 				}
 			} catch (err) {
-				errors.push(`could not read ${src.label} components — ${err.message}`);
+				errors.push(`could not read ${src.label} components — ${err instanceof Error ? err.message : String(err)}`);
 			}
 		}
 		if (used) applied.push(src.label);

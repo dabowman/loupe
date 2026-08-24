@@ -11,6 +11,8 @@
  * `px` — except on the properties where a number is already the unit.
  */
 
+import type { Node, ObjectProperty } from '@babel/types';
+
 /**
  * Properties where a bare number is a ratio or a count, not a length. React
  * leaves these unsuffixed; treating `fontWeight: 600` as `600px` would classify
@@ -32,7 +34,7 @@ const UNITLESS = new Set([
  * A key that already contains a hyphen is passed through: React accepts
  * `'margin-bottom'` as a quoted key and custom properties must survive intact.
  */
-export function toCssProp(key) {
+export function toCssProp(key: string): string {
 	if (key.startsWith('--')) return key;
 	if (key.includes('-')) return key.toLowerCase();
 	const kebab = key.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`);
@@ -45,7 +47,7 @@ export function toCssProp(key) {
  * Returns null when the value is dynamic — an identifier, a call, a spread —
  * because "width: [expression]" is noise, not a finding.
  */
-export function toCssValue(prop, node) {
+export function toCssValue(prop: string, node: Node | null | undefined): string | null {
 	if (!node) return null;
 	switch (node.type) {
 		case 'StringLiteral':
@@ -64,15 +66,15 @@ export function toCssValue(prop, node) {
 	}
 }
 
-function numeric(prop, n) {
+function numeric(prop: string, n: number): string {
 	if (n === 0) return '0';
 	return UNITLESS.has(prop) ? String(n) : `${n}px`;
 }
 
 /** The property name a style-object key carries, or null if it isn't static. */
-export function keyName(node) {
+export function keyName(node: ObjectProperty | null | undefined): string | null {
 	if (!node) return null;
-	if (node.key?.type === 'Identifier' && !node.computed) return node.key.name;
-	if (node.key?.type === 'StringLiteral') return node.key.value;
+	if (node.key.type === 'Identifier' && !node.computed) return node.key.name;
+	if (node.key.type === 'StringLiteral') return node.key.value;
 	return null;
 }

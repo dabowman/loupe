@@ -13,22 +13,34 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import { findingKey } from './analyze.mjs';
+import { findingKey } from './analyze.ts';
+import type { AnalyzeResult, Baseline, BaselineFile, BaselinedResult } from './types.ts';
 
-const resolvePath = (root, p) => (isAbsolute(p) ? p : join(root, p));
+const resolvePath = (root: string, p: string): string => (isAbsolute(p) ? p : join(root, p));
 
-export function readBaseline(root, path) {
+export function readBaseline(root: string, path: string): Baseline | null {
 	const full = resolvePath(root, path);
 	if (!existsSync(full)) return null;
 	try {
-		const parsed = JSON.parse(readFileSync(full, 'utf8'));
-		return { ...parsed, set: new Set(parsed.entries || []) };
+		const parsed = JSON.parse(readFileSync(full, 'utf8')) as Partial<BaselineFile>;
+		const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+		return {
+			version: parsed.version ?? 1,
+			createdAt: parsed.createdAt ?? '',
+			count: parsed.count ?? entries.length,
+			entries,
+			set: new Set(entries),
+		};
 	} catch {
 		return null;
 	}
 }
 
-export function writeBaseline(root, path, result) {
+export function writeBaseline(
+	root: string,
+	path: string,
+	result: AnalyzeResult,
+): { path: string; count: number } {
 	const full = resolvePath(root, path);
 	const entries = [...new Set(result.findings.map(findingKey))].sort();
 	writeFileSync(
@@ -43,9 +55,9 @@ export function writeBaseline(root, path, result) {
  * `fixed` is only meaningful on a whole-repo run — on a scoped run the absent
  * entries are mostly just out of scope, so callers suppress that number.
  */
-export function applyBaseline(result, baseline) {
+export function applyBaseline(result: AnalyzeResult, baseline: Baseline | null): BaselinedResult {
 	if (!baseline) return { ...result, baselined: 0, fixed: 0 };
-	const seen = new Set();
+	const seen = new Set<string>();
 	const kept = [];
 	let baselined = 0;
 	for (const f of result.findings) {

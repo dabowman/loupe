@@ -16,47 +16,37 @@
  * the wrong repo — which is the failure mode no build ever catches.
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze } from '../src/analyze.mjs';
-import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.mjs';
-import { matches, toNode } from '../src/patterns.mjs';
-import { registryApplies } from '../src/registry.mjs';
-import { readProfiles, selectProfiles, applyRegistries } from '../src/profiles.mjs';
-import { detectPreset } from '../src/detect.mjs';
+import { analyze } from '../src/analyze.ts';
+import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
+import { matches, toNode } from '../src/patterns.ts';
+import { registryApplies } from '../src/registry.ts';
+import { readProfiles, selectProfiles, applyRegistries } from '../src/profiles.ts';
+import { detectPreset } from '../src/detect.ts';
+import { assert, check, cleanup, finish, one, scratch, writeAll } from './harness.ts';
+import type { AnalyzeResult, PatternNode } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRESET_DIR = join(HERE, '..', 'presets');
 
-let failed = 0;
-const check = async (name, fn) => {
-	try {
-		await fn();
-		console.log(`ok   ${name}`);
-	} catch (err) {
-		failed++;
-		console.log(`FAIL ${name}\n     ${err.message}`);
-	}
-};
-const assert = (cond, msg) => {
-	if (!cond) throw new Error(msg);
+/** `toNode` is nullable by contract; a signature written in a test is not. */
+const node = (spec: unknown): PatternNode => {
+	const n = toNode(spec);
+	assert(n, `test signature did not parse: ${JSON.stringify(spec)}`);
+	return n;
 };
 
 /** Write a throwaway repo and hand back its root. */
-function repo(files) {
-	const root = mkdtempSync(join(tmpdir(), 'loupe-mds-'));
-	for (const [rel, body] of Object.entries(files)) {
-		const p = join(root, rel);
-		mkdirSync(dirname(p), { recursive: true });
-		writeFileSync(p, body);
-	}
+function repo(files: Record<string, string>): string {
+	const root = scratch('loupe-mds-');
+	writeAll(root, files);
 	return root;
 }
 
 /** The same page header, built from whichever package the caller names. */
-const pageHeader = (pkg, name) => `import { Stack, Text, Button } from '${pkg}';
+const pageHeader = (pkg: string, name: string): string => `import { Stack, Text, Button } from '${pkg}';
 export const ${name} = () => (
   <Stack>
     <Stack><Text>Title</Text><Text>Sub</Text></Stack>
@@ -67,20 +57,20 @@ export const ${name} = () => (
 
 const PAGE_HEADER_SIG = ['Stack', ['Stack', 'Text', 'Text'], ['Stack', 'Button']];
 
-const registryFile = (packages) =>
+const registryFile = (packages: string[]): string =>
 	JSON.stringify({
 		packages,
 		patterns: [{ id: 'page-header', summary: 'header', signature: PAGE_HEADER_SIG }],
 	});
 
-const configFor = (pkg) =>
+const configFor = (pkg: string): string =>
 	JSON.stringify({
 		extends: 'generic',
 		designSystem: { packages: [pkg], components: { layout: ['Stack'], text: ['Text'] } },
 	});
 
 /** Analyze `root`, attaching `patternsPath` the way the CLI would. */
-async function analyzeWith(root, patternsPath) {
+async function analyzeWith(root: string, patternsPath?: string | null): Promise<AnalyzeResult> {
 	const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 	if (patternsPath)
 		applyRegistries(config, [{ label: 'test', patterns: patternsPath }], { setPatterns, setComponentRegistry });
@@ -101,7 +91,7 @@ await check('a scoped registry does not reach a project on another design system
 		const dup = r.findings.filter((f) => f.rule === 'patterns/duplicate-composite');
 		assert(!dup.length, `WPDS pattern fired on a Chakra repo: ${dup.map((f) => f.message)}`);
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
@@ -117,7 +107,7 @@ await check('the same registry reaches the design system it names', async () => 
 		const dup = r.findings.filter((f) => f.rule === 'patterns/duplicate-composite');
 		assert(dup.length === 2, `expected both files reported, got ${dup.length}`);
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
@@ -130,7 +120,7 @@ await check('a registry naming no packages still applies anywhere', () => {
 // ── qualified signatures ────────────────────────────────────────────────────
 
 await check('a package-qualified node matches only that package', () => {
-	const pattern = toNode(['@wordpress/components::Stack', '@wordpress/components::Button']);
+	const pattern = node(['@wordpress/components::Stack', '@wordpress/components::Button']);
 	const wp = { name: 'Stack', pkg: '@wordpress/components', children: [{ name: 'Button', pkg: '@wordpress/components', children: [] }] };
 	const chakra = { name: 'Stack', pkg: '@chakra-ui/react', children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }] };
 	assert(matches(pattern, wp), 'should match its own package');
@@ -138,12 +128,12 @@ await check('a package-qualified node matches only that package', () => {
 });
 
 await check('an unqualified node still matches any package', () => {
-	const pattern = toNode(['Stack', 'Button']);
+	const pattern = node(['Stack', 'Button']);
 	const chakra = { name: 'Stack', pkg: '@chakra-ui/react', children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }] };
 	const unknown = { name: 'Stack', pkg: null, children: [{ name: 'Button', pkg: null, children: [] }] };
 	assert(matches(pattern, chakra), 'bare names are the default and must stay permissive');
 	// An import the scanner could not resolve is not evidence of a mismatch.
-	assert(matches(toNode(['@x/y::Stack', 'Button']), unknown), 'an unknown package must not block a match');
+	assert(matches(node(['@x/y::Stack', 'Button']), unknown), 'an unknown package must not block a match');
 });
 
 // ── detection is data ───────────────────────────────────────────────────────
@@ -170,7 +160,7 @@ await check('a preset dropped into presets/ is detected without touching the eng
 		assert(got.reasons.join(' ').includes('@zz/design-system'), `reason should name the marker: ${got.reasons}`);
 	} finally {
 		rmSync(file, { force: true });
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
@@ -186,7 +176,7 @@ await check('priority decides when two presets both match', async () => {
 		// severities; picking the other would silently disable them.
 		assert(detectPreset(root).preset === 'wpds', 'higher priority must win');
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
@@ -195,20 +185,23 @@ await check('a preset with no detect block is never inferred', async () => {
 	try {
 		assert(detectPreset(root).preset === 'generic', 'a parent preset is not a conclusion');
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
 // ── profiles ────────────────────────────────────────────────────────────────
 
-function profileDir() {
-	const root = mkdtempSync(join(tmpdir(), 'loupe-prof-'));
-	mkdirSync(join(root, 'acme'), { recursive: true });
-	writeFileSync(
-		join(root, 'acme', 'profile.json'),
-		JSON.stringify({ id: 'acme', name: 'Acme DS', packages: ['@acme/ui'], patterns: './patterns.json' })
-	);
-	writeFileSync(join(root, 'acme', 'patterns.json'), registryFile(['@acme/ui']));
+function profileDir(): string {
+	const root = scratch('loupe-prof-');
+	writeAll(root, {
+		'acme/profile.json': JSON.stringify({
+			id: 'acme',
+			name: 'Acme DS',
+			packages: ['@acme/ui'],
+			patterns: './patterns.json',
+		}),
+		'acme/patterns.json': registryFile(['@acme/ui']),
+	});
 	// A directory with no manifest is not a profile, and must not throw.
 	mkdirSync(join(root, 'not-a-profile'), { recursive: true });
 	return root;
@@ -217,13 +210,12 @@ function profileDir() {
 await check('profiles are read from disk, junk directories ignored', () => {
 	const dir = profileDir();
 	try {
-		const profiles = readProfiles(dir);
-		assert(profiles.length === 1, `expected 1 profile, got ${profiles.length}`);
-		assert(profiles[0].id === 'acme' && profiles[0].name === 'Acme DS', 'manifest fields should survive');
-		assert(profiles[0].patterns.endsWith('patterns.json'), 'registry path should resolve against the profile dir');
+		const profile = one(readProfiles(dir), 'expected exactly 1 profile');
+		assert(profile.id === 'acme' && profile.name === 'Acme DS', 'manifest fields should survive');
+		assert(profile.patterns?.endsWith('patterns.json'), 'registry path should resolve against the profile dir');
 		assert(readProfiles(join(dir, 'nope')).length === 0, 'a missing directory is not an error');
 	} finally {
-		rmSync(dir, { recursive: true, force: true });
+		cleanup(dir);
 	}
 });
 
@@ -238,7 +230,7 @@ await check('a profile is selected by what the project imports', () => {
 		assert(selectProfiles(profiles, { designSystem: { packages: [] } }).length === 0, 'no packages, no profile');
 		assert(selectProfiles(profiles, off, 'acme').length === 1, '--profile forces selection');
 	} finally {
-		rmSync(dir, { recursive: true, force: true });
+		cleanup(dir);
 	}
 });
 
@@ -251,10 +243,10 @@ await check('a skipped registry is reported, not silently dropped', async () => 
 			setComponentRegistry,
 		});
 		assert(out.applied.length === 0, 'nothing should have applied');
-		assert(out.skipped.length === 1, 'the skip must be reported');
-		assert(out.skipped[0].packages.includes('@wordpress/components'), 'the report should name the scope');
+		const skip = one(out.skipped, 'the skip must be reported');
+		assert(skip.packages.includes('@wordpress/components'), 'the report should name the scope');
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
@@ -269,9 +261,8 @@ await check('an unreadable registry is an error, not a crash', async () => {
 		assert(out.errors.length === 1, 'the failure should be reported');
 		assert(config.enabled['patterns/duplicate-composite'] === false, 'the rule stays off rather than half-configured');
 	} finally {
-		rmSync(root, { recursive: true, force: true });
+		cleanup(root);
 	}
 });
 
-console.log(failed ? `\n${failed} failed` : '\nall passed');
-process.exit(failed ? 1 : 0);
+finish();
