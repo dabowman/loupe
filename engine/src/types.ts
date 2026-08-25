@@ -359,6 +359,7 @@ export interface MergedConfig {
 		normalizeExports: string;
 		components: { layout: string[]; text: string[] };
 		elementMap: Record<string, string | AuthoredElementMapping>;
+		substitutionProps: string[];
 	};
 	namespaces: { project: string[]; external: string[]; neverDead: string[] };
 	sources: SourceGlobs;
@@ -401,6 +402,8 @@ export interface DesignSystem {
 	textComponents: string[];
 	knownComponents: Set<string>;
 	elementMap: Map<string, ElementMapping>;
+	/** Props whose value names the element a component should render. */
+	substitutionProps: Set<string>;
 }
 
 export interface RuleSetting {

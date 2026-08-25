@@ -168,10 +168,15 @@ with a reason naming what is computed.
 `variant="heading-*"` and `render` supplying the semantic element, a styled
 `<div>` → `Stack`, a styled `<span>` → `Text`.
 
+The element inside a substitution prop — `render`, `as`, `component` — is never
+flagged: it names the tag the component emits, so converting a `<h4>` to `Text`
+with `render={ <h4 /> }` settles the finding rather than moving it. Markup
+nested inside such a prop still counts.
+
 Not every raw element should convert. Content rendered from the editor, docs
-prose, and third-party render props are legitimately raw — suppress those with
-that as the reason, or exclude the path in config, which is better because it
-scales.
+prose, and elements handed to a third-party render prop under some other name
+are legitimately raw — suppress those with that as the reason, or exclude the
+path in config, which is better because it scales.
 
 ### `tokens/hardcoded-value`
 

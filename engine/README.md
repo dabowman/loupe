@@ -131,7 +131,8 @@ is what makes a preset:
     "elementMap": {
       "p": "Text",
       "div": { "component": "Stack", "styledOnly": true }
-    }
+    },
+    "substitutionProps": ["render", "as", "component"]
   }
 }
 ```
@@ -140,6 +141,14 @@ is what makes a preset:
 names. `@wordpress/components` publishes `__experimentalText`; without
 normalization the text rules never match and quietly degrade into generic
 override findings.
+
+`substitutionProps` names the props that hand a component the element it should
+render — `<Text variant="heading-md" render={ <h4 /> }>`. The element in one of
+those is an argument naming a tag, not markup, and it is how you keep an
+element's semantics through the conversion `system/raw-element` asks for, so
+that rule leaves it alone. The default covers `render` (WPDS, Base UI) and
+`as`/`component` (most other React systems); the exemption is the prop's own
+element only, never the subtree under it.
 
 ### Bundled presets
 
@@ -347,6 +356,7 @@ const { findings, blocking, directives } = analyze(config, { scope: null });
 | --- | --- |
 | `designSystem.tokenSources` | Paths (file or directory) holding the token definitions. Read even under `node_modules`, which the project walk prunes — that is where a design system's tokens live. Missing paths are skipped. |
 | `designSystem.cssInJsPackages` | Packages whose tagged templates are CSS. Defaults cover styled-components and emotion. |
+| `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element`; nothing nested inside it is. Defaults to `render`, `as`, `component`; `[]` exempts nothing. |
 | `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on `id`. |
 | `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 

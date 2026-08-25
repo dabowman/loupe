@@ -15,7 +15,8 @@ import { harvestStems } from '../src/markup.ts';
 import { isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
 import { analyze } from '../src/analyze.ts';
-import { assert, check, cleanup, execFailure, finish, scratch, writeAll } from './harness.ts';
+import { assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
+import type { Finding } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, '..', 'bin', 'loupe.mjs');
@@ -250,6 +251,89 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 	} finally {
 		cleanup(root);
 	}
+});
+
+/** Analyze one throwaway markup file under the WPDS preset. */
+const findingsFor = async (source: string, designSystem?: Record<string, unknown>): Promise<Finding[]> => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', ...(designSystem ? { designSystem } : {}) }),
+		'src/A.tsx': source,
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const { findings } = await analyze(config, { scope: null });
+		return findings;
+	} finally {
+		cleanup(root);
+	}
+};
+
+const rawOnly = (findings: readonly Finding[]): Finding[] => findings.filter((f) => f.rule === 'system/raw-element');
+
+// `render={ <h4 /> }` is how WPDS gives a text component its semantic element —
+// the component registry names that idiom as `Heading`'s replacement. Reporting
+// the `<h4>` inside it fired the rule on the result of obeying the rule, leaving
+// nothing to do but undo the conversion or suppress.
+await check('an element handed to a substitution prop is not raw markup', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			[
+				"import { Text } from '@wordpress/ui';",
+				'export const A = () => <Text variant="heading-md" render={ <h4 /> }>Hi</Text>;',
+				'export const B = () => <Text variant="heading-md" render={ ( props ) => <h4 { ...props } /> }>Hi</Text>;',
+				'export const C = () => <Text as={ <h4 /> }>Hi</Text>;',
+			].join('\n'),
+		),
+	);
+	assert(!findings.length, `flagged the escape hatch it recommends: ${JSON.stringify(findings.map((f) => f.message))}`);
+});
+
+// The narrow reading on purpose: the prop's own element is an argument naming a
+// tag, but everything under it is markup the author wrote and React renders as
+// markup. Exempting the subtree would hide a hand-rolled layout by wrapping it
+// in a `render`.
+await check('markup nested inside a substitution prop still counts', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			[
+				"import { Text } from '@wordpress/ui';",
+				'export const A = () => <Text render={ <div><p>Hi</p></div> }>Hi</Text>;',
+			].join('\n'),
+		),
+	);
+	const f = one(findings, 'expected the nested <p> and nothing else');
+	assert(f.message.includes('<p>'), `flagged the substitution element instead: ${f.message}`);
+});
+
+// The exclusion answers one question — which tag does the component emit — and
+// no others. Styling written on that element is drift wherever it sits.
+await check('styling on a substitution element is still styling', async () => {
+	const findings = await findingsFor(
+		[
+			"import { Text } from '@wordpress/ui';",
+			'export const A = () => <Text render={ <h4 style={ { marginBottom: 16 } } /> }>Hi</Text>;',
+		].join('\n'),
+	);
+	assert(!rawOnly(findings).length, 'the <h4> is still the substitution element');
+	assert(
+		findings.some((f) => f.rule === 'layout/margin-on-child'),
+		`inline margin went unreported: ${JSON.stringify(findings.map((f) => f.message))}`,
+	);
+});
+
+// `render` is WPDS and Base UI; `as` and `component` are the same idiom
+// elsewhere. A design system that spells it differently says so in config, and
+// an empty list is how a project asks for the old behaviour back.
+await check('the substitution-prop list is config-driven', async () => {
+	const source = [
+		"import { Text } from '@wordpress/ui';",
+		'export const A = () => <Text render={ <h4 /> } elementType={ <h5 /> }>Hi</Text>;',
+	].join('\n');
+	const custom = rawOnly(await findingsFor(source, { substitutionProps: ['elementType'] }));
+	const f = one(custom, 'only the prop the config names is a substitution');
+	assert(f.message.includes('<h4>'), `wrong element exempted: ${f.message}`);
+	const none = rawOnly(await findingsFor(source, { substitutionProps: [] }));
+	assert(none.length === 2, `an empty list exempts nothing — got ${none.length}`);
 });
 
 finish();

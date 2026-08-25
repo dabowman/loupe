@@ -49,6 +49,12 @@ export const DEFAULTS: MergedConfig = {
 		normalizeExports: '',
 		components: { layout: [], text: [] },
 		elementMap: {},
+		// Props that hand a component the element it should render — `render` in
+		// WPDS and Base UI, `as` and `component` in most other React systems. The
+		// element in one of these is an argument naming a tag, not markup being
+		// rendered, so the raw-element rule leaves it alone. Set it to `[]` to get
+		// the old behaviour back; a system with a differently-named prop names it.
+		substitutionProps: ['render', 'as', 'component'],
 	},
 	namespaces: { project: [], external: [], neverDead: [] },
 	sources: {
@@ -288,6 +294,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 			textComponents,
 			knownComponents: new Set([...layoutComponents, ...textComponents]),
 			elementMap,
+			substitutionProps: new Set(ds.substitutionProps ?? []),
 		},
 		patterns,
 		componentRegistry,

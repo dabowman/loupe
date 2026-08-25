@@ -56,6 +56,25 @@ const firstArgOf = (t: Expression): string | undefined => {
 };
 const identifierOf = (t: Expression): string | undefined => (t.type === 'Identifier' ? t.name : undefined);
 
+/**
+ * The element a component-substitution prop was handed, if it was handed one.
+ *
+ * `render={ <h4 /> }` is how a design-system text component is told which tag to
+ * emit — `as` and `component` are the same idiom elsewhere. The callback
+ * spelling `render={ ( props ) => <h4 { ...props } /> }` says the same thing and
+ * is equally documented, so it resolves to the same element.
+ *
+ * Only the element the prop is given counts: anything nested inside it is markup
+ * the author wrote and React renders as markup, so it stays subject to every
+ * rule.
+ */
+const substitutionTarget = (value: JSXAttribute['value']): JSXElement | null => {
+	const expr = value?.type === 'JSXExpressionContainer' ? value.expression : null;
+	if (expr?.type === 'JSXElement') return expr;
+	if (expr?.type === 'ArrowFunctionExpression' && expr.body.type === 'JSXElement') return expr.body;
+	return null;
+};
+
 /** `Set.has` for a name that may not exist. */
 const held = (set: ReadonlySet<string>, name: string | undefined): boolean =>
 	name !== undefined && set.has(name);
@@ -287,6 +306,10 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 		number,
 		{ target: string; isSystem: boolean; isText: boolean; isLayout: boolean }
 	>();
+	// Elements handed to a substitution prop, by offset. Recorded while the
+	// carrying element's attributes are read, which the walk reaches first — the
+	// same ordering `cssPropOwner` relies on.
+	const substituted = new Set<number>();
 	for (const node of ast.program.body)
 		if (node.type === 'ImportDeclaration') for (const sp of node.specifiers) imports.add(sp.local.name);
 
@@ -405,6 +428,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 		const line = node.loc?.start?.line ?? 1;
 
 		const strings: string[] = [];
+		const substitutions: JSXElement[] = [];
 		let style: ReturnType<typeof readStyleAttr> | null = null;
 		let cssAttr: JSXAttribute['value'] = null;
 		for (const attr of node.attributes) {
@@ -413,12 +437,25 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 			if (an === 'className' || an === 'class') stringsIn(attr.value, strings);
 			else if (an === 'style') style = readStyleAttr(attr.value);
 			else if (an === 'css') cssAttr = attr.value;
+			else if (ds.substitutionProps.has(an)) {
+				const target = substitutionTarget(attr.value);
+				if (target) substitutions.push(target);
+			}
 		}
 		const classes = classesFrom(strings);
 
 		const root = tag.split('.')[0] ?? tag;
 		const isComponent = /^[A-Z]/.test(root);
 		const isSystem = isComponent && known.has(root);
+
+		// Only a component takes a substitution prop. `render` on a DOM element is
+		// an attribute React does not know either, so an element under one there is
+		// markup like any other.
+		if (isComponent)
+			for (const target of substitutions) {
+				const at = target.openingElement.start;
+				if (typeof at === 'number') substituted.add(at);
+			}
 
 		const owned = cssAttr?.type === 'JSXExpressionContainer' ? cssAttr.expression : null;
 		if (owned?.type === 'TaggedTemplateExpression' && typeof owned.start === 'number')
@@ -448,6 +485,12 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 			for (const cls of classes)
 				bindings.push({ cls, tag: root, isSystem: true, isText, isLayout, file: relPath, line });
 		} else {
+			// `render={ <h4 /> }` is not markup being rendered — it is the argument
+			// telling a design-system component which tag to emit, and it is the
+			// documented way to keep an element's semantics through exactly the
+			// conversion this rule asks for. Flagging it leaves nothing to do but
+			// undo the fix. Its children are ordinary markup and still count.
+			if (typeof node.start === 'number' && substituted.has(node.start)) return;
 			const lower = tag.toLowerCase();
 			const mapped = ds.elementMap.get(lower);
 			if (!mapped) return;
