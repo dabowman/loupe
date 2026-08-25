@@ -13,6 +13,7 @@ import { RULES, RULE_IDS, canonicalRuleId, isRuleId, isSeverity } from './rules.
 import { loadPatterns } from './patterns.ts';
 import { registryApplies } from './registry.ts';
 import { loadComponents } from './components.ts';
+import { DEFAULT_BASELINE } from './paths.ts';
 import type {
 	AuthoredConfig,
 	Capability,
@@ -70,7 +71,7 @@ export const DEFAULTS: MergedConfig = {
 	// per component+package). Named distinctly from `designSystem.components`
 	// (the layout/text categorization) — same word, unrelated concern.
 	componentRegistry: null,
-	baseline: '.loupe-baseline.json',
+	baseline: DEFAULT_BASELINE,
 	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 120000 },
 };
 

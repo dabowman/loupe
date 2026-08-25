@@ -82,13 +82,21 @@ terminals, symlink it somewhere on your `PATH`:
 ln -s "$HOME/.claude/plugins/<marketplace>/loupe/bin/loupe" ~/.local/bin/loupe
 ```
 
-It runs against whatever directory you are in and adds nothing to that project:
-the engine carries its own dependencies and writes nothing into your repo. It
-also passes the shipped pattern and component registries unless you name your
-own with `--patterns`/`--components`.
+It runs against the project you are in — the directory holding the
+`loupe.config.json` that governs your cwd, so a command typed in
+`packages/app` and the gate running over the whole repo agree on what the
+project is and read the same baseline. Pass `--root` when you mean the
+subdirectory itself. It needs nothing added to that project: the engine carries its own dependencies, so there is no config file to
+commit and nothing to install. Nothing appears unless you run the thing that
+writes it: `loupe baseline` records `.loupe-baseline.json`, a hook run outside a
+plugin keeps its retry counter in `.loupe/`, and `loupe fix` rewrites the
+stylesheets whose findings it can settle without judgment. It also passes the
+shipped pattern and component registries unless you name your own with
+`--patterns`/`--components`.
 
-Pure analysis — it never edits. Fixing is `loupe-remediation`'s job, because the
-fixes need judgment that a codemod does not have.
+`check`, `status` and the gate are pure analysis — they never edit. `loupe fix`
+is the one command that does, and only for substitutions with a single right
+answer; everything needing judgment is `loupe-remediation`'s job.
 
 ### Rules
 
@@ -367,8 +375,14 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
-node engine/bin/loupe.mjs baseline
+./bin/loupe baseline
 ```
+
+Use the `bin/loupe` shim (or pass `--profiles` yourself). The hooks always run
+with the shipped design-system profiles, and rules that need a registry —
+`system/locked-component`, `system/superseded-component` — only fire when the
+profiles are loaded. Recording a backlog without them reports `baselined 0
+finding(s)` and leaves the gate blocking on findings the baseline never saw.
 
 Entries key on rule + file + normalized code, not line number, so reformatting
 does not resurrect the whole file.
@@ -376,8 +390,34 @@ does not resurrect the whole file.
 The baseline is written to `.loupe-baseline.json` in the project and is meant to
 be committed: it is a statement about this repo, and the CLI and the hook are
 different processes that have to read the same file. Set `baseline` in the
-config to move it. Only the hook's retry counter lives in the plugin's data
-directory, keyed by project. `status` prints both locations.
+config, or pass `--baseline <path>`, to move it. The hook's retry counter is the
+one piece of state that does not live in the project — under a plugin it goes to
+the plugin's data directory keyed by project, and only when there is no such
+directory (plain `npx`, CI) does it fall back to `.loupe/` in the repo.
+`status` prints both locations.
+
+Two older locations are still read, and `status` says which one answered.
+
+A baseline recorded by 0.1.x sits in one of those state directories. `status`
+marks it as a 0.1.x location — run `loupe baseline` once to record it in the
+project, because the plugin-data copy is only visible to a process that has
+`CLAUDE_PLUGIN_DATA` set, which a terminal does not.
+
+The other case is a committed `.loupe-baseline.json` in a project whose config
+has since pointed `baseline` somewhere that does not exist yet. That file is
+already in the project, so there is nothing to move: `status` names it as the
+default-name file and says which configured path is missing. Without this
+fallback, a config change and the file move landing in separate commits would
+put every accepted finding back in between them.
+
+### When the gate stands down
+
+An agent that cannot fix a finding should not be stopped forever. After
+`maxAttempts` blocked turns on the same file in the same session the gate
+stands down, says so once, and stays quiet for the rest of that session —
+until the finding is actually fixed, which releases it. Standing down is a
+truce, not an off switch: the next regression in that session is reported
+again.
 
 ### Turning it off for a session
 
@@ -389,6 +429,11 @@ The hook says nothing — not advisory, silent. Advisory mode does not solve thi
 an advisory finding still lands in the agent's context, and an agent that sees a
 finding starts fixing it, which is usually the thing you were trying to avoid.
 `loupe` typed by hand still reports normally; the switch is only for the hook.
+
+`1`, `true`, `yes` and `on` all turn it on, case-insensitively. Anything else
+leaves the hook running — `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence it,
+they read as a value that isn't "on". `loupe status` prints a `hook: OFF` line
+when the switch has actually taken.
 
 ## Remediation
 
@@ -527,7 +572,7 @@ what the shared classifier decided from what a formatter is allowed to see.
 cd engine && npm test
 ```
 
-Five suites over a shared harness. `tests/run.ts` is fixture-driven, one
+Six suites over a shared harness. `tests/run.ts` is fixture-driven, one
 directory per behaviour, each with a note explaining what it pins down — since
 behaviour is config-driven, this is the only thing standing between a preset
 edit and a rule silently switching itself off. `tests/detect.ts` covers
@@ -538,9 +583,11 @@ absolute path that matched nothing and returned clean. `tests/features.ts`
 covers the three channels and the two cross-file rules — everything that reports
 across a boundary a single-file linter cannot see. `tests/autofix.ts` covers
 `fix`, where every failure is invisible: the value is right, the file parses, the
-report goes clean, and the meaning has changed.
+report goes clean, and the meaning has changed. `tests/multi-ds.ts` covers
+registry scoping and profile selection — which design system answers for a file,
+in a repo that has more than one.
 
-`tests/harness.ts` holds what all five were carrying their own copy of —
+`tests/harness.ts` holds what all six were carrying their own copy of —
 `check`, `assert`, the scratch-repo helpers — plus `one()` and `first()`, which
 read a single expected element out of a result list and fail with the count when
 there isn't one.

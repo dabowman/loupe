@@ -8,10 +8,14 @@ styles that class. That correlation is what lets it say *"this `font-size` is on
 a `<Text>` — use its `variant` prop"* rather than *"this `font-size` isn't a
 token."*
 
-Pure analysis. It never edits.
+`check`, `status` and the gate are pure analysis — they never edit. `fix` is the
+one command that does, and only for substitutions with a single right answer.
+
+The package is not published to npm; run it from a checkout (or from the
+installed plugin) rather than through `npx`.
 
 ```bash
-npx loupe check --all
+node engine/bin/loupe.mjs check --all   # or ./bin/loupe check --all
 ```
 
 ## Why
@@ -22,7 +26,7 @@ hardcoded hex next to your token, a `<p>` where the system has a `<Text>`, an
 override reaching into a third-party component's internals. None of that is a
 syntax error. All of it is drift.
 
-Six of the nine rules need cross-file correlation to decide. The other three
+Most of the seventeen rules need cross-file correlation to decide. The rest
 would work as a stylelint plugin, and are included because you want one report.
 
 ## Rules
@@ -30,6 +34,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | Rule | Detects |
 | --- | --- |
 | `suppression/malformed` | A blanket disable, or a directive missing a rule id or reason |
+| `stylesheet/unparsed` | A stylesheet the parser could not read, so nothing in it was checked |
 | `css/dead-class` | A project-namespaced class referenced in no markup or reference file |
 | `tokens/unknown-token` | A `var()` naming no token any known source defines |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
@@ -40,6 +45,8 @@ would work as a stylelint plugin, and are included because you want one report.
 | `typography/untokenized` | Raw type styling with no token and no text component |
 | `system/override` | CSS restyling a design-system component, or reaching into a library's internals |
 | `system/raw-element` | A raw element that has a design-system analog |
+| `system/inline-style` | A style prop doing what a component prop or token already does |
+| `layout/negative-margin` | A negative margin pulling against the layout the system provides |
 | `typography/in-css` | A text component typed in CSS instead of via its props |
 | `system/locked-component` | A private API the design system does not recommend outside its own core |
 | `system/superseded-component` | A current, recommended component now covers this job |
@@ -373,9 +380,16 @@ invoked as, and is meant to be committed. One location is the point: `loupe
 baseline` from a shell and the Stop hook running as a plugin are different
 processes with different environments, and a backlog only one of them can see is
 a gate that blocks on findings it was told to accept. Set `baseline` in the
-config, or pass `--baseline <path>`, to put it elsewhere. Baselines written by
-earlier versions into a state directory are still read until the next `loupe
-baseline` rewrites them. `loupe status` prints the path in use.
+config, or pass `--baseline <path>`, to put it elsewhere. `loupe status` prints
+the path in use, and says so when that path is a fallback.
+
+Baselines written by earlier versions are still read: a committed
+`.loupe-baseline.json` the config has since pointed away from, then
+`.loupe/baseline.json`, then the plugin data directory. Re-run `loupe baseline`
+to move one into place — the plugin-data fallback is reachable only where
+`CLAUDE_PLUGIN_DATA` is set, so until you do, a 0.1.0 backlog recorded inside
+Claude Code is honored by the hook and invisible to `loupe check` in a
+terminal.
 
 ## Claude Code hook
 
@@ -384,7 +398,7 @@ baseline` rewrites them. `loupe status` prints the path in use.
 {
   "hooks": {
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "npx loupe hook" }] }
+      { "hooks": [{ "type": "command", "command": "node /abs/path/to/engine/bin/loupe.mjs hook" }] }
     ]
   }
 }
@@ -412,6 +426,16 @@ Set `LOUPE_OFF=1` in the hook's environment to silence it for a session —
 `LOUPE_OFF=1 claude`. It produces no output at all rather than downgrading to
 advisory, because an advisory finding still reaches the agent and an agent that
 sees a finding starts fixing it. `loupe` run by hand ignores the switch.
+
+It reads the same on/off spelling as every plugin option: `1`, `true`, `yes`,
+`on`, case-insensitively. `LOUPE_OFF=0` is not one of them and leaves the hook
+running — `loupe status` prints a `hook: OFF` line only when the switch actually
+took, so the diagnostic and the gate cannot disagree.
+
+The hook still drains its stdin before it returns, silenced or not: Claude Code
+writes the payload into this process, and a `Write` of a large file carries the
+whole file body in it. Exiting without reading leaves that write on a pipe with
+no reader.
 
 ## Output
 
@@ -520,11 +544,13 @@ off for everyone.
 npm test        # typecheck, then all six suites
 ```
 
-Six suites: `tests/run.ts` (fixtures, one directory per behaviour),
-`tests/detect.ts` (inference), `tests/regressions.ts` (failures that reported
-success), `tests/features.ts` (the three channels and the two cross-file rules),
-`tests/autofix.ts` (the fix path, where a wrong substitution is invisible), and
-`tests/harness.ts` — not a suite but the `check`/`assert`/scratch-repo helpers
-the other five share, typed once instead of copied five times.
+Six suites, in the order `npm test` runs them: `tests/run.ts` (fixtures, one
+directory per behaviour), `tests/detect.ts` (inference), `tests/regressions.ts`
+(failures that reported success), `tests/features.ts` (the three channels and the
+two cross-file rules), `tests/autofix.ts` (the fix path, where a wrong
+substitution is invisible), and `tests/multi-ds.ts` (registry scoping and profile
+selection — which design system answers for a file). `tests/harness.ts` is not a
+suite: it holds the `check`/`assert`/scratch-repo helpers the six share, typed
+once instead of copied six times.
 Once behaviour is config-driven, these are the only thing standing between a
 preset edit and a rule silently switching itself off.

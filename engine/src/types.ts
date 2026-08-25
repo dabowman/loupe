@@ -526,7 +526,13 @@ export type StateScope = 'plugin-data' | 'project' | 'none';
 export interface BaselineFile {
 	version: number;
 	createdAt: string;
+	/** Entries, not findings — kept under this name because 0.1.x files use it. */
 	count: number;
+	/**
+	 * Findings recorded, which is >= `count` whenever several shared a key.
+	 * Optional: files written before the two numbers were told apart lack it.
+	 */
+	findings?: number;
 	entries: string[];
 }
 

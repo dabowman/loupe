@@ -139,6 +139,26 @@ export function hookRoot(): string {
 }
 
 /**
+ * One spelling of "on" for every switch this tool reads.
+ *
+ * The set was written out three times — plugin options from the environment,
+ * the same options from the settings file, and the `LOUPE_OFF` gate — which is
+ * two chances for a switch to mean something different depending on which door
+ * it came through. It also made `status` disagree with the gate: `LOUPE_OFF=0`
+ * reported the hook OFF while the hook went right on blocking.
+ */
+export const isOn = (v: string | undefined): boolean =>
+	v !== undefined && /^(1|true|yes|on)$/i.test(v);
+
+/**
+ * The per-session off switch, asked once.
+ *
+ * Both the gate and `status` call this, so a diagnostic that says the hook is
+ * silenced is a diagnostic that watched the same value the hook did.
+ */
+export const hookSilenced = (): boolean => isOn(process.env.LOUPE_OFF);
+
+/**
  * Options the user set when enabling the plugin.
  *
  * Claude Code refuses to substitute ${user_config.*} into a shell-form hook
@@ -152,7 +172,7 @@ export function pluginOptions(): PluginOptions {
 	};
 	const bool = (key: string): boolean | undefined => {
 		const v = get(key);
-		return v === undefined ? undefined : /^(1|true|yes|on)$/i.test(v);
+		return v === undefined ? undefined : isOn(v);
 	};
 	const num = (key: string): number | undefined => {
 		const v = Number(get(key));
@@ -256,7 +276,7 @@ function coerce(opts: Record<string, unknown>): PluginOptions {
 	return {
 		preset: str(opts['preset']),
 		projectPrefixes: list(opts['project_prefixes']),
-		blocking: opts['blocking'] === undefined ? undefined : /^(1|true|yes|on)$/i.test(String(opts['blocking'])),
+		blocking: opts['blocking'] === undefined ? undefined : isOn(String(opts['blocking'])),
 		maxAttempts: num(opts['max_attempts']),
 		maxFindings: num(opts['max_findings']),
 	};
