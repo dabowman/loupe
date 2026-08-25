@@ -41,3 +41,16 @@ jobs:
       # like, and the whole point of shipping dist/ is that it works there.
       - run: node engine/bin/loupe.mjs presets
       - run: node engine/bin/loupe.mjs explain layout/margin-on-child
+      # The HTML report's template and client script are compiled into the
+      # bundle rather than read from disk beside it, precisely so a marketplace
+      # install cannot end up with an engine whose reporter is missing. This is
+      # what proves that: `check` on the engine's own tree, through the bundle,
+      # with nothing installed.
+      - name: the bundle can render an html report
+        run: |
+          status=0
+          node engine/bin/loupe.mjs check --all --format html --preset generic > /tmp/report.html || status=$?
+          # 0 clean, 1 blocking findings — both mean it ran. 2 means it could not,
+          # which is the only outcome this step is looking for.
+          [ "$status" -le 1 ] || { echo "loupe could not run (exit $status)"; exit 1; }
+          grep -q 'id="loupe-data"' /tmp/report.html

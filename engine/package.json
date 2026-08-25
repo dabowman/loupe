@@ -23,7 +23,7 @@
     "build": "node build.mjs",
     "build:check": "node build.mjs --check",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "npm run typecheck && tsx tests/run.ts && tsx tests/detect.ts && tsx tests/regressions.ts && tsx tests/features.ts && tsx tests/autofix.ts && tsx tests/multi-ds.ts"
+    "test": "npm run typecheck && tsx tests/run.ts && tsx tests/detect.ts && tsx tests/regressions.ts && tsx tests/features.ts && tsx tests/autofix.ts && tsx tests/multi-ds.ts && tsx tests/report.ts"
   },
   "dependencies": {
     "@babel/parser": "^7.24.0",

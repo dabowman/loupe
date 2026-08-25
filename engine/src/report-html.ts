@@ -1,0 +1,513 @@
+/**
+ * The HTML report.
+ *
+ * Every other formatter in this codebase spends its design budget on brevity,
+ * because its reader is an agent and context is the scarce resource. This one
+ * has the opposite constraint: nobody's context pays for it, and the reader is
+ * a person who wants to know where the drift *is* before deciding what to fix.
+ *
+ * Two decisions follow from that, and they are the whole design:
+ *
+ * 1. The page renders client-side from the exact `--format json` payload,
+ *    embedded verbatim. There is no second selection of fields, no second
+ *    notion of what a finding is, and therefore no way for the page to
+ *    disagree with the JSON — a divergence that would otherwise be invisible,
+ *    since each looks perfectly correct read on its own.
+ *
+ * 2. It shows the two things a line-per-finding list structurally cannot. A
+ *    directory rollup answers "is this clustered or is it everywhere", which is
+ *    the first question `/loupe-audit` tells the agent to answer and the one a
+ *    flat list buries. And the composite rules — the only findings that cannot
+ *    exist in one file — are shown as the N-way relations they are, instead of
+ *    printed N times as if they were unrelated.
+ *
+ * No timestamp is rendered. Re-running the same check would otherwise produce a
+ * file that differs from itself, which is the same trap `writeBaseline` already
+ * had to climb out of; the file's mtime records when it was taken.
+ */
+
+import { reportPayload } from './report.ts';
+import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
+
+/**
+ * Embed the payload in a `<script type="application/json">` block.
+ *
+ * The block's content is raw text — the only thing that can end it early is the
+ * literal `</script`, and the only thing that can open a comment is `<!--`.
+ * Escaping every `<` closes both, and is safe wholesale because in JSON a `<`
+ * can only ever occur inside a string, where `<` means exactly the same
+ * character. A finding's message routinely carries CSS-in-JS source, so this is
+ * a live hazard rather than a theoretical one.
+ */
+const embed = (json: string): string => json.replace(/</g, '\\u003c');
+
+/**
+ * Palette and chrome.
+ *
+ * Light values sit on bare `:root`; the dark values are declared twice — once
+ * for the OS setting and once for an explicit theme stamp — so a viewer's
+ * toggle wins in both directions. Severity uses the reserved status colors
+ * rather than a series hue, because severity is a state, not an identity. On
+ * the light surface the advisory amber falls below 3:1, which is by design for
+ * that palette and carries an obligation with it: every severity is rendered
+ * with its glyph and the word, never the color alone, and the findings table is
+ * the table view that makes each value readable without reference to hue.
+ */
+const CSS = `
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --hairline: rgba(11,11,11,0.10);
+  --sev-error: #d03b3b;
+  --sev-warn: #fab219;
+  --seq: #2a78d6;
+  --track: rgba(11,11,11,0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #1a1a19;
+    --plane: #0d0d0d;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --hairline: rgba(255,255,255,0.10);
+    --seq: #3987e5;
+    --track: rgba(255,255,255,0.08);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1a1a19;
+  --plane: #0d0d0d;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --hairline: rgba(255,255,255,0.10);
+  --seq: #3987e5;
+  --track: rgba(255,255,255,0.08);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 80px; }
+h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 13px; font-weight: 600; margin: 0 0 14px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink-2); }
+.sub { color: var(--ink-muted); margin: 4px 0 0; font-size: 13px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 20px;
+  margin-top: 16px;
+}
+/* Stat tiles. The lead number is the chart; a one-bar bar chart is not. */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; margin-top: 20px; }
+.kpi { background: var(--surface); padding: 16px 18px; }
+.kpi .v { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.kpi.lead .v { font-size: 48px; }
+.kpi .k { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+.kpi .v.err { color: var(--sev-error); }
+/* Filters: one row, above everything it scopes. */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 20px; }
+.filters input[type=search] {
+  flex: 1 1 200px; min-width: 160px; padding: 7px 10px; font: inherit; font-size: 13px;
+  color: var(--ink); background: var(--surface); border: 1px solid var(--hairline); border-radius: 7px;
+}
+.chip {
+  font: inherit; font-size: 12px; padding: 6px 11px; border-radius: 999px; cursor: pointer;
+  background: var(--surface); color: var(--ink-2); border: 1px solid var(--hairline);
+}
+.chip[aria-pressed=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.chip:focus-visible, .bar:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
+.scope { font-size: 12px; color: var(--ink-muted); margin-left: auto; }
+/* Bars: thin marks, rounded at the data end only, anchored to the baseline. */
+.bars { display: grid; gap: 8px; }
+.bar {
+  display: grid; grid-template-columns: minmax(120px, 34%) 1fr auto; align-items: center; gap: 12px;
+  width: 100%; text-align: left; font: inherit; background: none; border: 0; padding: 3px 2px; cursor: pointer;
+  border-radius: 6px; color: inherit;
+}
+.bar:hover { background: var(--track); }
+.bar .name { font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar[aria-pressed=true] .name { color: var(--ink); font-weight: 600; }
+.bar .track { height: 10px; background: var(--track); border-radius: 0 5px 5px 0; }
+.bar .fill { display: block; height: 10px; border-radius: 0 4px 4px 0; min-width: 2px; }
+.bar .val { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+.legend { display: flex; gap: 16px; margin: 0 0 14px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+/* Findings table: the table view, and the way every value stays readable without color. */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+tr.grp th { text-align: left; font-weight: 400; padding: 18px 10px 7px 0; border-bottom: 1px solid var(--axis); }
+tbody:first-child tr.grp th { padding-top: 0; }
+tr.grp .count { font-size: 12px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--grid); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+td.loc { white-space: nowrap; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+td.msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-word; }
+.sev { white-space: nowrap; font-size: 12px; }
+.sev.error { color: var(--sev-error); }
+.sev.warn { color: var(--ink-2); }
+.rule { font-size: 12px; color: var(--ink); font-weight: 600; white-space: nowrap; }
+.fix { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+.tokens { font-size: 11.5px; color: var(--ink-muted); margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* Composite clusters: one card per defect, not one row per member file. */
+.cluster { border: 1px solid var(--hairline); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+.cluster .sig { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-word; }
+.cluster ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 12.5px; }
+.banner { border-left: 3px solid var(--sev-error); background: var(--surface); border-radius: 0 8px 8px 0; padding: 14px 16px; margin-top: 16px; border-top: 1px solid var(--hairline); border-right: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+.banner b { color: var(--sev-error); }
+.empty { color: var(--ink-muted); font-size: 13px; padding: 8px 0; }
+.clean { text-align: center; padding: 56px 20px; }
+.clean .v { font-size: 40px; font-weight: 600; }
+#tip {
+  position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--ink); color: var(--surface); font-size: 12px; padding: 6px 9px;
+  border-radius: 6px; max-width: 320px; z-index: 10;
+}
+#tip.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #tip { transition: none; } }
+`;
+
+/**
+ * The client. Written without template literals on purpose: this whole string
+ * is itself inside one, and a stray `${` in here would be interpolated by the
+ * bundler rather than shipped — a failure that shows up as a broken page, not a
+ * build error.
+ */
+const JS = `
+(function () {
+  var data = JSON.parse(document.getElementById('loupe-data').textContent);
+  var state = { rule: null, severity: null, q: '' };
+  var MARK = { error: '\\u2717', warn: '\\u2022' };
+  var WORD = { error: 'blocking', warn: 'advisory' };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function dirOf(file) {
+    var i = String(file).lastIndexOf('/');
+    return i === -1 ? '.' : file.slice(0, i);
+  }
+  function slice() {
+    var q = state.q.toLowerCase();
+    return data.findings.filter(function (f) {
+      if (state.rule && f.rule !== state.rule) return false;
+      if (state.severity && f.severity !== state.severity) return false;
+      if (q && (f.file + ' ' + f.message + ' ' + f.rule).toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+  function tally(rows, keyOf) {
+    var m = new Map();
+    rows.forEach(function (r) { var k = keyOf(r); m.set(k, (m.get(k) || 0) + 1); });
+    return Array.from(m.entries()).sort(function (a, b) { return b[1] - a[1] || String(a[0]).localeCompare(String(b[0])); });
+  }
+
+  var tip = document.getElementById('tip');
+  function bindTip(el, text) {
+    function show(e) {
+      tip.textContent = text;
+      tip.classList.add('on');
+      var x = e.clientX !== undefined ? e.clientX + 14 : el.getBoundingClientRect().left;
+      var y = e.clientY !== undefined ? e.clientY + 16 : el.getBoundingClientRect().bottom + 6;
+      tip.style.left = Math.min(x, window.innerWidth - tip.offsetWidth - 8) + 'px';
+      tip.style.top = Math.min(y, window.innerHeight - tip.offsetHeight - 8) + 'px';
+    }
+    el.addEventListener('mousemove', show);
+    el.addEventListener('mouseenter', show);
+    el.addEventListener('focus', show);
+    el.addEventListener('mouseleave', function () { tip.classList.remove('on'); });
+    el.addEventListener('blur', function () { tip.classList.remove('on'); });
+  }
+
+  // One bar builder for both charts. \`color\` is a CSS custom property name so
+  // the mark follows the theme rather than a hex baked in at render time.
+  function bars(host, rows, max, color, opts) {
+    opts = opts || {};
+    host.innerHTML = '';
+    if (!rows.length) { host.innerHTML = '<p class="empty">Nothing in this slice.</p>'; return; }
+    rows.forEach(function (row) {
+      var key = row[0], n = row[1];
+      var b = document.createElement('button');
+      b.className = 'bar';
+      b.type = 'button';
+      var fillColor = typeof color === 'function' ? color(key) : color;
+      var pct = max > 0 ? Math.max(1.5, (n / max) * 100) : 0;
+      b.innerHTML =
+        '<span class="name">' + esc(opts.label ? opts.label(key) : key) + '</span>' +
+        '<span class="track"><span class="fill" style="width:' + pct.toFixed(2) + '%;background:var(' + fillColor + ')"></span></span>' +
+        '<span class="val">' + n + '</span>';
+      if (opts.onClick) {
+        b.setAttribute('aria-pressed', String(opts.pressed && opts.pressed(key)));
+        b.addEventListener('click', function () { opts.onClick(key); });
+      } else {
+        b.style.cursor = 'default';
+      }
+      bindTip(b, opts.tip ? opts.tip(key, n) : key + ' \\u2014 ' + n);
+      host.appendChild(b);
+    });
+  }
+
+  function renderKpis(rows) {
+    var err = rows.filter(function (f) { return f.severity === 'error'; }).length;
+    var s = data.summary;
+    var tiles = [
+      { k: 'findings', v: rows.length, lead: true },
+      { k: '\\u2717 blocking', v: err, err: err > 0 },
+      { k: '\\u2022 advisory', v: rows.length - err }
+    ];
+    // Only when it hid something. A baseline that accepted nothing and a project
+    // with no baseline file both report 0, so a zero tile states nothing.
+    if (s.baselined) tiles.push({ k: 'baselined', v: s.baselined });
+    tiles.push({ k: 'suppressions', v: s.suppressions });
+    tiles.push({ k: 'files unparsed', v: s.parseErrors, err: s.parseErrors > 0 });
+    document.getElementById('kpis').innerHTML = tiles.map(function (t) {
+      return '<div class="kpi' + (t.lead ? ' lead' : '') + '"><div class="v' + (t.err ? ' err' : '') + '">' +
+        t.v + '</div><div class="k">' + t.k + '</div></div>';
+    }).join('');
+  }
+
+  function renderRules(rows) {
+    var counts = tally(rows, function (f) { return f.rule; });
+    var byRank = new Map();
+    data.rules.forEach(function (r) { byRank.set(r.id, r); });
+    // Frequency order, deliberately not the agent format's rank order. The two
+    // answer different questions — rank is "fix this first", length is "there is
+    // the most of this" — and a bar chart sorted by neither its own lengths nor a
+    // natural category order is unreadable. Rank breaks ties, and severity is
+    // carried by the mark's color and by the blocking tile above.
+    counts.sort(function (a, b) {
+      var ra = byRank.get(a[0]), rb = byRank.get(b[0]);
+      return b[1] - a[1] || (rb ? rb.rank : 0) - (ra ? ra.rank : 0);
+    });
+    var max = counts.length ? counts[0][1] : 0;
+    var sevOf = new Map();
+    rows.forEach(function (f) { sevOf.set(f.rule, f.severity); });
+    bars(document.getElementById('rules'), counts, max,
+      function (id) { return sevOf.get(id) === 'error' ? '--sev-error' : '--sev-warn'; },
+      {
+        onClick: function (id) { state.rule = state.rule === id ? null : id; render(); },
+        pressed: function (id) { return state.rule === id; },
+        tip: function (id, n) {
+          var r = byRank.get(id);
+          return n + ' \\u00d7 ' + id + (r ? ' \\u2014 ' + r.title : '');
+        }
+      });
+  }
+
+  // Top directories only. Past the cap the tail is folded into one row rather
+  // than truncated silently — a report that drops rows without saying so reads
+  // as though it covered everything.
+  var DIR_CAP = 12;
+  function renderPaths(rows) {
+    var counts = tally(rows, function (f) { return dirOf(f.file); });
+    var shown = counts.slice(0, DIR_CAP);
+    var tail = counts.slice(DIR_CAP);
+    if (tail.length) {
+      var n = tail.reduce(function (t, c) { return t + c[1]; }, 0);
+      shown.push([tail.length + ' more director' + (tail.length === 1 ? 'y' : 'ies'), n]);
+    }
+    var max = shown.reduce(function (m, c) { return Math.max(m, c[1]); }, 0);
+    bars(document.getElementById('paths'), shown, max, '--seq', {
+      tip: function (dir, n) { return n + ' finding' + (n === 1 ? '' : 's') + ' in ' + dir; }
+    });
+  }
+
+  // The two rules whose finding is one member of an N-way relation. Grouped on
+  // \`group\`, which is the key the engine says the cluster means.
+  function renderClusters(rows) {
+    var host = document.getElementById('clusters');
+    var section = document.getElementById('clusters-section');
+    var m = new Map();
+    rows.forEach(function (f) {
+      if (!f.group) return;
+      var k = f.rule + '\\u0000' + f.group;
+      if (!m.has(k)) m.set(k, { rule: f.rule, group: f.group, files: [], message: f.message });
+      var e = m.get(k);
+      if (e.files.indexOf(f.file) === -1) e.files.push(f.file);
+    });
+    var list = Array.from(m.values()).sort(function (a, b) { return b.files.length - a.files.length; });
+    section.hidden = list.length === 0;
+    host.innerHTML = list.map(function (c) {
+      return '<div class="cluster"><div class="sig">' + esc(c.group) + '</div>' +
+        '<div class="fix">' + esc(c.rule) + ' \\u2014 assembled in ' + c.files.length + ' file' +
+        (c.files.length === 1 ? '' : 's') + '</div><ul>' +
+        c.files.map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ul></div>';
+    }).join('');
+  }
+
+  // Grouped by rule, for the same reason the agent format groups by rule: the
+  // remedy and the severity are properties of the rule, not of the finding, and
+  // a column that repeats one sentence down two hundred rows is the report
+  // costing more to read than it is worth. Group order matches the chart above.
+  function renderTable(rows) {
+    var host = document.getElementById('table');
+    if (!rows.length) { host.innerHTML = '<p class="empty">No findings in this slice.</p>'; return; }
+    var groups = new Map();
+    rows.forEach(function (f) {
+      if (!groups.has(f.rule)) groups.set(f.rule, []);
+      groups.get(f.rule).push(f);
+    });
+    var byRank = new Map();
+    data.rules.forEach(function (r) { byRank.set(r.id, r); });
+    var order = Array.from(groups.entries()).sort(function (a, b) {
+      var ra = byRank.get(a[0]), rb = byRank.get(b[0]);
+      return b[1].length - a[1].length || (rb ? rb.rank : 0) - (ra ? ra.rank : 0);
+    });
+    var out = order.map(function (entry) {
+      var rule = entry[0], group = entry[1];
+      var sev = group[0].severity;
+      var body = group.map(function (f) {
+        var tokens = (f.suggest || []).map(function (s) { return s.tokens.join(' / '); }).filter(Boolean);
+        return '<tr>' +
+          '<td class="loc">' + esc(f.file) + ':' + f.line + '</td>' +
+          '<td class="msg">' + esc(f.message) +
+            (tokens.length ? '<div class="tokens">\\u2192 ' + esc(tokens.join(', ')) + '</div>' : '') + '</td>' +
+          '</tr>';
+      }).join('');
+      return '<tbody><tr class="grp"><th colspan="2">' +
+        '<span class="sev ' + sev + '">' + MARK[sev] + ' ' + WORD[sev] + '</span> ' +
+        '<span class="rule">' + esc(rule) + '</span> ' +
+        '<span class="count">' + group.length + '</span>' +
+        '<div class="fix">' + esc(group[0].fix) + '</div>' +
+        '</th></tr>' + body + '</tbody>';
+    }).join('');
+    host.innerHTML = '<table>' + out + '</table>';
+  }
+
+  function render() {
+    var rows = slice();
+    renderKpis(rows);
+    renderRules(rows);
+    renderPaths(rows);
+    renderClusters(rows);
+    renderTable(rows);
+    document.querySelectorAll('.chip[data-sev]').forEach(function (c) {
+      c.setAttribute('aria-pressed', String(state.severity === c.dataset.sev));
+    });
+    var filtered = state.rule || state.severity || state.q;
+    document.getElementById('scope').textContent =
+      filtered ? 'showing ' + rows.length + ' of ' + data.findings.length : '';
+    document.getElementById('clear').hidden = !filtered;
+  }
+
+  document.querySelectorAll('.chip[data-sev]').forEach(function (c) {
+    c.addEventListener('click', function () {
+      state.severity = state.severity === c.dataset.sev ? null : c.dataset.sev;
+      render();
+    });
+  });
+  document.getElementById('q').addEventListener('input', function (e) {
+    state.q = e.target.value;
+    render();
+  });
+  document.getElementById('clear').addEventListener('click', function () {
+    state.rule = null; state.severity = null; state.q = '';
+    document.getElementById('q').value = '';
+    render();
+  });
+  render();
+})();
+`;
+
+/** The page body — everything between the markers, so a host that supplies its own shell can lift it out whole. */
+function body(payload: string, clean: boolean, parseErrors: number): string {
+	// `<style>`/`<script>` sit inside the markers rather than in `<head>` so the
+	// fragment is self-sufficient: `/loupe-report` publishes exactly this span
+	// into an Artifact, which supplies its own document shell.
+	if (clean) {
+		return `<!-- loupe:begin -->
+<style>${CSS}</style>
+<div class="wrap">
+  <h1>Loupe</h1>
+  <p class="sub">Design-system conformance report</p>
+  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
+</div>
+<script type="application/json" id="loupe-data">${payload}</script>
+<!-- loupe:end -->`;
+	}
+	// Unparsed files are named before anything else: nothing in them was checked,
+	// so every count below is a floor rather than a total.
+	const banner = parseErrors
+		? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely — every number below is a floor, not a total. See <code>stylesheet/unparsed</code>.</div>\n`
+		: '';
+	return `<!-- loupe:begin -->
+<style>${CSS}</style>
+<div class="wrap">
+  <h1>Loupe</h1>
+  <p class="sub">Design-system conformance report</p>
+${banner}  <div class="kpis" id="kpis"></div>
+
+  <div class="filters">
+    <input type="search" id="q" placeholder="Filter by file, rule or value…" aria-label="Filter findings">
+    <button class="chip" data-sev="error" aria-pressed="false">✗ blocking</button>
+    <button class="chip" data-sev="warn" aria-pressed="false">• advisory</button>
+    <button class="chip" id="clear" hidden>clear</button>
+    <span class="scope" id="scope"></span>
+  </div>
+
+  <div class="card">
+    <h2>By rule</h2>
+    <p class="legend">
+      <span><i class="dot" style="background:var(--sev-error)"></i> ✗ blocking</span>
+      <span><i class="dot" style="background:var(--sev-warn)"></i> • advisory</span>
+    </p>
+    <div class="bars" id="rules"></div>
+  </div>
+
+  <div class="card">
+    <h2>Where it is</h2>
+    <div class="bars" id="paths"></div>
+  </div>
+
+  <div class="card" id="clusters-section" hidden>
+    <h2>Composites rebuilt across files</h2>
+    <div id="clusters"></div>
+  </div>
+
+  <div class="card">
+    <h2>Findings</h2>
+    <div id="table"></div>
+  </div>
+</div>
+<div id="tip" role="status" aria-live="polite"></div>
+<script type="application/json" id="loupe-data">${payload}</script>
+<script>${JS}</script>
+<!-- loupe:end -->`;
+}
+
+export function formatHtml(result: AnalyzeResult | BaselinedResult, config: Config): string {
+	const payload = embed(JSON.stringify(reportPayload(result, config)));
+	const clean = result.findings.length === 0;
+	return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loupe report</title>
+</head>
+<body>
+${body(payload, clean, result.diagnostics.parseErrors.length)}
+</body>
+</html>
+`;
+}
