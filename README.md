@@ -116,6 +116,12 @@ Rules disable themselves when the config cannot support them — a block theme
 with no component layer leaves the component rules inert rather than firing on
 nothing.
 
+`system/raw-element` skips the element a WPDS text or layout component's
+substitution prop is handed: `<Text variant="heading-md" render={ <h4 /> }>` is
+the WPDS way to keep a heading's semantics, not a raw `<h4>`. The prop list is
+config — see [`designSystem.substitutionProps`](engine/README.md#config)
+for the bounds and the default.
+
 ### Tokens
 
 `tokenPrefixes` used to be cosmetic — it shaped a message and validated nothing.

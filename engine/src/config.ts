@@ -49,6 +49,12 @@ export const DEFAULTS: MergedConfig = {
 		normalizeExports: '',
 		components: { layout: [], text: [] },
 		elementMap: {},
+		// Props that hand a component the element it should render — `render` in
+		// WPDS and Base UI, `as` and `component` in most other React systems. The
+		// element in one of these is an argument naming a tag, not markup being
+		// rendered, so the raw-element rule leaves it alone. Set it to `[]` to get
+		// the old behaviour back; a system with a differently-named prop names it.
+		substitutionProps: ['render', 'as', 'component'],
 	},
 	namespaces: { project: [], external: [], neverDead: [] },
 	sources: {
@@ -243,6 +249,22 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
 	}
 
+	// `new Set('render')` is a set of four characters, and a config that means
+	// nothing it says would report exactly like one that meant `[]` — the whole
+	// exemption off, with nothing to see. Every coercion here that cannot mean
+	// what it says throws; this one does too.
+	//
+	// The fallback is the default rather than `[]` because this key is the one
+	// whose default is not empty: `merge` writes an explicit `undefined` straight
+	// over the default, so `designSystem: { ...opts, substitutionProps: opts.subs }`
+	// in a `.mjs` config would otherwise turn the exemption off silently. `[]`
+	// stays the way to ask for that on purpose.
+	const substitutionProps: unknown = ds.substitutionProps ?? DEFAULTS.designSystem.substitutionProps;
+	if (!Array.isArray(substitutionProps) || substitutionProps.some((p) => typeof p !== 'string'))
+		throw new Error(
+			`designSystem.substitutionProps must be an array of prop names, got: ${JSON.stringify(substitutionProps)}`,
+		);
+
 	const layoutComponents = ds.components?.layout ?? [];
 	const textComponents = ds.components?.text ?? [];
 	const hasComponents = (ds.packages ?? []).length > 0 && layoutComponents.length + textComponents.length > 0;
@@ -288,6 +310,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 			textComponents,
 			knownComponents: new Set([...layoutComponents, ...textComponents]),
 			elementMap,
+			substitutionProps: new Set(substitutionProps as string[]),
 		},
 		patterns,
 		componentRegistry,

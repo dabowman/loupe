@@ -24176,6 +24176,46 @@ var firstArgOf = (t) => {
   return arg?.type === "Identifier" ? arg.name : void 0;
 };
 var identifierOf = (t) => t.type === "Identifier" ? t.name : void 0;
+function substitutionTargets(expr, out = []) {
+  switch (expr?.type) {
+    case "JSXElement":
+      out.push(expr);
+      break;
+    case "ArrowFunctionExpression":
+    case "FunctionExpression": {
+      if (expr.body.type !== "BlockStatement") return substitutionTargets(expr.body, out);
+      for (const stmt of expr.body.body)
+        if (stmt.type === "ReturnStatement") substitutionTargets(stmt.argument, out);
+      break;
+    }
+    case "ConditionalExpression":
+      substitutionTargets(expr.consequent, out);
+      substitutionTargets(expr.alternate, out);
+      break;
+    case "LogicalExpression":
+      substitutionTargets(expr.left, out);
+      substitutionTargets(expr.right, out);
+      break;
+    // A type assertion is not a different value. `.tsx` is a first-class input
+    // here, and `render={ ( <h4 /> ) as ReactElement }` is what a narrower prop
+    // type makes an author write; the wrapper says nothing about which element
+    // the prop receives.
+    case "TSAsExpression":
+    case "TSSatisfiesExpression":
+    case "TSNonNullExpression":
+    case "TSTypeAssertion":
+      substitutionTargets(expr.expression, out);
+      break;
+    // `render={ <h4 /> }`. JSX also allows the braces to be dropped entirely
+    // (`render=<h4 />`), which arrives as the element itself and is caught by
+    // the `JSXElement` case above.
+    case "JSXExpressionContainer":
+      substitutionTargets(expr.expression, out);
+      break;
+  }
+  return out;
+}
+var canonicalName = (name, normalize2) => normalize2 ? name.replace(normalize2, "") : name;
 var held = (set, name) => name !== void 0 && set.has(name);
 var messageOf2 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
 function harvestTokens(text, into = /* @__PURE__ */ new Set()) {
@@ -24275,7 +24315,7 @@ function systemImports(ast, ds) {
   const layout = /* @__PURE__ */ new Set();
   const componentImports = [];
   const packages = /* @__PURE__ */ new Map();
-  const canonical = (name) => ds.normalizeExports ? name.replace(ds.normalizeExports, "") : name;
+  const canonical = (name) => canonicalName(name, ds.normalizeExports);
   const fromPackage = (src) => ds.packages.some((p) => src === p || src.startsWith(`${p}/`));
   for (const node of ast.program.body) {
     if (node.type !== "ImportDeclaration" || !fromPackage(node.source.value)) continue;
@@ -24310,6 +24350,7 @@ function scanMarkup(text, relPath, ds) {
   const { known, text: textLike, layout, componentImports, packages } = systemImports(ast, ds);
   const tags = cssInJsLocals(ast, ds.cssInJsPackages);
   const cssPropOwner = /* @__PURE__ */ new Map();
+  const substituted = /* @__PURE__ */ new Set();
   for (const node of ast.program.body)
     if (node.type === "ImportDeclaration") for (const sp of node.specifiers) imports.add(sp.local.name);
   const jsxChildElements = (el) => {
@@ -24394,6 +24435,15 @@ function scanMarkup(text, relPath, ds) {
     const tag = name.type === "JSXIdentifier" ? name.name : name.type === "JSXMemberExpression" ? `${name.object.type === "JSXIdentifier" ? name.object.name : "?"}.${name.property.name}` : null;
     if (!tag) return;
     const line = node.loc?.start?.line ?? 1;
+    const root2 = tag.split(".")[0] ?? tag;
+    const isComponent = /^[A-Z]/.test(root2);
+    const isSystem = isComponent && known.has(root2);
+    const member = tag.includes(".") ? tag.slice(tag.indexOf(".") + 1) : null;
+    const emitsTag = member ? (
+      // `<UI.Text render={ <h4 /> }>` — the namespace is what was imported,
+      // so the component name is the member.
+      known.has(root2) && (ds.textComponents.includes(canonicalName(member, ds.normalizeExports)) || ds.layoutComponents.includes(canonicalName(member, ds.normalizeExports)))
+    ) : textLike.has(root2) || layout.has(root2);
     const strings = [];
     let style = null;
     let cssAttr = null;
@@ -24403,11 +24453,10 @@ function scanMarkup(text, relPath, ds) {
       if (an === "className" || an === "class") stringsIn(attr.value, strings);
       else if (an === "style") style = readStyleAttr(attr.value);
       else if (an === "css") cssAttr = attr.value;
+      else if (emitsTag && attr.name.type === "JSXIdentifier" && ds.substitutionProps.has(an))
+        for (const target of substitutionTargets(attr.value)) substituted.add(target.openingElement);
     }
     const classes = classesFrom(strings);
-    const root2 = tag.split(".")[0] ?? tag;
-    const isComponent = /^[A-Z]/.test(root2);
-    const isSystem = isComponent && known.has(root2);
     const owned = cssAttr?.type === "JSXExpressionContainer" ? cssAttr.expression : null;
     if (owned?.type === "TaggedTemplateExpression" && typeof owned.start === "number")
       cssPropOwner.set(owned.start, {
@@ -24434,6 +24483,7 @@ function scanMarkup(text, relPath, ds) {
       for (const cls of classes)
         bindings.push({ cls, tag: root2, isSystem: true, isText, isLayout, file: relPath, line });
     } else {
+      if (substituted.has(node)) return;
       const lower = tag.toLowerCase();
       const mapped = ds.elementMap.get(lower);
       if (!mapped) return;
@@ -25241,7 +25291,13 @@ var DEFAULTS = {
     cssInJsPackages: [],
     normalizeExports: "",
     components: { layout: [], text: [] },
-    elementMap: {}
+    elementMap: {},
+    // Props that hand a component the element it should render — `render` in
+    // WPDS and Base UI, `as` and `component` in most other React systems. The
+    // element in one of these is an argument naming a tag, not markup being
+    // rendered, so the raw-element rule leaves it alone. Set it to `[]` to get
+    // the old behaviour back; a system with a differently-named prop names it.
+    substitutionProps: ["render", "as", "component"]
   },
   namespaces: { project: [], external: [], neverDead: [] },
   sources: {
@@ -25373,6 +25429,11 @@ function normalize(raw, { root: root2 }) {
     const entry = typeof v === "string" ? { component: v, styledOnly: false } : v;
     elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
   }
+  const substitutionProps = ds.substitutionProps ?? DEFAULTS.designSystem.substitutionProps;
+  if (!Array.isArray(substitutionProps) || substitutionProps.some((p) => typeof p !== "string"))
+    throw new Error(
+      `designSystem.substitutionProps must be an array of prop names, got: ${JSON.stringify(substitutionProps)}`
+    );
   const layoutComponents = ds.components?.layout ?? [];
   const textComponents = ds.components?.text ?? [];
   const hasComponents = (ds.packages ?? []).length > 0 && layoutComponents.length + textComponents.length > 0;
@@ -25412,7 +25473,8 @@ function normalize(raw, { root: root2 }) {
       layoutComponents,
       textComponents,
       knownComponents: /* @__PURE__ */ new Set([...layoutComponents, ...textComponents]),
-      elementMap
+      elementMap,
+      substitutionProps: new Set(substitutionProps)
     },
     patterns,
     componentRegistry,

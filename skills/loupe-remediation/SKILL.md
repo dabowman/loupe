@@ -168,6 +168,13 @@ with a reason naming what is computed.
 `variant="heading-*"` and `render` supplying the semantic element, a styled
 `<div>` → `Stack`, a styled `<span>` → `Text`.
 
+The element handed to a WPDS text or layout component's substitution prop —
+`render`, `as`, `component` — is not flagged: it names the tag that component
+emits, so converting a `<h4>` to `Text` with `render={ <h4 /> }` settles the
+finding rather than moving it. That holds for those components only. Markup
+nested inside such a prop still counts, as does an element handed to a genuine
+render callback — another library's, or `FormFileUpload`'s.
+
 Not every raw element should convert. Content rendered from the editor, docs
 prose, and third-party render props are legitimately raw — suppress those with
 that as the reason, or exclude the path in config, which is better because it

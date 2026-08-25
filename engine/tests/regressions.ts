@@ -16,7 +16,8 @@ import { isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
 import { RULES } from '../src/rules.ts';
 import { analyze } from '../src/analyze.ts';
-import { assert, check, cleanup, execFailure, finish, scratch, writeAll } from './harness.ts';
+import { assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
+import type { Finding } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, '..', 'bin', 'loupe.mjs');
@@ -295,6 +296,179 @@ await check('no formatter emits an unsubstituted {placeholder}', async () => {
 	} finally {
 		cleanup(root);
 	}
+});
+
+/** Analyze one throwaway markup file under the WPDS preset. */
+const findingsFor = async (source: string, designSystem?: Record<string, unknown>): Promise<Finding[]> => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', ...(designSystem ? { designSystem } : {}) }),
+		'src/A.tsx': source,
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const { findings } = await analyze(config, { scope: null });
+		return findings;
+	} finally {
+		cleanup(root);
+	}
+};
+
+const rawOnly = (findings: readonly Finding[]): Finding[] => findings.filter((f) => f.rule === 'system/raw-element');
+
+// `render={ <h4 /> }` is how WPDS gives a text component its semantic element —
+// the component registry names that idiom as `Heading`'s replacement. Reporting
+// the `<h4>` inside it fired the rule on the result of obeying the rule, leaving
+// nothing to do but undo the conversion or suppress.
+await check('an element handed to a substitution prop is not raw markup', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			[
+				"import { Text } from '@wordpress/ui';",
+				'export const A = () => <Text variant="heading-md" render={ <h4 /> }>Hi</Text>;',
+				'export const B = () => <Text variant="heading-md" render={ ( props ) => <h4 { ...props } /> }>Hi</Text>;',
+				'export const C = () => <Text render={ ( props ) => { return <h4 { ...props } />; } }>Hi</Text>;',
+				'export const D = () => <Text render={ big ? <h2 /> : <h4 /> }>Hi</Text>;',
+				'export const E = () => <Text as={ <h4 /> }>Hi</Text>;',
+				// A callback that touches its props destructures before it returns —
+				// the return is still the one element, whatever the block does first.
+				'export const F = () => <Text render={ ( { cls, ...rest } ) => { const c = cls; return <h4 className={ c } { ...rest } />; } }>Hi</Text>;',
+				'export const G = () => <Text render={ function ( props ) { return <h4 { ...props } />; } }>Hi</Text>;',
+				// A type assertion is not a different value: a narrower prop type is
+				// what makes an author reach for one, and .tsx is a first-class input.
+				'export const H = () => <Text render={ ( <h4 /> ) as never }>Hi</Text>;',
+				'export const I = () => <Text render={ ( <h4 /> ) satisfies never }>Hi</Text>;',
+				'export const J = () => <Text render={ ( <h4 /> )! }>Hi</Text>;',
+				// Both arms of a guard, as for a conditional: following only the right
+				// one exempted the fallback and still reported the guarded element.
+				'export const K = () => <Text render={ <h4 /> || null }>Hi</Text>;',
+				'export const L = () => <Text render={ big && <h2 /> || <h4 /> }>Hi</Text>;',
+				// JSX lets the braces be dropped entirely.
+				'export const M = () => <Text render=<h4 /> >Hi</Text>;',
+				// WPDS ships its own components under an experimental prefix, and
+				// `__experimentalText` is the same text component as `Text`.
+				"import { __experimentalText } from '@wordpress/components';",
+				'export const N = () => <__experimentalText render={ <h4 /> }>Hi</__experimentalText>;',
+				// A namespace import puts the component name in the member.
+				"import * as UI from '@wordpress/ui';",
+				'export const O = () => <UI.Text render={ <h4 /> }>Hi</UI.Text>;',
+			].join('\n'),
+		),
+	);
+	assert(!findings.length, `flagged the escape hatch it recommends: ${JSON.stringify(findings.map((f) => f.message))}`);
+});
+
+// The exemption is for the components whose job is emitting a tag. Every other
+// export of a design-system package that takes a `render` prop takes an ordinary
+// render callback — `@wordpress/components` ships `FormFileUpload` — and markup
+// inside one of those is markup the author wrote, with an analog to convert to.
+await check('a design-system render callback is not a substitution', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			[
+				"import { FormFileUpload, Button } from '@wordpress/components';",
+				'export const A = () => <FormFileUpload render={ ( { open } ) => <p onClick={ open }>pick</p> } />;',
+				'export const B = () => <Button render={ <p>label</p> } />;',
+			].join('\n'),
+		),
+	);
+	assert(
+		findings.length === 2,
+		`a real render callback was exempted: ${JSON.stringify(findings.map((f) => f.message))}`,
+	);
+});
+
+// `attr.name` collapses a namespace, so `xlink:render` read as `render` and
+// exempted an element no substitution prop was ever given.
+await check('a namespaced attribute is not a substitution prop', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			["import { Text } from '@wordpress/ui';", 'export const A = () => <Text xlink:render={ <h4 /> }>Hi</Text>;'].join(
+				'\n',
+			),
+		),
+	);
+	one(findings, 'a namespaced prop exempted the element');
+});
+
+// `render` is not a name WPDS reserved: react-router, Formik and Downshift all
+// spell a render prop exactly that. Gating the exemption on "the tag starts with
+// a capital" bought the fix with a silent false negative — an element that
+// genuinely should convert, reported nowhere, with nothing to suppress.
+await check('a third-party render prop is not a design-system substitution', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			[
+				"import { Route } from 'react-router';",
+				'export const A = () => <Route render={ () => <p>page</p> } />;',
+				'export const B = () => <Whatever render={ <p>x</p> } />;',
+				'export const C = () => <div render={ <h4 /> } />;',
+			].join('\n'),
+		),
+	);
+	assert(findings.length === 3, `a non-WPDS carrier exempts nothing — got ${findings.length}`);
+});
+
+// The narrow reading on purpose: the prop's own element is an argument naming a
+// tag, but everything under it is markup the author wrote and React renders as
+// markup. Exempting the subtree would hide a hand-rolled layout by wrapping it
+// in a `render`.
+await check('markup nested inside a substitution prop still counts', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			[
+				"import { Text } from '@wordpress/ui';",
+				// Both elements report without the fix, so this fixture discriminates:
+				// the outer <p> is the substitution, the <h4> under it is markup.
+				'export const A = () => <Text render={ <p><h4>t</h4></p> }>Hi</Text>;',
+				'export const B = () => <h4>a heading nobody handed to anything</h4>;',
+			].join('\n'),
+		),
+	);
+	assert(findings.length === 2, `expected the nested <h4> and B's <h4> — got ${findings.length}`);
+	assert(
+		findings.every((f) => f.message.includes('<h4>')),
+		`flagged the substitution element itself: ${JSON.stringify(findings.map((f) => f.message))}`,
+	);
+});
+
+// The exclusion answers one question — which tag does the component emit — and
+// no others. Styling written on that element is drift wherever it sits.
+await check('styling on a substitution element is still styling', async () => {
+	const findings = await findingsFor(
+		[
+			"import { Text } from '@wordpress/ui';",
+			'export const A = () => <Text render={ <h4 style={ { marginBottom: 16 } } /> }>Hi</Text>;',
+		].join('\n'),
+	);
+	assert(!rawOnly(findings).length, 'the <h4> is still the substitution element');
+	assert(
+		findings.some((f) => f.rule === 'layout/margin-on-child'),
+		`inline margin went unreported: ${JSON.stringify(findings.map((f) => f.message))}`,
+	);
+});
+
+// `render` is WPDS and Base UI; `as` and `component` are the same idiom
+// elsewhere. A design system that spells it differently says so in config, and
+// an empty list is how a project asks for the old behaviour back.
+await check('the substitution-prop list is config-driven', async () => {
+	const source = [
+		"import { Text } from '@wordpress/ui';",
+		'export const A = () => <Text render={ <h4 /> } elementType={ <h5 /> }>Hi</Text>;',
+	].join('\n');
+	const custom = rawOnly(await findingsFor(source, { substitutionProps: ['elementType'] }));
+	const f = one(custom, 'only the prop the config names is a substitution');
+	assert(f.message.includes('<h4>'), `wrong element exempted: ${f.message}`);
+	const none = rawOnly(await findingsFor(source, { substitutionProps: [] }));
+	assert(none.length === 2, `an empty list exempts nothing — got ${none.length}`);
+
+	// `new Set('render')` is a set of characters — a config that means nothing it
+	// says, reporting identically to one that turned the exemption off.
+	let threw = '';
+	await findingsFor(source, { substitutionProps: 'render' }).catch((err: unknown) => {
+		threw = err instanceof Error ? err.message : String(err);
+		return [];
+	});
+	assert(/substitutionProps must be an array/.test(threw), `a bare string was accepted: ${threw || 'no throw'}`);
 });
 
 finish();
