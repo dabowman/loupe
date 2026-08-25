@@ -86,6 +86,17 @@ export interface Finding {
 	message: string;
 	/** Stable identity for baselining — survives a value tweak. Defaults to `message`. */
 	code?: string | undefined;
+	/**
+	 * Cluster key, for rules whose finding is one member of an N-way relation.
+	 *
+	 * The two pattern rules are the only findings that cannot exist in one file:
+	 * a composite rebuilt in six files is one defect reported six times, and
+	 * only a shared key puts those six back together. `code` happens to hold the
+	 * same value today, but `code` is the *baselining* identity — tying the
+	 * cluster to it means a future change to what survives a value tweak
+	 * silently regroups the report. Say which one the grouping means.
+	 */
+	group?: string | undefined;
 	rank: number;
 	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
@@ -546,6 +557,51 @@ export interface BaselinedResult extends AnalyzeResult {
 	baselined: number;
 	/** Only meaningful on a whole-repo run — scoped runs suppress it. */
 	fixed: number;
+}
+
+// ── report payload ──────────────────────────────────────────────────────────
+
+/** One rule as a report presents it: placeholders resolved, report order baked in. */
+export interface RuleDescriptor {
+	id: RuleId;
+	title: string;
+	rank: number;
+	severity: Severity;
+}
+
+/**
+ * The machine-readable report — what `--format json` prints and `--format html`
+ * embeds.
+ *
+ * Written down as a type rather than left implicit in the formatter, because it
+ * is now a contract with two consumers instead of one, and the second reads it
+ * back at runtime. `version` is additive-only: fields may be added, so a
+ * consumer must ignore what it does not know, and nothing already emitted
+ * changes meaning without a bump.
+ */
+export interface ReportPayload {
+	version: 1;
+	tool: 'loupe';
+	blocking: boolean;
+	summary: {
+		total: number;
+		error: number;
+		warn: number;
+		suppressions: number;
+		parseErrors: number;
+		/**
+		 * Findings hidden by the baseline. Absent under `--no-baseline`, where the
+		 * question was never asked; 0 where it was asked and nothing was hidden —
+		 * which is equally what a project with no baseline file reports, so 0 is
+		 * not evidence that a baseline exists.
+		 */
+		baselined?: number;
+	};
+	rules: RuleDescriptor[];
+	findings: (Omit<Finding, 'rank'> & { fix: string })[];
+	suppressions: Directive[];
+	parseErrors: ParseError[];
+	config: { rules: Record<RuleId, RuleSetting>; enabled: Record<RuleId, boolean> };
 }
 
 // ── autofix ─────────────────────────────────────────────────────────────────
