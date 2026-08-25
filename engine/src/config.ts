@@ -120,9 +120,19 @@ async function readConfigFile(path: string): Promise<AuthoredConfig | undefined>
 	return mod.default ?? (mod as AuthoredConfig);
 }
 
+/**
+ * Where a preset spec would live, if it names a shipped preset at all.
+ *
+ * Shared with {@link presetExists} so the two cannot disagree: a check that
+ * strips the `loupe/presets/` prefix and a check that does not will reject a
+ * spec the resolver would have accepted, which is how `--profile` came to
+ * report a perfectly resolvable preset as "not installed".
+ */
+const presetPath = (spec: string): string => join(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, '')}.json`);
+
 /** Resolve `extends`, which may name a shipped preset or a path. */
 async function resolveExtends(spec: string, fromDir: string): Promise<{ path: string; dir: string }> {
-	const asPreset = join(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, '')}.json`);
+	const asPreset = presetPath(spec);
 	if (existsSync(asPreset)) return { path: asPreset, dir: PRESET_DIR };
 	const asPath = isAbsolute(spec) ? spec : join(fromDir, spec);
 	if (existsSync(asPath)) return { path: asPath, dir: dirname(asPath) };
@@ -174,7 +184,7 @@ export function listPresets(): string[] {
 	}
 }
 
-export const presetExists = (name: string): boolean => existsSync(join(PRESET_DIR, `${name}.json`));
+export const presetExists = (name: string): boolean => existsSync(presetPath(name));
 
 /** Compile `has-*` style patterns into anchored regexes. */
 function compilePatterns(patterns: readonly string[] | undefined): RegExp[] {
@@ -316,6 +326,12 @@ export function setPatterns(config: Config, patterns: Pattern[] | null | undefin
 	config.patterns = patterns ?? [];
 	config.enabled['patterns/duplicate-composite'] =
 		config.patterns.length > 0 &&
+		// The same `hasComponents` normalization computes above, restated rather
+		// than recomputed. Dropping the packages half made this looser than the
+		// capability it stands in for: a composite is only ever built from names
+		// imported out of `designSystem.packages`, so a config declaring none can
+		// never produce one — and `status` reported the rule active anyway.
+		config.designSystem.packages.length > 0 &&
 		config.designSystem.knownComponents.size > 0 &&
 		config.severityOf('patterns/duplicate-composite') !== 'off';
 	return config;

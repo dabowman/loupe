@@ -427,12 +427,23 @@ export interface SkippedRegistry {
 	packages: string[];
 }
 
-/** A registry that merged and changed nothing — as invisible as one skipped. */
-export interface InertRegistry {
+/**
+ * Something worth saying about a registry `--profile` forced past the scope gate.
+ *
+ * Two states earn a note and neither shows up anywhere else. A registry that
+ * merged and changed nothing is exactly as invisible as one that was skipped —
+ * the thing skip reporting exists to prevent, reached by the other road. And a
+ * registry merged onto a config naming a different design system still matches:
+ * composite signatures are bare component names, so `Stack(Text,Button)` fits
+ * every design system that ships those names, and the finding names an import
+ * the project has never heard of. Forcing that is allowed — it is what the flag
+ * asks for — but it may not be silent.
+ */
+export interface RegistryNote {
 	label: string;
 	kind: 'patterns' | 'components';
-	/** Why the merge came to nothing, as the clause after the dash. */
-	reason: string;
+	/** The whole verdict, as the predicate after `<label> <kind> registry`. */
+	note: string;
 }
 
 /** Which profiles were on offer, which applied, and what they contributed. */
@@ -441,7 +452,7 @@ export interface ProfileState {
 	active: Profile[];
 	applied: string[];
 	skipped: SkippedRegistry[];
-	inert: InertRegistry[];
+	notes: RegistryNote[];
 	errors: string[];
 }
 

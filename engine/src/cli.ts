@@ -208,12 +208,32 @@ async function main(): Promise<number> {
 	// to be settled before the config it would configure is loaded.
 	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
 	const forced = args.flags.profile ? (profiles.find((p) => p.id === args.flags.profile) ?? null) : null;
+	// A named profile that resolves to nothing used to be a silent no-op — no
+	// registries, no preset, exit 0 — which is indistinguishable from the profile
+	// applying and finding nothing. Worse, it also suppresses the profile
+	// *selection* would have made, so a typo checks strictly less than no flag at
+	// all. The sibling failure one screen down already warns; this one has to.
+	if (args.flags.profile && !forced && !isHook)
+		process.stderr.write(
+			`loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve(args.flags.profiles) : 'any profiles directory (--profiles was not given)'}${
+				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
+			}\n`
+		);
 
 	let config: Config;
 	let detected: DetectedConfig | null = null;
 	// Hoisted: `status` has to be able to say where an inferred config got its
 	// ruleset, and "inferred" on its own does not say a profile named it.
 	let profilePreset: string | null = null;
+	// Detection plus everything that outranks it. Reads `profilePreset` at call
+	// time, which is what lets `detect` and `init` below reuse it after the
+	// resolution above has settled.
+	const runDetection = (): DetectedConfig => {
+		const d = detectConfig(root, { preset: profilePreset });
+		if (options.projectPrefixes?.length)
+			d.config.namespaces = { ...d.config.namespaces, project: options.projectPrefixes };
+		return d;
+	};
 	try {
 		// An explicit path or preset wins; then a discovered project config; then
 		// whatever the project itself implies. Without the last step a project
@@ -237,20 +257,17 @@ async function main(): Promise<number> {
 			else if (!isHook)
 				process.stderr.write(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed\n`);
 		}
-		if (unconfigured) {
-			detected = detectConfig(root);
-			if (options.projectPrefixes?.length)
-				detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
-			// Override the preset inference chose, not the run it produced. The
-			// namespaces are a reading of *this* project and hold whoever picked
-			// the design system; skipping detection to inject the preset instead
-			// dropped them, which switched css/dead-class off on a repo where it
-			// had been running and left `init` writing that loss to disk.
-			// `extends` is where inference records its preset choice and what
-			// `loadConfig` resolves for an inline config, so this is the same
-			// statement, made by the flag rather than by the guess.
-			if (profilePreset) detected.config.extends = profilePreset;
-		}
+		// Override the preset inference chose, not the run it produced. The
+		// namespaces are a reading of *this* project and hold whoever picked the
+		// design system; skipping detection to inject the preset instead dropped
+		// them, which switched css/dead-class off on a repo where it had been
+		// running and left `init` writing that loss to disk.
+		//
+		// Both overrides live here rather than at the call site because `detect`
+		// and `init` re-run detection when the run did not, and a config written
+		// to someone's repo without them is a wrong artifact that outlives the
+		// process that made it.
+		if (unconfigured) detected = runDetection();
 		config = await loadConfig({
 			root,
 			configPath: args.flags.config ?? null,
@@ -300,10 +317,11 @@ async function main(): Promise<number> {
 					config.designSystem.packages.length ? config.designSystem.packages.join(', ') : 'no design-system packages'
 				}\n`
 			);
-		// And the same for one merged past the scope check that still changed
-		// nothing: `--profile` forcing a registry in does not make its rules run.
-		for (const i of registries.inert)
-			process.stderr.write(`loupe: ${i.label} ${i.kind} registry merged but enabled nothing \u2014 ${i.reason}\n`);
+		// And the same for one merged past the scope check that still did not do
+		// what merging it was for: `--profile` forcing a registry in does not make
+		// its rules run, and forcing it onto a project on another design system
+		// makes them run against components they describe nothing about.
+		for (const n of registries.notes) process.stderr.write(`loupe: ${n.label} ${n.kind} registry ${n.note}\n`);
 	}
 
 	// An inferred namespace list is a guess, and css/dead-class tells an agent to
@@ -415,7 +433,7 @@ async function main(): Promise<number> {
 	}
 
 	if (command === 'detect' || command === 'init') {
-		const info = detected || detectConfig(root);
+		const info = detected ?? runDetection();
 		if (args.flags.format === 'json') {
 			process.stdout.write(`${JSON.stringify(info, null, 2)}\n`);
 			return EXIT.OK;

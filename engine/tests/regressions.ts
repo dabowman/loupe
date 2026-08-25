@@ -23,23 +23,41 @@ const CLI = join(HERE, '..', 'bin', 'loupe.mjs');
 const PROFILES = join(HERE, '..', '..', 'profiles');
 
 /**
- * Run the CLI and hand back both streams.
+ * Run the CLI and hand back its exit code and both streams.
  *
  * Both halves of the option lookup are isolated, not just the loud one: the
  * plugin option variables outrank a profile's preset by design, and stripping
  * them is exactly the condition under which `resolvedOptions` falls back to
  * `~/.claude/settings.json` — so an emptied environment alone would hand the
  * developer's own settings file the decision these tests exist to pin down.
- * `status` exits 0, so there is no throw to unpack, which is what separates
- * this from the `execFileSync` calls below.
+ * Every CLI call in this file goes through here for that reason; the one that
+ * did not was failing on any machine with `CLAUDE_PLUGIN_OPTION_BLOCKING` set,
+ * and passing for the wrong reason on any machine with it set to false.
+ *
+ * `status` is a zero-exit command and `hook` is not, so the code comes back
+ * rather than being thrown: a caller that cares asserts on it. A spawn that
+ * never ran does throw — `spawnSync` reports that as `error` with both streams
+ * null, and returning `''` for those turned an engine crash into a passing
+ * negative assertion.
  */
-function runCli(argv: readonly string[], extra: NodeJS.ProcessEnv = {}): { stdout: string; stderr: string } {
+function runCli(
+	argv: readonly string[],
+	extra: NodeJS.ProcessEnv = {},
+	input?: string,
+): { status: number | null; stdout: string; stderr: string } {
 	const home = scratch('dsh-home-');
 	try {
 		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
 		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
-		const r = spawnSync('node', [CLI, ...argv], { encoding: 'utf8', env: { ...env, ...extra } });
-		return { stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+		// `process.execPath` rather than `'node'`: the suite must run under the
+		// interpreter that started it, not whichever one PATH resolves to.
+		const r = spawnSync(process.execPath, [CLI, ...argv], {
+			encoding: 'utf8',
+			env: { ...env, ...extra },
+			...(input === undefined ? {} : { input }),
+		});
+		if (r.error) throw r.error;
+		return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 	} finally {
 		cleanup(home);
 	}
@@ -397,16 +415,17 @@ await check('everything more explicit than a profile outranks its preset', () =>
 await check('a named profile does not make an inferred config block turns', () => {
 	const root = inferrableRepo();
 	try {
-		const out = execFileSync('node', [CLI, 'hook', '--root', root, '--profile', 'wpds', '--profiles', PROFILES], {
-			encoding: 'utf8',
-			input: '{"session_id":"prof","tool_input":{"file_path":"styles/a.css"}}',
-			env: { ...process.env, HOME: root },
-			stdio: ['pipe', 'pipe', 'pipe'],
-		});
-		assert(/advisory/.test(out), `the hook did not report advisory:\n${out}`);
-	} catch (err) {
-		const f = execFailure(err);
-		throw new Error(`the hook blocked a turn on an inferred config (exit ${f.status}):\n${f.stderr}`);
+		// Through `runCli` like the rest: `CLAUDE_PLUGIN_OPTION_BLOCKING` is the
+		// one variable that decides this outcome on its own, so a test reading it
+		// out of the developer's environment is testing their settings, not the
+		// code — true either way it happens to be set.
+		const { status, stdout } = runCli(
+			['hook', '--root', root, '--profile', 'wpds', '--profiles', PROFILES],
+			{},
+			'{"session_id":"prof","tool_input":{"file_path":"styles/a.css"}}',
+		);
+		assert(status === 0, `the hook blocked a turn on an inferred config (exit ${status}):\n${stdout}`);
+		assert(/advisory/.test(stdout), `the hook did not report advisory:\n${stdout}`);
 	} finally {
 		cleanup(root);
 	}
@@ -444,6 +463,87 @@ await check('a skipped registry names the config that rejected it', () => {
 		const { stderr } = runCli(['status', '--root', root, '--patterns', join(root, 'registry.json')]);
 		assert(/registry skipped/.test(stderr), `the skip must still be reported:\n${stderr}`);
 		assert(/this config declares no design-system packages/.test(stderr), `the skip still blames the imports:\n${stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A `--profile` that matches nothing selected nothing, applied no preset and
+// said nothing — so a one-character typo checked strictly *less* than the same
+// command with no flag at all, and reported clean either way. The sibling case
+// one test up already warned; this one, the likelier mistake, did not.
+await check('a --profile that matches nothing says so', () => {
+	const root = inferrableRepo();
+	try {
+		const typo = runCli(['status', '--root', root, '--profile', 'wpsd', '--profiles', PROFILES]);
+		assert(/no profile "wpsd"/.test(typo.stderr), `a mistyped profile said nothing:\n${typo.stderr}`);
+		assert(/available: wpds/.test(typo.stderr), `the warning should name what is on offer:\n${typo.stderr}`);
+		// The other way to reach the same state: the id is real, the directory it
+		// lives in was never passed.
+		const noDir = runCli(['status', '--root', root, '--profile', 'wpds']);
+		assert(/--profiles was not given/.test(noDir.stderr), `a profile with nowhere to look said nothing:\n${noDir.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `presetExists` gated a spec that `resolveExtends` would have resolved: one
+// strips the `loupe/presets/` prefix and the other did not. A profile written
+// the way the docs spell an extends target was told its preset is not installed.
+await check('a profile may name its preset the way extends spells it', () => {
+	const profiles = scratch('dsh-pref-');
+	const root = inferrableRepo();
+	try {
+		writeAll(profiles, {
+			'acme/profile.json': JSON.stringify({ id: 'acme', name: 'Acme', preset: 'loupe/presets/wpds', packages: ['@acme/ui'] }),
+		});
+		const { stdout, stderr } = runCli(['status', '--root', root, '--profile', 'acme', '--profiles', profiles]);
+		assert(!/not installed/.test(stderr), `a resolvable preset was rejected:\n${stderr}`);
+		assert(/suppress:\s+wpds-allow/.test(stdout), `the preset did not reach the ruleset:\n${stdout}`);
+	} finally {
+		cleanup(profiles);
+		cleanup(root);
+	}
+});
+
+// `init` recomputes detection when the run did not do it, and that second pass
+// went through none of what outranks it — so on a repo that already had a
+// config, `init --force` wrote the inferred namespaces over the ones the plugin
+// option had configured. The wrong artifact, and it outlives the run.
+await check('init --force over an existing config still honours the prefixes option', () => {
+	const root = inferrableRepo();
+	writeFileSync(join(root, 'loupe.config.json'), JSON.stringify({ extends: 'generic' }));
+	try {
+		const { stdout } = runCli(['init', '--root', root, '--force'], {
+			CLAUDE_PLUGIN_OPTION_PROJECT_PREFIXES: 'wf-',
+		});
+		assert(/Wrote /.test(stdout), `init wrote nothing:\n${stdout}`);
+		const cfg = JSON.parse(readFileSync(join(root, 'loupe.config.json'), 'utf8')) as {
+			namespaces?: { project?: string[] };
+		};
+		assert(cfg.namespaces?.project?.join(',') === 'wf-', `init recorded the wrong namespaces: ${JSON.stringify(cfg)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The shim adds `--profiles <shipped>` unless the caller named a registry
+// source itself, and `--profile` was on that opt-out list. It names one *among*
+// the profiles that flag supplies rather than supplying any, so `loupe --profile
+// wpds` reached the engine with no profiles directory, found nothing to force,
+// and ran a weaker check than the same command without the flag.
+await check('the shim still supplies its profiles directory under --profile', () => {
+	const shim = join(HERE, '..', '..', 'bin', 'loupe');
+	const root = inferrableRepo();
+	try {
+		const r = spawnSync('sh', [shim, 'status', '--root', root, '--profile', 'wpds'], {
+			encoding: 'utf8',
+			env: { ...process.env, HOME: root },
+		});
+		if (r.error) throw r.error;
+		const stdout = r.stdout ?? '';
+		assert(/profile:\s+wpds/.test(stdout), `the shim did not reach the shipped profile:\n${stdout}`);
+		assert(/suppress:\s+wpds-allow/.test(stdout), `the profile's preset never applied:\n${stdout}`);
 	} finally {
 		cleanup(root);
 	}

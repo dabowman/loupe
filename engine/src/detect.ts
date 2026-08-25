@@ -452,17 +452,24 @@ export function detectNamespaces(
  * `inferred: true` travels with the result so the CLI can hold guessed settings
  * to a lower bar than ones somebody wrote down.
  */
-export function detectConfig(root: string): DetectedConfig {
+export function detectConfig(root: string, { preset: override }: { preset?: string | null } = {}): DetectedConfig {
 	const { preset: name, reasons, confidence: presetConfidence, packageDir } = detectPreset(root);
 	const ns = detectNamespaces(root, name, packageDir);
-	const config: AuthoredConfig = { extends: name, namespaces: { project: ns.project } };
+	// `--profile <id>` names the design system outright, which is the one
+	// statement that beats a guess about it. Inference's own verdict is still
+	// returned as `preset` — `status` and `init` report it — but the config
+	// extends what the flag named. Everything derived from the preset below has
+	// to follow it: overriding `extends` after the fact left a config extending
+	// one preset while carrying another's token sources.
+	const extend = override || name;
+	const config: AuthoredConfig = { extends: extend, namespaces: { project: ns.project } };
 
 	// A preset's token sources are written relative to the project root. In a
 	// monorepo the design system is installed beside the manifest that asked for
 	// it, so without this the token set comes back empty and every finding goes
 	// back to naming a namespace instead of a token.
 	if (packageDir) {
-		const sources = resolvePreset(name).designSystem?.tokenSources ?? [];
+		const sources = resolvePreset(extend).designSystem?.tokenSources ?? [];
 		if (sources.length)
 			config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
 	}

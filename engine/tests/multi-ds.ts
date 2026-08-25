@@ -25,7 +25,7 @@ import { matches, toNode } from '../src/patterns.ts';
 import { registryApplies } from '../src/registry.ts';
 import { readProfiles, selectProfiles, applyRegistries } from '../src/profiles.ts';
 import { detectPreset } from '../src/detect.ts';
-import { assert, check, cleanup, finish, one, scratch, writeAll } from './harness.ts';
+import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, PatternNode } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -236,6 +236,50 @@ await check('two directories claiming one id yield one profile', () => {
 	}
 });
 
+// A `profile.json` is third-party JSON: every field is whatever the author
+// typed. `id` reaches a Set, `--profile`'s comparison and a sort that runs
+// outside every `try` in the function — so a numeric one threw past all of it,
+// and under `loupe hook` that is exit 2, a turn blocked by a stack trace. The
+// contract this function states is that one bad directory cannot do that.
+await check('a profile with junk field types falls back rather than throwing', () => {
+	const dir = scratch('loupe-junk-');
+	try {
+		writeAll(dir, {
+			// Sorts after `good`, which is what put it on the left of the comparator.
+			'zz/profile.json': JSON.stringify({ id: 7, name: [], packages: ['@acme/ui'], patterns: 3 }),
+			'good/profile.json': JSON.stringify({ id: 'good', name: 'Good', packages: ['@acme/ui'] }),
+		});
+		const found = readProfiles(dir);
+		assert(found.length === 2, `both directories should still be read, got ${found.length}`);
+		const junk = first(
+			found.filter((p) => p.id !== 'good'),
+			'the junk profile should fall back to its directory name',
+		);
+		assert(junk.id === 'zz' && junk.name === 'zz', `expected the directory name, got ${junk.id}/${junk.name}`);
+		assert(junk.patterns === null, `a non-string patterns path must not be joined: ${junk.patterns}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// Dedup reserved the id before the entry was built, so a directory that failed
+// on the way to the list still locked its id out — and the well-formed
+// directory claiming the same one was dropped behind it. `--profile acme` then
+// matched neither, silently.
+await check('a broken profile does not lock its id out for a good one', () => {
+	const dir = scratch('loupe-poison-');
+	try {
+		writeAll(dir, {
+			'a-broken/profile.json': '{ not json',
+			'b-good/profile.json': JSON.stringify({ id: 'a-broken', name: 'Real', packages: ['@acme/ui'] }),
+		});
+		const profile = one(readProfiles(dir), 'a profile that never parsed must not claim its id');
+		assert(profile.name === 'Real', `expected the well-formed profile, got ${profile.name}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
 await check('a profile is selected by what the project imports', () => {
 	const dir = profileDir();
 	try {
@@ -285,7 +329,16 @@ await check('a profile named outright applies its registries anyway', async () =
 		assert(!out.skipped.length, 'a forced registry must not be re-gated on scope');
 		assert(out.applied.length === 1, `expected the registry applied, got ${out.applied.length}`);
 		assert(config.enabled['patterns/duplicate-composite'], 'the rule the registry exists to enable stayed off');
-		assert(!out.inert.length, 'a registry whose rule came on has nothing to report');
+		// Forcing it in is what the flag asked for; doing it silently is not.
+		// This registry is scoped to WPDS and the config names Chakra, so its
+		// bare-name signatures now match a codebase they describe nothing about
+		// — `Modal(Text,Stack(Button,Button))` fits both, and the finding tells
+		// the agent to import `__experimentalConfirmDialog`.
+		const note = one(out.notes, 'forcing a registry onto another design system must be reported');
+		assert(
+			/scoped to @wordpress\/components/.test(note.note) && /@chakra-ui\/react/.test(note.note),
+			`the note should name both sides of the mismatch: ${note.note}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -297,7 +350,12 @@ await check('a profile named outright applies its registries anyway', async () =
 // which is the whole reason skips are reported.
 await check('a forced registry that enables nothing says so', async () => {
 	const root = repo({
-		'loupe.config.json': JSON.stringify({ extends: 'generic' }),
+		// In scope — the config names the package the registry is scoped to — so
+		// the only thing left to report is that the merge came to nothing.
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			designSystem: { packages: ['@wordpress/components'] },
+		}),
 		'registry.json': registryFile(['@wordpress/components']),
 	});
 	try {
@@ -308,8 +366,40 @@ await check('a forced registry that enables nothing says so', async () => {
 			{ setPatterns, setComponentRegistry },
 		);
 		assert(!out.skipped.length && out.applied.length === 1, 'the forced registry should still merge');
-		const inert = one(out.inert, 'a merge that changed nothing must be reported');
-		assert(/names no components/.test(inert.reason), `the reason should name what is missing: ${inert.reason}`);
+		const note = one(out.notes, 'a merge that changed nothing must be reported');
+		// Named precisely: a merged component *registry* never feeds
+		// `designSystem.components`, so "no components" on its own sent the
+		// reader to a file that had nothing wrong with it.
+		assert(/no designSystem\.components/.test(note.note), `the note should name what is missing: ${note.note}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The report used to read the merged totals rather than what this source added,
+// so a forced registry whose every id the project had already defined merged,
+// contributed nothing, and was reported as fine — because some *other* source
+// had filled the same list. That is the invisibility the note exists to prevent.
+await check('a forced registry the project already covers is not reported as fine', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			designSystem: { packages: ['@wordpress/components'], components: { layout: ['Stack'], text: ['Text'] } },
+			patterns: './own.json',
+		}),
+		'own.json': JSON.stringify([{ id: 'page-header', summary: 'ours', signature: PAGE_HEADER_SIG }]),
+		'registry.json': registryFile(['@wordpress/components']),
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const out = applyRegistries(
+			config,
+			[{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true }],
+			{ setPatterns, setComponentRegistry },
+		);
+		assert(config.enabled['patterns/duplicate-composite'], 'the project’s own registry should still enable the rule');
+		const note = one(out.notes, 'a forced registry that added nothing must be reported');
+		assert(/added no patterns/.test(note.note), `the note should say it added nothing: ${note.note}`);
 	} finally {
 		cleanup(root);
 	}

@@ -25295,8 +25295,9 @@ async function readConfigFile(path) {
   const mod = await import(pathToFileURL(path).href);
   return mod.default ?? mod;
 }
+var presetPath = (spec) => join5(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, "")}.json`);
 async function resolveExtends(spec, fromDir) {
-  const asPreset = join5(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, "")}.json`);
+  const asPreset = presetPath(spec);
   if (existsSync2(asPreset)) return { path: asPreset, dir: PRESET_DIR };
   const asPath = isAbsolute2(spec) ? spec : join5(fromDir, spec);
   if (existsSync2(asPath)) return { path: asPath, dir: dirname2(asPath) };
@@ -25327,7 +25328,7 @@ function listPresets() {
     return ["generic"];
   }
 }
-var presetExists = (name) => existsSync2(join5(PRESET_DIR, `${name}.json`));
+var presetExists = (name) => existsSync2(presetPath(name));
 function compilePatterns(patterns) {
   return (patterns ?? []).map(
     (p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`)
@@ -25431,7 +25432,12 @@ function normalize(raw, { root: root2 }) {
 }
 function setPatterns(config, patterns) {
   config.patterns = patterns ?? [];
-  config.enabled["patterns/duplicate-composite"] = config.patterns.length > 0 && config.designSystem.knownComponents.size > 0 && config.severityOf("patterns/duplicate-composite") !== "off";
+  config.enabled["patterns/duplicate-composite"] = config.patterns.length > 0 && // The same `hasComponents` normalization computes above, restated rather
+  // than recomputed. Dropping the packages half made this looser than the
+  // capability it stands in for: a composite is only ever built from names
+  // imported out of `designSystem.packages`, so a config declaring none can
+  // never produce one — and `status` reported the rule active anyway.
+  config.designSystem.packages.length > 0 && config.designSystem.knownComponents.size > 0 && config.severityOf("patterns/duplicate-composite") !== "off";
   return config;
 }
 function setComponentRegistry(config, componentRegistry) {
@@ -25866,12 +25872,13 @@ function detectNamespaces(root2, presetName, packageDir = "") {
     sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length }
   };
 }
-function detectConfig(root2) {
+function detectConfig(root2, { preset: override } = {}) {
   const { preset: name, reasons, confidence: presetConfidence, packageDir } = detectPreset(root2);
   const ns = detectNamespaces(root2, name, packageDir);
-  const config = { extends: name, namespaces: { project: ns.project } };
+  const extend = override || name;
+  const config = { extends: extend, namespaces: { project: ns.project } };
   if (packageDir) {
-    const sources = resolvePreset(name).designSystem?.tokenSources ?? [];
+    const sources = resolvePreset(extend).designSystem?.tokenSources ?? [];
     if (sources.length)
       config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
   }
@@ -25895,6 +25902,8 @@ import { isAbsolute as isAbsolute3, join as join7, resolve as resolve2 } from "n
 var readJson2 = (p) => JSON.parse(readFileSync7(p, "utf8"));
 var under = (dir, rel) => isAbsolute3(rel) ? rel : join7(dir, rel);
 var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
+var asString = (v) => typeof v === "string" && v !== "" ? v : null;
+var byBytes = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function readProfiles(root2) {
   if (!root2 || !existsSync4(root2)) return [];
   let entries;
@@ -25905,30 +25914,32 @@ function readProfiles(root2) {
   }
   const out = [];
   const seen = /* @__PURE__ */ new Set();
-  for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
+  for (const e of [...entries].sort((a, b) => byBytes(a.name, b.name))) {
     if (!e.isDirectory()) continue;
     const dir = join7(root2, e.name);
     const manifest = join7(dir, "profile.json");
     if (!existsSync4(manifest)) continue;
     try {
       const raw = readJson2(manifest);
-      const id = raw.id || e.name;
+      const id = asString(raw.id) ?? e.name;
       if (seen.has(id)) continue;
-      seen.add(id);
+      const patterns = asString(raw.patterns);
+      const components = asString(raw.components);
       out.push({
         id,
-        name: raw.name || raw.id || e.name,
-        preset: raw.preset ?? null,
+        name: asString(raw.name) ?? asString(raw.id) ?? e.name,
+        preset: asString(raw.preset),
         packages: asStrings(raw.packages),
         skills: asStrings(raw.skills),
-        patterns: raw.patterns ? under(dir, raw.patterns) : null,
-        components: raw.components ? under(dir, raw.components) : null,
+        patterns: patterns ? under(dir, patterns) : null,
+        components: components ? under(dir, components) : null,
         dir
       });
+      seen.add(id);
     } catch {
     }
   }
-  return out.sort((a, b) => a.id.localeCompare(b.id));
+  return out.sort((a, b) => byBytes(a.id, b.id));
 }
 function selectProfiles(profiles, config, force = null) {
   if (force) return profiles.filter((p) => p.id === force);
@@ -25943,8 +25954,7 @@ function applyRegistries(config, sources, {
   const applied = [];
   const skipped = [];
   const errors = [];
-  const forcedPatterns = [];
-  const forcedComponents = [];
+  const forced = [];
   let patterns = config.patterns ?? [];
   const components = new Map(config.componentRegistry ?? []);
   let sawPatterns = false;
@@ -25954,12 +25964,20 @@ function applyRegistries(config, sources, {
     if (src.patterns) {
       try {
         const raw = readJson2(resolve2(src.patterns));
-        if (src.forced || registryApplies(raw, config.designSystem.packages)) {
+        const inScope = registryApplies(raw, config.designSystem.packages);
+        if (src.forced || inScope) {
           const own = new Set(patterns.map((p) => p.id));
-          patterns = [...patterns, ...loadPatterns(raw).filter((p) => !own.has(p.id))];
+          const fresh = loadPatterns(raw).filter((p) => !own.has(p.id));
+          patterns = [...patterns, ...fresh];
           sawPatterns = true;
           used = true;
-          if (src.forced) forcedPatterns.push(src.label);
+          if (src.forced)
+            forced.push({
+              label: src.label,
+              kind: "patterns",
+              added: fresh.length,
+              offScope: inScope ? [] : registryPackages(raw)
+            });
         } else {
           skipped.push({ label: src.label, kind: "patterns", packages: registryPackages(raw) });
         }
@@ -25970,11 +25988,19 @@ function applyRegistries(config, sources, {
     if (src.components) {
       try {
         const raw = readJson2(resolve2(src.components));
-        if (src.forced || registryApplies(raw, config.designSystem.packages)) {
+        const inScope = registryApplies(raw, config.designSystem.packages);
+        if (src.forced || inScope) {
+          const before = components.size;
           for (const [key, entry] of loadComponents(raw)) if (!components.has(key)) components.set(key, entry);
           sawComponents = true;
           used = true;
-          if (src.forced) forcedComponents.push(src.label);
+          if (src.forced)
+            forced.push({
+              label: src.label,
+              kind: "components",
+              added: components.size - before,
+              offScope: inScope ? [] : registryPackages(raw)
+            });
         } else {
           skipped.push({ label: src.label, kind: "components", packages: registryPackages(raw) });
         }
@@ -25986,16 +26012,33 @@ function applyRegistries(config, sources, {
   }
   if (sawPatterns) setPatterns2(config, patterns);
   if (sawComponents) setComponentRegistry2(config, components);
-  const inert = [];
-  for (const label of forcedPatterns) {
-    if (config.enabled["patterns/duplicate-composite"]) continue;
-    if (!config.patterns.length) inert.push({ label, kind: "patterns", reason: "it carries no patterns" });
-    else if (!config.designSystem.knownComponents.size)
-      inert.push({ label, kind: "patterns", reason: "this config names no components for its signatures to match" });
+  const patternsNote = (added) => config.severityOf("patterns/duplicate-composite") === "off" ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
+    // A composite is only ever built from names imported out of
+    // `designSystem.packages` (see markup.ts), so with none declared
+    // there is nothing for a signature to be compared against.
+    !config.designSystem.packages.length ? "merged but enabled nothing \u2014 this config declares no designSystem.packages, so no composite is ever built to compare" : (
+      // `knownComponents` is `designSystem.components.layout` + `.text`.
+      // A merged component *registry* does not feed it, so naming
+      // "components" here without saying which pointed at the wrong file.
+      !config.designSystem.knownComponents.size ? "merged but enabled nothing \u2014 this config declares no designSystem.components for its signatures to match" : null
+    )
+  );
+  const componentsNote = (added) => added || config.severityOf("system/locked-component") === "off" && config.severityOf("system/superseded-component") === "off" ? null : "merged but enabled nothing \u2014 it added no entries this config did not already have";
+  const notes = [];
+  for (const f of forced) {
+    if (f.offScope.length)
+      notes.push({
+        label: f.label,
+        kind: f.kind,
+        // Named against what the *config* declares, not what the project
+        // imports — those differ on an inferred config, and blaming the
+        // imports is what sent people hunting through source that was fine.
+        note: `forced past the scope check \u2014 it is scoped to ${f.offScope.join(", ")} and this config declares ${config.designSystem.packages.length ? `${config.designSystem.packages.join(", ")} \u2014 so its findings name a design system this config does not declare` : "no design-system packages, so nothing here says which design system its findings are about"}`
+      });
+    const note = f.kind === "patterns" ? patternsNote(f.added) : componentsNote(f.added);
+    if (note) notes.push({ label: f.label, kind: f.kind, note });
   }
-  for (const label of forcedComponents)
-    if (!config.componentRegistry.size) inert.push({ label, kind: "components", reason: "it carries no entries" });
-  return { applied, skipped, inert, errors };
+  return { applied, skipped, notes, errors };
 }
 
 // src/paths.ts
@@ -26335,9 +26378,20 @@ async function main() {
   const { options, source: optionsSource } = resolvedOptions();
   const profiles = readProfiles(args.flags.profiles ? resolve4(args.flags.profiles) : null);
   const forced = args.flags.profile ? profiles.find((p) => p.id === args.flags.profile) ?? null : null;
+  if (args.flags.profile && !forced && !isHook)
+    process.stderr.write(
+      `loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve4(args.flags.profiles) : "any profiles directory (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
+`
+    );
   let config;
   let detected = null;
   let profilePreset = null;
+  const runDetection = () => {
+    const d = detectConfig(root2, { preset: profilePreset });
+    if (options.projectPrefixes?.length)
+      d.config.namespaces = { ...d.config.namespaces, project: options.projectPrefixes };
+    return d;
+  };
   try {
     const explicitPreset = args.flags.preset ?? (options.preset && options.preset !== "auto" ? options.preset : null);
     const unconfigured = !args.flags.config && !explicitPreset && !findConfig(root2);
@@ -26347,12 +26401,7 @@ async function main() {
         process.stderr.write(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed
 `);
     }
-    if (unconfigured) {
-      detected = detectConfig(root2);
-      if (options.projectPrefixes?.length)
-        detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
-      if (profilePreset) detected.config.extends = profilePreset;
-    }
+    if (unconfigured) detected = runDetection();
     config = await loadConfig({
       root: root2,
       configPath: args.flags.config ?? null,
@@ -26391,8 +26440,7 @@ async function main() {
         `loupe: ${s.label} ${s.kind} registry skipped \u2014 scoped to ${s.packages.join(", ")}, and this config declares ${config.designSystem.packages.length ? config.designSystem.packages.join(", ") : "no design-system packages"}
 `
       );
-    for (const i of registries.inert)
-      process.stderr.write(`loupe: ${i.label} ${i.kind} registry merged but enabled nothing \u2014 ${i.reason}
+    for (const n of registries.notes) process.stderr.write(`loupe: ${n.label} ${n.kind} registry ${n.note}
 `);
   }
   if (config.inferred && config.rules["css/dead-class"]?.severity === "error")
@@ -26461,7 +26509,7 @@ async function main() {
     return EXIT.OK;
   }
   if (command === "detect" || command === "init") {
-    const info = detected || detectConfig(root2);
+    const info = detected ?? runDetection();
     if (args.flags.format === "json") {
       process.stdout.write(`${JSON.stringify(info, null, 2)}
 `);
