@@ -12,6 +12,20 @@ import type { AnalyzeResult, BaselinedResult, Config, Finding, RuleId, Severity 
 
 const SEV_MARK: Partial<Record<Severity, string>> = { error: '\u2717', warn: '\u2022' };
 
+/**
+ * A rule title with its {placeholders} resolved.
+ *
+ * `RULES[id].title` is a template — `replace with a {tokenPrefix} token` — and
+ * only the resolved config knows what fills it. The agent format has always
+ * interpolated; JSON and SARIF shipped the raw template, so a consumer read
+ * `{tokenPrefix}` where a human read `--wpds-*`. Guidance that names a
+ * placeholder is worse than no guidance: it is actionable-looking and wrong.
+ * Binding this per formatter keeps the obligation in one place, so a fourth
+ * format cannot quietly skip it.
+ */
+const titleFor = (config: Config) => (id: RuleId): string =>
+	renderTitle(id, config.designSystem, config.suppression.keyword);
+
 export function formatAgent(
 	result: AnalyzeResult | BaselinedResult,
 	config: Config,
@@ -19,6 +33,7 @@ export function formatAgent(
 ): string {
 	const { findings, diagnostics } = result;
 	const kw = config.suppression.keyword;
+	const title = titleFor(config);
 	const lines: string[] = [];
 
 	if (!findings.length) {
@@ -58,7 +73,7 @@ export function formatAgent(
 		for (const [ruleId, group] of groups) {
 			const sev = group[0]?.severity ?? 'warn';
 			lines.push('');
-			lines.push(`${SEV_MARK[sev] ?? '\u2022'} ${ruleId} (${group.length}) \u2014 ${renderTitle(ruleId, config.designSystem, kw)}`);
+			lines.push(`${SEV_MARK[sev] ?? '\u2022'} ${ruleId} (${group.length}) \u2014 ${title(ruleId)}`);
 			const show = group.slice(0, quota.get(ruleId) ?? 0);
 			hidden += group.length - show.length;
 			for (const f of show) lines.push(`    ${f.file}:${f.line}  ${f.message}`);
@@ -102,6 +117,7 @@ export function formatSummary(
 }
 
 export function formatJson(result: AnalyzeResult | BaselinedResult, config: Config): string {
+	const title = titleFor(config);
 	return JSON.stringify(
 		{
 			version: 1,
@@ -114,7 +130,7 @@ export function formatJson(result: AnalyzeResult | BaselinedResult, config: Conf
 				suppressions: result.directives.length,
 				parseErrors: result.diagnostics.parseErrors.length,
 			},
-			findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: RULES[f.rule].title })),
+			findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: title(f.rule) })),
 			suppressions: result.directives,
 			parseErrors: result.diagnostics.parseErrors,
 			config: { rules: config.rules, enabled: config.enabled },
@@ -125,6 +141,7 @@ export function formatJson(result: AnalyzeResult | BaselinedResult, config: Conf
 }
 
 export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Config): string {
+	const title = titleFor(config);
 	const used = [...new Set(result.findings.map((f) => f.rule))];
 	return JSON.stringify(
 		{
@@ -138,7 +155,7 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 							informationUri: 'https://github.com/dvdbwmn/loupe',
 							rules: used.map((id) => ({
 								id,
-								shortDescription: { text: RULES[id].title },
+								shortDescription: { text: title(id) },
 								defaultConfiguration: { level: config.severityOf(id) === 'error' ? 'error' : 'warning' },
 							})),
 						},
@@ -146,7 +163,7 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 					results: result.findings.map((f) => ({
 						ruleId: f.rule,
 						level: f.severity === 'error' ? 'error' : 'warning',
-						message: { text: `${f.message} \u2014 ${RULES[f.rule].title}` },
+						message: { text: `${f.message} \u2014 ${title(f.rule)}` },
 						locations: [
 							{
 								physicalLocation: {
