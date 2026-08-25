@@ -36,11 +36,20 @@ export function readBaseline(root: string, path: string): Baseline | null {
 	}
 }
 
+/**
+ * Record the backlog.
+ *
+ * Both counts come back because they are different numbers: a file that repeats
+ * a declaration collapses several findings into one entry, and `check` reports
+ * the findings it hid, not the entries that hid them. Returning only the
+ * entries left the caller labelling them as findings and the two commands
+ * disagreeing with nothing to reconcile them against.
+ */
 export function writeBaseline(
 	root: string,
 	path: string,
 	result: AnalyzeResult,
-): { path: string; count: number } {
+): { path: string; findings: number; entries: number } {
 	const full = resolvePath(root, path);
 	// A configured baseline may name a directory that doesn't exist yet.
 	mkdirSync(dirname(full), { recursive: true });
@@ -49,7 +58,7 @@ export function writeBaseline(
 		full,
 		`${JSON.stringify({ version: 1, createdAt: new Date().toISOString(), count: entries.length, entries }, null, 2)}\n`
 	);
-	return { path: full, count: entries.length };
+	return { path: full, findings: result.findings.length, entries: entries.length };
 }
 
 /**

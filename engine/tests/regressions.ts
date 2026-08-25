@@ -8,7 +8,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
@@ -226,6 +226,55 @@ await check('a baseline recorded from a shell is visible to the plugin hook', ()
 	} finally {
 		cleanup(root);
 		cleanup(pluginData);
+	}
+});
+
+// `baseline` reported the entry count and called it findings, so it disagreed
+// with the number `check` printed a moment later — 194 against 253, both
+// labelled findings, with nothing on hand to say whether 59 had been dropped.
+// The dedup itself is deliberate; only the label was wrong.
+await check('baseline reports the findings recorded and the entries they collapsed into', () => {
+	// Two classes carrying the same declarations: same rule, same file, same
+	// code, so four findings key to two entries.
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <><Text className=\"acme-one\">one</Text><Text className=\"acme-two\">two</Text></>;",
+		'styles/a.css': '.acme-one { color: #f00; font-size: 13px; }\n.acme-two { color: #f00; font-size: 13px; }',
+	});
+	try {
+		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8' });
+		const both = /baselined (\d+) finding\(s\) as (\d+) entries /.exec(recorded);
+		assert(both, `baseline did not report both counts:\n${recorded}`);
+		const [, findings, entries] = both;
+		const written = JSON.parse(readFileSync(join(root, '.loupe-baseline.json'), 'utf8')) as { entries: string[] };
+		assert(Number(entries) === written.entries.length, `entry count is not what was written: ${entries} vs ${written.entries.length}`);
+		assert(Number(findings) > Number(entries), `fixture did not collapse anything: ${recorded}`);
+
+		// The number `check` hides next is the findings one, not the entries one.
+		const out = execFileSync('node', [CLI, 'check', '--all', '--root', root], { encoding: 'utf8' });
+		const hidden = /(\d+) baselined finding\(s\) hidden/.exec(out);
+		assert(hidden, `check reported no baselined findings:\n${out}`);
+		assert(hidden[1] === findings, `check hid ${hidden[1]} where baseline claimed ${findings}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Saying "2 finding(s) as 2 entries" invents a distinction the reader then has
+// to go and check. Nothing collapsed, so there is nothing to reconcile.
+await check('baseline names one count when no finding collapsed', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-one\">one</Text>;",
+		'styles/a.css': '.acme-one { color: #f00; font-size: 13px; }',
+	});
+	try {
+		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8' });
+		assert(/baselined [1-9]\d* finding\(s\) \u2192 /.test(recorded), `expected a single count:\n${recorded}`);
+	} finally {
+		cleanup(root);
 	}
 });
 

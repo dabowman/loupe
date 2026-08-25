@@ -407,8 +407,14 @@ async function main(): Promise<number> {
 	if (command === 'baseline') {
 		const result = await analyze(config, { scope: null });
 		const { path: target } = baselinePath(root, args.flags.baseline ?? config.baselinePath);
-		const { path, count } = writeBaseline(root, target, result);
-		process.stdout.write(`loupe: baselined ${count} finding(s) \u2192 ${path}\n`);
+		const { path, findings, entries } = writeBaseline(root, target, result);
+		// Both numbers, because `check` prints the findings it hid next and that
+		// is the larger one whenever a file repeats a declaration. Naming only
+		// the entries — as findings — left the two commands contradicting each
+		// other. When nothing collapsed they are the same number, and saying it
+		// twice invents a distinction the reader then has to go and check.
+		const recorded = findings === entries ? `${findings} finding(s)` : `${findings} finding(s) as ${entries} entries`;
+		process.stdout.write(`loupe: baselined ${recorded} \u2192 ${path}\n`);
 		return EXIT.OK;
 	}
 
