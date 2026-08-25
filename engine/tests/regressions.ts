@@ -302,6 +302,111 @@ await check('a preset rename does not orphan directives written in the old keywo
 	}
 });
 
+// Reading another preset's keyword must not put it on the *malformed* gate as
+// well. Every line below is prose — one of them is the comment someone writes
+// precisely because the migration guide told them about the rename — and each
+// one turned a clean repo into exit 1 under `wpds`, where malformed is an
+// error. An upgrade that reports new errors on comments nobody changed is a
+// worse trade than the bug it fixes.
+await check('prose mentioning another preset\'s keyword stays prose', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': [
+			'/* ds-allow is the old keyword; write wpds-allow instead. */',
+			'/* ds-allowlist below is generated - do not edit */',
+			'// ds-allow used to be spelled that way before the rename',
+			'.acme-a { color: var(--wpds-color-fg); }',
+			'',
+		].join('\n'),
+		'src/A.jsx': 'export const A = () => <div className="acme-a">x</div>;\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		assert(
+			!r.findings.length,
+			`prose about the rename reported: ${JSON.stringify(r.findings.map((f) => `${f.rule}:${f.line}`))}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Symmetrically, and this is the direction that was arbitrary: `wpds-allow-file`
+// is a blanket form under `wpds`, so under `wpds` it reports. Under `generic` it
+// is a word in a comment — reading `wpds-allow` there must not drag its blanket
+// spelling along with it.
+await check("another preset's blanket spelling is prose where it is not blanket", async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'generic', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': '/* wpds-allow-file */\n/* wpds-allowlist: generated */\n.acme-a { display: block; }\n',
+		'src/A.jsx': 'export const A = () => <div className="acme-a">x</div>;\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		assert(
+			!r.findings.length,
+			`prose reported under generic: ${JSON.stringify(r.findings.map((f) => `${f.rule}:${f.line}`))}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The one thing an alias may report. A line with a directive's shape and no
+// reason was muting nothing before the rename either — leaving it silent is how
+// the escape hatch rots.
+await check('an aliased directive missing its reason still reports', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': '/* ds-allow tokens/hardcoded-value */\n.acme-a { color: #826200; }\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		const malformed = r.findings.filter((f) => f.rule === 'suppression/malformed');
+		assert(malformed.length === 1 && malformed[0]?.line === 1, `expected one malformed at line 1, got ${JSON.stringify(malformed)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `suppression.aliases` is user-supplied text interpolated into a regex. The
+// escaping and the blanket guard are the whole safety story for it, and both
+// fail silently — as a keyword that matches too much, or one that mutes when it
+// should report.
+await check('declared aliases are escaped, and a blanket term is never one', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({
+			extends: 'wpds',
+			namespaces: { project: ['acme-'] },
+			suppression: { aliases: ['ds.allow', 'a|b', '(x', 'ds-disable'] },
+		}),
+		'styles/a.css': [
+			'/* ds.allow tokens/hardcoded-value -- a dot is a dot */',
+			'.acme-a { color: #826200; }',
+			'/* dsxallow tokens/hardcoded-value -- the dot must not match x */',
+			'.acme-b { color: #826201; }',
+			'/* (x tokens/hardcoded-value -- an unbalanced group is literal text */',
+			'.acme-c { color: #826202; }',
+			'/* ds-disable tokens/hardcoded-value -- blanket terms stay blanket */',
+			'.acme-d { color: #826203; }',
+			'',
+		].join('\n'),
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		const lines = (rule: string): number[] => r.findings.filter((f) => f.rule === rule).map((f) => f.line).sort();
+		assert(
+			JSON.stringify(lines('tokens/hardcoded-value')) === '[4,8]',
+			`expected the escaped aliases to mute and only those — got ${JSON.stringify(lines('tokens/hardcoded-value'))}`,
+		);
+		// `ds-disable` is a blanket term of the active preset, so naming it as an
+		// alias buys nothing: it reports, exactly as it did before.
+		assert(lines('suppression/malformed').includes(7), `a blanket term declared as an alias must still report — got ${JSON.stringify(lines('suppression/malformed'))}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('loupe suppressions names the rename behind an aliased directive', () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),

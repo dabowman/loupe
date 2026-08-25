@@ -23712,9 +23712,12 @@ function makeSuppressionParser({
   aliases = []
 }) {
   const heads = [keyword, ...aliases.filter((a) => a !== keyword && !blanket.includes(a))];
-  const head = [...heads].sort((a, b) => b.length - a.length).map(esc).join("|");
-  const strict = new RegExp(`^(${head})\\s+(${ID}(?:\\s*,\\s*${ID})*)\\s*--\\s*(\\S.*?)(?:\\*/|-->|\\}|$)`);
-  const prefixes = [...heads, ...blanket];
+  const head = `(${[...heads].sort((a, b) => b.length - a.length).map(esc).join("|")})(?![\\w-])`;
+  const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
+  const strict = new RegExp(`^${head}\\s+(${IDS})\\s*--\\s*(\\S.*?)(?:\\*/|-->|\\}|$)`);
+  const shaped = new RegExp(`^${head}\\s+${IDS}\\s*(?:--|\\*/|-->|\\}|$)`);
+  const prefixes = [keyword, ...blanket];
+  const anyHead = [...heads, ...blanket];
   return function scan(text, relPath) {
     const byLine = /* @__PURE__ */ new Map();
     const directives = [];
@@ -23722,13 +23725,13 @@ function makeSuppressionParser({
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
-      if (raw === void 0 || !prefixes.some((p) => raw.includes(p))) continue;
+      if (raw === void 0 || !anyHead.some((p) => raw.includes(p))) continue;
       const stripped = raw.replace(OPENER, "");
-      if (!prefixes.some((p) => stripped.startsWith(p))) continue;
       const line = i + 1;
       const m = stripped.match(strict);
       if (m?.[2] !== void 0 && m[3] !== void 0) {
         const ids = m[2].split(",").map((s) => canonicalRuleId(s.trim()));
+        const used = m[1] ?? keyword;
         byLine.set(line, new Set(ids));
         directives.push({
           file: relPath,
@@ -23737,9 +23740,9 @@ function makeSuppressionParser({
           reason: m[3].trim(),
           // Carried only when it is not the keyword the config asks for, so
           // `loupe suppressions` can name the rename and nothing else has to.
-          ...m[1] !== void 0 && m[1] !== keyword ? { alias: m[1] } : {}
+          ...used === keyword ? {} : { alias: used }
         });
-      } else {
+      } else if (prefixes.some((p) => stripped.startsWith(p)) || shaped.test(stripped)) {
         malformed.push({
           rule: "suppression/malformed",
           file: relPath,
@@ -25339,25 +25342,28 @@ function listPresets() {
   }
 }
 var presetExists = (name) => existsSync2(join5(PRESET_DIR, `${name}.json`));
-var shipped = null;
-function shippedKeywords() {
-  if (shipped) return shipped;
-  const found = /* @__PURE__ */ new Set([DEFAULTS.suppression.keyword]);
+function shippedVocabulary() {
+  const keywords = /* @__PURE__ */ new Set([DEFAULTS.suppression.keyword]);
+  const blanket = new Set(DEFAULTS.suppression.blanket);
   try {
     for (const f of readdirSync3(PRESET_DIR)) {
       if (!f.endsWith(".json")) continue;
       try {
         const raw = JSON.parse(readFileSync5(join5(PRESET_DIR, f), "utf8"));
         const supp = isObj(raw) ? raw["suppression"] : void 0;
-        const kw = isObj(supp) ? supp["keyword"] : void 0;
-        if (typeof kw === "string" && kw) found.add(kw);
+        if (!isObj(supp)) continue;
+        const kw = supp["keyword"];
+        if (typeof kw === "string" && kw) keywords.add(kw);
+        const bl = supp["blanket"];
+        if (Array.isArray(bl)) {
+          for (const b of bl) if (typeof b === "string" && b) blanket.add(b);
+        }
       } catch {
       }
     }
   } catch {
   }
-  shipped = [...found];
-  return shipped;
+  return { keywords: [...keywords], blanket };
 }
 function compilePatterns(patterns) {
   return (patterns ?? []).map(
@@ -25423,10 +25429,12 @@ function normalize(raw, { root: root2 }) {
       RULES[id].needs.every((n) => capability[n]) && rules[id].severity !== "off"
     ])
   );
+  const shipped = shippedVocabulary();
+  const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
   const suppression = {
     ...cfg.suppression,
-    aliases: [.../* @__PURE__ */ new Set([...shippedKeywords(), ...cfg.suppression.aliases ?? []])].filter(
-      (a) => a !== cfg.suppression.keyword
+    aliases: [.../* @__PURE__ */ new Set([...shipped.keywords, ...declared])].filter(
+      (a) => typeof a === "string" && a !== "" && a !== cfg.suppression.keyword && !shipped.blanket.has(a)
     )
   };
   const neverDead = compilePatterns(cfg.namespaces.neverDead);

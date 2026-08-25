@@ -80,10 +80,20 @@ The keyword is preset-scoped — `generic` asks for `ds-allow`, `wpds` for
 shipped presets declare is *read* whichever one is active, so a rename never
 orphans the directives already written: a directive nothing recognizes is not a
 mute and not a finding either, which is the one way a signed-off reason can
-disappear entirely. `loupe suppressions` names the alias behind such a
-directive, so the rename stays discoverable. A config with a keyword of its own
-can list the one it replaced under `suppression.aliases`. What the tool tells
-you to *write* is still one keyword: the active one.
+disappear entirely. `loupe suppressions` names the keyword such a directive was
+written with, so the rename stays discoverable. A config with a keyword of its
+own can list the one it replaced under `suppression.aliases`; a term any preset
+treats as a blanket disable is never read as one, so an alias can only ever
+widen what may be written, never what a directive may do.
+
+Reading is all an alias does, and it runs in both directions: `generic` reads
+`wpds-allow` exactly as `wpds` reads `ds-allow`, which also means a project with
+no config at all — `generic` is the fallback — honours a `wpds-allow` directive.
+What the tool tells you to *write* is still one keyword, the active one, and
+that is also the only vocabulary judged for `suppression/malformed`: a comment
+opening with some other preset's keyword is prose about a rename far more often
+than it is a broken directive, so it is left alone unless it has a directive's
+full shape (keyword, rule ids, then a reason or nothing).
 
 ## Config
 

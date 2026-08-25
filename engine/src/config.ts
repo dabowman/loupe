@@ -177,25 +177,34 @@ export function listPresets(): string[] {
 export const presetExists = (name: string): boolean => existsSync(join(PRESET_DIR, `${name}.json`));
 
 /**
- * Every suppression keyword the shipped presets declare.
+ * The suppression vocabulary of every shipped preset: the keywords each one
+ * asks people to write, and the blanket forms each one refuses.
  *
  * Read from the directory for the same reason {@link listPresets} is: a list
  * kept by hand drifts the moment a preset is added, and here the drift is
  * invisible — a directive written in the missing vocabulary simply stops
- * suppressing. Cached because normalization runs per invocation, not per file.
+ * suppressing. Read every time rather than cached, so a preset dropped into
+ * `presets/` takes effect in the same run that adds it; it is a handful of
+ * small files, once per `normalize`.
+ *
+ * Both halves matter. A term one preset treats as a blanket disable must never
+ * become a muting keyword somewhere else just because a third preset names it,
+ * so the blanket side is collected to be *excluded* from the alias set.
  */
-let shipped: string[] | null = null;
-function shippedKeywords(): string[] {
-	if (shipped) return shipped;
-	const found = new Set<string>([DEFAULTS.suppression.keyword]);
+function shippedVocabulary(): { keywords: string[]; blanket: Set<string> } {
+	const keywords = new Set<string>([DEFAULTS.suppression.keyword]);
+	const blanket = new Set<string>(DEFAULTS.suppression.blanket);
 	try {
 		for (const f of readdirSync(PRESET_DIR)) {
 			if (!f.endsWith('.json')) continue;
 			try {
 				const raw: unknown = JSON.parse(readFileSync(join(PRESET_DIR, f), 'utf8'));
 				const supp = isObj(raw) ? raw['suppression'] : undefined;
-				const kw = isObj(supp) ? supp['keyword'] : undefined;
-				if (typeof kw === 'string' && kw) found.add(kw);
+				if (!isObj(supp)) continue;
+				const kw = supp['keyword'];
+				if (typeof kw === 'string' && kw) keywords.add(kw);
+				const bl = supp['blanket'];
+				if (Array.isArray(bl)) for (const b of bl) if (typeof b === 'string' && b) blanket.add(b);
 			} catch {
 				// A preset that will not parse fails loudly when something extends it;
 				// it must not take the alias list down with it here.
@@ -205,8 +214,7 @@ function shippedKeywords(): string[] {
 		// An unreadable preset directory is a broken install. The default
 		// vocabulary is still worth honoring.
 	}
-	shipped = [...found];
-	return shipped;
+	return { keywords: [...keywords], blanket };
 }
 
 /** Compile `has-*` style patterns into anchored regexes. */
@@ -304,11 +312,21 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	// — and a directive in the old vocabulary is not read as a directive at all,
 	// which loses the suppression and reports nothing. Reading them all keeps a
 	// recorded reason counting; `keyword` alone is still what the tool tells
-	// people to write.
+	// people to write, and the only vocabulary a malformed directive is judged
+	// against.
+	//
+	// A blanket term anywhere in the shipped presets is never an alias: `wpds`
+	// refuses `ds-disable`, and another preset adopting that spelling as its
+	// keyword must not turn it into a mute here. Declared aliases are filtered
+	// too — the guard is about the term, not about who named it — and anything
+	// that is not a non-empty string is dropped rather than interpolated into a
+	// regex.
+	const shipped = shippedVocabulary();
+	const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
 	const suppression = {
 		...cfg.suppression,
-		aliases: [...new Set([...shippedKeywords(), ...(cfg.suppression.aliases ?? [])])].filter(
-			(a) => a !== cfg.suppression.keyword,
+		aliases: [...new Set([...shipped.keywords, ...declared])].filter(
+			(a) => typeof a === 'string' && a !== '' && a !== cfg.suppression.keyword && !shipped.blanket.has(a),
 		),
 	};
 

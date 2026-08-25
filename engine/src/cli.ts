@@ -413,8 +413,10 @@ async function main(): Promise<number> {
 	}
 
 	// A directive written in a keyword this config no longer asks for still
-	// mutes, and is named here rather than reported as a finding: it is doing its
-	// job, and the inventory command is where you would go to find the rename.
+	// mutes. It is doing its job, so the rename is named here rather than turned
+	// into a finding of its own — the inventory is where you would come looking
+	// for it. (A *broken* directive still reports as `suppression/malformed`,
+	// whichever keyword it was written in.)
 	if (command === 'suppressions') {
 		const { directives } = await analyze(config, { scope: null });
 		const kw = config.suppression.keyword;
