@@ -26,6 +26,20 @@ const tmpRepo = (files: Record<string, string>): string => {
 	return root;
 };
 
+/**
+ * The ambient environment, minus the switches that change what the gate does.
+ *
+ * `LOUPE_OFF` silences the hook, and it is exactly the variable a developer
+ * working on the off switch has exported in the shell they run the suite from —
+ * at which point the tests that assert the hook *blocks* fail with "it did not
+ * block" and point at the wrong thing entirely.
+ */
+const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
+	const e: NodeJS.ProcessEnv = { ...process.env, ...extra };
+	if (!('LOUPE_OFF' in extra)) delete e['LOUPE_OFF'];
+	return e;
+};
+
 // A 10MB generated file made the old `/([A-Za-z_][\w-]*)\$\{/g` backtrack
 // quadratically: a gutenberg scan took 100s, past every hook timeout, so the
 // gate silently never ran. The bound is loose on purpose — it is there to catch
@@ -109,7 +123,7 @@ await check('a config error never blocks a turn', () => {
 		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
 			input: '{"session_id":"x","tool_input":{"file_path":"src/App.jsx"}}',
-			env: { ...process.env, CLAUDE_PLUGIN_OPTION_PRESET: 'no-such-preset' },
+			env: env({ CLAUDE_PLUGIN_OPTION_PRESET: 'no-such-preset' }),
 		});
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(parsed.systemMessage?.includes('config error'), `unexpected output: ${out}`);
@@ -184,7 +198,7 @@ await check('the hook blocks when the setting says it should', () => {
 		execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
 			input: '{"session_id":"blk","tool_input":{"file_path":"styles/a.css"}}',
-			env: { ...process.env, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+			env: env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 		throw new Error('hook exited 0 — it did not block');
@@ -211,17 +225,27 @@ await check('a baseline recorded from a shell is visible to the plugin hook', ()
 	});
 	const pluginData = scratch('dsh-plugin-data-');
 	try {
-		const shell = { ...process.env };
+		const shell = env();
 		delete shell['CLAUDE_PLUGIN_DATA'];
 		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: shell });
 		assert(/baselined [1-9]/.test(recorded), `nothing baselined:\n${recorded}`);
 
-		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
-			encoding: 'utf8',
-			input: '{"session_id":"base","tool_input":{"file_path":"styles/a.css"}}',
-			env: { ...process.env, CLAUDE_PLUGIN_DATA: pluginData, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
-			stdio: ['pipe', 'pipe', 'pipe'],
-		});
+		// A hook that ignores the baseline blocks, and blocking is exit 2 — which
+		// `execFileSync` raises as a throw before any assertion here can run. Catch
+		// it and say what it means, or the regression reports itself as `Command
+		// failed: node ...` and the message written for it is never reached.
+		let out: string;
+		try {
+			out = execFileSync('node', [CLI, 'hook', '--root', root], {
+				encoding: 'utf8',
+				input: '{"session_id":"base","tool_input":{"file_path":"styles/a.css"}}',
+				env: env({ CLAUDE_PLUGIN_DATA: pluginData, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+				stdio: ['pipe', 'pipe', 'pipe'],
+			});
+		} catch (err) {
+			const f = execFailure(err);
+			throw new Error(`hook did not honor the baseline \u2014 exit ${f.status}:\n${f.stderr}`);
+		}
 		assert(!/blocking/i.test(out), `hook did not honor the baseline:\n${out}`);
 	} finally {
 		cleanup(root);
@@ -289,7 +313,7 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
 			input: '{"session_id":"off","tool_input":{"file_path":"styles/a.css"}}',
-			env: { ...process.env, LOUPE_OFF: '1', CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+			env: env({ LOUPE_OFF: '1', CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 		assert(out === '', `expected no output, got: ${out}`);

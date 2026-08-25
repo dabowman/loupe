@@ -82,10 +82,13 @@ terminals, symlink it somewhere on your `PATH`:
 ln -s "$HOME/.claude/plugins/<marketplace>/loupe/bin/loupe" ~/.local/bin/loupe
 ```
 
-It runs against whatever directory you are in and adds nothing to that project:
-the engine carries its own dependencies and writes nothing into your repo. It
-also passes the shipped pattern and component registries unless you name your
-own with `--patterns`/`--components`.
+It runs against whatever directory you are in and needs nothing added to that
+project: the engine carries its own dependencies, so there is no config file to
+commit and nothing to install. The two files it can write are both something you
+asked for — `loupe baseline` records `.loupe-baseline.json`, and a hook run
+outside a plugin keeps its retry counter in `.loupe/` — and neither appears
+unless you run the thing that writes it. It also passes the shipped pattern and
+component registries unless you name your own with `--patterns`/`--components`.
 
 Pure analysis — it never edits. Fixing is `loupe-remediation`'s job, because the
 fixes need judgment that a codemod does not have.
@@ -338,8 +341,17 @@ does not resurrect the whole file.
 The baseline is written to `.loupe-baseline.json` in the project and is meant to
 be committed: it is a statement about this repo, and the CLI and the hook are
 different processes that have to read the same file. Set `baseline` in the
-config to move it. Only the hook's retry counter lives in the plugin's data
-directory, keyed by project. `status` prints both locations.
+config, or pass `--baseline <path>`, to move it. The hook's retry counter is the
+one piece of state that does not live in the project — under a plugin it goes to
+the plugin's data directory keyed by project, and only when there is no such
+directory (plain `npx`, CI) does it fall back to `.loupe/` in the repo.
+`status` prints both locations.
+
+A baseline recorded by 0.1.x sits in one of those state directories instead.
+It is still read, and `status` marks it as a legacy location — run `loupe
+baseline` once to move it into the project, because the plugin-data copy is only
+visible to a process that has `CLAUDE_PLUGIN_DATA` set, which a terminal does
+not.
 
 ### Turning it off for a session
 
@@ -351,6 +363,11 @@ The hook says nothing — not advisory, silent. Advisory mode does not solve thi
 an advisory finding still lands in the agent's context, and an agent that sees a
 finding starts fixing it, which is usually the thing you were trying to avoid.
 `loupe` typed by hand still reports normally; the switch is only for the hook.
+
+`1`, `true`, `yes` and `on` all turn it on, case-insensitively. Anything else
+leaves the hook running — `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence it,
+they read as a value that isn't "on". `loupe status` prints a `hook: OFF` line
+when the switch has actually taken.
 
 ## Remediation
 

@@ -22,7 +22,7 @@ import type { RegistrySource } from './profiles.ts';
 import { baselinePath, findExistingBaseline, isPluginContext, stateDir } from './paths.ts';
 import { RULE_IDS } from './rules.ts';
 import {
-	bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot,
+	bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot, hookSilenced,
 	parsePayload, payloadFile, readStdin, resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
@@ -110,6 +110,8 @@ Options:
   --format <f>          agent | json | sarif        (default: agent)
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn — minimum severity to report
+  --baseline <path>     Read/write the baseline here instead of the configured
+                        path (default: .loupe-baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
   --force               Overwrite an existing config (init)
@@ -125,6 +127,8 @@ Options:
 Environment:
   LOUPE_OFF=1           Silence the hook for this session; 'loupe' typed by hand
                         still reports. Start Claude Code as 'LOUPE_OFF=1 claude'.
+                        1/true/yes/on turn it on; anything else — 0 and false
+                        included — leaves the hook running.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
@@ -183,6 +187,18 @@ async function main(): Promise<number> {
 	}
 
 	const isHook = command === 'hook';
+
+	// Read the payload before anything can return.
+	//
+	// Claude Code writes it to this process's stdin, and a hook that exits
+	// without draining leaves the writer holding a pipe nobody is reading: once
+	// the payload outgrows the pipe buffer — which a Write of a large file does,
+	// since `tool_input.content` carries the whole file — the write fails with
+	// EPIPE instead of completing. Every early return below is downstream of
+	// this line for that reason, the off switch most of all: silencing the gate
+	// must not turn every large write into a broken pipe.
+	const payload: HookPayload = isHook ? parsePayload(await readStdin()) : {};
+
 	// Per-session off switch: `LOUPE_OFF=1 claude`.
 	//
 	// Silence, not advisory mode. An advisory finding still lands in the agent's
@@ -190,7 +206,7 @@ async function main(): Promise<number> {
 	// whole complaint. The only way to work on something else is for the gate to
 	// say nothing at all. Deliberately hook-only: `loupe check` typed by hand is
 	// someone asking, and answering "nothing" would be a lie.
-	if (isHook && /^(1|true|yes|on)$/i.test(process.env.LOUPE_OFF ?? '')) return EXIT.OK;
+	if (isHook && hookSilenced()) return EXIT.OK;
 
 	const root = resolve(args.flags.root ?? (isHook ? hookRoot() : process.cwd()));
 	if (!existsSync(root)) {
@@ -312,7 +328,20 @@ async function main(): Promise<number> {
 			`config:     ${src}`,
 			`namespaces: ${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
 			`suppress:   ${config.suppression.keyword} <ruleId> -- <reason>`,
-			`baseline:   ${base.path}${existsSync(base.path) ? '' : '  (none recorded yet)'}`,
+			// A legacy hit has to say so. `loupe baseline` writes the canonical path,
+			// so an unmarked legacy path here is `status` and `baseline` naming
+			// different files with nothing on hand to reconcile them — the exact
+			// shape of the bug that pinned the baseline to the project in the first
+			// place.
+			`baseline:   ${base.path}${
+				base.found && readBaseline(root, base.path) === null
+					? '  (unreadable \u2014 every finding in it is live again)'
+					: base.legacy
+						? "  (legacy location — run 'loupe baseline' to move it into the project)"
+						: base.found
+							? ''
+							: '  (none recorded yet)'
+			}`,
 			`state:      ${state.dir}${state.scope === 'plugin-data' ? '  (retry counter only, outside your repo)' : ''}`,
 			`options:    ${
 				optionsSource === 'environment'
@@ -322,7 +351,10 @@ async function main(): Promise<number> {
 						: 'none found — plugin defaults apply'
 			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
 			`plugin:     ${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
-			...(process.env.LOUPE_OFF ? ['hook:       OFF for this session (LOUPE_OFF is set)'] : []),
+			// Asked through the same predicate the gate uses. Reporting on mere
+			// truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
+			// blocking — a diagnostic lying about the one thing it exists to say.
+			...(hookSilenced() ? ['hook:       OFF for this session (LOUPE_OFF is set)'] : []),
 			// Which design system's registries are in play, and — when none are —
 			// which ones were on offer. "No composite findings" and "no composite
 			// registry" look identical in a report; they must not look identical here.
@@ -406,7 +438,11 @@ async function main(): Promise<number> {
 	// the hook is a different process with a different environment.
 	if (command === 'baseline') {
 		const result = await analyze(config, { scope: null });
-		const { path: target } = baselinePath(root, args.flags.baseline ?? config.baselinePath);
+		// `||`, not `??`: an empty `--baseline=` is not a path. `findExistingBaseline`
+		// reads it as "unnamed" and falls through to the configured path, so a
+		// writer that took it as nullish-only would record the backlog somewhere
+		// the next `check` never looks.
+		const target = baselinePath(root, args.flags.baseline || config.baselinePath);
 		const { path, findings, entries } = writeBaseline(root, target, result);
 		// Nothing collapsed means nothing to reconcile, and saying the same number
 		// twice invents a distinction the reader then has to go and check.
@@ -462,9 +498,6 @@ async function main(): Promise<number> {
 	}
 
 	// ── check / hook ──────────────────────────────────────────────────────────
-	let payload: HookPayload = {};
-	if (isHook) payload = parsePayload(await readStdin());
-
 	// A PostToolUse payload names the file just written; scope to it so drift is
 	// reported at write time. Stop payloads carry no file and fall through to
 	// the changed-file scope.
@@ -488,8 +521,19 @@ async function main(): Promise<number> {
 	}
 
 	if (!args.flags['no-baseline']) {
-		const { path: bPath } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
-		result = applyBaseline(result, readBaseline(root, bPath));
+		// The lookup already stat'd it. Most projects have no baseline, and this
+		// runs on every write, so don't pay a second stat inside `readBaseline`
+		// just to be told the same thing.
+		const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+		const baseline = found ? readBaseline(root, bPath) : null;
+		// A file that is present and unparseable is not the same as no file, and
+		// treating it as one puts the whole backlog back with the gate blocking on
+		// all of it — silently, which is how this class of bug stays unfound.
+		// Conflict markers in a committed baseline are the ordinary way to get
+		// here, so name the file rather than letting it fail open in silence.
+		if (found && !baseline && !isHook)
+			process.stderr.write(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
+		result = applyBaseline(result, baseline);
 	}
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
 

@@ -273,9 +273,16 @@ invoked as, and is meant to be committed. One location is the point: `loupe
 baseline` from a shell and the Stop hook running as a plugin are different
 processes with different environments, and a backlog only one of them can see is
 a gate that blocks on findings it was told to accept. Set `baseline` in the
-config, or pass `--baseline <path>`, to put it elsewhere. Baselines written by
-earlier versions into a state directory are still read until the next `loupe
-baseline` rewrites them. `loupe status` prints the path in use.
+config, or pass `--baseline <path>`, to put it elsewhere. `loupe status` prints
+the path in use, and says so when that path is a fallback.
+
+Baselines written by earlier versions are still read: a committed
+`.loupe-baseline.json` the config has since pointed away from, then
+`.loupe/baseline.json`, then the plugin data directory. Re-run `loupe baseline`
+to move one into place — the plugin-data fallback is reachable only where
+`CLAUDE_PLUGIN_DATA` is set, so until you do, a 0.1.0 backlog recorded inside
+Claude Code is honored by the hook and invisible to `loupe check` in a
+terminal.
 
 ## Claude Code hook
 
@@ -312,6 +319,16 @@ Set `LOUPE_OFF=1` in the hook's environment to silence it for a session —
 `LOUPE_OFF=1 claude`. It produces no output at all rather than downgrading to
 advisory, because an advisory finding still reaches the agent and an agent that
 sees a finding starts fixing it. `loupe` run by hand ignores the switch.
+
+It reads the same on/off spelling as every plugin option: `1`, `true`, `yes`,
+`on`, case-insensitively. `LOUPE_OFF=0` is not one of them and leaves the hook
+running — `loupe status` prints a `hook: OFF` line only when the switch actually
+took, so the diagnostic and the gate cannot disagree.
+
+The hook still drains its stdin before it returns, silenced or not: Claude Code
+writes the payload into this process, and a `Write` of a large file carries the
+whole file body in it. Exiting without reading leaves that write on a pipe with
+no reader.
 
 ## Output
 
