@@ -23712,11 +23712,12 @@ function makeSuppressionParser({
   aliases = []
 }) {
   const heads = [keyword, ...aliases.filter((a) => a !== keyword && !blanket.includes(a))];
-  const head = `(${[...heads].sort((a, b) => b.length - a.length).map(esc).join("|")})(?![\\w-])`;
+  const alternation = (terms) => [...new Set(terms)].sort((a, b) => b.length - a.length).map(esc).join("|");
+  const head = `(${alternation(heads)})(?![\\w-])`;
   const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
-  const strict = new RegExp(`^${head}\\s+(${IDS})\\s*--\\s*(\\S.*?)(?:\\*/|-->|\\}|$)`);
-  const shaped = new RegExp(`^${head}\\s+${IDS}\\s*(?:--|\\*/|-->|\\}|$)`);
-  const prefixes = [keyword, ...blanket];
+  const strict = new RegExp(`^${head}\\s+(${IDS})\\s*--\\s*(?!\\*/|-->|\\})(\\S.*?)(?:\\*/|-->|\\}|$)`);
+  const shaped = new RegExp(`^${head}\\s*(?:${IDS}\\s*)?(?:--|\\*/|-->|\\}|$)`);
+  const written = new RegExp(`^(?:${alternation([keyword, ...blanket])})(?![\\w-])`);
   const anyHead = [...heads, ...blanket];
   return function scan(text, relPath) {
     const byLine = /* @__PURE__ */ new Map();
@@ -23727,6 +23728,7 @@ function makeSuppressionParser({
       const raw = lines[i];
       if (raw === void 0 || !anyHead.some((p) => raw.includes(p))) continue;
       const stripped = raw.replace(OPENER, "");
+      if (!anyHead.some((p) => stripped.startsWith(p))) continue;
       const line = i + 1;
       const m = stripped.match(strict);
       if (m?.[2] !== void 0 && m[3] !== void 0) {
@@ -23742,7 +23744,7 @@ function makeSuppressionParser({
           // `loupe suppressions` can name the rename and nothing else has to.
           ...used === keyword ? {} : { alias: used }
         });
-      } else if (prefixes.some((p) => stripped.startsWith(p)) || shaped.test(stripped)) {
+      } else if (written.test(stripped) || shaped.test(stripped)) {
         malformed.push({
           rule: "suppression/malformed",
           file: relPath,
@@ -25431,10 +25433,15 @@ function normalize(raw, { root: root2 }) {
   );
   const shipped = shippedVocabulary();
   const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
+  const isTerm = (v) => typeof v === "string" && v !== "";
+  const keyword = isTerm(cfg.suppression.keyword) ? cfg.suppression.keyword : DEFAULTS.suppression.keyword;
+  const blanket = Array.isArray(cfg.suppression.blanket) ? cfg.suppression.blanket.filter(isTerm) : [...DEFAULTS.suppression.blanket];
   const suppression = {
     ...cfg.suppression,
+    keyword,
+    blanket,
     aliases: [.../* @__PURE__ */ new Set([...shipped.keywords, ...declared])].filter(
-      (a) => typeof a === "string" && a !== "" && a !== cfg.suppression.keyword && !shipped.blanket.has(a)
+      (a) => isTerm(a) && a !== keyword && !shipped.blanket.has(a)
     )
   };
   const neverDead = compilePatterns(cfg.namespaces.neverDead);

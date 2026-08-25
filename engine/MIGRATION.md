@@ -8,10 +8,11 @@ working unchanged, including the `R2,R3` style ids. Renaming it — or adopting 
 preset that renames it for you — no longer costs you the directives already
 written: every keyword the shipped presets declare is read as an alias, so a
 directive in the old one still mutes and still shows up in `loupe suppressions`,
-which names the keyword it was written with beside it. Prose that merely
-mentions the old keyword stays prose, so a rename adds no findings; a line with
-a directive's shape but no reason reports as `suppression/malformed`, as it
-would in the active keyword.
+which names the keyword it was written with beside it. A comment that opens with
+the old keyword and then reads as a sentence stays prose, so a rename adds no
+findings on its own; a line carrying a directive's shape and breaking it — no
+reason, no rule ids, or a bare keyword — reports as `suppression/malformed`, as
+it would in the active keyword.
 
 ```jsonc
 // loupe.config.json — repo root

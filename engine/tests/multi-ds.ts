@@ -175,12 +175,16 @@ await check('a term one preset disables can never become a muting alias', async 
 	const name = 'zz-blanket-clash';
 	const file = join(PRESET_DIR, `${name}.json`);
 	assert(!existsSync(file), `${file} already exists — refusing to clobber it`);
-	writeFileSync(file, JSON.stringify({ extends: 'generic', suppression: { keyword: 'wpds-disable', blanket: [] } }));
+	// Written inside the try: `presets/` is the installed package, and a throw
+	// between the write and the `finally` leaves a stray preset behind that every
+	// later run — in this process and the next — silently reads its vocabulary
+	// from.
 	const root = repo({
 		'loupe.config.json': JSON.stringify({ extends: 'generic', namespaces: { project: ['acme-'] } }),
 		'styles/a.css': '/* wpds-disable tokens/hardcoded-value -- blanket under wpds */\n.acme-a { color: #826200; }\n',
 	});
 	try {
+		writeFileSync(file, JSON.stringify({ extends: 'generic', suppression: { keyword: 'wpds-disable', blanket: [] } }));
 		const r = await analyze(await loadConfig({ root }), { scope: null });
 		assert(!r.directives.length, `a blanket term must not read as a directive: ${JSON.stringify(r.directives)}`);
 		assert(

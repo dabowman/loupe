@@ -321,12 +321,28 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	// too — the guard is about the term, not about who named it — and anything
 	// that is not a non-empty string is dropped rather than interpolated into a
 	// regex.
+	//
+	// The same guard has to cover `keyword` and `blanket`. `merge` copies a
+	// non-object value from authored JSON verbatim, so the declared types are a
+	// contract with the author, not a check: `"keyword": ""` makes the parser's
+	// `startsWith`/`includes` universally true and reports every line of every
+	// file as malformed, `"keyword": 12` throws out of `esc`, and `"blanket":
+	// "ds-disable"` spreads into eleven single-character prefixes. An unusable
+	// value falls back to the default vocabulary for the same reason an
+	// unreadable preset directory does — a broken install still has to run.
 	const shipped = shippedVocabulary();
 	const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
+	const isTerm = (v: unknown): v is string => typeof v === 'string' && v !== '';
+	const keyword = isTerm(cfg.suppression.keyword) ? cfg.suppression.keyword : DEFAULTS.suppression.keyword;
+	const blanket = Array.isArray(cfg.suppression.blanket)
+		? cfg.suppression.blanket.filter(isTerm)
+		: [...DEFAULTS.suppression.blanket];
 	const suppression = {
 		...cfg.suppression,
+		keyword,
+		blanket,
 		aliases: [...new Set([...shipped.keywords, ...declared])].filter(
-			(a) => typeof a === 'string' && a !== '' && a !== cfg.suppression.keyword && !shipped.blanket.has(a),
+			(a) => isTerm(a) && a !== keyword && !shipped.blanket.has(a),
 		),
 	};
 

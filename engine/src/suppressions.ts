@@ -20,10 +20,13 @@
  * The keyword is preset-scoped, so adopting a different preset renames it. Read
  * aliases are what keep that rename from orphaning the directives already
  * written: every keyword the engine knows *mutes*, whichever one the active
- * config asks people to write. Reading is all they do — what may be reported as
- * malformed stays the active vocabulary, because a keyword nobody here writes
- * is overwhelmingly likely to appear in prose about the rename rather than in a
- * directive, and prose must not become an error.
+ * config asks people to write. What an alias does *not* widen is prose: a
+ * comment that merely opens with another preset's keyword is left alone, while
+ * one that carries a directive's shape — the keyword alone, or a reason
+ * separator, or rule ids — reports as `suppression/malformed` exactly as it
+ * would in the active keyword. Both halves are load-bearing. Prose must not
+ * become an error, and a directive someone signed off must never go silent:
+ * silence is the one outcome a written-down reason can never have.
  */
 
 import { canonicalRuleId } from './rules.ts';
@@ -53,22 +56,35 @@ export function makeSuppressionParser({
 	const heads = [keyword, ...aliases.filter((a) => a !== keyword && !blanket.includes(a))];
 	// Longest first: alternation takes the first branch that matches, so a
 	// keyword that is a prefix of another would otherwise shadow it. The
-	// boundary is what keeps `ds-allowlist` from reading as `ds-allow`.
-	const head = `(${[...heads].sort((a, b) => b.length - a.length).map(esc).join('|')})(?![\\w-])`;
+	// boundary is what stops `ds-allowlist` reading as `ds-allow` wherever the
+	// term is not already followed by mandatory whitespace — which is the
+	// malformed gate below, not `strict`.
+	const alternation = (terms: readonly string[]): string =>
+		[...new Set(terms)].sort((a, b) => b.length - a.length).map(esc).join('|');
+	const head = `(${alternation(heads)})(?![\\w-])`;
 	const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
-	const strict = new RegExp(`^${head}\\s+(${IDS})\\s*--\\s*(\\S.*?)(?:\\*/|-->|\\}|$)`);
-	// A line with a directive's *shape* — keyword, rule ids, then a reason
-	// separator or the end of the comment — that `strict` still rejected. This
-	// is the only route by which an alias can produce a finding, and the shape
-	// is what separates `ds-allow tokens/hardcoded-value` (a directive missing
-	// its reason) from `ds-allow is the old keyword, write wpds-allow` (a
-	// sentence about one). Prose that merely opens with a keyword this config
-	// does not ask for stays prose: it is a comment about the rename, and the
-	// rename must not cost a clean repo its exit code.
-	const shaped = new RegExp(`^${head}\\s+${IDS}\\s*(?:--|\\*/|-->|\\}|$)`);
-	// The malformed gate, unchanged: the vocabulary this config asks people to
-	// write, in any shape at all, plus the blanket forms it names.
-	const prefixes = [keyword, ...blanket];
+	// The reason may not be the comment terminator itself: `<kw> <ids> -- */`
+	// records `*/` as a signed-off reason and mutes, which is the missing-reason
+	// case wearing a directive's clothes. Rejecting it here drops it through to
+	// `shaped`, where it belongs.
+	const strict = new RegExp(`^${head}\\s+(${IDS})\\s*--\\s*(?!\\*/|-->|\\})(\\S.*?)(?:\\*/|-->|\\}|$)`);
+	// A line with a directive's *shape* that `strict` rejected: the keyword
+	// alone, or with rule ids, or with a reason separator and nothing usable
+	// after it. This is the only route by which a read alias can produce a
+	// finding, and the shape is what separates `ds-allow tokens/hardcoded-value`
+	// and `ds-allow -- Stack exposes no padding` (directives someone wrote and
+	// broke) from `ds-allow is the old keyword, write wpds-allow` (a sentence
+	// about one). Prose that merely opens with a keyword this config does not
+	// ask for stays prose — the rename must not cost a clean repo its exit code
+	// — but a broken directive must not go silent either, which is what happens
+	// when the shape gate is narrower than the grammar it guards.
+	const shaped = new RegExp(`^${head}\\s*(?:${IDS}\\s*)?(?:--|\\*/|-->|\\}|$)`);
+	// The malformed gate: the vocabulary this config asks people to write, in
+	// any shape at all, plus the blanket forms it names. A regex rather than
+	// `startsWith` so it carries the same word boundary the heads do —
+	// `ds-allowlist` and `ds-disabled` are other words, not this one written
+	// badly, and `suppression/malformed` is an error in every preset.
+	const written = new RegExp(`^(?:${alternation([keyword, ...blanket])})(?![\\w-])`);
 	// The cheap whole-line filter — everything that could reach either gate.
 	const anyHead = [...heads, ...blanket];
 
@@ -81,6 +97,10 @@ export function makeSuppressionParser({
 			const raw = lines[i];
 			if (raw === undefined || !anyHead.some((p) => raw.includes(p))) continue;
 			const stripped = raw.replace(OPENER, '');
+			// Every gate below is `^`-anchored on a member of `anyHead`, so this
+			// is output-identical and keeps prose that merely mentions a keyword
+			// from paying for a regex pass.
+			if (!anyHead.some((p) => stripped.startsWith(p))) continue; // prose, not a directive
 			const line = i + 1;
 			const m = stripped.match(strict);
 			if (m?.[2] !== undefined && m[3] !== undefined) {
@@ -96,7 +116,7 @@ export function makeSuppressionParser({
 					// `loupe suppressions` can name the rename and nothing else has to.
 					...(used === keyword ? {} : { alias: used }),
 				});
-			} else if (prefixes.some((p) => stripped.startsWith(p)) || shaped.test(stripped)) {
+			} else if (written.test(stripped) || shaped.test(stripped)) {
 				malformed.push({
 					rule: 'suppression/malformed',
 					file: relPath,
