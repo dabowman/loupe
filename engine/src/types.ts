@@ -508,7 +508,15 @@ export interface DiscoveredFile {
 	rel: string;
 }
 
-export type Discovered = Record<SourceKind, DiscoveredFile[]>;
+/**
+ * What one walk turned up.
+ *
+ * `truncated` is the walk saying it stopped rather than finished. A caller that
+ * handed `discover` a file ceiling gets back a prefix of the tree, not the
+ * tree, and a conclusion drawn from a prefix must not be reported as though the
+ * whole project had been read.
+ */
+export type Discovered = Record<SourceKind, DiscoveredFile[]> & { truncated: boolean };
 
 // ── state ───────────────────────────────────────────────────────────────────
 

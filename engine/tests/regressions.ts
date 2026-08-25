@@ -5,6 +5,11 @@
  * Each of these was a silent failure — the gate reported "clean", or reported a
  * finding against code the project owns, or never finished at all. None of them
  * surfaced as an error, which is why they need a test rather than a code review.
+ *
+ * The last few are the edges of the guard that fixed the walk: they passed
+ * before it existed, and the point of writing them down is that they still do.
+ * A guard against a gate that never finishes becomes a gate that never runs the
+ * moment its idea of "project" is narrower than the engine's own.
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -170,18 +175,25 @@ await check('--files accepts an absolute path', () => {
 // the hook is exit 2 — blocking every turn in every project, with nothing the
 // agent could do about it.
 await check('a config error never blocks a turn', () => {
-	const root = tmpRepo({ 'src/App.jsx': 'export const App = () => <div />;' });
+	// A manifest, so the run gets past the project-shape guard and reaches the
+	// config error this is about: the `preset` plugin option is set once for
+	// every project its owner opens, so it is not itself evidence of a project.
+	const root = tmpRepo({ 'package.json': '{}', 'src/App.jsx': 'export const App = () => <div />;' });
+	let out: string;
 	try {
-		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+		out = execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
 			input: '{"session_id":"x","tool_input":{"file_path":"src/App.jsx"}}',
 			env: { ...process.env, CLAUDE_PLUGIN_OPTION_PRESET: 'no-such-preset' },
 		});
-		const parsed = JSON.parse(out) as { systemMessage?: string };
-		assert(parsed.systemMessage?.includes('config error'), `unexpected output: ${out}`);
 	} catch (err) {
 		const f = execFailure(err);
+		cleanup(root);
 		throw new Error(`hook exited non-zero on a config error: ${f.status} ${f.stderr}`);
+	}
+	try {
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(parsed.systemMessage?.includes('config error'), `unexpected output: ${out}`);
 	} finally {
 		cleanup(root);
 	}
@@ -819,6 +831,38 @@ await check('the comment terminator is not a reason', async () => {
 	}
 });
 
+// Config inference walked the whole tree before the guard that decides the root
+// is not a project ran at all. `hookRoot()` falls back to the process cwd when
+// CLAUDE_PROJECT_DIR is unset, so a root that is neither a package nor a
+// worktree — a home directory, most often — was indexed in full on the way to
+// standing aside, on every edit. One such call blew past the 120s Stop timeout
+// and had to be killed by hand.
+await check('the hook stands aside on a non-project root instead of indexing it', () => {
+	const root = tmpRepo({
+		'src/App.jsx': 'export const App = () => <div className="acme-a" />;',
+		'style.css': '.acme-a { margin-bottom: 16px; }',
+	});
+	try {
+		let out: string;
+		try {
+			out = execFileSync('node', [CLI, 'hook', '--root', root], {
+				encoding: 'utf8',
+				input: '{"session_id":"np","tool_input":{"file_path":"style.css"}}',
+			});
+		} catch (err) {
+			const f = execFailure(err);
+			throw new Error(`hook exited non-zero on a non-project root: ${f.status} ${f.stderr}`);
+		}
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			parsed.systemMessage?.includes('not a git worktree'),
+			`the hook analyzed a root that is not a project: ${out}`
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `init` writes a file that outlives the run, and it recomputes detection when
 // the run did not do it. A --profile that skipped detection therefore wrote a
 // config with the wrong namespaces into someone's repo — the one failure here
@@ -834,6 +878,24 @@ await check('init under a profile writes the profile preset and the real prefixe
 		const cfg = written as { extends?: string; namespaces?: { project?: string[] } };
 		assert(cfg.extends === 'wpds', `init recorded the wrong preset: ${JSON.stringify(written)}`);
 		assert(cfg.namespaces?.project?.join(',') === 'wf-', `init recorded the wrong namespaces: ${JSON.stringify(written)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The edges of that guard, every one of them cheaper to get wrong than to
+// notice, because `suppressOutput` means a hook that stands aside says so where
+// nobody is reading.
+//
+// The flags first. `--all` and `--files` name their own scope and never ask git
+// anything, so they have always worked outside a worktree — and a guard that
+// took those with it would be a worse bug than the one it fixed.
+await check('--all still runs where there is no worktree and no manifest', () => {
+	const root = tmpRepo({ 'style.css': '.acme-a { margin-bottom: 16px; }' });
+	try {
+		const out = execFileSync('node', [CLI, 'check', '--all', '--root', root, '--format', 'json'], { encoding: 'utf8' });
+		const parsed = JSON.parse(out) as { summary: { total: number } };
+		assert(parsed.summary.total > 0, `--all reported nothing outside a worktree:\n${out}`);
 	} finally {
 		cleanup(root);
 	}
@@ -908,6 +970,30 @@ await check('an unusable suppression keyword falls back rather than flooding', a
 		assert(
 			!r.findings.some((f) => f.rule === 'suppression/malformed'),
 			`ordinary lines reported as malformed: ${JSON.stringify(r.findings.map((f) => `${f.rule}:${f.line}`))}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// And the refusal itself is a contract: exit 2, and wording that tells you the
+// two flags that would have worked.
+await check('--changed outside a worktree still refuses with exit 2', () => {
+	// A manifest, so the project-shape guard passes and the refusal under test
+	// is the one the changed-file scope raises. Without it this passed on the
+	// guard's copy of the message and stopped covering `resolveScope` at all —
+	// which is the whole reason both say it through one constant.
+	const root = tmpRepo({ 'package.json': '{}', 'style.css': '.acme-a { margin-bottom: 16px; }' });
+	try {
+		execFileSync('node', [CLI, 'check', '--changed', '--root', root], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+		throw new Error('check --changed exited 0 outside a worktree');
+	} catch (err) {
+		const f = execFailure(err);
+		if (f.message.includes('exited 0 outside a worktree')) throw err;
+		assert(f.status === 2, `expected exit 2, got ${f.status}`);
+		assert(
+			f.stderr.includes('not a git worktree; use --all or --files'),
+			`the refusal changed wording: ${f.stderr}`
 		);
 	} finally {
 		cleanup(root);
@@ -1041,6 +1127,149 @@ await check('the shim still supplies its profiles directory under --profile', ()
 		const stdout = r.stdout ?? '';
 		assert(/profile:\s+wpds/.test(stdout), `the shim did not reach the shipped profile:\n${stdout}`);
 		assert(/suppress:\s+wpds-allow/.test(stdout), `the profile's preset never applied:\n${stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A deployed block theme in wp-content/themes/ has a theme.json and a
+// templates/ directory, and routinely has neither a package.json nor a .git —
+// while `loupe detect` identifies it as wordpress-block-theme at high
+// confidence. A guard whose idea of "project" is narrower than the engine's own
+// refuses to gate a directory this same binary confidently recognises.
+await check('a block theme with no manifest and no worktree is still gated', () => {
+	const root = tmpRepo({
+		'theme.json': '{"version":3}',
+		'templates/index.html': '<div class="ridge-hero"></div>',
+		'style.css': '.ridge-hero { margin-bottom: 16px; }',
+	});
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"bt","tool_input":{"file_path":"style.css"}}',
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			!parsed.systemMessage?.includes('not a git worktree'),
+			`the gate stood aside on a theme it detects at high confidence: ${out}`
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `git rev-parse` exits 128 on a dubious-ownership mount — the normal state
+// inside a container — and on a machine with no git binary it does not run at
+// all. Neither is evidence that a repo is not a repo, so the guard reads `.git`
+// off the filesystem before it asks git anything.
+await check('a repo git refuses to answer about is still gated', () => {
+	const root = tmpRepo({
+		'.git': 'gitdir: /nowhere/that/exists\n',
+		'src/App.jsx': 'export const App = () => <div className="acme-a" />;',
+		'style.css': '.acme-a { margin-bottom: 16px; }',
+	});
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"dg","tool_input":{"file_path":"style.css"}}',
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			!parsed.systemMessage?.includes('not a git worktree'),
+			`git declining to answer was read as "no project": ${out}`
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A classic WordPress theme or plugin is PHP, CSS and nothing else: no npm, no
+// `theme.json`, and routinely not in git. It is also most of what this plugin
+// is pointed at, so a guard whose only manifest is `package.json` turned the
+// gate off for the audience — silently, because `suppressOutput` hides the
+// message that says so.
+await check('a composer-only project with no worktree is still gated', () => {
+	const root = tmpRepo({
+		'composer.json': '{"name":"acme/plugin"}',
+		'tpl.php': '<?php ?><div class="acme-a"></div>',
+		'style.css': '.acme-a { margin-bottom: 16px; }',
+	});
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"cj","tool_input":{"file_path":"style.css"}}',
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(!parsed.systemMessage?.includes('not a git worktree'), `the gate stood aside on a PHP project: ${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The `.git` fallback exists for the case where git will not answer — a
+// dubious-ownership mount, the normal state inside a container. Probed only at
+// the root it covered the top of a repo and nothing else, so the subdirectory
+// `isWorktree` was added to catch was exactly the case left with no answer.
+await check('a repo subdirectory git refuses to answer about is still gated', () => {
+	const root = tmpRepo({
+		'.git': 'gitdir: /nowhere/that/exists\n',
+		'packages/ui/App.jsx': 'export const App = () => <div className="acme-a" />;',
+		'packages/ui/style.css': '.acme-a { margin-bottom: 16px; }',
+	});
+	// A `git` that exits non-zero without answering, ahead of any real one.
+	const bin = join(root, '.stub-bin');
+	mkdirSync(bin, { recursive: true });
+	writeFileSync(join(bin, 'git'), '#!/bin/sh\nexit 128\n', { mode: 0o755 });
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', join(root, 'packages', 'ui')], {
+			encoding: 'utf8',
+			input: '{"session_id":"sd","tool_input":{"file_path":"style.css"}}',
+			env: { ...process.env, PATH: `${bin}:${process.env['PATH'] ?? ''}` },
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			!parsed.systemMessage?.includes('not a git worktree'),
+			`git declining to answer about a subdirectory was read as "no project": ${out}`
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The `preset` plugin option is set once, for every project its owner ever
+// opens. Treating it as somebody stating that *this* directory is a project
+// switched the guard off everywhere for anyone who had pinned one — and with a
+// valid preset the run is not even advisory, so it walked an unchosen root and
+// then blocked the turn.
+await check('a pinned plugin preset does not vouch for a non-project root', () => {
+	const root = tmpRepo({ 'style.css': '.acme-a { margin-bottom: 16px; }' });
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"pp","tool_input":{"file_path":"style.css"}}',
+			env: { ...process.env, CLAUDE_PLUGIN_OPTION_PRESET: 'wpds', CLAUDE_PLUGIN_OPTION_BLOCKING: '1' },
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			parsed.systemMessage?.includes('not a git worktree'),
+			`a user-wide preset let the gate index a non-project root: ${out}`
+		);
+	} catch (err) {
+		const f = execFailure(err);
+		throw new Error(`the hook blocked a turn on a non-project root: ${f.status} ${f.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `--changed` is a scope only on the commands that resolve one. `detect
+// --changed` ignores the flag, so a guard firing on the flag alone invents a
+// refusal that run would never have got.
+await check('--changed on a command that ignores it does not refuse', () => {
+	const root = tmpRepo({ 'style.css': '.acme-a { margin-bottom: 16px; }' });
+	try {
+		const out = execFileSync('node', [CLI, 'detect', '--changed', '--root', root], { encoding: 'utf8' });
+		assert(/preset:/.test(out), `detect --changed stopped answering:\n${out}`);
 	} finally {
 		cleanup(root);
 	}
