@@ -26466,7 +26466,7 @@ Wrote ${target}
     const result2 = await analyze(config, { scope: null });
     const { path: target } = baselinePath(root2, args.flags.baseline ?? config.baselinePath);
     const { path, findings, entries } = writeBaseline(root2, target, result2);
-    const recorded = findings === entries ? `${findings} finding(s)` : `${findings} finding(s) as ${entries} entries`;
+    const recorded = findings === entries ? `${findings} finding(s)` : `${findings} finding(s) as ${entries} ${entries === 1 ? "entry" : "entries"}`;
     process.stdout.write(`loupe: baselined ${recorded} \u2192 ${path}
 `);
     return EXIT.OK;

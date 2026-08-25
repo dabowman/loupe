@@ -39,11 +39,12 @@ export function readBaseline(root: string, path: string): Baseline | null {
 /**
  * Record the backlog.
  *
- * Both counts come back because they are different numbers: a file that repeats
- * a declaration collapses several findings into one entry, and `check` reports
- * the findings it hid, not the entries that hid them. Returning only the
- * entries left the caller labelling them as findings and the two commands
- * disagreeing with nothing to reconcile them against.
+ * Both counts come back because they are different numbers: several findings
+ * collapse into one entry whenever they share a key — the same declaration on
+ * two selectors, the same code on two lines — and `check` reports the findings
+ * it hid, not the entries that hid them. Returning only the entries left the
+ * caller labelling them as findings and the two commands disagreeing with
+ * nothing to reconcile them against.
  */
 export function writeBaseline(
 	root: string,
