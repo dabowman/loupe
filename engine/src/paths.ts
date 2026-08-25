@@ -57,15 +57,28 @@ export function stateDir(
 	{ create = false }: { create?: boolean } = {},
 ): { dir: string | null; scope: StateScope } {
 	const data = pluginDataDir();
+	const project = join(root, '.loupe');
 	if (data) {
 		const dir = join(data, 'projects', projectKey(root));
-		if (!create) return { dir, scope: 'plugin-data' };
-		const made = ensureDir(dir);
-		if (made) return { dir: made, scope: 'plugin-data' };
+		if (create) {
+			const made = ensureDir(dir);
+			if (made) return { dir: made, scope: 'plugin-data' };
+		} else if (existsSync(dir) || !existsSync(project)) {
+			// The state is there, or nothing has been written anywhere yet — in
+			// which case name where a writer would try first, so `status` reports
+			// the location rather than a directory that will never appear.
+			return { dir, scope: 'plugin-data' };
+		}
+		// Falls through: the plugin-data directory does not exist but a project one
+		// does, which is exactly what a writer that could not create the former
+		// leaves behind. Returning the plugin-data path here regardless was the
+		// bug — readers looked somewhere the writer had already given up on, so
+		// the retry counter was written to one file and read from another, every
+		// bump started from zero, and the gate blocked at "attempt 1 of 3" forever
+		// instead of ever standing down.
 	}
-	const dir = join(root, '.loupe');
-	if (!create) return { dir, scope: 'project' };
-	const made = ensureDir(dir);
+	if (!create) return { dir: project, scope: 'project' };
+	const made = ensureDir(project);
 	return made ? { dir: made, scope: 'project' } : { dir: null, scope: 'none' };
 }
 

@@ -8,7 +8,7 @@
  */
 
 import { existsSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { analyze } from './analyze.ts';
 import { applyTokenFixes } from './autofix.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
@@ -122,7 +122,8 @@ Options:
                         this project's imports supply their registries
   --profile <id>        Use this profile regardless of what the project imports
   --config <path>       Explicit config file
-  --root <path>         Project root (default: cwd, or CLAUDE_PROJECT_DIR under hook)
+  --root <path>         Project root (default: the directory holding the config
+                        that governs the cwd, or CLAUDE_PROJECT_DIR under hook)
 
 Environment:
   LOUPE_OFF=1           Silence the hook for this session; 'loupe' typed by hand
@@ -208,7 +209,20 @@ async function main(): Promise<number> {
 	// someone asking, and answering "nothing" would be a lie.
 	if (isHook && hookSilenced()) return EXIT.OK;
 
-	const root = resolve(args.flags.root ?? (isHook ? hookRoot() : process.cwd()));
+	// The project, not the directory you happen to be standing in.
+	//
+	// The hook roots at CLAUDE_PROJECT_DIR; a typed command used to root at the
+	// cwd, so the same repo had two roots and everything keyed off one of them
+	// disagreed. `loupe baseline` in `packages/app` of a monorepo wrote
+	// `packages/app/.loupe-baseline.json` with subdirectory-relative keys, and
+	// the hook — rooted at the repo — never read it and blocked on the findings
+	// that had just been accepted. Anchoring to the config the run is actually
+	// governed by makes the two agree, because it is the same config file the
+	// hook resolves. `--root` still overrides, for the case where someone means
+	// the subdirectory.
+	const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
+	const anchor = explicitRoot ? null : findConfig(resolve(process.cwd()));
+	const root = resolve(explicitRoot ?? (anchor ? dirname(anchor) : process.cwd()));
 	if (!existsSync(root)) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root}`);
 		process.stderr.write(`loupe: root does not exist: ${root}\n`);
@@ -222,13 +236,28 @@ async function main(): Promise<number> {
 	let config: Config;
 	let detected: DetectedConfig | null = null;
 	try {
-		// An explicit path or preset wins; then a discovered project config; then
-		// whatever the project itself implies. Without the last step a project
-		// with no config file fell through to `generic`, which declares no
-		// component layer and therefore silently disables every correlation rule.
-		const explicitPreset =
-			args.flags.preset ?? (options.preset && options.preset !== 'auto' ? options.preset : null);
-		if (!args.flags.config && !explicitPreset && !findConfig(root)) {
+		// An explicit path or a typed `--preset` wins; then a discovered project
+		// config; then the plugin's preset setting; then whatever the project
+		// itself implies. Without the last step a project with no config file
+		// fell through to `generic`, which declares no component layer and
+		// therefore silently disables every correlation rule.
+		//
+		// The plugin setting sits *below* the project config on purpose. Both the
+		// README and the option's own description promise "a project's own
+		// loupe.config.json always wins", and it did not: the setting reaches the
+		// hook through the environment and a terminal only through a best-guess
+		// read of ~/.claude/settings.json, so the two sides loaded different
+		// configs — different severities, a different suppression keyword, and
+		// therefore different finding keys, which means a baseline recorded on one
+		// side matched nothing on the other. A setting that names a default for
+		// projects that have not written a config is useful; one that quietly
+		// discards a config they did write is the split this branch exists to end.
+		// `--preset`, typed at the moment of use, is a different thing and still
+		// wins.
+		const projectConfig = args.flags.config ? null : findConfig(root);
+		const optionPreset = options.preset && options.preset !== 'auto' ? options.preset : null;
+		const explicitPreset = args.flags.preset ?? (projectConfig ? null : optionPreset);
+		if (!args.flags.config && !explicitPreset && !projectConfig) {
 			detected = detectConfig(root);
 			if (options.projectPrefixes?.length)
 				detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
@@ -571,8 +600,21 @@ async function main(): Promise<number> {
 			return emitClean('loupe: blocking findings remain (retry budget unavailable).');
 		}
 		if (attempts > max) {
-			clearAttempts(root, touched ? `${sessionId}\u0000${touched}` : sessionId);
-			return emitClean(`loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}`);
+			// Latched, not cleared. Clearing the counter here reset the budget, so
+			// "gate stood down" lasted exactly one turn: the next fire blocked at
+			// attempt 1 of 3 again, and an agent that could not fix a finding was
+			// stopped in perpetual bursts of three for the rest of the session.
+			// Leaving the count above `max` keeps the stand-down standing; the
+			// clean-run branch above still releases it the moment the finding goes,
+			// and `readState` ages the entry out after MAX_AGE_MS either way.
+			//
+			// Say it once. Repeating the stand-down line every fire is the same
+			// nagging the stand-down exists to end.
+			return emitClean(
+				attempts === max + 1
+					? `loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}`
+					: formatSummary(result)
+			);
 		}
 		const report = formatAgent({ ...result, findings: result.findings.filter((f) => f.severity === 'error') }, config, {
 			maxFindings: config.hook.maxFindings,

@@ -556,4 +556,216 @@ await check('an older baseline location is honored and named for what it is', ()
 	}
 });
 
+// The stand-down is the gate's promise that it will stop nagging. Clearing the
+// counter to mark it reset the budget instead of latching it, so "gate stood
+// down" lasted exactly one turn and the next fire blocked at attempt 1 of 3 —
+// an agent that cannot fix a finding stopped in perpetual bursts of three.
+await check('a gate that stood down stays down until the finding goes', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '/* ds-disable */\n.a { color: #f00; }',
+	});
+	const fire = (): number => {
+		try {
+			execFileSync('node', [CLI, 'hook', '--root', root], {
+				encoding: 'utf8',
+				input: '{"session_id":"stand","tool_input":{"file_path":"styles/a.css"}}',
+				env: env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+				stdio: ['pipe', 'pipe', 'pipe'],
+			});
+			return 0;
+		} catch (err) {
+			return execFailure(err).status ?? -1;
+		}
+	};
+	try {
+		// The budget, spent.
+		for (let i = 1; i <= 3; i++) assert(fire() === 2, `attempt ${i} should have blocked`);
+		assert(fire() === 0, 'the gate did not stand down after its budget');
+
+		// And it stays spent. This is the whole point: three more fires, all quiet.
+		for (let i = 1; i <= 3; i++) assert(fire() === 0, `the gate blocked again after standing down (fire ${i})`);
+
+		// Fixing the finding releases the latch — a stand-down is not a permanent
+		// off switch, or the next real regression in this session goes unreported.
+		writeFileSync(join(root, 'styles', 'a.css'), '.a { color: var(--wp-admin-theme-color); }');
+		assert(fire() === 0, 'a clean run should pass');
+		writeFileSync(join(root, 'styles', 'a.css'), '/* ds-disable */\n.a { color: #f00; }');
+		assert(fire() === 2, 'the gate stayed down after the finding was fixed and reintroduced');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `--changed` is the hook's default scope. `git diff --name-only` answers from
+// the repository root while `ls-files` answers from the cwd, so a project rooted
+// in a subdirectory of the worktree built a scope Set in two coordinate systems
+// and nothing in it ever matched a finding — the gate reported clean without
+// checking anything.
+await check('--changed finds a modified file when the project is a git subdirectory', () => {
+	const repo = scratch('dsh-mono-');
+	const app = join(repo, 'packages', 'app');
+	const gitIn = (dir: string, args: string[]): void => {
+		execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'ignore', 'ignore'] });
+	};
+	try {
+		writeAll(app, {
+			'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+			'styles/a.css': '.a { color: red; }',
+		});
+		gitIn(repo, ['init']);
+		gitIn(repo, ['config', 'user.email', 't@t']);
+		gitIn(repo, ['config', 'user.name', 't']);
+		gitIn(repo, ['add', '-A']);
+		gitIn(repo, ['commit', '-m', 'init']);
+		writeFileSync(join(app, 'styles', 'a.css'), '/* ds-disable */\n.a { color: #f00; }');
+
+		const changed = (() => {
+			try {
+				return execFileSync('node', [CLI, 'check', '--changed', '--root', app], {
+					encoding: 'utf8',
+					env: env(),
+					stdio: ['pipe', 'pipe', 'pipe'],
+				});
+			} catch (err) {
+				return execFailure(err).stdout;
+			}
+		})();
+		assert(/suppression\/malformed/.test(changed), `--changed missed a modified file in a subdirectory:\n${changed}`);
+	} finally {
+		cleanup(repo);
+	}
+});
+
+// One repo, one root. The hook roots at CLAUDE_PROJECT_DIR; a typed command
+// rooted at the cwd, so `loupe baseline` in a subdirectory wrote a file with
+// subdirectory-relative keys that the hook never read — and the gate blocked on
+// the findings that had just been accepted.
+await check('a baseline recorded from a subdirectory is the one the hook reads', () => {
+	const repo = scratch('dsh-anchor-');
+	const app = join(repo, 'packages', 'app');
+	try {
+		mkdirSync(app, { recursive: true });
+		writeAll(repo, { 'loupe.config.json': JSON.stringify({ extends: 'wpds' }) });
+		writeAll(app, { 'styles/a.css': '/* ds-disable */\n.a { color: #f00; }' });
+
+		const recorded = execFileSync('node', [CLI, 'baseline'], { encoding: 'utf8', cwd: app, env: env() });
+		assert(
+			recorded.includes(join(repo, '.loupe-baseline.json')),
+			`baseline anchored to the cwd, not the project:\n${recorded}`
+		);
+
+		// The gate, rooted where the hook roots it, must honor what was just recorded.
+		let status = 0;
+		try {
+			execFileSync('node', [CLI, 'hook', '--root', repo], {
+				encoding: 'utf8',
+				input: '{"session_id":"anchor","tool_input":{"file_path":"packages/app/styles/a.css"}}',
+				env: env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+				stdio: ['pipe', 'pipe', 'pipe'],
+			});
+		} catch (err) {
+			status = execFailure(err).status ?? -1;
+		}
+		assert(status === 0, 'the hook blocked on findings a subdirectory run had just baselined');
+	} finally {
+		cleanup(repo);
+	}
+});
+
+// The plugin's preset setting is a default for projects that have not written a
+// config, not an override of one that has — both READMEs and the option's own
+// description say so. It reaches the hook through the environment and a terminal
+// only through a settings-file guess, so overriding meant the two sides loaded
+// different configs and produced finding keys no shared baseline could cover.
+await check("a project's own config outranks the plugin's preset setting", () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': '.acme-a { color: #f00; }',
+	});
+	try {
+		const withOption = execFileSync('node', [CLI, 'status', '--root', root], {
+			encoding: 'utf8',
+			env: env({ CLAUDE_PLUGIN_OPTION_PRESET: 'generic' }),
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		assert(
+			/config:\s+\S*loupe\.config\.json/.test(withOption),
+			`the plugin setting discarded the project's config:\n${withOption}`
+		);
+
+		// A typed `--preset` is a different thing: someone asking, at the moment of
+		// asking. It still wins.
+		const typed = execFileSync('node', [CLI, 'status', '--root', root, '--preset', 'generic'], {
+			encoding: 'utf8',
+			env: env(),
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		assert(/config:\s+preset generic/.test(typed), `--preset stopped winning:\n${typed}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The baseline is a committed file now, so it has to be stable under a re-run.
+// A fresh timestamp every time made it differ from itself, and two branches that
+// each re-baselined conflicted on line 3 with identical entry lists — producing
+// exactly the unreadable baseline the warning above exists to report.
+await check('re-recording an unchanged backlog rewrites the same bytes', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.a { color: #f00; }',
+	});
+	const file = join(root, '.loupe-baseline.json');
+	try {
+		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
+		const first = readFileSync(file, 'utf8');
+		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
+		assert(readFileSync(file, 'utf8') === first, 're-baselining an unchanged repo produced a diff');
+
+		// A real change still stamps: the timestamp says when the backlog was
+		// taken, and freezing it through an actual change would be a lie.
+		writeFileSync(join(root, 'styles', 'a.css'), '.a { color: #f00; }\n.b { margin: 3px; }');
+		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
+		assert(readFileSync(file, 'utf8') !== first, 'a changed backlog kept the old timestamp');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Readers and writers have to name the same state directory. `stateDir` handed
+// readers the plugin-data path unconditionally while writers fell back to the
+// project when it could not be created, so the retry counter was written to one
+// file and read from another: every bump started from zero and the gate blocked
+// at "attempt 1 of 3" forever instead of ever standing down.
+await check('the retry counter is read from where it was written', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '/* ds-disable */\n.a { color: #f00; }',
+	});
+	// A plugin-data path that cannot be a directory, which is what an unwritable
+	// or occupied location looks like from `ensureDir`.
+	const blocked = join(root, 'not-a-directory');
+	writeFileSync(blocked, '');
+	const fire = (): number => {
+		try {
+			execFileSync('node', [CLI, 'hook', '--root', root], {
+				encoding: 'utf8',
+				input: '{"session_id":"state","tool_input":{"file_path":"styles/a.css"}}',
+				env: env({ CLAUDE_PLUGIN_DATA: blocked, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+				stdio: ['pipe', 'pipe', 'pipe'],
+			});
+			return 0;
+		} catch (err) {
+			return execFailure(err).status ?? -1;
+		}
+	};
+	try {
+		for (let i = 1; i <= 3; i++) assert(fire() === 2, `attempt ${i} should have blocked`);
+		assert(fire() === 0, 'the counter never advanced, so the gate could not stand down');
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();

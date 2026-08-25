@@ -93,8 +93,17 @@ export function changedFiles(root: string): Set<string> | null {
 	// cover the gap: staging a file stops it being "other", so a fresh repo
 	// whose work is staged reported an empty scope and the gate passed clean.
 	// Before the first commit, every tracked file is new by definition.
+	//
+	// `--relative` is load-bearing. Findings are keyed relative to the project
+	// root, and `ls-files` is already relative to `cwd` — but `diff --name-only`
+	// answers from the *repository* root, so when the project sits in a
+	// subdirectory of the worktree the two halves of this one Set were in
+	// different coordinate systems and nothing in it ever matched a finding.
+	// `--changed` is the hook's default scope, so a gate on a monorepo package
+	// reported "clean" without checking anything. It also scopes the diff to
+	// `cwd`, which is what a root-relative Set means in the first place.
 	try {
-		add(git(['diff', '--name-only', 'HEAD']));
+		add(git(['diff', '--name-only', '--relative', 'HEAD']));
 	} catch {
 		try {
 			add(git(['ls-files', '--cached']));

@@ -20112,7 +20112,7 @@ var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
     var { existsSync: existsSync8, readFileSync: readFileSync9, realpathSync } = __require("fs");
-    var { dirname: dirname5, isAbsolute: isAbsolute7, join: join11, relative: relative4, sep: sep3 } = __require("path");
+    var { dirname: dirname6, isAbsolute: isAbsolute7, join: join11, relative: relative4, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath(path) {
       try {
@@ -20139,7 +20139,7 @@ var require_previous_map = __commonJS({
         if (!this.mapFile && opts.from) {
           this.mapFile = opts.from;
         }
-        if (this.mapFile) this.root = dirname5(this.mapFile);
+        if (this.mapFile) this.root = dirname6(this.mapFile);
         if (text) this.text = text;
       }
       consumer() {
@@ -20185,12 +20185,12 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative4(realPath(dirname5(cssFile)), realPath(path));
+          let rel = relative4(realPath(dirname6(cssFile)), realPath(path));
           if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute7(rel)) {
             return void 0;
           }
         }
-        this.root = dirname5(path);
+        this.root = dirname6(path);
         if (existsSync8(path)) {
           this.mapFile = path;
           return readFileSync9(path, "utf-8").toString().trim();
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join11(dirname5(file), map);
+          if (file) map = join11(dirname6(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname5, relative: relative4, resolve: resolve6, sep: sep3 } = __require("path");
+    var { dirname: dirname6, relative: relative4, resolve: resolve6, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL2 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname5 && resolve6 && relative4 && sep3);
+    var pathAvailable = Boolean(dirname6 && resolve6 && relative4 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20767,7 +20767,7 @@ var require_map_generator = __commonJS({
       applyPrevMaps() {
         for (let prev of this.previous()) {
           let from = this.toUrl(this.path(prev.file));
-          let root2 = prev.root || dirname5(prev.file);
+          let root2 = prev.root || dirname6(prev.file);
           let map;
           if (this.mapOpts.sourcesContent === false) {
             map = new SourceMapConsumer(prev.text);
@@ -20962,9 +20962,9 @@ var require_map_generator = __commonJS({
         if (/^\w+:\/\//.test(file)) return file;
         let cached = this.memoizedPaths.get(file);
         if (cached) return cached;
-        let from = this.opts.to ? dirname5(this.opts.to) : ".";
+        let from = this.opts.to ? dirname6(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname5(resolve6(from, this.mapOpts.annotation));
+          from = dirname6(resolve6(from, this.mapOpts.annotation));
         }
         let path = relative4(from, file);
         this.memoizedPaths.set(file, path);
@@ -23495,7 +23495,7 @@ var require_lib2 = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync7, writeFileSync as writeFileSync4 } from "node:fs";
-import { isAbsolute as isAbsolute6, join as join10, relative as relative3, resolve as resolve5 } from "node:path";
+import { dirname as dirname5, isAbsolute as isAbsolute6, join as join10, relative as relative3, resolve as resolve5 } from "node:path";
 
 // src/analyze.ts
 import { readFileSync as readFileSync2, statSync as statSync2 } from "node:fs";
@@ -23688,7 +23688,7 @@ function changedFiles(root2) {
     }
   };
   try {
-    add(git(["diff", "--name-only", "HEAD"]));
+    add(git(["diff", "--name-only", "--relative", "HEAD"]));
   } catch {
     try {
       add(git(["ls-files", "--cached"]));
@@ -25164,15 +25164,18 @@ function ensureDir(dir) {
 }
 function stateDir(root2, { create = false } = {}) {
   const data = pluginDataDir();
+  const project = join4(root2, ".loupe");
   if (data) {
-    const dir2 = join4(data, "projects", projectKey(root2));
-    if (!create) return { dir: dir2, scope: "plugin-data" };
-    const made2 = ensureDir(dir2);
-    if (made2) return { dir: made2, scope: "plugin-data" };
+    const dir = join4(data, "projects", projectKey(root2));
+    if (create) {
+      const made2 = ensureDir(dir);
+      if (made2) return { dir: made2, scope: "plugin-data" };
+    } else if (existsSync(dir) || !existsSync(project)) {
+      return { dir, scope: "plugin-data" };
+    }
   }
-  const dir = join4(root2, ".loupe");
-  if (!create) return { dir, scope: "project" };
-  const made = ensureDir(dir);
+  if (!create) return { dir: project, scope: "project" };
+  const made = ensureDir(project);
   return made ? { dir: made, scope: "project" } : { dir: null, scope: "none" };
 }
 var DEFAULT_BASELINE = ".loupe-baseline.json";
@@ -25232,9 +25235,11 @@ function writeBaseline(root2, path, result) {
   const dir = dirname(full);
   if (dir !== resolve2(root2)) ensureDir(dir);
   const entries = [...new Set(result.findings.map(findingKey))].sort();
+  const prior = readBaseline(root2, path);
+  const unchanged = prior !== null && prior.entries.length === entries.length && prior.entries.every((e, i) => e === entries[i]);
   const file = {
     version: 1,
-    createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+    createdAt: unchanged && prior.createdAt ? prior.createdAt : (/* @__PURE__ */ new Date()).toISOString(),
     count: entries.length,
     findings: result.findings.length,
     entries
@@ -26285,7 +26290,8 @@ Options:
                         this project's imports supply their registries
   --profile <id>        Use this profile regardless of what the project imports
   --config <path>       Explicit config file
-  --root <path>         Project root (default: cwd, or CLAUDE_PROJECT_DIR under hook)
+  --root <path>         Project root (default: the directory holding the config
+                        that governs the cwd, or CLAUDE_PROJECT_DIR under hook)
 
 Environment:
   LOUPE_OFF=1           Silence the hook for this session; 'loupe' typed by hand
@@ -26331,7 +26337,9 @@ async function main() {
   const isHook = command === "hook";
   const payload = isHook ? parsePayload(await readStdin()) : {};
   if (isHook && hookSilenced()) return EXIT.OK;
-  const root2 = resolve5(args.flags.root ?? (isHook ? hookRoot() : process.cwd()));
+  const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
+  const anchor = explicitRoot ? null : findConfig(resolve5(process.cwd()));
+  const root2 = resolve5(explicitRoot ?? (anchor ? dirname5(anchor) : process.cwd()));
   if (!existsSync7(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     process.stderr.write(`loupe: root does not exist: ${root2}
@@ -26342,8 +26350,10 @@ async function main() {
   let config;
   let detected = null;
   try {
-    const explicitPreset = args.flags.preset ?? (options.preset && options.preset !== "auto" ? options.preset : null);
-    if (!args.flags.config && !explicitPreset && !findConfig(root2)) {
+    const projectConfig = args.flags.config ? null : findConfig(root2);
+    const optionPreset = options.preset && options.preset !== "auto" ? options.preset : null;
+    const explicitPreset = args.flags.preset ?? (projectConfig ? null : optionPreset);
+    if (!args.flags.config && !explicitPreset && !projectConfig) {
       detected = detectConfig(root2);
       if (options.projectPrefixes?.length)
         detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
@@ -26589,8 +26599,9 @@ ${USAGE}`);
       return emitClean("loupe: blocking findings remain (retry budget unavailable).");
     }
     if (attempts > max) {
-      clearAttempts(root2, touched ? `${sessionId}\0${touched}` : sessionId);
-      return emitClean(`loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}`);
+      return emitClean(
+        attempts === max + 1 ? `loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}` : formatSummary(result)
+      );
     }
     const report = formatAgent({ ...result, findings: result.findings.filter((f) => f.severity === "error") }, config, {
       maxFindings: config.hook.maxFindings

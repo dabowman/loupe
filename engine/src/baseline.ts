@@ -81,13 +81,21 @@ export function writeBaseline(
 	const dir = dirname(full);
 	if (dir !== resolve(root)) ensureDir(dir);
 	const entries = [...new Set(result.findings.map(findingKey))].sort();
+	// Re-recording the same backlog rewrites the same bytes. A fresh timestamp on
+	// every run made this file — which the project is now asked to commit — differ
+	// from itself, so two branches that each re-baselined conflicted on line 3
+	// with identical entry lists, and a conflict-markered baseline is unreadable.
+	// The timestamp records when the backlog was taken, not when the command was.
+	const prior = readBaseline(root, path);
+	const unchanged =
+		prior !== null && prior.entries.length === entries.length && prior.entries.every((e, i) => e === entries[i]);
 	// Both numbers, for the same reason the CLI prints both: `count` is entries,
 	// and a file that reports only entries under a name a reader hears as
 	// "findings" is how 194 came to be quoted against `check`'s 253. `count`
 	// keeps its meaning so 0.1.x files still parse; `findings` says the rest.
 	const file: BaselineFile = {
 		version: 1,
-		createdAt: new Date().toISOString(),
+		createdAt: unchanged && prior.createdAt ? prior.createdAt : new Date().toISOString(),
 		count: entries.length,
 		findings: result.findings.length,
 		entries,

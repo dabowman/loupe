@@ -82,8 +82,11 @@ terminals, symlink it somewhere on your `PATH`:
 ln -s "$HOME/.claude/plugins/<marketplace>/loupe/bin/loupe" ~/.local/bin/loupe
 ```
 
-It runs against whatever directory you are in and needs nothing added to that
-project: the engine carries its own dependencies, so there is no config file to
+It runs against the project you are in — the directory holding the
+`loupe.config.json` that governs your cwd, so a command typed in
+`packages/app` and the gate running over the whole repo agree on what the
+project is and read the same baseline. Pass `--root` when you mean the
+subdirectory itself. It needs nothing added to that project: the engine carries its own dependencies, so there is no config file to
 commit and nothing to install. Nothing appears unless you run the thing that
 writes it: `loupe baseline` records `.loupe-baseline.json`, a hook run outside a
 plugin keeps its retry counter in `.loupe/`, and `loupe fix` rewrites the
@@ -368,6 +371,15 @@ already in the project, so there is nothing to move: `status` names it as the
 default-name file and says which configured path is missing. Without this
 fallback, a config change and the file move landing in separate commits would
 put every accepted finding back in between them.
+
+### When the gate stands down
+
+An agent that cannot fix a finding should not be stopped forever. After
+`maxAttempts` blocked turns on the same file in the same session the gate
+stands down, says so once, and stays quiet for the rest of that session —
+until the finding is actually fixed, which releases it. Standing down is a
+truce, not an off switch: the next regression in that session is reported
+again.
 
 ### Turning it off for a session
 
