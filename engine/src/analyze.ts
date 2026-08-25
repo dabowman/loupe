@@ -17,6 +17,7 @@ import { discover } from './discover.ts';
 import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
 import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
+import { messageLine, messageParts, oneLine, snippet } from './text.ts';
 import { SUBSTANTIAL, matches } from './patterns.ts';
 import { harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
 import {
@@ -78,6 +79,10 @@ function classifyDeclaration(
 	const styling =
 		isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
 
+	// The declaration as written. Where the rule has no coarser identity to key
+	// on, `code` carries the whole of it — only the printed message is bounded.
+	const decl = `${prop}: ${value}`;
+
 	let finding: ClassifiedFinding | null = null;
 	if (TYPE_PROPS.has(prop) && boundText[0]) {
 		finding = { rule: 'typography/in-css', message: `${prop} on <${boundText[0].tag}>` };
@@ -86,22 +91,28 @@ function classifyDeclaration(
 	} else if (isMargin) {
 		// Zero and `auto` classify as null: a reset and a centering trick,
 		// neither of which has a gap remedy to point at.
-		if (marginKind === 'negative') finding = { rule: 'layout/negative-margin', message: `${prop}: ${value}`, code: prop };
-		else if (marginKind) finding = { rule: 'layout/margin-on-child', message: `${prop}: ${value}`, code: prop };
+		if (marginKind === 'negative') finding = { rule: 'layout/negative-margin', message: decl, code: prop };
+		else if (marginKind) finding = { rule: 'layout/margin-on-child', message: decl, code: prop };
 	} else if (TYPE_PROPS.has(prop)) {
 		if (!usesToken(value) && !isInertValue(value))
-			finding = { rule: 'typography/untokenized', message: `${prop}: ${value}`, hint: { prop, value } };
+			finding = { rule: 'typography/untokenized', message: decl, code: oneLine(decl), hint: { prop, value } };
 	} else if (GAP_PROPS.has(prop)) {
 		// Skipped on a component-bound class (component-internal flex, or a class
 		// already on a layout primitive) and on a grid, neither of which is
 		// convertible to a flex primitive.
-		if (!boundSystem.length && !isGrid) finding = { rule: 'layout/in-css', message: `${prop}: ${value}`, code: prop };
+		if (!boundSystem.length && !isGrid) finding = { rule: 'layout/in-css', message: decl, code: prop };
 	} else if (isFlexish) {
 		const gridDisplay = prop === 'display' && /\bgrid\b/.test(value);
-		if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: 'layout/in-css', message: `${prop}: ${value}` };
+		if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: 'layout/in-css', message: decl, code: oneLine(decl) };
 	} else if (hardcoded) {
-		finding = { rule: 'tokens/hardcoded-value', message: `${prop}: ${value}`, hint: { prop, value } };
+		finding = { rule: 'tokens/hardcoded-value', message: decl, code: oneLine(decl), hint: { prop, value } };
 	}
+	// Deliberately unbounded here. `message` is what the dedupe below tells two
+	// findings apart by, and on the rules whose `code` is only the property
+	// (`margin-*`, `gap`) it is the ONLY thing that tells them apart — so a cap
+	// applied at capture folds two distinct declarations on one line into one
+	// finding and drops a real violation. The line is bounded once, at the end
+	// of `analyze`, after the dedupe has run.
 	return { finding, styling };
 }
 
@@ -142,7 +153,12 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 		out.push({
 			...first,
 			rule,
-			message: group.map((f) => f.message).join('; '),
+			// Bounded per contributor, so one long value cannot spend the whole
+			// line and crowd the others out of a message that is several of them.
+			// Safe to bound here where it is not at capture: a collapsed finding
+			// always carries its own `code` below, so identity does not fall back
+			// to this string.
+			message: group.map((f) => snippet(f.message)).join('; '),
 			hints: group.flatMap((f) => f.hints ?? (f.hint ? [f.hint] : [])),
 			suffix: first.suffix,
 			code: `${rule}:${props.sort().join(',')}`,
@@ -304,7 +320,7 @@ export async function analyze(
 			continue;
 		}
 
-		const emit = ({ rule, line, message, code, scopeLines = [], hint, hints }: PendingFinding): void => {
+		const emit = ({ rule, line, message, code, scopeLines = [], hint, hints, suffix }: PendingFinding): void => {
 			if (!config.enabled[rule] || !reports(rel)) return;
 			if (isSuppressed(supp.byLine, line, rule, scopeLines)) return;
 			findings.push({
@@ -316,7 +332,12 @@ export async function analyze(
 				code: code ?? message,
 				rank: RULES[rule].rank,
 				hints: hints || (hint ? [hint] : undefined),
-				suffix: undefined,
+				// Forwarded rather than blanked. Nothing in this channel sets one
+				// today, but `collapsePerRule` carries `suffix` through on purpose
+				// and it is now what keeps a message tail out of the line bound —
+				// so dropping it here would silently disarm that for whichever rule
+				// reaches for it first.
+				suffix,
 			});
 		};
 
@@ -477,6 +498,14 @@ export async function analyze(
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
 			}
+			// Held whole, not bounded here. The selector is the only thing telling
+			// two otherwise identical findings in one template apart, and it never
+			// reaches `code` — so bounding it at capture made two of them
+			// byte-identical and the dedupe folded them into one, dropping a real
+			// violation. It stays in `suffix`, which is also what carries it across
+			// the token pass's rebuild of `message`; the line bound at the end of
+			// `analyze` is where it gets shortened, from the front, so the part
+			// that distinguishes two sibling selectors is the part that survives.
 			const where = group.selector ? ` in \`${group.selector}\`` : '';
 			for (const f of collapsePerRule(pending)) {
 				if (!config.enabled[f.rule]) continue;
@@ -487,7 +516,7 @@ export async function analyze(
 					file: tpl.file,
 					line: f.line,
 					message: `${f.message}${where} (css-in-js)`,
-				suffix: `${where} (css-in-js)`,
+					suffix: `${where} (css-in-js)`,
 					code: `css-in-js:${f.code ?? f.message}`,
 					rank: RULES[f.rule].rank,
 					hints: f.hints ?? (f.hint ? [f.hint] : undefined),
@@ -563,7 +592,12 @@ export async function analyze(
 			if (!prev || c.line < prev.line) perFile.set(c.file, c);
 		}
 
-		const emitComposite = (rule: RuleId, c: Composite, message: string): void => {
+		// These two rules lead with a signature and close with the remedy, and a
+		// signature is as big as the tree it describes — a five-column card runs
+		// past the line bound on its own. The remedy goes in `tail`, which that
+		// bound is built to spare: eliding the shape still names the file count
+		// and what to do about it, where eliding the end left neither.
+		const emitComposite = (rule: RuleId, c: Composite, signature: string, tail: string): void => {
 			if (!reports(c.file)) return;
 			const supp = suppByFile.get(c.file);
 			if (supp && isSuppressed(supp.byLine, c.line, rule)) return;
@@ -572,7 +606,8 @@ export async function analyze(
 				severity: config.severityOf(rule),
 				file: c.file,
 				line: c.line,
-				message,
+				message: `${signature}${tail}`,
+				suffix: tail,
 				code: c.signature,
 				rank: RULES[rule].rank,
 			});
@@ -589,7 +624,8 @@ export async function analyze(
 				emitComposite(
 					'patterns/duplicate-composite',
 					c,
-					`${c.signature} \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`
+					c.signature,
+					` \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`
 				);
 			}
 		}
@@ -598,7 +634,7 @@ export async function analyze(
 		for (const [sig, files] of bySignature) {
 			if (files.size < 3) continue;
 			for (const c of files.values())
-				emitComposite('patterns/unregistered-composite', c, `${sig} \u2014 assembled in ${files.size} files, registered in none`);
+				emitComposite('patterns/unregistered-composite', c, sig, ` \u2014 assembled in ${files.size} files, registered in none`);
 		}
 	}
 
@@ -656,10 +692,23 @@ export async function analyze(
 // Name the replacement instead of the namespace. A finding that says
 // "13px is hardcoded — use a --wpds-* token" leaves the agent to invent one.
 for (const f of findings) {
-	if (!f.hints?.length) continue;
-	f.message =
-		f.hints.map(({ prop, value }) => `${prop}: ${value}${suggestionFor(tokenSet, prop, value)}`).join('; ') +
-		(f.suffix ?? '');
+	// An empty array is still working state, and `collapsePerRule` produces one
+	// whenever it merges a group where nothing carried a hint. Dropped here too,
+	// or `"hints": []` rides out into `--format json`.
+	if (!f.hints?.length) {
+		delete f.hints;
+		continue;
+	}
+	// Rebuilt from the hints, so each declaration goes back through `snippet` —
+	// the message the classifier bounded is being replaced, not appended to.
+	// Composed with `messageParts` rather than joined, because this is the one
+	// message that is a list: a collapsed rule carries one remedy per property,
+	// and a line bound that cuts the list mid-token loses the last remedy and
+	// every remedy after it without saying so.
+	f.message = messageParts(
+		f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
+		f.suffix ?? '',
+	);
 	// Keep the match structured as well as rendered. The prose is for a reader;
 	// an unambiguous substitution should not need a model to parse it back out
 	// of a sentence in order to apply it.
@@ -668,7 +717,8 @@ for (const f of findings) {
 		.filter((s) => s.tokens.length);
 	if (suggest.length) f.suggest = suggest;
 	delete f.hints;
-	delete f.suffix;
+	// `suffix` stays until the message is bounded below, which needs to know
+	// which part of it is the channel marker. Nothing downstream of that sees it.
 }
 
 // An empty token set means nothing was found to check against — not that every
@@ -693,17 +743,34 @@ if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
 	}
 }
 
-	for (const f of findings) delete f.suffix;
-
 	// Dedupe: nesting and multi-selector rules can legitimately reach the same
 	// declaration twice.
+	//
+	// Keyed on identity AND display, and run BEFORE the line bound below. A cap
+	// decides how a finding reads; it must not get to decide whether a finding
+	// survives, and folding on a capped message is exactly that — two distinct
+	// declarations, or two distinct selectors, alike only up to the cut would
+	// collapse into one. `code` alone would fold the other way, since on the
+	// margin and gap rules it is deliberately just the property.
 	const seen = new Set<string>();
 	const unique = findings.filter((f) => {
-		const k = `${f.rule}|${f.file}|${f.line}|${f.message}`;
+		const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ''}|${f.message}`;
 		if (seen.has(k)) return false;
 		seen.add(k);
 		return true;
 	});
+
+	// One report line per finding, bounded — once, here, because the token pass
+	// above is the last of several writers of `message`, and a cap applied
+	// before it would simply be overwritten. Each captured snippet is bounded
+	// where it was captured; this bounds what a message assembled out of
+	// several of them adds up to, keeping the channel marker on the end.
+	for (const f of unique) {
+		const tail = f.suffix ?? '';
+		const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
+		f.message = messageLine(body, tail);
+		delete f.suffix;
+	}
 
 	unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
 	directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
@@ -718,4 +785,4 @@ if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
 
 /** Stable identity for baselining: survives reformatting and unrelated edits. */
 export const findingKey = (f: Pick<Finding, 'rule' | 'file' | 'code' | 'message'>): string =>
-	`${f.rule}|${f.file}|${String(f.code ?? f.message).replace(/\s+/g, ' ').trim()}`;
+	`${f.rule}|${f.file}|${oneLine(String(f.code ?? f.message))}`;

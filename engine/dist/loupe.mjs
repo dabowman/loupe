@@ -23702,6 +23702,50 @@ function changedFiles(root2) {
   return set;
 }
 
+// src/text.ts
+var flatten = (text) => text.replace(/\s+/g, " ");
+var oneLine = (text) => flatten(text).trim();
+var clip = (text, max) => {
+  const line = oneLine(text);
+  if (max <= 0) return "";
+  if (line.length <= max) return line;
+  const chars = [...line];
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}\u2026` : line;
+};
+var head = (text, max) => text.length <= max ? text : [...text].slice(0, max).join("");
+var SNIPPET_MAX = 80;
+var snippet = (text) => clip(text, SNIPPET_MAX);
+var MESSAGE_MAX = 200;
+var TAIL_MAX = 100;
+var clipFront = (text, max) => {
+  const line = flatten(text);
+  if (line.length <= max) return line;
+  const chars = [...line];
+  return chars.length > max ? `\u2026${chars.slice(chars.length - (max - 1)).join("")}` : line;
+};
+var messageLine = (body, tail = "") => {
+  const end = clipFront(tail, TAIL_MAX);
+  return clip(body, MESSAGE_MAX - [...end].length) + end;
+};
+var JOIN = "; ";
+var messageParts = (parts, tail = "") => {
+  const budget = MESSAGE_MAX - [...clipFront(tail, TAIL_MAX)].length;
+  const pieces = parts.map(oneLine);
+  const whole = pieces.join(JOIN);
+  if ([...whole].length <= budget) return whole + tail;
+  const room = budget - ` (+${pieces.length} more)`.length;
+  const kept = [];
+  let used = 0;
+  for (const p of pieces) {
+    const cost = (kept.length ? JOIN.length : 0) + [...p].length;
+    if (kept.length && used + cost > room) break;
+    kept.push(p);
+    used += cost;
+  }
+  const dropped = pieces.length - kept.length;
+  return `${clip(kept.join(JOIN), room)}${dropped ? ` (+${dropped} more)` : ""}${tail}`;
+};
+
 // src/suppressions.ts
 var ID = "(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)";
 var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -23727,13 +23771,20 @@ function makeSuppressionParser({
       if (m?.[1] !== void 0 && m[2] !== void 0) {
         const ids = m[1].split(",").map((s) => canonicalRuleId(s.trim()));
         byLine.set(line, new Set(ids));
-        directives.push({ file: relPath, line, rules: ids, reason: m[2].trim() });
+        directives.push({ file: relPath, line, rules: ids, reason: oneLine(m[2]) });
       } else {
         malformed.push({
           rule: "suppression/malformed",
           file: relPath,
           line,
-          message: stripped.trim().slice(0, 60)
+          // Cut on the raw text, and by code point. `head`, not `oneLine`
+          // then `slice`: this string is also the finding's `code`, and
+          // `findingKey` collapses whitespace on `code` itself — so
+          // flattening first changes nothing a reader sees and only moves
+          // the 60-character window, taking every baseline key already
+          // written for a directive long enough to be cut with it. What a
+          // reader sees is flattened by the line bound in `analyze`.
+          message: head(stripped.trim(), 60)
         });
       }
     }
@@ -24661,24 +24712,25 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
   const isFlexish = FLEX_PROPS.has(prop) || prop === "display" && /\b(inline-)?(flex|grid)\b/.test(value);
   const hardcoded = isHardcodedTokenValue(prop, value, options);
   const styling = isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
+  const decl2 = `${prop}: ${value}`;
   let finding = null;
   if (TYPE_PROPS.has(prop) && boundText[0]) {
     finding = { rule: "typography/in-css", message: `${prop} on <${boundText[0].tag}>` };
   } else if (boundSystem[0] && APPEARANCE_PROPS.has(prop)) {
     finding = { rule: "system/override", message: `<${boundSystem[0].tag}> \u2190 ${prop}` };
   } else if (isMargin) {
-    if (marginKind === "negative") finding = { rule: "layout/negative-margin", message: `${prop}: ${value}`, code: prop };
-    else if (marginKind) finding = { rule: "layout/margin-on-child", message: `${prop}: ${value}`, code: prop };
+    if (marginKind === "negative") finding = { rule: "layout/negative-margin", message: decl2, code: prop };
+    else if (marginKind) finding = { rule: "layout/margin-on-child", message: decl2, code: prop };
   } else if (TYPE_PROPS.has(prop)) {
     if (!usesToken(value) && !isInertValue(value))
-      finding = { rule: "typography/untokenized", message: `${prop}: ${value}`, hint: { prop, value } };
+      finding = { rule: "typography/untokenized", message: decl2, code: oneLine(decl2), hint: { prop, value } };
   } else if (GAP_PROPS.has(prop)) {
-    if (!boundSystem.length && !isGrid) finding = { rule: "layout/in-css", message: `${prop}: ${value}`, code: prop };
+    if (!boundSystem.length && !isGrid) finding = { rule: "layout/in-css", message: decl2, code: prop };
   } else if (isFlexish) {
     const gridDisplay = prop === "display" && /\bgrid\b/.test(value);
-    if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: "layout/in-css", message: `${prop}: ${value}` };
+    if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: "layout/in-css", message: decl2, code: oneLine(decl2) };
   } else if (hardcoded) {
-    finding = { rule: "tokens/hardcoded-value", message: `${prop}: ${value}`, hint: { prop, value } };
+    finding = { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hint: { prop, value } };
   }
   return { finding, styling };
 }
@@ -24706,7 +24758,12 @@ function collapsePerRule(pending) {
     out.push({
       ...first,
       rule: rule2,
-      message: group.map((f) => f.message).join("; "),
+      // Bounded per contributor, so one long value cannot spend the whole
+      // line and crowd the others out of a message that is several of them.
+      // Safe to bound here where it is not at capture: a collapsed finding
+      // always carries its own `code` below, so identity does not fall back
+      // to this string.
+      message: group.map((f) => snippet(f.message)).join("; "),
       hints: group.flatMap((f) => f.hints ?? (f.hint ? [f.hint] : [])),
       suffix: first.suffix,
       code: `${rule2}:${props.sort().join(",")}`
@@ -24829,7 +24886,7 @@ async function analyze(config, { scope = null } = {}) {
       unparsed(messageOf3(err));
       continue;
     }
-    const emit = ({ rule: rule2, line, message, code, scopeLines = [], hint, hints }) => {
+    const emit = ({ rule: rule2, line, message, code, scopeLines = [], hint, hints, suffix }) => {
       if (!config.enabled[rule2] || !reports(rel)) return;
       if (isSuppressed(supp.byLine, line, rule2, scopeLines)) return;
       findings.push({
@@ -24841,7 +24898,12 @@ async function analyze(config, { scope = null } = {}) {
         code: code ?? message,
         rank: RULES[rule2].rank,
         hints: hints || (hint ? [hint] : void 0),
-        suffix: void 0
+        // Forwarded rather than blanked. Nothing in this channel sets one
+        // today, but `collapsePerRule` carries `suffix` through on purpose
+        // and it is now what keeps a message tail out of the line bound —
+        // so dropping it here would silently disarm that for whichever rule
+        // reaches for it first.
+        suffix
       });
     };
     harvestTokenDefs(root2, tokenPrefixes, tokenSet);
@@ -25012,7 +25074,7 @@ async function analyze(config, { scope = null } = {}) {
       const prev = perFile.get(c.file);
       if (!prev || c.line < prev.line) perFile.set(c.file, c);
     }
-    const emitComposite = (rule2, c, message) => {
+    const emitComposite = (rule2, c, signature, tail) => {
       if (!reports(c.file)) return;
       const supp = suppByFile.get(c.file);
       if (supp && isSuppressed(supp.byLine, c.line, rule2)) return;
@@ -25021,7 +25083,8 @@ async function analyze(config, { scope = null } = {}) {
         severity: config.severityOf(rule2),
         file: c.file,
         line: c.line,
-        message,
+        message: `${signature}${tail}`,
+        suffix: tail,
         code: c.signature,
         rank: RULES[rule2].rank
       });
@@ -25033,14 +25096,15 @@ async function analyze(config, { scope = null } = {}) {
         emitComposite(
           "patterns/duplicate-composite",
           c,
-          `${c.signature} \u2014 rebuilds \`${id}\`, also in ${files2.size - 1} other file(s); ${remedy}`
+          c.signature,
+          ` \u2014 rebuilds \`${id}\`, also in ${files2.size - 1} other file(s); ${remedy}`
         );
       }
     }
     for (const [sig, files2] of bySignature) {
       if (files2.size < 3) continue;
       for (const c of files2.values())
-        emitComposite("patterns/unregistered-composite", c, `${sig} \u2014 assembled in ${files2.size} files, registered in none`);
+        emitComposite("patterns/unregistered-composite", c, sig, ` \u2014 assembled in ${files2.size} files, registered in none`);
     }
   }
   if (config.enabled["system/locked-component"] || config.enabled["system/superseded-component"]) {
@@ -25081,12 +25145,17 @@ async function analyze(config, { scope = null } = {}) {
       });
   }
   for (const f of findings) {
-    if (!f.hints?.length) continue;
-    f.message = f.hints.map(({ prop, value }) => `${prop}: ${value}${suggestionFor(tokenSet, prop, value)}`).join("; ") + (f.suffix ?? "");
+    if (!f.hints?.length) {
+      delete f.hints;
+      continue;
+    }
+    f.message = messageParts(
+      f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
+      f.suffix ?? ""
+    );
     const suggest = f.hints.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) })).filter((s) => s.tokens.length);
     if (suggest.length) f.suggest = suggest;
     delete f.hints;
-    delete f.suffix;
   }
   if (tokenSet.known.size && config.enabled["tokens/unknown-token"]) {
     const seenUnknown = /* @__PURE__ */ new Set();
@@ -25107,14 +25176,19 @@ async function analyze(config, { scope = null } = {}) {
       });
     }
   }
-  for (const f of findings) delete f.suffix;
   const seen = /* @__PURE__ */ new Set();
   const unique = findings.filter((f) => {
-    const k = `${f.rule}|${f.file}|${f.line}|${f.message}`;
+    const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ""}|${f.message}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
   });
+  for (const f of unique) {
+    const tail = f.suffix ?? "";
+    const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
+    f.message = messageLine(body, tail);
+    delete f.suffix;
+  }
   unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
   directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   return {
@@ -25124,7 +25198,7 @@ async function analyze(config, { scope = null } = {}) {
     blocking: unique.some((f) => f.severity === "error")
   };
 }
-var findingKey = (f) => `${f.rule}|${f.file}|${String(f.code ?? f.message).replace(/\s+/g, " ").trim()}`;
+var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.message))}`;
 
 // src/autofix.ts
 import { readFileSync as readFileSync3, writeFileSync } from "node:fs";
@@ -26562,9 +26636,10 @@ Wrote ${target}
     const dry = Boolean(args.flags["dry-run"]);
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
     const verb = dry ? "would fix" : "fixed";
-    for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${f.prop}: ${f.value} \u2192 var(${f.token})
+    const decl2 = (f) => oneLine(`${f.prop}: ${f.value}`);
+    for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${decl2(f)} \u2192 var(${f.token})
 `);
-    for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${f.prop}: ${f.value} \u2014 ${f.why}
+    for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${decl2(f)} \u2014 ${f.why}
 `);
     const left = toFix.findings.length - applied.length;
     process.stdout.write(

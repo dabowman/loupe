@@ -11,6 +11,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let failed = 0;
 
@@ -85,6 +86,15 @@ export function execFailure(err: unknown): ExecFailure {
 		message: err instanceof Error ? err.message : String(err),
 	};
 }
+
+/**
+ * The engine's entry point, for the suites that drive it as a subprocess.
+ *
+ * Here rather than in each of them for the reason above: two copies of where the
+ * bin lives is two edits the day it moves, and the one that gets missed still
+ * passes. This is the other half of the CLI pathway `execFailure` already owns.
+ */
+export const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'loupe.mjs');
 
 /** A throwaway repo directory. The caller removes it. */
 export const scratch = (prefix: string): string => mkdtempSync(join(tmpdir(), prefix));

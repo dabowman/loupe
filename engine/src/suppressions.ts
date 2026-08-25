@@ -15,6 +15,7 @@
  */
 
 import { canonicalRuleId } from './rules.ts';
+import { head, oneLine } from './text.ts';
 import type { Directive, MalformedDirective, SuppressionConfig, Suppressions } from './types.ts';
 
 const ID = '(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)';
@@ -45,13 +46,23 @@ export function makeSuppressionParser({
 			if (m?.[1] !== undefined && m[2] !== undefined) {
 				const ids = m[1].split(',').map((s) => canonicalRuleId(s.trim()));
 				byLine.set(line, new Set(ids));
-				directives.push({ file: relPath, line, rules: ids, reason: m[2].trim() });
+				// Flattened for the same reason the malformed branch below is: a tab
+				// in the reason resets the columns `loupe suppressions` prints in,
+				// and the reason is quoted source like any other captured snippet.
+				directives.push({ file: relPath, line, rules: ids, reason: oneLine(m[2]) });
 			} else {
 				malformed.push({
 					rule: 'suppression/malformed',
 					file: relPath,
 					line,
-					message: stripped.trim().slice(0, 60),
+					// Cut on the raw text, and by code point. `head`, not `oneLine`
+					// then `slice`: this string is also the finding's `code`, and
+					// `findingKey` collapses whitespace on `code` itself — so
+					// flattening first changes nothing a reader sees and only moves
+					// the 60-character window, taking every baseline key already
+					// written for a directive long enough to be cut with it. What a
+					// reader sees is flattened by the line bound in `analyze`.
+					message: head(stripped.trim(), 60),
 				});
 			}
 		}

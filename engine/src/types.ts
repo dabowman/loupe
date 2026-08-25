@@ -74,8 +74,9 @@ export interface Suggestion extends Hint {
  * One reported violation.
  *
  * `hints` and `suffix` are working state: the token pass reads them to rewrite
- * `message`, then deletes both. They are optional so that deletion is legal,
- * and absent from anything a formatter sees.
+ * `message` and drops `hints`, and `suffix` — the channel marker — survives
+ * just long enough for the message to be bounded around it. They are optional
+ * so that deletion is legal, and absent from anything a formatter sees.
  */
 export interface Finding {
 	rule: RuleId;

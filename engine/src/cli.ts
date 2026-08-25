@@ -16,6 +16,7 @@ import { findConfig, listPresets, loadConfig, setComponentRegistry, setPatterns 
 import { changedFiles, isSource, toPosix } from './discover.ts';
 import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
+import { oneLine } from './text.ts';
 import { detectConfig } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
 import type { RegistrySource } from './profiles.ts';
@@ -26,7 +27,7 @@ import {
 	parsePayload, payloadFile, readStdin, resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
-import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
+import type { AnalyzeResult, BaselinedResult, Config, TokenFix } from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
@@ -440,8 +441,18 @@ async function main(): Promise<number> {
 		const dry = Boolean(args.flags['dry-run']);
 		const { applied, skipped } = applyTokenFixes(root, toFix.findings, { dry });
 		const verb = dry ? 'would fix' : 'fixed';
-		for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${f.prop}: ${f.value} \u2192 var(${f.token})\n`);
-		for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${f.prop}: ${f.value} \u2014 ${f.why}\n`);
+		// The value is held raw — it is what the substitution matches against —
+		// so this is the one place the flattening belongs at the print site
+		// rather than at capture: a multi-line declaration is exactly the kind
+		// `fix` skips, and it reported the skip across six lines.
+		//
+		// Flattened but not bounded. Both lines exist to be acted on — the skip
+		// names a value the reader now has to find and edit by hand, and the
+		// applied line is the preview `--dry-run` exists to give — and an elided
+		// value is one neither of them can be matched against.
+		const decl = (f: TokenFix): string => oneLine(`${f.prop}: ${f.value}`);
+		for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${decl(f)} \u2192 var(${f.token})\n`);
+		for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${decl(f)} \u2014 ${f.why}\n`);
 		const left = toFix.findings.length - applied.length;
 		process.stdout.write(
 			`\nloupe: ${verb} ${applied.length} finding(s)${skipped.length ? `, skipped ${skipped.length}` : ''}. ` +

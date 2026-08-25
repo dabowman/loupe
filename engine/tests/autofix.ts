@@ -8,12 +8,13 @@
  * reader, so it is the whole of this suite.
  */
 
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { analyze } from '../src/analyze.ts';
 import { applyTokenFixes } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
-import { assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
+import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
 import type { Finding, FixCandidate, SkippedFix, TokenFix } from '../src/types.ts';
 
 const CONFIG = JSON.stringify({ extends: 'wpds', namespaces: { project: ['wf-'] } });
@@ -129,6 +130,34 @@ await check('--dry-run reports without writing', async () => {
 		const { applied } = applyTokenFixes(root, findings, { dry: true });
 		assert(applied.length === 1, 'dry run still reports the fix');
 		assert(readFileSync(join(root, 'styles/g.css'), 'utf8').includes('4px'), 'dry run must not write');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// What `fix` skips is what it prints, and a declaration spanning source lines
+// is exactly the case it skips — the substitution is matched against one line.
+// The value is held raw on purpose, since that is what the match needs, so this
+// is the one place the flattening belongs at the print site rather than at
+// capture.
+await check('a skipped multi-line declaration is reported on one line', async () => {
+	const root = scratch('dsh-fix-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			'styles/tokens.css': ':root { --wpds-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08); }',
+			'styles/s.css': '.wf-s {\n\tbox-shadow: 0 1px 2px rgba(0, 0, 0, 0.12),\n\t\t0 4px 12px rgba(0, 0, 0, 0.08);\n}',
+			'src/S.jsx': 'export const S = () => <div className="wf-s" />;',
+		});
+		const out = execFileSync('node', [CLI, 'fix', '--dry-run', '--root', root], { encoding: 'utf8' });
+		const skips = out.split('\n').filter((l) => l.startsWith('skip'));
+		assert(skips.length === 1, `expected one skip line, got ${skips.length}:\n${out}`);
+		// Counting the lines that START with `skip` cannot see the failure: a
+		// declaration spilling across output lines leaves continuations that begin
+		// with the source's own indentation, and those are filtered out rather
+		// than counted. So the spill is checked for directly.
+		assert(!out.split('\n').some((l) => /^\s+\S/.test(l)), `output spilled onto an indented line:\n${out}`);
+		assert(skips[0]?.includes('box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px'), `not flattened: ${skips[0]}`);
 	} finally {
 		cleanup(root);
 	}

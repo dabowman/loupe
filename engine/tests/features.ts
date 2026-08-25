@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze } from '../src/analyze.ts';
+import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
@@ -170,6 +170,258 @@ await check('a tagged template from an unrelated library is left alone', async (
 	const src = ["import gql from 'graphql-tag';", 'const q = gql`{ user { margin } }`;'].join('\n');
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/q.ts': src });
 	assert(!r.findings.length, `read a GraphQL document as CSS: ${r.findings.map((f) => f.message)}`);
+});
+
+// ── one line per finding ────────────────────────────────────────────────────
+// A gradient, a `box-shadow` list or a `grid-template-areas` map spans source
+// lines. The report is one line per finding — and the hook hands that same text
+// back as blocking feedback — so a value carried through verbatim resets the
+// indentation the format uses to group findings under a rule.
+
+const GRADIENT = [
+	'linear-gradient(',
+	'\t\t90deg,',
+	'\t\ttransparent 0%,',
+	'\t\trgba( 255, 255, 255, 0.45 ) 50%,',
+	'\t\ttransparent 100%',
+	'\t)',
+].join('\n');
+
+/** The same gradient as one line — written out, not computed, so it is a pin. */
+const FLAT = 'background: linear-gradient( 90deg, transparent 0%, rgba( 255, 255, 255, 0.45 ) 50%, transparent 100% )';
+
+const MULTILINE = {
+	'loupe.config.json': CONFIG(),
+	'styles/a.css': `.acme-card {\n\tbackground: ${GRADIENT};\n}`,
+	'src/A.tsx': [
+		"import styled from 'styled-components';",
+		'const Panel = styled.div`',
+		`\tbackground: ${GRADIENT};`,
+		'`;',
+		'export const A = () => (',
+		`\t<div className="acme-card" style={{ background: \`${GRADIENT}\` }}>`,
+		'\t\t<Panel />',
+		'\t</div>',
+		');',
+	].join('\n'),
+};
+
+await check('a multi-line declaration prints on one line in all three channels', async () => {
+	const r = await run(MULTILINE);
+	const found = at(r, 'tokens/hardcoded-value');
+	assert(found.length === 3, `expected one finding per channel; got ${found.length}`);
+	// `\s\s` alone would pass a message carrying a single tab — the very
+	// character that resets the indentation the agent format groups by — so the
+	// two that actually break the line are named outright.
+	for (const f of found) assert(!/\s\s|[\n\t]/.test(f.message), `message spans lines: ${JSON.stringify(f.message)}`);
+});
+
+await check('a value too long to print is capped, and still names its property', async () => {
+	const r = await run(MULTILINE);
+	for (const f of at(r, 'tokens/hardcoded-value')) {
+		assert(f.message.startsWith('background: linear-gradient('), `lost the property: ${f.message}`);
+		assert(f.message.includes('…'), `an over-long value should be elided: ${f.message}`);
+	}
+});
+
+// The keys are written out rather than derived, because a key computed the same
+// way the engine computes it would agree with any change to how it is computed.
+// These three are what the engine wrote BEFORE the cap existed: capping the
+// printed snippet must leave every existing baseline entry matching.
+await check('the baseline key is byte-for-byte what it was before the cap', async () => {
+	const r = await run(MULTILINE);
+	const keys = at(r, 'tokens/hardcoded-value').map(findingKey).sort();
+	const want = [
+		`tokens/hardcoded-value|src/A.tsx|${FLAT}`,
+		`tokens/hardcoded-value|src/A.tsx|css-in-js:${FLAT}`,
+		`tokens/hardcoded-value|styles/a.css|${FLAT}`,
+	].sort();
+	assert(JSON.stringify(keys) === JSON.stringify(want), `baselines would break:\n got ${JSON.stringify(keys, null, 1)}\nwant ${JSON.stringify(want, null, 1)}`);
+});
+
+// The cap is on what a finding PRINTS, so it must not reach the dedupe key:
+// these two declarations agree for their first 80 characters and differ after,
+// and a linter that silently drops one of them is worse than the formatting the
+// cap exists to fix.
+await check('two declarations alike up to the cap are two findings', async () => {
+	const shadow = (rgba: string): string =>
+		`box-shadow: 0 0 0 1px rgba(0,0,0,0.05), 0 0 0 2px rgba(0,0,0,0.05), 0 0 0 3px rgba( ${rgba} )`;
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': `.acme-dup { ${shadow('11,11,11,0.3')}; ${shadow('22,22,22,0.9')}; }`,
+		'src/A.jsx': 'export const A = () => <div className="acme-dup" />;',
+	});
+	const found = at(r, 'tokens/hardcoded-value');
+	assert(found.length === 2, `one of two distinct shadows was dropped; got ${found.length}`);
+	assert(new Set(found.map(findingKey)).size === 2, 'they must also be two baseline entries');
+});
+
+// The other direction: `code` is deliberately coarser than the message on the
+// rules that key on the property alone, so it cannot stand in for it either.
+await check('two values of one property on one line are two findings', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': '.acme-m { margin-bottom: 4px; margin-bottom: 8px; }',
+		'src/A.jsx': 'export const A = () => <div className="acme-m" />;',
+	});
+	assert(at(r, 'layout/margin-on-child').length === 2, 'a repeated property is still two declarations');
+});
+
+// A selector is captured source too, and postcss keeps the newlines inside one.
+await check('a multi-line selector is flattened into the finding', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/F.tsx': [
+			"import styled from 'styled-components';",
+			'const F = styled.div`',
+			'\t& .outer',
+			'\t\t> .inner:not(.x)',
+			'\t\t+ .sibling {',
+			'\t\tbackground: #f00;',
+			'\t}',
+			'`;',
+		].join('\n'),
+	});
+	const f = one(at(r, 'tokens/hardcoded-value'), 'expected the nested declaration');
+	assert(f.message.includes('in `& .outer > .inner:not(.x) + .sibling`'), `selector not flattened: ${JSON.stringify(f.message)}`);
+	assert(!/[\n\t]/.test(f.message), `message spans lines: ${JSON.stringify(f.message)}`);
+});
+
+// Every message is one bounded line, whatever assembled it — several collapsed
+// declarations, a token suggestion, a selector and a channel marker — and the
+// marker survives the cap, because which channel a finding came from is not
+// recoverable from the rest of the line.
+await check('a message assembled from several snippets is still one bounded line', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/L.tsx': [
+			"import styled from 'styled-components';",
+			'const L = styled.div`',
+			`\t& .${'x'.repeat(120)} {`,
+			'\t\tfont-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, "Noto Sans", sans-serif;',
+			'\t\tfont-size: 13.5px;',
+			'\t\tletter-spacing: 0.0123em;',
+			'\t}',
+			'`;',
+		].join('\n'),
+	});
+	const f = one(at(r, 'typography/untokenized'), 'expected one collapsed typography finding');
+	assert([...f.message].length <= 200, `message ran to ${[...f.message].length} characters`);
+	assert(f.message.endsWith('(css-in-js)'), `the channel marker was eaten by the cap: ${f.message}`);
+});
+
+// `slice` counts UTF-16 units, so a cap landing mid-surrogate-pair emits a lone
+// surrogate: harmless on a terminal, rejected outright by a strict JSON reader.
+await check('the cap never splits a character', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': `.acme-u { font-family: ${'a'.repeat(65)}\u{1F600}zzzz; }`,
+		'src/A.jsx': 'export const A = () => <div className="acme-u" />;',
+	});
+	const f = one(at(r, 'typography/untokenized'), 'expected the type finding');
+	assert(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(f.message), `lone surrogate in ${JSON.stringify(f.message)}`);
+	assert(f.message.includes('\u{1F600}'), `the character itself was lost: ${f.message}`);
+});
+
+// The suppression parser quotes source as well, and a tab in a block comment
+// reset the same indentation. Flattened, never capped: this message is also the
+// finding's `code`, and `findingKey` already collapses whitespace.
+await check('a malformed suppression is quoted on one line', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/D.jsx': ['export const D = () => (', '\t/* wpds-allow\tlayout/in-css */', '\t<div style={{ display: 999 }} />', ');'].join('\n'),
+	});
+	const f = one(at(r, 'suppression/malformed'), 'expected the malformed directive');
+	assert(!/[\n\t]/.test(f.message), `message carries a tab: ${JSON.stringify(f.message)}`);
+});
+
+// The directive is cut at 60 characters and that cut is also the finding's
+// `code`, so where the cut lands decides the baseline key. Collapsing the
+// whitespace first moves it — silently invalidating every entry already
+// recorded for a directive long enough to be cut, on a rule that blocks.
+await check('a long malformed directive keys the same as it always did', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/D.jsx': ['export const D = () => (', '\t/* wpds-allow   layout/in-css   because  the  design  system  has  no  equivalent */', '\t<div />', ');'].join('\n'),
+	});
+	const f = one(at(r, 'suppression/malformed'), 'expected the malformed directive');
+	assert(
+		findingKey(f) === 'suppression/malformed|src/D.jsx|wpds-allow layout/in-css because the design system h',
+		`baselines would break: ${findingKey(f)}`
+	);
+});
+
+// The 60-character cut counts characters, like every other cut here. `slice`
+// counts UTF-16 units and would halve the pair.
+await check('the directive cut never splits a character', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/D.jsx': `export const D = () => (\n\t/* wpds-allow ${'a'.repeat(48)}\u{1F600} and then some more */\n\t<div />\n);`,
+	});
+	const f = one(at(r, 'suppression/malformed'), 'expected the malformed directive');
+	assert(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(f.code ?? ''), `lone surrogate in ${JSON.stringify(f.code)}`);
+});
+
+// The selector is the only thing telling these two apart — it is not in `code`,
+// and both declarations are identical. Bounding it before the dedupe ran folded
+// them into one finding and dropped a real violation.
+await check('two css-in-js selectors alike up to the bound are two findings', async () => {
+	const sel = (tag: string): string => `& .pre${'x'.repeat(90)}${tag}`;
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/S.tsx': [
+			"import styled from 'styled-components';",
+			'const S = styled.div`',
+			`\t${sel('AAA')} { background: #f00; } ${sel('BBB')} { background: #f00; }`,
+			'`;',
+			'export const S2 = () => <S />;',
+		].join('\n'),
+	});
+	assert(at(r, 'tokens/hardcoded-value').length === 2, 'one of two distinct selectors was dropped');
+});
+
+// The same loss on the other rules the dedupe comment names: `code` there is
+// only the property, so the message is the whole of what separates them.
+await check('two long values of one property are two findings', async () => {
+	const v = (tail: string): string => `calc(100% - ${'1px - '.repeat(12)}${tail})`;
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': `.acme-m { margin-bottom: ${v('2px')}; margin-bottom: ${v('9px')}; }`,
+		'src/A.jsx': 'export const A = () => <div className="acme-m" />;',
+	});
+	assert(at(r, 'layout/negative-margin').length === 2, 'one of two distinct margins was dropped');
+});
+
+// A collapsed finding is a list of remedies, and a line bound that ends it
+// mid-token leaves one the reader cannot act on and no sign of the rest.
+await check('a collapsed remedy list drops whole remedies and counts them', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		// Enough on-role tokens that every declaration below resolves to one, so
+		// the message really is a list of remedies rather than a list of values.
+		'styles/tokens.css': [
+			':root {',
+			'\t--wpds-typography-font-size-md: 13px;',
+			'\t--wpds-typography-font-weight-bold: 600;',
+			'\t--wpds-typography-line-height-md: 1.4;',
+			'\t--wpds-typography-letter-spacing-sm: 0.02em;',
+			'}',
+		].join('\n'),
+		'styles/a.css': [
+			'.acme-t {',
+			'\tfont-size: 13px;',
+			'\tfont-weight: 600;',
+			'\tline-height: 1.4;',
+			'\tletter-spacing: 0.02em;',
+			'\tfont-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif;',
+			'}',
+		].join('\n'),
+		'src/A.jsx': 'export const A = () => <div className="acme-t" />;',
+	});
+	const f = one(at(r, 'typography/untokenized'), 'expected one collapsed typography finding');
+	assert([...f.message].length <= 200, `message ran to ${[...f.message].length} characters`);
+	assert(/\(\+\d+ more\)$/.test(f.message), `the dropped remedies went unannounced: ${f.message}`);
+	assert(!/→ var\(--[\w-]*…/.test(f.message), `a remedy was cut mid-token: ${f.message}`);
 });
 
 // ── composites ──────────────────────────────────────────────────────────────
