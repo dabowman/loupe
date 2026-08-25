@@ -341,6 +341,17 @@ different processes that have to read the same file. Set `baseline` in the
 config to move it. Only the hook's retry counter lives in the plugin's data
 directory, keyed by project. `status` prints both locations.
 
+### Turning it off for a session
+
+```bash
+LOUPE_OFF=1 claude
+```
+
+The hook says nothing — not advisory, silent. Advisory mode does not solve this:
+an advisory finding still lands in the agent's context, and an agent that sees a
+finding starts fixing it, which is usually the thing you were trying to avoid.
+`loupe` typed by hand still reports normally; the switch is only for the hook.
+
 ## Remediation
 
 `/loupe-fix` runs `loupe fix` first, so what remains is the work that needs

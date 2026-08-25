@@ -122,6 +122,10 @@ Options:
   --config <path>       Explicit config file
   --root <path>         Project root (default: cwd, or CLAUDE_PROJECT_DIR under hook)
 
+Environment:
+  LOUPE_OFF=1           Silence the hook for this session; 'loupe' typed by hand
+                        still reports. Start Claude Code as 'LOUPE_OFF=1 claude'.
+
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
 `;
@@ -179,6 +183,15 @@ async function main(): Promise<number> {
 	}
 
 	const isHook = command === 'hook';
+	// Per-session off switch: `LOUPE_OFF=1 claude`.
+	//
+	// Silence, not advisory mode. An advisory finding still lands in the agent's
+	// context, and an agent that sees a finding starts fixing it — which is the
+	// whole complaint. The only way to work on something else is for the gate to
+	// say nothing at all. Deliberately hook-only: `loupe check` typed by hand is
+	// someone asking, and answering "nothing" would be a lie.
+	if (isHook && /^(1|true|yes|on)$/i.test(process.env.LOUPE_OFF ?? '')) return EXIT.OK;
+
 	const root = resolve(args.flags.root ?? (isHook ? hookRoot() : process.cwd()));
 	if (!existsSync(root)) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root}`);
@@ -309,6 +322,7 @@ async function main(): Promise<number> {
 						: 'none found — plugin defaults apply'
 			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
 			`plugin:     ${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
+			...(process.env.LOUPE_OFF ? ['hook:       OFF for this session (LOUPE_OFF is set)'] : []),
 			// Which design system's registries are in play, and — when none are —
 			// which ones were on offer. "No composite findings" and "no composite
 			// registry" look identical in a report; they must not look identical here.

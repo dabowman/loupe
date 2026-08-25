@@ -26267,6 +26267,10 @@ Options:
   --config <path>       Explicit config file
   --root <path>         Project root (default: cwd, or CLAUDE_PROJECT_DIR under hook)
 
+Environment:
+  LOUPE_OFF=1           Silence the hook for this session; 'loupe' typed by hand
+                        still reports. Start Claude Code as 'LOUPE_OFF=1 claude'.
+
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
 `;
@@ -26303,6 +26307,7 @@ async function main() {
     return EXIT.OK;
   }
   const isHook = command === "hook";
+  if (isHook && /^(1|true|yes|on)$/i.test(process.env.LOUPE_OFF ?? "")) return EXIT.OK;
   const root2 = resolve4(args.flags.root ?? (isHook ? hookRoot() : process.cwd()));
   if (!existsSync7(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
@@ -26390,6 +26395,7 @@ async function main() {
       `state:      ${state.dir}${state.scope === "plugin-data" ? "  (retry counter only, outside your repo)" : ""}`,
       `options:    ${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
       `plugin:     ${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
+      ...process.env.LOUPE_OFF ? ["hook:       OFF for this session (LOUPE_OFF is set)"] : [],
       // Which design system's registries are in play, and — when none are —
       // which ones were on offer. "No composite findings" and "no composite
       // registry" look identical in a report; they must not look identical here.

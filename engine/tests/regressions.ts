@@ -229,4 +229,27 @@ await check('a baseline recorded from a shell is visible to the plugin hook', ()
 	}
 });
 
+// Advisory mode is not an off switch: an advisory finding still reaches the
+// agent's context, and an agent that sees a finding starts fixing it. The
+// escape hatch has to produce nothing at all.
+await check('LOUPE_OFF silences a hook that would otherwise block', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"off","tool_input":{"file_path":"styles/a.css"}}',
+			env: { ...process.env, LOUPE_OFF: '1', CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		assert(out === '', `expected no output, got: ${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();

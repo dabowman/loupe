@@ -308,6 +308,11 @@ stands down and says so. Bailing out entirely on `stop_hook_active` — the
 obvious loop guard — means the turn that *fixes* a finding is never checked, so
 you never confirm the fix.
 
+Set `LOUPE_OFF=1` in the hook's environment to silence it for a session —
+`LOUPE_OFF=1 claude`. It produces no output at all rather than downgrading to
+advisory, because an advisory finding still reaches the agent and an agent that
+sees a finding starts fixing it. `loupe` run by hand ignores the switch.
+
 ## Output
 
 ```bash
