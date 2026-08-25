@@ -109,18 +109,25 @@ await check('--files accepts an absolute path', () => {
 // the hook is exit 2 — blocking every turn in every project, with nothing the
 // agent could do about it.
 await check('a config error never blocks a turn', () => {
-	const root = tmpRepo({ 'src/App.jsx': 'export const App = () => <div />;' });
+	// A manifest, so the run gets past the project-shape guard and reaches the
+	// config error this is about: the `preset` plugin option is set once for
+	// every project its owner opens, so it is not itself evidence of a project.
+	const root = tmpRepo({ 'package.json': '{}', 'src/App.jsx': 'export const App = () => <div />;' });
+	let out: string;
 	try {
-		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+		out = execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
 			input: '{"session_id":"x","tool_input":{"file_path":"src/App.jsx"}}',
 			env: { ...process.env, CLAUDE_PLUGIN_OPTION_PRESET: 'no-such-preset' },
 		});
-		const parsed = JSON.parse(out) as { systemMessage?: string };
-		assert(parsed.systemMessage?.includes('config error'), `unexpected output: ${out}`);
 	} catch (err) {
 		const f = execFailure(err);
+		cleanup(root);
 		throw new Error(`hook exited non-zero on a config error: ${f.status} ${f.stderr}`);
+	}
+	try {
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(parsed.systemMessage?.includes('config error'), `unexpected output: ${out}`);
 	} finally {
 		cleanup(root);
 	}
@@ -310,7 +317,11 @@ await check('--all still runs where there is no worktree and no manifest', () =>
 // And the refusal itself is a contract: exit 2, and wording that tells you the
 // two flags that would have worked.
 await check('--changed outside a worktree still refuses with exit 2', () => {
-	const root = tmpRepo({ 'style.css': '.acme-a { margin-bottom: 16px; }' });
+	// A manifest, so the project-shape guard passes and the refusal under test
+	// is the one the changed-file scope raises. Without it this passed on the
+	// guard's copy of the message and stopped covering `resolveScope` at all —
+	// which is the whole reason both say it through one constant.
+	const root = tmpRepo({ 'package.json': '{}', 'style.css': '.acme-a { margin-bottom: 16px; }' });
 	try {
 		execFileSync('node', [CLI, 'check', '--changed', '--root', root], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 		throw new Error('check --changed exited 0 outside a worktree');
@@ -373,6 +384,85 @@ await check('a repo git refuses to answer about is still gated', () => {
 			!parsed.systemMessage?.includes('not a git worktree'),
 			`git declining to answer was read as "no project": ${out}`
 		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A classic WordPress theme or plugin is PHP, CSS and nothing else: no npm, no
+// `theme.json`, and routinely not in git. It is also most of what this plugin
+// is pointed at, so a guard whose only manifest is `package.json` turned the
+// gate off for the audience — silently, because `suppressOutput` hides the
+// message that says so.
+await check('a composer-only project with no worktree is still gated', () => {
+	const root = tmpRepo({
+		'composer.json': '{"name":"acme/plugin"}',
+		'tpl.php': '<?php ?><div class="acme-a"></div>',
+		'style.css': '.acme-a { margin-bottom: 16px; }',
+	});
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"cj","tool_input":{"file_path":"style.css"}}',
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(!parsed.systemMessage?.includes('not a git worktree'), `the gate stood aside on a PHP project: ${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The `.git` fallback exists for the case where git will not answer — a
+// dubious-ownership mount, the normal state inside a container. Probed only at
+// the root it covered the top of a repo and nothing else, so the subdirectory
+// `isWorktree` was added to catch was exactly the case left with no answer.
+await check('a repo subdirectory git refuses to answer about is still gated', () => {
+	const root = tmpRepo({
+		'.git': 'gitdir: /nowhere/that/exists\n',
+		'packages/ui/App.jsx': 'export const App = () => <div className="acme-a" />;',
+		'packages/ui/style.css': '.acme-a { margin-bottom: 16px; }',
+	});
+	// A `git` that exits non-zero without answering, ahead of any real one.
+	const bin = join(root, '.stub-bin');
+	mkdirSync(bin, { recursive: true });
+	writeFileSync(join(bin, 'git'), '#!/bin/sh\nexit 128\n', { mode: 0o755 });
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', join(root, 'packages', 'ui')], {
+			encoding: 'utf8',
+			input: '{"session_id":"sd","tool_input":{"file_path":"style.css"}}',
+			env: { ...process.env, PATH: `${bin}:${process.env['PATH'] ?? ''}` },
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			!parsed.systemMessage?.includes('not a git worktree'),
+			`git declining to answer about a subdirectory was read as "no project": ${out}`
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The `preset` plugin option is set once, for every project its owner ever
+// opens. Treating it as somebody stating that *this* directory is a project
+// switched the guard off everywhere for anyone who had pinned one — and with a
+// valid preset the run is not even advisory, so it walked an unchosen root and
+// then blocked the turn.
+await check('a pinned plugin preset does not vouch for a non-project root', () => {
+	const root = tmpRepo({ 'style.css': '.acme-a { margin-bottom: 16px; }' });
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"pp","tool_input":{"file_path":"style.css"}}',
+			env: { ...process.env, CLAUDE_PLUGIN_OPTION_PRESET: 'wpds', CLAUDE_PLUGIN_OPTION_BLOCKING: '1' },
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			parsed.systemMessage?.includes('not a git worktree'),
+			`a user-wide preset let the gate index a non-project root: ${out}`
+		);
+	} catch (err) {
+		const f = execFailure(err);
+		throw new Error(`the hook blocked a turn on a non-project root: ${f.status} ${f.stderr}`);
 	} finally {
 		cleanup(root);
 	}

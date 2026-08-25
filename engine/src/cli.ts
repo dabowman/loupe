@@ -13,7 +13,7 @@ import { analyze } from './analyze.ts';
 import { applyTokenFixes } from './autofix.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { findConfig, listPresets, loadConfig, setComponentRegistry, setPatterns } from './config.ts';
-import { changedFiles, isSource, isWorktree, toPosix } from './discover.ts';
+import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
 import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
@@ -175,30 +175,38 @@ const needsProject = (command: string, args: Args, isHook: boolean): boolean => 
  * Is there a project here, by any evidence the engine already trusts?
  *
  * Deliberately generous, because the cost of a false negative is a gate that
- * turns itself off and says so only in a message the hook suppresses. Four
- * kinds of evidence, none of which walks the tree:
+ * turns itself off and says so only in a message the hook suppresses. Five
+ * kinds of evidence, cheapest first, none of which walks the tree:
  *
- * - a manifest, the usual node-shaped answer;
- * - a `.git` entry, which survives the two cases where asking git fails rather
- *   than answers — a dubious-ownership mount, the normal state inside a
- *   container, and no `git` binary on PATH at all;
- * - a preset that matches, which is the engine's own definition of a project.
- *   A deployed block theme in `wp-content/themes/` has a `theme.json` and a
- *   `templates/` directory and frequently neither of the two above, and
+ * - a manifest, node-shaped or PHP-shaped. `composer.json` is here because a
+ *   WordPress plugin is as likely to carry one as a `package.json`, and this
+ *   plugin's audience is more likely to be in one than in a React app;
+ * - a `.git` entry anywhere up the tree. Searched upwards, because the case
+ *   that needs answering is the subdirectory, and a subdirectory has no `.git`
+ *   of its own — and answered off the filesystem, which survives the two cases
+ *   where asking git fails rather than answers: a dubious-ownership mount, the
+ *   normal state inside a container, and no `git` binary on PATH at all;
+ * - git itself, which is what still recognises a worktree the filesystem walk
+ *   above cannot see — one told by `GIT_DIR`, say. Asked after that walk and
+ *   not before it, because it is a subprocess and the walk is a handful of
+ *   `existsSync` calls;
+ * - and last, a preset that matches, which is the engine's own definition of a
+ *   project. A deployed block theme in `wp-content/themes/` has a `theme.json`
+ *   and a `templates/` directory and frequently none of the above, and
  *   `detectPreset` identifies it at high confidence. Refusing to gate a
- *   directory this same binary confidently identifies is indefensible;
- * - and finally git itself, which is what recognises a subdirectory of a repo,
- *   a linked worktree and a submodule.
+ *   directory this same binary confidently identifies is indefensible.
  *
  * `detectPreset` reads manifests three levels down and the markers in the root
  * and its immediate children — bounded, and nowhere near `discover`, so this
- * stays off the walk that the guard exists to avoid.
+ * stays off the walk that the guard exists to avoid. It is still the dearest of
+ * the five, which is why it is asked last.
  */
 const looksLikeProject = (root: string): boolean =>
 	existsSync(join(root, 'package.json')) ||
-	existsSync(join(root, '.git')) ||
-	detectPreset(root).preset !== 'generic' ||
-	isWorktree(root);
+	existsSync(join(root, 'composer.json')) ||
+	hasGitDir(root) ||
+	isWorktree(root) ||
+	detectPreset(root).preset !== 'generic';
 
 /**
  * What a run says when inference answered from part of a tree.
@@ -209,10 +217,21 @@ const looksLikeProject = (root: string): boolean =>
  * prefix — and a namespace list drawn from a prefix looks exactly like one
  * drawn from a whole project, down to the confident-looking coverage
  * percentage, which is computed over what was read.
+ *
+ * Four surfaces say this — stderr, `status`, `detect`'s `scanned:` line and the
+ * hook's own message — so they are built from two shared fragments rather than
+ * written out four times, and rewording it stays one edit. The ceiling carries
+ * its thousands separator: `${DETECT_ENTRY_BUDGET}` alone renders `50000`
+ * against the `50,000` both READMEs document.
  */
+const CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString('en-US')}-entry ceiling`;
+const CEILING_WHY =
+	'this root is larger than a project, so the namespaces are a guess from the part of it that was read';
 const TRUNCATED_NOTE =
-	`loupe: inference stopped at the ${DETECT_ENTRY_BUDGET}-entry ceiling \u2014 this root is larger than a project, so the ` +
-	'namespaces are a guess from the part of it that was read. Point --root at the project, or write a config with `loupe init`.\n';
+	`loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. ` +
+	'Point --root at the project, then write a config with `loupe init`.\n';
+/** The same fact, sized for a hook message that has to stay one line. */
+const CEILING_SUFFIX = ` (inference stopped at the ${CEILING}; namespaces are a guess)`;
 
 function resolveScope(
 	config: Config,
@@ -270,6 +289,19 @@ async function main(): Promise<number> {
 	// someone asking, and answering "nothing" would be a lie.
 	if (isHook && /^(1|true|yes|on)$/i.test(process.env.LOUPE_OFF ?? '')) return EXIT.OK;
 
+	// Read before anything can decide to stand aside.
+	//
+	// A PostToolUse payload carries the whole file body for a Write, so it is
+	// routinely larger than a pipe buffer: a hook that returns without draining
+	// stdin leaves the parent's write unfinished, and Node reports that to the
+	// writer as EPIPE. Every early exit below — a missing root, a config error,
+	// the project-shape guard, which is the one that fires on every edit in a
+	// directory nobody chose — used to return before the read further down.
+	// Nothing between here and there needs the payload; only `payloadFile` does,
+	// and that needs `root`, which is resolved next.
+	let payload: HookPayload = {};
+	if (isHook) payload = parsePayload(await readStdin());
+
 	const root = resolve(args.flags.root ?? (isHook ? hookRoot() : process.cwd()));
 	if (!existsSync(root)) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root}`);
@@ -290,24 +322,32 @@ async function main(): Promise<number> {
 		// component layer and therefore silently disables every correlation rule.
 		const explicitPreset =
 			args.flags.preset ?? (options.preset && options.preset !== 'auto' ? options.preset : null);
-		if (!args.flags.config && !explicitPreset && !findConfig(root)) {
-			// The project-shape guard runs ahead of inference, not after it.
-			//
-			// Inference walks the tree; the scope resolver further down is what
-			// decides there is no project here. In that order the whole walk was
-			// paid for on the way to the refusal — and `hookRoot()` falls back to
-			// the process cwd whenever CLAUDE_PROJECT_DIR is unset, so the tree
-			// being indexed was sometimes a home directory, on every edit, past
-			// the hook's timeout.
-			//
-			// Only here, where there is nothing but the directory to go on: a
-			// config file or a named preset is somebody stating that this is a
-			// project, and that statement outranks anything guessed from shape.
-			if (needsProject(command, args, isHook) && !looksLikeProject(root)) {
-				if (isHook) return emitClean(`loupe: skipped \u2014 ${NOT_A_WORKTREE}`);
-				process.stderr.write(`loupe: ${NOT_A_WORKTREE}\n`);
-				return EXIT.CANNOT_RUN;
-			}
+		const configPath = findConfig(root);
+
+		// The project-shape guard runs ahead of inference, not after it.
+		//
+		// Inference walks the tree; the scope resolver further down is what
+		// decides there is no project here. In that order the whole walk was
+		// paid for on the way to the refusal — and `hookRoot()` falls back to
+		// the process cwd whenever CLAUDE_PROJECT_DIR is unset, so the tree
+		// being indexed was sometimes a home directory, on every edit, past
+		// the hook's timeout.
+		//
+		// Only where there is nothing but the directory to go on: a config file,
+		// `--config` or `--preset` is somebody stating that *this* directory is a
+		// project, and that statement outranks anything guessed from shape. The
+		// `preset` plugin option is not such a statement — it is set once, for
+		// every project its owner ever opens — so it configures the run without
+		// vouching for the root, and leaving it in this test switched the guard
+		// off everywhere for anyone who had pinned one.
+		const statedProject = Boolean(args.flags.config) || Boolean(args.flags.preset) || Boolean(configPath);
+		if (!statedProject && needsProject(command, args, isHook) && !looksLikeProject(root)) {
+			if (isHook) return emitClean(`loupe: skipped \u2014 ${NOT_A_WORKTREE}`);
+			process.stderr.write(`loupe: ${NOT_A_WORKTREE}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+
+		if (!args.flags.config && !explicitPreset && !configPath) {
 			detected = detectConfig(root);
 			if (options.projectPrefixes?.length)
 				detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
@@ -367,8 +407,7 @@ async function main(): Promise<number> {
 	// way. The hook is the caller this ceiling exists for; it cannot be the one
 	// caller that never hears about it.
 	if (detected?.truncated && !isHook) process.stderr.write(TRUNCATED_NOTE);
-	const ceilingSuffix =
-		detected?.truncated ? ` (inference stopped at the ${DETECT_ENTRY_BUDGET}-entry ceiling; namespaces are a guess)` : '';
+	const ceilingSuffix = detected?.truncated ? CEILING_SUFFIX : '';
 
 	// An inferred namespace list is a guess, and css/dead-class tells an agent to
 	// delete code. Never let a guess drive a destructive rule at error severity.
@@ -469,7 +508,7 @@ async function main(): Promise<number> {
 			lines.push('css/dead-class is held to advisory because the namespaces were inferred, not configured.');
 			if (detected?.truncated)
 				lines.push(
-					`Inference stopped at the ${DETECT_ENTRY_BUDGET}-entry ceiling: this root is larger than a project, so those namespaces came from the part of it that was read.`
+					`Inference stopped at the ${CEILING}: ${CEILING_WHY}.`
 				);
 			if (!blockingAllowed)
 				lines.push(
@@ -497,7 +536,7 @@ async function main(): Promise<number> {
 			`namespaces: ${info.namespaces.project.join(', ') || '(none found)'}  [${info.namespaceConfidence} confidence]`,
 			`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`,
 			`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` +
-				(info.truncated ? `  (stopped at the ${DETECT_ENTRY_BUDGET}-entry ceiling)` : ''),
+				(info.truncated ? `  (stopped at the ${CEILING})` : ''),
 		];
 		if (command === 'detect') {
 			lines.push('', 'Inferred config:', JSON.stringify(info.config, null, 2));
@@ -506,6 +545,21 @@ async function main(): Promise<number> {
 			return EXIT.OK;
 		}
 		const target = join(root, 'loupe.config.json');
+		// A written config is not a guess any more: `config.inferred` goes false,
+		// which turns blocking back on by default and lifts the css/dead-class
+		// demotion. A namespace list drawn from the part of the tree that was
+		// read would then block turns and tell an agent to delete classes it
+		// never read the stylesheet for — so the one thing inference must never
+		// do silently is launder a truncated answer into an authored one.
+		if (info.truncated && !args.flags.force) {
+			// The note above has already said why; this says only what it refuses
+			// to do about it, so the two lines do not read as one repeated twice.
+			process.stderr.write(
+				'loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. ' +
+					'Point --root at the project, or pass --force to write it anyway.\n'
+			);
+			return EXIT.CANNOT_RUN;
+		}
 		if (existsSync(target) && !args.flags.force) {
 			process.stderr.write(`loupe: ${target} already exists (use --force)\n`);
 			return EXIT.CANNOT_RUN;
@@ -570,9 +624,6 @@ async function main(): Promise<number> {
 	}
 
 	// ── check / hook ──────────────────────────────────────────────────────────
-	let payload: HookPayload = {};
-	if (isHook) payload = parsePayload(await readStdin());
-
 	// A PostToolUse payload names the file just written; scope to it so drift is
 	// reported at write time. Stop payloads carry no file and fall through to
 	// the changed-file scope.
@@ -612,11 +663,13 @@ async function main(): Promise<number> {
 		if (!sessionId && payload.stop_hook_active) {
 			// No session id to budget against: fall back to the conservative
 			// single-pass behaviour rather than risk looping the turn.
-			return emitClean('loupe: blocking findings remain (retry budget unavailable).');
+			return emitClean(`loupe: blocking findings remain (retry budget unavailable).${ceilingSuffix}`);
 		}
 		if (attempts > max) {
 			clearAttempts(root, touched ? `${sessionId}\u0000${touched}` : sessionId);
-			return emitClean(`loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}`);
+			return emitClean(
+				`loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}${ceilingSuffix}`
+			);
 		}
 		const report = formatAgent({ ...result, findings: result.findings.filter((f) => f.severity === 'error') }, config, {
 			maxFindings: config.hook.maxFindings,

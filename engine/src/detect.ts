@@ -389,7 +389,8 @@ export function detectNamespaces(
 	root: string,
 	presetName: string,
 	packageDir = '',
-	limit = DETECT_ENTRY_BUDGET,
+	/** Required: {@link detectConfig} is the only caller and always has one, so a default here would be a second, dead declaration of the ceiling. */
+	limit: number,
 ): NamespaceDetection {
 	const base = resolvePreset(presetName);
 	const generic = resolvePreset('generic');
@@ -473,8 +474,11 @@ export function detectNamespaces(
 		// A truncated walk read part of a tree, so `high` is a claim it cannot
 		// make: the prefixes it did not reach are exactly the ones that would
 		// have changed the answer. Coverage is measured against what was read,
-		// which is why it can look convincing and still be wrong.
-		confidence: files.truncated ? 'low' : accepted.length === 0 ? 'none' : coverage >= 0.5 ? 'high' : 'low',
+		// which is why it can look convincing and still be wrong. It demotes
+		// `high` only: `none` is the different and still-true claim that nothing
+		// was found, and swallowing it printed "(none found) [low confidence]".
+		confidence:
+			accepted.length === 0 ? 'none' : files.truncated ? 'low' : coverage >= 0.5 ? 'high' : 'low',
 		sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
 		truncated: files.truncated,
 	};

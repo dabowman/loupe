@@ -90,21 +90,41 @@ CSS evidence alone is never enough to adopt one.
 That walk stops after 50,000 directory entries, and a result that hit the
 ceiling comes back with its namespaces at low confidence and a note saying so —
 on stderr, and inside the hook's own message. Inference is a guess, and a guess
-made from part of a tree must not read like one made from a project. The preset
-is not affected: `detectPreset` reads manifests and top-level markers, never the
-walk.
+made from part of a tree must not read like one made from a project. Only `high`
+is demoted: a walk that stopped early and found nothing still answers `none`,
+which is the different and still-true claim. The preset is not affected:
+`detectPreset` reads manifests and top-level markers, never the walk.
+
+The walk reads the files at each level before descending below it, and prunes
+dot-directories unless a glob names one. Both exist for the same reason: with
+picomatch's `dot: false`, nothing under `.venv`, `.cache`, `.cargo` or a pnpm
+store can ever match a `**` glob, so descending into one bought nothing and
+could swallow the whole budget before the project's own files were reached —
+an answer indistinguishable from a project with no namespaces at all.
 
 Where the root is not a project at all, inference does not run. Hook runs and
 `check`/`fix --changed` stand aside there instead of indexing it — the refusal
 they would have got from the changed-file scope anyway, except on a `PostToolUse`
 payload naming a file, which used to analyze such a root and now does not. What
 counts as a project is deliberately generous, because a false negative is a gate
-that silently turns itself off: a `package.json`, a `.git` entry (read off disk,
-so a dubious-ownership mount or a missing `git` binary is not mistaken for "no
-repo"), a preset whose markers match — a block theme's `theme.json` +
-`templates/` needs neither of the first two — or git recognising a worktree,
-which is what catches subdirectories, linked worktrees and submodules. Plain
-`loupe check`, `--all` and `--files` name their own scope and run anywhere.
+that silently turns itself off, and they are asked cheapest first: a
+`package.json` or a `composer.json` (a WordPress plugin is as likely to carry
+the second as the first); a `.git` entry found anywhere up the tree, read off
+disk, so a dubious-ownership mount or a missing `git` binary is not mistaken for
+"no repo" — searched upwards, because the case that needs answering is the
+subdirectory and a subdirectory has no `.git` of its own; git itself, for a
+worktree the filesystem cannot see; or a preset whose markers match, which is
+how a block theme's `theme.json` + `templates/` counts with none of the others.
+A `--config` path or a `--preset` flag names this directory and skips the
+question outright; the `preset` plugin option does not, since it is set once for
+every project its owner opens. Plain `loupe check`, `--all` and `--files` name
+their own scope and run anywhere.
+
+`loupe init` refuses to write a config built from a truncated inference unless
+`--force` is passed. A written config is not held to advisory: `inferred` goes
+false, blocking comes back on by default and `css/dead-class` returns to its
+configured severity — so persisting a namespace list drawn from part of a tree
+turns a guess into a rule that deletes code.
 
 ```bash
 loupe detect   # what would be inferred, and why

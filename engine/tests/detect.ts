@@ -161,7 +161,7 @@ await check('the walk stops at its entry ceiling and says that it did', () => {
 
 		const bounded = discover({ root, sources, limit: 20 });
 		assert(bounded.truncated, 'a walk that stopped at its ceiling has to report stopping');
-		assert(bounded.styles.length <= 3, `a ceiling of 20 entries yielded ${bounded.styles.length} styles`);
+		assert(bounded.styles.length < 3, `a ceiling of 20 entries yielded all ${bounded.styles.length} styles`);
 
 		const whole = discover({ root, sources });
 		assert(!whole.truncated, 'an unbounded walk never reports truncation');
@@ -188,6 +188,33 @@ await check('directories count against the ceiling too', () => {
 	}
 });
 
+// Every `**` glob picomatch compiles leaves `dot: false` on, so nothing under
+// `.venv`, `.cache`, `.cargo` or a pnpm store can ever match one. Walking into
+// them spent the ceiling on entries that could not have contributed, and a
+// project whose own files lost that race came back with no namespaces at all —
+// which reads exactly like a project that has none.
+await check('a dot-directory neither answers the walk nor spends its budget', () => {
+	const root = scratch('dsh-ceiling-dot-');
+	try {
+		write(root, 'src/App.jsx', 'export const App = () => <div className="own-box own-card own-hero" />;');
+		write(root, 'styles/a.css', '.own-box{color:#111}\n.own-card{color:#222}\n.own-hero{color:#333}');
+		for (let i = 0; i < 200; i++) write(root, `.venv/lib/m${i}/x.py`, 'x\n');
+		const sources = { styles: ['**/*.css'], markup: ['**/*.jsx'], references: [], ignore: [] };
+
+		const whole = discover({ root, sources });
+		assert(!whole.truncated, '.venv is pruned, so nothing here is near any ceiling');
+		assert(whole.styles.length === 1 && whole.markup.length === 1, `pruning lost real files: ${JSON.stringify(whole)}`);
+
+		// The budget the walk actually spends: four entries at the root plus the
+		// two files below it. If `.venv` were still descended into it would be
+		// several hundred, and a ceiling of 20 would truncate.
+		const bounded = discover({ root, sources, limit: 20 });
+		assert(!bounded.truncated, 'a two-file project must not trip a 20-entry ceiling because of a .venv');
+	} finally {
+		cleanup(root);
+	}
+});
+
 // A guess drawn from part of a tree looks exactly like a guess drawn from a
 // whole project — same namespaces, same coverage percentage computed over what
 // was read. Confidence is the only thing that separates them, so a truncated
@@ -195,18 +222,25 @@ await check('directories count against the ceiling too', () => {
 await check('a truncated inference is never high confidence', () => {
 	const root = scratch('dsh-ceiling-detect-');
 	try {
+		// The namespace evidence sits in the root and the filler below it, so the
+		// bounded run below reads enough to accept `own-` and still stops early —
+		// which is the case the demotion is about. A run that found nothing would
+		// be answering `none`, a different claim.
 		write(root, 'package.json', '{}');
-		for (let i = 0; i < 40; i++) {
-			write(root, `src/A${i}.jsx`, `export const A${i} = () => <div className="own-box own-b${i}" />;`);
-			write(root, `styles/a${i}.css`, `.own-box{color:#111}\n.own-b${i}{color:#222}`);
-		}
+		write(root, 'App.jsx', 'export const App = () => <div className="own-box own-card own-hero" />;');
+		write(root, 'a.css', '.own-box{color:#111}\n.own-card{color:#222}\n.own-hero{color:#333}');
+		for (let i = 0; i < 40; i++) write(root, `filler/f${i}.txt`, 'filler\n');
 
 		const whole = detectConfig(root);
 		assert(!whole.truncated, 'a project this size is nowhere near the shipped ceiling');
 		assert(whole.namespaceConfidence === 'high', `unbounded run should be high, got ${whole.namespaceConfidence}`);
 
-		const bounded = detectConfig(root, { limit: 8 });
+		const bounded = detectConfig(root, { limit: 6 });
 		assert(bounded.truncated, 'inference that stopped at the ceiling has to say so');
+		assert(
+			bounded.namespaces.project.includes('own-'),
+			`the root's own files are read before the tree below them: ${JSON.stringify(bounded.namespaces)}`
+		);
 		assert(
 			bounded.namespaceConfidence === 'low',
 			`a guess from part of a tree cannot be high confidence — got ${bounded.namespaceConfidence}`
@@ -214,6 +248,26 @@ await check('a truncated inference is never high confidence', () => {
 		// The preset is read off manifests and top-level markers, not the walk,
 		// so it is exactly as good as it ever was.
 		assert(bounded.preset === 'generic', `the preset is still answered, got ${bounded.preset}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Truncation demotes `high`; it does not overwrite `none`. "We stopped early
+// and found nothing" and "we looked and there is nothing" are different claims,
+// and collapsing them printed `(none found)  [low confidence]`.
+await check('a truncated walk that found nothing still answers none', () => {
+	const root = scratch('dsh-ceiling-none-');
+	try {
+		write(root, 'package.json', '{}');
+		for (let i = 0; i < 40; i++) write(root, `filler/f${i}.txt`, 'filler\n');
+
+		const bounded = detectConfig(root, { limit: 3 });
+		assert(bounded.truncated, 'a 40-file tree has to trip a ceiling of 3');
+		assert(
+			bounded.namespaceConfidence === 'none',
+			`nothing was found, so the confidence is none — got ${bounded.namespaceConfidence}`
+		);
 	} finally {
 		cleanup(root);
 	}
