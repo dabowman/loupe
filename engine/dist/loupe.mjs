@@ -23702,6 +23702,19 @@ function changedFiles(root2) {
   return set;
 }
 
+// src/text.ts
+var flatten = (text) => text.replace(/\s+/g, " ");
+var oneLine = (text) => flatten(text).trim();
+var clip = (text, max) => {
+  const line = oneLine(text);
+  const chars = [...line];
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}\u2026` : line;
+};
+var SNIPPET_MAX = 80;
+var snippet = (text) => clip(text, SNIPPET_MAX);
+var MESSAGE_MAX = 200;
+var messageLine = (body, tail = "") => clip(body, Math.max(MESSAGE_MAX - tail.length, SNIPPET_MAX)) + flatten(tail);
+
 // src/suppressions.ts
 var ID = "(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)";
 var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -23733,7 +23746,11 @@ function makeSuppressionParser({
           rule: "suppression/malformed",
           file: relPath,
           line,
-          message: stripped.trim().slice(0, 60)
+          // Flattened, not capped: a block comment's tab would otherwise
+          // reset the indentation the report groups findings by, and this
+          // also feeds `code`, where collapsing whitespace is what
+          // `findingKey` already does.
+          message: oneLine(stripped).slice(0, 60)
         });
       }
     }
@@ -24605,12 +24622,6 @@ function tokenRefsIn(value, prefixes) {
 
 // src/analyze.ts
 var messageOf3 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
-var oneLine = (text) => text.replace(/\s+/g, " ").trim();
-var SNIPPET_MAX = 80;
-var snippet = (text) => {
-  const line = oneLine(text);
-  return line.length > SNIPPET_MAX ? `${line.slice(0, SNIPPET_MAX - 1)}\u2026` : line;
-};
 function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {} }) {
   const isMargin = prop === "margin" || prop.startsWith("margin-");
   const marginKind = isMargin ? classifyMargin(value) : null;
@@ -24624,20 +24635,20 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
   } else if (boundSystem[0] && APPEARANCE_PROPS.has(prop)) {
     finding = { rule: "system/override", message: `<${boundSystem[0].tag}> \u2190 ${prop}` };
   } else if (isMargin) {
-    if (marginKind === "negative") finding = { rule: "layout/negative-margin", message: snippet(decl2), code: prop };
-    else if (marginKind) finding = { rule: "layout/margin-on-child", message: snippet(decl2), code: prop };
+    if (marginKind === "negative") finding = { rule: "layout/negative-margin", message: decl2, code: prop };
+    else if (marginKind) finding = { rule: "layout/margin-on-child", message: decl2, code: prop };
   } else if (TYPE_PROPS.has(prop)) {
     if (!usesToken(value) && !isInertValue(value))
-      finding = { rule: "typography/untokenized", message: snippet(decl2), code: oneLine(decl2), hint: { prop, value } };
+      finding = { rule: "typography/untokenized", message: decl2, code: oneLine(decl2), hint: { prop, value } };
   } else if (GAP_PROPS.has(prop)) {
-    if (!boundSystem.length && !isGrid) finding = { rule: "layout/in-css", message: snippet(decl2), code: prop };
+    if (!boundSystem.length && !isGrid) finding = { rule: "layout/in-css", message: decl2, code: prop };
   } else if (isFlexish) {
     const gridDisplay = prop === "display" && /\bgrid\b/.test(value);
-    if (!boundSystem.length && !isGrid && !gridDisplay)
-      finding = { rule: "layout/in-css", message: snippet(decl2), code: oneLine(decl2) };
+    if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: "layout/in-css", message: decl2, code: oneLine(decl2) };
   } else if (hardcoded) {
-    finding = { rule: "tokens/hardcoded-value", message: snippet(decl2), code: oneLine(decl2), hint: { prop, value } };
+    finding = { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hint: { prop, value } };
   }
+  if (finding) finding.message = snippet(finding.message);
   return { finding, styling };
 }
 var COLLAPSE_PER_RULE = /* @__PURE__ */ new Set(["layout/in-css", "typography/untokenized"]);
@@ -24909,7 +24920,7 @@ async function analyze(config, { scope = null } = {}) {
         });
         if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
       }
-      const where = group.selector ? ` in \`${oneLine(group.selector)}\`` : "";
+      const where = group.selector ? ` in \`${snippet(group.selector)}\`` : "";
       for (const f of collapsePerRule(pending)) {
         if (!config.enabled[f.rule]) continue;
         if (supp && isSuppressed(supp.byLine, f.line, f.rule, [tpl.line, tpl.line - 1])) continue;
@@ -25044,7 +25055,6 @@ async function analyze(config, { scope = null } = {}) {
     const suggest = f.hints.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) })).filter((s) => s.tokens.length);
     if (suggest.length) f.suggest = suggest;
     delete f.hints;
-    delete f.suffix;
   }
   if (tokenSet.known.size && config.enabled["tokens/unknown-token"]) {
     const seenUnknown = /* @__PURE__ */ new Set();
@@ -25065,10 +25075,15 @@ async function analyze(config, { scope = null } = {}) {
       });
     }
   }
-  for (const f of findings) delete f.suffix;
+  for (const f of findings) {
+    const tail = f.suffix ?? "";
+    const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
+    f.message = messageLine(body, tail);
+    delete f.suffix;
+  }
   const seen = /* @__PURE__ */ new Set();
   const unique = findings.filter((f) => {
-    const k = `${f.rule}|${f.file}|${f.line}|${f.message}`;
+    const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ""}|${f.message}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -26504,9 +26519,10 @@ Wrote ${target}
     const dry = Boolean(args.flags["dry-run"]);
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
     const verb = dry ? "would fix" : "fixed";
-    for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${f.prop}: ${f.value} \u2192 var(${f.token})
+    const decl2 = (f) => snippet(`${f.prop}: ${f.value}`);
+    for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${decl2(f)} \u2192 var(${f.token})
 `);
-    for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${f.prop}: ${f.value} \u2014 ${f.why}
+    for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${decl2(f)} \u2014 ${f.why}
 `);
     const left = toFix.findings.length - applied.length;
     process.stdout.write(

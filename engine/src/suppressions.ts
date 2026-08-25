@@ -15,6 +15,7 @@
  */
 
 import { canonicalRuleId } from './rules.ts';
+import { oneLine } from './text.ts';
 import type { Directive, MalformedDirective, SuppressionConfig, Suppressions } from './types.ts';
 
 const ID = '(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)';
@@ -51,7 +52,11 @@ export function makeSuppressionParser({
 					rule: 'suppression/malformed',
 					file: relPath,
 					line,
-					message: stripped.trim().slice(0, 60),
+					// Flattened, not capped: a block comment's tab would otherwise
+					// reset the indentation the report groups findings by, and this
+					// also feeds `code`, where collapsing whitespace is what
+					// `findingKey` already does.
+					message: oneLine(stripped).slice(0, 60),
 				});
 			}
 		}

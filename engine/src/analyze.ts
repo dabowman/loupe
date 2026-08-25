@@ -17,6 +17,7 @@ import { discover } from './discover.ts';
 import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
 import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
+import { messageLine, oneLine, snippet } from './text.ts';
 import { SUBSTANTIAL, matches } from './patterns.ts';
 import { harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
 import {
@@ -52,34 +53,6 @@ const messageOf = (err: unknown): string =>
 	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
 
 /**
- * A captured snippet of source, flattened onto one line.
- *
- * A declaration is under no obligation to occupy one line of source: a
- * gradient, a `box-shadow` list, a `grid-template-areas` map and a multi-line
- * `transition` all span several, tabs and all. The report is one line per
- * finding, so a value carried through verbatim breaks the indentation the
- * format uses to group findings under a rule — and the hook hands that same
- * text back as blocking feedback.
- *
- * Flattened where the snippet is captured rather than where it is printed:
- * `--format json`, SARIF and the hook all read `message` too, and a guarantee
- * only the agent formatter honours is not a guarantee.
- */
-const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim();
-
-/** Past this, a snippet is quoting the value rather than identifying it. */
-const SNIPPET_MAX = 80;
-
-/**
- * What a finding prints. `code` keeps the whole declaration, so two long values
- * sharing their first {@link SNIPPET_MAX} characters stay distinct identities.
- */
-const snippet = (text: string): string => {
-	const line = oneLine(text);
-	return line.length > SNIPPET_MAX ? `${line.slice(0, SNIPPET_MAX - 1)}\u2026` : line;
-};
-
-/**
  * Which rule, if any, a single declaration violates.
  *
  * Shared by the stylesheet walk and the JSX inline-style walk. `margin-bottom:
@@ -106,8 +79,8 @@ function classifyDeclaration(
 	const styling =
 		isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
 
-	// The declaration as written. `snippet` is what gets printed; where the rule
-	// has no coarser identity to key on, `code` carries the whole of it.
+	// The declaration as written. Where the rule has no coarser identity to key
+	// on, `code` carries the whole of it — only the printed message is bounded.
 	const decl = `${prop}: ${value}`;
 
 	let finding: ClassifiedFinding | null = null;
@@ -118,23 +91,27 @@ function classifyDeclaration(
 	} else if (isMargin) {
 		// Zero and `auto` classify as null: a reset and a centering trick,
 		// neither of which has a gap remedy to point at.
-		if (marginKind === 'negative') finding = { rule: 'layout/negative-margin', message: snippet(decl), code: prop };
-		else if (marginKind) finding = { rule: 'layout/margin-on-child', message: snippet(decl), code: prop };
+		if (marginKind === 'negative') finding = { rule: 'layout/negative-margin', message: decl, code: prop };
+		else if (marginKind) finding = { rule: 'layout/margin-on-child', message: decl, code: prop };
 	} else if (TYPE_PROPS.has(prop)) {
 		if (!usesToken(value) && !isInertValue(value))
-			finding = { rule: 'typography/untokenized', message: snippet(decl), code: oneLine(decl), hint: { prop, value } };
+			finding = { rule: 'typography/untokenized', message: decl, code: oneLine(decl), hint: { prop, value } };
 	} else if (GAP_PROPS.has(prop)) {
 		// Skipped on a component-bound class (component-internal flex, or a class
 		// already on a layout primitive) and on a grid, neither of which is
 		// convertible to a flex primitive.
-		if (!boundSystem.length && !isGrid) finding = { rule: 'layout/in-css', message: snippet(decl), code: prop };
+		if (!boundSystem.length && !isGrid) finding = { rule: 'layout/in-css', message: decl, code: prop };
 	} else if (isFlexish) {
 		const gridDisplay = prop === 'display' && /\bgrid\b/.test(value);
-		if (!boundSystem.length && !isGrid && !gridDisplay)
-			finding = { rule: 'layout/in-css', message: snippet(decl), code: oneLine(decl) };
+		if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: 'layout/in-css', message: decl, code: oneLine(decl) };
 	} else if (hardcoded) {
-		finding = { rule: 'tokens/hardcoded-value', message: snippet(decl), code: oneLine(decl), hint: { prop, value } };
+		finding = { rule: 'tokens/hardcoded-value', message: decl, code: oneLine(decl), hint: { prop, value } };
 	}
+	// Bounded in one place rather than at each branch, so a rule added here is
+	// one line by default. `code` is deliberately left alone: identity keeps the
+	// whole declaration, and two values sharing their first SNIPPET_MAX
+	// characters must not collapse into one baseline entry.
+	if (finding) finding.message = snippet(finding.message);
 	return { finding, styling };
 }
 
@@ -510,7 +487,7 @@ export async function analyze(
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
 			}
-			const where = group.selector ? ` in \`${oneLine(group.selector)}\`` : '';
+			const where = group.selector ? ` in \`${snippet(group.selector)}\`` : '';
 			for (const f of collapsePerRule(pending)) {
 				if (!config.enabled[f.rule]) continue;
 				if (supp && isSuppressed(supp.byLine, f.line, f.rule, [tpl.line, tpl.line - 1])) continue;
@@ -703,7 +680,8 @@ for (const f of findings) {
 		.filter((s) => s.tokens.length);
 	if (suggest.length) f.suggest = suggest;
 	delete f.hints;
-	delete f.suffix;
+	// `suffix` stays until the message is bounded below, which needs to know
+	// which part of it is the channel marker. Nothing downstream of that sees it.
 }
 
 // An empty token set means nothing was found to check against — not that every
@@ -728,13 +706,29 @@ if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
 	}
 }
 
-	for (const f of findings) delete f.suffix;
+	// One report line per finding, bounded — once, here, because the token pass
+	// above is the last of several writers of `message`, and a cap applied
+	// before it would simply be overwritten. Each captured snippet is bounded
+	// where it was captured; this bounds what a message assembled out of
+	// several of them adds up to, keeping the channel marker on the end.
+	for (const f of findings) {
+		const tail = f.suffix ?? '';
+		const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
+		f.message = messageLine(body, tail);
+		delete f.suffix;
+	}
 
 	// Dedupe: nesting and multi-selector rules can legitimately reach the same
 	// declaration twice.
+	//
+	// Keyed on identity AND display. `message` alone would fold two distinct
+	// declarations on one line whose values agree up to the cap into a single
+	// finding — a linter losing a finding silently is worse than the formatting
+	// this cap exists to fix. `code` alone would fold the other way, since on
+	// the margin and gap rules it is deliberately just the property.
 	const seen = new Set<string>();
 	const unique = findings.filter((f) => {
-		const k = `${f.rule}|${f.file}|${f.line}|${f.message}`;
+		const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ''}|${f.message}`;
 		if (seen.has(k)) return false;
 		seen.add(k);
 		return true;
