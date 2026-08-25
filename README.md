@@ -335,9 +335,11 @@ node engine/bin/loupe.mjs baseline
 Entries key on rule + file + normalized code, not line number, so reformatting
 does not resurrect the whole file.
 
-The baseline and the hook's retry counter live in the plugin's data directory,
-keyed by project — carrying the plugin between repos writes nothing into them.
-A baseline already committed to a project still wins. `status` prints which.
+The baseline is written to `.loupe-baseline.json` in the project and is meant to
+be committed: it is a statement about this repo, and the CLI and the hook are
+different processes that have to read the same file. Set `baseline` in the
+config to move it. Only the hook's retry counter lives in the plugin's data
+directory, keyed by project. `status` prints both locations.
 
 ## Remediation
 

@@ -11,8 +11,8 @@
  * finding in the file.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
 import { findingKey } from './analyze.ts';
 import type { AnalyzeResult, Baseline, BaselineFile, BaselinedResult } from './types.ts';
 
@@ -42,6 +42,8 @@ export function writeBaseline(
 	result: AnalyzeResult,
 ): { path: string; count: number } {
 	const full = resolvePath(root, path);
+	// A configured baseline may name a directory that doesn't exist yet.
+	mkdirSync(dirname(full), { recursive: true });
 	const entries = [...new Set(result.findings.map(findingKey))].sort();
 	writeFileSync(
 		full,

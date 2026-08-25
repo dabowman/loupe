@@ -20112,7 +20112,7 @@ var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
     var { existsSync: existsSync8, readFileSync: readFileSync9, realpathSync } = __require("fs");
-    var { dirname: dirname4, isAbsolute: isAbsolute7, join: join11, relative: relative4, sep: sep3 } = __require("path");
+    var { dirname: dirname5, isAbsolute: isAbsolute7, join: join11, relative: relative4, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath(path) {
       try {
@@ -20139,7 +20139,7 @@ var require_previous_map = __commonJS({
         if (!this.mapFile && opts.from) {
           this.mapFile = opts.from;
         }
-        if (this.mapFile) this.root = dirname4(this.mapFile);
+        if (this.mapFile) this.root = dirname5(this.mapFile);
         if (text) this.text = text;
       }
       consumer() {
@@ -20185,12 +20185,12 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative4(realPath(dirname4(cssFile)), realPath(path));
+          let rel = relative4(realPath(dirname5(cssFile)), realPath(path));
           if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute7(rel)) {
             return void 0;
           }
         }
-        this.root = dirname4(path);
+        this.root = dirname5(path);
         if (existsSync8(path)) {
           this.mapFile = path;
           return readFileSync9(path, "utf-8").toString().trim();
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join11(dirname4(file), map);
+          if (file) map = join11(dirname5(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname4, relative: relative4, resolve: resolve5, sep: sep3 } = __require("path");
+    var { dirname: dirname5, relative: relative4, resolve: resolve5, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL2 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname4 && resolve5 && relative4 && sep3);
+    var pathAvailable = Boolean(dirname5 && resolve5 && relative4 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20767,7 +20767,7 @@ var require_map_generator = __commonJS({
       applyPrevMaps() {
         for (let prev of this.previous()) {
           let from = this.toUrl(this.path(prev.file));
-          let root2 = prev.root || dirname4(prev.file);
+          let root2 = prev.root || dirname5(prev.file);
           let map;
           if (this.mapOpts.sourcesContent === false) {
             map = new SourceMapConsumer(prev.text);
@@ -20962,9 +20962,9 @@ var require_map_generator = __commonJS({
         if (/^\w+:\/\//.test(file)) return file;
         let cached = this.memoizedPaths.get(file);
         if (cached) return cached;
-        let from = this.opts.to ? dirname4(this.opts.to) : ".";
+        let from = this.opts.to ? dirname5(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname4(resolve5(from, this.mapOpts.annotation));
+          from = dirname5(resolve5(from, this.mapOpts.annotation));
         }
         let path = relative4(from, file);
         this.memoizedPaths.set(file, path);
@@ -25139,8 +25139,8 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
 }
 
 // src/baseline.ts
-import { existsSync, readFileSync as readFileSync4, writeFileSync as writeFileSync2 } from "node:fs";
-import { isAbsolute, join as join4 } from "node:path";
+import { existsSync, mkdirSync, readFileSync as readFileSync4, writeFileSync as writeFileSync2 } from "node:fs";
+import { dirname, isAbsolute, join as join4 } from "node:path";
 var resolvePath = (root2, p) => isAbsolute(p) ? p : join4(root2, p);
 function readBaseline(root2, path) {
   const full = resolvePath(root2, path);
@@ -25161,6 +25161,7 @@ function readBaseline(root2, path) {
 }
 function writeBaseline(root2, path, result) {
   const full = resolvePath(root2, path);
+  mkdirSync(dirname(full), { recursive: true });
   const entries = [...new Set(result.findings.map(findingKey))].sort();
   writeFileSync2(
     full,
@@ -25192,7 +25193,7 @@ function applyBaseline(result, baseline) {
 
 // src/config.ts
 import { existsSync as existsSync2, readFileSync as readFileSync5, readdirSync as readdirSync3 } from "node:fs";
-import { dirname, isAbsolute as isAbsolute2, join as join5, resolve } from "node:path";
+import { dirname as dirname2, isAbsolute as isAbsolute2, join as join5, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 // src/registry.ts
@@ -25220,7 +25221,7 @@ function loadComponents(raw) {
 }
 
 // src/config.ts
-var HERE = dirname(fileURLToPath(import.meta.url));
+var HERE = dirname2(fileURLToPath(import.meta.url));
 var PRESET_DIR = join5(HERE, "..", "presets");
 var CONFIG_NAMES = [
   "loupe.config.mjs",
@@ -25281,7 +25282,7 @@ function findConfig(start) {
       } catch {
       }
     }
-    const up = dirname(dir);
+    const up = dirname2(dir);
     if (up === dir) return null;
     dir = up;
   }
@@ -25298,7 +25299,7 @@ async function resolveExtends(spec, fromDir) {
   const asPreset = join5(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, "")}.json`);
   if (existsSync2(asPreset)) return { path: asPreset, dir: PRESET_DIR };
   const asPath = isAbsolute2(spec) ? spec : join5(fromDir, spec);
-  if (existsSync2(asPath)) return { path: asPath, dir: dirname(asPath) };
+  if (existsSync2(asPath)) return { path: asPath, dir: dirname2(asPath) };
   throw new Error(`cannot resolve extends: ${spec}`);
 }
 async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
@@ -25306,7 +25307,7 @@ async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
   if (seen.has(real)) throw new Error(`circular extends at ${real}`);
   seen.add(real);
   const raw = await readConfigFile(real) ?? {};
-  return expandExtends(raw, dirname(real), seen);
+  return expandExtends(raw, dirname2(real), seen);
 }
 async function expandExtends(raw, fromDir, seen = /* @__PURE__ */ new Set()) {
   if (!raw?.extends) return raw ?? {};
@@ -25612,9 +25613,9 @@ function formatSarif(result, config) {
 
 // src/detect.ts
 import { existsSync as existsSync3, readFileSync as readFileSync6, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
-import { dirname as dirname2, join as join6 } from "node:path";
+import { dirname as dirname3, join as join6 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
-var HERE2 = dirname2(fileURLToPath2(import.meta.url));
+var HERE2 = dirname3(fileURLToPath2(import.meta.url));
 var PRESET_DIR2 = join6(HERE2, "..", "presets");
 var readJson = (p) => {
   try {
@@ -25982,7 +25983,7 @@ function applyRegistries(config, sources, {
 
 // src/paths.ts
 import { createHash } from "node:crypto";
-import { existsSync as existsSync5, mkdirSync } from "node:fs";
+import { existsSync as existsSync5, mkdirSync as mkdirSync2 } from "node:fs";
 import { isAbsolute as isAbsolute4, join as join8, resolve as resolve3 } from "node:path";
 var pluginDataDir = () => process.env.CLAUDE_PLUGIN_DATA ?? null;
 var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
@@ -25994,15 +25995,15 @@ function projectKey(root2) {
 }
 function ensureDir(dir) {
   try {
-    mkdirSync(dir, { recursive: true });
+    mkdirSync2(dir, { recursive: true });
     return dir;
   } catch {
     return null;
   }
 }
-function stateDir(root2, { preferProject = false, create = false } = {}) {
+function stateDir(root2, { create = false } = {}) {
   const data = pluginDataDir();
-  if (!preferProject && data) {
+  if (data) {
     const dir2 = join8(data, "projects", projectKey(root2));
     if (!create) return { dir: dir2, scope: "plugin-data" };
     const made2 = ensureDir(dir2);
@@ -26013,22 +26014,24 @@ function stateDir(root2, { preferProject = false, create = false } = {}) {
   const made = ensureDir(dir);
   return made ? { dir: made, scope: "project" } : { dir: null, scope: "none" };
 }
-function baselinePath(root2, explicit, { create = false } = {}) {
-  if (explicit) {
-    return { path: isAbsolute4(explicit) ? explicit : join8(root2, explicit), scope: "explicit" };
-  }
-  const { dir, scope } = stateDir(root2, { create });
-  if (!dir) return { path: join8(root2, ".loupe-baseline.json"), scope: "project" };
-  return { path: join8(dir, "baseline.json"), scope };
+var DEFAULT_BASELINE = ".loupe-baseline.json";
+function baselinePath(root2, named) {
+  const p = named || DEFAULT_BASELINE;
+  return { path: isAbsolute4(p) ? p : join8(root2, p), scope: named ? "explicit" : "project" };
 }
-function findExistingBaseline(root2, explicit, configured, { create = false } = {}) {
+function legacyBaselines(root2) {
+  const data = pluginDataDir();
+  return [
+    { path: join8(root2, ".loupe", "baseline.json"), scope: "project" },
+    ...data ? [{ path: join8(data, "projects", projectKey(root2), "baseline.json"), scope: "plugin-data" }] : []
+  ];
+}
+function findExistingBaseline(root2, explicit, configured) {
   if (explicit) return baselinePath(root2, explicit);
-  const candidates = [configured, ".loupe-baseline.json"].filter((c) => Boolean(c));
-  for (const candidate of candidates) {
-    const p = isAbsolute4(candidate) ? candidate : join8(root2, candidate);
-    if (existsSync5(p)) return { path: p, scope: "project" };
-  }
-  return baselinePath(root2, null, { create });
+  const target = baselinePath(root2, configured);
+  if (existsSync5(target.path)) return target;
+  for (const legacy of legacyBaselines(root2)) if (existsSync5(legacy.path)) return legacy;
+  return target;
 }
 function attemptsPath(root2, create = false) {
   const { dir } = stateDir(root2, { create });
@@ -26037,7 +26040,7 @@ function attemptsPath(root2, create = false) {
 
 // src/hook.ts
 import { existsSync as existsSync6, readFileSync as readFileSync8, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname3, isAbsolute as isAbsolute5, join as join9, relative as relative2, sep as sep2 } from "node:path";
+import { dirname as dirname4, isAbsolute as isAbsolute5, join as join9, relative as relative2, sep as sep2 } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
@@ -26157,7 +26160,7 @@ function resolvedOptions() {
 function pluginName() {
   const roots = [
     process.env.CLAUDE_PLUGIN_ROOT,
-    join9(dirname3(fileURLToPath3(import.meta.url)), "..", "..")
+    join9(dirname4(fileURLToPath3(import.meta.url)), "..", "..")
   ].filter((r) => Boolean(r));
   for (const root2 of roots) {
     try {
@@ -26378,11 +26381,13 @@ async function main() {
   if (command === "status") {
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? "inferred (no config file found)" : config.source.kind;
     const state = stateDir(root2);
+    const base = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const lines = [
       `config:     ${src}`,
       `namespaces: ${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
       `suppress:   ${config.suppression.keyword} <ruleId> -- <reason>`,
-      `state:      ${state.dir}${state.scope === "plugin-data" ? "  (outside your repo)" : ""}`,
+      `baseline:   ${base.path}${existsSync7(base.path) ? "" : "  (none recorded yet)"}`,
+      `state:      ${state.dir}${state.scope === "plugin-data" ? "  (retry counter only, outside your repo)" : ""}`,
       `options:    ${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
       `plugin:     ${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
       // Which design system's registries are in play, and — when none are —
@@ -26453,10 +26458,9 @@ Wrote ${target}
   }
   if (command === "baseline") {
     const result2 = await analyze(config, { scope: null });
-    const { path: target, scope: scope2 } = findExistingBaseline(root2, args.flags.baseline, config.baselinePath, { create: true });
+    const { path: target } = baselinePath(root2, args.flags.baseline ?? config.baselinePath);
     const { path, count } = writeBaseline(root2, target, result2);
-    const where = scope2 === "plugin-data" ? " (plugin data \u2014 nothing written to your repo)" : "";
-    process.stdout.write(`loupe: baselined ${count} finding(s) \u2192 ${path}${where}
+    process.stdout.write(`loupe: baselined ${count} finding(s) \u2192 ${path}
 `);
     return EXIT.OK;
   }

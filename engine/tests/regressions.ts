@@ -198,4 +198,35 @@ await check('the hook blocks when the setting says it should', () => {
 	}
 });
 
+// `loupe baseline` from a shell has no CLAUDE_PLUGIN_DATA; the Stop hook always
+// has one. State keyed off that variable meant the two processes read different
+// files, so a recorded backlog was invisible to the gate that was supposed to
+// honor it — and the gate blocked with nothing in its output to say why.
+await check('a baseline recorded from a shell is visible to the plugin hook', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	const pluginData = scratch('dsh-plugin-data-');
+	try {
+		const shell = { ...process.env };
+		delete shell['CLAUDE_PLUGIN_DATA'];
+		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: shell });
+		assert(/baselined [1-9]/.test(recorded), `nothing baselined:\n${recorded}`);
+
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"base","tool_input":{"file_path":"styles/a.css"}}',
+			env: { ...process.env, CLAUDE_PLUGIN_DATA: pluginData, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		assert(!/blocking/i.test(out), `hook did not honor the baseline:\n${out}`);
+	} finally {
+		cleanup(root);
+		cleanup(pluginData);
+	}
+});
+
 finish();

@@ -19,7 +19,7 @@ import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts
 import { detectConfig } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
 import type { RegistrySource } from './profiles.ts';
-import { findExistingBaseline, isPluginContext, stateDir } from './paths.ts';
+import { baselinePath, findExistingBaseline, isPluginContext, stateDir } from './paths.ts';
 import { RULE_IDS } from './rules.ts';
 import {
 	bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot,
@@ -291,11 +291,16 @@ async function main(): Promise<number> {
 						? 'inferred (no config file found)'
 						: config.source.kind;
 		const state = stateDir(root);
+		// Report the baseline separately from the retry state. They resolve
+		// differently now, and the whole reason they do is that one line covering
+		// both let a baseline sit in a file the hook was never reading.
+		const base = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
 		const lines = [
 			`config:     ${src}`,
 			`namespaces: ${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
 			`suppress:   ${config.suppression.keyword} <ruleId> -- <reason>`,
-			`state:      ${state.dir}${state.scope === 'plugin-data' ? '  (outside your repo)' : ''}`,
+			`baseline:   ${base.path}${existsSync(base.path) ? '' : '  (none recorded yet)'}`,
+			`state:      ${state.dir}${state.scope === 'plugin-data' ? '  (retry counter only, outside your repo)' : ''}`,
 			`options:    ${
 				optionsSource === 'environment'
 					? 'from the plugin environment (hook context)'
@@ -382,12 +387,14 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
+	// Writes to the canonical project path, never to wherever a legacy baseline
+	// happens to sit: a backlog recorded here has to be visible to the hook, and
+	// the hook is a different process with a different environment.
 	if (command === 'baseline') {
 		const result = await analyze(config, { scope: null });
-		const { path: target, scope } = findExistingBaseline(root, args.flags.baseline, config.baselinePath, { create: true });
+		const { path: target } = baselinePath(root, args.flags.baseline ?? config.baselinePath);
 		const { path, count } = writeBaseline(root, target, result);
-		const where = scope === 'plugin-data' ? ' (plugin data \u2014 nothing written to your repo)' : '';
-		process.stdout.write(`loupe: baselined ${count} finding(s) \u2192 ${path}${where}\n`);
+		process.stdout.write(`loupe: baselined ${count} finding(s) \u2192 ${path}\n`);
 		return EXIT.OK;
 	}
 

@@ -268,11 +268,14 @@ loupe check --changed   # only what's new
 Entries key on rule + file + normalized code, not line number, so reformatting
 doesn't resurrect the whole file.
 
-Under a plugin the baseline goes to `${CLAUDE_PLUGIN_DATA}/projects/<project>/`,
-so carrying the tool between repos writes nothing into them. Outside one it
-falls back to the project. An existing project-local baseline always wins — a
-committed baseline is a deliberate choice — and `--baseline <path>` always
-writes where you name it. `loupe status` prints the location in use.
+The baseline goes to `.loupe-baseline.json` in the project, whatever the tool was
+invoked as, and is meant to be committed. One location is the point: `loupe
+baseline` from a shell and the Stop hook running as a plugin are different
+processes with different environments, and a backlog only one of them can see is
+a gate that blocks on findings it was told to accept. Set `baseline` in the
+config, or pass `--baseline <path>`, to put it elsewhere. Baselines written by
+earlier versions into a state directory are still read until the next `loupe
+baseline` rewrites them. `loupe status` prints the path in use.
 
 ## Claude Code hook
 
