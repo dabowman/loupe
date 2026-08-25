@@ -28,10 +28,16 @@ here=$(CDPATH= cd -- "$(dirname -- "$target")" && pwd -P)
 # imports its packages, so pointing this at every project is safe: a repo on a
 # different design system selects no profile and gets no registry.
 #
-# An explicit --profiles/--profile/--patterns still wins: the flag is only added
-# when the caller named none of them.
+# An explicit --profiles/--patterns still wins: the flag is only added when the
+# caller named none of them.
+#
+# `--profile <id>` is deliberately NOT in that list. It selects *among* the
+# profiles this line supplies rather than supplying any of its own, so treating
+# it as an opt-out suppressed the directory it needs: `loupe --profile wpds`
+# reached the engine with no profiles root, found nothing to force, and ran a
+# weaker check than the same command without the flag.
 case " $* " in
-	*" --profiles "*|*" --profiles="*|*" --profile "*|*" --profile="*|*" --patterns "*|*" --patterns="*)
+	*" --profiles "*|*" --profiles="*|*" --patterns "*|*" --patterns="*)
 		exec node "$here/../engine/bin/loupe.mjs" "$@" ;;
 esac
 exec node "$here/../engine/bin/loupe.mjs" "$@" --profiles "$here/../profiles"

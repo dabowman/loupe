@@ -12,7 +12,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { analyze } from './analyze.ts';
 import { applyTokenFixes } from './autofix.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
-import { findConfig, listPresets, loadConfig, setComponentRegistry, setPatterns } from './config.ts';
+import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
 import { changedFiles, isSource, toPosix } from './discover.ts';
 import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
@@ -204,8 +204,37 @@ async function main(): Promise<number> {
 	// the gate will do, and it cannot do that without the settings the gate reads.
 	const { options, source: optionsSource } = resolvedOptions();
 
+	// Read before the config rather than with the other registry work below: a
+	// profile names the preset that configures its design system, and that has
+	// to be settled before the config it would configure is loaded.
+	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
+	const forced = args.flags.profile ? (profiles.find((p) => p.id === args.flags.profile) ?? null) : null;
+	// A named profile that resolves to nothing used to be a silent no-op — no
+	// registries, no preset, exit 0 — which is indistinguishable from the profile
+	// applying and finding nothing. Worse, it also suppresses the profile
+	// *selection* would have made, so a typo checks strictly less than no flag at
+	// all. The sibling failure one screen down already warns; this one has to.
+	if (args.flags.profile && !forced && !isHook)
+		process.stderr.write(
+			`loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve(args.flags.profiles) : 'any profiles directory (--profiles was not given)'}${
+				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
+			}\n`
+		);
+
 	let config: Config;
 	let detected: DetectedConfig | null = null;
+	// Hoisted: `status` has to be able to say where an inferred config got its
+	// ruleset, and "inferred" on its own does not say a profile named it.
+	let profilePreset: string | null = null;
+	// Detection plus everything that outranks it. Reads `profilePreset` at call
+	// time, which is what lets `detect` and `init` below reuse it after the
+	// resolution above has settled.
+	const runDetection = (): DetectedConfig => {
+		const d = detectConfig(root, { preset: profilePreset });
+		if (options.projectPrefixes?.length)
+			d.config.namespaces = { ...d.config.namespaces, project: options.projectPrefixes };
+		return d;
+	};
 	try {
 		// An explicit path or preset wins; then a discovered project config; then
 		// whatever the project itself implies. Without the last step a project
@@ -213,11 +242,33 @@ async function main(): Promise<number> {
 		// component layer and therefore silently disables every correlation rule.
 		const explicitPreset =
 			args.flags.preset ?? (options.preset && options.preset !== 'auto' ? options.preset : null);
-		if (!args.flags.config && !explicitPreset && !findConfig(root)) {
-			detected = detectConfig(root);
-			if (options.projectPrefixes?.length)
-				detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
+		const unconfigured = !args.flags.config && !explicitPreset && !findConfig(root);
+		// A named profile's preset ranks last among the statements *about this
+		// project* — --config, --preset, the plugin option's own preset and the
+		// project's config file each outrank it — and first against inference,
+		// which is a guess about the design system `--profile` just named
+		// outright. Until this it was read by nothing at all: naming a profile
+		// merged its registries into a config that knew none of its components
+		// and left every severity at the generic default.
+		if (unconfigured && forced?.preset) {
+			if (presetExists(forced.preset)) profilePreset = forced.preset;
+			// A profile naming a preset this install does not carry is a broken
+			// profile, not a broken project: its registries still apply, so name
+			// what was ignored rather than failing the run over it.
+			else if (!isHook)
+				process.stderr.write(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed\n`);
 		}
+		// Override the preset inference chose, not the run it produced. The
+		// namespaces are a reading of *this* project and hold whoever picked the
+		// design system; skipping detection to inject the preset instead dropped
+		// them, which switched css/dead-class off on a repo where it had been
+		// running and left `init` writing that loss to disk.
+		//
+		// Both overrides live here rather than at the call site because `detect`
+		// and `init` re-run detection when the run did not, and a config written
+		// to someone's repo without them is a wrong artifact that outlives the
+		// process that made it.
+		if (unconfigured) detected = runDetection();
 		config = await loadConfig({
 			root,
 			configPath: args.flags.config ?? null,
@@ -239,12 +290,14 @@ async function main(): Promise<number> {
 	// design-system profile that the project's own imports selected. Both merge
 	// with the project winning on id, because a repo that has written down its
 	// own `page-header` means that one, not the shipped generic.
-	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
 	const active = selectProfiles(profiles, config, args.flags.profile ?? null);
 	const sources: RegistrySource[] = active.map((p) => ({
 		label: `profile ${p.id}`,
 		patterns: p.patterns,
 		components: p.components,
+		// Naming a profile has already answered the question its registries would
+		// be scope-checked against.
+		forced: p.id === forced?.id,
 	}));
 	if (args.flags.patterns || args.flags.components)
 		sources.push({
@@ -261,8 +314,15 @@ async function main(): Promise<number> {
 		// it is indistinguishable from running it and finding nothing.
 		for (const s of registries.skipped)
 			process.stderr.write(
-				`loupe: ${s.label} ${s.kind} registry skipped \u2014 it is scoped to ${s.packages.join(', ')}, which this project does not import\n`
+				`loupe: ${s.label} ${s.kind} registry skipped \u2014 scoped to ${s.packages.join(', ')}, and this config declares ${
+					config.designSystem.packages.length ? config.designSystem.packages.join(', ') : 'no design-system packages'
+				}\n`
 			);
+		// And the same for one merged past the scope check that still did not do
+		// what merging it was for: `--profile` forcing a registry in does not make
+		// its rules run, and forcing it onto a project on another design system
+		// makes them run against components they describe nothing about.
+		for (const n of registries.notes) process.stderr.write(`loupe: ${n.label} ${n.kind} registry ${n.note}\n`);
 	}
 
 	// An inferred namespace list is a guess, and css/dead-class tells an agent to
@@ -302,7 +362,7 @@ async function main(): Promise<number> {
 				: config.source.kind === 'preset'
 					? `preset ${config.source.name}`
 					: config.source.kind === 'inferred'
-						? 'inferred (no config file found)'
+						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
 		const state = stateDir(root);
 		// Report the baseline separately from the retry state. They resolve
@@ -374,7 +434,7 @@ async function main(): Promise<number> {
 	}
 
 	if (command === 'detect' || command === 'init') {
-		const info = detected || detectConfig(root);
+		const info = detected ?? runDetection();
 		if (args.flags.format === 'json') {
 			process.stdout.write(`${JSON.stringify(info, null, 2)}\n`);
 			return EXIT.OK;
@@ -382,6 +442,13 @@ async function main(): Promise<number> {
 		const lines = [
 			`preset:     ${info.preset}  [${info.presetConfidence} confidence]`,
 			`            ${info.presetReasons.join('; ')}`,
+			// What inference concluded still gets reported; it is just no longer
+			// what the run uses. `init` writes the config below verbatim, so the
+			// two lines disagreeing without explanation is a file someone would
+			// have to reverse-engineer.
+			...(profilePreset
+				? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`]
+				: []),
 			`namespaces: ${info.namespaces.project.join(', ') || '(none found)'}  [${info.namespaceConfidence} confidence]`,
 			`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`,
 			`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)`,

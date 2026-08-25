@@ -270,6 +270,26 @@ profiles/
 project actually imports; `--profile <id>` forces one. A profile declaring no
 packages is never selected automatically — there is nothing to recognize it by.
 
+Forcing one applies the whole bundle: its registries merge without the scope
+check the flag has already answered, and its preset configures the run. That
+preset is the least explicit statement anything makes about a project —
+`--config`, `--preset`, the plugin's own `preset` option and the project's
+config file each outrank it — and it replaces only the preset *inference* would
+have chosen, never what inference found about the project's own class
+namespaces. A config reached that way is still an inferred one, so the hook
+holds it advisory; `loupe check` run by hand reports at the profile's own
+severities, which is what naming the profile asked for — expect exit 1 where
+the same repo unnamed exits 0.
+
+The two halves have different reach, and that is the case to watch. On a repo
+with its own config file the preset is outranked but the registries still merge,
+so a forced profile can lint one design system's code against another's
+composites — signatures are bare component names, and `Modal(Text,Stack(Button,
+Button))` fits every system that ships those names. That is allowed; it is what
+the flag asks for. It is not silent: stderr names both sides of the mismatch, and
+`--profile <id>` matching no profile at all now says so rather than checking
+less than the same command with no flag.
+
 This is what keeps a shipped registry off the wrong repo. Point `--profiles` at
 every project you like: one on a different design system selects nothing and is
 checked by the rules that need no registry at all. `loupe status` prints which
