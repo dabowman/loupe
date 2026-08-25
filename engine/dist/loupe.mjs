@@ -25904,15 +25904,19 @@ function readProfiles(root2) {
     return [];
   }
   const out = [];
-  for (const e of entries) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
     if (!e.isDirectory()) continue;
     const dir = join7(root2, e.name);
     const manifest = join7(dir, "profile.json");
     if (!existsSync4(manifest)) continue;
     try {
       const raw = readJson2(manifest);
+      const id = raw.id || e.name;
+      if (seen.has(id)) continue;
+      seen.add(id);
       out.push({
-        id: raw.id || e.name,
+        id,
         name: raw.name || raw.id || e.name,
         preset: raw.preset ?? null,
         packages: asStrings(raw.packages),
@@ -25939,6 +25943,8 @@ function applyRegistries(config, sources, {
   const applied = [];
   const skipped = [];
   const errors = [];
+  const forcedPatterns = [];
+  const forcedComponents = [];
   let patterns = config.patterns ?? [];
   const components = new Map(config.componentRegistry ?? []);
   let sawPatterns = false;
@@ -25953,6 +25959,7 @@ function applyRegistries(config, sources, {
           patterns = [...patterns, ...loadPatterns(raw).filter((p) => !own.has(p.id))];
           sawPatterns = true;
           used = true;
+          if (src.forced) forcedPatterns.push(src.label);
         } else {
           skipped.push({ label: src.label, kind: "patterns", packages: registryPackages(raw) });
         }
@@ -25967,6 +25974,7 @@ function applyRegistries(config, sources, {
           for (const [key, entry] of loadComponents(raw)) if (!components.has(key)) components.set(key, entry);
           sawComponents = true;
           used = true;
+          if (src.forced) forcedComponents.push(src.label);
         } else {
           skipped.push({ label: src.label, kind: "components", packages: registryPackages(raw) });
         }
@@ -25978,7 +25986,16 @@ function applyRegistries(config, sources, {
   }
   if (sawPatterns) setPatterns2(config, patterns);
   if (sawComponents) setComponentRegistry2(config, components);
-  return { applied, skipped, errors };
+  const inert = [];
+  for (const label of forcedPatterns) {
+    if (config.enabled["patterns/duplicate-composite"]) continue;
+    if (!config.patterns.length) inert.push({ label, kind: "patterns", reason: "it carries no patterns" });
+    else if (!config.designSystem.knownComponents.size)
+      inert.push({ label, kind: "patterns", reason: "this config names no components for its signatures to match" });
+  }
+  for (const label of forcedComponents)
+    if (!config.componentRegistry.size) inert.push({ label, kind: "components", reason: "it carries no entries" });
+  return { applied, skipped, inert, errors };
 }
 
 // src/paths.ts
@@ -26320,25 +26337,26 @@ async function main() {
   const forced = args.flags.profile ? profiles.find((p) => p.id === args.flags.profile) ?? null : null;
   let config;
   let detected = null;
+  let profilePreset = null;
   try {
     const explicitPreset = args.flags.preset ?? (options.preset && options.preset !== "auto" ? options.preset : null);
     const unconfigured = !args.flags.config && !explicitPreset && !findConfig(root2);
-    let profilePreset = null;
     if (unconfigured && forced?.preset) {
       if (presetExists(forced.preset)) profilePreset = forced.preset;
       else if (!isHook)
         process.stderr.write(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed
 `);
     }
-    if (unconfigured && !profilePreset) {
+    if (unconfigured) {
       detected = detectConfig(root2);
       if (options.projectPrefixes?.length)
         detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
+      if (profilePreset) detected.config.extends = profilePreset;
     }
     config = await loadConfig({
       root: root2,
       configPath: args.flags.config ?? null,
-      preset: explicitPreset ?? profilePreset,
+      preset: explicitPreset,
       inline: detected?.config ?? null,
       inferred: Boolean(detected)
     });
@@ -26373,6 +26391,9 @@ async function main() {
         `loupe: ${s.label} ${s.kind} registry skipped \u2014 scoped to ${s.packages.join(", ")}, and this config declares ${config.designSystem.packages.length ? config.designSystem.packages.join(", ") : "no design-system packages"}
 `
       );
+    for (const i of registries.inert)
+      process.stderr.write(`loupe: ${i.label} ${i.kind} registry merged but enabled nothing \u2014 ${i.reason}
+`);
   }
   if (config.inferred && config.rules["css/dead-class"]?.severity === "error")
     config.rules["css/dead-class"].severity = "warn";
@@ -26396,7 +26417,7 @@ async function main() {
     return EXIT.OK;
   }
   if (command === "status") {
-    const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? "inferred (no config file found)" : config.source.kind;
+    const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ""}` : config.source.kind;
     const state = stateDir(root2);
     const base = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const lines = [
@@ -26449,6 +26470,11 @@ async function main() {
     const lines = [
       `preset:     ${info.preset}  [${info.presetConfidence} confidence]`,
       `            ${info.presetReasons.join("; ")}`,
+      // What inference concluded still gets reported; it is just no longer
+      // what the run uses. `init` writes the config below verbatim, so the
+      // two lines disagreeing without explanation is a file someone would
+      // have to reverse-engineer.
+      ...profilePreset ? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`] : [],
       `namespaces: ${info.namespaces.project.join(", ") || "(none found)"}  [${info.namespaceConfidence} confidence]`,
       `            ${Math.round(info.coverage * 100)}% of project CSS classes covered`,
       `scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)`

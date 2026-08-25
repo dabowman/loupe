@@ -8,7 +8,7 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
@@ -25,17 +25,47 @@ const PROFILES = join(HERE, '..', '..', 'profiles');
 /**
  * Run the CLI and hand back both streams.
  *
- * The plugin option variables are stripped: they outrank a profile's preset by
- * design, so one left in the ambient environment would quietly decide the very
- * thing these tests are pinning down. `status` exits 0, so there is no throw
- * to unpack — which is what separates this from the `execFileSync` calls below.
+ * Both halves of the option lookup are isolated, not just the loud one: the
+ * plugin option variables outrank a profile's preset by design, and stripping
+ * them is exactly the condition under which `resolvedOptions` falls back to
+ * `~/.claude/settings.json` — so an emptied environment alone would hand the
+ * developer's own settings file the decision these tests exist to pin down.
+ * `status` exits 0, so there is no throw to unpack, which is what separates
+ * this from the `execFileSync` calls below.
  */
-function runCli(argv: readonly string[]): { stdout: string; stderr: string } {
-	const env: NodeJS.ProcessEnv = { ...process.env };
-	for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
-	const r = spawnSync('node', [CLI, ...argv], { encoding: 'utf8', env });
-	return { stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+function runCli(argv: readonly string[], extra: NodeJS.ProcessEnv = {}): { stdout: string; stderr: string } {
+	const home = scratch('dsh-home-');
+	try {
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
+		const r = spawnSync('node', [CLI, ...argv], { encoding: 'utf8', env: { ...env, ...extra } });
+		return { stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+	} finally {
+		cleanup(home);
+	}
 }
+
+/**
+ * A repo with no config: a WPDS import, and a class prefix inference can find.
+ *
+ * The prefix matters as much as the import — half of what `--profile` has to
+ * leave alone is what inference concluded about *this* project.
+ */
+const inferrableRepo = (): string =>
+	tmpRepo({
+		'package.json': JSON.stringify({ name: 'externals', devDependencies: { '@wordpress/scripts': '^30.0.0' } }),
+		'src/A.jsx': [
+			"import { TextControl } from '@wordpress/components';",
+			'export const A = () => (',
+			'  <div className="acme-a">',
+			'    <span className="acme-b" />',
+			'    <span className="acme-c" />',
+			'    <TextControl className="acme-d" />',
+			'  </div>',
+			');',
+		].join('\n'),
+		'styles/a.css': '.acme-a { color: #f00; }\n.acme-b { margin-bottom: 16px; }\n.acme-c { padding: 4px; }\n.acme-d { display: block; }\n',
+	});
 
 const tmpRepo = (files: Record<string, string>): string => {
 	const root = scratch('dsh-regress-');
@@ -275,13 +305,10 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 // preset was read by nothing. The run that named a design system was
 // configured for no design system at all — reported, of course, as a clean one.
 await check('a named profile brings its preset and its registries', () => {
-	const root = tmpRepo({
-		'package.json': JSON.stringify({ name: 'externals', devDependencies: { '@wordpress/scripts': '^30.0.0' } }),
-		'src/a.tsx': "import { TextControl } from '@wordpress/components';\nexport const A = () => <TextControl />;\n",
-	});
+	const root = inferrableRepo();
 	try {
 		const { stdout, stderr } = runCli(['status', '--root', root, '--profile', 'wpds', '--profiles', PROFILES]);
-		assert(/config:\s+preset wpds/.test(stdout), `the profile's preset did not apply:\n${stdout}`);
+		assert(/extending preset wpds/.test(stdout), `the profile's preset did not apply:\n${stdout}`);
 		assert(/suppress:\s+wpds-allow/.test(stdout), `the profile's preset did not reach the ruleset:\n${stdout}`);
 		assert(!/registry skipped/.test(stderr), `the named profile's registries were dropped:\n${stderr}`);
 		assert(!/patterns\/duplicate-composite\s+off/.test(stdout), `the pattern registry never reached its rule:\n${stdout}`);
@@ -291,20 +318,114 @@ await check('a named profile brings its preset and its registries', () => {
 	}
 });
 
-// The other half of that fix: a profile's preset is the least explicit
-// statement in the chain. A project that wrote a config down has said what it
-// wants configured, and naming a profile asks for its registries — not for its
-// ruleset in place of the project's own.
-await check("a named profile does not overrule the project's own config", () => {
-	const root = tmpRepo({
-		'loupe.config.json': JSON.stringify({ extends: 'generic' }),
-		'src/a.tsx': "import { TextControl } from '@wordpress/components';\nexport const A = () => <TextControl />;\n",
-	});
+// The first fix for that reached the preset by skipping inference entirely,
+// which threw away the other half of what inference is for. A profile says
+// which design system this is; only the project can say what its own classes
+// are called — so `--profile` switched css/dead-class off on repos where it had
+// been running, and `loupe init --profile` wrote that loss into the repo.
+await check('a named profile keeps what inference found about the project', () => {
+	const root = inferrableRepo();
 	try {
 		const { stdout } = runCli(['status', '--root', root, '--profile', 'wpds', '--profiles', PROFILES]);
-		assert(/config:\s+.*loupe\.config\.json/.test(stdout), `the project's config lost to a profile:\n${stdout}`);
-		assert(/suppress:\s+ds-allow/.test(stdout), `the profile's preset overrode the project's config:\n${stdout}`);
+		assert(/namespaces: acme-/.test(stdout), `the inferred namespaces were dropped:\n${stdout}`);
+		assert(!/css\/dead-class\s+off/.test(stdout), `a rule that was running was switched off:\n${stdout}`);
 	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a named profile does not discard the project_prefixes option', () => {
+	const root = inferrableRepo();
+	try {
+		const { stdout } = runCli(['status', '--root', root, '--profile', 'wpds', '--profiles', PROFILES], {
+			CLAUDE_PLUGIN_OPTION_PROJECT_PREFIXES: 'wf-',
+		});
+		assert(/namespaces: wf-/.test(stdout), `the plugin option was ignored under --profile:\n${stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `init` writes a file that outlives the run, and it recomputes detection when
+// the run did not do it. A --profile that skipped detection therefore wrote a
+// config with the wrong namespaces into someone's repo — the one failure here
+// that survives the process that caused it.
+await check('init under a profile writes the profile preset and the real prefixes', () => {
+	const root = inferrableRepo();
+	try {
+		const { stdout } = runCli(['init', '--root', root, '--profile', 'wpds', '--profiles', PROFILES], {
+			CLAUDE_PLUGIN_OPTION_PROJECT_PREFIXES: 'wf-',
+		});
+		assert(/Wrote /.test(stdout), `init wrote nothing:\n${stdout}`);
+		const written: unknown = JSON.parse(readFileSync(join(root, 'loupe.config.json'), 'utf8'));
+		const cfg = written as { extends?: string; namespaces?: { project?: string[] } };
+		assert(cfg.extends === 'wpds', `init recorded the wrong preset: ${JSON.stringify(written)}`);
+		assert(cfg.namespaces?.project?.join(',') === 'wf-', `init recorded the wrong namespaces: ${JSON.stringify(written)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A profile's preset is the least explicit statement about a project, and every
+// other one has to survive contact with it — including the two that reach the
+// run without a file to point at.
+await check('everything more explicit than a profile outranks its preset', () => {
+	const root = inferrableRepo();
+	const explicit = join(root, 'explicit.json');
+	writeFileSync(explicit, JSON.stringify({ extends: 'generic' }));
+	const configured = tmpRepo({ 'loupe.config.json': JSON.stringify({ extends: 'generic' }) });
+	const named = ['--profile', 'wpds', '--profiles', PROFILES];
+	try {
+		const cases: [string, { stdout: string }][] = [
+			['--config', runCli(['status', '--root', root, '--config', explicit, ...named])],
+			['--preset', runCli(['status', '--root', root, '--preset', 'generic', ...named])],
+			['the preset plugin option', runCli(['status', '--root', root, ...named], { CLAUDE_PLUGIN_OPTION_PRESET: 'generic' })],
+			["the project's own config", runCli(['status', '--root', configured, ...named])],
+		];
+		for (const [what, { stdout }] of cases)
+			assert(/suppress:\s+ds-allow/.test(stdout), `the profile preset overrode ${what}:\n${stdout}`);
+	} finally {
+		cleanup(root);
+		cleanup(configured);
+	}
+});
+
+// The gate may not block a turn on a guess, and a profile does not turn the
+// guess into a statement: it names the design system, not this project. Reached
+// for the preset by skipping inference and the config stopped being marked
+// inferred — so an advisory hook run started blocking turns instead.
+await check('a named profile does not make an inferred config block turns', () => {
+	const root = inferrableRepo();
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root, '--profile', 'wpds', '--profiles', PROFILES], {
+			encoding: 'utf8',
+			input: '{"session_id":"prof","tool_input":{"file_path":"styles/a.css"}}',
+			env: { ...process.env, HOME: root },
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		assert(/advisory/.test(out), `the hook did not report advisory:\n${out}`);
+	} catch (err) {
+		const f = execFailure(err);
+		throw new Error(`the hook blocked a turn on an inferred config (exit ${f.status}):\n${f.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A profile naming a preset this install does not carry is a broken profile,
+// not a broken project: its registries are still worth merging, so the run goes
+// on — but silently going on would leave the ruleset a mystery.
+await check('a profile naming an uninstalled preset says so and carries on', () => {
+	const profiles = scratch('dsh-prof-');
+	const root = inferrableRepo();
+	try {
+		writeAll(profiles, { 'acme/profile.json': JSON.stringify({ id: 'acme', name: 'Acme', preset: 'nope', packages: ['@acme/ui'] }) });
+		const { stdout, stderr } = runCli(['status', '--root', root, '--profile', 'acme', '--profiles', profiles]);
+		assert(/names preset nope, which is not installed/.test(stderr), `the broken profile said nothing:\n${stderr}`);
+		assert(/config:\s+inferred/.test(stdout), `the run should fall back to inference:\n${stdout}`);
+		assert(/namespaces: acme-/.test(stdout), `inference should still have run:\n${stdout}`);
+	} finally {
+		cleanup(profiles);
 		cleanup(root);
 	}
 });

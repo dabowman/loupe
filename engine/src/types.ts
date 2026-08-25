@@ -427,12 +427,21 @@ export interface SkippedRegistry {
 	packages: string[];
 }
 
+/** A registry that merged and changed nothing — as invisible as one skipped. */
+export interface InertRegistry {
+	label: string;
+	kind: 'patterns' | 'components';
+	/** Why the merge came to nothing, as the clause after the dash. */
+	reason: string;
+}
+
 /** Which profiles were on offer, which applied, and what they contributed. */
 export interface ProfileState {
 	available: Profile[];
 	active: Profile[];
 	applied: string[];
 	skipped: SkippedRegistry[];
+	inert: InertRegistry[];
 	errors: string[];
 }
 

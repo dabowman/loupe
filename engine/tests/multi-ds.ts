@@ -219,6 +219,23 @@ await check('profiles are read from disk, junk directories ignored', () => {
 	}
 });
 
+// `--profile <id>` applies every profile carrying that id, and two directories
+// can carry the same one. Malformed input, but the outcome is a profile applied
+// twice and reported twice — so the read settles it once, in sorted order.
+await check('two directories claiming one id yield one profile', () => {
+	const dir = scratch('loupe-dup-');
+	try {
+		writeAll(dir, {
+			'acme/profile.json': JSON.stringify({ id: 'acme', name: 'Acme DS', packages: ['@acme/ui'] }),
+			'acme-copy/profile.json': JSON.stringify({ id: 'acme', name: 'A copy', packages: ['@acme/ui'] }),
+		});
+		const profile = one(readProfiles(dir), 'a duplicated id must not duplicate the profile');
+		assert(profile.name === 'Acme DS', `the first directory should win, got ${profile.name}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
 await check('a profile is selected by what the project imports', () => {
 	const dir = profileDir();
 	try {
@@ -268,6 +285,31 @@ await check('a profile named outright applies its registries anyway', async () =
 		assert(!out.skipped.length, 'a forced registry must not be re-gated on scope');
 		assert(out.applied.length === 1, `expected the registry applied, got ${out.applied.length}`);
 		assert(config.enabled['patterns/duplicate-composite'], 'the rule the registry exists to enable stayed off');
+		assert(!out.inert.length, 'a registry whose rule came on has nothing to report');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Forcing a registry in merges it; it does not make its rules run. A composite
+// signature still needs a component layer to match against, and a merged
+// registry that enables nothing is exactly as invisible as a skipped one —
+// which is the whole reason skips are reported.
+await check('a forced registry that enables nothing says so', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: 'generic' }),
+		'registry.json': registryFile(['@wordpress/components']),
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const out = applyRegistries(
+			config,
+			[{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true }],
+			{ setPatterns, setComponentRegistry },
+		);
+		assert(!out.skipped.length && out.applied.length === 1, 'the forced registry should still merge');
+		const inert = one(out.inert, 'a merge that changed nothing must be reported');
+		assert(/names no components/.test(inert.reason), `the reason should name what is missing: ${inert.reason}`);
 	} finally {
 		cleanup(root);
 	}

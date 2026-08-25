@@ -211,6 +211,9 @@ async function main(): Promise<number> {
 
 	let config: Config;
 	let detected: DetectedConfig | null = null;
+	// Hoisted: `status` has to be able to say where an inferred config got its
+	// ruleset, and "inferred" on its own does not say a profile named it.
+	let profilePreset: string | null = null;
 	try {
 		// An explicit path or preset wins; then a discovered project config; then
 		// whatever the project itself implies. Without the last step a project
@@ -219,14 +222,13 @@ async function main(): Promise<number> {
 		const explicitPreset =
 			args.flags.preset ?? (options.preset && options.preset !== 'auto' ? options.preset : null);
 		const unconfigured = !args.flags.config && !explicitPreset && !findConfig(root);
-		// A named profile's preset sits between those last two. It is a statement
-		// about a design system rather than about this project, so --preset, the
-		// plugin option and the project's own config file all outrank it — but it
-		// beats inference, which is a guess about the very thing `--profile` just
-		// stated outright. Without this the flag merged a profile's registries
-		// into a config that knew none of its components, and left every severity
-		// at its generic default.
-		let profilePreset: string | null = null;
+		// A named profile's preset ranks last among the statements *about this
+		// project* — --config, --preset, the plugin option's own preset and the
+		// project's config file each outrank it — and first against inference,
+		// which is a guess about the design system `--profile` just named
+		// outright. Until this it was read by nothing at all: naming a profile
+		// merged its registries into a config that knew none of its components
+		// and left every severity at the generic default.
 		if (unconfigured && forced?.preset) {
 			if (presetExists(forced.preset)) profilePreset = forced.preset;
 			// A profile naming a preset this install does not carry is a broken
@@ -235,15 +237,24 @@ async function main(): Promise<number> {
 			else if (!isHook)
 				process.stderr.write(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed\n`);
 		}
-		if (unconfigured && !profilePreset) {
+		if (unconfigured) {
 			detected = detectConfig(root);
 			if (options.projectPrefixes?.length)
 				detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
+			// Override the preset inference chose, not the run it produced. The
+			// namespaces are a reading of *this* project and hold whoever picked
+			// the design system; skipping detection to inject the preset instead
+			// dropped them, which switched css/dead-class off on a repo where it
+			// had been running and left `init` writing that loss to disk.
+			// `extends` is where inference records its preset choice and what
+			// `loadConfig` resolves for an inline config, so this is the same
+			// statement, made by the flag rather than by the guess.
+			if (profilePreset) detected.config.extends = profilePreset;
 		}
 		config = await loadConfig({
 			root,
 			configPath: args.flags.config ?? null,
-			preset: explicitPreset ?? profilePreset,
+			preset: explicitPreset,
 			inline: detected?.config ?? null,
 			inferred: Boolean(detected),
 		});
@@ -289,6 +300,10 @@ async function main(): Promise<number> {
 					config.designSystem.packages.length ? config.designSystem.packages.join(', ') : 'no design-system packages'
 				}\n`
 			);
+		// And the same for one merged past the scope check that still changed
+		// nothing: `--profile` forcing a registry in does not make its rules run.
+		for (const i of registries.inert)
+			process.stderr.write(`loupe: ${i.label} ${i.kind} registry merged but enabled nothing \u2014 ${i.reason}\n`);
 	}
 
 	// An inferred namespace list is a guess, and css/dead-class tells an agent to
@@ -328,7 +343,7 @@ async function main(): Promise<number> {
 				: config.source.kind === 'preset'
 					? `preset ${config.source.name}`
 					: config.source.kind === 'inferred'
-						? 'inferred (no config file found)'
+						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
 		const state = stateDir(root);
 		// Report the baseline separately from the retry state. They resolve
@@ -408,6 +423,13 @@ async function main(): Promise<number> {
 		const lines = [
 			`preset:     ${info.preset}  [${info.presetConfidence} confidence]`,
 			`            ${info.presetReasons.join('; ')}`,
+			// What inference concluded still gets reported; it is just no longer
+			// what the run uses. `init` writes the config below verbatim, so the
+			// two lines disagreeing without explanation is a file someone would
+			// have to reverse-engineer.
+			...(profilePreset
+				? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`]
+				: []),
 			`namespaces: ${info.namespaces.project.join(', ') || '(none found)'}  [${info.namespaceConfidence} confidence]`,
 			`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`,
 			`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)`,

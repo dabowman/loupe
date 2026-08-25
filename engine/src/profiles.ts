@@ -29,9 +29,9 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
 import { registryApplies, registryPackages } from './registry.ts';
-import type { ComponentEntry, Config, Pattern, Profile, SkippedRegistry } from './types.ts';
+import type { ComponentEntry, Config, InertRegistry, Pattern, Profile, SkippedRegistry } from './types.ts';
 
-export type { Profile, SkippedRegistry };
+export type { InertRegistry, Profile, SkippedRegistry };
 
 /** A registry pair to merge in, labelled for the report. */
 export interface RegistrySource {
@@ -80,15 +80,23 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 		return [];
 	}
 	const out: Profile[] = [];
-	for (const e of entries) {
+	// Sorted, and one profile per id: two directories claiming the same id would
+	// otherwise both be selected, and `--profile <id>` would apply each of them.
+	// Sorting is what makes "the first one wins" a fact rather than a filesystem
+	// accident.
+	const seen = new Set<string>();
+	for (const e of [...entries].sort((a, b) => a.name.localeCompare(b.name))) {
 		if (!e.isDirectory()) continue;
 		const dir = join(root, e.name);
 		const manifest = join(dir, 'profile.json');
 		if (!existsSync(manifest)) continue;
 		try {
 			const raw = readJson(manifest) as RawProfile;
+			const id = raw.id || e.name;
+			if (seen.has(id)) continue;
+			seen.add(id);
 			out.push({
-				id: raw.id || e.name,
+				id,
 				name: raw.name || raw.id || e.name,
 				preset: raw.preset ?? null,
 				packages: asStrings(raw.packages),
@@ -144,10 +152,13 @@ export function applyRegistries(
 		setPatterns: (config: Config, patterns: Pattern[]) => Config;
 		setComponentRegistry: (config: Config, registry: Map<string, ComponentEntry>) => Config;
 	},
-): { applied: string[]; skipped: SkippedRegistry[]; errors: string[] } {
+): { applied: string[]; skipped: SkippedRegistry[]; inert: InertRegistry[]; errors: string[] } {
 	const applied: string[] = [];
 	const skipped: SkippedRegistry[] = [];
 	const errors: string[] = [];
+	// Labels of the sources that were merged by fiat, for the inert check below.
+	const forcedPatterns: string[] = [];
+	const forcedComponents: string[] = [];
 
 	let patterns: Pattern[] = config.patterns ?? [];
 	const components = new Map<string, ComponentEntry>(config.componentRegistry ?? []);
@@ -164,6 +175,7 @@ export function applyRegistries(
 					patterns = [...patterns, ...loadPatterns(raw).filter((p) => !own.has(p.id))];
 					sawPatterns = true;
 					used = true;
+					if (src.forced) forcedPatterns.push(src.label);
 				} else {
 					skipped.push({ label: src.label, kind: 'patterns', packages: registryPackages(raw) });
 				}
@@ -178,6 +190,7 @@ export function applyRegistries(
 					for (const [key, entry] of loadComponents(raw)) if (!components.has(key)) components.set(key, entry);
 					sawComponents = true;
 					used = true;
+					if (src.forced) forcedComponents.push(src.label);
 				} else {
 					skipped.push({ label: src.label, kind: 'components', packages: registryPackages(raw) });
 				}
@@ -193,5 +206,22 @@ export function applyRegistries(
 	// like one that did something.
 	if (sawPatterns) setPatterns(config, patterns);
 	if (sawComponents) setComponentRegistry(config, components);
-	return { applied, skipped, errors };
+
+	// Merging a registry by fiat is not the same as its rules coming on: a
+	// composite signature still needs a component layer to match against, and a
+	// registry that carried no entries enables nothing. Either way it is exactly
+	// as invisible as one that was skipped — the thing the skip reporting exists
+	// to prevent, reached by the other road. A rule the config turns off is not
+	// reported: that one was asked for.
+	const inert: InertRegistry[] = [];
+	for (const label of forcedPatterns) {
+		if (config.enabled['patterns/duplicate-composite']) continue;
+		if (!config.patterns.length) inert.push({ label, kind: 'patterns', reason: 'it carries no patterns' });
+		else if (!config.designSystem.knownComponents.size)
+			inert.push({ label, kind: 'patterns', reason: 'this config names no components for its signatures to match' });
+	}
+	for (const label of forcedComponents)
+		if (!config.componentRegistry.size) inert.push({ label, kind: 'components', reason: 'it carries no entries' });
+
+	return { applied, skipped, inert, errors };
 }

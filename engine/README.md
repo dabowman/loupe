@@ -230,9 +230,15 @@ project actually imports; `--profile <id>` forces one. A profile declaring no
 packages is never selected automatically — there is nothing to recognize it by.
 
 Forcing one applies the whole bundle: its registries merge without the scope
-check the flag has already answered, and its preset configures the run — unless
-something more explicit already did, since `--preset`, the plugin option and the
-project's own config file all outrank it.
+check the flag has already answered, and its preset configures the run. That
+preset is the least explicit statement anything makes about a project —
+`--config`, `--preset`, the plugin's own `preset` option and the project's
+config file each outrank it — and it replaces only the preset *inference* would
+have chosen, never what inference found about the project's own class
+namespaces. A config reached that way is still an inferred one, so the hook
+holds it advisory; `loupe check` run by hand reports at the profile's own
+severities, which is what naming the profile asked for — expect exit 1 where
+the same repo unnamed exits 0.
 
 This is what keeps a shipped registry off the wrong repo. Point `--profiles` at
 every project you like: one on a different design system selects nothing and is
