@@ -151,9 +151,12 @@ that rule leaves it alone. The default covers `render` (WPDS, Base UI) and
 
 Two bounds keep the exemption from hiding drift. It is the prop's own element
 only, never the subtree under it — `render={ <div><p/></div> }` still reports the
-`<p>`. And it applies only on a component imported from a `packages` package:
-`render` is also react-router's, Formik's and Downshift's prop name, and an
-element handed to one of those is ordinary markup.
+`<p>`. And it applies only on a component whose job is emitting a tag, meaning
+one of the `components.text` or `components.layout` names imported from a
+`packages` package. `render` is also react-router's, Formik's and Downshift's
+prop name, and `@wordpress/components` spells an ordinary render callback that
+way too (`FormFileUpload`); an element handed to one of those is markup the
+author wrote, with an analog to convert to.
 
 ### Bundled presets
 
@@ -361,7 +364,7 @@ const { findings, blocking, directives } = analyze(config, { scope: null });
 | --- | --- |
 | `designSystem.tokenSources` | Paths (file or directory) holding the token definitions. Read even under `node_modules`, which the project walk prunes — that is where a design system's tokens live. Missing paths are skipped. |
 | `designSystem.cssInJsPackages` | Packages whose tagged templates are CSS. Defaults cover styled-components and emotion. |
-| `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element`; nothing nested inside it is. Defaults to `render`, `as`, `component`; `[]` exempts nothing. |
+| `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element` when the carrier is a `components.text` or `components.layout` name; nothing nested inside it is, and a genuine render callback on any other component is not. Defaults to `render`, `as`, `component`; `[]` exempts nothing. A list replaces the default rather than extending it. |
 | `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on `id`. |
 | `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 

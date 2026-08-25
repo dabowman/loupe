@@ -63,11 +63,12 @@ const identifierOf = (t: Expression): string | undefined => (t.type === 'Identif
  * emit — `as` and `component` are the same idiom elsewhere. The callback
  * spelling `render={ ( props ) => <h4 { ...props } /> }` says the same thing and
  * is equally documented, and so do the shapes an ordinary refactor turns those
- * into: a block body that returns one element, a conditional choosing between
- * two, a guard. Each resolves to the element it can produce, because a spelling
- * this rule does not follow reproduces exactly the unsatisfiable finding the
- * exemption exists to end. Anything opaque — a variable, a call — yields
- * nothing, which is the safe direction: the element still reports.
+ * into: a block body that returns one element, an older `function` spelling of
+ * the same callback, a conditional choosing between two, a guard. Each resolves
+ * to the element it can produce, because a spelling this rule does not follow
+ * reproduces exactly the unsatisfiable finding the exemption exists to end.
+ * Anything opaque — a variable, a call — yields nothing, which is the safe
+ * direction: the element still reports.
  *
  * Only the element the prop is given counts. Anything nested *inside* it is
  * markup the author wrote and React renders as markup, so it stays subject to
@@ -78,12 +79,17 @@ function substitutionTargets(expr: Node | null | undefined, out: JSXElement[] = 
 		case 'JSXElement':
 			out.push(expr);
 			break;
-		case 'ArrowFunctionExpression': {
+		case 'ArrowFunctionExpression':
+		case 'FunctionExpression': {
 			// `( props ) => <h4 />`, and the same body once someone has put braces
-			// around it — one `return` of one element is still one element.
+			// around it — a `return` of one element is still one element, whatever
+			// the block does first. Keying on the *first* statement missed
+			// `( { className, ...rest } ) => { … return <h4 /> }`, the shape a
+			// callback takes the moment it touches its props, and missing it
+			// reproduces the unsatisfiable finding this exemption exists to end.
 			if (expr.body.type !== 'BlockStatement') return substitutionTargets(expr.body, out);
-			const [only] = expr.body.body;
-			if (only?.type === 'ReturnStatement') substitutionTargets(only.argument, out);
+			for (const stmt of expr.body.body)
+				if (stmt.type === 'ReturnStatement') substitutionTargets(stmt.argument, out);
 			break;
 		}
 		case 'ConditionalExpression':
@@ -91,11 +97,39 @@ function substitutionTargets(expr: Node | null | undefined, out: JSXElement[] = 
 			substitutionTargets(expr.alternate, out);
 			break;
 		case 'LogicalExpression':
+			// Both arms, for the same reason a conditional takes both: `<h4 /> || fb`
+			// and `big && <h2 /> || <h4 />` each name an element the prop can receive,
+			// and following only the right one exempted the fallback while still
+			// reporting the guarded element — the same tag, in the same prop.
+			substitutionTargets(expr.left, out);
 			substitutionTargets(expr.right, out);
+			break;
+		// A type assertion is not a different value. `.tsx` is a first-class input
+		// here, and `render={ ( <h4 /> ) as ReactElement }` is what a narrower prop
+		// type makes an author write; the wrapper says nothing about which element
+		// the prop receives.
+		case 'TSAsExpression':
+		case 'TSSatisfiesExpression':
+		case 'TSNonNullExpression':
+		case 'TSTypeAssertion':
+			substitutionTargets(expr.expression, out);
+			break;
+		// `render={ <h4 /> }`. JSX also allows the braces to be dropped entirely
+		// (`render=<h4 />`), which arrives as the element itself and is caught by
+		// the `JSXElement` case above.
+		case 'JSXExpressionContainer':
+			substitutionTargets(expr.expression, out);
 			break;
 	}
 	return out;
 }
+
+/**
+ * An export name with the design system's experimental/unstable prefix stripped.
+ * WPDS ships `__experimentalText`, and it is the same component as `Text`.
+ */
+const canonicalName = (name: string, normalize: RegExp | null): string =>
+	normalize ? name.replace(normalize, '') : name;
 
 /** `Set.has` for a name that may not exist. */
 const held = (set: ReadonlySet<string>, name: string | undefined): boolean =>
@@ -277,8 +311,7 @@ function systemImports(
 	// local name -> the package it came from, so a composite signature can say
 	// *whose* `Stack` this is. Names are the one thing design systems share.
 	const packages = new Map<string, string>();
-	const canonical = (name: string): string =>
-		ds.normalizeExports ? name.replace(ds.normalizeExports, '') : name;
+	const canonical = (name: string): string => canonicalName(name, ds.normalizeExports);
 	const fromPackage = (src: string): boolean => ds.packages.some((p) => src === p || src.startsWith(`${p}/`));
 
 	for (const node of ast.program.body) {
@@ -450,8 +483,27 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 		if (!tag) return;
 		const line = node.loc?.start?.line ?? 1;
 
+		const root = tag.split('.')[0] ?? tag;
+		const isComponent = /^[A-Z]/.test(root);
+		const isSystem = isComponent && known.has(root);
+
+		// Which carriers can earn the substitution exemption. Not every export of a
+		// design-system package — `@wordpress/components` ships `FormFileUpload`,
+		// whose `render` is an ordinary render callback, and hand-rolled markup
+		// inside that is markup the author wrote. The exemption is for the
+		// components whose job is emitting a tag, which is exactly the text and
+		// layout sets. That also picks up `__experimentalText`, a text component
+		// the old `/^[A-Z]/` test dropped for its prefix.
+		const member = tag.includes('.') ? tag.slice(tag.indexOf('.') + 1) : null;
+		const emitsTag = member
+			? // `<UI.Text render={ <h4 /> }>` — the namespace is what was imported,
+				// so the component name is the member.
+				known.has(root) &&
+				(ds.textComponents.includes(canonicalName(member, ds.normalizeExports)) ||
+					ds.layoutComponents.includes(canonicalName(member, ds.normalizeExports)))
+			: textLike.has(root) || layout.has(root);
+
 		const strings: string[] = [];
-		const substitutions: JSXElement[] = [];
 		let style: ReturnType<typeof readStyleAttr> | null = null;
 		let cssAttr: JSXAttribute['value'] = null;
 		for (const attr of node.attributes) {
@@ -460,22 +512,20 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 			if (an === 'className' || an === 'class') stringsIn(attr.value, strings);
 			else if (an === 'style') style = readStyleAttr(attr.value);
 			else if (an === 'css') cssAttr = attr.value;
-			else if (ds.substitutionProps.has(an) && attr.value?.type === 'JSXExpressionContainer')
-				substitutionTargets(attr.value.expression, substitutions);
+			// Only a tag-emitting design-system component's substitution prop earns the
+			// exemption. `render` is not a name WPDS reserved — react-router, Formik
+			// and Downshift all spell a render prop exactly that, and an element handed
+			// to one of those is ordinary markup with a `Heading` analog, which the
+			// remediation guidance tells an agent to convert or suppress. Exempting it
+			// would silence a real finding and leave nothing to suppress.
+			//
+			// The name must be a plain identifier: `attr.name` collapses a namespace,
+			// so `xlink:render` would otherwise read as `render` and exempt an element
+			// no substitution prop was ever given.
+			else if (emitsTag && attr.name.type === 'JSXIdentifier' && ds.substitutionProps.has(an))
+				for (const target of substitutionTargets(attr.value)) substituted.add(target.openingElement);
 		}
 		const classes = classesFrom(strings);
-
-		const root = tag.split('.')[0] ?? tag;
-		const isComponent = /^[A-Z]/.test(root);
-		const isSystem = isComponent && known.has(root);
-
-		// Only a design-system component's substitution prop earns the exemption.
-		// `render` is not a name WPDS reserved — react-router, Formik and Downshift
-		// all spell a render prop exactly that, and an element handed to one of
-		// those is ordinary markup with a `Heading` analog, which the remediation
-		// guidance tells an agent to convert or suppress. Exempting it would
-		// silence a real finding and leave nothing to suppress.
-		if (isSystem) for (const target of substitutions) substituted.add(target.openingElement);
 
 		const owned = cssAttr?.type === 'JSXExpressionContainer' ? cssAttr.expression : null;
 		if (owned?.type === 'TaggedTemplateExpression' && typeof owned.start === 'number')

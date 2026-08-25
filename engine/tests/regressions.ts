@@ -284,10 +284,65 @@ await check('an element handed to a substitution prop is not raw markup', async 
 				'export const C = () => <Text render={ ( props ) => { return <h4 { ...props } />; } }>Hi</Text>;',
 				'export const D = () => <Text render={ big ? <h2 /> : <h4 /> }>Hi</Text>;',
 				'export const E = () => <Text as={ <h4 /> }>Hi</Text>;',
+				// A callback that touches its props destructures before it returns —
+				// the return is still the one element, whatever the block does first.
+				'export const F = () => <Text render={ ( { cls, ...rest } ) => { const c = cls; return <h4 className={ c } { ...rest } />; } }>Hi</Text>;',
+				'export const G = () => <Text render={ function ( props ) { return <h4 { ...props } />; } }>Hi</Text>;',
+				// A type assertion is not a different value: a narrower prop type is
+				// what makes an author reach for one, and .tsx is a first-class input.
+				'export const H = () => <Text render={ ( <h4 /> ) as never }>Hi</Text>;',
+				'export const I = () => <Text render={ ( <h4 /> ) satisfies never }>Hi</Text>;',
+				'export const J = () => <Text render={ ( <h4 /> )! }>Hi</Text>;',
+				// Both arms of a guard, as for a conditional: following only the right
+				// one exempted the fallback and still reported the guarded element.
+				'export const K = () => <Text render={ <h4 /> || null }>Hi</Text>;',
+				'export const L = () => <Text render={ big && <h2 /> || <h4 /> }>Hi</Text>;',
+				// JSX lets the braces be dropped entirely.
+				'export const M = () => <Text render=<h4 /> >Hi</Text>;',
+				// WPDS ships its own components under an experimental prefix, and
+				// `__experimentalText` is the same text component as `Text`.
+				"import { __experimentalText } from '@wordpress/components';",
+				'export const N = () => <__experimentalText render={ <h4 /> }>Hi</__experimentalText>;',
+				// A namespace import puts the component name in the member.
+				"import * as UI from '@wordpress/ui';",
+				'export const O = () => <UI.Text render={ <h4 /> }>Hi</UI.Text>;',
 			].join('\n'),
 		),
 	);
 	assert(!findings.length, `flagged the escape hatch it recommends: ${JSON.stringify(findings.map((f) => f.message))}`);
+});
+
+// The exemption is for the components whose job is emitting a tag. Every other
+// export of a design-system package that takes a `render` prop takes an ordinary
+// render callback — `@wordpress/components` ships `FormFileUpload` — and markup
+// inside one of those is markup the author wrote, with an analog to convert to.
+await check('a design-system render callback is not a substitution', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			[
+				"import { FormFileUpload, Button } from '@wordpress/components';",
+				'export const A = () => <FormFileUpload render={ ( { open } ) => <p onClick={ open }>pick</p> } />;',
+				'export const B = () => <Button render={ <p>label</p> } />;',
+			].join('\n'),
+		),
+	);
+	assert(
+		findings.length === 2,
+		`a real render callback was exempted: ${JSON.stringify(findings.map((f) => f.message))}`,
+	);
+});
+
+// `attr.name` collapses a namespace, so `xlink:render` read as `render` and
+// exempted an element no substitution prop was ever given.
+await check('a namespaced attribute is not a substitution prop', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			["import { Text } from '@wordpress/ui';", 'export const A = () => <Text xlink:render={ <h4 /> }>Hi</Text>;'].join(
+				'\n',
+			),
+		),
+	);
+	one(findings, 'a namespaced prop exempted the element');
 });
 
 // `render` is not a name WPDS reserved: react-router, Formik and Downshift all

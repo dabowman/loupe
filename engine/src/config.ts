@@ -253,7 +253,13 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	// nothing it says would report exactly like one that meant `[]` — the whole
 	// exemption off, with nothing to see. Every coercion here that cannot mean
 	// what it says throws; this one does too.
-	const substitutionProps: unknown = ds.substitutionProps ?? [];
+	//
+	// The fallback is the default rather than `[]` because this key is the one
+	// whose default is not empty: `merge` writes an explicit `undefined` straight
+	// over the default, so `designSystem: { ...opts, substitutionProps: opts.subs }`
+	// in a `.mjs` config would otherwise turn the exemption off silently. `[]`
+	// stays the way to ask for that on purpose.
+	const substitutionProps: unknown = ds.substitutionProps ?? DEFAULTS.designSystem.substitutionProps;
 	if (!Array.isArray(substitutionProps) || substitutionProps.some((p) => typeof p !== 'string'))
 		throw new Error(
 			`designSystem.substitutionProps must be an array of prop names, got: ${JSON.stringify(substitutionProps)}`,
