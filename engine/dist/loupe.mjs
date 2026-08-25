@@ -23752,10 +23752,17 @@ var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 var OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\/\*+|<!--|#+)?\s*/;
 function makeSuppressionParser({
   keyword,
-  blanket = []
+  blanket = [],
+  aliases = []
 }) {
-  const strict = new RegExp(`^${esc(keyword)}\\s+(${ID}(?:\\s*,\\s*${ID})*)\\s*--\\s*(\\S.*?)(?:\\*/|-->|\\}|$)`);
-  const prefixes = [keyword, ...blanket];
+  const heads = [keyword, ...aliases.filter((a) => a !== keyword && !blanket.includes(a))];
+  const alternation = (terms) => [...new Set(terms)].sort((a, b) => b.length - a.length).map(esc).join("|");
+  const keywordHead = `(${alternation(heads)})(?![\\w-])`;
+  const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
+  const strict = new RegExp(`^${keywordHead}\\s+(${IDS})\\s*--\\s*(?!\\*/|-->|\\})(\\S.*?)(?:\\*/|-->|\\}|$)`);
+  const shaped = new RegExp(`^${keywordHead}\\s*(?:${IDS}\\s*)?(?:--|\\*/|-->|\\}|$)`);
+  const written = new RegExp(`^(?:${alternation([keyword, ...blanket])})(?![\\w-])`);
+  const anyHead = [...heads, ...blanket];
   return function scan(text, relPath) {
     const byLine = /* @__PURE__ */ new Map();
     const directives = [];
@@ -23763,16 +23770,25 @@ function makeSuppressionParser({
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
-      if (raw === void 0 || !prefixes.some((p) => raw.includes(p))) continue;
+      if (raw === void 0 || !anyHead.some((p) => raw.includes(p))) continue;
       const stripped = raw.replace(OPENER, "");
-      if (!prefixes.some((p) => stripped.startsWith(p))) continue;
+      if (!anyHead.some((p) => stripped.startsWith(p))) continue;
       const line = i + 1;
       const m = stripped.match(strict);
-      if (m?.[1] !== void 0 && m[2] !== void 0) {
-        const ids = m[1].split(",").map((s) => canonicalRuleId(s.trim()));
+      if (m?.[2] !== void 0 && m[3] !== void 0) {
+        const ids = m[2].split(",").map((s) => canonicalRuleId(s.trim()));
+        const used = m[1] ?? keyword;
         byLine.set(line, new Set(ids));
-        directives.push({ file: relPath, line, rules: ids, reason: oneLine(m[2]) });
-      } else {
+        directives.push({
+          file: relPath,
+          line,
+          rules: ids,
+          reason: oneLine(m[3]),
+          // Carried only when it is not the keyword the config asks for, so
+          // `loupe suppressions` can name the rename and nothing else has to.
+          ...used === keyword ? {} : { alias: used }
+        });
+      } else if (written.test(stripped) || shaped.test(stripped)) {
         malformed.push({
           rule: "suppression/malformed",
           file: relPath,
@@ -25380,7 +25396,7 @@ var DEFAULTS = {
     references: ["**/*.php", "**/*.html"],
     ignore: ["**/node_modules/**", "**/build/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
   },
-  suppression: { keyword: "ds-allow", blanket: ["ds-disable"] },
+  suppression: { keyword: "ds-allow", blanket: ["ds-disable"], aliases: [] },
   rules: {},
   patterns: null,
   // The component-currency registry (recommended/legacy/locked/experimental
@@ -25458,6 +25474,29 @@ function listPresets() {
   }
 }
 var presetExists = (name) => existsSync2(join5(PRESET_DIR, `${name}.json`));
+function shippedVocabulary() {
+  const keywords = /* @__PURE__ */ new Set([DEFAULTS.suppression.keyword]);
+  const blanket = new Set(DEFAULTS.suppression.blanket);
+  try {
+    for (const f of readdirSync3(PRESET_DIR)) {
+      if (!f.endsWith(".json")) continue;
+      try {
+        const raw = JSON.parse(readFileSync5(join5(PRESET_DIR, f), "utf8"));
+        const supp = isObj(raw) ? raw["suppression"] : void 0;
+        if (!isObj(supp)) continue;
+        const kw = supp["keyword"];
+        if (typeof kw === "string" && kw) keywords.add(kw);
+        const bl = supp["blanket"];
+        if (Array.isArray(bl)) {
+          for (const b of bl) if (typeof b === "string" && b) blanket.add(b);
+        }
+      } catch {
+      }
+    }
+  } catch {
+  }
+  return { keywords: [...keywords], blanket };
+}
 function compilePatterns(patterns) {
   return (patterns ?? []).map(
     (p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`)
@@ -25527,6 +25566,19 @@ function normalize(raw, { root: root2 }) {
       RULES[id].needs.every((n) => capability[n]) && rules[id].severity !== "off"
     ])
   );
+  const shipped = shippedVocabulary();
+  const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
+  const isTerm = (v) => typeof v === "string" && v !== "";
+  const keyword = isTerm(cfg.suppression.keyword) ? cfg.suppression.keyword : DEFAULTS.suppression.keyword;
+  const blanket = Array.isArray(cfg.suppression.blanket) ? cfg.suppression.blanket.filter(isTerm) : [...DEFAULTS.suppression.blanket];
+  const suppression = {
+    ...cfg.suppression,
+    keyword,
+    blanket,
+    aliases: [.../* @__PURE__ */ new Set([...shipped.keywords, ...declared])].filter(
+      (a) => isTerm(a) && a !== keyword && !shipped.blanket.has(a)
+    )
+  };
   const neverDead = compilePatterns(cfg.namespaces.neverDead);
   const projectPrefixes = cfg.namespaces.project ?? [];
   const externalPrefixes = cfg.namespaces.external ?? [];
@@ -25553,7 +25605,7 @@ function normalize(raw, { root: root2 }) {
     patterns,
     componentRegistry,
     sources: cfg.sources,
-    suppression: cfg.suppression,
+    suppression,
     baselinePath: cfg.baseline,
     hook: cfg.hook,
     rules,
@@ -26612,10 +26664,15 @@ Wrote ${target}
   }
   if (command === "suppressions") {
     const { directives } = await analyze(config, { scope: null });
+    const kw = config.suppression.keyword;
     if (args.flags.format === "json") process.stdout.write(`${JSON.stringify(directives, null, 2)}
 `);
-    else for (const d of directives) process.stdout.write(`${d.file}:${d.line}  ${d.rules.join(",")}  ${d.reason}
-`);
+    else
+      for (const d of directives)
+        process.stdout.write(
+          `${d.file}:${d.line}  ${d.rules.join(",")}  ${d.reason}${d.alias ? `  (${d.alias} \u2192 ${kw})` : ""}
+`
+        );
     return EXIT.OK;
   }
   if (command === "fix") {

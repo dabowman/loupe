@@ -1,5 +1,5 @@
 {
-  "note": "Prose describing the grammar inside a doc comment is not a directive. A directive on the selector line mutes that rule's own declarations. A blanket disable and a directive without a reason are each violations, not mutes. .wf-doc is a colour-only <div>, so it gets no layout-primitive suggestion.",
+  "note": "Prose describing the grammar inside a doc comment is not a directive. A directive on the selector line mutes that rule's own declarations. A blanket disable and a directive without a reason are each violations, not mutes. Another preset's keyword still reads as a directive — the keyword is preset-scoped, and a rename that quietly stops honoring what was already written is how a signed-off reason disappears. .wf-doc is a colour-only <div>, so it gets no layout-primitive suggestion.",
   "findings": [
     { "rule": "suppression/malformed", "file": "styles/doc.css", "line": 10 },
     { "rule": "suppression/malformed", "file": "styles/doc.css", "line": 13 },
@@ -7,6 +7,7 @@
     { "rule": "tokens/hardcoded-value", "file": "styles/doc.css", "line": 14 },
     { "rule": "css/dead-class", "file": "styles/doc.css", "line": 5 },
     { "rule": "css/dead-class", "file": "styles/doc.css", "line": 11 },
-    { "rule": "css/dead-class", "file": "styles/doc.css", "line": 14 }
+    { "rule": "css/dead-class", "file": "styles/doc.css", "line": 14 },
+    { "rule": "css/dead-class", "file": "styles/doc.css", "line": 17 }
   ]
 }

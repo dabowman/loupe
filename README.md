@@ -329,6 +329,17 @@ Rule id and reason are both mandatory; anything looser is its own finding. That
 inversion keeps the escape hatch available and legible. Audit with
 `loupe suppressions`.
 
+The keyword comes from the preset — `generic` asks for `ds-allow`, `wpds` for
+`wpds-allow` — and every preset's keyword is *read* whichever one is active, so
+switching preset never orphans the directives already written.
+`loupe suppressions` names the keyword such a directive was written with. It is
+symmetric on purpose: `generic`, the preset a project with nothing to detect
+falls back to, honours a `wpds-allow` directive the same way. The active keyword
+is still the only one you are told to *write* — but any of them, plus the
+blanket forms the preset names, reports as `suppression/malformed` when it
+carries a directive's shape and breaks it. A comment that merely mentions
+another preset's keyword in passing is prose, and stays prose.
+
 ### Baseline
 
 The first run on an existing codebase is the adoption blocker. Record the

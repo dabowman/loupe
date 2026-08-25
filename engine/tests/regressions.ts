@@ -467,4 +467,283 @@ await check('the substitution-prop list is config-driven', async () => {
 	assert(/substitutionProps must be an array/.test(threw), `a bare string was accepted: ${threw || 'no throw'}`);
 });
 
+// The suppression keyword is preset-scoped — `generic` asks for `ds-allow`,
+// `wpds` for `wpds-allow` — so adopting a preset renames it. Every directive
+// written in the old keyword used to go quiet on that rename: not honored, not
+// reported as malformed, missing from `loupe suppressions`. A reason someone
+// wrote down and signed off simply stopped counting, and nothing anywhere said
+// so. Read aliases are what keep the rename from costing anything.
+await check('a preset rename does not orphan directives written in the old keyword', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': [
+			'/* ds-allow tokens/hardcoded-value -- the preset before this one */',
+			'.acme-a { color: #826200; }',
+			'/* wpds-allow tokens/hardcoded-value -- the keyword this preset asks for */',
+			'.acme-b { color: #826201; }',
+			'/* ds-disable */',
+			'.acme-c { color: #826202; }',
+			'/* ds-allow tokens/hardcoded-value */',
+			'.acme-d { color: #826203; }',
+			'',
+		].join('\n'),
+	});
+	try {
+		const config = await loadConfig({ root });
+		const r = await analyze(config, { scope: null });
+		const lines = (rule: string): number[] => r.findings.filter((f) => f.rule === rule).map((f) => f.line).sort();
+
+		// Both keywords mute. A blanket alias stays blanket: `ds-disable` is
+		// carried in the preset's blanket list, and reading `ds-allow` must not
+		// hand it the power to mute anything.
+		assert(
+			JSON.stringify(lines('tokens/hardcoded-value')) === '[6,8]',
+			`expected findings only on the blanket and reasonless lines — got ${JSON.stringify(lines('tokens/hardcoded-value'))}`,
+		);
+		// A directive in the old keyword that is malformed reports as malformed,
+		// rather than reverting to prose and reporting nothing.
+		assert(
+			JSON.stringify(lines('suppression/malformed')) === '[5,7]',
+			`expected malformed on the blanket and reasonless lines — got ${JSON.stringify(lines('suppression/malformed'))}`,
+		);
+
+		// It counts as a suppression, which is what `loupe suppressions` audits,
+		// and it carries the keyword it was written with so the rename is findable.
+		assert(r.directives.length === 2, `expected 2 active directives, got ${r.directives.length}`);
+		const aliased = r.directives.filter((d) => d.alias !== undefined);
+		assert(aliased.length === 1 && aliased[0]?.alias === 'ds-allow', `expected one directive marked ds-allow, got ${JSON.stringify(aliased)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Reading another preset's keyword must not put it on the *malformed* gate as
+// well. Every line below is prose — one of them is the comment someone writes
+// precisely because the migration guide told them about the rename — and each
+// one turned a clean repo into exit 1 under `wpds`, where malformed is an
+// error. An upgrade that reports new errors on comments nobody changed is a
+// worse trade than the bug it fixes.
+await check('prose mentioning another preset\'s keyword stays prose', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': [
+			'/* ds-allow is the old keyword; write wpds-allow instead. */',
+			'/* ds-allowlist below is generated - do not edit */',
+			'// ds-allow used to be spelled that way before the rename',
+			'.acme-a { color: var(--wpds-color-fg); }',
+			'',
+		].join('\n'),
+		'src/A.jsx': 'export const A = () => <div className="acme-a">x</div>;\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		assert(
+			!r.findings.length,
+			`prose about the rename reported: ${JSON.stringify(r.findings.map((f) => `${f.rule}:${f.line}`))}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Symmetrically, and this is the direction that was arbitrary: `wpds-allow-file`
+// is a blanket form under `wpds`, so under `wpds` it reports. Under `generic` it
+// is a word in a comment — reading `wpds-allow` there must not drag its blanket
+// spelling along with it.
+await check("another preset's blanket spelling is prose where it is not blanket", async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'generic', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': '/* wpds-allow-file */\n/* wpds-allowlist: generated */\n.acme-a { display: block; }\n',
+		'src/A.jsx': 'export const A = () => <div className="acme-a">x</div>;\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		assert(
+			!r.findings.length,
+			`prose reported under generic: ${JSON.stringify(r.findings.map((f) => `${f.rule}:${f.line}`))}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The one thing an alias may report. A line with a directive's shape and no
+// reason was muting nothing before the rename either — leaving it silent is how
+// the escape hatch rots.
+await check('an aliased directive missing its reason still reports', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': '/* ds-allow tokens/hardcoded-value */\n.acme-a { color: #826200; }\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		const malformed = r.findings.filter((f) => f.rule === 'suppression/malformed');
+		assert(malformed.length === 1 && malformed[0]?.line === 1, `expected one malformed at line 1, got ${JSON.stringify(malformed)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `suppression.aliases` is user-supplied text interpolated into a regex. The
+// escaping and the blanket guard are the whole safety story for it, and both
+// fail silently — as a keyword that matches too much, or one that mutes when it
+// should report.
+await check('declared aliases are escaped, and a blanket term is never one', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({
+			extends: 'wpds',
+			namespaces: { project: ['acme-'] },
+			suppression: { aliases: ['ds.allow', 'a|b', '(x', 'ds-disable'] },
+		}),
+		'styles/a.css': [
+			'/* ds.allow tokens/hardcoded-value -- a dot is a dot */',
+			'.acme-a { color: #826200; }',
+			'/* dsxallow tokens/hardcoded-value -- the dot must not match x */',
+			'.acme-b { color: #826201; }',
+			'/* (x tokens/hardcoded-value -- an unbalanced group is literal text */',
+			'.acme-c { color: #826202; }',
+			'/* ds-disable tokens/hardcoded-value -- blanket terms stay blanket */',
+			'.acme-d { color: #826203; }',
+			'',
+		].join('\n'),
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		const lines = (rule: string): number[] =>
+			r.findings.filter((f) => f.rule === rule).map((f) => f.line).sort((a, b) => a - b);
+		assert(
+			JSON.stringify(lines('tokens/hardcoded-value')) === '[4,8]',
+			`expected the escaped aliases to mute and only those — got ${JSON.stringify(lines('tokens/hardcoded-value'))}`,
+		);
+		// `ds-disable` is a blanket term of the active preset, so naming it as an
+		// alias buys nothing: it reports, exactly as it did before.
+		assert(lines('suppression/malformed').includes(7), `a blanket term declared as an alias must still report — got ${JSON.stringify(lines('suppression/malformed'))}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The mirror of the two prose tests above, and the half they miss: each of them
+// runs its prose only under the preset where the term is an *alias*, so the word
+// boundary they are named for is exercised only on the gate that already had
+// one. `ds-allowlist` under `generic` — the fallback for a project with no
+// config at all — went through a bare `startsWith` and reported an error.
+await check('a longer word starting with the active keyword stays prose', async () => {
+	const cases: [string, string][] = [
+		['generic', 'ds'],
+		['wpds', 'wpds'],
+	];
+	for (const [preset, kw] of cases) {
+		const root = tmpRepo({
+			'loupe.config.json': JSON.stringify({ extends: preset, namespaces: { project: ['acme-'] } }),
+			'styles/a.css': [
+				`/* ${kw}-allowlist below is generated - do not edit */`,
+				`/* ${kw}-allowed values are listed above */`,
+				`/* ${kw}-disabled is a state, not a directive */`,
+				`#${kw}-allow-panel { display: block; }`,
+				'.acme-a { display: block; }',
+				'',
+			].join('\n'),
+			'src/A.jsx': 'export const A = () => <div className="acme-a">x</div>;\n',
+		});
+		try {
+			const r = await analyze(await loadConfig({ root }), { scope: null });
+			assert(
+				!r.findings.length,
+				`${preset}: prose reported ${JSON.stringify(r.findings.map((f) => `${f.rule}:${f.line}`))}`,
+			);
+		} finally {
+			cleanup(root);
+		}
+	}
+});
+
+// The other half of the shape gate. Narrowing what an alias may report is only
+// safe while it still reports everything that is recognizably a *broken*
+// directive — a reason with no rule ids, a bare keyword. Letting those fall
+// through both branches is the silence the module header forbids: no mute, no
+// finding, and nothing in `loupe suppressions` either.
+await check('a broken directive written in an alias still reports', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': [
+			'/* ds-allow -- Stack exposes no padding prop */',
+			'.acme-a { display: block; }',
+			'/* ds-allow */',
+			'.acme-b { display: block; }',
+			'',
+		].join('\n'),
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		const at = r.findings.filter((f) => f.rule === 'suppression/malformed').map((f) => f.line).sort((a, b) => a - b);
+		assert(JSON.stringify(at) === '[1,3]', `expected malformed at lines 1 and 3, got ${JSON.stringify(at)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A reason is mandatory, and the comment terminator is not one. `-- */` used to
+// satisfy the reason group with the closer itself, so the loosest possible
+// directive muted and `loupe suppressions` printed `*/` as the sign-off.
+await check('the comment terminator is not a reason', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': '/* wpds-allow tokens/hardcoded-value -- */\n.acme-a { color: #826200; }\n',
+		'src/A.jsx': 'export const A = () => <div className="acme-a">x</div>;\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		assert(!r.directives.length, `an empty reason must not mute: ${JSON.stringify(r.directives)}`);
+		assert(
+			r.findings.some((f) => f.rule === 'suppression/malformed' && f.line === 1),
+			`expected suppression/malformed at line 1, got ${JSON.stringify(r.findings.map((f) => `${f.rule}:${f.line}`))}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `keyword` and `blanket` reach the parser from authored JSON through `merge`,
+// which copies a non-object value verbatim. An empty keyword makes the parser's
+// prefix tests universally true — every line of every file reported as a
+// malformed suppression — and a `blanket` written as a bare string spreads into
+// one prefix per character.
+await check('an unusable suppression keyword falls back rather than flooding', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			namespaces: { project: ['acme-'] },
+			suppression: { keyword: '', blanket: 'ds-disable' },
+		}),
+		'styles/a.css': '.acme-a { display: block; }\n.acme-b { display: block; }\n',
+		'src/A.jsx': 'export const A = () => <div className="acme-a acme-b">x</div>;\n',
+	});
+	try {
+		const config = await loadConfig({ root });
+		assert(config.suppression.keyword === 'ds-allow', `expected the default keyword, got ${JSON.stringify(config.suppression.keyword)}`);
+		const r = await analyze(config, { scope: null });
+		assert(
+			!r.findings.some((f) => f.rule === 'suppression/malformed'),
+			`ordinary lines reported as malformed: ${JSON.stringify(r.findings.map((f) => `${f.rule}:${f.line}`))}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('loupe suppressions names the rename behind an aliased directive', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': '/* ds-allow tokens/hardcoded-value -- signed off */\n.acme-a { color: #826200; }\n',
+	});
+	try {
+		const out = execFileSync('node', [CLI, 'suppressions', '--root', root], { encoding: 'utf8' });
+		assert(/tokens\/hardcoded-value/.test(out), `directive missing from the inventory:\n${out}`);
+		assert(/ds-allow \u2192 wpds-allow/.test(out), `the inventory does not name the rename:\n${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();

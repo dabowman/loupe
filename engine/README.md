@@ -75,6 +75,30 @@ available and stays legible.
 The directive must be the first thing in its comment, so documentation *about*
 the grammar isn't mistaken for an instance of it.
 
+The keyword is preset-scoped — `generic` asks for `ds-allow`, `wpds` for
+`wpds-allow` — so adopting a different preset renames it. Every keyword the
+shipped presets declare is *read* whichever one is active, so a rename never
+orphans the directives already written: a directive nothing recognizes is not a
+mute and not a finding either, which is the one way a signed-off reason can
+disappear entirely. `loupe suppressions` names the keyword such a directive was
+written with, so the rename stays discoverable. A config with a keyword of its
+own can list the one it replaced under `suppression.aliases`; a term any preset
+treats as a blanket disable is never offered as an alias, so an alias can only
+ever widen what may be written, never what a directive may do.
+
+Reading is all an alias does, and it runs in both directions: `generic` reads
+`wpds-allow` exactly as `wpds` reads `ds-allow`, which also means a project with
+nothing to detect — `generic` is the fallback — honours a `wpds-allow`
+directive. What the tool tells you to *write* is still one keyword, the active
+one. What may be *reported* is wider: the active keyword and the blanket forms
+in any shape at all, and an alias whenever the line carries a directive's shape
+(the keyword alone, or with rule ids, or with a reason separator) and breaks it.
+A comment that merely opens with some other preset's keyword and then reads as a
+sentence is prose about a rename far more often than it is a broken directive,
+so it is left alone — but a directive someone wrote and broke is never left
+silent, whichever keyword it is written in. Silence is the one outcome a
+signed-off reason must never have.
+
 ## Config
 
 `loupe.config.json` (or `.mjs`, or a `loupe` key in `package.json`),

@@ -129,6 +129,8 @@ export interface Directive {
 	line: number;
 	rules: string[];
 	reason: string;
+	/** The read alias it was written with, when that is not the active keyword. */
+	alias?: string;
 }
 
 /** A suppression comment that names no rule, or gives no reason. */
@@ -321,6 +323,13 @@ export type SourceKind = 'styles' | 'markup' | 'references';
 export interface SuppressionConfig {
 	keyword: string;
 	blanket: string[];
+	/**
+	 * Keywords honored for *reading* alongside `keyword`, so switching preset
+	 * renames the vocabulary without orphaning the directives already written in
+	 * it. Seeded from every shipped preset's keyword; a config naming its own
+	 * keyword can list the one it replaced here.
+	 */
+	aliases: string[];
 }
 
 export interface HookConfig {

@@ -164,6 +164,39 @@ await check('a preset dropped into presets/ is detected without touching the eng
 	}
 });
 
+// Suppression keywords are read across presets, so that every rename keeps
+// honoring the directives written before it — and the alias set is therefore
+// assembled from whatever is in `presets/`. A term one preset refuses as a
+// blanket disable must not become a mute somewhere else just because a later
+// preset adopts that spelling as its keyword. Adding a preset is the workflow
+// this whole directory exists for; it must not be able to widen suppression
+// under a preset nobody touched.
+await check('a term one preset disables can never become a muting alias', async () => {
+	const name = 'zz-blanket-clash';
+	const file = join(PRESET_DIR, `${name}.json`);
+	assert(!existsSync(file), `${file} already exists — refusing to clobber it`);
+	// Written inside the try: `presets/` is the installed package, and a throw
+	// between the write and the `finally` leaves a stray preset behind that every
+	// later run — in this process and the next — silently reads its vocabulary
+	// from.
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: 'generic', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': '/* wpds-disable tokens/hardcoded-value -- blanket under wpds */\n.acme-a { color: #826200; }\n',
+	});
+	try {
+		writeFileSync(file, JSON.stringify({ extends: 'generic', suppression: { keyword: 'wpds-disable', blanket: [] } }));
+		const r = await analyze(await loadConfig({ root }), { scope: null });
+		assert(!r.directives.length, `a blanket term must not read as a directive: ${JSON.stringify(r.directives)}`);
+		assert(
+			r.findings.some((f) => f.rule === 'tokens/hardcoded-value'),
+			'the finding must survive — a blanket term mutes nothing, whoever names it',
+		);
+	} finally {
+		rmSync(file, { force: true });
+		cleanup(root);
+	}
+});
+
 await check('priority decides when two presets both match', async () => {
 	const root = repo({
 		'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '^28.0.0' } }),

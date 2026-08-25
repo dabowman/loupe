@@ -413,10 +413,21 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
+	// A directive written in a keyword this config no longer asks for still
+	// mutes. It is doing its job, so the rename is named here rather than turned
+	// into a finding of its own — the inventory is where you would come looking
+	// for it. (A directive that carries the grammar's shape and breaks it —
+	// missing reason, missing rule ids, bare keyword — still reports as
+	// `suppression/malformed`, whichever keyword it was written in.)
 	if (command === 'suppressions') {
 		const { directives } = await analyze(config, { scope: null });
+		const kw = config.suppression.keyword;
 		if (args.flags.format === 'json') process.stdout.write(`${JSON.stringify(directives, null, 2)}\n`);
-		else for (const d of directives) process.stdout.write(`${d.file}:${d.line}  ${d.rules.join(',')}  ${d.reason}\n`);
+		else
+			for (const d of directives)
+				process.stdout.write(
+					`${d.file}:${d.line}  ${d.rules.join(',')}  ${d.reason}${d.alias ? `  (${d.alias} \u2192 ${kw})` : ''}\n`
+				);
 		return EXIT.OK;
 	}
 

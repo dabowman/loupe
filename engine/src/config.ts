@@ -63,7 +63,7 @@ export const DEFAULTS: MergedConfig = {
 		references: ['**/*.php', '**/*.html'],
 		ignore: ['**/node_modules/**', '**/build/**', '**/dist/**', '**/vendor/**', '**/.git/**'],
 	},
-	suppression: { keyword: 'ds-allow', blanket: ['ds-disable'] },
+	suppression: { keyword: 'ds-allow', blanket: ['ds-disable'], aliases: [] },
 	rules: {},
 	patterns: null,
 	// The component-currency registry (recommended/legacy/locked/experimental
@@ -182,6 +182,47 @@ export function listPresets(): string[] {
 
 export const presetExists = (name: string): boolean => existsSync(join(PRESET_DIR, `${name}.json`));
 
+/**
+ * The suppression vocabulary of every shipped preset: the keywords each one
+ * asks people to write, and the blanket forms each one refuses.
+ *
+ * Read from the directory for the same reason {@link listPresets} is: a list
+ * kept by hand drifts the moment a preset is added, and here the drift is
+ * invisible — a directive written in the missing vocabulary simply stops
+ * suppressing. Read every time rather than cached, so a preset dropped into
+ * `presets/` takes effect in the same run that adds it; it is a handful of
+ * small files, once per `normalize`.
+ *
+ * Both halves matter. A term one preset treats as a blanket disable must never
+ * become a muting keyword somewhere else just because a third preset names it,
+ * so the blanket side is collected to be *excluded* from the alias set.
+ */
+function shippedVocabulary(): { keywords: string[]; blanket: Set<string> } {
+	const keywords = new Set<string>([DEFAULTS.suppression.keyword]);
+	const blanket = new Set<string>(DEFAULTS.suppression.blanket);
+	try {
+		for (const f of readdirSync(PRESET_DIR)) {
+			if (!f.endsWith('.json')) continue;
+			try {
+				const raw: unknown = JSON.parse(readFileSync(join(PRESET_DIR, f), 'utf8'));
+				const supp = isObj(raw) ? raw['suppression'] : undefined;
+				if (!isObj(supp)) continue;
+				const kw = supp['keyword'];
+				if (typeof kw === 'string' && kw) keywords.add(kw);
+				const bl = supp['blanket'];
+				if (Array.isArray(bl)) for (const b of bl) if (typeof b === 'string' && b) blanket.add(b);
+			} catch {
+				// A preset that will not parse fails loudly when something extends it;
+				// it must not take the alias list down with it here.
+			}
+		}
+	} catch {
+		// An unreadable preset directory is a broken install. The default
+		// vocabulary is still worth honoring.
+	}
+	return { keywords: [...keywords], blanket };
+}
+
 /** Compile `has-*` style patterns into anchored regexes. */
 function compilePatterns(patterns: readonly string[] | undefined): RegExp[] {
 	return (patterns ?? []).map(
@@ -288,6 +329,45 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		]),
 	) as Record<RuleId, boolean>;
 
+	// Read aliases: every keyword the shipped presets know, plus any this config
+	// names itself. The keyword is preset-scoped, so adopting a preset renames it
+	// — and a directive in the old vocabulary is not read as a directive at all,
+	// which loses the suppression and reports nothing. Reading them all keeps a
+	// recorded reason counting; `keyword` alone is still what the tool tells
+	// people to write, and the only vocabulary a malformed directive is judged
+	// against.
+	//
+	// A blanket term anywhere in the shipped presets is never an alias: `wpds`
+	// refuses `ds-disable`, and another preset adopting that spelling as its
+	// keyword must not turn it into a mute here. Declared aliases are filtered
+	// too — the guard is about the term, not about who named it — and anything
+	// that is not a non-empty string is dropped rather than interpolated into a
+	// regex.
+	//
+	// The same guard has to cover `keyword` and `blanket`. `merge` copies a
+	// non-object value from authored JSON verbatim, so the declared types are a
+	// contract with the author, not a check: `"keyword": ""` makes the parser's
+	// `startsWith`/`includes` universally true and reports every line of every
+	// file as malformed, `"keyword": 12` throws out of `esc`, and `"blanket":
+	// "ds-disable"` spreads into eleven single-character prefixes. An unusable
+	// value falls back to the default vocabulary for the same reason an
+	// unreadable preset directory does — a broken install still has to run.
+	const shipped = shippedVocabulary();
+	const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
+	const isTerm = (v: unknown): v is string => typeof v === 'string' && v !== '';
+	const keyword = isTerm(cfg.suppression.keyword) ? cfg.suppression.keyword : DEFAULTS.suppression.keyword;
+	const blanket = Array.isArray(cfg.suppression.blanket)
+		? cfg.suppression.blanket.filter(isTerm)
+		: [...DEFAULTS.suppression.blanket];
+	const suppression = {
+		...cfg.suppression,
+		keyword,
+		blanket,
+		aliases: [...new Set([...shipped.keywords, ...declared])].filter(
+			(a) => isTerm(a) && a !== keyword && !shipped.blanket.has(a),
+		),
+	};
+
 	const neverDead = compilePatterns(cfg.namespaces.neverDead);
 	const projectPrefixes = cfg.namespaces.project ?? [];
 	const externalPrefixes = cfg.namespaces.external ?? [];
@@ -315,7 +395,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		patterns,
 		componentRegistry,
 		sources: cfg.sources,
-		suppression: cfg.suppression,
+		suppression,
 		baselinePath: cfg.baseline,
 		hook: cfg.hook,
 		rules,
