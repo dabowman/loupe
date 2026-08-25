@@ -4,7 +4,10 @@
 
 This reproduces the old hardcoded behaviour. Note `suppression.keyword` — keep
 it as `wpds-allow` and every existing suppression comment in the repo keeps
-working unchanged, including the `R2,R3` style ids.
+working unchanged, including the `R2,R3` style ids. Renaming it is safe too:
+every keyword the shipped presets declare is read as an alias, so a directive
+written in the old one still mutes and still shows up in `loupe suppressions`,
+which names the rename beside it.
 
 ```jsonc
 // loupe.config.json — repo root

@@ -12,6 +12,11 @@
  * checker flagging its own documentation: a line reading
  * `* Suppression: ds-allow <ids> -- <reason>` is prose about the grammar, not
  * an instance of it.
+ *
+ * The keyword is preset-scoped, so adopting a different preset renames it. Read
+ * aliases are what keep that rename from orphaning the directives already
+ * written: every keyword the engine knows mutes, whichever one the active
+ * config asks people to write.
  */
 
 import { canonicalRuleId } from './rules.ts';
@@ -26,9 +31,19 @@ const OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\/\*+|<!--|#+)?\s*/;
 export function makeSuppressionParser({
 	keyword,
 	blanket = [],
+	aliases = [],
 }: SuppressionConfig): (text: string, relPath: string) => Suppressions {
-	const strict = new RegExp(`^${esc(keyword)}\\s+(${ID}(?:\\s*,\\s*${ID})*)\\s*--\\s*(\\S.*?)(?:\\*/|-->|\\}|$)`);
-	const prefixes = [keyword, ...blanket];
+	// A read alias mutes exactly as the active keyword does. An unrecognized
+	// directive is not read as a directive at all — it neither suppresses nor
+	// reports — and that silence is the one outcome a reason someone wrote down
+	// must never have. Blanket forms are left out on purpose: an alias widens
+	// what may be *written*, never what a directive is allowed to do.
+	const heads = [keyword, ...aliases.filter((a) => a !== keyword && !blanket.includes(a))];
+	// Longest first: alternation takes the first branch that matches, so a
+	// keyword that is a prefix of another would otherwise shadow it.
+	const head = [...heads].sort((a, b) => b.length - a.length).map(esc).join('|');
+	const strict = new RegExp(`^(${head})\\s+(${ID}(?:\\s*,\\s*${ID})*)\\s*--\\s*(\\S.*?)(?:\\*/|-->|\\}|$)`);
+	const prefixes = [...heads, ...blanket];
 
 	return function scan(text: string, relPath: string): Suppressions {
 		const byLine = new Map<number, Set<string>>();
@@ -42,10 +57,18 @@ export function makeSuppressionParser({
 			if (!prefixes.some((p) => stripped.startsWith(p))) continue; // prose, not a directive
 			const line = i + 1;
 			const m = stripped.match(strict);
-			if (m?.[1] !== undefined && m[2] !== undefined) {
-				const ids = m[1].split(',').map((s) => canonicalRuleId(s.trim()));
+			if (m?.[2] !== undefined && m[3] !== undefined) {
+				const ids = m[2].split(',').map((s) => canonicalRuleId(s.trim()));
 				byLine.set(line, new Set(ids));
-				directives.push({ file: relPath, line, rules: ids, reason: m[2].trim() });
+				directives.push({
+					file: relPath,
+					line,
+					rules: ids,
+					reason: m[3].trim(),
+					// Carried only when it is not the keyword the config asks for, so
+					// `loupe suppressions` can name the rename and nothing else has to.
+					...(m[1] !== undefined && m[1] !== keyword ? { alias: m[1] } : {}),
+				});
 			} else {
 				malformed.push({
 					rule: 'suppression/malformed',

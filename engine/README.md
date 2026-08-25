@@ -75,6 +75,16 @@ available and stays legible.
 The directive must be the first thing in its comment, so documentation *about*
 the grammar isn't mistaken for an instance of it.
 
+The keyword is preset-scoped — `generic` asks for `ds-allow`, `wpds` for
+`wpds-allow` — so adopting a different preset renames it. Every keyword the
+shipped presets declare is *read* whichever one is active, so a rename never
+orphans the directives already written: a directive nothing recognizes is not a
+mute and not a finding either, which is the one way a signed-off reason can
+disappear entirely. `loupe suppressions` names the alias behind such a
+directive, so the rename stays discoverable. A config with a keyword of its own
+can list the one it replaced under `suppression.aliases`. What the tool tells
+you to *write* is still one keyword: the active one.
+
 ## Config
 
 `loupe.config.json` (or `.mjs`, or a `loupe` key in `package.json`),

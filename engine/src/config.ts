@@ -57,7 +57,7 @@ export const DEFAULTS: MergedConfig = {
 		references: ['**/*.php', '**/*.html'],
 		ignore: ['**/node_modules/**', '**/build/**', '**/dist/**', '**/vendor/**', '**/.git/**'],
 	},
-	suppression: { keyword: 'ds-allow', blanket: ['ds-disable'] },
+	suppression: { keyword: 'ds-allow', blanket: ['ds-disable'], aliases: [] },
 	rules: {},
 	patterns: null,
 	// The component-currency registry (recommended/legacy/locked/experimental
@@ -176,6 +176,39 @@ export function listPresets(): string[] {
 
 export const presetExists = (name: string): boolean => existsSync(join(PRESET_DIR, `${name}.json`));
 
+/**
+ * Every suppression keyword the shipped presets declare.
+ *
+ * Read from the directory for the same reason {@link listPresets} is: a list
+ * kept by hand drifts the moment a preset is added, and here the drift is
+ * invisible — a directive written in the missing vocabulary simply stops
+ * suppressing. Cached because normalization runs per invocation, not per file.
+ */
+let shipped: string[] | null = null;
+function shippedKeywords(): string[] {
+	if (shipped) return shipped;
+	const found = new Set<string>([DEFAULTS.suppression.keyword]);
+	try {
+		for (const f of readdirSync(PRESET_DIR)) {
+			if (!f.endsWith('.json')) continue;
+			try {
+				const raw: unknown = JSON.parse(readFileSync(join(PRESET_DIR, f), 'utf8'));
+				const supp = isObj(raw) ? raw['suppression'] : undefined;
+				const kw = isObj(supp) ? supp['keyword'] : undefined;
+				if (typeof kw === 'string' && kw) found.add(kw);
+			} catch {
+				// A preset that will not parse fails loudly when something extends it;
+				// it must not take the alias list down with it here.
+			}
+		}
+	} catch {
+		// An unreadable preset directory is a broken install. The default
+		// vocabulary is still worth honoring.
+	}
+	shipped = [...found];
+	return shipped;
+}
+
 /** Compile `has-*` style patterns into anchored regexes. */
 function compilePatterns(patterns: readonly string[] | undefined): RegExp[] {
 	return (patterns ?? []).map(
@@ -266,6 +299,19 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		]),
 	) as Record<RuleId, boolean>;
 
+	// Read aliases: every keyword the shipped presets know, plus any this config
+	// names itself. The keyword is preset-scoped, so adopting a preset renames it
+	// — and a directive in the old vocabulary is not read as a directive at all,
+	// which loses the suppression and reports nothing. Reading them all keeps a
+	// recorded reason counting; `keyword` alone is still what the tool tells
+	// people to write.
+	const suppression = {
+		...cfg.suppression,
+		aliases: [...new Set([...shippedKeywords(), ...(cfg.suppression.aliases ?? [])])].filter(
+			(a) => a !== cfg.suppression.keyword,
+		),
+	};
+
 	const neverDead = compilePatterns(cfg.namespaces.neverDead);
 	const projectPrefixes = cfg.namespaces.project ?? [];
 	const externalPrefixes = cfg.namespaces.external ?? [];
@@ -292,7 +338,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		patterns,
 		componentRegistry,
 		sources: cfg.sources,
-		suppression: cfg.suppression,
+		suppression,
 		baselinePath: cfg.baseline,
 		hook: cfg.hook,
 		rules,

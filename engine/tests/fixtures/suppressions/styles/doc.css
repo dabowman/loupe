@@ -12,3 +12,6 @@
 
 /* ds-allow tokens/hardcoded-value */
 .wf-noreason { color: #123456; }
+
+/* wpds-allow tokens/hardcoded-value -- another preset's keyword still reads */
+.wf-renamed { color: #654321; }

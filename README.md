@@ -323,6 +323,11 @@ Rule id and reason are both mandatory; anything looser is its own finding. That
 inversion keeps the escape hatch available and legible. Audit with
 `loupe suppressions`.
 
+The keyword comes from the preset — `generic` asks for `ds-allow`, `wpds` for
+`wpds-allow` — and every preset's keyword is read whichever one is active, so
+switching preset never orphans the directives already written.
+`loupe suppressions` names the older keyword beside such a directive.
+
 ### Baseline
 
 The first run on an existing codebase is the adoption blocker. Record the
