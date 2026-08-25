@@ -16,7 +16,7 @@
 
 import { parse as babelParse } from '@babel/parser';
 import type { ParserPlugin } from '@babel/parser';
-import type { Expression, File, JSXAttribute, JSXElement, Node, TaggedTemplateExpression } from '@babel/types';
+import type { Expression, File, JSXAttribute, JSXElement, JSXOpeningElement, Node, TaggedTemplateExpression } from '@babel/types';
 import { keyName, toCssProp, toCssValue } from './inline.ts';
 import { FLEX_PROPS, GAP_PROPS } from './styles.ts';
 import { cssInJsLocals, parseTemplate, templateText } from './cssinjs.ts';
@@ -57,23 +57,45 @@ const firstArgOf = (t: Expression): string | undefined => {
 const identifierOf = (t: Expression): string | undefined => (t.type === 'Identifier' ? t.name : undefined);
 
 /**
- * The element a component-substitution prop was handed, if it was handed one.
+ * The element(s) a component-substitution prop can hand over.
  *
  * `render={ <h4 /> }` is how a design-system text component is told which tag to
  * emit — `as` and `component` are the same idiom elsewhere. The callback
  * spelling `render={ ( props ) => <h4 { ...props } /> }` says the same thing and
- * is equally documented, so it resolves to the same element.
+ * is equally documented, and so do the shapes an ordinary refactor turns those
+ * into: a block body that returns one element, a conditional choosing between
+ * two, a guard. Each resolves to the element it can produce, because a spelling
+ * this rule does not follow reproduces exactly the unsatisfiable finding the
+ * exemption exists to end. Anything opaque — a variable, a call — yields
+ * nothing, which is the safe direction: the element still reports.
  *
- * Only the element the prop is given counts: anything nested inside it is markup
- * the author wrote and React renders as markup, so it stays subject to every
- * rule.
+ * Only the element the prop is given counts. Anything nested *inside* it is
+ * markup the author wrote and React renders as markup, so it stays subject to
+ * every rule.
  */
-const substitutionTarget = (value: JSXAttribute['value']): JSXElement | null => {
-	const expr = value?.type === 'JSXExpressionContainer' ? value.expression : null;
-	if (expr?.type === 'JSXElement') return expr;
-	if (expr?.type === 'ArrowFunctionExpression' && expr.body.type === 'JSXElement') return expr.body;
-	return null;
-};
+function substitutionTargets(expr: Node | null | undefined, out: JSXElement[] = []): JSXElement[] {
+	switch (expr?.type) {
+		case 'JSXElement':
+			out.push(expr);
+			break;
+		case 'ArrowFunctionExpression': {
+			// `( props ) => <h4 />`, and the same body once someone has put braces
+			// around it — one `return` of one element is still one element.
+			if (expr.body.type !== 'BlockStatement') return substitutionTargets(expr.body, out);
+			const [only] = expr.body.body;
+			if (only?.type === 'ReturnStatement') substitutionTargets(only.argument, out);
+			break;
+		}
+		case 'ConditionalExpression':
+			substitutionTargets(expr.consequent, out);
+			substitutionTargets(expr.alternate, out);
+			break;
+		case 'LogicalExpression':
+			substitutionTargets(expr.right, out);
+			break;
+	}
+	return out;
+}
 
 /** `Set.has` for a name that may not exist. */
 const held = (set: ReadonlySet<string>, name: string | undefined): boolean =>
@@ -306,10 +328,11 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 		number,
 		{ target: string; isSystem: boolean; isText: boolean; isLayout: boolean }
 	>();
-	// Elements handed to a substitution prop, by offset. Recorded while the
-	// carrying element's attributes are read, which the walk reaches first — the
-	// same ordering `cssPropOwner` relies on.
-	const substituted = new Set<number>();
+	// Opening elements handed to a substitution prop. Recorded while the carrying
+	// element's attributes are read, which the walk reaches first, and held by
+	// node identity — `walkAst` visits these very objects, so nothing has to be
+	// keyed on a source offset.
+	const substituted = new Set<JSXOpeningElement>();
 	for (const node of ast.program.body)
 		if (node.type === 'ImportDeclaration') for (const sp of node.specifiers) imports.add(sp.local.name);
 
@@ -437,10 +460,8 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 			if (an === 'className' || an === 'class') stringsIn(attr.value, strings);
 			else if (an === 'style') style = readStyleAttr(attr.value);
 			else if (an === 'css') cssAttr = attr.value;
-			else if (ds.substitutionProps.has(an)) {
-				const target = substitutionTarget(attr.value);
-				if (target) substitutions.push(target);
-			}
+			else if (ds.substitutionProps.has(an) && attr.value?.type === 'JSXExpressionContainer')
+				substitutionTargets(attr.value.expression, substitutions);
 		}
 		const classes = classesFrom(strings);
 
@@ -448,14 +469,13 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 		const isComponent = /^[A-Z]/.test(root);
 		const isSystem = isComponent && known.has(root);
 
-		// Only a component takes a substitution prop. `render` on a DOM element is
-		// an attribute React does not know either, so an element under one there is
-		// markup like any other.
-		if (isComponent)
-			for (const target of substitutions) {
-				const at = target.openingElement.start;
-				if (typeof at === 'number') substituted.add(at);
-			}
+		// Only a design-system component's substitution prop earns the exemption.
+		// `render` is not a name WPDS reserved — react-router, Formik and Downshift
+		// all spell a render prop exactly that, and an element handed to one of
+		// those is ordinary markup with a `Heading` analog, which the remediation
+		// guidance tells an agent to convert or suppress. Exempting it would
+		// silence a real finding and leave nothing to suppress.
+		if (isSystem) for (const target of substitutions) substituted.add(target.openingElement);
 
 		const owned = cssAttr?.type === 'JSXExpressionContainer' ? cssAttr.expression : null;
 		if (owned?.type === 'TaggedTemplateExpression' && typeof owned.start === 'number')
@@ -490,7 +510,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 			// documented way to keep an element's semantics through exactly the
 			// conversion this rule asks for. Flagging it leaves nothing to do but
 			// undo the fix. Its children are ordinary markup and still count.
-			if (typeof node.start === 'number' && substituted.has(node.start)) return;
+			if (substituted.has(node)) return;
 			const lower = tag.toLowerCase();
 			const mapped = ds.elementMap.get(lower);
 			if (!mapped) return;

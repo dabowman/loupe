@@ -249,6 +249,16 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
 	}
 
+	// `new Set('render')` is a set of four characters, and a config that means
+	// nothing it says would report exactly like one that meant `[]` — the whole
+	// exemption off, with nothing to see. Every coercion here that cannot mean
+	// what it says throws; this one does too.
+	const substitutionProps: unknown = ds.substitutionProps ?? [];
+	if (!Array.isArray(substitutionProps) || substitutionProps.some((p) => typeof p !== 'string'))
+		throw new Error(
+			`designSystem.substitutionProps must be an array of prop names, got: ${JSON.stringify(substitutionProps)}`,
+		);
+
 	const layoutComponents = ds.components?.layout ?? [];
 	const textComponents = ds.components?.text ?? [];
 	const hasComponents = (ds.packages ?? []).length > 0 && layoutComponents.length + textComponents.length > 0;
@@ -294,7 +304,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 			textComponents,
 			knownComponents: new Set([...layoutComponents, ...textComponents]),
 			elementMap,
-			substitutionProps: new Set(ds.substitutionProps ?? []),
+			substitutionProps: new Set(substitutionProps as string[]),
 		},
 		patterns,
 		componentRegistry,

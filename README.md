@@ -116,10 +116,11 @@ Rules disable themselves when the config cannot support them — a block theme
 with no component layer leaves the component rules inert rather than firing on
 nothing.
 
-`system/raw-element` skips the element a component-substitution prop is handed:
-`<Text variant="heading-md" render={ <h4 /> }>` is the WPDS way to keep a
-heading's semantics, not a raw `<h4>`. The exemption is that element only —
-markup nested inside it is still markup — and the prop list
+`system/raw-element` skips the element a WPDS component's substitution prop is
+handed: `<Text variant="heading-md" render={ <h4 /> }>` is the WPDS way to keep
+a heading's semantics, not a raw `<h4>`. The exemption is that element only —
+markup nested inside it is still markup, and `render` on someone else's
+component is still someone else's render prop — and the prop list
 (`designSystem.substitutionProps`, default `render`, `as`, `component`) is
 config, so a design system that spells it differently says so.
 

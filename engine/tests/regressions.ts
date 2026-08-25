@@ -281,11 +281,31 @@ await check('an element handed to a substitution prop is not raw markup', async 
 				"import { Text } from '@wordpress/ui';",
 				'export const A = () => <Text variant="heading-md" render={ <h4 /> }>Hi</Text>;',
 				'export const B = () => <Text variant="heading-md" render={ ( props ) => <h4 { ...props } /> }>Hi</Text>;',
-				'export const C = () => <Text as={ <h4 /> }>Hi</Text>;',
+				'export const C = () => <Text render={ ( props ) => { return <h4 { ...props } />; } }>Hi</Text>;',
+				'export const D = () => <Text render={ big ? <h2 /> : <h4 /> }>Hi</Text>;',
+				'export const E = () => <Text as={ <h4 /> }>Hi</Text>;',
 			].join('\n'),
 		),
 	);
 	assert(!findings.length, `flagged the escape hatch it recommends: ${JSON.stringify(findings.map((f) => f.message))}`);
+});
+
+// `render` is not a name WPDS reserved: react-router, Formik and Downshift all
+// spell a render prop exactly that. Gating the exemption on "the tag starts with
+// a capital" bought the fix with a silent false negative — an element that
+// genuinely should convert, reported nowhere, with nothing to suppress.
+await check('a third-party render prop is not a design-system substitution', async () => {
+	const findings = rawOnly(
+		await findingsFor(
+			[
+				"import { Route } from 'react-router';",
+				'export const A = () => <Route render={ () => <p>page</p> } />;',
+				'export const B = () => <Whatever render={ <p>x</p> } />;',
+				'export const C = () => <div render={ <h4 /> } />;',
+			].join('\n'),
+		),
+	);
+	assert(findings.length === 3, `a non-WPDS carrier exempts nothing — got ${findings.length}`);
 });
 
 // The narrow reading on purpose: the prop's own element is an argument naming a
@@ -297,12 +317,18 @@ await check('markup nested inside a substitution prop still counts', async () =>
 		await findingsFor(
 			[
 				"import { Text } from '@wordpress/ui';",
-				'export const A = () => <Text render={ <div><p>Hi</p></div> }>Hi</Text>;',
+				// Both elements report without the fix, so this fixture discriminates:
+				// the outer <p> is the substitution, the <h4> under it is markup.
+				'export const A = () => <Text render={ <p><h4>t</h4></p> }>Hi</Text>;',
+				'export const B = () => <h4>a heading nobody handed to anything</h4>;',
 			].join('\n'),
 		),
 	);
-	const f = one(findings, 'expected the nested <p> and nothing else');
-	assert(f.message.includes('<p>'), `flagged the substitution element instead: ${f.message}`);
+	assert(findings.length === 2, `expected the nested <h4> and B's <h4> — got ${findings.length}`);
+	assert(
+		findings.every((f) => f.message.includes('<h4>')),
+		`flagged the substitution element itself: ${JSON.stringify(findings.map((f) => f.message))}`,
+	);
 });
 
 // The exclusion answers one question — which tag does the component emit — and
@@ -334,6 +360,15 @@ await check('the substitution-prop list is config-driven', async () => {
 	assert(f.message.includes('<h4>'), `wrong element exempted: ${f.message}`);
 	const none = rawOnly(await findingsFor(source, { substitutionProps: [] }));
 	assert(none.length === 2, `an empty list exempts nothing — got ${none.length}`);
+
+	// `new Set('render')` is a set of characters — a config that means nothing it
+	// says, reporting identically to one that turned the exemption off.
+	let threw = '';
+	await findingsFor(source, { substitutionProps: 'render' }).catch((err: unknown) => {
+		threw = err instanceof Error ? err.message : String(err);
+		return [];
+	});
+	assert(/substitutionProps must be an array/.test(threw), `a bare string was accepted: ${threw || 'no throw'}`);
 });
 
 finish();

@@ -24176,12 +24176,27 @@ var firstArgOf = (t) => {
   return arg?.type === "Identifier" ? arg.name : void 0;
 };
 var identifierOf = (t) => t.type === "Identifier" ? t.name : void 0;
-var substitutionTarget = (value) => {
-  const expr = value?.type === "JSXExpressionContainer" ? value.expression : null;
-  if (expr?.type === "JSXElement") return expr;
-  if (expr?.type === "ArrowFunctionExpression" && expr.body.type === "JSXElement") return expr.body;
-  return null;
-};
+function substitutionTargets(expr, out = []) {
+  switch (expr?.type) {
+    case "JSXElement":
+      out.push(expr);
+      break;
+    case "ArrowFunctionExpression": {
+      if (expr.body.type !== "BlockStatement") return substitutionTargets(expr.body, out);
+      const [only] = expr.body.body;
+      if (only?.type === "ReturnStatement") substitutionTargets(only.argument, out);
+      break;
+    }
+    case "ConditionalExpression":
+      substitutionTargets(expr.consequent, out);
+      substitutionTargets(expr.alternate, out);
+      break;
+    case "LogicalExpression":
+      substitutionTargets(expr.right, out);
+      break;
+  }
+  return out;
+}
 var held = (set, name) => name !== void 0 && set.has(name);
 var messageOf2 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
 function harvestTokens(text, into = /* @__PURE__ */ new Set()) {
@@ -24411,20 +24426,14 @@ function scanMarkup(text, relPath, ds) {
       if (an === "className" || an === "class") stringsIn(attr.value, strings);
       else if (an === "style") style = readStyleAttr(attr.value);
       else if (an === "css") cssAttr = attr.value;
-      else if (ds.substitutionProps.has(an)) {
-        const target = substitutionTarget(attr.value);
-        if (target) substitutions.push(target);
-      }
+      else if (ds.substitutionProps.has(an) && attr.value?.type === "JSXExpressionContainer")
+        substitutionTargets(attr.value.expression, substitutions);
     }
     const classes = classesFrom(strings);
     const root2 = tag.split(".")[0] ?? tag;
     const isComponent = /^[A-Z]/.test(root2);
     const isSystem = isComponent && known.has(root2);
-    if (isComponent)
-      for (const target of substitutions) {
-        const at = target.openingElement.start;
-        if (typeof at === "number") substituted.add(at);
-      }
+    if (isSystem) for (const target of substitutions) substituted.add(target.openingElement);
     const owned = cssAttr?.type === "JSXExpressionContainer" ? cssAttr.expression : null;
     if (owned?.type === "TaggedTemplateExpression" && typeof owned.start === "number")
       cssPropOwner.set(owned.start, {
@@ -24451,7 +24460,7 @@ function scanMarkup(text, relPath, ds) {
       for (const cls of classes)
         bindings.push({ cls, tag: root2, isSystem: true, isText, isLayout, file: relPath, line });
     } else {
-      if (typeof node.start === "number" && substituted.has(node.start)) return;
+      if (substituted.has(node)) return;
       const lower = tag.toLowerCase();
       const mapped = ds.elementMap.get(lower);
       if (!mapped) return;
@@ -25397,6 +25406,11 @@ function normalize(raw, { root: root2 }) {
     const entry = typeof v === "string" ? { component: v, styledOnly: false } : v;
     elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
   }
+  const substitutionProps = ds.substitutionProps ?? [];
+  if (!Array.isArray(substitutionProps) || substitutionProps.some((p) => typeof p !== "string"))
+    throw new Error(
+      `designSystem.substitutionProps must be an array of prop names, got: ${JSON.stringify(substitutionProps)}`
+    );
   const layoutComponents = ds.components?.layout ?? [];
   const textComponents = ds.components?.text ?? [];
   const hasComponents = (ds.packages ?? []).length > 0 && layoutComponents.length + textComponents.length > 0;
@@ -25437,7 +25451,7 @@ function normalize(raw, { root: root2 }) {
       textComponents,
       knownComponents: /* @__PURE__ */ new Set([...layoutComponents, ...textComponents]),
       elementMap,
-      substitutionProps: new Set(ds.substitutionProps ?? [])
+      substitutionProps: new Set(substitutionProps)
     },
     patterns,
     componentRegistry,

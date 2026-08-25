@@ -131,8 +131,7 @@ is what makes a preset:
     "elementMap": {
       "p": "Text",
       "div": { "component": "Stack", "styledOnly": true }
-    },
-    "substitutionProps": ["render", "as", "component"]
+    }
   }
 }
 ```
@@ -142,13 +141,19 @@ names. `@wordpress/components` publishes `__experimentalText`; without
 normalization the text rules never match and quietly degrade into generic
 override findings.
 
-`substitutionProps` names the props that hand a component the element it should
-render — `<Text variant="heading-md" render={ <h4 /> }>`. The element in one of
-those is an argument naming a tag, not markup, and it is how you keep an
+`designSystem.substitutionProps` — defaulted for every config rather than
+declared by a preset — names the props that hand a component the element it
+should render: `<Text variant="heading-md" render={ <h4 /> }>`. The element in
+one of those is an argument naming a tag, not markup, and it is how you keep an
 element's semantics through the conversion `system/raw-element` asks for, so
 that rule leaves it alone. The default covers `render` (WPDS, Base UI) and
-`as`/`component` (most other React systems); the exemption is the prop's own
-element only, never the subtree under it.
+`as`/`component` (most other React systems).
+
+Two bounds keep the exemption from hiding drift. It is the prop's own element
+only, never the subtree under it — `render={ <div><p/></div> }` still reports the
+`<p>`. And it applies only on a component imported from a `packages` package:
+`render` is also react-router's, Formik's and Downshift's prop name, and an
+element handed to one of those is ordinary markup.
 
 ### Bundled presets
 
