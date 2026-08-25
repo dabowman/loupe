@@ -25477,9 +25477,11 @@ async function loadConfig({
 
 // src/report.ts
 var SEV_MARK = { error: "\u2717", warn: "\u2022" };
+var titleFor = (config) => (id) => renderTitle(id, config.designSystem, config.suppression.keyword);
 function formatAgent(result, config, { maxFindings = 0, showSuppressed = false } = {}) {
   const { findings, diagnostics } = result;
   const kw = config.suppression.keyword;
+  const title = titleFor(config);
   const lines = [];
   if (!findings.length) {
     lines.push("loupe: clean.");
@@ -25513,7 +25515,7 @@ function formatAgent(result, config, { maxFindings = 0, showSuppressed = false }
     for (const [ruleId, group] of groups) {
       const sev = group[0]?.severity ?? "warn";
       lines.push("");
-      lines.push(`${SEV_MARK[sev] ?? "\u2022"} ${ruleId} (${group.length}) \u2014 ${renderTitle(ruleId, config.designSystem, kw)}`);
+      lines.push(`${SEV_MARK[sev] ?? "\u2022"} ${ruleId} (${group.length}) \u2014 ${title(ruleId)}`);
       const show = group.slice(0, quota.get(ruleId) ?? 0);
       hidden += group.length - show.length;
       for (const f of show) lines.push(`    ${f.file}:${f.line}  ${f.message}`);
@@ -25550,6 +25552,7 @@ function formatSummary(result, { prefix = true } = {}) {
   return `${tag}${parts.join(", ")}${top ? ` (${top})` : ""}.`;
 }
 function formatJson(result, config) {
+  const title = titleFor(config);
   return JSON.stringify(
     {
       version: 1,
@@ -25562,7 +25565,7 @@ function formatJson(result, config) {
         suppressions: result.directives.length,
         parseErrors: result.diagnostics.parseErrors.length
       },
-      findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: RULES[f.rule].title })),
+      findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: title(f.rule) })),
       suppressions: result.directives,
       parseErrors: result.diagnostics.parseErrors,
       config: { rules: config.rules, enabled: config.enabled }
@@ -25572,6 +25575,7 @@ function formatJson(result, config) {
   );
 }
 function formatSarif(result, config) {
+  const title = titleFor(config);
   const used = [...new Set(result.findings.map((f) => f.rule))];
   return JSON.stringify(
     {
@@ -25585,7 +25589,7 @@ function formatSarif(result, config) {
               informationUri: "https://github.com/dvdbwmn/loupe",
               rules: used.map((id) => ({
                 id,
-                shortDescription: { text: RULES[id].title },
+                shortDescription: { text: title(id) },
                 defaultConfiguration: { level: config.severityOf(id) === "error" ? "error" : "warning" }
               }))
             }
@@ -25593,7 +25597,7 @@ function formatSarif(result, config) {
           results: result.findings.map((f) => ({
             ruleId: f.rule,
             level: f.severity === "error" ? "error" : "warning",
-            message: { text: `${f.message} \u2014 ${RULES[f.rule].title}` },
+            message: { text: `${f.message} \u2014 ${title(f.rule)}` },
             locations: [
               {
                 physicalLocation: {

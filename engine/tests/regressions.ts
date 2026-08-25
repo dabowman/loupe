@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
 import { isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
+import { RULES } from '../src/rules.ts';
 import { analyze } from '../src/analyze.ts';
 import { assert, check, cleanup, execFailure, finish, scratch, writeAll } from './harness.ts';
 
@@ -247,6 +248,50 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 		assert(out === '', `expected no output, got: ${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// SARIF and JSON read `RULES[id].title` straight out of the table, while the
+// agent format ran it through `renderTitle`. So a GitHub code-scanning alert
+// said "replace with a {tokenPrefix} token" where the terminal said
+// "--wpds-*". Nothing errored: the template is a valid string, and only a
+// human comparing two formats would notice.
+//
+// The placeholder list is derived from the titles rather than written down
+// here, so a rule added with a new {placeholder} is covered without anyone
+// remembering to update this test.
+await check('no formatter emits an unsubstituted {placeholder}', async () => {
+	const placeholders = [
+		...new Set(Object.values(RULES).flatMap((r) => [...r.title.matchAll(/\{(\w+)\}/g)].map((m) => m[0]))),
+	];
+	assert(placeholders.length > 0, 'no rule title carries a placeholder — this test would prove nothing');
+
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css': '.acme-card { border-radius: 4px; margin-bottom: 8px; }',
+		'src/A.jsx': 'export const A = () => <div className="acme-card" />;',
+	});
+	try {
+		for (const format of ['agent', 'json', 'sarif']) {
+			// The fixture is deliberately blocking, so `check` exits 1 and
+			// execFileSync throws. The report is on stdout either way, and it is
+			// the blocking path the hook hands back that matters most here.
+			let out: string;
+			try {
+				out = execFileSync('node', [CLI, 'check', '--all', '--root', root, '--format', format], {
+					encoding: 'utf8',
+				});
+			} catch (err) {
+				const f = execFailure(err);
+				assert(f.status === 1, `check failed for an unexpected reason: ${f.status} ${f.stderr}`);
+				out = f.stdout;
+			}
+			assert(out.includes('acme-card') || out.includes('border-radius'), `${format} produced no findings to check`);
+			const leaked = placeholders.filter((ph) => out.includes(ph));
+			assert(!leaked.length, `${format} shipped ${leaked.join(', ')} unsubstituted`);
+		}
 	} finally {
 		cleanup(root);
 	}
