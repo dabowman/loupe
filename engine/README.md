@@ -8,10 +8,14 @@ styles that class. That correlation is what lets it say *"this `font-size` is on
 a `<Text>` — use its `variant` prop"* rather than *"this `font-size` isn't a
 token."*
 
-Pure analysis. It never edits.
+`check`, `status` and the gate are pure analysis — they never edit. `fix` is the
+one command that does, and only for substitutions with a single right answer.
+
+The package is not published to npm; run it from a checkout (or from the
+installed plugin) rather than through `npx`.
 
 ```bash
-npx loupe check --all
+node engine/bin/loupe.mjs check --all   # or ./bin/loupe check --all
 ```
 
 ## Why
@@ -22,7 +26,7 @@ hardcoded hex next to your token, a `<p>` where the system has a `<Text>`, an
 override reaching into a third-party component's internals. None of that is a
 syntax error. All of it is drift.
 
-Six of the nine rules need cross-file correlation to decide. The other three
+Most of the seventeen rules need cross-file correlation to decide. The rest
 would work as a stylelint plugin, and are included because you want one report.
 
 ## Rules
@@ -30,6 +34,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | Rule | Detects |
 | --- | --- |
 | `suppression/malformed` | A blanket disable, or a directive missing a rule id or reason |
+| `stylesheet/unparsed` | A stylesheet the parser could not read, so nothing in it was checked |
 | `css/dead-class` | A project-namespaced class referenced in no markup or reference file |
 | `tokens/unknown-token` | A `var()` naming no token any known source defines |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
@@ -40,6 +45,8 @@ would work as a stylelint plugin, and are included because you want one report.
 | `typography/untokenized` | Raw type styling with no token and no text component |
 | `system/override` | CSS restyling a design-system component, or reaching into a library's internals |
 | `system/raw-element` | A raw element that has a design-system analog |
+| `system/inline-style` | A style prop doing what a component prop or token already does |
+| `layout/negative-margin` | A negative margin pulling against the layout the system provides |
 | `typography/in-css` | A text component typed in CSS instead of via its props |
 | `system/locked-component` | A private API the design system does not recommend outside its own core |
 | `system/superseded-component` | A current, recommended component now covers this job |
@@ -291,7 +298,7 @@ terminal.
 {
   "hooks": {
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "npx loupe hook" }] }
+      { "hooks": [{ "type": "command", "command": "node /abs/path/to/engine/bin/loupe.mjs hook" }] }
     ]
   }
 }
@@ -430,11 +437,13 @@ off for everyone.
 npm test        # typecheck, then all six suites
 ```
 
-Six suites: `tests/run.ts` (fixtures, one directory per behaviour),
-`tests/detect.ts` (inference), `tests/regressions.ts` (failures that reported
-success), `tests/features.ts` (the three channels and the two cross-file rules),
-`tests/autofix.ts` (the fix path, where a wrong substitution is invisible), and
-`tests/harness.ts` — not a suite but the `check`/`assert`/scratch-repo helpers
-the other five share, typed once instead of copied five times.
+Six suites, in the order `npm test` runs them: `tests/run.ts` (fixtures, one
+directory per behaviour), `tests/detect.ts` (inference), `tests/regressions.ts`
+(failures that reported success), `tests/features.ts` (the three channels and the
+two cross-file rules), `tests/autofix.ts` (the fix path, where a wrong
+substitution is invisible), and `tests/multi-ds.ts` (registry scoping and profile
+selection — which design system answers for a file). `tests/harness.ts` is not a
+suite: it holds the `check`/`assert`/scratch-repo helpers the six share, typed
+once instead of copied six times.
 Once behaviour is config-driven, these are the only thing standing between a
 preset edit and a rule silently switching itself off.

@@ -34,11 +34,20 @@ export function readBaseline(root: string, path: string): Baseline | null {
 	if (!existsSync(full)) return null;
 	try {
 		const parsed = JSON.parse(readFileSync(full, 'utf8')) as Partial<BaselineFile>;
-		const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+		// A file whose `entries` is missing or not an array is as unreadable as one
+		// that doesn't parse: both mean "we cannot tell you what was accepted".
+		// Defaulting it to `[]` instead said "nothing was accepted", which reads to
+		// every caller as a healthy empty baseline — so the backlog went live, the
+		// gate blocked on all of it, and the warning that exists for exactly this
+		// never fired. `jq` rewriting the file without `.entries` is enough to get
+		// here, and valid JSON is the case least likely to be suspected.
+		if (!Array.isArray(parsed.entries)) return null;
+		const entries = parsed.entries;
 		return {
 			version: parsed.version ?? 1,
 			createdAt: parsed.createdAt ?? '',
 			count: parsed.count ?? entries.length,
+			findings: parsed.findings ?? entries.length,
 			entries,
 			set: new Set(entries),
 		};

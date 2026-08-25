@@ -25183,7 +25183,6 @@ function baselinePath(root2, named) {
 function legacyBaselines(root2) {
   const data = pluginDataDir();
   return [
-    join4(root2, DEFAULT_BASELINE),
     join4(root2, ".loupe", "baseline.json"),
     ...data ? [join4(data, "projects", projectKey(root2), "baseline.json")] : []
   ];
@@ -25191,13 +25190,16 @@ function legacyBaselines(root2) {
 function findExistingBaseline(root2, explicit, configured) {
   if (explicit) {
     const path = baselinePath(root2, explicit);
-    return { path, found: existsSync(path), legacy: false };
+    return { path, found: existsSync(path), fallback: "none" };
   }
   const target = baselinePath(root2, configured);
-  if (existsSync(target)) return { path: target, found: true, legacy: false };
+  if (existsSync(target)) return { path: target, found: true, fallback: "none" };
+  const byDefaultName = join4(root2, DEFAULT_BASELINE);
+  if (byDefaultName !== target && existsSync(byDefaultName))
+    return { path: byDefaultName, found: true, fallback: "default-name" };
   for (const path of legacyBaselines(root2))
-    if (existsSync(path)) return { path, found: true, legacy: true };
-  return { path: target, found: false, legacy: false };
+    if (existsSync(path)) return { path, found: true, fallback: "legacy" };
+  return { path: target, found: false, fallback: "none" };
 }
 function attemptsPath(root2, create = false) {
   const { dir } = stateDir(root2, { create });
@@ -25211,11 +25213,13 @@ function readBaseline(root2, path) {
   if (!existsSync2(full)) return null;
   try {
     const parsed = JSON.parse(readFileSync4(full, "utf8"));
-    const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+    if (!Array.isArray(parsed.entries)) return null;
+    const entries = parsed.entries;
     return {
       version: parsed.version ?? 1,
       createdAt: parsed.createdAt ?? "",
       count: parsed.count ?? entries.length,
+      findings: parsed.findings ?? entries.length,
       entries,
       set: new Set(entries)
     };
@@ -26403,6 +26407,7 @@ async function main() {
     return EXIT.OK;
   }
   if (command === "status") {
+    const gateBlocks = blockingAllowed && !hookSilenced();
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? "inferred (no config file found)" : config.source.kind;
     const state = stateDir(root2);
     const base = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
@@ -26415,7 +26420,7 @@ async function main() {
       // different files with nothing on hand to reconcile them — the exact
       // shape of the bug that pinned the baseline to the project in the first
       // place.
-      `baseline:   ${base.path}${base.found && readBaseline(root2, base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.legacy ? "  (legacy location \u2014 run 'loupe baseline' to move it into the project)" : base.found ? "" : "  (none recorded yet)"}`,
+      `baseline:   ${base.path}${base.found && readBaseline(root2, base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "legacy" ? "  (0.1.x location \u2014 run 'loupe baseline' to record it in the project)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
       `state:      ${state.dir}${state.scope === "plugin-data" ? "  (retry counter only, outside your repo)" : ""}`,
       `options:    ${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
       `plugin:     ${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
@@ -26433,15 +26438,17 @@ async function main() {
     for (const id of RULE_IDS) {
       const def = RULES[id];
       const sev = config.severityOf(id);
-      const note = config.enabled[id] ? sev === "error" && blockingAllowed ? "BLOCKS" : sev === "error" ? "advisory (would block if enabled)" : "advisory" : `off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`;
+      const note = config.enabled[id] ? sev === "error" && gateBlocks ? "BLOCKS" : sev === "error" ? "advisory (would block if enabled)" : "advisory" : `off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`;
       lines.push(`  ${id.padEnd(32)} ${note}`);
     }
     const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
     lines.push(
       "",
-      blockingAllowed && blockers.length ? `Turns are blocked by: ${blockers.join(", ")}` : "Nothing blocks turns; every finding is advisory."
+      gateBlocks && blockers.length ? `Turns are blocked by: ${blockers.join(", ")}` : "Nothing blocks turns; every finding is advisory."
     );
-    if (config.inferred) {
+    if (hookSilenced()) {
+      lines.push("The gate is silenced for this session: LOUPE_OFF is set in the environment.");
+    } else if (config.inferred) {
       lines.push("css/dead-class is held to advisory because the namespaces were inferred, not configured.");
       if (!blockingAllowed)
         lines.push(
@@ -26564,7 +26571,7 @@ ${USAGE}`);
   if (!args.flags["no-baseline"]) {
     const { path: bPath, found } = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const baseline = found ? readBaseline(root2, bPath) : null;
-    if (found && !baseline && !isHook)
+    if (found && !baseline)
       process.stderr.write(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
 `);
     result = applyBaseline(result, baseline);

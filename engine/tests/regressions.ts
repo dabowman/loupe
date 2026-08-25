@@ -8,7 +8,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
@@ -20,6 +20,22 @@ import { assert, check, cleanup, execFailure, finish, scratch, writeAll } from '
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, '..', 'bin', 'loupe.mjs');
 
+// `check` exits 1 whenever a finding survives the baseline, and `execFileSync`
+// raises that as a throw — before any assertion about the output can run. Every
+// test that asserts on a hidden-count is a test about whether findings survived,
+// so all of them need the output, not the exit code.
+const checkAll = (root: string, extra: string[] = []): string => {
+	try {
+		return execFileSync('node', [CLI, 'check', '--all', '--root', root, ...extra], {
+			encoding: 'utf8',
+			env: env(),
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+	} catch (err) {
+		return execFailure(err).stdout;
+	}
+};
+
 const tmpRepo = (files: Record<string, string>): string => {
 	const root = scratch('dsh-regress-');
 	writeAll(root, files);
@@ -27,16 +43,30 @@ const tmpRepo = (files: Record<string, string>): string => {
 };
 
 /**
- * The ambient environment, minus the switches that change what the gate does.
+ * The ambient environment, minus every switch that changes what the gate does.
  *
- * `LOUPE_OFF` silences the hook, and it is exactly the variable a developer
- * working on the off switch has exported in the shell they run the suite from —
- * at which point the tests that assert the hook *blocks* fail with "it did not
- * block" and point at the wrong thing entirely.
+ * A developer's shell is not a clean room. `LOUPE_OFF` silences the hook and is
+ * exactly the variable someone working on the off switch has exported; the
+ * `CLAUDE_PLUGIN_OPTION_*` family overrides rules, and `preset` among them wins
+ * over the fixture's own `loupe.config.json`, so `CLAUDE_PLUGIN_OPTION_PRESET`
+ * makes the wpds rules vanish and the blocking test fail with "it did not
+ * block". `CLAUDE_PLUGIN_DATA` and `CLAUDE_PLUGIN_ROOT` move state and profiles.
+ * `HOME` is the quietest of them: `resolvedOptions` reads `~/.claude/settings*
+ * .json`, so a developer with this plugin installed and configured has options
+ * leaking in through a file nothing in the test mentions.
+ *
+ * All of them fail in the same direction — a red suite that points at the code
+ * instead of at the shell — so the helper closes every door, and a test that
+ * wants one open passes it in `extra`.
  */
+const EMPTY_HOME = scratch('dsh-home-');
+
 const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
-	const e: NodeJS.ProcessEnv = { ...process.env, ...extra };
+	const e: NodeJS.ProcessEnv = { ...process.env, HOME: EMPTY_HOME, ...extra };
 	if (!('LOUPE_OFF' in extra)) delete e['LOUPE_OFF'];
+	if (!('CLAUDE_PLUGIN_DATA' in extra)) delete e['CLAUDE_PLUGIN_DATA'];
+	if (!('CLAUDE_PLUGIN_ROOT' in extra)) delete e['CLAUDE_PLUGIN_ROOT'];
+	for (const k of Object.keys(e)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_') && !(k in extra)) delete e[k];
 	return e;
 };
 
@@ -173,10 +203,9 @@ await check('status reports the blocking switch it cannot see in the environment
 			join(home, '.claude', 'settings.json'),
 			JSON.stringify({ pluginConfigs: { 'loupe@somewhere': { options: { blocking: true } } } })
 		);
-		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
-		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
-		delete env['CLAUDE_PLUGIN_ROOT'];
-		const out = execFileSync('node', [CLI, 'status', '--root', root], { encoding: 'utf8', env });
+		// `env({HOME: home})`, not a hand-rolled scrub: this test needs one door
+		// open — the settings file it just wrote — and the helper closes the rest.
+		const out = execFileSync('node', [CLI, 'status', '--root', root], { encoding: 'utf8', env: env({ HOME: home }) });
 		assert(/blocking on/.test(out), `status did not read the setting:\n${out}`);
 		assert(/Turns are blocked by/.test(out), `status still claims nothing blocks:\n${out}`);
 	} finally {
@@ -226,7 +255,7 @@ await check('a baseline recorded from a shell is visible to the plugin hook', ()
 	const pluginData = scratch('dsh-plugin-data-');
 	try {
 		const shell = env();
-		delete shell['CLAUDE_PLUGIN_DATA'];
+
 		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: shell });
 		assert(/baselined [1-9]/.test(recorded), `nothing baselined:\n${recorded}`);
 
@@ -309,14 +338,219 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
-	try {
-		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+	// A fresh session id per run. The gate budgets retries per session and stands
+	// down once the budget is spent, so reusing one id makes the fourth blocking
+	// run exit 0 for a reason that has nothing to do with the switch under test.
+	let session = 0;
+	const run = (extra: NodeJS.ProcessEnv, content?: string): string =>
+		execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
-			input: '{"session_id":"off","tool_input":{"file_path":"styles/a.css"}}',
+			input: JSON.stringify({
+				session_id: `off-${++session}`,
+				tool_input: { file_path: 'styles/a.css', ...(content === undefined ? {} : { content }) },
+			}),
+			env: env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true', ...extra }),
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+	try {
+		// Establish that the fixture blocks. Without this the test cannot tell
+		// "silenced" from "nothing to say": the gate returns before the root check
+		// and the analysis, so `out === ''` also holds for an empty directory, for
+		// a root that does not exist, and for a fixture whose findings a rule
+		// change quietly stopped producing.
+		const blocked = (() => {
+			try {
+				run({});
+				return null;
+			} catch (err) {
+				return execFailure(err);
+			}
+		})();
+		assert(blocked?.status === 2, `fixture does not block, so silence proves nothing: ${blocked?.status}`);
+
+		assert(run({ LOUPE_OFF: '1' }) === '', 'LOUPE_OFF=1 did not silence the hook');
+
+		// The values that look like an off switch but are not. A gate that goes
+		// quiet on `LOUPE_OFF=0` is worse than one that ignores it: three docs and
+		// `--help` promise this exact behaviour, and the failure is silent.
+		for (const value of ['0', 'false', 'off', 'no', '']) {
+			let status: number | null = null;
+			try {
+				run({ LOUPE_OFF: value });
+			} catch (err) {
+				status = execFailure(err).status;
+			}
+			assert(status === 2, `LOUPE_OFF=${JSON.stringify(value)} silenced the hook; it must not`);
+		}
+
+		// Silenced or not, the hook drains the payload. Claude Code writes a Write
+		// tool's whole file body to this pipe; exiting without reading it leaves
+		// that write on a pipe with no reader, and the parent takes an EPIPE on
+		// every large edit of the session. A small payload fits the pipe buffer and
+		// proves nothing, so this one is deliberately past it.
+		assert(run({ LOUPE_OFF: '1' }, 'x'.repeat(512 * 1024)) === '', 'a large payload was not drained under LOUPE_OFF');
+
+		// `status` has to reach the same conclusion the gate does. Unifying the
+		// predicate is not the same as unifying what is concluded from it: with the
+		// hook silenced, `status` went on printing `Turns are blocked by: ...` and
+		// marking every error rule BLOCKS, seven lines under its own `hook: OFF`.
+		const silenced = execFileSync('node', [CLI, 'status', '--root', root], {
+			encoding: 'utf8',
 			env: env({ LOUPE_OFF: '1', CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
-		assert(out === '', `expected no output, got: ${out}`);
+		assert(/hook:\s+OFF/.test(silenced), `status did not report the switch:\n${silenced}`);
+		assert(!/Turns are blocked by/.test(silenced), `status says the gate blocks while it is silenced:\n${silenced}`);
+		assert(!/BLOCKS/.test(silenced), `status marks rules BLOCKS while the gate is silenced:\n${silenced}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A baseline that is present and unreadable is not an absent one. Conflict
+// markers in a committed file are the ordinary way to get here, and treating
+// them as "no baseline" puts the whole accepted backlog back with the gate
+// blocking on all of it — the symptom pinning the baseline to the project was
+// meant to end, arriving through the file's contents instead of its location.
+await check('an unreadable baseline is named, not silently ignored', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	const baseline = join(root, '.loupe-baseline.json');
+	try {
+		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
+		const clean = checkAll(root);
+		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(clean), `fixture was not baselined:\n${clean}`);
+
+		// Two ways to be unreadable. The second is the quiet one: it parses, so the
+		// `catch` that guards the first never sees it, and an `entries` default of
+		// `[]` reported it as a healthy empty baseline while the backlog went live.
+		const corruptions = {
+			'conflict markers': '<<<<<<< ours\n{"version":1,"entries":["a"]}\n=======\n{"version":1,"entries":["b"]}\n>>>>>>> theirs\n',
+			'valid JSON without entries': '{"version":1,"createdAt":"","count":3,"findings":3}\n',
+		};
+		for (const [name, body] of Object.entries(corruptions)) {
+			writeFileSync(baseline, body);
+			const f = execFailure(
+				(() => {
+					try {
+						execFileSync('node', [CLI, 'check', '--all', '--root', root], {
+							encoding: 'utf8',
+							env: env(),
+							stdio: ['pipe', 'pipe', 'pipe'],
+						});
+						return null;
+					} catch (err) {
+						return err;
+					}
+				})()
+			);
+			assert(/is unreadable/.test(f.stderr), `${name}: check did not name the baseline:\n${f.stderr}`);
+
+			const status = execFileSync('node', [CLI, 'status', '--root', root], {
+				encoding: 'utf8',
+				env: env(),
+				stdio: ['pipe', 'pipe', 'pipe'],
+			});
+			assert(/unreadable/.test(status), `${name}: status vouched for a broken baseline:\n${status}`);
+
+			// The hook says it too. It is the surface where this bites — the agent
+			// gets its own accepted backlog handed back as blocking findings — and
+			// staying quiet there spends the retry budget with no reason given.
+			let hookErr = '';
+			try {
+				execFileSync('node', [CLI, 'hook', '--root', root], {
+					encoding: 'utf8',
+					input: '{"session_id":"unread","tool_input":{"file_path":"styles/a.css"}}',
+					env: env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+					stdio: ['pipe', 'pipe', 'pipe'],
+				});
+			} catch (err) {
+				hookErr = execFailure(err).stderr;
+			}
+			assert(/is unreadable/.test(hookErr), `${name}: the hook blocked without naming the baseline:\n${hookErr}`);
+		}
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `--baseline` is documented in `--help` and in both READMEs. The writer and the
+// readers resolve it separately, so a flag the writer honours and the readers
+// drop records a backlog into a file nothing will ever read — silently, and
+// reported as success.
+await check('--baseline names the same file for the writer and the readers', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, baseline: 'cfg/b.json' }),
+		'src/A.jsx':
+			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	try {
+		// An explicit path, including one naming a directory that does not exist.
+		const named = execFileSync('node', [CLI, 'baseline', '--root', root, '--baseline', 'sub/dir/b.json'], {
+			encoding: 'utf8',
+			env: env(),
+		});
+		assert(/sub\/dir\/b\.json/.test(named), `--baseline was not honoured on write:\n${named}`);
+		const readBack = checkAll(root, ['--baseline', 'sub/dir/b.json']);
+		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(readBack), `readers ignored --baseline:\n${readBack}`);
+
+		// `--baseline=` is an empty string, not a path. Writer and readers have to
+		// agree it means "nobody named one" — `??` on either side sends them to
+		// different files, which is how the flag reported success into a file the
+		// gate never opened.
+		const empty = execFileSync('node', [CLI, 'baseline', '--root', root, '--baseline='], { encoding: 'utf8', env: env() });
+		assert(/cfg\/b\.json/.test(empty), `--baseline= did not fall back to the configured path:\n${empty}`);
+		const emptyRead = checkAll(root, ['--baseline=']);
+		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(emptyRead), `--baseline= read a different file than it wrote:\n${emptyRead}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A 0.1.x baseline was a deliberate `loupe baseline`; an upgrade must not throw
+// it away. It is also not the same case as the project's own default file being
+// used because a configured path is not there yet — one wants "re-record this",
+// the other wants "your config points elsewhere", and one message for both was
+// wrong for both.
+await check('an older baseline location is honored and named for what it is', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	try {
+		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
+		const recorded = readFileSync(join(root, '.loupe-baseline.json'), 'utf8');
+
+		// 0.1.x kept it in the state directory.
+		mkdirSync(join(root, '.loupe'), { recursive: true });
+		writeFileSync(join(root, '.loupe', 'baseline.json'), recorded);
+		rmSync(join(root, '.loupe-baseline.json'));
+		const legacy = checkAll(root);
+		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(legacy), `a 0.1.x baseline was dropped:\n${legacy}`);
+		const legacyStatus = execFileSync('node', [CLI, 'status', '--root', root], { encoding: 'utf8', env: env() });
+		assert(/0\.1\.x location/.test(legacyStatus), `status did not mark the old location:\n${legacyStatus}`);
+
+		// The other fallback: the config names a file that is not there yet, and
+		// the project's own default file answers. It is in the project already, so
+		// telling the user to move it there is advice they cannot follow.
+		rmSync(join(root, '.loupe'), { recursive: true, force: true });
+		writeFileSync(join(root, '.loupe-baseline.json'), recorded);
+		writeFileSync(
+			join(root, 'loupe.config.json'),
+			JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, baseline: 'cfg/b.json' })
+		);
+		const byName = checkAll(root);
+		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(byName), `the committed default-name file was dropped:\n${byName}`);
+		const byNameStatus = execFileSync('node', [CLI, 'status', '--root', root], { encoding: 'utf8', env: env() });
+		assert(/the default name/.test(byNameStatus), `status mislabelled the default-name fallback:\n${byNameStatus}`);
+		assert(!/0\.1\.x location/.test(byNameStatus), `a file in the project was called an old location:\n${byNameStatus}`);
 	} finally {
 		cleanup(root);
 	}

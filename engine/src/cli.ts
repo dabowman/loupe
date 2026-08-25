@@ -311,6 +311,13 @@ async function main(): Promise<number> {
 	}
 
 	if (command === 'status') {
+		// One conclusion, asked once. `blockingAllowed` answers "do the severities
+		// permit blocking"; it is not the same question as "will this gate stop a
+		// turn", because a silenced hook stops nothing. Deriving the two answers
+		// separately is what let `status` print `hook: OFF` and `Turns are blocked
+		// by: ...` seven lines apart — the same drift `isOn` closed one layer down,
+		// reappearing in the conclusion instead of the predicate.
+		const gateBlocks = blockingAllowed && !hookSilenced();
 		const src =
 			config.source.kind === 'file'
 				? config.source.path
@@ -336,11 +343,13 @@ async function main(): Promise<number> {
 			`baseline:   ${base.path}${
 				base.found && readBaseline(root, base.path) === null
 					? '  (unreadable \u2014 every finding in it is live again)'
-					: base.legacy
-						? "  (legacy location — run 'loupe baseline' to move it into the project)"
-						: base.found
-							? ''
-							: '  (none recorded yet)'
+					: base.fallback === 'legacy'
+						? "  (0.1.x location — run 'loupe baseline' to record it in the project)"
+						: base.fallback === 'default-name'
+							? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)`
+							: base.found
+								? ''
+								: '  (none recorded yet)'
 			}`,
 			`state:      ${state.dir}${state.scope === 'plugin-data' ? '  (retry counter only, outside your repo)' : ''}`,
 			`options:    ${
@@ -374,9 +383,11 @@ async function main(): Promise<number> {
 			// Report what will actually happen, not the configured severity: an
 			// error-severity rule under a gate that isn't allowed to block is
 			// advisory in practice, and saying otherwise here is how you end up
-			// debugging a gate that "should" be blocking and isn't.
+			// debugging a gate that "should" be blocking and isn't. `gateBlocks`
+			// rather than `blockingAllowed` for the same reason: a silenced hook
+			// blocks nothing, whatever the severities say.
 			const note = config.enabled[id]
-				? sev === 'error' && blockingAllowed
+				? sev === 'error' && gateBlocks
 					? 'BLOCKS'
 					: sev === 'error'
 						? 'advisory (would block if enabled)'
@@ -387,11 +398,13 @@ async function main(): Promise<number> {
 		const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
 		lines.push(
 			'',
-			blockingAllowed && blockers.length
+			gateBlocks && blockers.length
 				? `Turns are blocked by: ${blockers.join(', ')}`
 				: 'Nothing blocks turns; every finding is advisory.'
 		);
-		if (config.inferred) {
+		if (hookSilenced()) {
+			lines.push('The gate is silenced for this session: LOUPE_OFF is set in the environment.');
+		} else if (config.inferred) {
 			lines.push('css/dead-class is held to advisory because the namespaces were inferred, not configured.');
 			if (!blockingAllowed)
 				lines.push(
@@ -531,7 +544,14 @@ async function main(): Promise<number> {
 		// all of it — silently, which is how this class of bug stays unfound.
 		// Conflict markers in a committed baseline are the ordinary way to get
 		// here, so name the file rather than letting it fail open in silence.
-		if (found && !baseline && !isHook)
+		//
+		// The hook says it too. Guarding this on `!isHook` kept it quiet on the one
+		// surface where it bites: the agent is handed back a backlog it explicitly
+		// accepted, with no reason given, and spends its retry budget on findings
+		// nobody asked it to fix. `emitBlocking` already writes the report to
+		// stderr and Claude Code feeds that back on exit 2, so the line is carried
+		// by a channel that already exists.
+		if (found && !baseline)
 			process.stderr.write(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
 		result = applyBaseline(result, baseline);
 	}

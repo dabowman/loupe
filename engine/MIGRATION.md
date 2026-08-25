@@ -71,7 +71,7 @@ Delete `vip-workflow-quality-stop.sh`. In `.claude/settings.local.json`:
 {
   "hooks": {
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "npx loupe hook" }] }
+      { "hooks": [{ "type": "command", "command": "node /abs/path/to/engine/bin/loupe.mjs hook" }] }
     ]
   }
 }
@@ -95,7 +95,7 @@ encodes is now the CLI's own contract, so it survives without a wrapper.
 ## 3. Baseline the backlog
 
 ```bash
-npx loupe baseline
+./bin/loupe baseline          # or pass --profiles <dir> yourself
 git add .loupe-baseline.json
 ```
 
@@ -113,8 +113,8 @@ CSS at all is the finding.
 Audit and re-point in one pass:
 
 ```bash
-npx loupe suppressions --format json > /tmp/before.json     # canonicalized ids
-npx loupe check --all --format json | \
+node engine/bin/loupe.mjs suppressions --format json > /tmp/before.json     # canonicalized ids
+node engine/bin/loupe.mjs check --all --format json | \
   jq -r '.findings[] | "\(.file):\(.line)\t\(.rule)"'       # what fires now
 ```
 

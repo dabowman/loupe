@@ -273,8 +273,13 @@ Do not fix hundreds of findings in one pass. Baseline the backlog, which
 silences existing findings and surfaces new ones immediately:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" baseline
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" baseline --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
+
+`--profiles` matters: the hooks always pass it, and the registry-backed rules
+(`system/locked-component`, `system/superseded-component`) only fire when it is
+there. Baselining without it reports `baselined 0 finding(s)` and leaves the
+gate blocking on findings this backlog never recorded.
 
 Then burn it down by rule — one rule across the whole codebase is a far more
 reviewable diff than one file across all rules, and the mechanical repetition

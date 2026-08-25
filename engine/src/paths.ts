@@ -92,16 +92,17 @@ export function baselinePath(root: string, named?: string | null): string {
 /**
  * Baselines the configured path did not name. Read-only fallbacks, best first.
  *
- * The default filename leads because a committed `.loupe-baseline.json` is the
- * likeliest of the three to be someone's real backlog: 0.1.0 tried it before
- * giving up, and dropping it meant a repo that set `baseline` to move the file
- * lost every accepted finding in the window between the config change landing
- * and the file actually moving. The other two are 0.1.0 state directories.
+ * These are 0.1.x state directories only. The project's own default filename is
+ * NOT one of them: when the configured path is missing and `.loupe-baseline.json`
+ * is sitting there, that file is in the project, under this tool's own default
+ * name, and calling it a legacy location told the user to "move it into the
+ * project" — advice that is both false and unfollowable, since `loupe baseline`
+ * writes the configured path and leaves that file where it is. It is a distinct
+ * case with a distinct remedy, so `findExistingBaseline` names it separately.
  */
 function legacyBaselines(root: string): string[] {
 	const data = pluginDataDir();
 	return [
-		join(root, DEFAULT_BASELINE),
 		join(root, '.loupe', 'baseline.json'),
 		...(data ? [join(data, 'projects', projectKey(root), 'baseline.json')] : []),
 	];
@@ -110,34 +111,49 @@ function legacyBaselines(root: string): string[] {
 /**
  * The baseline to read, or the one to write if none exists yet.
  *
- * A baseline an older version stashed in a state directory still counts — it
- * was a deliberate `loupe baseline` — so keep reading it until the next
- * `baseline` run rewrites it in the project.
+ * `fallback` says which of three ways the answer was reached, because each wants
+ * different advice and one message for all three was wrong for two of them:
  *
- * `legacy` is reported rather than absorbed because that fallback is only half
- * a fix: the plugin-data candidate below exists only when `CLAUDE_PLUGIN_DATA`
- * does, so a 0.1.0 backlog recorded inside Claude Code is invisible to `loupe
- * check` from a terminal — the CLI and the hook disagreeing again, in the one
- * path left that can still do it. The way out is to re-run `loupe baseline`,
- * and nothing can suggest that unless callers can tell a legacy hit from a
- * canonical one. `found` comes back for the same reason `path` does: this
- * function already stat'd it, and a caller that has to ask again is a caller
- * that can get a different answer.
+ *   'none'          the configured (or default) path — nothing to explain.
+ *   'default-name'  the config names a file that isn't there, so the project's
+ *                   own `.loupe-baseline.json` answered instead. Dropping this
+ *                   fallback lost every accepted finding in the window between a
+ *                   config change landing and the file actually moving.
+ *   'legacy'        a 0.1.x state directory. It was a deliberate `loupe
+ *                   baseline`, so keep reading it — but it is only half a fix:
+ *                   the plugin-data candidate exists only when
+ *                   `CLAUDE_PLUGIN_DATA` does, so a 0.1.0 backlog recorded
+ *                   inside Claude Code is invisible to `loupe check` from a
+ *                   terminal. The way out is to re-run `loupe baseline`, and
+ *                   nothing can suggest that unless callers can tell this case
+ *                   from a canonical hit.
+ *
+ * `found` comes back for the same reason `path` does: this function already
+ * stat'd it, and a caller that has to ask again is a caller that can get a
+ * different answer.
  */
+export type BaselineFallback = 'none' | 'default-name' | 'legacy';
+
 export function findExistingBaseline(
 	root: string,
 	explicit?: string | null,
 	configured?: string | null,
-): { path: string; found: boolean; legacy: boolean } {
+): { path: string; found: boolean; fallback: BaselineFallback } {
 	if (explicit) {
 		const path = baselinePath(root, explicit);
-		return { path, found: existsSync(path), legacy: false };
+		return { path, found: existsSync(path), fallback: 'none' };
 	}
 	const target = baselinePath(root, configured);
-	if (existsSync(target)) return { path: target, found: true, legacy: false };
+	if (existsSync(target)) return { path: target, found: true, fallback: 'none' };
+	const byDefaultName = join(root, DEFAULT_BASELINE);
+	// Guarded, not just ordered: with no configured path `target` IS this file,
+	// and re-stat'ing it to report it as a fallback would be both a wasted
+	// syscall and a second answer to a question already answered above.
+	if (byDefaultName !== target && existsSync(byDefaultName))
+		return { path: byDefaultName, found: true, fallback: 'default-name' };
 	for (const path of legacyBaselines(root))
-		if (existsSync(path)) return { path, found: true, legacy: true };
-	return { path: target, found: false, legacy: false };
+		if (existsSync(path)) return { path, found: true, fallback: 'legacy' };
+	return { path: target, found: false, fallback: 'none' };
 }
 
 /** @param create make the state directory (writers pass true) */
