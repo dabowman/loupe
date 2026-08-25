@@ -331,6 +331,12 @@ same thing for a reader; `suggest` is there so a consumer does not have to parse
 it back out of a sentence. `loupe fix` is that consumer for the
 single-token case.
 
+`message` is one line, and bounded: a quoted value has its whitespace collapsed,
+and a message longer than the bound is elided with `…`, or — where it is a list
+of remedies — shortened to whole remedies and a `(+N more)` count. `suggest` and
+`code` are not bounded, so a consumer that needs the whole of what was matched
+should read those rather than the prose.
+
 ## Programmatic use
 
 ```js

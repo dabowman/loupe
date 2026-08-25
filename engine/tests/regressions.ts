@@ -9,16 +9,12 @@
 
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { harvestStems } from '../src/markup.ts';
 import { isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
 import { analyze } from '../src/analyze.ts';
-import { assert, check, cleanup, execFailure, finish, scratch, writeAll } from './harness.ts';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const CLI = join(HERE, '..', 'bin', 'loupe.mjs');
+import { CLI, assert, check, cleanup, execFailure, finish, scratch, writeAll } from './harness.ts';
 
 const tmpRepo = (files: Record<string, string>): string => {
 	const root = scratch('dsh-regress-');

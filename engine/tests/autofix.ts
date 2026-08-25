@@ -10,15 +10,12 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { analyze } from '../src/analyze.ts';
 import { applyTokenFixes } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
-import { assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
+import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
 import type { Finding, FixCandidate, SkippedFix, TokenFix } from '../src/types.ts';
-
-const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'loupe.mjs');
 
 const CONFIG = JSON.stringify({ extends: 'wpds', namespaces: { project: ['wf-'] } });
 
@@ -155,6 +152,11 @@ await check('a skipped multi-line declaration is reported on one line', async ()
 		const out = execFileSync('node', [CLI, 'fix', '--dry-run', '--root', root], { encoding: 'utf8' });
 		const skips = out.split('\n').filter((l) => l.startsWith('skip'));
 		assert(skips.length === 1, `expected one skip line, got ${skips.length}:\n${out}`);
+		// Counting the lines that START with `skip` cannot see the failure: a
+		// declaration spilling across output lines leaves continuations that begin
+		// with the source's own indentation, and those are filtered out rather
+		// than counted. So the spill is checked for directly.
+		assert(!out.split('\n').some((l) => /^\s+\S/.test(l)), `output spilled onto an indented line:\n${out}`);
 		assert(skips[0]?.includes('box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px'), `not flattened: ${skips[0]}`);
 	} finally {
 		cleanup(root);

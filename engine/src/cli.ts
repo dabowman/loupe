@@ -16,7 +16,7 @@ import { findConfig, listPresets, loadConfig, setComponentRegistry, setPatterns 
 import { changedFiles, isSource, toPosix } from './discover.ts';
 import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
-import { snippet } from './text.ts';
+import { oneLine } from './text.ts';
 import { detectConfig } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
 import type { RegistrySource } from './profiles.ts';
@@ -445,7 +445,12 @@ async function main(): Promise<number> {
 		// so this is the one place the flattening belongs at the print site
 		// rather than at capture: a multi-line declaration is exactly the kind
 		// `fix` skips, and it reported the skip across six lines.
-		const decl = (f: TokenFix): string => snippet(`${f.prop}: ${f.value}`);
+		//
+		// Flattened but not bounded. Both lines exist to be acted on — the skip
+		// names a value the reader now has to find and edit by hand, and the
+		// applied line is the preview `--dry-run` exists to give — and an elided
+		// value is one neither of them can be matched against.
+		const decl = (f: TokenFix): string => oneLine(`${f.prop}: ${f.value}`);
 		for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${decl(f)} \u2192 var(${f.token})\n`);
 		for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${decl(f)} \u2014 ${f.why}\n`);
 		const left = toFix.findings.length - applied.length;

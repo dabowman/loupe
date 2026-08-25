@@ -23707,13 +23707,44 @@ var flatten = (text) => text.replace(/\s+/g, " ");
 var oneLine = (text) => flatten(text).trim();
 var clip = (text, max) => {
   const line = oneLine(text);
+  if (max <= 0) return "";
+  if (line.length <= max) return line;
   const chars = [...line];
   return chars.length > max ? `${chars.slice(0, max - 1).join("")}\u2026` : line;
 };
+var head = (text, max) => text.length <= max ? text : [...text].slice(0, max).join("");
 var SNIPPET_MAX = 80;
 var snippet = (text) => clip(text, SNIPPET_MAX);
 var MESSAGE_MAX = 200;
-var messageLine = (body, tail = "") => clip(body, Math.max(MESSAGE_MAX - tail.length, SNIPPET_MAX)) + flatten(tail);
+var TAIL_MAX = 100;
+var clipFront = (text, max) => {
+  const line = flatten(text);
+  if (line.length <= max) return line;
+  const chars = [...line];
+  return chars.length > max ? `\u2026${chars.slice(chars.length - (max - 1)).join("")}` : line;
+};
+var messageLine = (body, tail = "") => {
+  const end = clipFront(tail, TAIL_MAX);
+  return clip(body, MESSAGE_MAX - [...end].length) + end;
+};
+var JOIN = "; ";
+var messageParts = (parts, tail = "") => {
+  const budget = MESSAGE_MAX - [...clipFront(tail, TAIL_MAX)].length;
+  const pieces = parts.map(oneLine);
+  const whole = pieces.join(JOIN);
+  if ([...whole].length <= budget) return whole + tail;
+  const room = budget - ` (+${pieces.length} more)`.length;
+  const kept = [];
+  let used = 0;
+  for (const p of pieces) {
+    const cost = (kept.length ? JOIN.length : 0) + [...p].length;
+    if (kept.length && used + cost > room) break;
+    kept.push(p);
+    used += cost;
+  }
+  const dropped = pieces.length - kept.length;
+  return `${clip(kept.join(JOIN), room)}${dropped ? ` (+${dropped} more)` : ""}${tail}`;
+};
 
 // src/suppressions.ts
 var ID = "(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)";
@@ -23740,17 +23771,20 @@ function makeSuppressionParser({
       if (m?.[1] !== void 0 && m[2] !== void 0) {
         const ids = m[1].split(",").map((s) => canonicalRuleId(s.trim()));
         byLine.set(line, new Set(ids));
-        directives.push({ file: relPath, line, rules: ids, reason: m[2].trim() });
+        directives.push({ file: relPath, line, rules: ids, reason: oneLine(m[2]) });
       } else {
         malformed.push({
           rule: "suppression/malformed",
           file: relPath,
           line,
-          // Flattened, not capped: a block comment's tab would otherwise
-          // reset the indentation the report groups findings by, and this
-          // also feeds `code`, where collapsing whitespace is what
-          // `findingKey` already does.
-          message: oneLine(stripped).slice(0, 60)
+          // Cut on the raw text, and by code point. `head`, not `oneLine`
+          // then `slice`: this string is also the finding's `code`, and
+          // `findingKey` collapses whitespace on `code` itself — so
+          // flattening first changes nothing a reader sees and only moves
+          // the 60-character window, taking every baseline key already
+          // written for a directive long enough to be cut with it. What a
+          // reader sees is flattened by the line bound in `analyze`.
+          message: head(stripped.trim(), 60)
         });
       }
     }
@@ -24648,7 +24682,6 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
   } else if (hardcoded) {
     finding = { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hint: { prop, value } };
   }
-  if (finding) finding.message = snippet(finding.message);
   return { finding, styling };
 }
 var COLLAPSE_PER_RULE = /* @__PURE__ */ new Set(["layout/in-css", "typography/untokenized"]);
@@ -24675,7 +24708,12 @@ function collapsePerRule(pending) {
     out.push({
       ...first,
       rule: rule2,
-      message: group.map((f) => f.message).join("; "),
+      // Bounded per contributor, so one long value cannot spend the whole
+      // line and crowd the others out of a message that is several of them.
+      // Safe to bound here where it is not at capture: a collapsed finding
+      // always carries its own `code` below, so identity does not fall back
+      // to this string.
+      message: group.map((f) => snippet(f.message)).join("; "),
       hints: group.flatMap((f) => f.hints ?? (f.hint ? [f.hint] : [])),
       suffix: first.suffix,
       code: `${rule2}:${props.sort().join(",")}`
@@ -24798,7 +24836,7 @@ async function analyze(config, { scope = null } = {}) {
       unparsed(messageOf3(err));
       continue;
     }
-    const emit = ({ rule: rule2, line, message, code, scopeLines = [], hint, hints }) => {
+    const emit = ({ rule: rule2, line, message, code, scopeLines = [], hint, hints, suffix }) => {
       if (!config.enabled[rule2] || !reports(rel)) return;
       if (isSuppressed(supp.byLine, line, rule2, scopeLines)) return;
       findings.push({
@@ -24810,7 +24848,12 @@ async function analyze(config, { scope = null } = {}) {
         code: code ?? message,
         rank: RULES[rule2].rank,
         hints: hints || (hint ? [hint] : void 0),
-        suffix: void 0
+        // Forwarded rather than blanked. Nothing in this channel sets one
+        // today, but `collapsePerRule` carries `suffix` through on purpose
+        // and it is now what keeps a message tail out of the line bound —
+        // so dropping it here would silently disarm that for whichever rule
+        // reaches for it first.
+        suffix
       });
     };
     harvestTokenDefs(root2, tokenPrefixes, tokenSet);
@@ -24920,7 +24963,7 @@ async function analyze(config, { scope = null } = {}) {
         });
         if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
       }
-      const where = group.selector ? ` in \`${snippet(group.selector)}\`` : "";
+      const where = group.selector ? ` in \`${group.selector}\`` : "";
       for (const f of collapsePerRule(pending)) {
         if (!config.enabled[f.rule]) continue;
         if (supp && isSuppressed(supp.byLine, f.line, f.rule, [tpl.line, tpl.line - 1])) continue;
@@ -24981,7 +25024,7 @@ async function analyze(config, { scope = null } = {}) {
       const prev = perFile.get(c.file);
       if (!prev || c.line < prev.line) perFile.set(c.file, c);
     }
-    const emitComposite = (rule2, c, message) => {
+    const emitComposite = (rule2, c, signature, tail) => {
       if (!reports(c.file)) return;
       const supp = suppByFile.get(c.file);
       if (supp && isSuppressed(supp.byLine, c.line, rule2)) return;
@@ -24990,7 +25033,8 @@ async function analyze(config, { scope = null } = {}) {
         severity: config.severityOf(rule2),
         file: c.file,
         line: c.line,
-        message,
+        message: `${signature}${tail}`,
+        suffix: tail,
         code: c.signature,
         rank: RULES[rule2].rank
       });
@@ -25002,14 +25046,15 @@ async function analyze(config, { scope = null } = {}) {
         emitComposite(
           "patterns/duplicate-composite",
           c,
-          `${c.signature} \u2014 rebuilds \`${id}\`, also in ${files2.size - 1} other file(s); ${remedy}`
+          c.signature,
+          ` \u2014 rebuilds \`${id}\`, also in ${files2.size - 1} other file(s); ${remedy}`
         );
       }
     }
     for (const [sig, files2] of bySignature) {
       if (files2.size < 3) continue;
       for (const c of files2.values())
-        emitComposite("patterns/unregistered-composite", c, `${sig} \u2014 assembled in ${files2.size} files, registered in none`);
+        emitComposite("patterns/unregistered-composite", c, sig, ` \u2014 assembled in ${files2.size} files, registered in none`);
     }
   }
   if (config.enabled["system/locked-component"] || config.enabled["system/superseded-component"]) {
@@ -25050,8 +25095,14 @@ async function analyze(config, { scope = null } = {}) {
       });
   }
   for (const f of findings) {
-    if (!f.hints?.length) continue;
-    f.message = f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`).join("; ") + (f.suffix ?? "");
+    if (!f.hints?.length) {
+      delete f.hints;
+      continue;
+    }
+    f.message = messageParts(
+      f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
+      f.suffix ?? ""
+    );
     const suggest = f.hints.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) })).filter((s) => s.tokens.length);
     if (suggest.length) f.suggest = suggest;
     delete f.hints;
@@ -25075,12 +25126,6 @@ async function analyze(config, { scope = null } = {}) {
       });
     }
   }
-  for (const f of findings) {
-    const tail = f.suffix ?? "";
-    const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
-    f.message = messageLine(body, tail);
-    delete f.suffix;
-  }
   const seen = /* @__PURE__ */ new Set();
   const unique = findings.filter((f) => {
     const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ""}|${f.message}`;
@@ -25088,6 +25133,12 @@ async function analyze(config, { scope = null } = {}) {
     seen.add(k);
     return true;
   });
+  for (const f of unique) {
+    const tail = f.suffix ?? "";
+    const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
+    f.message = messageLine(body, tail);
+    delete f.suffix;
+  }
   unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
   directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   return {
@@ -25097,7 +25148,7 @@ async function analyze(config, { scope = null } = {}) {
     blocking: unique.some((f) => f.severity === "error")
   };
 }
-var findingKey = (f) => `${f.rule}|${f.file}|${String(f.code ?? f.message).replace(/\s+/g, " ").trim()}`;
+var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.message))}`;
 
 // src/autofix.ts
 import { readFileSync as readFileSync3, writeFileSync } from "node:fs";
@@ -26519,7 +26570,7 @@ Wrote ${target}
     const dry = Boolean(args.flags["dry-run"]);
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
     const verb = dry ? "would fix" : "fixed";
-    const decl2 = (f) => snippet(`${f.prop}: ${f.value}`);
+    const decl2 = (f) => oneLine(`${f.prop}: ${f.value}`);
     for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${decl2(f)} \u2192 var(${f.token})
 `);
     for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${decl2(f)} \u2014 ${f.why}

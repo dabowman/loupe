@@ -210,7 +210,10 @@ await check('a multi-line declaration prints on one line in all three channels',
 	const r = await run(MULTILINE);
 	const found = at(r, 'tokens/hardcoded-value');
 	assert(found.length === 3, `expected one finding per channel; got ${found.length}`);
-	for (const f of found) assert(!/\s\s|\n/.test(f.message), `message spans lines: ${JSON.stringify(f.message)}`);
+	// `\s\s` alone would pass a message carrying a single tab — the very
+	// character that resets the indentation the agent format groups by — so the
+	// two that actually break the line are named outright.
+	for (const f of found) assert(!/\s\s|[\n\t]/.test(f.message), `message spans lines: ${JSON.stringify(f.message)}`);
 });
 
 await check('a value too long to print is capped, and still names its property', async () => {
@@ -330,6 +333,95 @@ await check('a malformed suppression is quoted on one line', async () => {
 	});
 	const f = one(at(r, 'suppression/malformed'), 'expected the malformed directive');
 	assert(!/[\n\t]/.test(f.message), `message carries a tab: ${JSON.stringify(f.message)}`);
+});
+
+// The directive is cut at 60 characters and that cut is also the finding's
+// `code`, so where the cut lands decides the baseline key. Collapsing the
+// whitespace first moves it — silently invalidating every entry already
+// recorded for a directive long enough to be cut, on a rule that blocks.
+await check('a long malformed directive keys the same as it always did', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/D.jsx': ['export const D = () => (', '\t/* wpds-allow   layout/in-css   because  the  design  system  has  no  equivalent */', '\t<div />', ');'].join('\n'),
+	});
+	const f = one(at(r, 'suppression/malformed'), 'expected the malformed directive');
+	assert(
+		findingKey(f) === 'suppression/malformed|src/D.jsx|wpds-allow layout/in-css because the design system h',
+		`baselines would break: ${findingKey(f)}`
+	);
+});
+
+// The 60-character cut counts characters, like every other cut here. `slice`
+// counts UTF-16 units and would halve the pair.
+await check('the directive cut never splits a character', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/D.jsx': `export const D = () => (\n\t/* wpds-allow ${'a'.repeat(48)}\u{1F600} and then some more */\n\t<div />\n);`,
+	});
+	const f = one(at(r, 'suppression/malformed'), 'expected the malformed directive');
+	assert(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(f.code ?? ''), `lone surrogate in ${JSON.stringify(f.code)}`);
+});
+
+// The selector is the only thing telling these two apart — it is not in `code`,
+// and both declarations are identical. Bounding it before the dedupe ran folded
+// them into one finding and dropped a real violation.
+await check('two css-in-js selectors alike up to the bound are two findings', async () => {
+	const sel = (tag: string): string => `& .pre${'x'.repeat(90)}${tag}`;
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/S.tsx': [
+			"import styled from 'styled-components';",
+			'const S = styled.div`',
+			`\t${sel('AAA')} { background: #f00; } ${sel('BBB')} { background: #f00; }`,
+			'`;',
+			'export const S2 = () => <S />;',
+		].join('\n'),
+	});
+	assert(at(r, 'tokens/hardcoded-value').length === 2, 'one of two distinct selectors was dropped');
+});
+
+// The same loss on the other rules the dedupe comment names: `code` there is
+// only the property, so the message is the whole of what separates them.
+await check('two long values of one property are two findings', async () => {
+	const v = (tail: string): string => `calc(100% - ${'1px - '.repeat(12)}${tail})`;
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': `.acme-m { margin-bottom: ${v('2px')}; margin-bottom: ${v('9px')}; }`,
+		'src/A.jsx': 'export const A = () => <div className="acme-m" />;',
+	});
+	assert(at(r, 'layout/negative-margin').length === 2, 'one of two distinct margins was dropped');
+});
+
+// A collapsed finding is a list of remedies, and a line bound that ends it
+// mid-token leaves one the reader cannot act on and no sign of the rest.
+await check('a collapsed remedy list drops whole remedies and counts them', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		// Enough on-role tokens that every declaration below resolves to one, so
+		// the message really is a list of remedies rather than a list of values.
+		'styles/tokens.css': [
+			':root {',
+			'\t--wpds-typography-font-size-md: 13px;',
+			'\t--wpds-typography-font-weight-bold: 600;',
+			'\t--wpds-typography-line-height-md: 1.4;',
+			'\t--wpds-typography-letter-spacing-sm: 0.02em;',
+			'}',
+		].join('\n'),
+		'styles/a.css': [
+			'.acme-t {',
+			'\tfont-size: 13px;',
+			'\tfont-weight: 600;',
+			'\tline-height: 1.4;',
+			'\tletter-spacing: 0.02em;',
+			'\tfont-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif;',
+			'}',
+		].join('\n'),
+		'src/A.jsx': 'export const A = () => <div className="acme-t" />;',
+	});
+	const f = one(at(r, 'typography/untokenized'), 'expected one collapsed typography finding');
+	assert([...f.message].length <= 200, `message ran to ${[...f.message].length} characters`);
+	assert(/\(\+\d+ more\)$/.test(f.message), `the dropped remedies went unannounced: ${f.message}`);
+	assert(!/→ var\(--[\w-]*…/.test(f.message), `a remedy was cut mid-token: ${f.message}`);
 });
 
 // ── composites ──────────────────────────────────────────────────────────────
