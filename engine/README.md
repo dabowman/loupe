@@ -229,6 +229,11 @@ profiles/
 project actually imports; `--profile <id>` forces one. A profile declaring no
 packages is never selected automatically — there is nothing to recognize it by.
 
+Forcing one applies the whole bundle: its registries merge without the scope
+check the flag has already answered, and its preset configures the run — unless
+something more explicit already did, since `--preset`, the plugin option and the
+project's own config file all outrank it.
+
 This is what keeps a shipped registry off the wrong repo. Point `--profiles` at
 every project you like: one on a different design system selects nothing and is
 checked by the rules that need no registry at all. `loupe status` prints which

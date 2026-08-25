@@ -12,7 +12,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { analyze } from './analyze.ts';
 import { applyTokenFixes } from './autofix.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
-import { findConfig, listPresets, loadConfig, setComponentRegistry, setPatterns } from './config.ts';
+import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
 import { changedFiles, isSource, toPosix } from './discover.ts';
 import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
@@ -203,6 +203,12 @@ async function main(): Promise<number> {
 	// the gate will do, and it cannot do that without the settings the gate reads.
 	const { options, source: optionsSource } = resolvedOptions();
 
+	// Read before the config rather than with the other registry work below: a
+	// profile names the preset that configures its design system, and that has
+	// to be settled before the config it would configure is loaded.
+	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
+	const forced = args.flags.profile ? (profiles.find((p) => p.id === args.flags.profile) ?? null) : null;
+
 	let config: Config;
 	let detected: DetectedConfig | null = null;
 	try {
@@ -212,7 +218,24 @@ async function main(): Promise<number> {
 		// component layer and therefore silently disables every correlation rule.
 		const explicitPreset =
 			args.flags.preset ?? (options.preset && options.preset !== 'auto' ? options.preset : null);
-		if (!args.flags.config && !explicitPreset && !findConfig(root)) {
+		const unconfigured = !args.flags.config && !explicitPreset && !findConfig(root);
+		// A named profile's preset sits between those last two. It is a statement
+		// about a design system rather than about this project, so --preset, the
+		// plugin option and the project's own config file all outrank it — but it
+		// beats inference, which is a guess about the very thing `--profile` just
+		// stated outright. Without this the flag merged a profile's registries
+		// into a config that knew none of its components, and left every severity
+		// at its generic default.
+		let profilePreset: string | null = null;
+		if (unconfigured && forced?.preset) {
+			if (presetExists(forced.preset)) profilePreset = forced.preset;
+			// A profile naming a preset this install does not carry is a broken
+			// profile, not a broken project: its registries still apply, so name
+			// what was ignored rather than failing the run over it.
+			else if (!isHook)
+				process.stderr.write(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed\n`);
+		}
+		if (unconfigured && !profilePreset) {
 			detected = detectConfig(root);
 			if (options.projectPrefixes?.length)
 				detected.config.namespaces = { ...detected.config.namespaces, project: options.projectPrefixes };
@@ -220,7 +243,7 @@ async function main(): Promise<number> {
 		config = await loadConfig({
 			root,
 			configPath: args.flags.config ?? null,
-			preset: explicitPreset,
+			preset: explicitPreset ?? profilePreset,
 			inline: detected?.config ?? null,
 			inferred: Boolean(detected),
 		});
@@ -238,12 +261,14 @@ async function main(): Promise<number> {
 	// design-system profile that the project's own imports selected. Both merge
 	// with the project winning on id, because a repo that has written down its
 	// own `page-header` means that one, not the shipped generic.
-	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
 	const active = selectProfiles(profiles, config, args.flags.profile ?? null);
 	const sources: RegistrySource[] = active.map((p) => ({
 		label: `profile ${p.id}`,
 		patterns: p.patterns,
 		components: p.components,
+		// Naming a profile has already answered the question its registries would
+		// be scope-checked against.
+		forced: p.id === forced?.id,
 	}));
 	if (args.flags.patterns || args.flags.components)
 		sources.push({
@@ -260,7 +285,9 @@ async function main(): Promise<number> {
 		// it is indistinguishable from running it and finding nothing.
 		for (const s of registries.skipped)
 			process.stderr.write(
-				`loupe: ${s.label} ${s.kind} registry skipped \u2014 it is scoped to ${s.packages.join(', ')}, which this project does not import\n`
+				`loupe: ${s.label} ${s.kind} registry skipped \u2014 scoped to ${s.packages.join(', ')}, and this config declares ${
+					config.designSystem.packages.length ? config.designSystem.packages.join(', ') : 'no design-system packages'
+				}\n`
 			);
 	}
 

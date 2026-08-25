@@ -250,6 +250,29 @@ await check('a skipped registry is reported, not silently dropped', async () => 
 	}
 });
 
+// `--profile <id>` is the user answering the question the scope gate asks, and
+// it was asked anyway: the named profile was selected and both of its
+// registries dropped, so every rule the profile exists to enable stayed off.
+await check('a profile named outright applies its registries anyway', async () => {
+	const root = repo({
+		'loupe.config.json': configFor('@chakra-ui/react'),
+		'registry.json': registryFile(['@wordpress/components']),
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const out = applyRegistries(
+			config,
+			[{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true }],
+			{ setPatterns, setComponentRegistry },
+		);
+		assert(!out.skipped.length, 'a forced registry must not be re-gated on scope');
+		assert(out.applied.length === 1, `expected the registry applied, got ${out.applied.length}`);
+		assert(config.enabled['patterns/duplicate-composite'], 'the rule the registry exists to enable stayed off');
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('an unreadable registry is an error, not a crash', async () => {
 	const root = repo({ 'loupe.config.json': configFor('@acme/ui') });
 	try {

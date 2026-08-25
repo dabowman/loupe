@@ -7,7 +7,7 @@
  * surfaced as an error, which is why they need a test rather than a code review.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +19,23 @@ import { assert, check, cleanup, execFailure, finish, scratch, writeAll } from '
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, '..', 'bin', 'loupe.mjs');
+/** The shipped profiles, at the path the hooks and commands pass. */
+const PROFILES = join(HERE, '..', '..', 'profiles');
+
+/**
+ * Run the CLI and hand back both streams.
+ *
+ * The plugin option variables are stripped: they outrank a profile's preset by
+ * design, so one left in the ambient environment would quietly decide the very
+ * thing these tests are pinning down. `status` exits 0, so there is no throw
+ * to unpack — which is what separates this from the `execFileSync` calls below.
+ */
+function runCli(argv: readonly string[]): { stdout: string; stderr: string } {
+	const env: NodeJS.ProcessEnv = { ...process.env };
+	for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
+	const r = spawnSync('node', [CLI, ...argv], { encoding: 'utf8', env });
+	return { stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+}
 
 const tmpRepo = (files: Record<string, string>): string => {
 	const root = scratch('dsh-regress-');
@@ -247,6 +264,65 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 		assert(out === '', `expected no output, got: ${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `--profile <id>` says "use this profile regardless of what the project
+// imports" and used none of it: the scope gate re-asked the question the flag
+// had already answered and dropped both registries, and the profile's own
+// preset was read by nothing. The run that named a design system was
+// configured for no design system at all — reported, of course, as a clean one.
+await check('a named profile brings its preset and its registries', () => {
+	const root = tmpRepo({
+		'package.json': JSON.stringify({ name: 'externals', devDependencies: { '@wordpress/scripts': '^30.0.0' } }),
+		'src/a.tsx': "import { TextControl } from '@wordpress/components';\nexport const A = () => <TextControl />;\n",
+	});
+	try {
+		const { stdout, stderr } = runCli(['status', '--root', root, '--profile', 'wpds', '--profiles', PROFILES]);
+		assert(/config:\s+preset wpds/.test(stdout), `the profile's preset did not apply:\n${stdout}`);
+		assert(/suppress:\s+wpds-allow/.test(stdout), `the profile's preset did not reach the ruleset:\n${stdout}`);
+		assert(!/registry skipped/.test(stderr), `the named profile's registries were dropped:\n${stderr}`);
+		assert(!/patterns\/duplicate-composite\s+off/.test(stdout), `the pattern registry never reached its rule:\n${stdout}`);
+		assert(!/system\/locked-component\s+off/.test(stdout), `the component registry never reached its rule:\n${stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The other half of that fix: a profile's preset is the least explicit
+// statement in the chain. A project that wrote a config down has said what it
+// wants configured, and naming a profile asks for its registries — not for its
+// ruleset in place of the project's own.
+await check("a named profile does not overrule the project's own config", () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'generic' }),
+		'src/a.tsx': "import { TextControl } from '@wordpress/components';\nexport const A = () => <TextControl />;\n",
+	});
+	try {
+		const { stdout } = runCli(['status', '--root', root, '--profile', 'wpds', '--profiles', PROFILES]);
+		assert(/config:\s+.*loupe\.config\.json/.test(stdout), `the project's config lost to a profile:\n${stdout}`);
+		assert(/suppress:\s+ds-allow/.test(stdout), `the profile's preset overrode the project's config:\n${stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The skip named the wrong input. It said the project does not import those
+// packages; what is actually tested is what the *config* declares, and on an
+// inferred config those are not the same thing — so the message sent you
+// hunting for imports that were sitting right there in the file.
+await check('a skipped registry names the config that rejected it', () => {
+	const root = tmpRepo({
+		'package.json': JSON.stringify({ name: 'plain' }),
+		'registry.json': JSON.stringify({ packages: ['@acme/ui'], patterns: [] }),
+		'src/a.tsx': 'export const A = () => <div />;\n',
+	});
+	try {
+		const { stderr } = runCli(['status', '--root', root, '--patterns', join(root, 'registry.json')]);
+		assert(/registry skipped/.test(stderr), `the skip must still be reported:\n${stderr}`);
+		assert(/this config declares no design-system packages/.test(stderr), `the skip still blames the imports:\n${stderr}`);
 	} finally {
 		cleanup(root);
 	}

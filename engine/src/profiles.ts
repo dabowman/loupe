@@ -38,6 +38,14 @@ export interface RegistrySource {
 	label: string;
 	patterns?: string | null;
 	components?: string | null;
+	/**
+	 * Merge these registries without asking whether they apply.
+	 *
+	 * The scope gate asks "is this project on that design system?" — a question
+	 * `--profile <id>` has already answered. Asking it again drops the registries
+	 * of the profile the user named, which is the whole reason they named it.
+	 */
+	forced?: boolean;
 }
 
 const readJson = (p: string): unknown => JSON.parse(readFileSync(p, 'utf8'));
@@ -151,7 +159,7 @@ export function applyRegistries(
 		if (src.patterns) {
 			try {
 				const raw = readJson(resolve(src.patterns));
-				if (registryApplies(raw, config.designSystem.packages)) {
+				if (src.forced || registryApplies(raw, config.designSystem.packages)) {
 					const own = new Set(patterns.map((p) => p.id));
 					patterns = [...patterns, ...loadPatterns(raw).filter((p) => !own.has(p.id))];
 					sawPatterns = true;
@@ -166,7 +174,7 @@ export function applyRegistries(
 		if (src.components) {
 			try {
 				const raw = readJson(resolve(src.components));
-				if (registryApplies(raw, config.designSystem.packages)) {
+				if (src.forced || registryApplies(raw, config.designSystem.packages)) {
 					for (const [key, entry] of loadComponents(raw)) if (!components.has(key)) components.set(key, entry);
 					sawComponents = true;
 					used = true;
