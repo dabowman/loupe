@@ -87,6 +87,25 @@ or `@wordpress/ui` in `package.json` → `wpds`; `theme.json` + `templates/` →
 **both** the CSS and the markup. A prefix present only in CSS is exactly what a dead class looks like, so
 CSS evidence alone is never enough to adopt one.
 
+That walk stops after 50,000 directory entries, and a result that hit the
+ceiling comes back with its namespaces at low confidence and a note saying so —
+on stderr, and inside the hook's own message. Inference is a guess, and a guess
+made from part of a tree must not read like one made from a project. The preset
+is not affected: `detectPreset` reads manifests and top-level markers, never the
+walk.
+
+Where the root is not a project at all, inference does not run. Hook runs and
+`check`/`fix --changed` stand aside there instead of indexing it — the refusal
+they would have got from the changed-file scope anyway, except on a `PostToolUse`
+payload naming a file, which used to analyze such a root and now does not. What
+counts as a project is deliberately generous, because a false negative is a gate
+that silently turns itself off: a `package.json`, a `.git` entry (read off disk,
+so a dubious-ownership mount or a missing `git` binary is not mistaken for "no
+repo"), a preset whose markers match — a block theme's `theme.json` +
+`templates/` needs neither of the first two — or git recognising a worktree,
+which is what catches subdirectories, linked worktrees and submodules. Plain
+`loupe check`, `--all` and `--files` name their own scope and run anywhere.
+
 ```bash
 loupe detect   # what would be inferred, and why
 loupe init     # write it to loupe.config.json

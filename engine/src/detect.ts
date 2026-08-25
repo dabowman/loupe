@@ -49,6 +49,8 @@ export interface NamespaceDetection {
 	coverage: number;
 	confidence: Confidence;
 	sampled: { styles: number; markup: number; references: number };
+	/** The walk hit {@link DETECT_ENTRY_BUDGET} and stopped: this is part of the tree. */
+	truncated: boolean;
 }
 
 /** Everything inference concluded, with the config it produced. */
@@ -62,6 +64,8 @@ export interface DetectedConfig {
 	namespaceConfidence: Confidence;
 	coverage: number;
 	sampled: NamespaceDetection['sampled'];
+	/** Inference stopped at the file ceiling — the caller has to say so. */
+	truncated: boolean;
 	config: AuthoredConfig;
 }
 
@@ -80,6 +84,30 @@ const preset = (name: string): PresetFile => (readJson(join(PRESET_DIR, `${name}
 
 /** Directories never worth descending into when looking for a manifest. */
 const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'build', 'dist', '.claude']);
+
+/**
+ * How many directory entries inference will look at before it gives up and
+ * answers from what it has.
+ *
+ * Inference is a guess, and a guess does not earn an unbounded walk. The caller
+ * that matters is the hook, which has 60s for a PostToolUse and 120s for a
+ * Stop, and whose root falls back to the process cwd whenever
+ * CLAUDE_PROJECT_DIR is unset — so the tree handed to this is not always a
+ * project, and was sometimes a home directory. The ceiling is what stops that
+ * from being paid for on every edit.
+ *
+ * Entries, not files: a home directory is mostly directories that hold almost
+ * nothing — a package cache, a pnpm store, maildirs — and a file-counting
+ * budget walks all of them for free.
+ *
+ * 50,000 is several times the largest project this plugin plausibly meets —
+ * WordPress core is around 7,000 files and Gutenberg around 15,000 once
+ * node_modules is pruned, which the walk does — so a real repo reaches its own
+ * end long before the ceiling, and a tree that trips it is one where the answer
+ * was never going to be about a project anyway. It costs about a second of
+ * walking, which leaves the hook's budget for the analysis that follows.
+ */
+export const DETECT_ENTRY_BUDGET = 50_000;
 
 /**
  * Every `package.json` in the project, shallowest first.
@@ -361,11 +389,12 @@ export function detectNamespaces(
 	root: string,
 	presetName: string,
 	packageDir = '',
+	limit = DETECT_ENTRY_BUDGET,
 ): NamespaceDetection {
 	const base = resolvePreset(presetName);
 	const generic = resolvePreset('generic');
 	const sources = { ...generic.sources, ...(base.sources ?? {}) } as SourceGlobs;
-	const files = discover({ root, sources });
+	const files = discover({ root, sources, limit });
 
 	// Library prefixes from *every* shipped preset, not just the detected one, so
 	// a project styling only third-party classes yields no namespace rather than
@@ -441,8 +470,13 @@ export function detectNamespaces(
 	return {
 		project: accepted.map(([p]) => p),
 		coverage,
-		confidence: accepted.length === 0 ? 'none' : coverage >= 0.5 ? 'high' : 'low',
+		// A truncated walk read part of a tree, so `high` is a claim it cannot
+		// make: the prefixes it did not reach are exactly the ones that would
+		// have changed the answer. Coverage is measured against what was read,
+		// which is why it can look convincing and still be wrong.
+		confidence: files.truncated ? 'low' : accepted.length === 0 ? 'none' : coverage >= 0.5 ? 'high' : 'low',
 		sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
+		truncated: files.truncated,
 	};
 }
 
@@ -450,11 +484,16 @@ export function detectNamespaces(
  * Full inferred config for a project with no config file.
  *
  * `inferred: true` travels with the result so the CLI can hold guessed settings
- * to a lower bar than ones somebody wrote down.
+ * to a lower bar than ones somebody wrote down, and `truncated` says whether
+ * the guess even got to see the whole tree — the namespaces, specifically:
+ * {@link detectPreset} reads manifests and top-level markers rather than
+ * walking, so the preset it returns is complete either way. `limit` is the
+ * ceiling the walk stops at; it is a parameter only so a test can trip it
+ * without building {@link DETECT_ENTRY_BUDGET} entries.
  */
-export function detectConfig(root: string): DetectedConfig {
+export function detectConfig(root: string, { limit = DETECT_ENTRY_BUDGET }: { limit?: number } = {}): DetectedConfig {
 	const { preset: name, reasons, confidence: presetConfidence, packageDir } = detectPreset(root);
-	const ns = detectNamespaces(root, name, packageDir);
+	const ns = detectNamespaces(root, name, packageDir, limit);
 	const config: AuthoredConfig = { extends: name, namespaces: { project: ns.project } };
 
 	// A preset's token sources are written relative to the project root. In a
@@ -477,6 +516,7 @@ export function detectConfig(root: string): DetectedConfig {
 		namespaceConfidence: ns.confidence,
 		coverage: ns.coverage,
 		sampled: ns.sampled,
+		truncated: ns.truncated,
 		config,
 	};
 }

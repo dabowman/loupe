@@ -6,8 +6,11 @@
  * regression here silently changes behaviour in every project at once.
  */
 
-import { detectConfig } from '../src/detect.ts';
-import { cleanup, fail, failures, finish, scratch, write } from './harness.ts';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { DETECT_ENTRY_BUDGET, detectConfig } from '../src/detect.ts';
+import { discover } from '../src/discover.ts';
+import { assert, check, cleanup, fail, finish, scratch, write } from './harness.ts';
 
 /** One detection scenario: a repo to build, and what should come back. */
 interface Case {
@@ -130,4 +133,90 @@ for (const c of CASES) {
 		cleanup(root);
 	}
 }
-finish(`\n${CASES.length - failures()} passed, ${failures()} failed`);
+
+// ── the ceiling ─────────────────────────────────────────────────────────────
+// Inference walked the tree with no depth cap, no entry budget and no time
+// budget. The hook's root falls back to the process cwd when
+// CLAUDE_PROJECT_DIR is unset, so that walk was sometimes a home directory —
+// still running at 60s, on every edit.
+
+// Pinned because nothing else exercises the shipped value: every test below
+// passes its own ceiling, so a typo here, or a default dropped from a
+// signature, would sail through the suite and only show up as a hook that
+// takes a minute.
+await check('the shipped ceiling is the one that was measured', () => {
+	assert(DETECT_ENTRY_BUDGET === 50_000, `the ceiling moved to ${DETECT_ENTRY_BUDGET} without a measurement`);
+});
+
+await check('the walk stops at its entry ceiling and says that it did', () => {
+	const root = scratch('dsh-ceiling-');
+	try {
+		// Sixty files that match nothing and three that do. A budget counting
+		// matches rather than entries would walk all sixty-three for free — and a
+		// home directory is exactly this shape, which is what made the walk
+		// unbounded in the place the bug was reported from.
+		for (let i = 0; i < 60; i++) write(root, `d${i % 6}/f${i}.txt`, 'filler\n');
+		for (let i = 0; i < 3; i++) write(root, `d${i}/s${i}.css`, `.pj-a${i}{color:#111}`);
+		const sources = { styles: ['**/*.css'], markup: ['**/*.jsx'], references: [], ignore: [] };
+
+		const bounded = discover({ root, sources, limit: 20 });
+		assert(bounded.truncated, 'a walk that stopped at its ceiling has to report stopping');
+		assert(bounded.styles.length <= 3, `a ceiling of 20 entries yielded ${bounded.styles.length} styles`);
+
+		const whole = discover({ root, sources });
+		assert(!whole.truncated, 'an unbounded walk never reports truncation');
+		assert(whole.styles.length === 3, `unbounded walk found ${whole.styles.length} of 3 style files`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `~/.cache`, a pnpm store, a cargo registry, maildirs: hundreds of thousands
+// of directories holding almost nothing. Counting only files let the walk
+// through all of them, and the reported repro was `cd ~ && loupe detect`.
+await check('directories count against the ceiling too', () => {
+	const root = scratch('dsh-ceiling-dirs-');
+	try {
+		for (let i = 0; i < 60; i++) mkdirSync(join(root, `empty${i}`), { recursive: true });
+		write(root, 'only.css', '.pj-a{color:#111}');
+		const sources = { styles: ['**/*.css'], markup: [], references: [], ignore: [] };
+
+		const bounded = discover({ root, sources, limit: 20 });
+		assert(bounded.truncated, 'a tree of 61 entries has to trip a ceiling of 20');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A guess drawn from part of a tree looks exactly like a guess drawn from a
+// whole project — same namespaces, same coverage percentage computed over what
+// was read. Confidence is the only thing that separates them, so a truncated
+// walk can never come back high.
+await check('a truncated inference is never high confidence', () => {
+	const root = scratch('dsh-ceiling-detect-');
+	try {
+		write(root, 'package.json', '{}');
+		for (let i = 0; i < 40; i++) {
+			write(root, `src/A${i}.jsx`, `export const A${i} = () => <div className="own-box own-b${i}" />;`);
+			write(root, `styles/a${i}.css`, `.own-box{color:#111}\n.own-b${i}{color:#222}`);
+		}
+
+		const whole = detectConfig(root);
+		assert(!whole.truncated, 'a project this size is nowhere near the shipped ceiling');
+		assert(whole.namespaceConfidence === 'high', `unbounded run should be high, got ${whole.namespaceConfidence}`);
+
+		const bounded = detectConfig(root, { limit: 8 });
+		assert(bounded.truncated, 'inference that stopped at the ceiling has to say so');
+		assert(
+			bounded.namespaceConfidence === 'low',
+			`a guess from part of a tree cannot be high confidence — got ${bounded.namespaceConfidence}`
+		);
+		// The preset is read off manifests and top-level markers, not the walk,
+		// so it is exactly as good as it ever was.
+		assert(bounded.preset === 'generic', `the preset is still answered, got ${bounded.preset}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+finish();

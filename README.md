@@ -277,6 +277,23 @@ classes appearing in **both** your CSS and your markup, minus any a dependency
 defines — `rbc-` looks exactly like a namespace you own until you notice
 react-big-calendar ships the stylesheet that declares it.
 
+Inference is bounded, because it is a guess and a guess does not earn an
+unbounded walk inside a hook timeout: it stops after 50,000 directory entries,
+drops the namespaces it inferred to low confidence, and says so — in `detect`,
+in `status`, on stderr, and in the hook's own one-line message. A tree that big
+is a home directory or a monorepo root, not a project. The preset is unaffected
+either way: it is read off manifests and top-level markers rather than the walk.
+
+The hook also stands aside outright where there is no project to gate. It is
+the one caller that gets pointed at a directory nobody chose — with
+`CLAUDE_PROJECT_DIR` unset it falls back to the working directory — so before
+walking anything it asks whether this is a project at all: a `package.json`, a
+`.git`, or the markers a preset recognises, which is how a block theme with
+neither of the first two still counts. Where none of that is there, a
+`PostToolUse` hook that previously indexed the whole tree to report "clean" now
+reports nothing at all. Typed by hand nothing changes: `loupe check`, `--all`
+and `--files` name their own scope and still run anywhere.
+
 Token sources follow the winning manifest, so the design system is found where
 it is actually installed rather than only at the root. The
 alternative is falling through to `generic`, which declares no component layer —

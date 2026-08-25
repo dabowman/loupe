@@ -5,6 +5,11 @@
  * Each of these was a silent failure — the gate reported "clean", or reported a
  * finding against code the project owns, or never finished at all. None of them
  * surfaced as an error, which is why they need a test rather than a code review.
+ *
+ * The last few are the edges of the guard that fixed the walk: they passed
+ * before it existed, and the point of writing them down is that they still do.
+ * A guard against a gate that never finishes becomes a gate that never runs the
+ * moment its idea of "project" is narrower than the engine's own.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -247,6 +252,140 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 		assert(out === '', `expected no output, got: ${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Config inference walked the whole tree before the guard that decides the root
+// is not a project ran at all. `hookRoot()` falls back to the process cwd when
+// CLAUDE_PROJECT_DIR is unset, so a root that is neither a package nor a
+// worktree — a home directory, most often — was indexed in full on the way to
+// standing aside, on every edit. One such call blew past the 120s Stop timeout
+// and had to be killed by hand.
+await check('the hook stands aside on a non-project root instead of indexing it', () => {
+	const root = tmpRepo({
+		'src/App.jsx': 'export const App = () => <div className="acme-a" />;',
+		'style.css': '.acme-a { margin-bottom: 16px; }',
+	});
+	try {
+		let out: string;
+		try {
+			out = execFileSync('node', [CLI, 'hook', '--root', root], {
+				encoding: 'utf8',
+				input: '{"session_id":"np","tool_input":{"file_path":"style.css"}}',
+			});
+		} catch (err) {
+			const f = execFailure(err);
+			throw new Error(`hook exited non-zero on a non-project root: ${f.status} ${f.stderr}`);
+		}
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			parsed.systemMessage?.includes('not a git worktree'),
+			`the hook analyzed a root that is not a project: ${out}`
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The edges of that guard, every one of them cheaper to get wrong than to
+// notice, because `suppressOutput` means a hook that stands aside says so where
+// nobody is reading.
+//
+// The flags first. `--all` and `--files` name their own scope and never ask git
+// anything, so they have always worked outside a worktree — and a guard that
+// took those with it would be a worse bug than the one it fixed.
+await check('--all still runs where there is no worktree and no manifest', () => {
+	const root = tmpRepo({ 'style.css': '.acme-a { margin-bottom: 16px; }' });
+	try {
+		const out = execFileSync('node', [CLI, 'check', '--all', '--root', root, '--format', 'json'], { encoding: 'utf8' });
+		const parsed = JSON.parse(out) as { summary: { total: number } };
+		assert(parsed.summary.total > 0, `--all reported nothing outside a worktree:\n${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// And the refusal itself is a contract: exit 2, and wording that tells you the
+// two flags that would have worked.
+await check('--changed outside a worktree still refuses with exit 2', () => {
+	const root = tmpRepo({ 'style.css': '.acme-a { margin-bottom: 16px; }' });
+	try {
+		execFileSync('node', [CLI, 'check', '--changed', '--root', root], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+		throw new Error('check --changed exited 0 outside a worktree');
+	} catch (err) {
+		const f = execFailure(err);
+		if (f.message.includes('exited 0 outside a worktree')) throw err;
+		assert(f.status === 2, `expected exit 2, got ${f.status}`);
+		assert(
+			f.stderr.includes('not a git worktree; use --all or --files'),
+			`the refusal changed wording: ${f.stderr}`
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A deployed block theme in wp-content/themes/ has a theme.json and a
+// templates/ directory, and routinely has neither a package.json nor a .git —
+// while `loupe detect` identifies it as wordpress-block-theme at high
+// confidence. A guard whose idea of "project" is narrower than the engine's own
+// refuses to gate a directory this same binary confidently recognises.
+await check('a block theme with no manifest and no worktree is still gated', () => {
+	const root = tmpRepo({
+		'theme.json': '{"version":3}',
+		'templates/index.html': '<div class="ridge-hero"></div>',
+		'style.css': '.ridge-hero { margin-bottom: 16px; }',
+	});
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"bt","tool_input":{"file_path":"style.css"}}',
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			!parsed.systemMessage?.includes('not a git worktree'),
+			`the gate stood aside on a theme it detects at high confidence: ${out}`
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `git rev-parse` exits 128 on a dubious-ownership mount — the normal state
+// inside a container — and on a machine with no git binary it does not run at
+// all. Neither is evidence that a repo is not a repo, so the guard reads `.git`
+// off the filesystem before it asks git anything.
+await check('a repo git refuses to answer about is still gated', () => {
+	const root = tmpRepo({
+		'.git': 'gitdir: /nowhere/that/exists\n',
+		'src/App.jsx': 'export const App = () => <div className="acme-a" />;',
+		'style.css': '.acme-a { margin-bottom: 16px; }',
+	});
+	try {
+		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
+			encoding: 'utf8',
+			input: '{"session_id":"dg","tool_input":{"file_path":"style.css"}}',
+		});
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(
+			!parsed.systemMessage?.includes('not a git worktree'),
+			`git declining to answer was read as "no project": ${out}`
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `--changed` is a scope only on the commands that resolve one. `detect
+// --changed` ignores the flag, so a guard firing on the flag alone invents a
+// refusal that run would never have got.
+await check('--changed on a command that ignores it does not refuse', () => {
+	const root = tmpRepo({ 'style.css': '.acme-a { margin-bottom: 16px; }' });
+	try {
+		const out = execFileSync('node', [CLI, 'detect', '--changed', '--root', root], { encoding: 'utf8' });
+		assert(/preset:/.test(out), `detect --changed stopped answering:\n${out}`);
 	} finally {
 		cleanup(root);
 	}
