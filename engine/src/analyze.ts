@@ -52,6 +52,34 @@ const messageOf = (err: unknown): string =>
 	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
 
 /**
+ * A captured snippet of source, flattened onto one line.
+ *
+ * A declaration is under no obligation to occupy one line of source: a
+ * gradient, a `box-shadow` list, a `grid-template-areas` map and a multi-line
+ * `transition` all span several, tabs and all. The report is one line per
+ * finding, so a value carried through verbatim breaks the indentation the
+ * format uses to group findings under a rule — and the hook hands that same
+ * text back as blocking feedback.
+ *
+ * Flattened where the snippet is captured rather than where it is printed:
+ * `--format json`, SARIF and the hook all read `message` too, and a guarantee
+ * only the agent formatter honours is not a guarantee.
+ */
+const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim();
+
+/** Past this, a snippet is quoting the value rather than identifying it. */
+const SNIPPET_MAX = 80;
+
+/**
+ * What a finding prints. `code` keeps the whole declaration, so two long values
+ * sharing their first {@link SNIPPET_MAX} characters stay distinct identities.
+ */
+const snippet = (text: string): string => {
+	const line = oneLine(text);
+	return line.length > SNIPPET_MAX ? `${line.slice(0, SNIPPET_MAX - 1)}\u2026` : line;
+};
+
+/**
  * Which rule, if any, a single declaration violates.
  *
  * Shared by the stylesheet walk and the JSX inline-style walk. `margin-bottom:
@@ -78,6 +106,10 @@ function classifyDeclaration(
 	const styling =
 		isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
 
+	// The declaration as written. `snippet` is what gets printed; where the rule
+	// has no coarser identity to key on, `code` carries the whole of it.
+	const decl = `${prop}: ${value}`;
+
 	let finding: ClassifiedFinding | null = null;
 	if (TYPE_PROPS.has(prop) && boundText[0]) {
 		finding = { rule: 'typography/in-css', message: `${prop} on <${boundText[0].tag}>` };
@@ -86,21 +118,22 @@ function classifyDeclaration(
 	} else if (isMargin) {
 		// Zero and `auto` classify as null: a reset and a centering trick,
 		// neither of which has a gap remedy to point at.
-		if (marginKind === 'negative') finding = { rule: 'layout/negative-margin', message: `${prop}: ${value}`, code: prop };
-		else if (marginKind) finding = { rule: 'layout/margin-on-child', message: `${prop}: ${value}`, code: prop };
+		if (marginKind === 'negative') finding = { rule: 'layout/negative-margin', message: snippet(decl), code: prop };
+		else if (marginKind) finding = { rule: 'layout/margin-on-child', message: snippet(decl), code: prop };
 	} else if (TYPE_PROPS.has(prop)) {
 		if (!usesToken(value) && !isInertValue(value))
-			finding = { rule: 'typography/untokenized', message: `${prop}: ${value}`, hint: { prop, value } };
+			finding = { rule: 'typography/untokenized', message: snippet(decl), code: oneLine(decl), hint: { prop, value } };
 	} else if (GAP_PROPS.has(prop)) {
 		// Skipped on a component-bound class (component-internal flex, or a class
 		// already on a layout primitive) and on a grid, neither of which is
 		// convertible to a flex primitive.
-		if (!boundSystem.length && !isGrid) finding = { rule: 'layout/in-css', message: `${prop}: ${value}`, code: prop };
+		if (!boundSystem.length && !isGrid) finding = { rule: 'layout/in-css', message: snippet(decl), code: prop };
 	} else if (isFlexish) {
 		const gridDisplay = prop === 'display' && /\bgrid\b/.test(value);
-		if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: 'layout/in-css', message: `${prop}: ${value}` };
+		if (!boundSystem.length && !isGrid && !gridDisplay)
+			finding = { rule: 'layout/in-css', message: snippet(decl), code: oneLine(decl) };
 	} else if (hardcoded) {
-		finding = { rule: 'tokens/hardcoded-value', message: `${prop}: ${value}`, hint: { prop, value } };
+		finding = { rule: 'tokens/hardcoded-value', message: snippet(decl), code: oneLine(decl), hint: { prop, value } };
 	}
 	return { finding, styling };
 }
@@ -477,7 +510,7 @@ export async function analyze(
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
 			}
-			const where = group.selector ? ` in \`${group.selector}\`` : '';
+			const where = group.selector ? ` in \`${oneLine(group.selector)}\`` : '';
 			for (const f of collapsePerRule(pending)) {
 				if (!config.enabled[f.rule]) continue;
 				if (supp && isSuppressed(supp.byLine, f.line, f.rule, [tpl.line, tpl.line - 1])) continue;
@@ -657,8 +690,10 @@ export async function analyze(
 // "13px is hardcoded — use a --wpds-* token" leaves the agent to invent one.
 for (const f of findings) {
 	if (!f.hints?.length) continue;
+	// Rebuilt from the hints, so it goes back through `snippet` — the message
+	// the classifier bounded is being replaced, not appended to.
 	f.message =
-		f.hints.map(({ prop, value }) => `${prop}: ${value}${suggestionFor(tokenSet, prop, value)}`).join('; ') +
+		f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`).join('; ') +
 		(f.suffix ?? '');
 	// Keep the match structured as well as rendered. The prose is for a reader;
 	// an unambiguous substitution should not need a model to parse it back out

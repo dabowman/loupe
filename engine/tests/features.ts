@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze } from '../src/analyze.ts';
+import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
@@ -170,6 +170,61 @@ await check('a tagged template from an unrelated library is left alone', async (
 	const src = ["import gql from 'graphql-tag';", 'const q = gql`{ user { margin } }`;'].join('\n');
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/q.ts': src });
 	assert(!r.findings.length, `read a GraphQL document as CSS: ${r.findings.map((f) => f.message)}`);
+});
+
+// ── one line per finding ────────────────────────────────────────────────────
+// A gradient, a `box-shadow` list or a `grid-template-areas` map spans source
+// lines. The report is one line per finding — and the hook hands that same text
+// back as blocking feedback — so a value carried through verbatim resets the
+// indentation the format uses to group findings under a rule.
+
+const GRADIENT = [
+	'linear-gradient(',
+	'\t\t90deg,',
+	'\t\ttransparent 0%,',
+	'\t\trgba( 255, 255, 255, 0.45 ) 50%,',
+	'\t\ttransparent 100%',
+	'\t)',
+].join('\n');
+
+const MULTILINE = {
+	'loupe.config.json': CONFIG(),
+	'styles/a.css': `.acme-card {\n\tbackground: ${GRADIENT};\n}`,
+	'src/A.tsx': [
+		"import styled from 'styled-components';",
+		'const Panel = styled.div`',
+		`\tbackground: ${GRADIENT};`,
+		'`;',
+		'export const A = () => (',
+		`\t<div className="acme-card" style={{ background: \`${GRADIENT}\` }}>`,
+		'\t\t<Panel />',
+		'\t</div>',
+		');',
+	].join('\n'),
+};
+
+await check('a multi-line declaration prints on one line in all three channels', async () => {
+	const r = await run(MULTILINE);
+	const found = at(r, 'tokens/hardcoded-value');
+	assert(found.length === 3, `expected one finding per channel; got ${found.length}`);
+	for (const f of found) assert(!/\s\s|\n/.test(f.message), `message spans lines: ${JSON.stringify(f.message)}`);
+});
+
+await check('a value too long to print is capped, and still names its property', async () => {
+	const r = await run(MULTILINE);
+	for (const f of at(r, 'tokens/hardcoded-value')) {
+		assert(f.message.startsWith('background: linear-gradient('), `lost the property: ${f.message}`);
+		assert(f.message.includes('\u2026'), `an over-long value should be elided: ${f.message}`);
+	}
+});
+
+// Capping the printed snippet must not cap the identity: two gradients sharing
+// their first 80 characters are one baseline entry if it does, and the second
+// one is then silently accepted the moment the first is baselined.
+await check('the baseline key keeps the whole declaration', async () => {
+	const r = await run(MULTILINE);
+	for (const f of at(r, 'tokens/hardcoded-value'))
+		assert(findingKey(f).includes('transparent 100% )'), `identity was truncated: ${findingKey(f)}`);
 });
 
 // ── composites ──────────────────────────────────────────────────────────────
