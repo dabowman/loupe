@@ -98,6 +98,22 @@ await check('a clean result renders a page rather than an empty one', () => {
 	assert(payload.summary.total === 0, 'the clean page carries findings');
 });
 
+await check('a clean page still names the files that could not be read', () => {
+	// `stylesheet/unparsed` can be off, baselined, or out of scope, and then a
+	// parse error leaves no finding behind. Without the banner the page reports
+	// that files it never opened had nothing wrong with them.
+	const clean: AnalyzeResult = {
+		...result,
+		findings: [],
+		blocking: false,
+		diagnostics: { ...result.diagnostics, parseErrors: [{ file: 'styles/broken.scss', message: 'Unclosed block' }] },
+	};
+	const html = formatHtml(clean, config);
+	assert(html.includes('could not be parsed'), 'the clean page hid an unparsed file');
+	const payload = embedded(html) as { summary: { parseErrors: number } };
+	assert(payload.summary.parseErrors === 1, 'the clean payload lost the parse error');
+});
+
 await check('the page is one file — no external requests', () => {
 	const html = formatHtml(result, config);
 	assert(!/<(script|link|img)[^>]+(src|href)=/i.test(html), 'the page loads something over the network');
@@ -134,6 +150,22 @@ await check('sarif fingerprints survive a line move', () => {
 	) as typeof sarif;
 	const after = moved.runs[0]?.results.map((r) => r.partialFingerprints.loupeCode) ?? [];
 	assert(JSON.stringify(before) === JSON.stringify(after), 'a fingerprint moved with its line number');
+});
+
+await check('no two sarif results share a fingerprint', () => {
+	// The identity a fingerprint is built on drops the line number on purpose, so
+	// one file declaring the same value twice yields two findings with one key.
+	// Code scanning matches an alert on rule plus fingerprint: leave the two
+	// alike and the second finding never becomes an alert at all.
+	const twice = result.findings[0];
+	assert(twice, 'no findings to duplicate');
+	const doubled: AnalyzeResult = { ...result, findings: [...result.findings, { ...twice, line: twice.line + 12 }] };
+	const sarif = JSON.parse(formatSarif(doubled, config)) as {
+		runs: { results: { ruleId: string; partialFingerprints: { loupeCode: string } }[] }[];
+	};
+	const results = sarif.runs[0]?.results ?? [];
+	const keys = new Set(results.map((r) => `${r.ruleId}|${r.partialFingerprints.loupeCode}`));
+	assert(keys.size === results.length, `${results.length} results share ${keys.size} fingerprints`);
 });
 
 await check('sarif rules carry a namespace tag and a pointer to the guidance', () => {

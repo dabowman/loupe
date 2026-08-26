@@ -25865,7 +25865,15 @@ function usedRules(result, config) {
   const title = titleFor(config);
   return ids.sort((a, b) => RULES[b].rank - RULES[a].rank).map((id) => ({ id, title: title(id), rank: RULES[id].rank, severity: config.severityOf(id) }));
 }
-var fingerprint = (f) => createHash2("sha256").update(findingKey(f)).digest("hex").slice(0, 16);
+function fingerprints(findings) {
+  const seen = /* @__PURE__ */ new Map();
+  return findings.map((f) => {
+    const key = findingKey(f);
+    const nth = seen.get(key) ?? 0;
+    seen.set(key, nth + 1);
+    return createHash2("sha256").update(nth === 0 ? key : `${key}|#${nth}`).digest("hex").slice(0, 16);
+  });
+}
 function reportPayload(result, config) {
   const title = titleFor(config);
   return {
@@ -25895,6 +25903,7 @@ function formatJson(result, config) {
 }
 function formatSarif(result, config) {
   const title = titleFor(config);
+  const fps = fingerprints(result.findings);
   return JSON.stringify(
     {
       $schema: "https://json.schemastore.org/sarif-2.1.0.json",
@@ -25920,11 +25929,11 @@ function formatSarif(result, config) {
               }))
             }
           },
-          results: result.findings.map((f) => ({
+          results: result.findings.map((f, i) => ({
             ruleId: f.rule,
             level: f.severity === "error" ? "error" : "warning",
             message: { text: `${f.message} \u2014 ${title(f.rule)}` },
-            partialFingerprints: { loupeCode: fingerprint(f) },
+            partialFingerprints: { loupeCode: fps[i] ?? "" },
             locations: [
               {
                 physicalLocation: {
@@ -26313,19 +26322,19 @@ var JS = `
 })();
 `;
 function body(payload, clean, parseErrors) {
+  const banner = parseErrors ? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely \u2014 ${clean ? "a clean result covers only what could be read" : "every number below is a floor, not a total"}. See <code>stylesheet/unparsed</code>.</div>
+` : "";
   if (clean) {
     return `<!-- loupe:begin -->
 <style>${CSS}</style>
 <div class="wrap">
   <h1>Loupe</h1>
   <p class="sub">Design-system conformance report</p>
-  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
+${banner}  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
 </div>
 <script type="application/json" id="loupe-data">${payload}</script>
 <!-- loupe:end -->`;
   }
-  const banner = parseErrors ? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely \u2014 every number below is a floor, not a total. See <code>stylesheet/unparsed</code>.</div>
-` : "";
   return `<!-- loupe:begin -->
 <style>${CSS}</style>
 <div class="wrap">

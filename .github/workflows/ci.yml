@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci
-      # `npm test` type-checks first, then runs the six suites. esbuild strips
+      # `npm test` type-checks first, then runs the seven suites. esbuild strips
       # types without checking them, so the bundle building proves nothing about
       # whether the source type-checks — these have to be separate gates.
       - run: npm test

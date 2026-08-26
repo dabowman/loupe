@@ -60,9 +60,17 @@ jobs:
 
       - name: check
         id: check
+        env:
+          # Through the environment rather than `${{ }}` inside the script: an
+          # expansion is pasted into the script text before bash sees it, so a
+          # caller's value would be source code — a `$(...)` in it runs, and a
+          # lone quote in it is a syntax error. As `$PRESET` it is only ever a
+          # string, and an array keeps "no preset" as no argument instead of an
+          # empty one.
+          PRESET: ${{ inputs.preset }}
         run: |
-          preset=""
-          [ "${{ inputs.preset }}" = "auto" ] || preset="--preset ${{ inputs.preset }}"
+          preset=()
+          [ "$PRESET" = "auto" ] || preset=(--preset "$PRESET")
           engine=".loupe-engine/engine/bin/loupe.mjs"
           profiles=".loupe-engine/profiles"
 
@@ -71,13 +79,13 @@ jobs:
           # Deciding that here, once, keeps the two report steps below from each
           # having to re-derive it.
           status=0
-          node "$engine" check --all --format sarif $preset --profiles "$profiles" > loupe.sarif || status=$?
+          node "$engine" check --all --format sarif "${preset[@]}" --profiles "$profiles" > loupe.sarif || status=$?
           if [ "$status" -gt 1 ]; then
             echo "loupe could not run (exit $status)"
             exit 1
           fi
-          node "$engine" check --all --format html $preset --profiles "$profiles" > loupe-report.html || true
-          node "$engine" check --all $preset --profiles "$profiles" >> "$GITHUB_STEP_SUMMARY" || true
+          node "$engine" check --all --format html "${preset[@]}" --profiles "$profiles" > loupe-report.html || true
+          node "$engine" check --all "${preset[@]}" --profiles "$profiles" >> "$GITHUB_STEP_SUMMARY" || true
           echo "blocking=$status" >> "$GITHUB_OUTPUT"
 
       # Not fatal: a repo without code scanning enabled gets a failed step here

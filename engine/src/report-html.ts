@@ -434,22 +434,28 @@ function body(payload: string, clean: boolean, parseErrors: number): string {
 	// `<style>`/`<script>` sit inside the markers rather than in `<head>` so the
 	// fragment is self-sufficient: `/loupe-report` publishes exactly this span
 	// into an Artifact, which supplies its own document shell.
+	//
+	// Unparsed files are named before anything else: nothing in them was checked,
+	// so every count below is a floor rather than a total. The clean page needs
+	// it most, not least — `stylesheet/unparsed` can be off, baselined or out of
+	// scope, and then a page reading "clean" is reporting that the files it never
+	// opened had nothing wrong with them.
+	const banner = parseErrors
+		? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely — ${
+				clean ? 'a clean result covers only what could be read' : 'every number below is a floor, not a total'
+			}. See <code>stylesheet/unparsed</code>.</div>\n`
+		: '';
 	if (clean) {
 		return `<!-- loupe:begin -->
 <style>${CSS}</style>
 <div class="wrap">
   <h1>Loupe</h1>
   <p class="sub">Design-system conformance report</p>
-  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
+${banner}  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
 </div>
 <script type="application/json" id="loupe-data">${payload}</script>
 <!-- loupe:end -->`;
 	}
-	// Unparsed files are named before anything else: nothing in them was checked,
-	// so every count below is a floor rather than a total.
-	const banner = parseErrors
-		? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely — every number below is a floor, not a total. See <code>stylesheet/unparsed</code>.</div>\n`
-		: '';
 	return `<!-- loupe:begin -->
 <style>${CSS}</style>
 <div class="wrap">
