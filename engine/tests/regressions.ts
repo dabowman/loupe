@@ -1791,4 +1791,55 @@ await check('--changed on a command that ignores it does not refuse', () => {
 	}
 });
 
+// `classifyMargin` split the value on whitespace and read any part opening with
+// `-` as a minus sign. WordPress's prettier writes `var( --token )`, so the
+// custom property name landed in its own part and every tokenized margin in the
+// repo reported as a bleed — the one margin shape that has no `gap` remedy to
+// offer.
+await check('a spaced var() on a margin is not a negative margin', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'src/App.jsx': 'export const App = () => <div className="acme-sep" />;',
+		'style.css': '.acme-sep { margin-inline: var( --wpds-dimension-gap-sm ); }',
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const { findings } = await analyze(config, { scope: null });
+		const negative = findings.filter((f) => f.rule === 'layout/negative-margin');
+		assert(!negative.length, `a tokenized margin read as a bleed: ${JSON.stringify(negative)}`);
+		assert(
+			findings.some((f) => f.rule === 'layout/margin-on-child'),
+			'the margin stopped reporting at all'
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The JSX comment opener only admitted `{/*`. WordPress's prettier config
+// mandates the spaced `{ /*` form, so a directive written in a JSX child
+// position could not survive `lint:js:fix` — the finding was unsuppressable in
+// the one place JSX leaves for a comment.
+await check('a spaced JSX comment carries a directive', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'src/App.jsx': [
+			'export const App = () => (',
+			'\t<Panel>',
+			'\t\t{ /* wpds-allow system/raw-element -- prettier mandates the spaced form */ }',
+			'\t\t<p>hi</p>',
+			'\t</Panel>',
+			');',
+		].join('\n'),
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const { findings } = await analyze(config, { scope: null });
+		const live = findings.filter((f) => f.rule === 'system/raw-element' || f.rule === 'suppression/malformed');
+		assert(!live.length, `a spaced JSX directive did not mute: ${JSON.stringify(live)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();
