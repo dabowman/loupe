@@ -1,0 +1,114 @@
+# Conformance reporting for a project that uses Loupe.
+#
+# This is a reusable workflow, not a job this repository runs on itself — there
+# is no wp-admin UI in here to check. A consuming project calls it:
+#
+#     jobs:
+#       loupe:
+#         uses: dabowman/loupe/.github/workflows/loupe.yml@main
+#         permissions:
+#           contents: read
+#           security-events: write
+#
+# It leans on the same property that makes the plugin installable without a
+# toolchain: `engine/dist` is committed, so checking this repo out beside yours
+# is the entire install. No npm install, no published package, no build step.
+#
+# Two outputs, because they fail differently. SARIF puts each finding on the
+# line that caused it in the PR's Files tab — the best form of this by far, and
+# the one that needs code scanning enabled (free on public repos, GitHub
+# Advanced Security on private ones). The HTML report is uploaded as a build
+# artifact and works everywhere, so a repo without code scanning still gets the
+# whole picture rather than nothing.
+name: loupe
+
+on:
+  workflow_call:
+    inputs:
+      preset:
+        description: 'Bundled preset to check against, or "auto" to infer it. A loupe.config.json in the project always wins.'
+        type: string
+        default: auto
+      engine-ref:
+        description: 'Which revision of dabowman/loupe to run. Pin this to a tag once you care about reproducibility.'
+        type: string
+        default: main
+      fail-on-blocking:
+        description: 'Fail the job when the engine reports blocking findings. Off by default: adopt the report first, then turn the ratchet on.'
+        type: boolean
+        default: false
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: check out the project
+        uses: actions/checkout@v4
+
+      # A called workflow's default checkout is the caller's repo, so the engine
+      # needs its own, into a path the project is unlikely to own.
+      - name: check out the engine
+        uses: actions/checkout@v4
+        with:
+          repository: dabowman/loupe
+          ref: ${{ inputs.engine-ref }}
+          path: .loupe-engine
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: check
+        id: check
+        env:
+          # Through the environment rather than `${{ }}` inside the script: an
+          # expansion is pasted into the script text before bash sees it, so a
+          # caller's value would be source code — a `$(...)` in it runs, and a
+          # lone quote in it is a syntax error. As `$PRESET` it is only ever a
+          # string, and an array keeps "no preset" as no argument instead of an
+          # empty one.
+          PRESET: ${{ inputs.preset }}
+        run: |
+          preset=()
+          [ "$PRESET" = "auto" ] || preset=(--preset "$PRESET")
+          engine=".loupe-engine/engine/bin/loupe.mjs"
+          profiles=".loupe-engine/profiles"
+
+          # Exit codes are the contract: 0 clean, 1 blocking findings, 2 could
+          # not run. Only 2 is this step's failure — 1 is the engine working.
+          # Deciding that here, once, keeps the two report steps below from each
+          # having to re-derive it.
+          status=0
+          node "$engine" check --all --format sarif "${preset[@]}" --profiles "$profiles" > loupe.sarif || status=$?
+          if [ "$status" -gt 1 ]; then
+            echo "loupe could not run (exit $status)"
+            exit 1
+          fi
+          node "$engine" check --all --format html "${preset[@]}" --profiles "$profiles" > loupe-report.html || true
+          node "$engine" check --all "${preset[@]}" --profiles "$profiles" >> "$GITHUB_STEP_SUMMARY" || true
+          echo "blocking=$status" >> "$GITHUB_OUTPUT"
+
+      # Not fatal: a repo without code scanning enabled gets a failed step here
+      # and nothing else, which would make the whole workflow read as broken
+      # when it is only unavailable. The artifact below is the fallback.
+      - name: upload to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: loupe.sarif
+          category: loupe
+
+      - name: upload the report
+        uses: actions/upload-artifact@v4
+        with:
+          name: loupe-report
+          path: |
+            loupe-report.html
+            loupe.sarif
+          if-no-files-found: error
+
+      - name: fail on blocking findings
+        if: ${{ inputs.fail-on-blocking && steps.check.outputs.blocking == '1' }}
+        run: |
+          echo "Blocking findings — see the job summary, the Security tab, or the loupe-report artifact."
+          exit 1

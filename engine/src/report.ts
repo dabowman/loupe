@@ -7,8 +7,12 @@
  * findings are worth.
  */
 
+import { createHash } from 'node:crypto';
+import { findingKey } from './analyze.ts';
 import { RULES, renderTitle } from './rules.ts';
-import type { AnalyzeResult, BaselinedResult, Config, Finding, RuleId, Severity } from './types.ts';
+import type {
+	AnalyzeResult, BaselinedResult, Config, Finding, ReportPayload, RuleDescriptor, RuleId, Severity,
+} from './types.ts';
 
 const SEV_MARK: Partial<Record<Severity, string>> = { error: '\u2717', warn: '\u2022' };
 
@@ -116,33 +120,86 @@ export function formatSummary(
 	return `${tag}${parts.join(', ')}${top ? ` (${top})` : ''}.`;
 }
 
-export function formatJson(result: AnalyzeResult | BaselinedResult, config: Config): string {
+/** The rules a report actually used, richest first — the order every format prints in. */
+function usedRules(result: AnalyzeResult | BaselinedResult, config: Config): RuleDescriptor[] {
+	const ids = [...new Set(result.findings.map((f) => f.rule))];
 	const title = titleFor(config);
-	return JSON.stringify(
-		{
-			version: 1,
-			tool: 'loupe',
-			blocking: result.blocking,
-			summary: {
-				total: result.findings.length,
-				error: result.findings.filter((f) => f.severity === 'error').length,
-				warn: result.findings.filter((f) => f.severity === 'warn').length,
-				suppressions: result.directives.length,
-				parseErrors: result.diagnostics.parseErrors.length,
-			},
-			findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: title(f.rule) })),
-			suppressions: result.directives,
-			parseErrors: result.diagnostics.parseErrors,
-			config: { rules: config.rules, enabled: config.enabled },
+	return ids
+		.sort((a, b) => RULES[b].rank - RULES[a].rank)
+		.map((id) => ({ id, title: title(id), rank: RULES[id].rank, severity: config.severityOf(id) }));
+}
+
+/**
+ * An opaque, line-independent identity for each finding, in report order.
+ *
+ * SARIF consumers track an alert across pushes by its fingerprint, so a
+ * fingerprint that moves when a line moves re-opens every alert in a reformatted
+ * file. `findingKey` is already the identity the baseline ratchets on — which is
+ * the same question asked by a different consumer — so this hashes that rather
+ * than inventing a second answer to it. Hashed because the raw key embeds
+ * arbitrary CSS text, and a fingerprint is meant to be compared, not read.
+ *
+ * Two findings can share that key: one file declaring `margin-bottom: 16px`
+ * three times is three findings differing only by line, which the key
+ * deliberately drops. A fingerprint has to be unique within a run — a repeated
+ * one makes code scanning fold those three into a single alert, so two of the
+ * three vanish from the Files tab — so occurrences past the first are separated
+ * by their position among the findings sharing the key. Only duplicates pay for
+ * it: a finding that is the only one of its key keeps a fingerprint nothing but
+ * an edit to the finding itself can move.
+ */
+function fingerprints(findings: readonly Finding[]): string[] {
+	const seen = new Map<string, number>();
+	return findings.map((f) => {
+		const key = findingKey(f);
+		const nth = seen.get(key) ?? 0;
+		seen.set(key, nth + 1);
+		return createHash('sha256')
+			.update(nth === 0 ? key : `${key}|#${nth}`)
+			.digest('hex')
+			.slice(0, 16);
+	});
+}
+
+/**
+ * The one machine-readable shape of a report.
+ *
+ * `formatJson` prints this and `formatHtml` embeds it, so the page and the JSON
+ * cannot disagree about what was found — a divergence that would otherwise be
+ * invisible, because each looks correct on its own.
+ */
+export function reportPayload(result: AnalyzeResult | BaselinedResult, config: Config): ReportPayload {
+	const title = titleFor(config);
+	return {
+		version: 1,
+		tool: 'loupe',
+		blocking: result.blocking,
+		summary: {
+			total: result.findings.length,
+			error: result.findings.filter((f) => f.severity === 'error').length,
+			warn: result.findings.filter((f) => f.severity === 'warn').length,
+			suppressions: result.directives.length,
+			parseErrors: result.diagnostics.parseErrors.length,
+			// Only when a baseline was applied. Without it, the number the agent
+			// format prints has no counterpart here, and a consumer cannot tell a
+			// clean repo from one whose whole backlog is accepted.
+			...('baselined' in result ? { baselined: result.baselined } : {}),
 		},
-		null,
-		2
-	);
+		rules: usedRules(result, config),
+		findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: title(f.rule) })),
+		suppressions: result.directives,
+		parseErrors: result.diagnostics.parseErrors,
+		config: { rules: config.rules, enabled: config.enabled },
+	};
+}
+
+export function formatJson(result: AnalyzeResult | BaselinedResult, config: Config): string {
+	return JSON.stringify(reportPayload(result, config), null, 2);
 }
 
 export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Config): string {
 	const title = titleFor(config);
-	const used = [...new Set(result.findings.map((f) => f.rule))];
+	const fps = fingerprints(result.findings);
 	return JSON.stringify(
 		{
 			$schema: 'https://json.schemastore.org/sarif-2.1.0.json',
@@ -153,17 +210,26 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 						driver: {
 							name: 'Loupe',
 							informationUri: 'https://github.com/dvdbwmn/loupe',
-							rules: used.map((id) => ({
-								id,
-								shortDescription: { text: title(id) },
-								defaultConfiguration: { level: config.severityOf(id) === 'error' ? 'error' : 'warning' },
+							rules: usedRules(result, config).map((r) => ({
+								id: r.id,
+								shortDescription: { text: r.title },
+								// No `fullDescription`: the rule catalog holds exactly one line of
+								// guidance per rule, and shipping it twice under two names tells a
+								// reader there is more to read when there is not. `help` points at
+								// where the rest of the reasoning actually lives.
+								help: { text: `Run \`loupe explain ${r.id}\` for this rule's guidance.` },
+								// The namespace, so a security tab with fifteen rules can be
+								// filtered down to the layout ones.
+								properties: { tags: [r.id.split('/')[0] ?? 'loupe'] },
+								defaultConfiguration: { level: r.severity === 'error' ? 'error' : 'warning' },
 							})),
 						},
 					},
-					results: result.findings.map((f) => ({
+					results: result.findings.map((f, i) => ({
 						ruleId: f.rule,
 						level: f.severity === 'error' ? 'error' : 'warning',
 						message: { text: `${f.message} \u2014 ${title(f.rule)}` },
+						partialFingerprints: { loupeCode: fps[i] ?? '' },
 						locations: [
 							{
 								physicalLocation: {
