@@ -23538,6 +23538,12 @@ var RULES = {
     needs: ["patternRegistry"],
     title: "rebuilds a registered pattern \u2014 import the shared implementation instead of reassembling it"
   },
+  "patterns/superseded-composite": {
+    severity: "warn",
+    rank: 16,
+    needs: ["patternRegistry"],
+    title: "a sanctioned composition already covers this \u2014 see the finding for which pattern replaces the shape that was built"
+  },
   "patterns/unregistered-composite": {
     severity: "warn",
     rank: 14,
@@ -24215,8 +24221,9 @@ function descendants(tree, out = []) {
   }
   return out;
 }
+var nameMatches = (spec, actual) => spec === actual || spec.includes("|") && spec.split("|").includes(actual);
 function matches(pattern, tree) {
-  if (pattern.name !== tree.name) return false;
+  if (!nameMatches(pattern.name, tree.name)) return false;
   if (pattern.pkg && tree.pkg && pattern.pkg !== tree.pkg) return false;
   if (!pattern.children.length) return true;
   const pool = descendants(tree);
@@ -24235,12 +24242,18 @@ function loadPatterns(raw) {
   for (const p of list2) {
     const node = toNode(p?.signature);
     if (!node) continue;
+    const authored = p?.instead_of_signature;
+    const shapes = !Array.isArray(authored) ? [] : typeof authored[0] === "string" ? [authored] : authored;
     out.push({
       id: p.id || signatureOf(node),
       summary: p.summary ?? "",
       canonical: p.canonical ?? null,
       node,
-      size: nodeCount(node)
+      size: nodeCount(node),
+      // An anti-shape below the floor would fire on half a codebase: a bare
+      // `SelectControl` is one node and says nothing about whether the
+      // choice it presents wanted a segmented control instead.
+      avoid: shapes.map((shape) => toNode(shape)).filter((n) => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes)
     });
   }
   return out;
@@ -25103,10 +25116,21 @@ async function analyze(config, { scope = null } = {}) {
   }
   const dupEnabled = config.enabled["patterns/duplicate-composite"];
   const newEnabled = config.enabled["patterns/unregistered-composite"];
-  if ((dupEnabled || newEnabled) && composites.length) {
+  const supEnabled = config.enabled["patterns/superseded-composite"];
+  if ((dupEnabled || newEnabled || supEnabled) && composites.length) {
     const registry = config.patterns || [];
     const bestMatch = (c) => registry.filter((p) => p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree)).sort((a, b) => b.size - a.size)[0] ?? null;
+    const avoidMatch = (c) => {
+      let best = null;
+      for (const p of registry) {
+        let fit = 0;
+        for (const a of p.avoid) if (matches(a, c.tree)) fit = Math.max(fit, nodeCount(a));
+        if (fit && (!best || fit > best.fit)) best = { pattern: p, fit };
+      }
+      return best?.pattern ?? null;
+    };
     const byPattern = /* @__PURE__ */ new Map();
+    const bySuperseded = /* @__PURE__ */ new Map();
     const bySignature = /* @__PURE__ */ new Map();
     for (const c of composites) {
       const hit = dupEnabled ? bestMatch(c) : null;
@@ -25116,6 +25140,15 @@ async function analyze(config, { scope = null } = {}) {
         byPattern.set(hit.id, perFile2);
         const prev2 = perFile2.get(c.file);
         if (!prev2 || c.size > prev2.size) perFile2.set(c.file, { ...c, pattern: hit });
+        continue;
+      }
+      const avoided = supEnabled ? avoidMatch(c) : null;
+      if (avoided) {
+        if (avoided.canonical && importsByFile.get(c.file)?.has(avoided.canonical)) continue;
+        const perFile2 = bySuperseded.get(avoided.id) ?? /* @__PURE__ */ new Map();
+        bySuperseded.set(avoided.id, perFile2);
+        const prev2 = perFile2.get(c.file);
+        if (!prev2 || c.size < prev2.size) perFile2.set(c.file, { ...c, pattern: avoided });
         continue;
       }
       if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
@@ -25151,6 +25184,12 @@ async function analyze(config, { scope = null } = {}) {
           ` \u2014 rebuilds \`${id}\`, also in ${files2.size - 1} other file(s); ${remedy}`,
           id
         );
+      }
+    }
+    for (const [id, files2] of bySuperseded) {
+      for (const c of files2.values()) {
+        const remedy = c.pattern?.canonical ? `use \`${c.pattern.canonical}\`` : `follow the \`${id}\` pattern`;
+        emitComposite("patterns/superseded-composite", c, c.signature, ` \u2014 \`${id}\` covers this; ${remedy}`, id);
       }
     }
     for (const [sig, files2] of bySignature) {
@@ -25734,12 +25773,14 @@ function normalize(raw, { root: root2 }) {
 }
 function setPatterns(config, patterns) {
   config.patterns = patterns ?? [];
-  config.enabled["patterns/duplicate-composite"] = config.patterns.length > 0 && // The same `hasComponents` normalization computes above, restated rather
+  const hasRegistry = config.patterns.length > 0 && // The same `hasComponents` normalization computes above, restated rather
   // than recomputed. Dropping the packages half made this looser than the
   // capability it stands in for: a composite is only ever built from names
   // imported out of `designSystem.packages`, so a config declaring none can
   // never produce one — and `status` reported the rule active anyway.
-  config.designSystem.packages.length > 0 && config.designSystem.knownComponents.size > 0 && config.severityOf("patterns/duplicate-composite") !== "off";
+  config.designSystem.packages.length > 0 && config.designSystem.knownComponents.size > 0;
+  for (const rule2 of ["patterns/duplicate-composite", "patterns/superseded-composite"])
+    config.enabled[rule2] = hasRegistry && config.severityOf(rule2) !== "off";
   return config;
 }
 function setComponentRegistry(config, componentRegistry) {
@@ -26800,7 +26841,8 @@ function applyRegistries(config, sources, {
   }
   if (sawPatterns) setPatterns2(config, patterns);
   if (sawComponents) setComponentRegistry2(config, components);
-  const patternsNote = (added) => config.severityOf("patterns/duplicate-composite") === "off" ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
+  const registryRules = ["patterns/duplicate-composite", "patterns/superseded-composite"];
+  const patternsNote = (added) => registryRules.every((rule2) => config.severityOf(rule2) === "off") ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
     // A composite is only ever built from names imported out of
     // `designSystem.packages` (see markup.ts), so with none declared
     // there is nothing for a signature to be compared against.

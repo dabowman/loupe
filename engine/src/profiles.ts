@@ -265,8 +265,12 @@ export function applyRegistries(
 	// turns off is not reported" comes first, because that one was asked for —
 	// testing `config.enabled` instead conflated it with the cases below and
 	// sent someone after a component layer they had nothing wrong with.
+	// Every rule the registry feeds, not just the first: with `duplicate-composite`
+	// turned off and `superseded-composite` left on, testing only the first said
+	// "nothing to report here" about a registry that had in fact enabled nothing.
+	const registryRules = ['patterns/duplicate-composite', 'patterns/superseded-composite'] as const;
 	const patternsNote = (added: number): string | null =>
-		config.severityOf('patterns/duplicate-composite') === 'off'
+		registryRules.every((rule) => config.severityOf(rule) === 'off')
 			? null
 			: !added
 				? 'merged but enabled nothing — it added no patterns this config did not already have'

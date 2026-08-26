@@ -439,6 +439,19 @@ await check('a registered pattern matches through nesting and extra siblings', (
 	assert(!matches(formModal.node, noFooter), 'a modal with no action pair is not a form-modal');
 });
 
+// Measured on 2110 Gutenberg files: the `Stack` spelling alone missed nine real
+// form-modals written with VStack/Flex, which came back as unregistered noise.
+await check('a signature node names alternatives with |', () => {
+	const formModal = registry.find((p) => p.id === 'form-modal');
+	assert(formModal, 'the shipped registry should carry form-modal');
+	const legacy = node(['Modal', ['VStack', 'TextControl', ['HStack', 'Button', 'Button']]]);
+	assert(matches(formModal.node, legacy), 'VStack should satisfy Stack|VStack|HStack|Flex');
+	const modern = node(['Modal', ['Stack', 'TextControl', ['Stack', 'Button', 'Button']]]);
+	assert(matches(formModal.node, modern), 'so should Stack');
+	const unrelated = node(['Modal', ['Grid', 'TextControl', ['Grid', 'Button', 'Button']]]);
+	assert(!matches(formModal.node, unrelated), 'a name outside the alternation must not match');
+});
+
 await check('a registered child must claim a distinct node', () => {
 	const twoTexts = node(['VStack', 'Text', 'Text']);
 	assert(!matches(twoTexts, node(['VStack', 'Text'])), 'one Text should not satisfy two');
@@ -447,13 +460,12 @@ await check('a registered child must claim a distinct node', () => {
 
 const composite = (n: string): string =>
 	[
-		"import { EmptyState, Button } from '@wordpress/ui';",
-		`export const Screen${n} = () => (`,
-		'\t<EmptyState.Root>',
-		'\t\t<EmptyState.Title>Nothing here</EmptyState.Title>',
-		'\t\t<EmptyState.Description>Try a different filter.</EmptyState.Description>',
-		'\t\t<div className="acme-actions"><EmptyState.Actions><Button>A</Button></EmptyState.Actions></div>',
-		'\t</EmptyState.Root>',
+		"import { Stack, Text, Button } from '@wordpress/ui';",
+		`export const Panel${n} = () => (`,
+		'\t<Stack>',
+		'\t\t<Stack><Text>Details</Text><Button>Close</Button></Stack>',
+		'\t\t<div className="acme-body"><Stack><Text>body</Text></Stack></div>',
+		'\t</Stack>',
 		');',
 	].join('\n');
 
@@ -469,7 +481,29 @@ await check('a registered pattern rebuilt in two files is reported in both', asy
 	const dup = at(r, 'patterns/duplicate-composite');
 	assert(dup.length === 2, `expected one per file, got ${dup.length}`);
 	const named = first(dup, 'expected a duplicate-composite finding');
-	assert(named.message.includes('empty-state'), `named the wrong pattern: ${named.message}`);
+	assert(named.message.includes('detail-sidebar'), `named the wrong pattern: ${named.message}`);
+});
+
+// `canonical` is matched against the file's local import names, so it has to be
+// the name the code binds — `EmptyState`, not the `EmptyState.Root` the JSX says
+// nor the import statement that produced it.
+await check('a file importing the canonical component is using the pattern, not rebuilding it', async () => {
+	const shipped = (n: string): string =>
+		[
+			"import { EmptyState, Button } from '@wordpress/ui';",
+			`export const Screen${n} = () => (`,
+			'\t<EmptyState.Root>',
+			'\t\t<EmptyState.Title>Nothing here</EmptyState.Title>',
+			'\t\t<EmptyState.Description>Try a different filter.</EmptyState.Description>',
+			'\t\t<EmptyState.Actions><Button>A</Button></EmptyState.Actions>',
+			'\t</EmptyState.Root>',
+			');',
+		].join('\n');
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': shipped('A'), 'src/B.jsx': shipped('B') },
+		{ patterns: registry }
+	);
+	assert(!at(r, 'patterns/duplicate-composite').length, 'importing EmptyState is using empty-state');
 });
 
 await check('one file is a first use, not a duplicate', async () => {
@@ -510,6 +544,49 @@ await check('an unregistered shape needs three files before it is house style', 
 		{ patterns: registry }
 	);
 	assert(at(three, 'patterns/unregistered-composite').length === 3, 'three is a pattern');
+});
+
+// The registry's answer to a shape, fired against the one file that built it —
+// this is the only composite rule that does not need a second file to exist.
+await check('the shape a pattern replaces is reported in the file that built it', async () => {
+	const src = [
+		"import { Modal, TextControl } from '@wordpress/components';",
+		'export const Edit = () => (',
+		'\t<Modal title="Edit">',
+		'\t\t<TextControl label="Title" />',
+		'\t\t<TextControl label="Tagline" />',
+		'\t\t<TextControl label="Slug" />',
+		'\t</Modal>',
+		');',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { patterns: registry });
+	const sup = first(at(r, 'patterns/superseded-composite'), 'one file is enough for a wrong choice');
+	assert(sup.message.includes('entity-dataform'), `named the wrong pattern: ${sup.message}`);
+	assert(sup.message.includes('DataForm'), `should name the remedy: ${sup.message}`);
+});
+
+await check('two fields are a form, not the anti-pattern', async () => {
+	const src = [
+		"import { Modal, TextControl } from '@wordpress/components';",
+		'export const Edit = () => (<Modal title="Edit"><TextControl label="Title" /><TextControl label="Slug" /></Modal>);',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { patterns: registry });
+	assert(!at(r, 'patterns/superseded-composite').length, 'below the floor is not a finding');
+});
+
+await check('a file already importing the answer is not told to use it', async () => {
+	const src = [
+		"import { Modal, TextControl } from '@wordpress/components';",
+		"import { DataForm } from '@wordpress/dataviews';",
+		'export const Edit = () => (',
+		'\t<Modal title="Edit">',
+		'\t\t<TextControl label="Title" /><TextControl label="Tagline" /><TextControl label="Slug" />',
+		'\t\t<DataForm data={ {} } fields={ [] } form={ {} } onChange={ () => {} } />',
+		'\t</Modal>',
+		');',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { patterns: registry });
+	assert(!at(r, 'patterns/superseded-composite').length, 'canonical import means the choice was deliberate');
 });
 
 // ── component currency ────────────────────────────────────────────────────

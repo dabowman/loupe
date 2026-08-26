@@ -1,29 +1,63 @@
 {
-  "packages": ["@wordpress/components", "@wordpress/ui"],
+  "packages": [
+    "@wordpress/components",
+    "@wordpress/ui"
+  ],
   "version": 1,
-  "note": "Sanctioned WPDS compositions. `signature` is the normalized component tree — it is what makes a pattern checkable rather than merely documented. A node is `[name, ...children]`; each child is either a bare component name or another node. Only design-system components appear: raw elements between them are transparent, so an intervening `<div>` never hides a match. Matching is containment, not equality — extra children are fine, and a registered child may sit anywhere beneath the root rather than as a direct sibling, because a footer recorded beside the body and a footer nested inside it are the same composition. A signature under four nodes is documentation rather than a check: `Stack(Button,Button)` describes an action bar truthfully and matches half a codebase. Entries ship without `canonical` or `import` on purpose: the real shape is project-specific, and an implementation invented here would be wrong everywhere. Fill each in from the project's own code the first time you build it — `canonical` also tells the checker which import already satisfies the pattern, so a file using the shared implementation stops being reported.",
+  "note": "Sanctioned WPDS compositions. `signature` is the normalized component tree — it is what makes a pattern checkable rather than merely documented. A node is `[name, ...children]`; each child is either a bare component name or another node. Only design-system components appear: raw elements between them are transparent, so an intervening `<div>` never hides a match. Matching is containment, not equality — extra children are fine, and a registered child may sit anywhere beneath the root rather than as a direct sibling, because a footer recorded beside the body and a footer nested inside it are the same composition. A signature under four nodes is documentation rather than a check: `Stack(Button,Button)` describes an action bar truthfully and matches half a codebase. Entries ship without `canonical` or `import` on purpose: the real shape is project-specific, and an implementation invented here would be wrong everywhere. Fill each in from the project's own code the first time you build it — `canonical` also tells the checker which import already satisfies the pattern, so a file using the shared implementation stops being reported. `instead_of_signature` records the shape a pattern exists to replace, as trees rather than the prose of `instead_of`; matching one reports `patterns/superseded-composite` against the single file that built it, because a wrong choice is a defect where it is made rather than only across a set. It obeys the same four-node floor: a one-node anti-shape like a bare `SelectControl` says nothing about whether the choice it presents wanted a segmented control instead, and would fire on half a codebase. Most of the entries here therefore carry the anti-pattern as prose only — the shapes agents reach for by default are usually too small to name, which is why reading this file before assembling matters more than the check does. `canonical` is matched against a file's local import names, so it is written as the name the code binds (`ConfirmDialog`, `Navigator`), not as the import statement that produces it. A signature node may name alternatives with `|` — `Stack|VStack|HStack` or `ToggleGroupControlOption|ToggleGroupControlOptionIcon` — because one shape often has more than one spelling, and an entry that knows only the new one reports every file still writing the old one as an unregistered composite. Only pattern nodes carry alternations; a tree built from real code is always a single name.",
   "patterns": [
     {
       "id": "page-header",
       "summary": "Screen title with an optional description and a trailing action cluster.",
       "use": "The top of any admin screen or panel.",
-      "signature": ["Stack", ["Stack", "Text", "Text"], ["Stack", "Button"]],
-      "instead_of": ["An ad-hoc row Stack + heading Text + buttons rebuilt per screen"]
+      "signature": [
+        "Stack|VStack|HStack|Flex",
+        [
+          "Stack|VStack|HStack|Flex",
+          "Text",
+          "Text"
+        ],
+        [
+          "Stack|VStack|HStack|Flex",
+          "Button"
+        ]
+      ],
+      "instead_of": [
+        "An ad-hoc row Stack + heading Text + buttons rebuilt per screen"
+      ],
+      "import": "@wordpress/admin-ui",
+      "canonical": "Page",
+      "note": "`Page` (@wordpress/admin-ui) ships this: title, headingLevel, optional breadcrumbs and icon, an `actions` slot, and `hasPadding` for the body. The site editor's Styles and Identity panes are both `<Page title actions>` with no hand-built header at all."
     },
     {
       "id": "action-bar",
       "summary": "Horizontal group of actions with consistent order, spacing and alignment.",
       "use": "Anywhere two or more actions sit together; primary action last.",
-      "signature": ["Stack", "Button", "Button"],
-      "instead_of": ["div.actions with hand-set margins", "Buttons spaced with margin-right"]
+      "signature": [
+        "Stack|VStack|HStack|Flex",
+        "Button",
+        "Button"
+      ],
+      "instead_of": [
+        "div.actions with hand-set margins",
+        "Buttons spaced with margin-right"
+      ]
     },
     {
       "id": "confirm-modal",
       "summary": "Destructive-action confirmation dialog with confirm/cancel actions.",
       "use": "Any irreversible action needing explicit consent.",
       "import": "@wordpress/components",
-      "canonical": "__experimentalConfirmDialog as ConfirmDialog",
-      "signature": ["Modal", "Text", ["Stack", "Button", "Button"]],
+      "canonical": "ConfirmDialog",
+      "signature": [
+        "Modal",
+        "Text",
+        [
+          "Stack|VStack|HStack|Flex",
+          "Button",
+          "Button"
+        ]
+      ],
       "instead_of": [
         "A hand-built Modal + Stack + Button pair reimplementing confirm/cancel — ConfirmDialog already does this, controlled or uncontrolled",
         "window.confirm()"
@@ -34,8 +68,18 @@
       "id": "form-modal",
       "summary": "Modal wrapping a form, with submit and cancel in the standard position.",
       "use": "Creating or editing a record without leaving the current screen.",
-      "signature": ["Modal", "Stack", ["Stack", "Button", "Button"]],
-      "instead_of": ["Modal with an inline form and per-instance submit placement"],
+      "signature": [
+        "Modal",
+        "Stack|VStack|HStack|Flex",
+        [
+          "Stack|VStack|HStack|Flex",
+          "Button",
+          "Button"
+        ]
+      ],
+      "instead_of": [
+        "Modal with an inline form and per-instance submit placement"
+      ],
       "note": "@wordpress/ui's Dialog/Drawer are Modal's eventual replacements, chosen by field count/complexity (see loupe-authoring), but both are marked experimental in components/index.json — stay on Modal until that clears."
     },
     {
@@ -44,7 +88,10 @@
       "use": "Any screen that can show more than one notice at a time.",
       "import": "@wordpress/components",
       "canonical": "NoticeList",
-      "signature": ["Stack", "Notice"],
+      "signature": [
+        "Stack|VStack|HStack|Flex",
+        "Notice"
+      ],
       "instead_of": [
         "Individually placed Notice components with local margins — NoticeList already takes notices + onRemove"
       ],
@@ -54,16 +101,31 @@
       "id": "detail-sidebar",
       "summary": "Secondary panel beside a main region, with its own header and scroll area.",
       "use": "Inspector and detail views alongside a list or canvas.",
-      "signature": ["Stack", ["Stack", "Text", "Button"], "Stack"],
-      "instead_of": ["One-off panel layouts with bespoke headers"]
+      "signature": [
+        "Stack|VStack|HStack|Flex",
+        [
+          "Stack|VStack|HStack|Flex",
+          "Text",
+          "Button"
+        ],
+        "Stack|VStack|HStack|Flex"
+      ],
+      "instead_of": [
+        "One-off panel layouts with bespoke headers"
+      ]
     },
     {
       "id": "empty-state",
       "summary": "Centred explanation of why a region is empty, with the action that fills it.",
       "use": "Any list, table or canvas that can legitimately have no content.",
       "import": "@wordpress/ui",
-      "canonical": "EmptyState.Root",
-      "signature": ["EmptyState.Root", "EmptyState.Title", "EmptyState.Description", "EmptyState.Actions"],
+      "canonical": "EmptyState",
+      "signature": [
+        "EmptyState.Root",
+        "EmptyState.Title",
+        "EmptyState.Description",
+        "EmptyState.Actions"
+      ],
       "instead_of": [
         "A centred div (or hand-built Stack + Text + Button) with a paragraph and a button — EmptyState.Root/Title/Description/Actions already ships this"
       ]
@@ -73,11 +135,24 @@
       "summary": "Label, control and help text in the standard arrangement.",
       "use": "Every field in a settings or record form.",
       "import": "@wordpress/ui",
-      "canonical": "Field.Root",
-      "signature": ["Field.Root", "Field.Label", "Field.Control", "Field.Description"],
+      "canonical": "Field",
+      "signature": [
+        "Field.Root",
+        "Field.Label",
+        "Field.Control",
+        "Field.Description"
+      ],
       "instead_of": [
         "Label/control/help rebuilt per field with a hand-built Stack — Field.Root already handles the layout, association and a11y",
         "Fieldset.Root for a group of controls sharing one legend, instead of Field.Root per control"
+      ],
+      "instead_of_signature": [
+        [
+          "Stack|VStack|HStack|Flex",
+          "Text",
+          "TextControl|InputControl|SelectControl|TextareaControl",
+          "Text"
+        ]
       ]
     },
     {
@@ -85,16 +160,366 @@
       "summary": "Visually contained surface grouping related content and actions, with an optional header.",
       "use": "Any block of related content that needs a visible boundary — settings groups, list items, dashboard tiles.",
       "import": "@wordpress/ui",
-      "canonical": "Card.Root",
-      "signature": ["Card.Root", "Card.Header", "Card.Title", "Card.Content"],
-      "instead_of": ["A styled div with a border/shadow rebuilt per surface"]
+      "canonical": "Card",
+      "signature": [
+        "Card.Root",
+        "Card.Header",
+        "Card.Title",
+        "Card.Content"
+      ],
+      "instead_of": [
+        "A styled div with a border/shadow rebuilt per surface"
+      ]
     },
     {
       "id": "dataviews-toolbar",
       "summary": "Search, filters and bulk actions above a DataViews list.",
       "use": "Any DataViews surface with filtering or bulk operations.",
-      "signature": ["Stack", "SearchControl", ["Stack", "Button"]],
-      "instead_of": ["Custom filter/search/action clusters per list"]
+      "signature": [
+        "Stack|VStack|HStack|Flex",
+        "SearchControl",
+        [
+          "Stack|VStack|HStack|Flex",
+          "Button"
+        ]
+      ],
+      "instead_of": [
+        "Custom filter/search/action clusters per list"
+      ]
+    },
+    {
+      "id": "navigator-drilldown",
+      "summary": "Hierarchical settings navigated as a stack of screens, one route per screen.",
+      "use": "Any settings surface deeper than one level — global styles, block styles, preset editing, a font picker inside a modal.",
+      "import": "@wordpress/components",
+      "canonical": "Navigator",
+      "signature": [
+        "Navigator",
+        "Navigator.Screen",
+        "Navigator.Screen",
+        "Navigator.Screen"
+      ],
+      "instead_of": [
+        "Tabs standing in for hierarchy — tabs are for siblings, not for parent and child",
+        "One long scrolling panel holding every control for every level",
+        "A SelectControl that swaps which panel is rendered"
+      ],
+      "note": "Screens are declared flat with path strings ('/typography/font-sizes/:origin/:slug'), never nested as JSX. The path is the state, so a route or query param can drive it and deep links work; the site editor syncs an outer router to Navigator rather than letting the component own its position."
+    },
+    {
+      "id": "drilldown-row",
+      "summary": "List row that names a sub-screen, carries an icon or preview, and navigates into it.",
+      "use": "Every entry in a settings menu that opens another screen.",
+      "import": "@wordpress/components",
+      "canonical": "Navigator",
+      "signature": [
+        "ItemGroup",
+        "Navigator.Button",
+        "Navigator.Button",
+        "Navigator.Button"
+      ],
+      "instead_of": [
+        "A column of Buttons standing in for navigation",
+        "A SelectControl choosing which sub-section to show",
+        "Anchors styled to look like list rows"
+      ],
+      "note": "`Navigator.Button as={Item}` inside `ItemGroup` — the row is one control, so it gets one tab stop and one accessible name. A trailing chevron marks 'goes deeper'; a trailing value marks 'this is the current setting'. Never both."
+    },
+    {
+      "id": "value-preview-row",
+      "summary": "Row whose leading element renders the current value instead of describing it, and drills in to edit it.",
+      "use": "Any setting with a visual identity — a palette, a font, a typographic element, a shadow.",
+      "import": "@wordpress/components",
+      "canonical": "Navigator",
+      "signature": [
+        "ItemGroup",
+        [
+          "Navigator.Button",
+          [
+            "ZStack",
+            "ColorIndicator"
+          ]
+        ]
+      ],
+      "instead_of": [
+        "A label beside an always-open ColorPicker, one per color",
+        "A swatch beside a separate 'Edit' button",
+        "A SelectControl of font or preset names with nothing shown"
+      ],
+      "note": "The site editor never labels a visual value in words alone: the palette row stacks five ColorIndicators, the typography row renders 'Aa' in the live face and color, the font row sets the family name in its own face. `ZStack` is planned for deprecation — the overlap is a CSS concern; the pattern is the rendered preview, not that component."
+    },
+    {
+      "id": "color-dropdown-item",
+      "summary": "Color or gradient setting shown as its own swatches, edited in a popover, resettable only when locally set.",
+      "use": "Every color or gradient inside a settings panel.",
+      "import": "@wordpress/components",
+      "canonical": "Dropdown",
+      "signature": [
+        "ToolsPanelItem",
+        [
+          "Dropdown",
+          [
+            "ZStack",
+            "ColorIndicator"
+          ]
+        ]
+      ],
+      "instead_of": [
+        "A ColorPicker rendered inline for every color slot",
+        "A SelectControl of palette slug names",
+        "A reset button that is always visible whether or not anything is set"
+      ],
+      "note": "Color and Gradient are Tabs inside the popover, not two separate controls. The reset affordance appears only when the user has a local value — an always-present reset on an inherited value is a lie about what it would do."
+    },
+    {
+      "id": "preview-tile-grid",
+      "summary": "Grid of live-rendered previews as the chooser: the option is the rendering, not its name.",
+      "use": "Style variations, typesets, color schemes, block style variations — anything whose difference is visible.",
+      "signature": [
+        "Grid",
+        [
+          "Tooltip.Root",
+          "Tooltip.Trigger",
+          "Tooltip.Popup"
+        ]
+      ],
+      "instead_of": [
+        "A SelectControl of variation names",
+        "A RadioControl list of theme or preset names",
+        "Static thumbnails that are not the thing they preview"
+      ],
+      "note": "Each tile renders the real variation through a scoped style provider, marks the active one with aria-current, and puts the name in a Tooltip rather than under the tile. `Grid` is planned for deprecation — use CSS grid; the pattern is the live preview as the option.",
+      "import": "@wordpress/global-styles-ui",
+      "canonical": "Variation"
+    },
+    {
+      "id": "screen-header",
+      "summary": "Sub-screen header: back control, title, optional description, right-aligned state controls.",
+      "use": "Every screen below the root of a drilldown.",
+      "signature": [
+        "Stack|VStack|HStack|Flex",
+        "Navigator.BackButton",
+        "Text",
+        "Text"
+      ],
+      "instead_of": [
+        "A bare heading plus a Button with an arrow icon, rebuilt per screen",
+        "A breadcrumb trail inside a panel that is already one screen deep"
+      ],
+      "note": "`Navigator.BackButton` handles the common case; pass an explicit onBack only when the path carries a selection ('/revisions/12') rather than a sub-screen, where popping one segment would land nowhere."
+    },
+    {
+      "id": "tools-panel",
+      "summary": "Settings panel where a control appears only once it holds a value or is shown by default, each with its own reset.",
+      "use": "Every group of optional settings.",
+      "import": "@wordpress/components",
+      "canonical": "ToolsPanel",
+      "signature": [
+        "ToolsPanel",
+        "ToolsPanelItem",
+        "ToolsPanelItem",
+        "ToolsPanelItem"
+      ],
+      "instead_of": [
+        "A PanelBody rendering all twelve possible controls at once",
+        "A stack of controls with no per-control reset",
+        "A hand-rolled 'Show advanced' toggle hiding half of them"
+      ],
+      "note": "Each item declares hasValue / onDeselect / isShownByDefault / panelId; the panel owns resetAll. That is what keeps a twelve-control surface showing three. A block settings screen orders it preview first, then one ToolsPanel per concern, with Advanced last and collapsed."
+    },
+    {
+      "id": "segmented-choice",
+      "summary": "A small closed set of options chosen inline, each with an icon; clicking the active one clears it.",
+      "use": "Two to five mutually exclusive options that fit on one row — alignment, letter case, position, orientation.",
+      "import": "@wordpress/components",
+      "canonical": "ToggleGroupControl",
+      "signature": [
+        "ToggleGroupControl",
+        "ToggleGroupControlOption|ToggleGroupControlOptionIcon",
+        "ToggleGroupControlOption|ToggleGroupControlOptionIcon",
+        "ToggleGroupControlOption|ToggleGroupControlOptionIcon"
+      ],
+      "instead_of": [
+        "A SelectControl with two to five options",
+        "A RadioControl for a set that fits on one row",
+        "A row of Buttons with isPressed and hand-managed exclusivity"
+      ],
+      "note": "`isDeselectable` plus an onChange that clears when the new value equals the old one is how 'no opinion' stays reachable without a 'None' option eating a slot."
+    },
+    {
+      "id": "size-control",
+      "summary": "One CSS length as a unit input and a slider side by side under one label, the slider's range derived from the unit.",
+      "use": "Any length a user tunes — font size, spacing, width, radius.",
+      "signature": [
+        "BaseControl",
+        [
+          "Stack|VStack|HStack|Flex",
+          "UnitControl",
+          "RangeControl"
+        ]
+      ],
+      "instead_of": [
+        "A bare RangeControl with the unit implied",
+        "A TextControl holding a CSS length as free text",
+        "A SelectControl of fixed sizes where the value is continuous"
+      ],
+      "note": "Bounds follow the unit: relative units get max 10 / step 0.1, absolute units get max 100 / step 1. A single hardcoded range is wrong for one of the two."
+    },
+    {
+      "id": "preset-group",
+      "summary": "One origin's presets — theme, default, custom — as a titled list with add and an overflow menu, each row drilling into its own editor.",
+      "use": "Managing font sizes, spacing sizes, shadows or palettes, where presets come from more than one origin.",
+      "signature": [
+        "Stack|VStack|HStack|Flex",
+        [
+          "Menu",
+          "Menu.TriggerButton",
+          "Menu.Popover"
+        ],
+        [
+          "ItemGroup",
+          "Navigator.Button"
+        ]
+      ],
+      "instead_of": [
+        "An editable table of presets with inline delete buttons",
+        "A repeater of TextControl + NumberControl rows",
+        "One flat list that hides which origin a preset came from"
+      ],
+      "note": "Origin is the grouping, and it decides what is offered: theme and default groups get Reset (and only while they actually differ from base), custom gets Add, Rename and Delete. Editing happens on its own screen, not inline in the row."
+    },
+    {
+      "id": "overflow-actions",
+      "summary": "Secondary and destructive actions behind one icon menu rather than as visible buttons.",
+      "use": "Rename, Delete, Reset on a record, preset or screen.",
+      "import": "@wordpress/components",
+      "canonical": "Menu",
+      "signature": [
+        "Menu",
+        "Menu.TriggerButton",
+        [
+          "Menu.Popover",
+          "Menu.Item"
+        ]
+      ],
+      "instead_of": [
+        "Rename and Delete rendered as two secondary Buttons in a header",
+        "A destructive Button sitting in the primary action row"
+      ],
+      "note": "The menu item opens a confirm dialog; it never destroys anything itself. Items that would do nothing are dropped from the menu rather than disabled. `Menu` in @wordpress/components is a private API — loupe reports it as system/locked-component, an error — so outside Gutenberg core the shape is the same but the import is `Menu` from @wordpress/ui."
+    },
+    {
+      "id": "filter-menu",
+      "summary": "A list's filter as a radio menu behind one icon, beside the search field.",
+      "use": "Narrowing a list by a single closed dimension — all vs customized, by status, by origin.",
+      "import": "@wordpress/components",
+      "canonical": "Menu",
+      "signature": [
+        "Menu",
+        "Menu.TriggerButton",
+        [
+          "Menu.Popover",
+          "Menu.RadioItem",
+          "Menu.RadioItem"
+        ]
+      ],
+      "instead_of": [
+        "A SelectControl sitting beside the search field",
+        "A row of filter chips built from Buttons with isPressed",
+        "A list long enough to need filtering that offers none"
+      ],
+      "note": "Search and filter share one row above the list; the result count is announced with speak() so a filter change is perceivable without sight of the list. `Menu` in @wordpress/components is a private API — loupe reports it as system/locked-component, an error — so outside Gutenberg core the shape is the same but the import is `Menu` from @wordpress/ui."
+    },
+    {
+      "id": "selectable-list",
+      "summary": "Keyboard-navigable list of records where one is selected, with listbox semantics and a roving tab stop.",
+      "use": "Revisions, versions, any list where selecting an item drives a preview elsewhere.",
+      "import": "@wordpress/components",
+      "canonical": "Composite",
+      "signature": [
+        "Composite",
+        [
+          "Composite.Item",
+          "Badge"
+        ],
+        "Composite.Item"
+      ],
+      "instead_of": [
+        "A stack of Buttons with aria-selected managed by hand",
+        "A RadioControl standing in for a list of records",
+        "A DataViews table whose only action is 'select'"
+      ],
+      "note": "role=\"listbox\" on the Composite, role=\"option\" plus aria-selected on each item, render={<div/>} so the item is not also a button. One tab stop for the whole list, arrows within it."
+    },
+    {
+      "id": "modal-with-tabs",
+      "summary": "Modal whose body is tabbed — one tab per source or mode — sharing a single footer.",
+      "use": "Install/activate flows and pickers that draw from more than one source.",
+      "import": "@wordpress/ui",
+      "canonical": "Tabs",
+      "signature": [
+        "Modal",
+        "Tabs.Root",
+        "Tabs.List",
+        "Tabs.Panel"
+      ],
+      "instead_of": [
+        "A SelectControl inside a Modal that swaps its body",
+        "Several Modals for what is one task with several sources"
+      ],
+      "note": "A tab's own content can itself be a Navigator drilldown — the font library installs from a tab and edits a family on a sub-screen of it, with the modal footer staying put."
+    },
+    {
+      "id": "live-example-gallery",
+      "summary": "Grouped gallery of real rendered output as the reference, not screenshots or names.",
+      "use": "Style books, block catalogs, token galleries.",
+      "import": "@wordpress/components",
+      "canonical": "Composite",
+      "signature": [
+        "Composite",
+        [
+          "Composite.Group",
+          "Composite.GroupLabel",
+          "Composite.Item"
+        ]
+      ],
+      "instead_of": [
+        "A grid of static images standing in for live output",
+        "A list of names with the rendering left to the reader's imagination",
+        "Sections built from headings with no grouping semantics"
+      ],
+      "note": "Examples render inside an iframe carrying the real styles, wrapped in Disabled so nothing in a preview is focusable or interactive. Composite.Group + GroupLabel give the categories real semantics rather than visual grouping alone."
+    },
+    {
+      "id": "entity-dataform",
+      "summary": "A record's fields declared as data — field list plus form layout — rendered by DataForm against the entity store.",
+      "use": "Any form editing a WordPress entity: site settings, post meta, a record's details.",
+      "import": "@wordpress/dataviews",
+      "canonical": "DataForm",
+      "signature": [
+        "Page",
+        "DataForm"
+      ],
+      "instead_of": [
+        "A stack of TextControls with a useState per field and a hand-written onChange each",
+        "Media pickers wired up individually instead of a field of type 'media'",
+        "A submit button doing what editEntityRecord already does per keystroke"
+      ],
+      "instead_of_signature": [
+        [
+          "Modal",
+          "TextControl|InputControl",
+          "TextControl|InputControl",
+          "TextControl|InputControl"
+        ],
+        [
+          "Card.Root",
+          "TextControl|InputControl",
+          "TextControl|InputControl",
+          "TextControl|InputControl"
+        ]
+      ],
+      "note": "The site editor's whole Identity pane is four field descriptors and a four-line form config. Field types carry their own editors (type: 'media' + Edit: MediaEdit), and state is getEditedEntityRecord / editEntityRecord — no local state, no save button, undo for free. The anti-shapes are deliberately rooted in a Modal or a Card: a bare `Stack` of three TextControls is the ordinary block-inspector panel, which edits attributes rather than an entity and has no DataForm to reach for."
     }
   ]
 }

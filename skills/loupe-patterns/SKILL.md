@@ -71,6 +71,13 @@ A compound component's sub-parts (`Card.Root`, `Card.Header`, `EmptyState.Title`
 `Field.Control`, …) are distinct nodes even though only the root name is ever
 imported — write the full dotted name in the signature.
 
+A node may name alternatives with `|` — `Stack|VStack|HStack|Flex`,
+`ToggleGroupControlOption|ToggleGroupControlOptionIcon`. One shape usually has
+more than one spelling, and an entry that knows only the newest one reports
+every file still writing the old one as an unregistered composite. Measured on
+2110 Gutenberg files, `form-modal` written with `Stack` alone missed nine real
+modals built with `VStack`/`Flex`.
+
 Matching is **containment, not equality**:
 
 - Extra children are fine. A header with one more button is still that header.
@@ -94,15 +101,70 @@ then the remedy the engine offers is "extract one shared implementation", becaus
 telling an agent to import something that does not exist sends it hunting for a
 module.
 
-The two rules this drives:
+Write `canonical` as **the name the code binds**, not the import statement that
+produces it: `ConfirmDialog`, not `__experimentalConfirmDialog as ConfirmDialog`;
+`EmptyState`, not `EmptyState.Root`. It is matched against a file's local import
+names, so anything else silently never matches and the pattern reports every
+file that is already using it correctly.
+
+`instead_of_signature` records the shape a pattern *replaces*, in the same
+`[name, ...children]` form. It is `instead_of` promoted from prose to a check,
+and it obeys the same four-node floor — a one-node anti-shape like a bare
+`SelectControl` says nothing about whether the choice it presents wanted a
+segmented control, and would fire on half a codebase. Most entries therefore
+carry the anti-pattern as prose only, which is why reading this file before
+assembling matters more than the check does.
+
+The three rules this drives:
 
 | | |
 | --- | --- |
 | `patterns/duplicate-composite` | A registered pattern reassembled by hand in two or more files |
+| `patterns/superseded-composite` | A shape a pattern exists to replace — reported against the one file that built it, because a wrong choice is a defect where it is made |
 | `patterns/unregistered-composite` | The same shape in three or more files, in no registry — two is a coincidence, three is house style |
 
 The engine reads this file when the hooks and commands pass `--patterns`. A
 project's own registry is merged over the shipped one, winning on `id`.
+
+## Choosing a shape
+
+Read this before writing the JSX, because the wrong choice is made in the
+moment of reaching for a control, not afterwards. The reflex the WordPress site
+editor encodes: **if a value has a visual identity, render it — do not name it.**
+A palette is five swatches, a typeface is the word set in that face, a style
+variation is the variation. A dropdown listing their names is a description of
+the choice rather than the choice itself.
+
+The second reflex: **depth beats breadth.** Twelve settings on one screen is a
+wall; twelve settings behind four rows that each open a screen is a menu. The
+site editor is drilldowns almost all the way down, and every leaf screen shows
+only the controls that are actually set.
+
+| About to build | Pattern | Not this |
+| --- | --- | --- |
+| Settings more than one level deep | `navigator-drilldown` | Tabs standing in for hierarchy; one long panel; a `SelectControl` that swaps panes |
+| A row that opens another screen | `drilldown-row` | A column of `Button`s; anchors styled as rows |
+| A setting whose value is visible — color, font, shadow | `value-preview-row` | A label beside an always-open picker; a swatch beside an "Edit" button |
+| Choosing between things that *look* different | `preview-tile-grid` | A `SelectControl` of variation names; a `RadioControl` of preset names |
+| A color or gradient inside a panel | `color-dropdown-item` | A `ColorPicker` rendered inline for every slot |
+| A group of optional settings | `tools-panel` | A `PanelBody` showing all twelve at once; a hand-rolled "Advanced" toggle |
+| Two to five exclusive options on one row | `segmented-choice` | `SelectControl`; `RadioControl`; `Button`s with `isPressed` |
+| A CSS length the user tunes | `size-control` | A bare `RangeControl`; a `TextControl` holding `"16px"` |
+| Presets from several origins | `preset-group` | An editable table; a repeater of input rows |
+| Rename / Delete / Reset on a thing | `overflow-actions` | Two secondary `Button`s sitting in the header |
+| Narrowing a list by one dimension | `filter-menu` | A `SelectControl` beside the search field |
+| A list where one item is selected | `selectable-list` | `Button`s with hand-managed `aria-selected` |
+| A modal drawing on several sources | `modal-with-tabs` | A `SelectControl` inside the modal that swaps its body |
+| A catalog of rendered output | `live-example-gallery` | Static thumbnails; a list of names |
+| A form over a WordPress entity | `entity-dataform` | A stack of `TextControl`s with a `useState` and an `onChange` per field |
+| The top of a screen or pane | `page-header` (`Page`) | A hand-built title row rebuilt per screen |
+| The top of a sub-screen | `screen-header` | A heading plus a `Button` with an arrow icon |
+
+Two of those rows carry most of the drift. `segmented-choice` because
+`SelectControl` is the reflex for any set of options, and a dropdown for four
+icons costs a click and a popover to say what four icons say at rest.
+`tools-panel` because every optional setting rendered unconditionally is a
+control the reader has to rule out.
 
 ## The starting set
 
@@ -113,27 +175,36 @@ time you build one:
 
 | Pattern | Replaces |
 | --- | --- |
-| `page-header` | Ad-hoc row `Stack` + heading `Text` + action cluster per screen |
 | `action-bar` | Bespoke button rows with hand-set spacing and alignment |
 | `form-modal` | `Modal` with an inline form and inconsistent submit placement |
 | `detail-sidebar` | One-off panel layouts beside a main region |
 | `dataviews-toolbar` | Custom filter/search/action clusters above a list |
+| `screen-header` | A heading and a back arrow rebuilt on every sub-screen |
+| `preview-tile-grid` | A dropdown of names where the options are visibly different |
+| `size-control` | A slider with the unit implied, or a text field holding a CSS length |
+| `preset-group` | A preset table with inline editing, origin flattened away |
 
 The rest already have `canonical`/`import` filled in, because WPDS ships the
-composition as a real component — the pattern exists to point at it, not to
-describe a shape to reassemble:
+composition — or the component the composition is built around — as something
+real. The pattern exists to point at it, not to describe a shape to reassemble.
+A file that imports the canonical name stops being reported:
 
-| Pattern | Canonical component |
+| Pattern | Canonical |
 | --- | --- |
+| `page-header` | `Page` (`@wordpress/admin-ui`) — title, breadcrumbs, an `actions` slot, `hasPadding` |
 | `confirm-modal` | `ConfirmDialog` (`@wordpress/components`) — wraps `Modal` with confirm/cancel already built |
 | `notice-stack` | `NoticeList` (`@wordpress/components`) |
-| `empty-state` | `EmptyState.Root/Title/Description/Actions` (`@wordpress/ui`) |
-| `form-row` | `Field.Root/Label/Control/Description` (`@wordpress/ui`) |
-| `card` | `Card.Root/Header/Title/Content` (`@wordpress/ui`) |
-
-A file that imports the canonical component stops being reported by
-`patterns/duplicate-composite` — check for it before assembling any of these
-five by hand.
+| `empty-state` | `EmptyState` (`@wordpress/ui`) — `.Root/.Title/.Description/.Actions` |
+| `form-row` | `Field` (`@wordpress/ui`) — `.Root/.Label/.Control/.Description` |
+| `card` | `Card` (`@wordpress/ui`) — `.Root/.Header/.Title/.Content` |
+| `navigator-drilldown`, `drilldown-row`, `value-preview-row` | `Navigator` (`@wordpress/components`) |
+| `tools-panel` | `ToolsPanel` (`@wordpress/components`) |
+| `segmented-choice` | `ToggleGroupControl` (`@wordpress/components`) |
+| `color-dropdown-item` | `Dropdown` (`@wordpress/components`) |
+| `overflow-actions`, `filter-menu` | `Menu` (`@wordpress/components`) |
+| `selectable-list`, `live-example-gallery` | `Composite` (`@wordpress/components`) |
+| `modal-with-tabs` | `Tabs` (`@wordpress/ui`) |
+| `entity-dataform` | `DataForm` (`@wordpress/dataviews`) |
 
 ## Registering a pattern
 
@@ -147,6 +218,12 @@ Add the entry, then keep it honest:
   generic to check; over-specify and near-identical variants stop matching.
 - **`instead_of` names the anti-pattern** you have actually seen in this
   codebase. That is the line that stops the next rebuild.
+- **`instead_of_signature` only if the anti-pattern has a shape.** Four nodes
+  minimum, same as `signature`. Most do not: the thing agents reach for by
+  default is usually one control, and a rule that fires on every `SelectControl`
+  is a rule people turn off. Leave it out unless the wrong version is a
+  recognisable composite in its own right — `Modal(TextControl,TextControl,TextControl)`
+  is; `SelectControl` is not.
 - **`import` and `canonical` earn the entry.** A pattern documented but never
   extracted still gets rebuilt. Once two call sites exist, extract it, point
   `import` at the module and `canonical` at the component name — the engine then
@@ -169,7 +246,7 @@ node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all
 ```
 
 Composite detection (`patterns/duplicate-composite`,
-`patterns/unregistered-composite`) is implemented — the engine builds a
+`patterns/superseded-composite`, `patterns/unregistered-composite`) is implemented — the engine builds a
 component tree per JSX subtree and runs it against the registry. It only sees
 what a project's `loupe.config.json` passes as `--patterns`; without that,
 this skill is still the enforcement, which means reading the registry before

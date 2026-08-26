@@ -428,7 +428,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
  */
 export function setPatterns(config: Config, patterns: Pattern[] | null | undefined): Config {
 	config.patterns = patterns ?? [];
-	config.enabled['patterns/duplicate-composite'] =
+	const hasRegistry =
 		config.patterns.length > 0 &&
 		// The same `hasComponents` normalization computes above, restated rather
 		// than recomputed. Dropping the packages half made this looser than the
@@ -436,8 +436,11 @@ export function setPatterns(config: Config, patterns: Pattern[] | null | undefin
 		// imported out of `designSystem.packages`, so a config declaring none can
 		// never produce one — and `status` reported the rule active anyway.
 		config.designSystem.packages.length > 0 &&
-		config.designSystem.knownComponents.size > 0 &&
-		config.severityOf('patterns/duplicate-composite') !== 'off';
+		config.designSystem.knownComponents.size > 0;
+	// Every rule reading the registry has to be wired here, not just the first
+	// one: a rule left out looks exactly like "nothing found".
+	for (const rule of ['patterns/duplicate-composite', 'patterns/superseded-composite'] as const)
+		config.enabled[rule] = hasRegistry && config.severityOf(rule) !== 'off';
 	return config;
 }
 

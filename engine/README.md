@@ -38,6 +38,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `css/dead-class` | A project-namespaced class referenced in no markup or reference file |
 | `tokens/unknown-token` | A `var()` naming no token any known source defines |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
+| `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the file that built it |
 | `patterns/unregistered-composite` | The same composite in 3+ files, registered in none |
 | `tokens/hardcoded-value` | A literal colour/length where a design token exists |
 | `layout/margin-on-child` | Margin, which belongs on the parent's `gap` |

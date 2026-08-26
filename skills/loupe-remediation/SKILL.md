@@ -224,6 +224,22 @@ nobody uses.
 This is never fixed by making the markup look less like the pattern. That
 silences the finding and keeps the duplication.
 
+### `patterns/superseded-composite`
+
+The shape a registered pattern exists to replace, found in the one file that
+built it — this is the only composite rule that does not need a second file,
+because a wrong choice is a defect where it is made. The finding names the
+pattern and, when the entry carries a `canonical`, the component to use instead.
+
+Read the entry's `instead_of` in `loupe-patterns` before rewriting: it says what
+the replacement actually buys, and a swap made without that reads as churn. The
+rewrite is usually a deletion — the hand-built version's state, layout and a11y
+wiring all come with the sanctioned component.
+
+If this file is the one legitimate exception, suppress it with that reason. Do
+not reshape the markup to dodge the match; that keeps the wrong composition and
+loses the record of why.
+
 ### `patterns/unregistered-composite`
 
 The same composite in three or more files, in no registry. Two would be a

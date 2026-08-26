@@ -119,6 +119,7 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `css/dead-class` | A namespaced class referenced in no markup or reference file | warn |
 | `tokens/unknown-token` | A `var()` naming no token the design system defines | warn |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in more than one file | warn |
+| `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the one file that built it | warn |
 | `patterns/unregistered-composite` | The same composite built in three or more files, registered in none | warn |
 
 Rules disable themselves when the config cannot support them — a block theme
@@ -177,10 +178,16 @@ fine on its own, and the finding only exists across files.
 A signature is the design-system component tree with everything else dropped, so
 an intervening `<div>` never hides a match and a prop change never invents one.
 Matching is containment: `form-modal` records its footer as a sibling of the
-body, real code nests it inside, and both are the same composition.
+body, real code nests it inside, and both are the same composition. A node may
+name alternatives with `|` (`Stack|VStack|HStack|Flex`), because one shape
+usually has more than one spelling and an entry that knows only the newest one
+reports every file still writing the old one.
 
 - `patterns/duplicate-composite` — a registered pattern reassembled by hand in
   two or more files.
+- `patterns/superseded-composite` — a shape a pattern's `instead_of_signature`
+  records as the thing it replaces. One file is enough: a wrong choice is a
+  defect where it is made, not only across a set.
 - `patterns/unregistered-composite` — the same shape in three or more files and
   in no registry. Two is a coincidence; three is house style.
 
