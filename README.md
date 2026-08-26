@@ -38,7 +38,7 @@ than using it.
 | `skills/loupe-patterns` | Registry of sanctioned composites. Load before assembling a header, modal, action bar, sidebar. |
 | `skills/loupe-remediation` | Per-rule remedies, and the checks that stop a "fix" from silently changing rendering. |
 | `agents/loupe-fixer` | Per-file remediation agent. `/loupe-fix` fans it out once the work spans enough files to be worth it. |
-| `commands/` | `/loupe-audit`, `/loupe-fix`, `/loupe-baseline` |
+| `commands/` | `/loupe-audit`, `/loupe-fix`, `/loupe-baseline`, `/loupe-report` |
 | `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
 | `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, and its two registries |
 | `profiles/wpds/patterns/index.json` | The composite registry |
@@ -71,6 +71,7 @@ depends on one is recorded as a parse diagnostic rather than guessed at.
 
 ```bash
 loupe check --all
+loupe check --all --format html > report.html
 loupe explain layout/margin-on-child
 ```
 
@@ -435,6 +436,75 @@ leaves the hook running — `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence i
 they read as a value that isn't "on". `loupe status` prints a `hook: OFF` line
 when the switch has actually taken.
 
+## Reading the report
+
+`--format agent` is the default because its reader is an agent and context is
+the scarce resource: guidance is printed once per rule group, and a finding
+budget is spent round-robin so one loud rule cannot bury the rest. That is the
+right shape for a hook and the wrong shape for a person deciding what to take
+on.
+
+`--format html` writes a self-contained page — no CDN, no fonts fetched, one
+file you can open, commit, or attach to a build:
+
+```bash
+loupe check --all --format html > report.html
+```
+
+It renders client-side from the exact `--format json` payload, embedded in the
+page. There is no second selection of fields anywhere, so the page and the JSON
+cannot describe different reports — a divergence that would otherwise be
+invisible, since each looks correct read on its own.
+
+It shows the two things a line-per-finding list cannot:
+
+- **Where the drift is.** Findings rolled up by directory, which answers
+  "clustered in a few files or spread across the codebase" — the first question
+  worth asking and the one a flat list buries.
+- **Composites as the N-way relations they are.** `patterns/duplicate-composite`
+  and `patterns/unregistered-composite` are the only findings that cannot exist
+  in one file. Text prints one line per member file, as though six files each
+  had their own problem; the page shows one card per composite, listing the
+  files that rebuild it.
+
+Findings are grouped by rule, so the remedy and the severity — both properties
+of the rule, not of the finding — are stated once rather than repeated down the
+table. Severity is always a glyph and a word beside its color, never the color
+alone.
+
+`/loupe-report` renders the same page and publishes it as an Artifact, for
+sharing a drift audit with people who are not going to run the CLI. It only
+renders and publishes: the page comes from the engine, so two people running it
+never see two different reports. Anything you want to change about how it looks
+belongs in `engine/src/report-html.ts`.
+
+### In CI
+
+`--format sarif` puts each finding on the line that caused it in a pull
+request's Files tab. `.github/workflows/loupe.yml` in this repo is a reusable
+workflow that does it:
+
+```yaml
+jobs:
+  loupe:
+    uses: dabowman/loupe/.github/workflows/loupe.yml@main
+    permissions:
+      contents: read
+      security-events: write
+```
+
+It checks this repository out beside yours and runs the engine from it — no npm
+install and no published package, because `engine/dist` is committed and needs
+neither. Code scanning is free on public repositories and requires GitHub
+Advanced Security on private ones; where it is unavailable that upload is
+skipped rather than failed, and the HTML report is uploaded as a build artifact
+either way. The job does not fail on findings unless you pass
+`fail-on-blocking: true` — adopt the report first, then turn the ratchet on.
+
+SARIF results carry a `partialFingerprints` entry derived from the same identity
+the baseline ratchets on: rule, file, and normalized code, deliberately not the
+line number. An edit above a finding moves its line without re-opening its alert.
+
 ## Remediation
 
 `/loupe-fix` runs `loupe fix` first, so what remains is the work that needs
@@ -572,7 +642,7 @@ what the shared classifier decided from what a formatter is allowed to see.
 cd engine && npm test
 ```
 
-Six suites over a shared harness. `tests/run.ts` is fixture-driven, one
+Seven suites over a shared harness. `tests/run.ts` is fixture-driven, one
 directory per behaviour, each with a note explaining what it pins down — since
 behaviour is config-driven, this is the only thing standing between a preset
 edit and a rule silently switching itself off. `tests/detect.ts` covers
@@ -585,9 +655,13 @@ across a boundary a single-file linter cannot see. `tests/autofix.ts` covers
 `fix`, where every failure is invisible: the value is right, the file parses, the
 report goes clean, and the meaning has changed. `tests/multi-ds.ts` covers
 registry scoping and profile selection — which design system answers for a file,
-in a repo that has more than one.
+in a repo that has more than one. `tests/report.ts` covers the formats: that the
+HTML page and `--format json` cannot describe different reports, that a finding
+carrying `</script>` — CSS-in-JS source routinely does — cannot end the block its
+own data sits in, and that a misspelled `--format` is rejected instead of
+quietly printing the agent format and exiting 0.
 
-`tests/harness.ts` holds what all six were carrying their own copy of —
+`tests/harness.ts` holds what all seven were carrying their own copy of —
 `check`, `assert`, the scratch-repo helpers — plus `one()` and `first()`, which
 read a single expected element out of a result list and fail with the count when
 there isn't one.

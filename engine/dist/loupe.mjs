@@ -855,12 +855,12 @@ var require_parse = __commonJS({
       }
       return depth;
     };
-    var analyzeRepeatedExtglob = (body, options) => {
+    var analyzeRepeatedExtglob = (body2, options) => {
       if (options.maxExtglobRecursion === false) {
         return { risky: false };
       }
       const max = typeof options.maxExtglobRecursion === "number" ? options.maxExtglobRecursion : constants.DEFAULT_MAX_EXTGLOB_RECURSION;
-      const branches = splitTopLevel(body).map((branch) => branch.trim());
+      const branches = splitTopLevel(body2).map((branch) => branch.trim());
       if (branches.length > 1) {
         if (branches.some((branch) => branch === "") || branches.some((branch) => /^[*?]+$/.test(branch)) || hasRepeatedCharPrefixOverlap(branches)) {
           return { risky: true };
@@ -1031,8 +1031,8 @@ var require_parse = __commonJS({
       };
       const extglobClose = (token) => {
         const literal = input.slice(token.startIndex, state.index + 1);
-        const body = input.slice(token.startIndex + 2, state.index);
-        const analysis = analyzeRepeatedExtglob(body, opts);
+        const body2 = input.slice(token.startIndex + 2, state.index);
+        const analysis = analyzeRepeatedExtglob(body2, opts);
         if ((token.type === "plus" || token.type === "star") && analysis.risky) {
           const safeOutput = analysis.safeOutput ? (token.output ? "" : ONE_CHAR) + (opts.capture ? `(${analysis.safeOutput})` : analysis.safeOutput) : void 0;
           const open = tokens[token.tokensIndex];
@@ -3779,7 +3779,7 @@ var require_lib = __commonJS({
           node.id = this.parseIdentifier();
         }
         const bodyNode = node.body = this.startNode();
-        const body = bodyNode.body = [];
+        const body2 = bodyNode.body = [];
         this.expect(5);
         while (!this.match(8)) {
           const bodyNode2 = this.startNode();
@@ -3788,10 +3788,10 @@ var require_lib = __commonJS({
             if (!this.isContextual(130) && !this.match(87)) {
               this.raise(FlowErrors.InvalidNonTypeImportInDeclareModule, this.state.lastTokStartLoc);
             }
-            body.push(super.parseImport(bodyNode2));
+            body2.push(super.parseImport(bodyNode2));
           } else {
             this.expectContextual(125, FlowErrors.UnsupportedStatementInDeclareModule);
-            body.push(this.flowParseDeclare(bodyNode2, true));
+            body2.push(this.flowParseDeclare(bodyNode2, true));
           }
         }
         this.scope.exit();
@@ -3799,7 +3799,7 @@ var require_lib = __commonJS({
         this.finishNode(bodyNode, "BlockStatement");
         let kind = null;
         let hasModuleExport = false;
-        body.forEach((bodyElement) => {
+        body2.forEach((bodyElement) => {
           if (isEsModuleType(bodyElement)) {
             if (kind === "CommonJS") {
               this.raise(FlowErrors.AmbiguousDeclareModuleKind, bodyElement);
@@ -10584,9 +10584,9 @@ var require_lib = __commonJS({
         if (this.eat(81)) {
           node.extends = this.tsParseHeritageClause("extends");
         }
-        const body = this.startNode();
-        body.body = this.tsInType(this.tsParseObjectTypeMembers.bind(this));
-        node.body = this.finishNode(body, "TSInterfaceBody");
+        const body2 = this.startNode();
+        body2.body = this.tsInType(this.tsParseObjectTypeMembers.bind(this));
+        node.body = this.finishNode(body2, "TSInterfaceBody");
         return this.finishNode(node, "TSInterfaceDeclaration");
       }
       tsParseTypeAliasDeclaration(node) {
@@ -12812,17 +12812,17 @@ var require_lib = __commonJS({
         const {
           startLoc
         } = this.state;
-        const body = this.parseMaybeAssign();
-        const requiredParentheses = UnparenthesizedPipeBodyDescriptions.has(body.type);
-        if (requiredParentheses && !((_body$extra = body.extra) != null && _body$extra.parenthesized)) {
+        const body2 = this.parseMaybeAssign();
+        const requiredParentheses = UnparenthesizedPipeBodyDescriptions.has(body2.type);
+        if (requiredParentheses && !((_body$extra = body2.extra) != null && _body$extra.parenthesized)) {
           this.raise(Errors.PipeUnparenthesizedBody, startLoc, {
-            type: body.type
+            type: body2.type
           });
         }
         if (!this.topicReferenceWasUsedInCurrentContext()) {
           this.raise(Errors.PipeTopicUnused, startLoc);
         }
-        return body;
+        return body2;
       }
       checkExponentialAfterUnary(node) {
         if (this.match(57)) {
@@ -15115,11 +15115,11 @@ var require_lib = __commonJS({
         return stmt.type === "ExpressionStatement" && stmt.expression.type === "StringLiteral" && !stmt.expression.extra.parenthesized;
       }
       parseBlockBody(node, allowDirectives, topLevel, end, afterBlockParse) {
-        const body = node.body = [];
+        const body2 = node.body = [];
         const directives = node.directives = [];
-        this.parseBlockOrModuleBlockBody(body, allowDirectives ? directives : void 0, topLevel, end, afterBlockParse);
+        this.parseBlockOrModuleBlockBody(body2, allowDirectives ? directives : void 0, topLevel, end, afterBlockParse);
       }
-      parseBlockOrModuleBlockBody(body, directives, topLevel, end, afterBlockParse) {
+      parseBlockOrModuleBlockBody(body2, directives, topLevel, end, afterBlockParse) {
         const oldStrict = this.state.strict;
         let hasStrictModeDirective = false;
         let parsedNonDirective = false;
@@ -15138,7 +15138,7 @@ var require_lib = __commonJS({
             parsedNonDirective = true;
             this.state.strictErrors.clear();
           }
-          body.push(stmt);
+          body2.push(stmt);
         }
         afterBlockParse == null || afterBlockParse.call(this, hasStrictModeDirective);
         if (!oldStrict) {
@@ -15503,8 +15503,8 @@ var require_lib = __commonJS({
         const oldLabels = this.state.labels;
         this.state.labels = [];
         this.prodParam.enter(0);
-        const body = member.body = [];
-        this.parseBlockOrModuleBlockBody(body, void 0, false, 8);
+        const body2 = member.body = [];
+        this.parseBlockOrModuleBlockBody(body2, void 0, false, 8);
         this.prodParam.exit();
         this.scope.exit();
         this.state.labels = oldLabels;
@@ -23757,9 +23757,9 @@ var clipFront = (text, max) => {
   const chars = [...line];
   return chars.length > max ? `\u2026${chars.slice(chars.length - (max - 1)).join("")}` : line;
 };
-var messageLine = (body, tail = "") => {
+var messageLine = (body2, tail = "") => {
   const end = clipFront(tail, TAIL_MAX);
-  return clip(body, MESSAGE_MAX - [...end].length) + end;
+  return clip(body2, MESSAGE_MAX - [...end].length) + end;
 };
 var JOIN = "; ";
 var messageParts = (parts, tail = "") => {
@@ -25124,7 +25124,7 @@ async function analyze(config, { scope = null } = {}) {
       const prev = perFile.get(c.file);
       if (!prev || c.line < prev.line) perFile.set(c.file, c);
     }
-    const emitComposite = (rule2, c, signature, tail) => {
+    const emitComposite = (rule2, c, signature, tail, group) => {
       if (!reports(c.file)) return;
       const supp = suppByFile.get(c.file);
       if (supp && isSuppressed(supp.byLine, c.line, rule2)) return;
@@ -25136,6 +25136,7 @@ async function analyze(config, { scope = null } = {}) {
         message: `${signature}${tail}`,
         suffix: tail,
         code: c.signature,
+        group,
         rank: RULES[rule2].rank
       });
     };
@@ -25147,14 +25148,15 @@ async function analyze(config, { scope = null } = {}) {
           "patterns/duplicate-composite",
           c,
           c.signature,
-          ` \u2014 rebuilds \`${id}\`, also in ${files2.size - 1} other file(s); ${remedy}`
+          ` \u2014 rebuilds \`${id}\`, also in ${files2.size - 1} other file(s); ${remedy}`,
+          id
         );
       }
     }
     for (const [sig, files2] of bySignature) {
       if (files2.size < 3) continue;
       for (const c of files2.values())
-        emitComposite("patterns/unregistered-composite", c, sig, ` \u2014 assembled in ${files2.size} files, registered in none`);
+        emitComposite("patterns/unregistered-composite", c, sig, ` \u2014 assembled in ${files2.size} files, registered in none`, sig);
     }
   }
   if (config.enabled["system/locked-component"] || config.enabled["system/superseded-component"]) {
@@ -25235,8 +25237,8 @@ async function analyze(config, { scope = null } = {}) {
   });
   for (const f of unique) {
     const tail = f.suffix ?? "";
-    const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
-    f.message = messageLine(body, tail);
+    const body2 = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
+    f.message = messageLine(body2, tail);
     delete f.suffix;
   }
   unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
@@ -25782,6 +25784,7 @@ async function loadConfig({
 }
 
 // src/report.ts
+import { createHash as createHash2 } from "node:crypto";
 var SEV_MARK = { error: "\u2717", warn: "\u2022" };
 var titleFor = (config) => (id) => renderTitle(id, config.designSystem, config.suppression.keyword);
 function formatAgent(result, config, { maxFindings = 0, showSuppressed = false } = {}) {
@@ -25857,32 +25860,50 @@ function formatSummary(result, { prefix = true } = {}) {
   if (warns) parts.push(`${warns} advisory`);
   return `${tag}${parts.join(", ")}${top ? ` (${top})` : ""}.`;
 }
-function formatJson(result, config) {
+function usedRules(result, config) {
+  const ids = [...new Set(result.findings.map((f) => f.rule))];
   const title = titleFor(config);
-  return JSON.stringify(
-    {
-      version: 1,
-      tool: "loupe",
-      blocking: result.blocking,
-      summary: {
-        total: result.findings.length,
-        error: result.findings.filter((f) => f.severity === "error").length,
-        warn: result.findings.filter((f) => f.severity === "warn").length,
-        suppressions: result.directives.length,
-        parseErrors: result.diagnostics.parseErrors.length
-      },
-      findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: title(f.rule) })),
-      suppressions: result.directives,
-      parseErrors: result.diagnostics.parseErrors,
-      config: { rules: config.rules, enabled: config.enabled }
+  return ids.sort((a, b) => RULES[b].rank - RULES[a].rank).map((id) => ({ id, title: title(id), rank: RULES[id].rank, severity: config.severityOf(id) }));
+}
+function fingerprints(findings) {
+  const seen = /* @__PURE__ */ new Map();
+  return findings.map((f) => {
+    const key = findingKey(f);
+    const nth = seen.get(key) ?? 0;
+    seen.set(key, nth + 1);
+    return createHash2("sha256").update(nth === 0 ? key : `${key}|#${nth}`).digest("hex").slice(0, 16);
+  });
+}
+function reportPayload(result, config) {
+  const title = titleFor(config);
+  return {
+    version: 1,
+    tool: "loupe",
+    blocking: result.blocking,
+    summary: {
+      total: result.findings.length,
+      error: result.findings.filter((f) => f.severity === "error").length,
+      warn: result.findings.filter((f) => f.severity === "warn").length,
+      suppressions: result.directives.length,
+      parseErrors: result.diagnostics.parseErrors.length,
+      // Only when a baseline was applied. Without it, the number the agent
+      // format prints has no counterpart here, and a consumer cannot tell a
+      // clean repo from one whose whole backlog is accepted.
+      ..."baselined" in result ? { baselined: result.baselined } : {}
     },
-    null,
-    2
-  );
+    rules: usedRules(result, config),
+    findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: title(f.rule) })),
+    suppressions: result.directives,
+    parseErrors: result.diagnostics.parseErrors,
+    config: { rules: config.rules, enabled: config.enabled }
+  };
+}
+function formatJson(result, config) {
+  return JSON.stringify(reportPayload(result, config), null, 2);
 }
 function formatSarif(result, config) {
   const title = titleFor(config);
-  const used = [...new Set(result.findings.map((f) => f.rule))];
+  const fps = fingerprints(result.findings);
   return JSON.stringify(
     {
       $schema: "https://json.schemastore.org/sarif-2.1.0.json",
@@ -25893,17 +25914,26 @@ function formatSarif(result, config) {
             driver: {
               name: "Loupe",
               informationUri: "https://github.com/dvdbwmn/loupe",
-              rules: used.map((id) => ({
-                id,
-                shortDescription: { text: title(id) },
-                defaultConfiguration: { level: config.severityOf(id) === "error" ? "error" : "warning" }
+              rules: usedRules(result, config).map((r) => ({
+                id: r.id,
+                shortDescription: { text: r.title },
+                // No `fullDescription`: the rule catalog holds exactly one line of
+                // guidance per rule, and shipping it twice under two names tells a
+                // reader there is more to read when there is not. `help` points at
+                // where the rest of the reasoning actually lives.
+                help: { text: `Run \`loupe explain ${r.id}\` for this rule's guidance.` },
+                // The namespace, so a security tab with fifteen rules can be
+                // filtered down to the layout ones.
+                properties: { tags: [r.id.split("/")[0] ?? "loupe"] },
+                defaultConfiguration: { level: r.severity === "error" ? "error" : "warning" }
               }))
             }
           },
-          results: result.findings.map((f) => ({
+          results: result.findings.map((f, i) => ({
             ruleId: f.rule,
             level: f.severity === "error" ? "error" : "warning",
             message: { text: `${f.message} \u2014 ${title(f.rule)}` },
+            partialFingerprints: { loupeCode: fps[i] ?? "" },
             locations: [
               {
                 physicalLocation: {
@@ -25919,6 +25949,451 @@ function formatSarif(result, config) {
     null,
     2
   );
+}
+
+// src/report-html.ts
+var embed = (json) => json.replace(/</g, "\\u003c");
+var CSS = `
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --hairline: rgba(11,11,11,0.10);
+  --sev-error: #d03b3b;
+  --sev-warn: #fab219;
+  --seq: #2a78d6;
+  --track: rgba(11,11,11,0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #1a1a19;
+    --plane: #0d0d0d;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --hairline: rgba(255,255,255,0.10);
+    --seq: #3987e5;
+    --track: rgba(255,255,255,0.08);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1a1a19;
+  --plane: #0d0d0d;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --hairline: rgba(255,255,255,0.10);
+  --seq: #3987e5;
+  --track: rgba(255,255,255,0.08);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 80px; }
+h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 13px; font-weight: 600; margin: 0 0 14px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink-2); }
+.sub { color: var(--ink-muted); margin: 4px 0 0; font-size: 13px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 20px;
+  margin-top: 16px;
+}
+/* Stat tiles. The lead number is the chart; a one-bar bar chart is not. */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; margin-top: 20px; }
+.kpi { background: var(--surface); padding: 16px 18px; }
+.kpi .v { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.kpi.lead .v { font-size: 48px; }
+.kpi .k { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+.kpi .v.err { color: var(--sev-error); }
+/* Filters: one row, above everything it scopes. */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 20px; }
+.filters input[type=search] {
+  flex: 1 1 200px; min-width: 160px; padding: 7px 10px; font: inherit; font-size: 13px;
+  color: var(--ink); background: var(--surface); border: 1px solid var(--hairline); border-radius: 7px;
+}
+.chip {
+  font: inherit; font-size: 12px; padding: 6px 11px; border-radius: 999px; cursor: pointer;
+  background: var(--surface); color: var(--ink-2); border: 1px solid var(--hairline);
+}
+.chip[aria-pressed=true] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.chip:focus-visible, .bar:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
+.scope { font-size: 12px; color: var(--ink-muted); margin-left: auto; }
+/* Bars: thin marks, rounded at the data end only, anchored to the baseline. */
+.bars { display: grid; gap: 8px; }
+.bar {
+  display: grid; grid-template-columns: minmax(120px, 34%) 1fr auto; align-items: center; gap: 12px;
+  width: 100%; text-align: left; font: inherit; background: none; border: 0; padding: 3px 2px; cursor: pointer;
+  border-radius: 6px; color: inherit;
+}
+.bar:hover { background: var(--track); }
+.bar .name { font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar[aria-pressed=true] .name { color: var(--ink); font-weight: 600; }
+.bar .track { height: 10px; background: var(--track); border-radius: 0 5px 5px 0; }
+.bar .fill { display: block; height: 10px; border-radius: 0 4px 4px 0; min-width: 2px; }
+.bar .val { font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+.legend { display: flex; gap: 16px; margin: 0 0 14px; font-size: 12px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+/* Findings table: the table view, and the way every value stays readable without color. */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+tr.grp th { text-align: left; font-weight: 400; padding: 18px 10px 7px 0; border-bottom: 1px solid var(--axis); }
+tbody:first-child tr.grp th { padding-top: 0; }
+tr.grp .count { font-size: 12px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--grid); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+td.loc { white-space: nowrap; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+td.msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-word; }
+.sev { white-space: nowrap; font-size: 12px; }
+.sev.error { color: var(--sev-error); }
+.sev.warn { color: var(--ink-2); }
+.rule { font-size: 12px; color: var(--ink); font-weight: 600; white-space: nowrap; }
+.fix { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+.tokens { font-size: 11.5px; color: var(--ink-muted); margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+/* Composite clusters: one card per defect, not one row per member file. */
+.cluster { border: 1px solid var(--hairline); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+.cluster .sig { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-word; }
+.cluster ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 12.5px; }
+.banner { border-left: 3px solid var(--sev-error); background: var(--surface); border-radius: 0 8px 8px 0; padding: 14px 16px; margin-top: 16px; border-top: 1px solid var(--hairline); border-right: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); }
+.banner b { color: var(--sev-error); }
+.empty { color: var(--ink-muted); font-size: 13px; padding: 8px 0; }
+.clean { text-align: center; padding: 56px 20px; }
+.clean .v { font-size: 40px; font-weight: 600; }
+#tip {
+  position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--ink); color: var(--surface); font-size: 12px; padding: 6px 9px;
+  border-radius: 6px; max-width: 320px; z-index: 10;
+}
+#tip.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #tip { transition: none; } }
+`;
+var JS = `
+(function () {
+  var data = JSON.parse(document.getElementById('loupe-data').textContent);
+  var state = { rule: null, severity: null, q: '' };
+  var MARK = { error: '\\u2717', warn: '\\u2022' };
+  var WORD = { error: 'blocking', warn: 'advisory' };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function dirOf(file) {
+    var i = String(file).lastIndexOf('/');
+    return i === -1 ? '.' : file.slice(0, i);
+  }
+  function slice() {
+    var q = state.q.toLowerCase();
+    return data.findings.filter(function (f) {
+      if (state.rule && f.rule !== state.rule) return false;
+      if (state.severity && f.severity !== state.severity) return false;
+      if (q && (f.file + ' ' + f.message + ' ' + f.rule).toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+  function tally(rows, keyOf) {
+    var m = new Map();
+    rows.forEach(function (r) { var k = keyOf(r); m.set(k, (m.get(k) || 0) + 1); });
+    return Array.from(m.entries()).sort(function (a, b) { return b[1] - a[1] || String(a[0]).localeCompare(String(b[0])); });
+  }
+
+  var tip = document.getElementById('tip');
+  function bindTip(el, text) {
+    function show(e) {
+      tip.textContent = text;
+      tip.classList.add('on');
+      var x = e.clientX !== undefined ? e.clientX + 14 : el.getBoundingClientRect().left;
+      var y = e.clientY !== undefined ? e.clientY + 16 : el.getBoundingClientRect().bottom + 6;
+      tip.style.left = Math.min(x, window.innerWidth - tip.offsetWidth - 8) + 'px';
+      tip.style.top = Math.min(y, window.innerHeight - tip.offsetHeight - 8) + 'px';
+    }
+    el.addEventListener('mousemove', show);
+    el.addEventListener('mouseenter', show);
+    el.addEventListener('focus', show);
+    el.addEventListener('mouseleave', function () { tip.classList.remove('on'); });
+    el.addEventListener('blur', function () { tip.classList.remove('on'); });
+  }
+
+  // One bar builder for both charts. \`color\` is a CSS custom property name so
+  // the mark follows the theme rather than a hex baked in at render time.
+  function bars(host, rows, max, color, opts) {
+    opts = opts || {};
+    host.innerHTML = '';
+    if (!rows.length) { host.innerHTML = '<p class="empty">Nothing in this slice.</p>'; return; }
+    rows.forEach(function (row) {
+      var key = row[0], n = row[1];
+      var b = document.createElement('button');
+      b.className = 'bar';
+      b.type = 'button';
+      var fillColor = typeof color === 'function' ? color(key) : color;
+      var pct = max > 0 ? Math.max(1.5, (n / max) * 100) : 0;
+      b.innerHTML =
+        '<span class="name">' + esc(opts.label ? opts.label(key) : key) + '</span>' +
+        '<span class="track"><span class="fill" style="width:' + pct.toFixed(2) + '%;background:var(' + fillColor + ')"></span></span>' +
+        '<span class="val">' + n + '</span>';
+      if (opts.onClick) {
+        b.setAttribute('aria-pressed', String(opts.pressed && opts.pressed(key)));
+        b.addEventListener('click', function () { opts.onClick(key); });
+      } else {
+        b.style.cursor = 'default';
+      }
+      bindTip(b, opts.tip ? opts.tip(key, n) : key + ' \\u2014 ' + n);
+      host.appendChild(b);
+    });
+  }
+
+  function renderKpis(rows) {
+    var err = rows.filter(function (f) { return f.severity === 'error'; }).length;
+    var s = data.summary;
+    var tiles = [
+      { k: 'findings', v: rows.length, lead: true },
+      { k: '\\u2717 blocking', v: err, err: err > 0 },
+      { k: '\\u2022 advisory', v: rows.length - err }
+    ];
+    // Only when it hid something. A baseline that accepted nothing and a project
+    // with no baseline file both report 0, so a zero tile states nothing.
+    if (s.baselined) tiles.push({ k: 'baselined', v: s.baselined });
+    tiles.push({ k: 'suppressions', v: s.suppressions });
+    tiles.push({ k: 'files unparsed', v: s.parseErrors, err: s.parseErrors > 0 });
+    document.getElementById('kpis').innerHTML = tiles.map(function (t) {
+      return '<div class="kpi' + (t.lead ? ' lead' : '') + '"><div class="v' + (t.err ? ' err' : '') + '">' +
+        t.v + '</div><div class="k">' + t.k + '</div></div>';
+    }).join('');
+  }
+
+  function renderRules(rows) {
+    var counts = tally(rows, function (f) { return f.rule; });
+    var byRank = new Map();
+    data.rules.forEach(function (r) { byRank.set(r.id, r); });
+    // Frequency order, deliberately not the agent format's rank order. The two
+    // answer different questions \u2014 rank is "fix this first", length is "there is
+    // the most of this" \u2014 and a bar chart sorted by neither its own lengths nor a
+    // natural category order is unreadable. Rank breaks ties, and severity is
+    // carried by the mark's color and by the blocking tile above.
+    counts.sort(function (a, b) {
+      var ra = byRank.get(a[0]), rb = byRank.get(b[0]);
+      return b[1] - a[1] || (rb ? rb.rank : 0) - (ra ? ra.rank : 0);
+    });
+    var max = counts.length ? counts[0][1] : 0;
+    var sevOf = new Map();
+    rows.forEach(function (f) { sevOf.set(f.rule, f.severity); });
+    bars(document.getElementById('rules'), counts, max,
+      function (id) { return sevOf.get(id) === 'error' ? '--sev-error' : '--sev-warn'; },
+      {
+        onClick: function (id) { state.rule = state.rule === id ? null : id; render(); },
+        pressed: function (id) { return state.rule === id; },
+        tip: function (id, n) {
+          var r = byRank.get(id);
+          return n + ' \\u00d7 ' + id + (r ? ' \\u2014 ' + r.title : '');
+        }
+      });
+  }
+
+  // Top directories only. Past the cap the tail is folded into one row rather
+  // than truncated silently \u2014 a report that drops rows without saying so reads
+  // as though it covered everything.
+  var DIR_CAP = 12;
+  function renderPaths(rows) {
+    var counts = tally(rows, function (f) { return dirOf(f.file); });
+    var shown = counts.slice(0, DIR_CAP);
+    var tail = counts.slice(DIR_CAP);
+    if (tail.length) {
+      var n = tail.reduce(function (t, c) { return t + c[1]; }, 0);
+      shown.push([tail.length + ' more director' + (tail.length === 1 ? 'y' : 'ies'), n]);
+    }
+    var max = shown.reduce(function (m, c) { return Math.max(m, c[1]); }, 0);
+    bars(document.getElementById('paths'), shown, max, '--seq', {
+      tip: function (dir, n) { return n + ' finding' + (n === 1 ? '' : 's') + ' in ' + dir; }
+    });
+  }
+
+  // The two rules whose finding is one member of an N-way relation. Grouped on
+  // \`group\`, which is the key the engine says the cluster means.
+  function renderClusters(rows) {
+    var host = document.getElementById('clusters');
+    var section = document.getElementById('clusters-section');
+    var m = new Map();
+    rows.forEach(function (f) {
+      if (!f.group) return;
+      var k = f.rule + '\\u0000' + f.group;
+      if (!m.has(k)) m.set(k, { rule: f.rule, group: f.group, files: [], message: f.message });
+      var e = m.get(k);
+      if (e.files.indexOf(f.file) === -1) e.files.push(f.file);
+    });
+    var list = Array.from(m.values()).sort(function (a, b) { return b.files.length - a.files.length; });
+    section.hidden = list.length === 0;
+    host.innerHTML = list.map(function (c) {
+      return '<div class="cluster"><div class="sig">' + esc(c.group) + '</div>' +
+        '<div class="fix">' + esc(c.rule) + ' \\u2014 assembled in ' + c.files.length + ' file' +
+        (c.files.length === 1 ? '' : 's') + '</div><ul>' +
+        c.files.map(function (f) { return '<li>' + esc(f) + '</li>'; }).join('') + '</ul></div>';
+    }).join('');
+  }
+
+  // Grouped by rule, for the same reason the agent format groups by rule: the
+  // remedy and the severity are properties of the rule, not of the finding, and
+  // a column that repeats one sentence down two hundred rows is the report
+  // costing more to read than it is worth. Group order matches the chart above.
+  function renderTable(rows) {
+    var host = document.getElementById('table');
+    if (!rows.length) { host.innerHTML = '<p class="empty">No findings in this slice.</p>'; return; }
+    var groups = new Map();
+    rows.forEach(function (f) {
+      if (!groups.has(f.rule)) groups.set(f.rule, []);
+      groups.get(f.rule).push(f);
+    });
+    var byRank = new Map();
+    data.rules.forEach(function (r) { byRank.set(r.id, r); });
+    var order = Array.from(groups.entries()).sort(function (a, b) {
+      var ra = byRank.get(a[0]), rb = byRank.get(b[0]);
+      return b[1].length - a[1].length || (rb ? rb.rank : 0) - (ra ? ra.rank : 0);
+    });
+    var out = order.map(function (entry) {
+      var rule = entry[0], group = entry[1];
+      var sev = group[0].severity;
+      var body = group.map(function (f) {
+        var tokens = (f.suggest || []).map(function (s) { return s.tokens.join(' / '); }).filter(Boolean);
+        return '<tr>' +
+          '<td class="loc">' + esc(f.file) + ':' + f.line + '</td>' +
+          '<td class="msg">' + esc(f.message) +
+            (tokens.length ? '<div class="tokens">\\u2192 ' + esc(tokens.join(', ')) + '</div>' : '') + '</td>' +
+          '</tr>';
+      }).join('');
+      return '<tbody><tr class="grp"><th colspan="2">' +
+        '<span class="sev ' + sev + '">' + MARK[sev] + ' ' + WORD[sev] + '</span> ' +
+        '<span class="rule">' + esc(rule) + '</span> ' +
+        '<span class="count">' + group.length + '</span>' +
+        '<div class="fix">' + esc(group[0].fix) + '</div>' +
+        '</th></tr>' + body + '</tbody>';
+    }).join('');
+    host.innerHTML = '<table>' + out + '</table>';
+  }
+
+  function render() {
+    var rows = slice();
+    renderKpis(rows);
+    renderRules(rows);
+    renderPaths(rows);
+    renderClusters(rows);
+    renderTable(rows);
+    document.querySelectorAll('.chip[data-sev]').forEach(function (c) {
+      c.setAttribute('aria-pressed', String(state.severity === c.dataset.sev));
+    });
+    var filtered = state.rule || state.severity || state.q;
+    document.getElementById('scope').textContent =
+      filtered ? 'showing ' + rows.length + ' of ' + data.findings.length : '';
+    document.getElementById('clear').hidden = !filtered;
+  }
+
+  document.querySelectorAll('.chip[data-sev]').forEach(function (c) {
+    c.addEventListener('click', function () {
+      state.severity = state.severity === c.dataset.sev ? null : c.dataset.sev;
+      render();
+    });
+  });
+  document.getElementById('q').addEventListener('input', function (e) {
+    state.q = e.target.value;
+    render();
+  });
+  document.getElementById('clear').addEventListener('click', function () {
+    state.rule = null; state.severity = null; state.q = '';
+    document.getElementById('q').value = '';
+    render();
+  });
+  render();
+})();
+`;
+function body(payload, clean, parseErrors) {
+  const banner = parseErrors ? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely \u2014 ${clean ? "a clean result covers only what could be read" : "every number below is a floor, not a total"}. See <code>stylesheet/unparsed</code>.</div>
+` : "";
+  if (clean) {
+    return `<!-- loupe:begin -->
+<style>${CSS}</style>
+<div class="wrap">
+  <h1>Loupe</h1>
+  <p class="sub">Design-system conformance report</p>
+${banner}  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
+</div>
+<script type="application/json" id="loupe-data">${payload}</script>
+<!-- loupe:end -->`;
+  }
+  return `<!-- loupe:begin -->
+<style>${CSS}</style>
+<div class="wrap">
+  <h1>Loupe</h1>
+  <p class="sub">Design-system conformance report</p>
+${banner}  <div class="kpis" id="kpis"></div>
+
+  <div class="filters">
+    <input type="search" id="q" placeholder="Filter by file, rule or value\u2026" aria-label="Filter findings">
+    <button class="chip" data-sev="error" aria-pressed="false">\u2717 blocking</button>
+    <button class="chip" data-sev="warn" aria-pressed="false">\u2022 advisory</button>
+    <button class="chip" id="clear" hidden>clear</button>
+    <span class="scope" id="scope"></span>
+  </div>
+
+  <div class="card">
+    <h2>By rule</h2>
+    <p class="legend">
+      <span><i class="dot" style="background:var(--sev-error)"></i> \u2717 blocking</span>
+      <span><i class="dot" style="background:var(--sev-warn)"></i> \u2022 advisory</span>
+    </p>
+    <div class="bars" id="rules"></div>
+  </div>
+
+  <div class="card">
+    <h2>Where it is</h2>
+    <div class="bars" id="paths"></div>
+  </div>
+
+  <div class="card" id="clusters-section" hidden>
+    <h2>Composites rebuilt across files</h2>
+    <div id="clusters"></div>
+  </div>
+
+  <div class="card">
+    <h2>Findings</h2>
+    <div id="table"></div>
+  </div>
+</div>
+<div id="tip" role="status" aria-live="polite"></div>
+<script type="application/json" id="loupe-data">${payload}</script>
+<script>${JS}</script>
+<!-- loupe:end -->`;
+}
+function formatHtml(result, config) {
+  const payload = embed(JSON.stringify(reportPayload(result, config)));
+  const clean = result.findings.length === 0;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loupe report</title>
+</head>
+<body>
+${body(payload, clean, result.diagnostics.parseErrors.length)}
+</body>
+</html>
+`;
 }
 
 // src/detect.ts
@@ -26534,6 +27009,8 @@ var VALUE_FLAGS = [
   "profiles",
   "profile"
 ];
+var FORMATS = ["agent", "json", "sarif", "html"];
+var isFormat = (f) => FORMATS.includes(f);
 var isValueFlag = (key) => VALUE_FLAGS.includes(key);
 function parseArgs(argv) {
   const positional = [];
@@ -26570,7 +27047,8 @@ Options:
   --changed             Only report findings in files changed vs. HEAD (default for hook)
   --all                 Report across the whole repo (default for check)
   --files a,b           Only report findings in these files
-  --format <f>          agent | json | sarif        (default: agent)
+  --format <f>          agent | json | sarif | html  (default: agent)
+                        html writes a self-contained page \u2014 redirect it to a file
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn \u2014 minimum severity to report
   --baseline <path>     Read/write the baseline here instead of the configured
@@ -26918,6 +27396,12 @@ loupe: ${verb} ${applied.length} finding(s)${skipped.length ? `, skipped ${skipp
 ${USAGE}`);
     return EXIT.CANNOT_RUN;
   }
+  const format = args.flags.format ?? "agent";
+  if (!isHook && !isFormat(format)) {
+    process.stderr.write(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(", ")}
+`);
+    return EXIT.CANNOT_RUN;
+  }
   const touched = isHook ? payloadFile(payload, root2) : null;
   if (touched && !isSource(config.sources, touched))
     return emitClean("loupe: skipped \u2014 not a checked file type.");
@@ -26970,11 +27454,11 @@ ${USAGE}`);
 (attempt ${attempts} of ${max})${ceilingSuffix}`);
   }
   const maxFindings = Number(args.flags["max-findings"] ?? 0) || 0;
-  const format = args.flags.format ?? "agent";
   if (format === "json") process.stdout.write(`${formatJson(result, config)}
 `);
   else if (format === "sarif") process.stdout.write(`${formatSarif(result, config)}
 `);
+  else if (format === "html") process.stdout.write(formatHtml(result, config));
   else {
     process.stdout.write(`${formatAgent(result, config, { maxFindings })}
 `);

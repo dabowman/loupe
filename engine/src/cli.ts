@@ -16,6 +16,7 @@ import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry
 import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
 import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
+import { formatHtml } from './report-html.ts';
 import { oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
@@ -47,6 +48,18 @@ const VALUE_FLAGS = [
 ] as const;
 
 type ValueFlag = (typeof VALUE_FLAGS)[number];
+
+/**
+ * What `--format` accepts on the check path.
+ *
+ * Held as a list because the dispatch used to be a chain ending in `else`, so a
+ * typo — `--format sarf` — printed the agent format and exited 0. That reads as
+ * a successful run to a CI job that then uploads an empty artifact, which is
+ * the worst available failure: silent, and shaped exactly like success.
+ */
+const FORMATS = ['agent', 'json', 'sarif', 'html'] as const;
+type Format = (typeof FORMATS)[number];
+const isFormat = (f: string): f is Format => (FORMATS as readonly string[]).includes(f);
 
 /**
  * Parsed command-line flags.
@@ -108,7 +121,8 @@ Options:
   --changed             Only report findings in files changed vs. HEAD (default for hook)
   --all                 Report across the whole repo (default for check)
   --files a,b           Only report findings in these files
-  --format <f>          agent | json | sarif        (default: agent)
+  --format <f>          agent | json | sarif | html  (default: agent)
+                        html writes a self-contained page — redirect it to a file
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn — minimum severity to report
   --baseline <path>     Read/write the baseline here instead of the configured
@@ -782,6 +796,14 @@ async function main(): Promise<number> {
 		return EXIT.CANNOT_RUN;
 	}
 
+	// Before the analysis, not after it: a run that is going to be rejected for a
+	// misspelled flag should not first walk the repo.
+	const format = args.flags.format ?? 'agent';
+	if (!isHook && !isFormat(format)) {
+		process.stderr.write(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(', ')}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
 	// ── check / hook ──────────────────────────────────────────────────────────
 	// A PostToolUse payload names the file just written; scope to it so drift is
 	// reported at write time. Stop payloads carry no file and fall through to
@@ -866,9 +888,11 @@ async function main(): Promise<number> {
 	}
 
 	const maxFindings = Number(args.flags['max-findings'] ?? 0) || 0;
-	const format = args.flags.format ?? 'agent';
 	if (format === 'json') process.stdout.write(`${formatJson(result, config)}\n`);
 	else if (format === 'sarif') process.stdout.write(`${formatSarif(result, config)}\n`);
+	// Already newline-terminated, and large: it is the one format most likely to
+	// be redirected, which is what the process.exitCode note below is about.
+	else if (format === 'html') process.stdout.write(formatHtml(result, config));
 	else {
 		process.stdout.write(`${formatAgent(result, config, { maxFindings })}\n`);
 		if ('baselined' in result && result.baselined)

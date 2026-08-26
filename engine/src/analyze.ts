@@ -597,7 +597,7 @@ export async function analyze(
 		// past the line bound on its own. The remedy goes in `tail`, which that
 		// bound is built to spare: eliding the shape still names the file count
 		// and what to do about it, where eliding the end left neither.
-		const emitComposite = (rule: RuleId, c: Composite, signature: string, tail: string): void => {
+		const emitComposite = (rule: RuleId, c: Composite, signature: string, tail: string, group: string): void => {
 			if (!reports(c.file)) return;
 			const supp = suppByFile.get(c.file);
 			if (supp && isSuppressed(supp.byLine, c.line, rule)) return;
@@ -609,6 +609,7 @@ export async function analyze(
 				message: `${signature}${tail}`,
 				suffix: tail,
 				code: c.signature,
+				group,
 				rank: RULES[rule].rank,
 			});
 		};
@@ -625,7 +626,8 @@ export async function analyze(
 					'patterns/duplicate-composite',
 					c,
 					c.signature,
-					` \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`
+					` \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`,
+					id
 				);
 			}
 		}
@@ -634,7 +636,7 @@ export async function analyze(
 		for (const [sig, files] of bySignature) {
 			if (files.size < 3) continue;
 			for (const c of files.values())
-				emitComposite('patterns/unregistered-composite', c, sig, ` \u2014 assembled in ${files.size} files, registered in none`);
+				emitComposite('patterns/unregistered-composite', c, sig, ` \u2014 assembled in ${files.size} files, registered in none`, sig);
 		}
 	}
 

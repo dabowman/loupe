@@ -21,7 +21,8 @@
   "commands": [
     "./commands/loupe-audit.md",
     "./commands/loupe-fix.md",
-    "./commands/loupe-baseline.md"
+    "./commands/loupe-baseline.md",
+    "./commands/loupe-report.md"
   ],
   "userConfig": {
     "blocking": {
