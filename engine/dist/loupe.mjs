@@ -23789,7 +23789,7 @@ var messageParts = (parts, tail = "") => {
 // src/suppressions.ts
 var ID = "(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)";
 var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-var OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\/\*+|<!--|#+)?\s*/;
+var OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
 function makeSuppressionParser({
   keyword,
   blanket = [],
@@ -24047,7 +24047,7 @@ var isLiteralEasing = (v) => /^(linear|ease|ease-in|ease-out|ease-in-out|step-st
 function classifyMargin(value) {
   const parts = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!parts.length) return null;
-  if (parts.some((p) => p.startsWith("-") && !ZERO.test(p))) return "negative";
+  if (parts.some((p) => /^-(?!-)/.test(p) && !ZERO.test(p))) return "negative";
   if (parts.some((p) => p === "auto")) return null;
   if (parts.every((p) => ZERO.test(p) || KEYWORD.test(p))) return null;
   return "spacing";

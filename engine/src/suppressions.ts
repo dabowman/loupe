@@ -36,8 +36,11 @@ import type { Directive, MalformedDirective, SuppressionConfig, Suppressions } f
 const ID = '(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)';
 const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Leading whitespace, jsdoc asterisks, then an optional comment opener.
-const OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\/\*+|<!--|#+)?\s*/;
+// Leading whitespace, jsdoc asterisks, then an optional comment opener. The
+// JSX opener admits a space before the comment (`{ /* … */ }`): WordPress's
+// prettier config mandates that form, so refusing it makes the directive
+// unwritable in a JSX child position anywhere in a WordPress repo.
+const OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
 
 export function makeSuppressionParser({
 	keyword,

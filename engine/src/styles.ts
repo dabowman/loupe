@@ -92,8 +92,11 @@ export const isLiteralEasing = (v: string): boolean =>
 export function classifyMargin(value: string): MarginKind {
 	const parts = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
 	if (!parts.length) return null;
-	// `var(--x)` on a margin is still margin, but we cannot see its sign.
-	if (parts.some((p) => p.startsWith('-') && !ZERO.test(p))) return 'negative';
+	// `var(--x)` on a margin is still margin, but we cannot see its sign. A
+	// leading `--` is a custom property name, not a minus: `var( --gap )` splits
+	// on the spaces prettier writes, and reading that as a bleed flags every
+	// tokenized margin in the repo.
+	if (parts.some((p) => /^-(?!-)/.test(p) && !ZERO.test(p))) return 'negative';
 	if (parts.some((p) => p === 'auto')) return null;
 	if (parts.every((p) => ZERO.test(p) || KEYWORD.test(p))) return null;
 	return 'spacing';
