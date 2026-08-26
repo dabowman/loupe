@@ -18,7 +18,7 @@ import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
 import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
 import { messageLine, messageParts, oneLine, snippet } from './text.ts';
-import { SUBSTANTIAL, matches } from './patterns.ts';
+import { SUBSTANTIAL, matches, nodeCount } from './patterns.ts';
 import { harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
 import {
 	APPEARANCE_PROPS, FLEX_PROPS, GAP_PROPS, TYPE_PROPS,
@@ -575,8 +575,20 @@ export async function analyze(
 		// The shape a pattern exists to replace. Unlike the two rules below this
 		// one, it is a per-file defect and not a set-level one: the file in hand
 		// built the clunky version, and that is already worth saying once.
-		const avoidMatch = (c: Composite): Pattern | null =>
-			registry.filter((p) => p.avoid.some((a) => matches(a, c.tree))).sort((a, b) => b.size - a.size)[0] ?? null;
+		//
+		// Ties go to the most specific anti-shape that matched, not to the largest
+		// replacement: a pattern's own `size` says nothing about how well its
+		// anti-shape fit, and ranking by it means the smallest entry in the
+		// registry can never win a tie it deserves.
+		const avoidMatch = (c: Composite): Pattern | null => {
+			let best: { pattern: Pattern; fit: number } | null = null;
+			for (const p of registry) {
+				let fit = 0;
+				for (const a of p.avoid) if (matches(a, c.tree)) fit = Math.max(fit, nodeCount(a));
+				if (fit && (!best || fit > best.fit)) best = { pattern: p, fit };
+			}
+			return best?.pattern ?? null;
+		};
 
 		const byPattern = new Map<string, Map<string, Composite>>(); // pattern id -> file -> best instance
 		const bySuperseded = new Map<string, Map<string, Composite>>(); // pattern id -> file -> first instance

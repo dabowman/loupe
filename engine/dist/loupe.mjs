@@ -24242,7 +24242,8 @@ function loadPatterns(raw) {
   for (const p of list2) {
     const node = toNode(p?.signature);
     if (!node) continue;
-    const raw2 = Array.isArray(p?.instead_of_signature) ? p.instead_of_signature : [];
+    const authored = p?.instead_of_signature;
+    const shapes = !Array.isArray(authored) ? [] : typeof authored[0] === "string" ? [authored] : authored;
     out.push({
       id: p.id || signatureOf(node),
       summary: p.summary ?? "",
@@ -24252,7 +24253,7 @@ function loadPatterns(raw) {
       // An anti-shape below the floor would fire on half a codebase: a bare
       // `SelectControl` is one node and says nothing about whether the
       // choice it presents wanted a segmented control instead.
-      avoid: raw2.map(toNode).filter((n) => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes)
+      avoid: shapes.map((shape) => toNode(shape)).filter((n) => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes)
     });
   }
   return out;
@@ -25119,7 +25120,15 @@ async function analyze(config, { scope = null } = {}) {
   if ((dupEnabled || newEnabled || supEnabled) && composites.length) {
     const registry = config.patterns || [];
     const bestMatch = (c) => registry.filter((p) => p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree)).sort((a, b) => b.size - a.size)[0] ?? null;
-    const avoidMatch = (c) => registry.filter((p) => p.avoid.some((a) => matches(a, c.tree))).sort((a, b) => b.size - a.size)[0] ?? null;
+    const avoidMatch = (c) => {
+      let best = null;
+      for (const p of registry) {
+        let fit = 0;
+        for (const a of p.avoid) if (matches(a, c.tree)) fit = Math.max(fit, nodeCount(a));
+        if (fit && (!best || fit > best.fit)) best = { pattern: p, fit };
+      }
+      return best?.pattern ?? null;
+    };
     const byPattern = /* @__PURE__ */ new Map();
     const bySuperseded = /* @__PURE__ */ new Map();
     const bySignature = /* @__PURE__ */ new Map();
@@ -26357,7 +26366,8 @@ function applyRegistries(config, sources, {
   }
   if (sawPatterns) setPatterns2(config, patterns);
   if (sawComponents) setComponentRegistry2(config, components);
-  const patternsNote = (added) => config.severityOf("patterns/duplicate-composite") === "off" ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
+  const registryRules = ["patterns/duplicate-composite", "patterns/superseded-composite"];
+  const patternsNote = (added) => registryRules.every((rule2) => config.severityOf(rule2) === "off") ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
     // A composite is only ever built from names imported out of
     // `designSystem.packages` (see markup.ts), so with none declared
     // there is nothing for a signature to be compared against.

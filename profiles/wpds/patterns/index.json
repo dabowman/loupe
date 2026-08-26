@@ -406,7 +406,7 @@
         "Rename and Delete rendered as two secondary Buttons in a header",
         "A destructive Button sitting in the primary action row"
       ],
-      "note": "The menu item opens a confirm dialog; it never destroys anything itself. Items that would do nothing are dropped from the menu rather than disabled."
+      "note": "The menu item opens a confirm dialog; it never destroys anything itself. Items that would do nothing are dropped from the menu rather than disabled. `Menu` in @wordpress/components is a private API — loupe reports it as system/locked-component, an error — so outside Gutenberg core the shape is the same but the import is `Menu` from @wordpress/ui."
     },
     {
       "id": "filter-menu",
@@ -428,7 +428,7 @@
         "A row of filter chips built from Buttons with isPressed",
         "A list long enough to need filtering that offers none"
       ],
-      "note": "Search and filter share one row above the list; the result count is announced with speak() so a filter change is perceivable without sight of the list."
+      "note": "Search and filter share one row above the list; the result count is announced with speak() so a filter change is perceivable without sight of the list. `Menu` in @wordpress/components is a private API — loupe reports it as system/locked-component, an error — so outside Gutenberg core the shape is the same but the import is `Menu` from @wordpress/ui."
     },
     {
       "id": "selectable-list",
@@ -517,15 +517,9 @@
           "TextControl|InputControl",
           "TextControl|InputControl",
           "TextControl|InputControl"
-        ],
-        [
-          "Stack|VStack|HStack|Flex",
-          "TextControl|InputControl",
-          "TextControl|InputControl",
-          "TextControl|InputControl"
         ]
       ],
-      "note": "The site editor's whole Identity pane is four field descriptors and a four-line form config. Field types carry their own editors (type: 'media' + Edit: MediaEdit), and state is getEditedEntityRecord / editEntityRecord — no local state, no save button, undo for free."
+      "note": "The site editor's whole Identity pane is four field descriptors and a four-line form config. Field types carry their own editors (type: 'media' + Edit: MediaEdit), and state is getEditedEntityRecord / editEntityRecord — no local state, no save button, undo for free. The anti-shapes are deliberately rooted in a Modal or a Card: a bare `Stack` of three TextControls is the ordinary block-inspector panel, which edits attributes rather than an entity and has no DataForm to reach for."
     }
   ]
 }

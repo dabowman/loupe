@@ -477,20 +477,20 @@
       "name": "DropdownMenu",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "Menu (@wordpress/components)"
+      "supersededBy": "Menu (@wordpress/components) -- core only; Menu (@wordpress/ui) outside it"
     },
     {
       "name": "MenuGroup",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "Menu.Group (@wordpress/components)",
+      "supersededBy": "Menu.Group (@wordpress/components) -- core only; Menu (@wordpress/ui) outside it",
       "note": "Subcomponent of DropdownMenu."
     },
     {
       "name": "MenuItem",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "Menu.Item (@wordpress/components)",
+      "supersededBy": "Menu.Item (@wordpress/components) -- core only; Menu (@wordpress/ui) outside it",
       "note": "Subcomponent of DropdownMenu."
     },
     {

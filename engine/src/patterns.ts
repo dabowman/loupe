@@ -123,7 +123,18 @@ export function loadPatterns(raw: unknown): Pattern[] {
 	for (const p of list) {
 		const node = toNode(p?.signature);
 		if (!node) continue;
-		const raw = Array.isArray(p?.instead_of_signature) ? p.instead_of_signature : [];
+		// A list of shapes, or — because `signature` next to it takes exactly one —
+		// a single shape written directly. A list never starts with a string, so
+		// the leading element settles it. Without this, `["Modal", ["VStack", …]]`
+		// read as four separate anti-shapes: the `"Modal"` that gave the rest its
+		// context dropped under the floor, and the nested child survived as a
+		// standalone shape far broader than anything the author asked for.
+		const authored: unknown = p?.instead_of_signature;
+		const shapes: unknown[] = !Array.isArray(authored)
+			? []
+			: typeof authored[0] === 'string'
+				? [authored]
+				: authored;
 		out.push({
 			id: p.id || signatureOf(node),
 			summary: p.summary ?? '',
@@ -133,8 +144,8 @@ export function loadPatterns(raw: unknown): Pattern[] {
 			// An anti-shape below the floor would fire on half a codebase: a bare
 			// `SelectControl` is one node and says nothing about whether the
 			// choice it presents wanted a segmented control instead.
-			avoid: raw
-				.map(toNode)
+			avoid: shapes
+				.map((shape) => toNode(shape))
 				.filter((n): n is PatternNode => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes),
 		});
 	}
