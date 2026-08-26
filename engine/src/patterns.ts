@@ -73,8 +73,22 @@ function descendants(tree: PatternNode, out: PatternNode[] = []): PatternNode[] 
  * child first; a registered pattern is a handful of nodes, so the cases where
  * greedy loses to a smarter assignment do not arise in practice.
  */
+/**
+ * `"Stack"` matches `Stack`; `"Stack|VStack|HStack"` matches any of the three.
+ *
+ * One shape often has more than one spelling — `ToggleGroupControlOption` and
+ * `ToggleGroupControlOptionIcon` are the same segmented control, and the same
+ * modal footer is written with `Stack` in new code and `VStack` in old. Without
+ * this, each spelling needs its own registry entry, and the ones nobody wrote
+ * come back as `unregistered-composite` noise against code that is in fact
+ * using the pattern. Only pattern nodes carry alternations; a tree built from
+ * real code is always one name.
+ */
+const nameMatches = (spec: string, actual: string): boolean =>
+	spec === actual || (spec.includes('|') && spec.split('|').includes(actual));
+
 export function matches(pattern: PatternNode, tree: PatternNode): boolean {
-	if (pattern.name !== tree.name) return false;
+	if (!nameMatches(pattern.name, tree.name)) return false;
 	// Only when both sides know: an unqualified pattern node matches any package,
 	// and a tree node whose import could not be resolved is not evidence of a
 	// mismatch. Qualification narrows a match, it never invents one.
@@ -97,6 +111,7 @@ interface RawPattern {
 	summary?: string;
 	canonical?: string | null;
 	signature?: unknown;
+	instead_of_signature?: unknown;
 }
 
 /** Normalize a registry file or inline array into matchable patterns. */
@@ -108,12 +123,19 @@ export function loadPatterns(raw: unknown): Pattern[] {
 	for (const p of list) {
 		const node = toNode(p?.signature);
 		if (!node) continue;
+		const raw = Array.isArray(p?.instead_of_signature) ? p.instead_of_signature : [];
 		out.push({
 			id: p.id || signatureOf(node),
 			summary: p.summary ?? '',
 			canonical: p.canonical ?? null,
 			node,
 			size: nodeCount(node),
+			// An anti-shape below the floor would fire on half a codebase: a bare
+			// `SelectControl` is one node and says nothing about whether the
+			// choice it presents wanted a segmented control instead.
+			avoid: raw
+				.map(toNode)
+				.filter((n): n is PatternNode => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes),
 		});
 	}
 	return out;

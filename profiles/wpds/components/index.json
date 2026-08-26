@@ -1,72 +1,633 @@
 {
-  "packages": ["@wordpress/components", "@wordpress/ui"],
+  "packages": [
+    "@wordpress/components",
+    "@wordpress/ui"
+  ],
   "version": 1,
-  "verifiedAgainst": "WordPress/gutenberg trunk, spot-checked 2026-08-21",
+  "verifiedAgainst": "WordPress/gutenberg trunk, from each component's own Storybook `componentStatus` metadata, 2026-08-25",
   "note": "Component currency, not props. `status` says whether a component is the current best-practice choice: `recommended` (use it), `legacy` (works, but a recommended replacement now covers the job -- see `supersededBy`), `locked` (a private API Gutenberg explicitly does not recommend outside core -- can break without notice on any update), `experimental` (real, documented, but WordPress's own Storybook metadata (`componentStatus.status: 'use-with-caution'`) flags it not-yet-safe to mix with @wordpress/components -- true of almost every real WP admin codebase today, so treat as informational, not a migration target, until that gate lifts). Two components can share a name across packages with different status -- `Button` in `@wordpress/components` is `recommended` today while the newer `Button` in `@wordpress/ui` is `experimental`; check `package` too. This file is the canonical answer to 'is this the current best practice' -- the design-system MCP is for prop/usage detail on a component you've already chosen, and does not carry this maturity signal at all (it presents `experimental`-status components with the same confidence as `recommended` ones, and is itself measurably behind trunk for several @wordpress/ui additions: Dialog, AlertDialog, Drawer, IconButton, LinkButton, and the current Menu all return nothing from `get_component_details`). Re-verify against trunk (`packages/ui/src/*/stories/index.story.tsx` -> `parameters.componentStatus`) before bumping this file's version -- do not guess a status.",
   "components": [
-    { "name": "Stack", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "HStack", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Stack (@wordpress/ui, direction=\"row\")" },
-    { "name": "VStack", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Stack (@wordpress/ui, direction=\"column\")" },
-    { "name": "Flex", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Stack (@wordpress/ui)" },
-    { "name": "FlexBlock", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Stack (@wordpress/ui)" },
-    { "name": "FlexItem", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Stack (@wordpress/ui)" },
-    { "name": "Grid", "package": "@wordpress/components", "status": "recommended", "note": "No @wordpress/ui replacement yet. Only for genuine CSS Grid layouts -- if this is actually a flex row/column, it should have been Stack/HStack/VStack, not Grid." },
-    { "name": "Spacer", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Stack's gap prop, or a --wpds-dimension-gap-* token directly" },
-    { "name": "Divider", "package": "@wordpress/components", "status": "recommended", "note": "No @wordpress/ui replacement yet." },
-
-    { "name": "Text", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Text", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Text (@wordpress/ui)", "note": "Same name, different package and prop surface -- @wordpress/ui's Text has only `variant`, no size/weight/color/align." },
-    { "name": "Heading", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Text (@wordpress/ui) with variant=\"heading-*\" and render for the semantic element" },
-    { "name": "Truncate", "package": "@wordpress/components", "status": "recommended", "note": "No @wordpress/ui replacement yet." },
-
-    { "name": "Card", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Card", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Card (@wordpress/ui)" },
-
-    { "name": "Icon", "package": "@wordpress/ui", "status": "recommended", "note": "Its own docs say to prefer it over @wordpress/components Icon or @wordpress/icons." },
-    { "name": "Icon", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Icon (@wordpress/ui)" },
-
-    { "name": "Spinner", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Spinner", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Spinner (@wordpress/ui)" },
-
-    { "name": "Tooltip", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Tooltip", "package": "@wordpress/components", "status": "legacy", "supersededBy": "Tooltip (@wordpress/ui)" },
-
-    { "name": "VisuallyHidden", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "VisuallyHidden", "package": "@wordpress/components", "status": "legacy", "supersededBy": "VisuallyHidden (@wordpress/ui)" },
-
-    { "name": "Badge", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Badge", "package": "@wordpress/components", "status": "locked", "note": "Private API -- Gutenberg does not yet recommend using this outside core.", "supersededBy": "Badge (@wordpress/ui) -- public, recommended" },
-
-    { "name": "Tabs", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Tabs", "package": "@wordpress/components", "status": "locked", "note": "Private API -- Gutenberg does not yet recommend using this outside core.", "supersededBy": "Tabs (@wordpress/ui) -- public, recommended" },
-
-    { "name": "Menu", "package": "@wordpress/components", "status": "locked", "note": "Private API -- Gutenberg does not yet recommend using this outside core." },
-    { "name": "Menu", "package": "@wordpress/ui", "status": "experimental", "note": "Real and documented, but Storybook flags it use-with-caution: APIs still in flux, compatibility with @wordpress/components overlays under review (gutenberg#76135)." },
-
-    { "name": "Link", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "EmptyState", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Collapsible", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "CollapsibleCard", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Calendar", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Skeleton", "package": "@wordpress/ui", "status": "recommended" },
-    { "name": "Field", "package": "@wordpress/ui", "status": "recommended", "note": "A low-level form primitive. Check for a higher-level *Control component (in either package) or DataForm first -- most UI should not need Field directly." },
-    { "name": "Fieldset", "package": "@wordpress/ui", "status": "recommended", "note": "Same altitude caveat as Field -- for a group of controls sharing one legend, not a substitute for a *Control component." },
-
-    { "name": "Button", "package": "@wordpress/components", "status": "recommended", "note": "Still the safe, stable choice. @wordpress/ui's Button exists but is experimental (see below) -- not a migration target yet." },
-    { "name": "Button", "package": "@wordpress/ui", "status": "experimental", "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components, pending style-consistency and text-overflow review (gutenberg#76135)." },
-    { "name": "IconButton", "package": "@wordpress/ui", "status": "experimental", "note": "Same use-with-caution gate as Button (@wordpress/ui) -- part of the same Button/IconButton/Link/LinkButton family, not yet safe alongside @wordpress/components." },
-    { "name": "LinkButton", "package": "@wordpress/ui", "status": "experimental", "note": "Same use-with-caution gate as Button (@wordpress/ui)." },
-
-    { "name": "Notice", "package": "@wordpress/components", "status": "recommended", "note": "Still the safe, stable choice. @wordpress/ui's Notice exists (compound Root/Title/Description/Actions) but is experimental -- not a migration target yet." },
-    { "name": "Notice", "package": "@wordpress/ui", "status": "experimental", "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135)." },
-
-    { "name": "Popover", "package": "@wordpress/components", "status": "recommended", "note": "Still the safe, stable choice. @wordpress/ui's Popover exists but is experimental -- not a migration target yet." },
-    { "name": "Popover", "package": "@wordpress/ui", "status": "experimental", "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135)." },
-
-    { "name": "Modal", "package": "@wordpress/components", "status": "recommended", "note": "Still the safe, stable choice. @wordpress/ui's Dialog/Drawer/AlertDialog exist as its eventual replacements but are all experimental -- not a migration target yet." },
-    { "name": "ConfirmDialog", "package": "@wordpress/components", "status": "recommended", "note": "Still the safe, stable choice for confirmation dialogs. @wordpress/ui's AlertDialog is its eventual replacement but is experimental -- not a migration target yet." },
-    { "name": "Dialog", "package": "@wordpress/ui", "status": "experimental", "note": "Real and documented (Root/Trigger/Popup/Header/Title/Description/Content/Footer/Action), but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135). Eventual Modal replacement." },
-    { "name": "AlertDialog", "package": "@wordpress/ui", "status": "experimental", "note": "Real and documented, but Storybook flags it use-with-caution and 'not yet recommended for use alongside @wordpress/components' (gutenberg#76135). Eventual ConfirmDialog replacement, for destructive/irreversible confirmations specifically." },
-    { "name": "Drawer", "package": "@wordpress/ui", "status": "experimental", "note": "Real and documented, but Storybook flags it use-with-caution (gutenberg#76135). For editing something already on screen / multi-field / drill-down overlays, as opposed to Dialog's single-decision case." }
+    {
+      "name": "Stack",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "HStack",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Stack (@wordpress/ui, direction=\"row\")"
+    },
+    {
+      "name": "VStack",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Stack (@wordpress/ui, direction=\"column\")"
+    },
+    {
+      "name": "Flex",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Stack (@wordpress/ui)"
+    },
+    {
+      "name": "FlexBlock",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Stack (@wordpress/ui)"
+    },
+    {
+      "name": "FlexItem",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Stack (@wordpress/ui)"
+    },
+    {
+      "name": "Grid",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "note": "Planned for deprecation per its own Storybook status. Write the grid in CSS; if this is really a flex row or column it wanted Stack, not Grid.",
+      "supersededBy": "CSS grid on a plain element"
+    },
+    {
+      "name": "Spacer",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Stack's gap prop, or a --wpds-dimension-gap-* token directly"
+    },
+    {
+      "name": "Divider",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "note": "Planned for deprecation per its own Storybook status.",
+      "supersededBy": "a CSS border, or a Stack with a separator"
+    },
+    {
+      "name": "Text",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Text",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Text (@wordpress/ui)",
+      "note": "Same name, different package and prop surface -- @wordpress/ui's Text has only `variant`, no size/weight/color/align."
+    },
+    {
+      "name": "Heading",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Text (@wordpress/ui) with variant=\"heading-*\" and render for the semantic element"
+    },
+    {
+      "name": "Truncate",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "No @wordpress/ui replacement yet."
+    },
+    {
+      "name": "Card",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Card",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Card (@wordpress/ui)"
+    },
+    {
+      "name": "Icon",
+      "package": "@wordpress/ui",
+      "status": "recommended",
+      "note": "Its own docs say to prefer it over @wordpress/components Icon or @wordpress/icons."
+    },
+    {
+      "name": "Icon",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Icon (@wordpress/ui)"
+    },
+    {
+      "name": "Spinner",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Spinner",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Spinner (@wordpress/ui)"
+    },
+    {
+      "name": "Tooltip",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Tooltip",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Tooltip (@wordpress/ui)"
+    },
+    {
+      "name": "VisuallyHidden",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "VisuallyHidden",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "VisuallyHidden (@wordpress/ui)"
+    },
+    {
+      "name": "Badge",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Badge",
+      "package": "@wordpress/components",
+      "status": "locked",
+      "note": "Private API -- Gutenberg does not yet recommend using this outside core.",
+      "supersededBy": "Badge (@wordpress/ui) -- public, recommended"
+    },
+    {
+      "name": "Tabs",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Tabs",
+      "package": "@wordpress/components",
+      "status": "locked",
+      "note": "Private API -- Gutenberg does not yet recommend using this outside core.",
+      "supersededBy": "Tabs (@wordpress/ui) -- public, recommended"
+    },
+    {
+      "name": "Menu",
+      "package": "@wordpress/components",
+      "status": "locked",
+      "note": "Private API -- Gutenberg does not yet recommend using this outside core."
+    },
+    {
+      "name": "Menu",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented, but Storybook flags it use-with-caution: APIs still in flux, compatibility with @wordpress/components overlays under review (gutenberg#76135)."
+    },
+    {
+      "name": "Link",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "EmptyState",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Collapsible",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "CollapsibleCard",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Calendar",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Skeleton",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Field",
+      "package": "@wordpress/ui",
+      "status": "recommended",
+      "note": "A low-level form primitive. Check for a higher-level *Control component (in either package) or DataForm first -- most UI should not need Field directly."
+    },
+    {
+      "name": "Fieldset",
+      "package": "@wordpress/ui",
+      "status": "recommended",
+      "note": "Same altitude caveat as Field -- for a group of controls sharing one legend, not a substitute for a *Control component."
+    },
+    {
+      "name": "Button",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Still the safe, stable choice. @wordpress/ui's Button exists but is experimental (see below) -- not a migration target yet."
+    },
+    {
+      "name": "Button",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components, pending style-consistency and text-overflow review (gutenberg#76135)."
+    },
+    {
+      "name": "IconButton",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Same use-with-caution gate as Button (@wordpress/ui) -- part of the same Button/IconButton/Link/LinkButton family, not yet safe alongside @wordpress/components."
+    },
+    {
+      "name": "LinkButton",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Same use-with-caution gate as Button (@wordpress/ui)."
+    },
+    {
+      "name": "Notice",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Still the safe, stable choice. @wordpress/ui's Notice exists (compound Root/Title/Description/Actions) but is experimental -- not a migration target yet."
+    },
+    {
+      "name": "Notice",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135)."
+    },
+    {
+      "name": "Popover",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Still the safe, stable choice. @wordpress/ui's Popover exists but is experimental -- not a migration target yet."
+    },
+    {
+      "name": "Popover",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135)."
+    },
+    {
+      "name": "Modal",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Still the safe, stable choice. @wordpress/ui's Dialog/Drawer/AlertDialog exist as its eventual replacements but are all experimental -- not a migration target yet."
+    },
+    {
+      "name": "ConfirmDialog",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Still the safe, stable choice for confirmation dialogs. @wordpress/ui's AlertDialog is its eventual replacement but is experimental -- not a migration target yet."
+    },
+    {
+      "name": "Dialog",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented (Root/Trigger/Popup/Header/Title/Description/Content/Footer/Action), but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135). Eventual Modal replacement."
+    },
+    {
+      "name": "AlertDialog",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented, but Storybook flags it use-with-caution and 'not yet recommended for use alongside @wordpress/components' (gutenberg#76135). Eventual ConfirmDialog replacement, for destructive/irreversible confirmations specifically."
+    },
+    {
+      "name": "Drawer",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented, but Storybook flags it use-with-caution (gutenberg#76135). For editing something already on screen / multi-field / drill-down overlays, as opposed to Dialog's single-decision case."
+    },
+    {
+      "name": "Navigator",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Screens are declared flat with path strings and the path is the state — see the navigator-drilldown pattern."
+    },
+    {
+      "name": "ItemGroup",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "The list container for drilldown rows. Item is its row; a row is one control with one tab stop."
+    },
+    {
+      "name": "Composite",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Roving tabindex for a list or grid where one item is selected — one tab stop for the whole set, arrows within it."
+    },
+    {
+      "name": "Panel",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Intended for the block inspector sidebar. For a group of optional settings use ToolsPanel; for a collapsible section elsewhere use Collapsible (@wordpress/ui)."
+    },
+    {
+      "name": "ToolsPanel",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Each ToolsPanelItem declares hasValue / onDeselect / isShownByDefault / panelId; the panel owns resetAll. This is what keeps a twelve-control surface showing three."
+    },
+    {
+      "name": "ToggleGroupControl",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "The answer for two to five mutually exclusive options that fit on one row. Will be superseded by the @wordpress/ui version, which is not ready yet."
+    },
+    {
+      "name": "UnitControl",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "A CSS length with its unit, parsed and preserved. A TextControl holding \"16px\" is not this."
+    },
+    {
+      "name": "RangeControl",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Will be superseded by SliderControl in @wordpress/ui, which is not shipped yet. Pair with UnitControl when the value is a CSS length."
+    },
+    {
+      "name": "SearchControl",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Will be superseded by the @wordpress/ui version, which is not ready yet."
+    },
+    {
+      "name": "SelectControl",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Correct for a long or open-ended list. For two to five options that fit on one row, ToggleGroupControl; for a visual choice, a preview grid or a value-preview row."
+    },
+    {
+      "name": "ToggleControl",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "CheckboxControl",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "RadioControl",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "For a set that fits on one row, ToggleGroupControl reads better and costs less space."
+    },
+    {
+      "name": "BaseControl",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Label, help text and id wiring for a composite control you are building out of more than one input."
+    },
+    {
+      "name": "FontSizePicker",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "ColorIndicator",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "The swatch that makes a color row show its value instead of naming it."
+    },
+    {
+      "name": "ColorPalette",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "ColorPicker",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "GradientPicker",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "PaletteEdit",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "ComboboxControl",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Will be superseded by SearchableSelectControl in @wordpress/ui, which is not shipped yet."
+    },
+    {
+      "name": "CustomSelectControl",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "FormTokenField",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "Dropdown",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "ProgressBar",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "Disabled",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "note": "Wraps a live preview so nothing inside it is focusable or interactive."
+    },
+    {
+      "name": "TextControl",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "InputControl (@wordpress/ui)"
+    },
+    {
+      "name": "TextareaControl",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "TextareaControl (@wordpress/ui)"
+    },
+    {
+      "name": "NumberControl",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "InputControl (@wordpress/ui) with type=\"number\""
+    },
+    {
+      "name": "InputControl",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "InputControl (@wordpress/ui)"
+    },
+    {
+      "name": "BoxControl",
+      "package": "@wordpress/components",
+      "status": "experimental",
+      "note": "A fallback for themes that supply no spacing presets. Most of the time SpacingSizesControl is what you want."
+    },
+    {
+      "name": "DropdownMenu",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Menu (@wordpress/components)"
+    },
+    {
+      "name": "MenuGroup",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Menu.Group (@wordpress/components)",
+      "note": "Subcomponent of DropdownMenu."
+    },
+    {
+      "name": "MenuItem",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Menu.Item (@wordpress/components)",
+      "note": "Subcomponent of DropdownMenu."
+    },
+    {
+      "name": "TabPanel",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Tabs (@wordpress/ui)"
+    },
+    {
+      "name": "ExternalLink",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "Link (@wordpress/ui)"
+    },
+    {
+      "name": "ZStack",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "CSS grid or absolute positioning",
+      "note": "Planned for deprecation per its own Storybook status."
+    },
+    {
+      "name": "View",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "a plain element",
+      "note": "Planned for deprecation per its own Storybook status."
+    },
+    {
+      "name": "Elevation",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "an elevation token applied in CSS",
+      "note": "Deprecated per its own Storybook status."
+    },
+    {
+      "name": "Surface",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "CSS built from design tokens",
+      "note": "Deprecated per its own Storybook status."
+    },
+    {
+      "name": "Scrollable",
+      "package": "@wordpress/components",
+      "status": "legacy",
+      "supersededBy": "CSS overflow on a plain element",
+      "note": "Planned for deprecation per its own Storybook status."
+    },
+    {
+      "name": "InputControl",
+      "package": "@wordpress/ui",
+      "status": "recommended",
+      "note": "The current text input. Label, description and validation come with it."
+    },
+    {
+      "name": "Input",
+      "package": "@wordpress/ui",
+      "status": "recommended",
+      "note": "The bare input for a control you are composing yourself; InputControl is the one to reach for first."
+    },
+    {
+      "name": "TextareaControl",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Textarea",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "InputLayout",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Autocomplete",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "SearchableChipSelect",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "SearchableChipSelectControl",
+      "package": "@wordpress/ui",
+      "status": "recommended",
+      "note": "Multi-select over a long list, as chips. Reach for this before a stack of checkboxes."
+    },
+    {
+      "name": "ValidityIndicator",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "RangeCalendar",
+      "package": "@wordpress/ui",
+      "status": "recommended"
+    },
+    {
+      "name": "Select",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135)."
+    },
+    {
+      "name": "Checkbox",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135)."
+    },
+    {
+      "name": "Combobox",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135)."
+    },
+    {
+      "name": "ControlWithError",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "APIs and behavior still prone to change."
+    },
+    {
+      "name": "ValidatedInputControl",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "APIs and behavior still prone to change."
+    },
+    {
+      "name": "ValidatedTextareaControl",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "APIs and behavior still prone to change."
+    }
   ]
 }

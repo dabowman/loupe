@@ -561,7 +561,8 @@ export async function analyze(
 // so the index has to be whole-repo even when the report is scoped to one file.
 	const dupEnabled = config.enabled['patterns/duplicate-composite'];
 	const newEnabled = config.enabled['patterns/unregistered-composite'];
-	if ((dupEnabled || newEnabled) && composites.length) {
+	const supEnabled = config.enabled['patterns/superseded-composite'];
+	if ((dupEnabled || newEnabled || supEnabled) && composites.length) {
 		const registry = config.patterns || [];
 
 		// Largest match wins: a page header contains an action bar, and reporting
@@ -571,7 +572,14 @@ export async function analyze(
 				.filter((p) => p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree))
 				.sort((a, b) => b.size - a.size)[0] ?? null;
 
+		// The shape a pattern exists to replace. Unlike the two rules below this
+		// one, it is a per-file defect and not a set-level one: the file in hand
+		// built the clunky version, and that is already worth saying once.
+		const avoidMatch = (c: Composite): Pattern | null =>
+			registry.filter((p) => p.avoid.some((a) => matches(a, c.tree))).sort((a, b) => b.size - a.size)[0] ?? null;
+
 		const byPattern = new Map<string, Map<string, Composite>>(); // pattern id -> file -> best instance
+		const bySuperseded = new Map<string, Map<string, Composite>>(); // pattern id -> file -> first instance
 		const bySignature = new Map<string, Map<string, Composite>>(); // signature -> file -> best instance
 		for (const c of composites) {
 			const hit = dupEnabled ? bestMatch(c) : null;
@@ -583,6 +591,21 @@ export async function analyze(
 				byPattern.set(hit.id, perFile);
 				const prev = perFile.get(c.file);
 				if (!prev || c.size > prev.size) perFile.set(c.file, { ...c, pattern: hit });
+				continue;
+			}
+			const avoided = supEnabled ? avoidMatch(c) : null;
+			if (avoided) {
+				// Already importing the answer means the anti-shape sitting beside it
+				// is deliberate, not a rebuild waiting to happen.
+				if (avoided.canonical && importsByFile.get(c.file)?.has(avoided.canonical)) continue;
+				const perFile = bySuperseded.get(avoided.id) ?? new Map<string, Composite>();
+				bySuperseded.set(avoided.id, perFile);
+				// Smallest wins, the opposite of `duplicate-composite`. Containment
+				// means an outer wrapper matches whatever its children match, and
+				// the whole form's tree is a worse answer to "where" than the one
+				// field that should have been a Field.
+				const prev = perFile.get(c.file);
+				if (!prev || c.size < prev.size) perFile.set(c.file, { ...c, pattern: avoided });
 				continue;
 			}
 			if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
@@ -627,6 +650,14 @@ export async function analyze(
 					c.signature,
 					` \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`
 				);
+			}
+		}
+		// One file is enough: this is a wrong choice made here, not a duplication
+		// that only exists across the set.
+		for (const [id, files] of bySuperseded) {
+			for (const c of files.values()) {
+				const remedy = c.pattern?.canonical ? `use \`${c.pattern.canonical}\`` : `follow the \`${id}\` pattern`;
+				emitComposite('patterns/superseded-composite', c, c.signature, ` \u2014 \`${id}\` covers this; ${remedy}`);
 			}
 		}
 		// Three for an unregistered shape: nothing says the second one was wrong,

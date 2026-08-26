@@ -55,6 +55,12 @@ export const RULES = {
 		needs: ['patternRegistry'],
 		title: 'rebuilds a registered pattern — import the shared implementation instead of reassembling it',
 	},
+	'patterns/superseded-composite': {
+		severity: 'warn',
+		rank: 16,
+		needs: ['patternRegistry'],
+		title: 'a sanctioned composition already covers this \u2014 see the finding for which pattern replaces the shape that was built',
+	},
 	'patterns/unregistered-composite': {
 		severity: 'warn',
 		rank: 14,

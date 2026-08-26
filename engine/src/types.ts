@@ -23,6 +23,7 @@ export type RuleId =
 	| 'system/superseded-component'
 	| 'patterns/duplicate-composite'
 	| 'patterns/unregistered-composite'
+	| 'patterns/superseded-composite'
 	| 'tokens/unknown-token'
 	| 'tokens/hardcoded-value'
 	| 'layout/margin-on-child'
@@ -283,6 +284,13 @@ export interface Pattern {
 	canonical: string | null;
 	node: PatternNode;
 	size: number;
+	/**
+	 * Shapes this pattern replaces, as trees rather than the prose of
+	 * `instead_of`. Matching one is the finding: the file built the clunky
+	 * version of a composite the system already has an answer for. Only
+	 * substantial nodes survive the load, for the same reason signatures do.
+	 */
+	avoid: PatternNode[];
 }
 
 export interface Composite {

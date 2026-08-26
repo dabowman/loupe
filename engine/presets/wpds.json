@@ -3,7 +3,10 @@
   "detect": {
     "priority": 30,
     "confidence": "high",
-    "dependencies": ["@wordpress/components", "@wordpress/ui"]
+    "dependencies": [
+      "@wordpress/components",
+      "@wordpress/ui"
+    ]
   },
   "designSystem": {
     "packages": [
@@ -62,6 +65,7 @@
     "css/dead-class": "warn",
     "tokens/unknown-token": "warn",
     "patterns/duplicate-composite": "warn",
+    "patterns/superseded-composite": "warn",
     "patterns/unregistered-composite": "warn"
   }
 }
