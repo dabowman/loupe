@@ -1,17 +1,22 @@
 # Loupe
 
-Keeps agent-written wp-admin interfaces on the WordPress Design System.
+Keeps agent-written UI on its design system.
 
 A loupe is what a printer holds over a proof before the run: close enough to
 see the dot, early enough that fixing it costs nothing. Same idea here — the
 drift is caught on the file just written, not in review.
 
 An agent writing UI produces code that compiles, renders correctly, passes
-review, and quietly reimplements things WPDS already provides: a hand-rolled
-flex row beside `Stack`, a `font-size` beside `Text`'s `variant` prop, a
-`margin-bottom` where the parent has a `gap`. None of it is an error. All of it
-is drift, and it is expensive to unwind once the pattern is load-bearing —
-because by then every argument for keeping it is locally true.
+review, and quietly reimplements things the design system already provides: a
+hand-rolled flex row beside the layout primitive, a `font-size` beside a
+component's own styling prop, a `margin-bottom` where the parent has a `gap`.
+None of it is an error. All of it is drift, and it is expensive to unwind once
+the pattern is load-bearing — because by then every argument for keeping it is
+locally true.
+
+Two design systems ship with it — the WordPress Design System and
+[Archer](#profiles), a Base UI–based system — and a third is a directory
+rather than a fork: nothing about either is compiled into the engine.
 
 This plugin works at two moments: **before** the code is written (skills that
 set the rules and the sanctioned compositions) and **as** it is written (hooks
@@ -35,15 +40,23 @@ than using it.
 | | |
 | --- | --- |
 | `skills/loupe-authoring` | The authoring rules — order of resort, gap over margin, props over CSS, tokens by role. Load before writing UI. |
-| `skills/loupe-patterns` | Registry of sanctioned composites. Load before assembling a header, modal, action bar, sidebar. |
+| `skills/loupe-patterns` | How the composite registry works, and the discipline of checking it. Load before assembling a header, modal, action bar, sidebar. |
 | `skills/loupe-remediation` | Per-rule remedies, and the checks that stop a "fix" from silently changing rendering. |
 | `agents/loupe-fixer` | Per-file remediation agent. `/loupe-fix` fans it out once the work spans enough files to be worth it. |
 | `commands/` | `/loupe-audit`, `/loupe-fix`, `/loupe-baseline`, `/loupe-report` |
 | `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
-| `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, and its two registries |
-| `profiles/wpds/patterns/index.json` | The composite registry |
-| `profiles/wpds/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
+| `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, its two registries and its three authoring docs |
+| `profiles/archer/` | The Archer profile — the same, for a Base UI–based system with one layout primitive and no text component |
+| `profiles/*/patterns/index.json` | The composite registry |
+| `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
 | `engine/` | `loupe` — the conformance engine |
+
+The three skills are design-system agnostic: each one starts at `loupe status`
+to learn which system is in play, then reads that system's own notes —
+`authoring.md`, `patterns.md`, `remediation.md` — out of the active profile.
+The rules are the same everywhere; the component names, token families and
+suppression keyword are not, and guessing them is what produces code that looks
+conformant and imports nothing real.
 
 ## The engine
 
@@ -108,12 +121,12 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `layout/margin-on-child` | Spacing margin, which belongs on the parent's `gap` | error |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own | error |
 | `typography/in-css` | A text component typed in CSS instead of via props | error |
-| `system/override` | CSS restyling a WPDS component, or reaching into a library's internals | error |
-| `system/inline-style` | `style={{ … }}` on a WPDS component — it overrides the props | error |
-| `system/locked-component` | A private API WPDS does not recommend outside Gutenberg core | error |
+| `system/override` | CSS restyling a design-system component, or reaching into a library's internals | error |
+| `system/inline-style` | `style={{ … }}` on a design-system component — it overrides the props | error |
+| `system/locked-component` | A private API the design system does not recommend outside its own core | error |
 | `layout/negative-margin` | A bleed — confirm it is deliberate | warn |
 | `typography/untokenized` | Raw type styling with no token and no text component | warn |
-| `system/raw-element` | A raw element that has a WPDS analog | warn |
+| `system/raw-element` | A raw element that has a design-system analog | warn |
 | `system/superseded-component` | A current, recommended component now covers this job | warn |
 | `tokens/hardcoded-value` | A literal colour or length where a token exists | warn |
 | `css/dead-class` | A namespaced class referenced in no markup or reference file | warn |
@@ -126,9 +139,9 @@ Rules disable themselves when the config cannot support them — a block theme
 with no component layer leaves the component rules inert rather than firing on
 nothing.
 
-`system/raw-element` skips the element a WPDS text or layout component's
+`system/raw-element` skips the element a text or layout component's
 substitution prop is handed: `<Text variant="heading-md" render={ <h4 /> }>` is
-the WPDS way to keep a heading's semantics, not a raw `<h4>`. The prop list is
+how you keep a heading's semantics under WPDS, not a raw `<h4>`. The prop list is
 config — see [`designSystem.substitutionProps`](engine/README.md#config)
 for the bounds and the default.
 
@@ -265,11 +278,39 @@ so before profiles the hook reported a React repo as rebuilding a WordPress
 pattern it had never heard of. Now the same code is reported on a WordPress
 project and silent on a Chakra one.
 
-`loupe status` names the active profile. Adding a second design system is
-adding a directory here plus a preset in `engine/presets/` — see **Adding a
-design system** in the [engine README](engine/README.md#adding-a-design-system).
-Its authoring prose goes in `skills/` and is listed in its `profile.json`, so
-which skills belong to which design system stays written down.
+`loupe status` names the active profile and the directory it lives in.
+
+A profile also carries its design system's **authoring prose**, beside its
+registries:
+
+```
+profiles/
+  wpds/
+    profile.json
+    patterns/index.json      components/index.json
+    authoring.md             # which component, token grammar, the escape-hatch keyword
+    patterns.md              # which shape to reach for, and what already ships
+    remediation.md           # the design-system half of each rule's remedy
+  archer/
+    …the same
+```
+
+The three skills carry the rules — order of resort, gap over margin, tokens by
+role — and nothing else. Each starts at `loupe status`, reads which system is in
+play and where its profile is, and loads the matching `.md`. So the same skill
+that keeps a WordPress admin screen on `Stack` and `--wpds-dimension-gap-*`
+keeps an Archer screen on `Stack` and `--space-*`, without either set of names
+being baked into it.
+
+The second profile shipped is **Archer**: a personal design system built on Base
+UI, with one layout primitive, no text component at all, and unprefixed tokens
+in seventeen families. It exists partly to be used and partly as the proof —
+every place the plugin still assumed WordPress showed up as something Archer
+could not express.
+
+Adding a third is adding a directory here plus a preset in `engine/presets/` —
+see **Adding a design system** in the
+[engine README](engine/README.md#adding-a-design-system).
 
 ### Config
 
@@ -288,7 +329,8 @@ which skills belong to which design system stays written down.
 
 Presets: `wpds` (WPDS tokens + a severity policy that actually blocks),
 `wordpress-components` (the older admin surface), `wordpress-block-theme`,
-`base-ui` (a starting point for a system built on Base UI), `generic`.
+`archer` (a styled system on Base UI — one layout primitive, no text component),
+`base-ui` (a starting point for any system built on Base UI), `generic`.
 
 `base-ui` is a parent, the way `wordpress-components` is: Base UI is headless,
 so it has no tokens, no layout primitive and no text component of its own, and
@@ -392,7 +434,8 @@ inversion keeps the escape hatch available and legible. Audit with
 `loupe suppressions`.
 
 The keyword comes from the preset — `generic` asks for `ds-allow`, `wpds` for
-`wpds-allow` — and every preset's keyword is *read* whichever one is active, so
+`wpds-allow`, `archer` for `archer-allow`; `loupe status` prints the active one
+under `suppress:` — and every preset's keyword is *read* whichever one is active, so
 switching preset never orphans the directives already written.
 `loupe suppressions` names the keyword such a directive was written with. It is
 symmetric on purpose: `generic`, the preset a project with nothing to detect

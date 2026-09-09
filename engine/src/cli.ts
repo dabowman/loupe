@@ -632,8 +632,22 @@ async function main(): Promise<number> {
 		// differently now, and the whole reason they do is that one line covering
 		// both let a baseline sit in a file the hook was never reading.
 		const base = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+		// What design system this run thinks it is checking, in the terms the
+		// rules are written against. The rules roster below says which checks are
+		// live; it does not say what they will name as the remedy, and that is the
+		// half a skill authored for no design system in particular has to read
+		// before it writes a line of UI. Empty fields are printed as such: "no
+		// layout primitive" is a fact about the system, and inferring it from a
+		// missing line is how a skill ends up recommending one that isn't there.
+		const ds = config.designSystem;
+		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
 		const lines = [
 			`${key('config:     ')}${src}`,
+			`${key('system:     ')}${ds.name || '(unnamed)'}`,
+			`${key('packages:   ')}${orNone(ds.packages)}`,
+			`${key('layout:     ')}${orNone(ds.layoutComponents)}`,
+			`${key('text:       ')}${orNone(ds.textComponents)}`,
+			`${key('tokens:     ')}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(', ') : '(none \u2014 token rules inactive)'}`,
 			`${key('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
 			`${key('suppress:   ')}${config.suppression.keyword} <ruleId> -- <reason>`,
 			// A legacy hit has to say so. `loupe baseline` writes the canonical path,
@@ -668,9 +682,14 @@ async function main(): Promise<number> {
 			// Which design system's registries are in play, and — when none are —
 			// which ones were on offer. "No composite findings" and "no composite
 			// registry" look identical in a report; they must not look identical here.
+			// The directory, not just the id: a profile carries the authoring prose
+			// for its design system beside its registries, and the skills that read
+			// it are written for no design system in particular. Told only "archer",
+			// a skill has to guess where that lives \u2014 and guesses wrong the moment
+			// the profiles root is a project's own rather than the plugin's.
 			`${key('profile:    ')}${
 				config.profiles?.active?.length
-					? config.profiles.active.map((p) => `${p.id} (${p.name})`).join(', ')
+					? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(', ')
 					: config.profiles?.available?.length
 						? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(', ')}`
 						: 'none available'

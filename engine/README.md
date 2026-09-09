@@ -239,7 +239,16 @@ author wrote, with an analog to convert to.
 - `base-ui` — the headless case: `@base-ui/react` packages so composites are
   seen, no token or component layer to inherit, and the two rules that assume
   you must not restyle a component turned off
+- `archer` — a *styled* system built on Base UI: one layout primitive (`Stack`),
+  no text component at all, unprefixed tokens in seventeen families, and the
+  override rules back on, because a consumer of a styled system is not supposed
+  to restyle its components from outside
 - `generic` — namespaces and token prefixes only
+
+`base-ui` and `archer` are the two halves of the same lesson. A library that
+ships no CSS wants the override rules off; a system built on top of one, that
+does ship CSS, wants them on. Which of those you are on is not something the
+dependency list can tell you, so the preset says it.
 
 ### Adding a design system
 
@@ -321,7 +330,15 @@ profiles/
     profile.json       { id, name, packages, preset, patterns, components }
     patterns/index.json
     components/index.json
+    authoring.md       read by the plugin's skills, not by this engine
+    patterns.md
+    remediation.md
 ```
+
+The three `.md` files are the design system's own authoring prose. The engine
+never opens them — it prints the profile's directory in `loupe status`, and the
+plugin's skills read them from there, which is what lets one set of skills serve
+whatever design system a project is on.
 
 `--profiles <dir>` reads them all and applies the ones whose packages the
 project actually imports; `--profile <id>` forces one. A profile declaring no

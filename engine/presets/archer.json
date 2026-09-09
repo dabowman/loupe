@@ -1,0 +1,51 @@
+{
+  "extends": "generic",
+  "detect": {
+    "priority": 40,
+    "confidence": "high",
+    "dependencies": ["@dabowman/archer"]
+  },
+  "designSystem": {
+    "name": "Archer",
+    "packages": ["@dabowman/archer"],
+    "tokenPrefixes": [
+      "--color-", "--space-", "--spacing-", "--font-", "--type-styles-",
+      "--radius-", "--border-", "--shadow-", "--size-", "--opacity-",
+      "--duration-", "--delay-", "--easing-", "--transition-",
+      "--z-index-", "--breakpoint-", "--cursor-"
+    ],
+    "tokenSources": [
+      "node_modules/@dabowman/archer/dist/tokens.css",
+      "node_modules/@dabowman/archer/dist/tokens.dark.css",
+      "node_modules/@dabowman/archer/dist"
+    ],
+    "components": {
+      "layout": ["Stack"],
+      "text": []
+    },
+    "elementMap": {
+      "div": { "component": "Stack", "styledOnly": true }
+    }
+  },
+  "suppression": {
+    "keyword": "archer-allow",
+    "blanket": ["archer-disable", "ds-disable"]
+  },
+  "rules": {
+    "stylesheet/unparsed": "error",
+    "suppression/malformed": "error",
+    "layout/margin-on-child": "error",
+    "system/override": "error",
+    "system/inline-style": "error",
+    "layout/negative-margin": "warn",
+    "layout/in-css": "warn",
+    "typography/untokenized": "warn",
+    "system/raw-element": "warn",
+    "tokens/hardcoded-value": "warn",
+    "tokens/unknown-token": "warn",
+    "css/dead-class": "warn",
+    "patterns/duplicate-composite": "warn",
+    "patterns/superseded-composite": "warn",
+    "patterns/unregistered-composite": "warn"
+  }
+}

@@ -170,10 +170,19 @@ export const isSeverity = (v: unknown): v is Severity =>
 export function renderTitle(ruleId: RuleId, ds: DesignSystem, keyword: string): string {
 	const list = (arr: readonly string[] | undefined, fallback: string): string =>
 		arr && arr.length ? arr.slice(0, 2).map((c) => `<${c}>`).join('/') : fallback;
+	// One prefix is the namespace; several are families within one namespace, and
+	// naming the first of them is not a shorter way of saying that — it is a
+	// different, wrong statement. A system whose tokens are `--color-*`,
+	// `--space-*` and `--type-styles-*` told agents to fix `font-size: 18px` with
+	// "a --color-* type token", which does not exist. The per-finding suggestion
+	// names the real token when the token set is readable; the title says which
+	// namespace to look in, and says nothing when there is no single one.
+	const prefixes = ds.tokenPrefixes ?? [];
+	const namespace = prefixes.length === 1 && prefixes[0] ? `${prefixes[0]}*` : 'design-system';
 	return RULES[ruleId].title
 		.replace('{layout}', list(ds.layoutComponents, 'a layout primitive'))
 		.replace('{text}', list(ds.textComponents, 'a text component'))
-		.replace(/\{tokenPrefix\}/g, ds.tokenPrefixes?.[0] ? `${ds.tokenPrefixes[0]}*` : 'design-system')
+		.replace(/\{tokenPrefix\}/g, namespace)
 		.replace('{system}', ds.name || 'the design system')
 		.replace('{kw}', keyword);
 }

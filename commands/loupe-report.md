@@ -1,5 +1,5 @@
 ---
-description: Render the WPDS conformance report as a visual page and publish it as an Artifact
+description: Render the design-system conformance report as a visual page and publish it as an Artifact
 argument-hint: "[--changed] [--local] [path]"
 ---
 

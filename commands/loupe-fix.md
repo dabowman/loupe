@@ -1,12 +1,14 @@
 ---
-description: Fix WPDS conformance findings, working upward through the rule layers
+description: Fix design-system conformance findings, working upward through the rule layers
 argument-hint: "[rule-id] [path]"
 ---
 
-Fix WPDS conformance findings.
+Fix design-system conformance findings.
 
 **Load the `loupe-remediation` skill first** — it carries the per-rule remedy and
-the checks that stop a fix from silently changing how the UI renders.
+the checks that stop a fix from silently changing how the UI renders. It starts
+by reading `loupe status` for which design system is in play, which is what the
+remedies name components and tokens from.
 
 ## 1. Apply what needs no judgement
 
@@ -48,7 +50,14 @@ six so they run concurrently. Give each agent:
   message included because it carries the token the engine already resolved,
 - the absolute path to
   `${CLAUDE_PLUGIN_ROOT}/skills/loupe-remediation/SKILL.md`, which it reads for
-  the remedy.
+  the remedy,
+- the absolute path to the active profile's `remediation.md` — the `profile:`
+  line of `loupe status` names the directory it is in — which carries the
+  design-system half of every remedy. Without it the agent has the shape of the
+  fix and no component or token names to write,
+- the suppression keyword from `loupe status`'s `suppress:` line. The agent has
+  no shell and cannot look it up, and a directive in the wrong vocabulary
+  suppresses nothing and reports as malformed.
 
 One agent per file, never per rule: two agents editing one file collide.
 

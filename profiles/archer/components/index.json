@@ -1,0 +1,55 @@
+{
+  "packages": ["@dabowman/archer"],
+  "version": 1,
+  "verifiedAgainst": "dabowman/storybook src/components/*, from each component's own exports, 2026-09-09",
+  "note": "Component currency, not props. Archer is one package on one release line, so nothing here is `legacy` or `locked` yet — the registry exists so that the day something is deprecated, `system/superseded-component` has somewhere to say so, and so `loupe-authoring` has a single answer to 'which component is this'. Entries are the roots a consumer chooses *between*. Every root ships flat part exports off the same import (`Dialog`, `DialogTrigger`, `DialogPopup`, … — not `Dialog.Root`), and the parts are that root's anatomy rather than a separate choice, so they are not listed one by one; the `note` on a root names the parts where the wrong one is actually reachable. Archer wraps Base UI for behaviour and supplies its own styling, so a part's props are Base UI's props plus Archer's `variant`/`size` where the root declares them — read the component's own `.tsx` or its Storybook page for those. Re-verify against `src/components/` before bumping this file's version.",
+  "components": [
+    { "name": "Stack", "package": "@dabowman/archer", "status": "recommended", "note": "The only layout primitive. Base UI ships none, so flow and spacing are Archer's half of the job: `direction`, `gap` (single space steps `4xs`…`3xl`), `align`, `justify`, `wrap`. Anything spacing siblings is this, not a margin." },
+
+    { "name": "Button", "package": "@dabowman/archer", "status": "recommended", "note": "`variant`: primary | secondary | outline | ghost. `size`: sm | md | lg. Inside a `Toolbar`, use `ToolbarButton` instead — it takes the toolbar's roving-focus wiring, which a bare `Button` does not." },
+    { "name": "Toggle", "package": "@dabowman/archer", "status": "recommended", "note": "A pressed/unpressed control (`aria-pressed`). Not a `Switch`, which is an on/off setting, and not a `Checkbox`, which is a form value." },
+    { "name": "Switch", "package": "@dabowman/archer", "status": "recommended", "note": "An on/off setting that applies immediately. A setting that only applies on submit is a `Checkbox`." },
+    { "name": "Checkbox", "package": "@dabowman/archer", "status": "recommended" },
+    { "name": "RadioGroup", "package": "@dabowman/archer", "status": "recommended", "note": "The container; `Radio` is one option and is never used outside it." },
+    { "name": "Radio", "package": "@dabowman/archer", "status": "recommended", "note": "One option inside a `RadioGroup`." },
+
+    { "name": "Input", "package": "@dabowman/archer", "status": "recommended", "note": "A bare text input. Wrap it in `Field` when it needs a label, description or error — `Field` owns that rhythm as a gap." },
+    { "name": "NumberField", "package": "@dabowman/archer", "status": "recommended" },
+    { "name": "OTPField", "package": "@dabowman/archer", "status": "recommended", "note": "Parts: `OTPFieldInput`, `OTPFieldSeparator`." },
+    { "name": "Field", "package": "@dabowman/archer", "status": "recommended", "note": "The label/control/description/error row. Parts: `FieldLabel`, `FieldControl`, `FieldDescription`, `FieldError`, `FieldValidity`. Reach for this before hand-stacking a label above an input." },
+    { "name": "Fieldset", "package": "@dabowman/archer", "status": "recommended", "note": "A group of related fields. Parts: `FieldsetLegend`." },
+    { "name": "Form", "package": "@dabowman/archer", "status": "recommended" },
+    { "name": "Slider", "package": "@dabowman/archer", "status": "recommended", "note": "Single value. Two thumbs is `RangeSlider`." },
+    { "name": "RangeSlider", "package": "@dabowman/archer", "status": "recommended" },
+
+    { "name": "Select", "package": "@dabowman/archer", "status": "recommended", "note": "Choosing one predefined value — the trigger shows the current value. Parts: `SelectTrigger`, `SelectPopup`, `SelectOption`, `SelectGroup`, `SelectGroupLabel`. For commands or navigation, that is `Menu`; for free-form filtering, `Autocomplete` or `Combobox`." },
+    { "name": "Combobox", "package": "@dabowman/archer", "status": "recommended", "note": "A value chosen from a list the user can filter, including multi-select via `ComboboxChips`. Parts: `ComboboxField`, `ComboboxInput`, `ComboboxTrigger`, `ComboboxClear`, `ComboboxValue`, `ComboboxPopup`, `ComboboxList`, `ComboboxItem`, `ComboboxGroup`, `ComboboxGroupLabel`, `ComboboxEmpty`, `ComboboxChips`, `ComboboxChip`, `ComboboxChipRemove`." },
+    { "name": "Autocomplete", "package": "@dabowman/archer", "status": "recommended", "note": "Free-form text with suggestions — the typed value is valid even when nothing matches. If the value must come from the list, that is `Combobox`. Parts: `AutocompleteInput`, `AutocompleteClear`, `AutocompletePopup`, `AutocompleteList`, `AutocompleteItem`, `AutocompleteGroup`, `AutocompleteGroupLabel`, `AutocompleteEmpty`." },
+
+    { "name": "Dialog", "package": "@dabowman/archer", "status": "recommended", "note": "A focused task in an overlay. Parts: `DialogTrigger`, `DialogPopup`, `DialogTitle`, `DialogDescription`, `DialogClose`. A destructive confirmation is `AlertDialog`; a longer flow or an edit of something already on screen is `Drawer`." },
+    { "name": "AlertDialog", "package": "@dabowman/archer", "status": "recommended", "note": "Destructive or irreversible confirmation — dismissal behaviour and emphasis already match the severity. Parts: `AlertDialogTrigger`, `AlertDialogPopup`, `AlertDialogTitle`, `AlertDialogDescription`, `AlertDialogClose`. Never rebuild this out of `Dialog` + two `Button`s." },
+    { "name": "Drawer", "package": "@dabowman/archer", "status": "recommended", "note": "An edge-anchored panel for multi-field or multi-step work a `Dialog` would cramp. Parts: `DrawerTrigger`, `DrawerPopup`, `DrawerTitle`, `DrawerDescription`, `DrawerClose`." },
+    { "name": "Popover", "package": "@dabowman/archer", "status": "recommended", "note": "Non-modal, anchored, interactive. Parts: `PopoverTrigger`, `PopoverPopup`, `PopoverTitle`, `PopoverDescription`, `PopoverClose`. Text-only on hover is `Tooltip`; a rich hover summary is `PreviewCard`." },
+    { "name": "PreviewCard", "package": "@dabowman/archer", "status": "recommended", "note": "A rich hover preview of a link or entity. Parts: `PreviewCardTrigger`, `PreviewCardPopup`." },
+    { "name": "Tooltip", "package": "@dabowman/archer", "status": "recommended", "note": "A short text label on hover/focus. It carries no interactive content — if it needs a button, it wanted `Popover`." },
+
+    { "name": "Menu", "package": "@dabowman/archer", "status": "recommended", "note": "Commands, navigation destinations and in-menu settings. Parts: `MenuTrigger`, `MenuPopup`, `MenuItem` (commands), `MenuLinkItem` (navigation), `MenuCheckboxItem`/`MenuRadioGroup`/`MenuRadioItem` (settings), `MenuGroup`, `MenuGroupLabel`, `MenuSeparator`, `MenuSub`, `MenuSubTrigger`, `MenuArrow`, `MenuBackdrop`. Choosing a value is `Select`, not this." },
+    { "name": "ContextMenu", "package": "@dabowman/archer", "status": "recommended", "note": "The same menu opened by right-click on a target. Parts: `ContextMenuTrigger`, `ContextMenuPopup`, `ContextMenuItem`, `ContextMenuSeparator`, `ContextMenuGroup`, `ContextMenuGroupLabel`." },
+    { "name": "Menubar", "package": "@dabowman/archer", "status": "recommended", "note": "A persistent horizontal bar of menus. Parts: `MenubarItem`." },
+    { "name": "NavigationMenu", "package": "@dabowman/archer", "status": "recommended", "note": "Site or app navigation with rich panels. Parts: `NavigationMenuList`, `NavigationMenuItem`, `NavigationMenuTrigger`, `NavigationMenuContent`, `NavigationMenuPopup`, `NavigationMenuLink`, `NavigationMenuArrow`." },
+    { "name": "Toolbar", "package": "@dabowman/archer", "status": "recommended", "note": "A roving-focus action bar. Parts: `ToolbarGroup`, `ToolbarButton`, `ToolbarLink`, `ToolbarInput`, `ToolbarSeparator`. Its children must be the `Toolbar*` parts — a plain `Button` inside a `Toolbar` drops out of the roving-focus order." },
+    { "name": "Tabs", "package": "@dabowman/archer", "status": "recommended", "note": "Peer views of one subject, all at the same level. Parts: `TabsList`, `TabsTab`, `TabsPanel`. Tabs standing in for hierarchy is the usual misuse — depth wants navigation, not tabs." },
+
+    { "name": "Accordion", "package": "@dabowman/archer", "status": "recommended", "note": "Several independently expandable sections. Parts: `AccordionItem`, `AccordionHeader`, `AccordionTrigger`, `AccordionPanel`. One section on its own is `Collapsible`." },
+    { "name": "Collapsible", "package": "@dabowman/archer", "status": "recommended", "note": "One show/hide region. Parts: `CollapsibleTrigger`, `CollapsiblePanel`." },
+    { "name": "ScrollArea", "package": "@dabowman/archer", "status": "recommended", "note": "A scroll container with styled scrollbars. Only where the scrollbar itself has to be styled — ordinary overflow does not need it." },
+    { "name": "Separator", "package": "@dabowman/archer", "status": "recommended", "note": "A visible divider. It carries no spacing of its own by default; the surrounding rhythm belongs to the parent's `gap`." },
+
+    { "name": "Avatar", "package": "@dabowman/archer", "status": "recommended" },
+    { "name": "Progress", "package": "@dabowman/archer", "status": "recommended", "note": "Progress toward completion. A static measurement of a value in a range is `Meter`." },
+    { "name": "Meter", "package": "@dabowman/archer", "status": "recommended", "note": "A static measurement within a known range (disk used, score). Not progress." },
+
+    { "name": "ToastProvider", "package": "@dabowman/archer", "status": "recommended", "note": "Mount once at the app root. Toasts are then raised from `useToastManager()`, not by rendering a component — a hand-built notification stack is rebuilding what the manager already owns." },
+    { "name": "useToastManager", "package": "@dabowman/archer", "status": "recommended", "note": "The hook that raises a toast. Requires `ToastProvider` above it." }
+  ]
+}

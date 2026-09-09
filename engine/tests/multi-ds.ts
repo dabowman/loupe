@@ -23,10 +23,11 @@ import { analyze } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { matches, toNode } from '../src/patterns.ts';
 import { registryApplies } from '../src/registry.ts';
+import { renderTitle } from '../src/rules.ts';
 import { readProfiles, selectProfiles, applyRegistries } from '../src/profiles.ts';
 import { detectPreset } from '../src/detect.ts';
 import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
-import type { AnalyzeResult, PatternNode } from '../src/types.ts';
+import type { AnalyzeResult, DesignSystem, PatternNode } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRESET_DIR = join(HERE, '..', 'presets');
@@ -503,6 +504,129 @@ await check('a headless system composes without a layout or text layer', async (
 		assert(!override.length, `an unstyled library must not report its own styling: ${override.map((f) => f.message)}`);
 	} finally {
 		cleanup(root);
+	}
+});
+
+// ── a second shipped design system ──────────────────────────────────────────
+// The claim the profiles directory makes is that adding a design system is
+// adding a directory. Archer is the second one shipped, and it is the first
+// that is neither WordPress nor headless: a styled system built on Base UI,
+// with one layout primitive, no text component, and unprefixed tokens in
+// seventeen families. Each of those is a seam that fails quietly.
+
+const PROFILES = join(HERE, '..', '..', 'profiles');
+
+await check('the archer profile reaches a project that imports it, and only that project', async () => {
+	const root = repo({ 'package.json': JSON.stringify({ dependencies: { '@dabowman/archer': '^1.0.0' } }) });
+	const other = repo({ 'package.json': JSON.stringify({ dependencies: { '@chakra-ui/react': '^2.0.0' } }) });
+	try {
+		assert(detectPreset(root).preset === 'archer', `expected archer, got ${detectPreset(root).preset}`);
+		const profiles = readProfiles(PROFILES);
+		assert(
+			profiles.some((p) => p.id === 'archer'),
+			`the shipped profiles should include archer: ${profiles.map((p) => p.id)}`,
+		);
+		const on = selectProfiles(profiles, { designSystem: { packages: ['@dabowman/archer'] } });
+		assert(on.length === 1 && on[0]?.id === 'archer', 'archer should select on its own package');
+		const off = selectProfiles(profiles, { designSystem: { packages: ['@chakra-ui/react'] } });
+		assert(!off.length, `archer must not reach another design system: ${off.map((p) => p.id)}`);
+	} finally {
+		cleanup(root);
+		cleanup(other);
+	}
+});
+
+// A styled system with no text component is the shape neither WPDS nor base-ui
+// covered: the text rules have to stay off while the override rules stay on.
+// Turning the pair off together — which is what the headless preset does — was
+// the easy wrong answer, and it silently stops reporting real overrides.
+await check('a system with a layout primitive but no text component keeps its override rules', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: 'archer' }),
+		'src/A.jsx': `import { Button } from '@dabowman/archer';\nexport const A = () => <Button className="save">Save</Button>;\n`,
+		'styles/a.css': '.save { background: #c24300; }\n',
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		assert(config.enabled['system/override'], 'a styled system must keep system/override');
+		assert(config.enabled['layout/in-css'], 'a system with a layout primitive must keep layout/in-css');
+		assert(!config.enabled['typography/in-css'], 'no text component means typography/in-css cannot fire');
+		const r = await analyze(config, { scope: null });
+		assert(
+			r.findings.some((f) => f.rule === 'system/override'),
+			`restyling a component from CSS should still report: ${r.findings.map((f) => f.rule)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A title interpolates one token namespace. With seventeen prefixes there is no
+// "the" prefix, and naming the first told agents to fix `font-size: 18px` with
+// "a --color-* type token" — a namespace that has no type tokens in it.
+await check('a rule title names a token namespace only when there is one', () => {
+	const ds = (tokenPrefixes: string[]): DesignSystem => ({
+		name: 'X',
+		packages: [],
+		tokenPrefixes,
+		tokenSources: [],
+		cssInJsPackages: [],
+		normalizeExports: null,
+		layoutComponents: [],
+		textComponents: [],
+		knownComponents: new Set(),
+		elementMap: new Map(),
+		substitutionProps: new Set(),
+	});
+	const several = renderTitle('tokens/hardcoded-value', ds(['--color-', '--space-']), 'k');
+	assert(!several.includes('--color-*'), `several prefixes must not be reported as the namespace: ${several}`);
+	assert(several.includes('design-system'), `the fallback should be generic: ${several}`);
+	const single = renderTitle('tokens/hardcoded-value', ds(['--wpds-']), 'k');
+	assert(single.includes('--wpds-*'), `a single prefix is the namespace and should be named: ${single}`);
+});
+
+// Anatomy entries are how a library's *required* structure stops reporting as
+// house style nobody wrote down. The mechanism is `canonical`: a file importing
+// it is skipped before either composite rule sees it. Register the same shape
+// without one and `patterns/unregistered-composite` does not go quiet — it
+// becomes `patterns/duplicate-composite`, which asks for an extraction that
+// must not happen. That swap is invisible in a registry diff.
+await check('a registered anatomy with a canonical absorbs the shape instead of re-reporting it', async () => {
+	const anatomy = (name: string): string => `import { Dlg, DlgTrigger, DlgPopup, DlgTitle } from '@acme/ui';
+export const ${name} = () => (
+  <Dlg><DlgTrigger /><DlgPopup><DlgTitle>Hi</DlgTitle></DlgPopup></Dlg>
+);
+`;
+	const files = {
+		'loupe.config.json': JSON.stringify({ extends: 'generic', designSystem: { packages: ['@acme/ui'] } }),
+		'src/A.jsx': anatomy('A'),
+		'src/B.jsx': anatomy('B'),
+		'src/C.jsx': anatomy('C'),
+	};
+	const sig = ['Dlg', 'DlgTrigger', ['DlgPopup', 'DlgTitle']];
+	const withCanonical = repo({
+		...files,
+		'registry.json': JSON.stringify({ patterns: [{ id: 'dlg', summary: 'anatomy', canonical: 'Dlg', signature: sig }] }),
+	});
+	const without = repo({
+		...files,
+		'registry.json': JSON.stringify({ patterns: [{ id: 'dlg', summary: 'anatomy', signature: sig }] }),
+	});
+	try {
+		const quiet = await analyzeWith(withCanonical, join(withCanonical, 'registry.json'));
+		const noisy = await analyzeWith(without, join(without, 'registry.json'));
+		const composite = (r: AnalyzeResult): string[] =>
+			r.findings.filter((f) => f.rule.startsWith('patterns/')).map((f) => f.rule);
+		assert(!composite(quiet).length, `a canonical anatomy entry must report nothing: ${composite(quiet)}`);
+		// Not merely "something fires": the specific wrong outcome is the
+		// extraction request, and that is what the canonical exists to prevent.
+		assert(
+			composite(noisy).includes('patterns/duplicate-composite'),
+			`without a canonical the same registry asks for an extraction: ${composite(noisy)}`,
+		);
+	} finally {
+		cleanup(withCanonical);
+		cleanup(without);
 	}
 });
 

@@ -1576,7 +1576,11 @@ await check('a --profile that matches nothing says so', () => {
 	try {
 		const typo = runCli(['status', '--root', root, '--profile', 'wpsd', '--profiles', PROFILES]);
 		assert(/no profile "wpsd"/.test(typo.stderr), `a mistyped profile said nothing:\n${typo.stderr}`);
-		assert(/available: wpds/.test(typo.stderr), `the warning should name what is on offer:\n${typo.stderr}`);
+		// Membership, not position: the list is every profile shipped, sorted, so
+		// pinning `available: wpds` meant shipping a second design system broke a
+		// test about a typo'd flag. Adding a profile is supposed to be adding a
+		// directory.
+		assert(/available:.*\bwpds\b/.test(typo.stderr), `the warning should name what is on offer:\n${typo.stderr}`);
 		// The other way to reach the same state: the id is real, the directory it
 		// lives in was never passed.
 		const noDir = runCli(['status', '--root', root, '--profile', 'wpds']);

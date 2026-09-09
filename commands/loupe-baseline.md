@@ -1,5 +1,5 @@
 ---
-description: Record current WPDS findings as an accepted backlog so only new drift is reported
+description: Record current design-system findings as an accepted backlog so only new drift is reported
 ---
 
 Record the existing findings as a baseline, turning the backlog into a ratchet:

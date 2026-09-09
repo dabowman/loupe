@@ -1,115 +1,70 @@
 ---
 name: loupe-authoring
 description: >-
-  Load BEFORE writing or editing any UI that uses the WordPress Design System — `@wordpress/components`, `@wordpress/ui`, or `--wpds-*` tokens — in wp-admin, Gutenberg, WordPress.com, Jetpack, or any React surface built on WPDS. Carries the authoring rules that keep generated code from drifting: which component is current (`profiles/wpds/components/index.json` — WPDS runs two live packages at once, and not everything in the newer one is safe to use yet), the component before the element (`Text` with `variant="heading-*"` over `<p>`/`<h2>`), the prop before the stylesheet (`variant`/`gap`/`direction` over `font-size`/`margin`/`display:flex`), and `gap` on a layout primitive over margin anywhere — WPDS ships no margin token at all. Also covers token selection by role, when writing CSS is legitimate, and the `wpds-allow` escape hatch. Triggers on building admin screens, settings panels, modals, sidebar plugins, DataViews surfaces, toolbars, or any JSX importing from `@wordpress/components`/`@wordpress/ui`. Pair with `loupe-patterns` before assembling a composite and `loupe-remediation` when fixing findings.
-compatibility: "Targets WPDS on WordPress 6.5+ / 7.0. Conformance checking needs the plugin's engine (node >=18)."
+  Load BEFORE writing or editing any UI built on a design system — a component library plus design tokens, whatever it is called: WordPress Design System (`@wordpress/components`, `@wordpress/ui`, `--wpds-*`), Archer (`@dabowman/archer`), or the system a project declares in its own `loupe.config.json`. Carries the authoring rules that keep generated code from drifting, and they are the same rules in every system: the component before the element, the prop before the stylesheet, `gap` on a layout primitive before a margin anywhere, a token chosen by role before a value that merely matches. Starts by asking `loupe status` which design system is actually in play, then reads that system's own authoring notes from its profile — so the specifics (which components exist, what the tokens are named, which escape-hatch keyword) come from the project rather than from memory. Also covers when writing CSS is legitimate and how to suppress a finding properly. Triggers on building screens, settings panels, modals, sidebars, toolbars, data tables, empty states, or any JSX importing components from a design-system package. Pair with `loupe-patterns` before assembling a composite and `loupe-remediation` when fixing findings.
+compatibility: "Any React-family design system Loupe can be configured for. Conformance checking needs the plugin's engine (node >=18)."
 ---
 
-# Authoring for the WordPress Design System
+# Authoring on a design system
 
 The failure this prevents is not broken code. It is code that compiles, renders
 correctly, passes review, and quietly reimplements something the design system
-already provides — a hand-rolled flex row beside `Stack`, a `font-size` where
-`Text`'s `variant` prop already covers it, a `margin-bottom` where the parent
-has a `gap`.
+already provides — a hand-rolled flex row beside the layout primitive, a
+`font-size` where a component prop already covers it, a `margin-bottom` where
+the parent has a `gap`.
 
 That drift is cheap to avoid while writing and expensive to unwind afterwards,
 because by then the pattern is load-bearing and every argument for keeping it is
 locally true. Decide correctly the first time.
 
-## Two different questions, two different sources
+## First: find out which design system this is
 
-"Which component should this be" and "what are that component's props" are
-different questions, and WPDS's two live packages (`@wordpress/components`,
-stable; `@wordpress/ui`, the actively-growing target) make it easy to answer
-the first one wrong by asking the second tool.
+The rules below are the same everywhere. The nouns are not — one system's
+layout primitive is `Stack`, another's is `HStack`, a third has none at all;
+tokens are `--wpds-color-*` here and `--color-text-*` there. Guessing those is
+the single largest source of code that looks conformant and imports nothing
+real.
 
-**Which component — `${CLAUDE_PLUGIN_ROOT}/profiles/wpds/components/index.json`.** A
-verified-once, versioned registry of every known component's currency:
-`recommended` (use it), `legacy` (works, but a recommended replacement now
-covers the job), `locked` (a private API — do not use outside Gutenberg core,
-can break without notice), `experimental` (real and documented, but WPDS's
-own metadata flags it not yet safe to recommend broadly — informational, not
-a migration target). The engine mechanically flags `locked`/`legacy` imports
-(`system/locked-component`, `system/superseded-component`); `experimental`
-never fires automatically, because whether it's safe here is contextual, not
-mechanical — see [Choosing a component](#choosing-a-component) below.
+```bash
+loupe status
+```
 
-**What are its props — the bundled `design-system` MCP**
-(`.mcp.json` → `@wordpress/design-system-mcp`). Use `get_component_details`
-once you've picked the component. It has **no maturity signal at all** — it
-shows an `experimental` component with the same confidence as a `recommended`
-one, and it's measurably behind trunk for several newer `@wordpress/ui`
-additions (`Dialog`, `AlertDialog`, `Drawer`, `IconButton`, `LinkButton`
-return nothing from it). Before asserting a prop or a token's name, or that
-something "doesn't exist," check `get_components`/`get_component_details`/
-`get_design_tokens` rather than recalling it — this doc's own examples have
-drifted before (`HStack`/`VStack` → `Stack`, `Heading` → `Text` with
-`variant`). Never assert a negative — "there's no prop for that" — without
-having actually looked.
+Read the top block before writing anything:
 
-## Choosing a component
-
-Past the basics (`Stack`, `Text`, `Card`, `Badge`, `Icon` — check the
-registry, but these are settled), a handful of families need a real decision,
-not a lookup. Check `profiles/wpds/components/index.json` for current status before
-treating any of these as settled — WPDS ships twice yearly and this
-section's calls can go stale.
-
-**Button, IconButton, Link, LinkButton** — choose by what happens on
-activation, not appearance:
-
-| Goal | Component |
+| Line | What it settles |
 | --- | --- |
-| Action on the current page (submit, open an overlay, run JS) | `Button` |
-| Same, icon-only | `IconButton` |
-| Navigate to another page/URL | `Link` |
-| Navigate, styled as a button (standalone CTA, card action) | `LinkButton` |
+| `system:` | The design system's name |
+| `packages:` | What its components are imported from |
+| `layout:` | The layout primitive(s). `(none)` is a real answer — a headless library has none |
+| `text:` | The text component(s), or `(none)` — then type is a token, not a component |
+| `tokens:` | The token namespace(s). Everything you write comes from these |
+| `suppress:` | The exact escape-hatch keyword for this project |
+| `profile:` | The active design-system profile, and the directory it lives in |
 
-`Button` and `IconButton` (`@wordpress/ui`) are `experimental` — not yet safe
-alongside `@wordpress/components`, which is most real codebases today. Use
-`Button` from `@wordpress/components` (`recommended`) until that clears;
-`size`: `default` for text buttons, `compact` for toggle/icon buttons,
-`small` for icon buttons on advanced/auxiliary features. One prominent
-(primary) action per layout, secondary for the rest, tertiary sparingly.
-Label with `{verb}+{noun}` (Save/Close/Cancel/OK exempted), strip filler
-words. Never `Button`+`onClick` for actual navigation — that belongs to
-`Link`.
+**Then read that profile's `authoring.md`** — `<profile dir>/authoring.md`,
+where `<profile dir>` is the path `profile:` printed. That file carries the
+system's real component list, its token grammar and the decisions that need
+judgement rather than a lookup. It is the difference between "use a token" and
+naming one that exists.
 
-**Modal, Dialog, AlertDialog, Drawer** — `Modal` (`@wordpress/components`) is
-still `recommended`; `Dialog`/`AlertDialog`/`Drawer` (`@wordpress/ui`) are its
-eventual replacements but are `experimental`, not yet safe alongside
-`@wordpress/components`. Stay on `Modal`/`ConfirmDialog` until the registry
-says otherwise. The decision for when it does clear: `Dialog` for a focused,
-single-decision, scannable-without-scrolling task reachable from multiple
-entry points; `AlertDialog` specifically for destructive/irreversible
-confirmations (dismissal behavior and button emphasis match the severity);
-`Drawer` for editing something already on screen, or a flow with multiple
-fields/sections/drill-down steps that a `Dialog` would cramp.
+If `profile:` says `none selected`, there is no profile for this system and
+this skill is the whole of the guidance: work from `loupe status`'s other lines
+and from the tokens the project's own stylesheets already define.
 
-**Menu vs. Select vs. Autocomplete vs. SelectControl** — by what the options
-represent: `Menu` (commands, actions, navigation destinations — `Menu.Item`
-for commands, `Menu.LinkItem` for navigation, `Menu.CheckboxItem`/
-`Menu.RadioItem` for settings within the menu) vs. `SelectControl`/`Select`
-(choosing one predefined value — the trigger represents the current value)
-vs. `Autocomplete` (free-form filtering of suggestions). The
-`@wordpress/components` `Menu` is `locked` — a private API, never use it.
-The `@wordpress/ui` `Menu` is real but `experimental` — same
-not-yet-safe-alongside-`@wordpress/components` gate as the Button family.
-
-**Field, Fieldset** — low-level form primitives (`@wordpress/ui`,
-`recommended`, no caution flag — they're stable, just low-altitude). Check
-for a higher-level `*Control` component (either package) or `DataForm` first;
-most UI should not need `Field`/`Fieldset` directly.
+`loupe` is on PATH when the plugin is enabled; otherwise
+`node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" status --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"`.
 
 ## The order of resort
 
 For any visual requirement, work down this list and stop at the first hit. Going
 further down than necessary is the drift.
 
-1. **A component prop.** `<Text variant="body-sm">`.
-2. **A layout primitive.** `<Stack direction="row" gap="sm">`, `<Stack direction="column">`.
-3. **A token, applied in CSS.** `padding: var(--wpds-dimension-padding-md)`.
+1. **A component prop.** The component already models this — a variant, a size,
+   an emphasis.
+2. **A layout primitive.** Direction and spacing belong to a container, not to
+   the things inside it.
+3. **A token, applied in CSS.** Chosen by role, from the namespace `loupe status`
+   named.
 4. **Raw CSS.** Only with a reason you would defend out loud, or for what has no
    primitive at all — CSS Grid is never reported, because no flex primitive
    expresses it. See [Legitimate CSS](#when-css-is-the-right-answer).
@@ -130,24 +85,15 @@ CSS rule bound to it would.
 The checker treats all three channels identically — stylesheets, `style={{ … }}`
 and CSS-in-JS run through one classifier — so there is no fast path here.
 
-```jsx
-<Button style={{ marginRight: 12 }}>Save</Button>                    // no — beats the props
-<Stack direction="row" gap="md"><Button>Save</Button></Stack>        // yes
-```
-
 Legitimate inline styles are the ones no stylesheet could express: a value
 computed at runtime (a measured width, a drag offset, a progress percentage).
 If the value is a constant, it belongs in a prop or a token.
 
 ## Layout: gap, never margin
 
-**WPDS ships no margin token.** The dimension scale covers `padding`, `gap`,
-`size` and `surface-width` — margin is absent by design, because the system
-expresses spacing as a property of a container, not of the things inside it.
-
-This is a fact about the system, not a style preference, and it settles the
-question: there is no sanctioned way to write margin, so spacing belongs to the
-parent.
+Spacing between siblings is a property of their container. A child that asserts
+its own margin has an opinion about who it sits next to, and it is wrong the
+first time it is reused somewhere else.
 
 ```jsx
 // Wrong — each child asserts its own spacing, and they will disagree.
@@ -157,11 +103,15 @@ parent.
 </div>
 
 // Right — the container owns the rhythm; children stay reusable.
-<Stack direction="row" gap="md" justify="flex-start">
+<Stack direction="row" gap="md">
 	<Button variant="primary">Save</Button>
 	<Button>Cancel</Button>
 </Stack>
 ```
+
+Many systems make this literal by shipping no margin token at all — the
+dimension scale covers `padding` and `gap` and stops. Check the profile's
+`authoring.md`; where that is true it settles the question outright.
 
 When a layout primitive genuinely cannot be used — you do not control the
 wrapper, or the markup comes from elsewhere — put `gap` on the parent in CSS.
@@ -173,86 +123,62 @@ Three margins carry no drift and are not flagged: `margin: 0` (a reset),
 express), and negative margins used for a deliberate bleed — that last one is
 reported separately so you confirm the intent rather than defend the technique.
 
-## Typography: variant, not properties
+## Typography: one decision, not five
 
-There is one text component, `Text`, and one styling prop, `variant`
-(`heading-2xl`…`heading-sm`, `body-xl`…`body-sm`) — that is the entire
-surface, headings included. A heading is `Text` at a heading variant with
-`render` supplying the semantic element, not a separate `Heading` component:
+`font-size`, `font-weight`, `line-height`, `letter-spacing` and `font-family`
+move together or they drift apart. A rule that sets one of them has taken a
+type style apart, and the next edit will change one half of it.
 
-```jsx
-<Text variant="heading-lg" render={<h2 />}>Section title</Text>   // yes
-<Text variant="body-sm">Draft</Text>                               // yes
-<span className="status">Draft</span>                              // no
-```
+Which mechanism carries them depends on what `loupe status` said under `text:`:
 
-Never set `font-size`, `font-weight`, `line-height`, `letter-spacing` or
-`font-family` on a class bound to `Text` — `variant` already carries all of
-them together, and a class that touches one drifts them out of sync with each
-other.
+- **A text component exists.** Use it, with its own styling prop — a `variant`
+  or `size` that carries the whole style at once — and never set the individual
+  properties on a class bound to it.
+- **`text: (none)`.** Type is a token composite. Apply the whole set of
+  longhands for a named role together; do not assemble a new style out of loose
+  values. The profile's `authoring.md` names the roles.
 
-`variant` has no color axis, and `Text` has no `color` prop — the component's
-own docs set color via `style` when a variant alone can't express it (e.g.
-`style={{ color: 'var(--wpds-color-foreground-content-warning)' }}`), which
-makes this the one sanctioned case for `style` on a WPDS component rather than
-an override. If the codebase's `system/inline-style` rule doesn't yet know that
-exception, suppress it with that reason rather than inventing a `color` prop
-that does not exist.
-
-Raw `<p>` and `<h1>`–`<h6>` both have a `Text` analog. Use it.
+Either way, semantic HTML still applies: a heading is a heading element,
+whether it carries a component's `render` prop or a type-style role.
 
 ## Tokens by role, not by value
 
 Token names describe purpose, not appearance. Pick by asking what the value is
-*for*, never by matching a hex you already had:
+*for*, never by matching a hex you already had. A background token applied to
+`color` gives the right pixels and the wrong meaning, and that survives review
+precisely because it looks correct.
 
-```
---wpds-color-<property>-<target>-<tone>[-<emphasis>][-<state>]
-```
+Two rules that hold in every system:
 
-- **property** — `background`, `foreground`, `stroke`
-- **target** — `surface` (containers), `interactive` (controls), `content`
-  (static text and icons), `track` / `thumb`
-- **tone** — `neutral`, `brand`, `success`, `info`, `caution`, `warning`, `error`
-- **emphasis** — `weak`, `strong` · **state** — `active`, `disabled`
+- **Never invent a token name.** A plausible-looking name that was never
+  defined resolves to nothing and fails silently at runtime. Look it up — in
+  the profile's `authoring.md`, in the design system's own generated
+  stylesheets, or with whatever token tool the profile names.
+- **Prefer the semantic layer over the primitive one.** Most systems ship a raw
+  palette and a role layer built on top of it. The role layer is what moves
+  when the theme moves; a primitive is a specific colour in light mode and the
+  same specific colour in dark.
 
-Body text on a panel is `--wpds-color-foreground-content-neutral`. A primary
-button's fill is `--wpds-color-background-interactive-brand-strong`. Keep the
-role fixed across states and vary only the state segment — pair
-`…-interactive-neutral` with `…-interactive-neutral-active`, rather than
-switching tone when something is hovered.
-
-Other families, all `--wpds-` prefixed:
-
-| Need | Family |
-| --- | --- |
-| Space inside a container | `dimension-padding-{xs…3xl}` |
-| Space between children | `dimension-gap-{xs…3xl}` |
-| Control / icon sizing | `dimension-size-{5xs…lg}` |
-| Max width of a surface | `dimension-surface-width-{xs…2xl}` |
-| Type | `typography-font-size-{xs…2xl}`, `-line-height-*`, `-font-weight-{default,emphasis}` |
-| Corners, borders | `border-radius-{xs…xl}`, `border-width-{xs…lg,focus}` |
-| Animation | `motion-duration-{xs…xl}`, `motion-easing-{subtle,balanced,expressive}` |
-
-The set is role-based, not a full matrix. A combination that does not exist
-usually should not — that is a signal to re-examine the design, not to invent a
-token or fall back to a literal.
-
-Never invent a token name. If the exact token is not obvious, look it up with
-the WPDS MCP server (`get_design_tokens`) rather than guessing a plausible
-shape; `--wpds-font-size-13` is the classic invented token and it resolves to
-nothing.
+Where a needed combination does not exist, that is usually a signal to
+re-examine the design rather than to invent a token or fall back to a literal.
 
 ## Don't restyle a component from outside
 
-A class on a WPDS component that sets colour, type, borders or radius is an
-override. It couples your code to the component's internals and breaks on
-upgrade. Restyle through props and the tokens the component reads.
+A class on a design-system component that sets colour, type, borders or radius
+is an override. It couples your code to the component's internals and breaks on
+upgrade. Restyle through props, and through whatever tokens the component
+declares as its own contract.
 
-Reaching into another library's DOM — `.components-*`, `.block-editor-*`,
-`.dataviews-*` — is worse: those are private and change without notice. If a
-component cannot be made to look right through its API, that is worth raising
-rather than routing around.
+Reaching into another library's DOM is worse: those selectors are private and
+change without notice. If a component cannot be made to look right through its
+API, that is worth raising rather than routing around.
+
+**One exception, and it is a real one.** On a headless library — Base UI, Radix,
+Ark, React Aria — styling the parts with your own classes *is* the documented
+way to use it, not drift. Loupe knows this: on a headless preset
+`system/override` and `system/inline-style` are off, and `loupe status` will
+show them that way. Do not apply this section against the grain of what the
+status output says.
 
 ## When CSS is the right answer
 
@@ -269,17 +195,18 @@ In all of them, values come from tokens.
 
 ## The escape hatch
 
-When a finding is genuinely wrong, suppress it precisely and say why:
+When a finding is genuinely wrong, suppress it precisely and say why, using the
+keyword `loupe status` printed under `suppress:`:
 
 ```css
-/* wpds-allow system/override -- Stack exposes no padding prop at this size */
-.acme-panel { padding: var(--wpds-dimension-padding-lg); }
+/* <keyword> system/override -- Stack exposes no padding prop at this size */
+.acme-panel { padding: var(--space-l); }
 ```
 
 The rule id and the reason are both mandatory; a bare or blanket disable is
 itself a blocking finding. This inversion is deliberate — the escape hatch stays
 available and stays legible, so suppressions can be audited later with
-`loupe-audit --suppressions`.
+`loupe suppressions`.
 
 A reason that amounts to "this is how it was already written" is not a reason.
 
@@ -293,8 +220,8 @@ pattern if it exists.
 ## Checking your work
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --changed
+loupe check --changed
 ```
 
-`--all` for the whole repo, `explain <rule>` for a rule's guidance and whether
-it is active. Fixing what it reports is **`loupe-remediation`**.
+`--all` for the whole repo, `loupe explain <rule>` for a rule's guidance and
+whether it is active. Fixing what it reports is **`loupe-remediation`**.

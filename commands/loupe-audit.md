@@ -1,9 +1,10 @@
 ---
-description: Run a WPDS conformance audit over the repo (or just changed files) and summarize what needs fixing
+description: Run a design-system conformance audit over the repo (or just changed files) and summarize what needs fixing
 argument-hint: "[--changed] [--suppressions] [path]"
 ---
 
-Run the WPDS conformance engine and report what it finds.
+Run the conformance engine and report what it finds, against whatever design
+system this project is on.
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
@@ -28,5 +29,9 @@ Then summarize for the user rather than pasting raw output:
 4. **Do not start fixing.** This command reports. Offer `/loupe-fix` as the next
    step, or ask which subset to take on.
 
-If the repo has no config, say so and note that `--preset wpds` runs the
-WordPress Design System ruleset without one.
+Name the design system in the summary — `loupe status` prints it, along with
+the active profile. A report that does not say which system it judged against is
+a report the reader has to guess at.
+
+If the repo has no config, say so and note that `loupe presets` lists the
+bundled rulesets, any of which runs without one (`--preset <name>`).

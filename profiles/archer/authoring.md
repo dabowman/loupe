@@ -1,0 +1,190 @@
+# Authoring for Archer
+
+The design-system half of `loupe-authoring`. Load that skill first — it carries
+the order of resort, gap over margin, the inline-style rule and the escape
+hatch, all of which apply here unchanged. This file says what those rules mean
+in Archer terms.
+
+Archer is one package, `@dabowman/archer`: 36 components built on
+[Base UI](https://base-ui.com) for behaviour and accessibility, styled entirely
+with token custom properties. Colour comes from Leonardo against contrast
+targets, type and space from Utopia's fluid interpolation. Every value the
+system exposes is a CSS custom property, and both themes are just a different
+set of values for the same names.
+
+## Which component
+
+`components/index.json`, beside this file, is the registry: every root, what it
+is for, and the parts it ships. Archer is on one release line, so nothing is
+`legacy` or `locked` yet — the registry earns its keep as the answer to "which
+of these is this", not as a currency check.
+
+Read it before reaching for one of the families where the wrong pick is easy:
+
+| Question | Answer |
+| --- | --- |
+| Confirmation of something destructive | `AlertDialog`, never `Dialog` plus two `Button`s |
+| A focused task in an overlay | `Dialog` |
+| Editing something already on screen, or a multi-step flow | `Drawer` |
+| Anchored, non-modal, interactive | `Popover` |
+| A short text label on hover | `Tooltip` — it holds nothing interactive |
+| A rich hover summary of a link or entity | `PreviewCard` |
+| Commands, navigation, in-menu settings | `Menu` |
+| Choosing one predefined value | `Select` |
+| A value chosen from a filterable list | `Combobox` |
+| Free-form text with suggestions | `Autocomplete` |
+| An immediate on/off setting | `Switch` |
+| A pressed/unpressed control | `Toggle` |
+| A form value | `Checkbox` |
+| Progress toward completion | `Progress` |
+| A static measurement in a range | `Meter` |
+| Several expandable sections | `Accordion`; one on its own is `Collapsible` |
+
+Parts are flat sibling exports off the same import — `DialogPopup`, not
+`Dialog.Root`. A component's parts are its anatomy, not a separate choice.
+
+## Layout: Stack, and only Stack
+
+Base UI ships **no layout components** — it bundles no CSS by design, so flow
+and spacing are Archer's half of the job. `Stack` is the whole of it:
+
+```jsx
+<Stack direction="row" gap="s" align="center" justify="between">
+	<Button variant="primary">Save</Button>
+	<Button variant="ghost">Cancel</Button>
+</Stack>
+```
+
+- `direction` — `column` (the default; the case margins were being used for) or `row`
+- `gap` — a **single** step of the space scale: `4xs 3xs 2xs xs s m l xl 2xl 3xl`
+- `align` — `start center end stretch baseline` · `justify` — `start center end between`
+- `wrap` — boolean, row direction
+
+Props map to custom properties (`--stack-direction`, `--stack-gap`, …), not to
+modifier classes, so the class count stays at one.
+
+The **pair steps** in the space scale (`--space-s-m`, `--space-l-xl`, …) are
+fluid ranges for container padding, not for the gap between two siblings.
+`Stack`'s `gap` only accepts single steps for that reason; if you are writing
+one in CSS, hold to the same rule.
+
+Spacing a child from inside the child is the drift Archer's `Stack` exists to
+end. Every container Archer owns carries its rhythm as `gap` and its children
+set `margin: 0`.
+
+## Typography: composites, never loose longhands
+
+Archer ships **no text component**. Type is a *composite* — five longhands that
+move together — applied from the `--type-styles-*` family:
+
+```css
+.panel-title {
+	font-family:    var(--type-styles-ui-title-font-family);
+	font-size:      var(--type-styles-ui-title-font-size);
+	font-weight:    var(--type-styles-ui-title-font-weight);
+	line-height:    var(--type-styles-ui-title-line-height);
+	letter-spacing: calc(var(--type-styles-ui-title-letter-spacing) * 1em);
+}
+```
+
+Roles, and what each is for:
+
+| | |
+| --- | --- |
+| UI | `ui-title` `ui-heading` `ui-body-lg` `ui-body` `ui-control` `ui-label` `ui-caption` `ui-overline` |
+| Prose | `heading-1`…`heading-6`, `body-1` `body-2` `body-3` |
+
+Two things about this that bite:
+
+- **letter-spacing tokens are unitless em proportions.** Written raw —
+  `letter-spacing: var(--type-styles-ui-body-letter-spacing)` — that is invalid
+  CSS the browser drops silently. It always needs `calc(… * 1em)`.
+- **A single longhand override is fine** (a variant's `font-size`, a state's
+  `font-weight`). Two or more in one rule is a new type style, and it belongs
+  in the token config as a role rather than inline in a component.
+
+There is no `font` shorthand route: it cannot carry letter-spacing and it
+resets `font-variant`.
+
+Semantic HTML still applies — a heading is an `<h2>` carrying a `heading-2`
+role, not a `<div>` that looks like one.
+
+## Tokens by role, not by value
+
+Archer's tokens are unprefixed and arrive in three tiers. **Consumers use the
+common tier.** The base tier is the raw palette the common tier is built from,
+and the component tier is each component's internal contract.
+
+| Tier | Looks like | Use it? |
+| --- | --- | --- |
+| base | `--color-neutral-600`, `--color-brand-400` | No — a primitive says what colour, not what for |
+| common | `--color-text-primary`, `--space-m`, `--radius-3` | Yes |
+| component | `--button-bg`, `--menu-item-color` | No — internal to that component |
+
+Colour, by role:
+
+| Need | Family |
+| --- | --- |
+| Text | `--color-text-{primary,secondary,tertiary,inverse,link,link-hover,on-primary}` |
+| Text carrying status | `--color-text-{success,warning,error,info}` |
+| Surfaces | `--color-background-{primary,secondary,tertiary,quaternary,inverse}` |
+| Surfaces carrying status | `--color-background-{success,warning,error,info}` |
+| Lines | `--color-border-{primary,secondary,control,control-hover,focus}`, and `-{success,warning,error,info}` |
+| The brand action | `--color-primary`, `-hover`, `-active`, `-surface`, `-surface-hover`, `-surface-active` |
+
+Everything else:
+
+| Need | Family |
+| --- | --- |
+| Space | `--space-{4xs…3xl}`, pair steps `--space-{s-m,l-xl,…}` for fluid container padding |
+| Type | `--type-styles-<role>-{font-family,font-size,font-weight,line-height,letter-spacing}` |
+| Loose type values | `--font-size-{xs…5xl}`, `--font-weight-{extralight…extrabold}`, `--font-line-height-*`, `--font-family-{sans,serif,mono,pixel,hybrid}` |
+| Corners | `--radius-{none,1…6,full}` · Borders `--border-width-{0,1,2,4}` |
+| Elevation | `--shadow-{1…6}` |
+| Control heights | `--size-target` (24) `--size-control` (34) `--size-control-lg` (44) `--size-field` (40) `--size-icon` |
+| Motion | `--duration-{fast,base,slow}`, `--easing-ease-{in,out,in-out}`, `--delay-{none,short,medium,long}` |
+| Stacking | `--z-index-{dropdown,sticky,fixed,modal-backdrop,modal,popover,tooltip}` |
+| Other | `--opacity-{0…100}`, `--cursor-*`, `--breakpoint-{xs…2xl}` |
+
+**Dark theme is the argument for all of this.** The theme switches on
+`[data-theme="dark"]`, and it switches by redefining these names. A hardcoded
+`#f3f2f2` is not a style preference — it is a value that will stay light when
+everything around it goes dark. Same for a base-tier primitive: `--color-neutral-100`
+is a specific light grey in both themes, which is why the common tier exists.
+
+Never invent a token name. The set is generated — `npm run tokens:build` in the
+Archer repo emits it — so a plausible-looking name that was never generated
+resolves to nothing and fails silently.
+
+## Control heights come from the size scale
+
+Archer pins control height to `--size-*` rather than growing it out of padding,
+because labels are cap-height trimmed and a trimmed box is shorter than its
+leading. A control you build to sit beside Archer's should take the same
+height: `--size-field` for anything on a row with an `Input` or a `Select`
+trigger, `--size-control` for anything on a row with a `Button`.
+
+## State comes from data attributes
+
+Base UI publishes state as `[data-*]` attributes — `[data-checked]`,
+`[data-disabled]`, `[data-open]`, `[data-highlighted]` — and Archer styles
+against those, not against `:checked`/`:disabled`. Styling your own wrapper
+around an Archer part, use the same attributes: they are the ones that exist on
+every part, including the ones with no native element underneath.
+
+Hover and focus are different jobs and must not be mixed. Hover changes a
+surface: background, text colour, border colour, elevation. Keyboard focus is
+the focus ring and nothing else — never a border or a box-shadow dressed up as
+a ring, and never a hover property inside a focus rule.
+
+## The escape hatch
+
+The keyword here is `archer-allow`:
+
+```css
+/* archer-allow tokens/hardcoded-value -- 1px hairline; the space scale starts above it */
+.thing { padding: 1px; }
+```
+
+`archer-disable` and `ds-disable` are blanket forms and are themselves blocking
+findings.
