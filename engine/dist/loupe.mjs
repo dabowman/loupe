@@ -27,9 +27,9 @@ var __export = (target, all) => {
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    for (let key2 of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key2) && key2 !== except)
+        __defProp(to, key2, { get: () => from[key2], enumerable: !(desc = __getOwnPropDesc(from, key2)) || desc.enumerable });
   }
   return to;
 };
@@ -2018,8 +2018,8 @@ var require_lib = __commonJS({
       ModuleAttributeDifferentFromType: "The only accepted module attribute is `type`.",
       ModuleAttributeInvalidValue: "Only string literals are allowed as module attribute values.",
       ModuleAttributesWithDuplicateKeys: ({
-        key
-      }) => `Duplicate key "${key}" is not allowed in module attributes.`,
+        key: key2
+      }) => `Duplicate key "${key2}" is not allowed in module attributes.`,
       ModuleExportNameHasLoneSurrogate: ({
         surrogateCharCode
       }) => `An export name cannot include a lone surrogate, found '\\u${surrogateCharCode.toString(16)}'.`,
@@ -2155,8 +2155,8 @@ var require_lib = __commonJS({
       UnsupportedBindRHS: "The right-hand side of binding can not be super or import."
     };
     var _excluded = ["message"];
-    function defineHidden(obj, key, value) {
-      Object.defineProperty(obj, key, {
+    function defineHidden(obj, key2, value) {
+      Object.defineProperty(obj, key2, {
         enumerable: false,
         configurable: true,
         value
@@ -2276,8 +2276,8 @@ var require_lib = __commonJS({
       if (opts.annexB != null && opts.annexB !== false) {
         throw new Error("The `annexB` option can only be set to `false`.");
       }
-      for (const key of Object.keys(options)) {
-        if (opts[key] != null) options[key] = opts[key];
+      for (const key2 of Object.keys(options)) {
+        if (opts[key2] != null) options[key2] = opts[key2];
       }
       if (options.startLine === 1) {
         if (opts.startIndex == null && options.startColumn > 0) {
@@ -2306,11 +2306,11 @@ var require_lib = __commonJS({
     var {
       defineProperty
     } = Object;
-    var toUnenumerable = (object, key) => {
+    var toUnenumerable = (object, key2) => {
       if (object) {
-        defineProperty(object, key, {
+        defineProperty(object, key2, {
           enumerable: false,
-          value: object[key]
+          value: object[key2]
         });
       }
     };
@@ -2500,9 +2500,9 @@ var require_lib = __commonJS({
           return this.finishNode(node, "MethodDefinition");
         }
       }
-      nameIsConstructor(key) {
-        if (key.type === "Literal") return key.value === "constructor";
-        return super.nameIsConstructor(key);
+      nameIsConstructor(key2) {
+        if (key2.type === "Literal") return key2.value === "constructor";
+        return super.nameIsConstructor(key2);
       }
       parseClassProperty(...args) {
         const propertyNode = super.parseClassProperty(...args);
@@ -2558,11 +2558,11 @@ var require_lib = __commonJS({
       toAssignable(node, isLHS = false) {
         if (node != null && this.isObjectProperty(node)) {
           const {
-            key,
+            key: key2,
             value
           } = node;
-          if (this.isPrivateName(key)) {
-            this.classScope.usePrivateName(this.getPrivateNameSV(key), key.loc.start);
+          if (this.isPrivateName(key2)) {
+            this.classScope.usePrivateName(this.getPrivateNameSV(key2), key2.loc.start);
           }
           this.toAssignable(value, isLHS);
         } else {
@@ -6803,8 +6803,8 @@ var require_lib = __commonJS({
             return false;
           }
           const actualOptions = this.plugins.get(pluginName2);
-          for (const key of Object.keys(pluginOptions2)) {
-            if ((actualOptions == null ? void 0 : actualOptions[key]) !== pluginOptions2[key]) {
+          for (const key2 of Object.keys(pluginOptions2)) {
+            if ((actualOptions == null ? void 0 : actualOptions[key2]) !== pluginOptions2[key2]) {
               return false;
             }
           }
@@ -8664,7 +8664,7 @@ var require_lib = __commonJS({
       return new ExpressionScope();
     }
     var UtilParser = class extends Tokenizer {
-      addExtra(node, key, value, enumerable = true) {
+      addExtra(node, key2, value, enumerable = true) {
         if (!node) return;
         let {
           extra
@@ -8674,9 +8674,9 @@ var require_lib = __commonJS({
           node.extra = extra;
         }
         if (enumerable) {
-          extra[key] = value;
+          extra[key2] = value;
         } else {
-          Object.defineProperty(extra, key, {
+          Object.defineProperty(extra, key2, {
             enumerable,
             value
           });
@@ -8909,9 +8909,9 @@ var require_lib = __commonJS({
       const newNode = new Node2(void 0, this.start, this.loc.start);
       const keys = Object.keys(this);
       for (let i = 0, length = keys.length; i < length; i++) {
-        const key = keys[i];
-        if (key !== "leadingComments" && key !== "trailingComments" && key !== "innerComments") {
-          newNode[key] = this[key];
+        const key2 = keys[i];
+        if (key2 !== "leadingComments" && key2 !== "trailingComments" && key2 !== "innerComments") {
+          newNode[key2] = this[key2];
         }
       }
       return newNode;
@@ -9037,11 +9037,11 @@ var require_lib = __commonJS({
             break;
           case "ObjectProperty": {
             const {
-              key,
+              key: key2,
               value
             } = node;
-            if (this.isPrivateName(key)) {
-              this.classScope.usePrivateName(this.getPrivateNameSV(key), key.loc.start);
+            if (this.isPrivateName(key2)) {
+              this.classScope.usePrivateName(this.getPrivateNameSV(key2), key2.loc.start);
             }
             this.toAssignable(value, isLHS);
             break;
@@ -9352,17 +9352,17 @@ var require_lib = __commonJS({
           });
           return;
         }
-        let key, isParenthesizedExpression;
+        let key2, isParenthesizedExpression;
         if (typeof validity === "string") {
-          key = validity;
+          key2 = validity;
           isParenthesizedExpression = type === "ParenthesizedExpression";
         } else {
-          [key, isParenthesizedExpression] = validity;
+          [key2, isParenthesizedExpression] = validity;
         }
         const nextAncestor = type === "ArrayPattern" || type === "ObjectPattern" ? {
           type
         } : ancestor;
-        const val = expression[key];
+        const val = expression[key2];
         if (Array.isArray(val)) {
           for (const child of val) {
             if (child) {
@@ -11484,10 +11484,10 @@ var require_lib = __commonJS({
         }
         if (node.abstract && this.match(29)) {
           const {
-            key
+            key: key2
           } = node;
           this.raise(TSErrors.AbstractPropertyHasInitializer, this.state.startLoc, {
-            propertyName: key.type === "Identifier" && !node.computed ? key.name : `[${this.input.slice(this.offsetToSourcePos(key.start), this.offsetToSourcePos(key.end))}]`
+            propertyName: key2.type === "Identifier" && !node.computed ? key2.name : `[${this.input.slice(this.offsetToSourcePos(key2.start), this.offsetToSourcePos(key2.end))}]`
           });
         }
         return super.parseClassProperty(node);
@@ -11924,10 +11924,10 @@ var require_lib = __commonJS({
           const methodFn = hasEstreePlugin ? method.value : method;
           if (methodFn.body) {
             const {
-              key
+              key: key2
             } = method;
             this.raise(TSErrors.AbstractMethodHasImplementation, method, {
-              methodName: key.type === "Identifier" && !method.computed ? key.name : `[${this.input.slice(this.offsetToSourcePos(key.start), this.offsetToSourcePos(key.end))}]`
+              methodName: key2.type === "Identifier" && !method.computed ? key2.name : `[${this.input.slice(this.offsetToSourcePos(key2.start), this.offsetToSourcePos(key2.end))}]`
             });
           }
         }
@@ -12552,20 +12552,20 @@ var require_lib = __commonJS({
         if (prop.type === "SpreadElement" || this.isObjectMethod(prop) || prop.computed || prop.shorthand) {
           return sawProto;
         }
-        const key = prop.key;
-        const name = key.type === "Identifier" ? key.name : key.value;
+        const key2 = prop.key;
+        const name = key2.type === "Identifier" ? key2.name : key2.value;
         if (name === "__proto__") {
           if (isRecord) {
-            this.raise(Errors.RecordNoProto, key);
+            this.raise(Errors.RecordNoProto, key2);
             return true;
           }
           if (sawProto) {
             if (refExpressionErrors) {
               if (refExpressionErrors.doubleProtoLoc === null) {
-                refExpressionErrors.doubleProtoLoc = key.loc.start;
+                refExpressionErrors.doubleProtoLoc = key2.loc.start;
               }
             } else {
-              this.raise(Errors.DuplicateProto, key);
+              this.raise(Errors.DuplicateProto, key2);
             }
           }
           return true;
@@ -13706,18 +13706,18 @@ var require_lib = __commonJS({
         this.parsePropertyName(prop, refExpressionErrors);
         if (!isGenerator && !containsEsc && this.maybeAsyncOrAccessorProp(prop)) {
           const {
-            key
+            key: key2
           } = prop;
-          const keyName2 = key.name;
+          const keyName2 = key2.name;
           if (keyName2 === "async" && !this.hasPrecedingLineBreak()) {
             isAsync = true;
-            this.resetPreviousNodeTrailingComments(key);
+            this.resetPreviousNodeTrailingComments(key2);
             isGenerator = this.eat(55);
             this.parsePropertyName(prop);
           }
           if (keyName2 === "get" || keyName2 === "set") {
             isAccessor = true;
-            this.resetPreviousNodeTrailingComments(key);
+            this.resetPreviousNodeTrailingComments(key2);
             prop.kind = keyName2;
             if (this.match(55)) {
               isGenerator = true;
@@ -13806,19 +13806,19 @@ var require_lib = __commonJS({
             type,
             value
           } = this.state;
-          let key;
+          let key2;
           if (tokenIsKeywordOrIdentifier(type)) {
-            key = this.parseIdentifier(true);
+            key2 = this.parseIdentifier(true);
           } else {
             switch (type) {
               case 135:
-                key = this.parseNumericLiteral(value);
+                key2 = this.parseNumericLiteral(value);
                 break;
               case 134:
-                key = this.parseStringLiteral(value);
+                key2 = this.parseStringLiteral(value);
                 break;
               case 136:
-                key = this.parseBigIntLiteral(value);
+                key2 = this.parseBigIntLiteral(value);
                 break;
               case 139: {
                 const privateKeyLoc = this.state.startLoc;
@@ -13829,18 +13829,18 @@ var require_lib = __commonJS({
                 } else {
                   this.raise(Errors.UnexpectedPrivateField, privateKeyLoc);
                 }
-                key = this.parsePrivateName();
+                key2 = this.parsePrivateName();
                 break;
               }
               default:
                 if (type === 137) {
-                  key = this.parseDecimalLiteral(value);
+                  key2 = this.parseDecimalLiteral(value);
                   break;
                 }
                 this.unexpected();
             }
           }
-          prop.key = key;
+          prop.key = key2;
           if (type !== 139) {
             prop.computed = false;
           }
@@ -15291,8 +15291,8 @@ var require_lib = __commonJS({
       isClassMethod() {
         return this.match(10);
       }
-      nameIsConstructor(key) {
-        return key.type === "Identifier" && key.name === "constructor" || key.type === "StringLiteral" && key.value === "constructor";
+      nameIsConstructor(key2) {
+        return key2.type === "Identifier" && key2.name === "constructor" || key2.type === "StringLiteral" && key2.value === "constructor";
       }
       isNonstaticConstructor(method) {
         return !method.computed && !method.static && this.nameIsConstructor(method.key);
@@ -15340,24 +15340,24 @@ var require_lib = __commonJS({
         return this.finishNode(classBody, "ClassBody");
       }
       parseClassMemberFromModifier(classBody, member) {
-        const key = this.parseIdentifier(true);
+        const key2 = this.parseIdentifier(true);
         if (this.isClassMethod()) {
           const method = member;
           method.kind = "method";
           method.computed = false;
-          method.key = key;
+          method.key = key2;
           method.static = false;
           this.pushClassMethod(classBody, method, false, false, false, false);
           return true;
         } else if (this.isClassProperty()) {
           const prop = member;
           prop.computed = false;
-          prop.key = key;
+          prop.key = key2;
           prop.static = false;
           classBody.body.push(this.parseClassProperty(prop));
           return true;
         }
-        this.resetPreviousNodeTrailingComments(key);
+        this.resetPreviousNodeTrailingComments(key2);
         return false;
       }
       parseClassMember(classBody, member, state) {
@@ -15399,9 +15399,9 @@ var require_lib = __commonJS({
           return;
         }
         const isContextual = !this.state.containsEsc && tokenIsIdentifier(this.state.type);
-        const key = this.parseClassElementName(member);
-        const maybeContextualKw = isContextual ? key.name : null;
-        const isPrivate = this.isPrivateName(key);
+        const key2 = this.parseClassElementName(member);
+        const maybeContextualKw = isContextual ? key2.name : null;
+        const isPrivate = this.isPrivateName(key2);
         const maybeQuestionTokenStartLoc = this.state.startLoc;
         this.parsePostMemberNameModifiers(publicMember);
         if (this.isClassMethod()) {
@@ -15415,10 +15415,10 @@ var require_lib = __commonJS({
           if (isConstructor) {
             publicMethod.kind = "constructor";
             if (state.hadConstructor && !this.hasPlugin("typescript")) {
-              this.raise(Errors.DuplicateConstructor, key);
+              this.raise(Errors.DuplicateConstructor, key2);
             }
             if (isConstructor && this.hasPlugin("typescript") && member.override) {
-              this.raise(Errors.OverrideOnConstructor, key);
+              this.raise(Errors.OverrideOnConstructor, key2);
             }
             state.hadConstructor = true;
             allowsDirectSuper = state.hadSuperClass;
@@ -15431,7 +15431,7 @@ var require_lib = __commonJS({
             this.pushClassProperty(classBody, publicProp);
           }
         } else if (maybeContextualKw === "async" && !this.isLineTerminator()) {
-          this.resetPreviousNodeTrailingComments(key);
+          this.resetPreviousNodeTrailingComments(key2);
           const isGenerator = this.eat(55);
           if (publicMember.optional) {
             this.unexpected(maybeQuestionTokenStartLoc);
@@ -15449,7 +15449,7 @@ var require_lib = __commonJS({
             this.pushClassMethod(classBody, publicMethod, isGenerator, true, false, false);
           }
         } else if ((maybeContextualKw === "get" || maybeContextualKw === "set") && !(this.match(55) && this.isLineTerminator())) {
-          this.resetPreviousNodeTrailingComments(key);
+          this.resetPreviousNodeTrailingComments(key2);
           method.kind = maybeContextualKw;
           const isPrivate2 = this.match(139);
           this.parseClassElementName(publicMethod);
@@ -15464,7 +15464,7 @@ var require_lib = __commonJS({
           this.checkGetterSetterParams(publicMethod);
         } else if (maybeContextualKw === "accessor" && !this.isLineTerminator()) {
           this.expectPlugin("decoratorAutoAccessors");
-          this.resetPreviousNodeTrailingComments(key);
+          this.resetPreviousNodeTrailingComments(key2);
           const isPrivate2 = this.match(139);
           this.parseClassElementName(publicProp);
           this.pushClassAccessorProperty(classBody, accessorProp, isPrivate2);
@@ -15490,9 +15490,9 @@ var require_lib = __commonJS({
           if (value === "constructor") {
             this.raise(Errors.ConstructorClassPrivateField, this.state.startLoc);
           }
-          const key = this.parsePrivateName();
-          member.key = key;
-          return key;
+          const key2 = this.parsePrivateName();
+          member.key = key2;
+          return key2;
         }
         this.parsePropertyName(member);
         return member.key;
@@ -15937,10 +15937,10 @@ var require_lib = __commonJS({
       isJSONModuleImport(node) {
         if (node.assertions != null) {
           return node.assertions.some(({
-            key,
+            key: key2,
             value
           }) => {
-            return value.value === "json" && (key.type === "Identifier" ? key.name === "type" : key.value === "type");
+            return value.value === "json" && (key2.type === "Identifier" ? key2.name === "type" : key2.value === "type");
           });
         }
         return false;
@@ -16379,14 +16379,14 @@ var require_lib = __commonJS({
           pluginList.push(name);
         }
       }
-      const key = pluginList.join("|");
-      let cls = parserClassCache.get(key);
+      const key2 = pluginList.join("|");
+      let cls = parserClassCache.get(key2);
       if (!cls) {
         cls = Parser;
         for (const plugin2 of pluginList) {
           cls = mixinPlugins[plugin2](cls);
         }
-        parserClassCache.set(key, cls);
+        parserClassCache.set(key2, cls);
       }
       return cls;
     }
@@ -16416,10 +16416,10 @@ var require_picocolors = __commonJS({
       } while (~index2);
       return result + string.substring(cursor);
     };
-    var createColors = (enabled = isColorSupported) => {
-      let f = enabled ? formatter : () => String;
+    var createColors = (enabled2 = isColorSupported) => {
+      let f = enabled2 ? formatter : () => String;
       return {
-        isColorSupported: enabled,
+        isColorSupported: enabled2,
         reset: f("\x1B[0m", "\x1B[0m"),
         bold: f("\x1B[1m", "\x1B[22m", "\x1B[22m\x1B[1m"),
         dim: f("\x1B[2m", "\x1B[22m", "\x1B[22m\x1B[2m"),
@@ -16801,8 +16801,8 @@ var require_css_syntax_error = __commonJS({
         let mark = (text) => text;
         let highlight = (text) => text;
         if (color) {
-          let { bold, gray, red } = pico.createColors(true);
-          mark = (text) => bold(red(text));
+          let { bold: bold2, gray, red: red2 } = pico.createColors(true);
+          mark = (text) => bold2(red2(text));
           aside = (text) => gray(text);
           if (terminalHighlight) {
             highlight = (text) => terminalHighlight(text);
@@ -17585,9 +17585,9 @@ var require_node = __commonJS({
         let holderOfRoot = [];
         let queue = [[this, holderOfRoot, 0]];
         for (let step = 0; step < queue.length; step++) {
-          let [node, holder, key] = queue[step];
+          let [node, holder, key2] = queue[step];
           let fixed2 = {};
-          holder[key] = fixed2;
+          holder[key2] = fixed2;
           for (let name in node) {
             if (!Object.prototype.hasOwnProperty.call(node, name)) {
               continue;
@@ -19052,8 +19052,8 @@ var require_source_map_generator = __commonJS({
         if (aSourceRoot != null) {
           source = util.relative(aSourceRoot, source);
         }
-        var key = util.toSetString(source);
-        return Object.prototype.hasOwnProperty.call(this._sourcesContents, key) ? this._sourcesContents[key] : null;
+        var key2 = util.toSetString(source);
+        return Object.prototype.hasOwnProperty.call(this._sourcesContents, key2) ? this._sourcesContents[key2] : null;
       }, this);
     };
     SourceMapGenerator.prototype.toJSON = function SourceMapGenerator_toJSON() {
@@ -21769,23 +21769,23 @@ var require_lazy_result = __commonJS({
       return typeof obj === "object" && typeof obj.then === "function";
     }
     function getEvents(node) {
-      let key = false;
+      let key2 = false;
       let type = TYPE_TO_CLASS_NAME[node.type];
       if (node.type === "decl") {
-        key = node.prop.toLowerCase();
+        key2 = node.prop.toLowerCase();
       } else if (node.type === "atrule") {
-        key = node.name.toLowerCase();
+        key2 = node.name.toLowerCase();
       }
-      if (key && node.append) {
+      if (key2 && node.append) {
         return [
           type,
-          type + "-" + key,
+          type + "-" + key2,
           CHILDREN,
           type + "Exit",
-          type + "Exit-" + key
+          type + "Exit-" + key2
         ];
-      } else if (key) {
-        return [type, type + "-" + key, type + "Exit", type + "Exit-" + key];
+      } else if (key2) {
+        return [type, type + "-" + key2, type + "Exit", type + "Exit-" + key2];
       } else if (node.append) {
         return [type, CHILDREN, type + "Exit"];
       } else {
@@ -23903,11 +23903,11 @@ var UNITLESS = /* @__PURE__ */ new Set([
   "stroke-opacity",
   "stroke-width"
 ]);
-function toCssProp(key) {
-  if (key.startsWith("--")) return key;
-  if (key.includes("-")) return key.toLowerCase();
-  const kebab = key.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`);
-  return /^[A-Z]/.test(key) ? `-${kebab.replace(/^-/, "")}` : kebab;
+function toCssProp(key2) {
+  if (key2.startsWith("--")) return key2;
+  if (key2.includes("-")) return key2.toLowerCase();
+  const kebab = key2.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`);
+  return /^[A-Z]/.test(key2) ? `-${kebab.replace(/^-/, "")}` : kebab;
 }
 function toCssValue(prop, node) {
   if (!node) return null;
@@ -24363,9 +24363,9 @@ function stringsIn(node, out = []) {
     const v = rec["value"];
     out.push(v?.cooked ?? v?.raw ?? "");
   }
-  for (const key of Object.keys(rec)) {
-    if (key === "loc" || key === "type" || key === "start" || key === "end") continue;
-    stringsIn(rec[key], out);
+  for (const key2 of Object.keys(rec)) {
+    if (key2 === "loc" || key2 === "type" || key2 === "start" || key2 === "end") continue;
+    stringsIn(rec[key2], out);
   }
   return out;
 }
@@ -24393,12 +24393,12 @@ function readStyleAttr(value) {
       dynamic++;
       continue;
     }
-    const key = keyName(prop);
-    if (!key) {
+    const key2 = keyName(prop);
+    if (!key2) {
       dynamic++;
       continue;
     }
-    const cssProp = toCssProp(key);
+    const cssProp = toCssProp(key2);
     const cssValue = toCssValue(cssProp, prop.value);
     if (cssValue === null) {
       dynamic++;
@@ -24417,10 +24417,10 @@ function walkAst(node, visit) {
   }
   const rec = node;
   if (typeof rec["type"] === "string") visit(node);
-  for (const key of Object.keys(rec)) {
-    if (key === "loc" || key === "start" || key === "end" || key === "leadingComments" || key === "trailingComments")
+  for (const key2 of Object.keys(rec)) {
+    if (key2 === "loc" || key2 === "start" || key2 === "end" || key2 === "leadingComments" || key2 === "trailingComments")
       continue;
-    walkAst(rec[key], visit);
+    walkAst(rec[key2], visit);
   }
 }
 function systemImports(ast, ds) {
@@ -24769,7 +24769,7 @@ function tokenRefsIn(value, prefixes) {
 
 // src/analyze.ts
 var messageOf3 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
-function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {}, enabled = () => true }) {
+function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {}, enabled: enabled2 = () => true }) {
   const isMargin = prop === "margin" || prop.startsWith("margin-");
   const marginKind = isMargin ? classifyMargin(value) : null;
   const isFlexish = FLEX_PROPS.has(prop) || prop === "display" && /\b(inline-)?(flex|grid)\b/.test(value);
@@ -24777,9 +24777,9 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
   const styling = isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
   const decl2 = `${prop}: ${value}`;
   let finding = null;
-  if (TYPE_PROPS.has(prop) && boundText[0] && enabled("typography/in-css")) {
+  if (TYPE_PROPS.has(prop) && boundText[0] && enabled2("typography/in-css")) {
     finding = { rule: "typography/in-css", message: `${prop} on <${boundText[0].tag}>` };
-  } else if (boundSystem[0] && APPEARANCE_PROPS.has(prop) && enabled("system/override")) {
+  } else if (boundSystem[0] && APPEARANCE_PROPS.has(prop) && enabled2("system/override")) {
     finding = { rule: "system/override", message: `<${boundSystem[0].tag}> \u2190 ${prop}` };
   } else if (isMargin) {
     if (marginKind === "negative") finding = { rule: "layout/negative-margin", message: decl2, code: prop };
@@ -25005,9 +25005,9 @@ async function analyze(config, { scope = null } = {}) {
         emit({ rule: "system/override", line: ruleLine, message: `.${external} (library internal)`, scopeLines });
       else for (const f of collapsePerRule(pending)) emit(f);
       for (const cls of keyClasses) {
-        const key = `${rel}\0${cls}`;
-        if (seenDead.has(key) || !config.isProject(cls) || isReferenced(cls)) continue;
-        seenDead.add(key);
+        const key2 = `${rel}\0${cls}`;
+        if (seenDead.has(key2) || !config.isProject(cls) || isReferenced(cls)) continue;
+        seenDead.add(key2);
         emit({ rule: "css/dead-class", line: ruleLine, message: `.${cls}`, scopeLines });
       }
     });
@@ -25212,19 +25212,19 @@ async function analyze(config, { scope = null } = {}) {
       if (!entry || entry.status !== "legacy" && entry.status !== "locked") continue;
       const rule2 = entry.status === "locked" ? "system/locked-component" : "system/superseded-component";
       if (!config.enabled[rule2] || !reports(ci.file)) continue;
-      const key = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
-      if (seen2.has(key)) continue;
-      seen2.add(key);
+      const key2 = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
+      if (seen2.has(key2)) continue;
+      seen2.add(key2);
       const supp = suppByFile.get(ci.file);
       if (supp && isSuppressed(supp.byLine, ci.line, rule2)) continue;
       const remedy = entry.supersededBy ? ` \u2192 ${entry.supersededBy}` : "";
-      const note = entry.note ? ` (${entry.note})` : "";
+      const note2 = entry.note ? ` (${entry.note})` : "";
       findings.push({
         rule: rule2,
         severity: config.severityOf(rule2),
         file: ci.file,
         line: ci.line,
-        message: `${ci.canonical} (${ci.package})${remedy}${note}`,
+        message: `${ci.canonical} (${ci.package})${remedy}${note2}`,
         code: `${rule2}:${ci.package}:${ci.canonical}`,
         rank: RULES[rule2].rank
       });
@@ -25258,9 +25258,9 @@ async function analyze(config, { scope = null } = {}) {
     const seenUnknown = /* @__PURE__ */ new Set();
     for (const { file, line, name, scopeLines, supp } of unknownTokens) {
       if (tokenSet.known.has(name) || !reports(file)) continue;
-      const key = `${file}\0${name}`;
-      if (seenUnknown.has(key)) continue;
-      seenUnknown.add(key);
+      const key2 = `${file}\0${name}`;
+      if (seenUnknown.has(key2)) continue;
+      seenUnknown.add(key2);
       if (isSuppressed(supp.byLine, line, "tokens/unknown-token", scopeLines)) continue;
       findings.push({
         rule: "tokens/unknown-token",
@@ -25475,9 +25475,9 @@ function applyBaseline(result, baseline) {
   const kept = [];
   let baselined = 0;
   for (const f of result.findings) {
-    const key = findingKey(f);
-    seen.add(key);
-    if (baseline.set.has(key)) baselined++;
+    const key2 = findingKey(f);
+    seen.add(key2);
+    if (baseline.set.has(key2)) baselined++;
     else kept.push(f);
   }
   const fixed = [...baseline.set].filter((k) => !seen.has(k)).length;
@@ -25722,7 +25722,7 @@ function normalize(raw, { root: root2 }) {
     componentRegistry: componentRegistry.size > 0,
     projectNamespace: (cfg.namespaces.project ?? []).length > 0
   };
-  const enabled = Object.fromEntries(
+  const enabled2 = Object.fromEntries(
     RULE_IDS.map((id) => [
       id,
       RULES[id].needs.every((n) => capability[n]) && rules[id].severity !== "off"
@@ -25771,7 +25771,7 @@ function normalize(raw, { root: root2 }) {
     baselinePath: cfg.baseline,
     hook: cfg.hook,
     rules,
-    enabled,
+    enabled: enabled2,
     severityOf: (id) => rules[id]?.severity ?? "warn",
     optionsOf: (id) => rules[id]?.options ?? {},
     isProject: (cls) => projectPrefixes.some((p) => cls.startsWith(p)),
@@ -25833,9 +25833,31 @@ async function loadConfig({
   return normalized;
 }
 
+// src/color.ts
+var { NO_COLOR, FORCE_COLOR, TERM } = process.env;
+var enabled = NO_COLOR ? false : FORCE_COLOR ? FORCE_COLOR !== "0" : Boolean(process.stdout.isTTY) && TERM !== "dumb";
+var setColor = (on) => {
+  enabled = on;
+};
+var paint = (code) => (text) => enabled ? `\x1B[${code}m${text}\x1B[0m` : text;
+var bold = paint("1");
+var dim = paint("2");
+var red = paint("31");
+var green = paint("32");
+var yellow = paint("33");
+var magenta = paint("35");
+var cyan = paint("36");
+var SEV_PAINT = {
+  error: red,
+  warn: yellow,
+  off: dim
+};
+
 // src/report.ts
 import { createHash as createHash2 } from "node:crypto";
 var SEV_MARK = { error: "\u2717", warn: "\u2022" };
+var COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
+var components = (message) => message.replace(COMPONENT, cyan);
 var titleFor = (config) => (id) => renderTitle(id, config.designSystem, config.suppression.keyword);
 function formatAgent(result, config, { maxFindings = 0, showSuppressed = false } = {}) {
   const { findings, diagnostics } = result;
@@ -25843,7 +25865,7 @@ function formatAgent(result, config, { maxFindings = 0, showSuppressed = false }
   const title = titleFor(config);
   const lines = [];
   if (!findings.length) {
-    lines.push("loupe: clean.");
+    lines.push(green("loupe: clean."));
   } else {
     const byRule = /* @__PURE__ */ new Map();
     for (const f of findings) {
@@ -25874,41 +25896,43 @@ function formatAgent(result, config, { maxFindings = 0, showSuppressed = false }
     for (const [ruleId, group] of groups) {
       const sev = group[0]?.severity ?? "warn";
       lines.push("");
-      lines.push(`${SEV_MARK[sev] ?? "\u2022"} ${ruleId} (${group.length}) \u2014 ${title(ruleId)}`);
+      lines.push(
+        `${SEV_PAINT[sev](SEV_MARK[sev] ?? "\u2022")} ${magenta(ruleId)} ${dim(`(${group.length})`)} \u2014 ${title(ruleId)}`
+      );
       const show = group.slice(0, quota.get(ruleId) ?? 0);
       hidden += group.length - show.length;
-      for (const f of show) lines.push(`    ${f.file}:${f.line}  ${f.message}`);
-      if (group.length > show.length) lines.push(`    \u2026 ${group.length - show.length} more`);
+      for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${components(f.message)}`);
+      if (group.length > show.length) lines.push(dim(`    \u2026 ${group.length - show.length} more`));
     }
     if (hidden) {
       lines.push("");
-      lines.push(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`);
+      lines.push(dim(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`));
     }
     lines.push("");
-    lines.push(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`);
+    lines.push(dim(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`));
   }
   if (diagnostics.parseErrors.length) {
     lines.push("");
-    lines.push(`! ${diagnostics.parseErrors.length} file(s) could not be parsed and were skipped:`);
-    for (const e of diagnostics.parseErrors.slice(0, 5)) lines.push(`    ${e.file}: ${e.message}`);
+    lines.push(yellow(`! ${diagnostics.parseErrors.length} file(s) could not be parsed and were skipped:`));
+    for (const e of diagnostics.parseErrors.slice(0, 5)) lines.push(`    ${dim(e.file)}: ${e.message}`);
   }
   if (showSuppressed && result.directives.length) {
     lines.push("");
-    lines.push(`${result.directives.length} active suppression(s).`);
+    lines.push(dim(`${result.directives.length} active suppression(s).`));
   }
   return lines.join("\n").replace(/^\n/, "");
 }
 function formatSummary(result, { prefix = true } = {}) {
   const tag = prefix ? "loupe: " : "";
   const { findings } = result;
-  if (!findings.length) return `${tag}clean.`;
+  if (!findings.length) return green(`${tag}clean.`);
   const errors = findings.filter((f) => f.severity === "error").length;
   const warns = findings.length - errors;
   const top = [...new Set(findings.map((f) => f.rule))].slice(0, 3).join(", ");
   const parts = [];
-  if (errors) parts.push(`${errors} blocking`);
-  if (warns) parts.push(`${warns} advisory`);
-  return `${tag}${parts.join(", ")}${top ? ` (${top})` : ""}.`;
+  if (errors) parts.push(red(`${errors} blocking`));
+  if (warns) parts.push(yellow(`${warns} advisory`));
+  return `${tag}${parts.join(", ")}${top ? dim(` (${top})`) : ""}.`;
 }
 function usedRules(result, config) {
   const ids = [...new Set(result.findings.map((f) => f.rule))];
@@ -25918,10 +25942,10 @@ function usedRules(result, config) {
 function fingerprints(findings) {
   const seen = /* @__PURE__ */ new Map();
   return findings.map((f) => {
-    const key = findingKey(f);
-    const nth = seen.get(key) ?? 0;
-    seen.set(key, nth + 1);
-    return createHash2("sha256").update(nth === 0 ? key : `${key}|#${nth}`).digest("hex").slice(0, 16);
+    const key2 = findingKey(f);
+    const nth = seen.get(key2) ?? 0;
+    seen.set(key2, nth + 1);
+    return createHash2("sha256").update(nth === 0 ? key2 : `${key2}|#${nth}`).digest("hex").slice(0, 16);
   });
 }
 function reportPayload(result, config) {
@@ -26762,7 +26786,7 @@ function readProfiles(root2) {
       const id = asString(raw.id) ?? e.name;
       if (seen.has(id)) continue;
       const patterns = asString(raw.patterns);
-      const components = asString(raw.components);
+      const components2 = asString(raw.components);
       out.push({
         id,
         name: asString(raw.name) ?? asString(raw.id) ?? e.name,
@@ -26770,7 +26794,7 @@ function readProfiles(root2) {
         packages: asStrings(raw.packages),
         skills: asStrings(raw.skills),
         patterns: patterns ? under(dir, patterns) : null,
-        components: components ? under(dir, components) : null,
+        components: components2 ? under(dir, components2) : null,
         dir
       });
       seen.add(id);
@@ -26794,7 +26818,7 @@ function applyRegistries(config, sources, {
   const errors = [];
   const forced = [];
   let patterns = config.patterns ?? [];
-  const components = new Map(config.componentRegistry ?? []);
+  const components2 = new Map(config.componentRegistry ?? []);
   let sawPatterns = false;
   let sawComponents = false;
   for (const src of sources) {
@@ -26828,15 +26852,15 @@ function applyRegistries(config, sources, {
         const raw = readJson2(resolve5(src.components));
         const inScope = registryApplies(raw, config.designSystem.packages);
         if (src.forced || inScope) {
-          const before = components.size;
-          for (const [key, entry] of loadComponents(raw)) if (!components.has(key)) components.set(key, entry);
+          const before = components2.size;
+          for (const [key2, entry] of loadComponents(raw)) if (!components2.has(key2)) components2.set(key2, entry);
           sawComponents = true;
           used = true;
           if (src.forced)
             forced.push({
               label: src.label,
               kind: "components",
-              added: components.size - before,
+              added: components2.size - before,
               offScope: inScope ? [] : registryPackages(raw)
             });
         } else {
@@ -26849,7 +26873,7 @@ function applyRegistries(config, sources, {
     if (used) applied.push(src.label);
   }
   if (sawPatterns) setPatterns2(config, patterns);
-  if (sawComponents) setComponentRegistry2(config, components);
+  if (sawComponents) setComponentRegistry2(config, components2);
   const registryRules = ["patterns/duplicate-composite", "patterns/superseded-composite"];
   const patternsNote = (added) => registryRules.every((rule2) => config.severityOf(rule2) === "off") ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
     // A composite is only ever built from names imported out of
@@ -26874,8 +26898,8 @@ function applyRegistries(config, sources, {
         // imports is what sent people hunting through source that was fine.
         note: `forced past the scope check \u2014 it is scoped to ${f.offScope.join(", ")} and this config declares ${config.designSystem.packages.length ? `${config.designSystem.packages.join(", ")} \u2014 so its findings name a design system this config does not declare` : "no design-system packages, so nothing here says which design system its findings are about"}`
       });
-    const note = f.kind === "patterns" ? patternsNote(f.added) : componentsNote(f.added);
-    if (note) notes.push({ label: f.label, kind: f.kind, note });
+    const note2 = f.kind === "patterns" ? patternsNote(f.added) : componentsNote(f.added);
+    if (note2) notes.push({ label: f.label, kind: f.kind, note: note2 });
   }
   return { applied, skipped, notes, errors };
 }
@@ -26952,20 +26976,20 @@ function hookRoot() {
 var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
 var hookSilenced = () => isOn(process.env.LOUPE_OFF);
 function pluginOptions() {
-  const get = (key) => {
-    const v = process.env[`CLAUDE_PLUGIN_OPTION_${key.toUpperCase()}`];
+  const get = (key2) => {
+    const v = process.env[`CLAUDE_PLUGIN_OPTION_${key2.toUpperCase()}`];
     return v === void 0 || v === "" ? void 0 : v;
   };
-  const bool = (key) => {
-    const v = get(key);
+  const bool = (key2) => {
+    const v = get(key2);
     return v === void 0 ? void 0 : isOn(v);
   };
-  const num = (key) => {
-    const v = Number(get(key));
+  const num = (key2) => {
+    const v = Number(get(key2));
     return Number.isFinite(v) ? v : void 0;
   };
-  const list2 = (key) => {
-    const v = get(key);
+  const list2 = (key2) => {
+    const v = get(key2);
     if (v === void 0) return void 0;
     if (v.startsWith("[")) {
       try {
@@ -26993,8 +27017,8 @@ function resolvedOptions() {
     try {
       const raw = JSON.parse(readFileSync8(join9(homedir(), ".claude", file), "utf8"));
       const configs = raw.pluginConfigs ?? {};
-      const key = Object.keys(configs).find((k) => k === name || k.startsWith(`${name}@`));
-      const opts = key === void 0 ? void 0 : configs[key]?.options;
+      const key2 = Object.keys(configs).find((k) => k === name || k.startsWith(`${name}@`));
+      const opts = key2 === void 0 ? void 0 : configs[key2]?.options;
       if (opts) return { options: coerce(opts), source: "settings" };
     } catch {
     }
@@ -27046,6 +27070,16 @@ function emitBlocking(report) {
 // src/cli.ts
 var EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 var messageOf4 = (err) => err instanceof Error ? err.message : String(err);
+var fail = (msg) => {
+  process.stderr.write(red(msg));
+};
+var note = (msg) => {
+  process.stderr.write(yellow(msg));
+};
+var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
+var key = (label) => dim(label);
+var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${key(`"${name}"`)}:`);
+var usage = () => USAGE.replace(/^  (--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^  ([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
 var VALUE_FLAGS = [
   "format",
   "config",
@@ -27062,7 +27096,7 @@ var VALUE_FLAGS = [
 ];
 var FORMATS = ["agent", "json", "sarif", "html"];
 var isFormat = (f) => FORMATS.includes(f);
-var isValueFlag = (key) => VALUE_FLAGS.includes(key);
+var isValueFlag = (key2) => VALUE_FLAGS.includes(key2);
 function parseArgs(argv) {
   const positional = [];
   const flags = {};
@@ -27073,10 +27107,10 @@ function parseArgs(argv) {
       positional.push(a);
       continue;
     }
-    const [key, inline] = a.slice(2).split(/=(.*)/s);
-    if (key === void 0) continue;
-    if (isValueFlag(key)) flags[key] = inline ?? argv[++i];
-    else flags[key] = inline === void 0 ? true : inline !== "false";
+    const [key2, inline] = a.slice(2).split(/=(.*)/s);
+    if (key2 === void 0) continue;
+    if (isValueFlag(key2)) flags[key2] = inline ?? argv[++i];
+    else flags[key2] = inline === void 0 ? true : inline !== "false";
   }
   return { _: positional, flags };
 }
@@ -27107,6 +27141,8 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
   --force               Overwrite an existing config (init)
+  --no-color            Never colour the output (colour is on only when stdout
+                        is a terminal; NO_COLOR and FORCE_COLOR are honoured)
   --preset <name>       Use a bundled preset instead of discovering config
   --patterns <path>     Composite pattern registry (JSON)
   --components <path>   Component currency registry (JSON)
@@ -27161,8 +27197,10 @@ async function main() {
   const args = parseArgs(argv);
   const first = args._[0];
   const command = first && !first.startsWith("-") ? first : "check";
+  if (command === "hook" || args.flags["no-color"] || args.flags.format && args.flags.format !== "agent")
+    setColor(false);
   if (args.flags.help || command === "help") {
-    process.stdout.write(USAGE);
+    process.stdout.write(usage());
     return EXIT.OK;
   }
   if (command === "presets") {
@@ -27178,7 +27216,7 @@ async function main() {
   const root2 = resolve6(explicitRoot ?? (anchor ? dirname6(anchor) : process.cwd()));
   if (!existsSync8(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
-    process.stderr.write(`loupe: root does not exist: ${root2}
+    fail(`loupe: root does not exist: ${root2}
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -27186,7 +27224,7 @@ async function main() {
   const profiles = readProfiles(args.flags.profiles ? resolve6(args.flags.profiles) : null);
   const forced = args.flags.profile ? profiles.find((p) => p.id === args.flags.profile) ?? null : null;
   if (args.flags.profile && !forced && !isHook)
-    process.stderr.write(
+    note(
       `loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve6(args.flags.profiles) : "any profiles directory (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
 `
     );
@@ -27206,7 +27244,7 @@ async function main() {
     const statedProject = Boolean(args.flags.config) || Boolean(args.flags.preset) || Boolean(projectConfig);
     if (!statedProject && needsProject(command, args, isHook) && !looksLikeProject(root2)) {
       if (isHook) return emitClean(`loupe: skipped \u2014 ${NOT_A_WORKTREE}`);
-      process.stderr.write(`loupe: ${NOT_A_WORKTREE}
+      fail(`loupe: ${NOT_A_WORKTREE}
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -27214,7 +27252,7 @@ async function main() {
     if (unconfigured && forced?.preset) {
       if (presetExists(forced.preset)) profilePreset = forced.preset;
       else if (!isHook)
-        process.stderr.write(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed
+        note(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed
 `);
     }
     if (unconfigured) detected = runDetection();
@@ -27227,7 +27265,7 @@ async function main() {
     });
   } catch (err) {
     if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf4(err)}`);
-    process.stderr.write(`loupe: config error \u2014 ${messageOf4(err)}
+    fail(`loupe: config error \u2014 ${messageOf4(err)}
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -27249,17 +27287,17 @@ async function main() {
   const registries = applyRegistries(config, sources, { setPatterns, setComponentRegistry });
   config.profiles = { available: profiles, active, ...registries };
   if (!isHook) {
-    for (const err of registries.errors) process.stderr.write(`loupe: ${err}
+    for (const err of registries.errors) fail(`loupe: ${err}
 `);
     for (const s of registries.skipped)
-      process.stderr.write(
+      note(
         `loupe: ${s.label} ${s.kind} registry skipped \u2014 scoped to ${s.packages.join(", ")}, and this config declares ${config.designSystem.packages.length ? config.designSystem.packages.join(", ") : "no design-system packages"}
 `
       );
-    for (const n of registries.notes) process.stderr.write(`loupe: ${n.label} ${n.kind} registry ${n.note}
+    for (const n of registries.notes) note(`loupe: ${n.label} ${n.kind} registry ${n.note}
 `);
   }
-  if (detected?.truncated && !isHook) process.stderr.write(TRUNCATED_NOTE);
+  if (detected?.truncated && !isHook) note(TRUNCATED_NOTE);
   const ceilingSuffix = detected?.truncated ? CEILING_SUFFIX : "";
   if (config.inferred && config.rules["css/dead-class"]?.severity === "error")
     config.rules["css/dead-class"].severity = "warn";
@@ -27272,12 +27310,12 @@ async function main() {
   if (command === "explain") {
     const id = canonicalRuleId(args._[1] ?? "");
     if (!isRuleId(id)) {
-      process.stderr.write(`loupe: unknown rule "${args._[1] ?? ""}"
+      fail(`loupe: unknown rule "${args._[1] ?? ""}"
 `);
       return EXIT.CANNOT_RUN;
     }
-    const state = config.enabled[id] ? config.severityOf(id) : "disabled (config does not satisfy its requirements)";
-    process.stdout.write(`${id}  [${state}]
+    const state = config.enabled[id] ? SEV_PAINT[config.severityOf(id)](config.severityOf(id)) : dim("disabled (config does not satisfy its requirements)");
+    process.stdout.write(`${magenta(id)}  [${state}]
   ${renderTitle(id, config.designSystem, config.suppression.keyword)}
 `);
     return EXIT.OK;
@@ -27288,39 +27326,39 @@ async function main() {
     const state = stateDir(root2);
     const base = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const lines = [
-      `config:     ${src}`,
-      `namespaces: ${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
-      `suppress:   ${config.suppression.keyword} <ruleId> -- <reason>`,
+      `${key("config:     ")}${src}`,
+      `${key("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
+      `${key("suppress:   ")}${config.suppression.keyword} <ruleId> -- <reason>`,
       // A legacy hit has to say so. `loupe baseline` writes the canonical path,
       // so an unmarked legacy path here is `status` and `baseline` naming
       // different files with nothing on hand to reconcile them — the exact
       // shape of the bug that pinned the baseline to the project in the first
       // place.
-      `baseline:   ${base.path}${base.found && readBaseline(root2, base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "legacy" ? "  (0.1.x location \u2014 run 'loupe baseline' to record it in the project)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
-      `state:      ${state.dir}${state.scope === "plugin-data" ? "  (retry counter only, outside your repo)" : ""}`,
-      `options:    ${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
-      `plugin:     ${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
+      `${key("baseline:   ")}${base.path}${base.found && readBaseline(root2, base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "legacy" ? "  (0.1.x location \u2014 run 'loupe baseline' to record it in the project)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
+      `${key("state:      ")}${state.dir}${state.scope === "plugin-data" ? "  (retry counter only, outside your repo)" : ""}`,
+      `${key("options:    ")}${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
+      `${key("plugin:     ")}${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
       // Asked through the same predicate the gate uses. Reporting on mere
       // truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
       // blocking — a diagnostic lying about the one thing it exists to say.
-      ...hookSilenced() ? ["hook:       OFF for this session (LOUPE_OFF is set)"] : [],
+      ...hookSilenced() ? [yellow("hook:       OFF for this session (LOUPE_OFF is set)")] : [],
       // Which design system's registries are in play, and — when none are —
       // which ones were on offer. "No composite findings" and "no composite
       // registry" look identical in a report; they must not look identical here.
-      `profile:    ${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name})`).join(", ") : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
+      `${key("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name})`).join(", ") : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
       "",
-      "rules:"
+      bold("rules:")
     ];
     for (const id of RULE_IDS) {
       const def = RULES[id];
       const sev = config.severityOf(id);
-      const note = config.enabled[id] ? sev === "error" && gateBlocks ? "BLOCKS" : sev === "error" ? "advisory (would block if enabled)" : "advisory" : `off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`;
-      lines.push(`  ${id.padEnd(32)} ${note}`);
+      const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red("BLOCKS") : sev === "error" ? yellow("advisory (would block if enabled)") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
+      lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
     }
     const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
     lines.push(
       "",
-      gateBlocks && blockers.length ? `Turns are blocked by: ${blockers.join(", ")}` : "Nothing blocks turns; every finding is advisory."
+      gateBlocks && blockers.length ? `${red("Turns are blocked by:")} ${blockers.map((id) => magenta(id)).join(", ")}` : green("Nothing blocks turns; every finding is advisory.")
     );
     if (hookSilenced()) {
       lines.push("The gate is silenced for this session: LOUPE_OFF is set in the environment.");
@@ -27343,26 +27381,28 @@ async function main() {
   }
   if (command === "detect" || command === "init") {
     const info = detected ?? runDetection();
-    if (!detected && info.truncated) process.stderr.write(TRUNCATED_NOTE);
+    if (!detected && info.truncated) note(TRUNCATED_NOTE);
     if (args.flags.format === "json") {
       process.stdout.write(`${JSON.stringify(info, null, 2)}
 `);
       return EXIT.OK;
     }
     const lines = [
-      `preset:     ${info.preset}  [${info.presetConfidence} confidence]`,
-      `            ${info.presetReasons.join("; ")}`,
+      `${key("preset:     ")}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
+      dim(`            ${info.presetReasons.join("; ")}`),
       // What inference concluded still gets reported; it is just no longer
       // what the run uses. `init` writes the config below verbatim, so the
       // two lines disagreeing without explanation is a file someone would
       // have to reverse-engineer.
       ...profilePreset ? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`] : [],
-      `namespaces: ${info.namespaces.project.join(", ") || "(none found)"}  [${info.namespaceConfidence} confidence]`,
-      `            ${Math.round(info.coverage * 100)}% of project CSS classes covered`,
-      `scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` + (info.truncated ? `  (stopped at the ${CEILING})` : "")
+      `${key("namespaces: ")}${info.namespaces.project.join(", ") || "(none found)"}  ${confidence(info.namespaceConfidence)}`,
+      dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
+      dim(
+        `scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` + (info.truncated ? `  (stopped at the ${CEILING})` : "")
+      )
     ];
     if (command === "detect") {
-      lines.push("", "Inferred config:", JSON.stringify(info.config, null, 2));
+      lines.push("", bold("Inferred config:"), jsonKeys(JSON.stringify(info.config, null, 2)));
       if (config.source.kind === "file") lines.push("", `Note: ${config.source.path} exists and takes precedence.`);
       process.stdout.write(`${lines.join("\n")}
 `);
@@ -27370,13 +27410,13 @@ async function main() {
     }
     const target = join10(root2, "loupe.config.json");
     if (info.truncated && !args.flags.force) {
-      process.stderr.write(
+      fail(
         "loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. Point --root at the project, or pass --force to write it anyway.\n"
       );
       return EXIT.CANNOT_RUN;
     }
     if (existsSync8(target) && !args.flags.force) {
-      process.stderr.write(`loupe: ${target} already exists (use --force)
+      fail(`loupe: ${target} already exists (use --force)
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -27384,7 +27424,7 @@ async function main() {
 `);
     process.stdout.write(`${lines.join("\n")}
 
-Wrote ${target}
+${green(`Wrote ${target}`)}
 `);
     return EXIT.OK;
   }
@@ -27393,8 +27433,8 @@ Wrote ${target}
     const target = baselinePath(root2, args.flags.baseline || config.baselinePath);
     const { path, findings, entries } = writeBaseline(root2, target, result2);
     const recorded = findings === entries ? `${findings} finding(s)` : `${findings} finding(s) as ${entries} ${entries === 1 ? "entry" : "entries"}`;
-    process.stdout.write(`loupe: baselined ${recorded} \u2192 ${path}
-`);
+    process.stdout.write(green(`loupe: baselined ${recorded} \u2192 ${path}
+`));
     return EXIT.OK;
   }
   if (command === "suppressions") {
@@ -27405,7 +27445,7 @@ Wrote ${target}
     else
       for (const d of directives)
         process.stdout.write(
-          `${d.file}:${d.line}  ${d.rules.join(",")}  ${d.reason}${d.alias ? `  (${d.alias} \u2192 ${kw})` : ""}
+          `${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(","))}  ${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ""}
 `
         );
     return EXIT.OK;
@@ -27413,7 +27453,7 @@ Wrote ${target}
   if (command === "fix") {
     const fixScope = resolveScope(config, args, { defaultChanged: false });
     if (fixScope !== null && !Array.isArray(fixScope)) {
-      process.stderr.write(`loupe: ${fixScope.error}
+      fail(`loupe: ${fixScope.error}
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -27421,7 +27461,7 @@ Wrote ${target}
     try {
       toFix = await analyze(config, { scope: fixScope });
     } catch (err) {
-      process.stderr.write(`loupe: ${messageOf4(err)}
+      fail(`loupe: ${messageOf4(err)}
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -27429,27 +27469,30 @@ Wrote ${target}
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
     const verb = dry ? "would fix" : "fixed";
     const decl2 = (f) => oneLine(`${f.prop}: ${f.value}`);
-    for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${decl2(f)} \u2192 var(${f.token})
+    for (const f of applied)
+      process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2192 ${green(`var(${f.token})`)}
 `);
-    for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${decl2(f)} \u2014 ${f.why}
+    for (const f of skipped)
+      process.stdout.write(`${yellow("skip")} ${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2014 ${f.why}
 `);
     const left = toFix.findings.length - applied.length;
     process.stdout.write(
       `
-loupe: ${verb} ${applied.length} finding(s)${skipped.length ? `, skipped ${skipped.length}` : ""}. ${left} left for review.
+loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${skipped.length ? yellow(`, skipped ${skipped.length}`) : ""}. ${left} left for review.
 `
     );
     return EXIT.OK;
   }
   if (command !== "check" && !isHook) {
-    process.stderr.write(`loupe: unknown command "${command}"
+    fail(`loupe: unknown command "${command}"
 
-${USAGE}`);
+`);
+    process.stderr.write(usage());
     return EXIT.CANNOT_RUN;
   }
   const format = args.flags.format ?? "agent";
   if (!isHook && !isFormat(format)) {
-    process.stderr.write(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(", ")}
+    fail(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(", ")}
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -27459,7 +27502,7 @@ ${USAGE}`);
   const scope = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
   if (scope !== null && !Array.isArray(scope)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 ${scope.error}`);
-    process.stderr.write(`loupe: ${scope.error}
+    fail(`loupe: ${scope.error}
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -27468,7 +27511,7 @@ ${USAGE}`);
     result = await analyze(config, { scope });
   } catch (err) {
     if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf4(err)}`);
-    process.stderr.write(`loupe: ${messageOf4(err)}
+    fail(`loupe: ${messageOf4(err)}
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -27476,7 +27519,7 @@ ${USAGE}`);
     const { path: bPath, found } = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const baseline = found ? readBaseline(root2, bPath) : null;
     if (found && !baseline)
-      process.stderr.write(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
+      note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
 `);
     result = applyBaseline(result, baseline);
   }
@@ -27514,16 +27557,16 @@ ${USAGE}`);
     process.stdout.write(`${formatAgent(result, config, { maxFindings })}
 `);
     if ("baselined" in result && result.baselined)
-      process.stdout.write(`
+      process.stdout.write(dim(`
 ${result.baselined} baselined finding(s) hidden.
-`);
+`));
   }
   return result.blocking ? EXIT.BLOCKED : EXIT.OK;
 }
 main().then((code) => {
   process.exitCode = code;
 }).catch((err) => {
-  process.stderr.write(`loupe: ${err instanceof Error ? err.stack : String(err)}
+  fail(`loupe: ${err instanceof Error ? err.stack : String(err)}
 `);
   process.exitCode = EXIT.CANNOT_RUN;
 });

@@ -9,12 +9,35 @@
 
 import { createHash } from 'node:crypto';
 import { findingKey } from './analyze.ts';
+import { SEV_PAINT, cyan, dim, green, magenta, red, yellow } from './color.ts';
 import { RULES, renderTitle } from './rules.ts';
 import type {
 	AnalyzeResult, BaselinedResult, Config, Finding, ReportPayload, RuleDescriptor, RuleId, Severity,
 } from './types.ts';
 
 const SEV_MARK: Partial<Record<Severity, string>> = { error: '\u2717', warn: '\u2022' };
+
+/**
+ * Component mentions inside a finding's message.
+ *
+ * Two shapes, because a message names a component two ways: as a JSX tag
+ * (`font-size on <Text>`, `<Card> \u2190 background`) and bare, inside a
+ * composite's signature or a currency verdict (`Card(CardBody(Stack))`,
+ * `Placeholder (@wordpress/components) \u2192 Notice`). Bare names are matched
+ * only where a signature puts them — against a bracket, a comma or an arrow, or
+ * at the end — so a stray capitalised word in a CSS value is left alone.
+ */
+const COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
+
+/**
+ * The same message with those names painted \u2014 at print time, never at capture.
+ *
+ * `findingKey` falls back to `message` for a finding that carries no `code`, so
+ * a name coloured any earlier would land in the baseline key and in the SARIF
+ * fingerprint hashed from it: every accepted finding of those rules would come
+ * back live the first time someone ran the tool in a terminal.
+ */
+const components = (message: string): string => message.replace(COMPONENT, cyan);
 
 /**
  * A rule title with its {placeholders} resolved.
@@ -41,7 +64,7 @@ export function formatAgent(
 	const lines: string[] = [];
 
 	if (!findings.length) {
-		lines.push('loupe: clean.');
+		lines.push(green('loupe: clean.'));
 	} else {
 		const byRule = new Map<RuleId, Finding[]>();
 		for (const f of findings) {
@@ -77,28 +100,37 @@ export function formatAgent(
 		for (const [ruleId, group] of groups) {
 			const sev = group[0]?.severity ?? 'warn';
 			lines.push('');
-			lines.push(`${SEV_MARK[sev] ?? '\u2022'} ${ruleId} (${group.length}) \u2014 ${title(ruleId)}`);
+			// Three spans, not one: the mark carries severity, the id carries the
+			// colour rules wear everywhere else, and the count is arithmetic. Painting
+			// the whole heading by severity made the id the one thing on the line that
+			// did not look like itself.
+			lines.push(
+				`${SEV_PAINT[sev](SEV_MARK[sev] ?? '\u2022')} ${magenta(ruleId)} ${dim(`(${group.length})`)} \u2014 ${title(ruleId)}`
+			);
 			const show = group.slice(0, quota.get(ruleId) ?? 0);
 			hidden += group.length - show.length;
-			for (const f of show) lines.push(`    ${f.file}:${f.line}  ${f.message}`);
-			if (group.length > show.length) lines.push(`    \u2026 ${group.length - show.length} more`);
+			// Location dimmed, message plain: the location is what an editor
+			// consumes and the message is what a reader does, and the pair sits on
+			// one line with nothing else to tell them apart.
+			for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${components(f.message)}`);
+			if (group.length > show.length) lines.push(dim(`    \u2026 ${group.length - show.length} more`));
 		}
 		if (hidden) {
 			lines.push('');
-			lines.push(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`);
+			lines.push(dim(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`));
 		}
 		lines.push('');
-		lines.push(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`);
+		lines.push(dim(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`));
 	}
 
 	if (diagnostics.parseErrors.length) {
 		lines.push('');
-		lines.push(`! ${diagnostics.parseErrors.length} file(s) could not be parsed and were skipped:`);
-		for (const e of diagnostics.parseErrors.slice(0, 5)) lines.push(`    ${e.file}: ${e.message}`);
+		lines.push(yellow(`! ${diagnostics.parseErrors.length} file(s) could not be parsed and were skipped:`));
+		for (const e of diagnostics.parseErrors.slice(0, 5)) lines.push(`    ${dim(e.file)}: ${e.message}`);
 	}
 	if (showSuppressed && result.directives.length) {
 		lines.push('');
-		lines.push(`${result.directives.length} active suppression(s).`);
+		lines.push(dim(`${result.directives.length} active suppression(s).`));
 	}
 	return lines.join('\n').replace(/^\n/, '');
 }
@@ -110,14 +142,14 @@ export function formatSummary(
 ): string {
 	const tag = prefix ? 'loupe: ' : '';
 	const { findings } = result;
-	if (!findings.length) return `${tag}clean.`;
+	if (!findings.length) return green(`${tag}clean.`);
 	const errors = findings.filter((f) => f.severity === 'error').length;
 	const warns = findings.length - errors;
 	const top = [...new Set(findings.map((f) => f.rule))].slice(0, 3).join(', ');
 	const parts = [];
-	if (errors) parts.push(`${errors} blocking`);
-	if (warns) parts.push(`${warns} advisory`);
-	return `${tag}${parts.join(', ')}${top ? ` (${top})` : ''}.`;
+	if (errors) parts.push(red(`${errors} blocking`));
+	if (warns) parts.push(yellow(`${warns} advisory`));
+	return `${tag}${parts.join(', ')}${top ? dim(` (${top})`) : ''}.`;
 }
 
 /** The rules a report actually used, richest first — the order every format prints in. */

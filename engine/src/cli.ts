@@ -13,6 +13,7 @@ import { analyze } from './analyze.ts';
 import { applyTokenFixes } from './autofix.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
+import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
 import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
 import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
@@ -35,6 +36,58 @@ const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 
 /** First line of an unknown throw. Anything can be thrown; only Errors carry a message. */
 const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * The two things stderr carries, told apart by colour as well as by wording.
+ *
+ * A refusal ends the run; a note is a run continuing on a partial answer. They
+ * were already interleaved on one stream in the same `loupe:` voice, and a
+ * reader scanning for the reason a command exited 2 had to read every line to
+ * find which one it was.
+ */
+const fail = (msg: string): void => {
+	process.stderr.write(red(msg));
+};
+const note = (msg: string): void => {
+	process.stderr.write(yellow(msg));
+};
+
+/**
+ * How far a detection result is to be trusted, coloured to match.
+ *
+ * `detect` prints two of these and `init` writes the config they describe, so
+ * the thing worth seeing at a glance is the weaker of the two — a low-confidence
+ * namespace list is the one that gets written down and then blocks turns.
+ */
+const confidence = (level: string): string =>
+	(level === 'high' ? green : level === 'none' ? red : yellow)(`[${level} confidence]`);
+
+/**
+ * A key: a `status` label, or a property in the config `detect` prints.
+ *
+ * Both are the same thing to a reader — the name of a setting, next to what it
+ * resolved to — so they wear one colour and the value beside them keeps the
+ * page's default. Dim rather than bright: the label column is the part you
+ * already know, and the value is what you came to read.
+ */
+const key = (label: string): string => dim(label);
+
+/** The keys inside a printed JSON config, painted without reserialising it. */
+const jsonKeys = (json: string): string => json.replace(/"([^"\\]+)":/g, (_m, name: string) => `${key(`"${name}"`)}:`);
+
+/**
+ * {@link USAGE}, painted at the print site.
+ *
+ * The text stays one plain template above: it is also what `--help | grep`
+ * gets, and threading colour through forty lines of it would put an escape
+ * sequence in front of every word someone might search for. Commands and
+ * options are matched where the layout already puts them — first token of an
+ * indented line — so a reworded description cannot accidentally light up.
+ */
+const usage = (): string =>
+	USAGE.replace(/^  (--[a-z-]+)/gm, (_m, flag: string) => `  ${cyan(flag)}`)
+		.replace(/^  ([a-z]+)\b/gm, (_m, cmd: string) => `  ${bold(cmd)}`)
+		.replace(/^(Commands|Options|Environment):$/gm, (_m, head: string) => `${bold(`${head}:`)}`);
 
 /**
  * The flags that take a value. Everything else is a boolean switch.
@@ -76,6 +129,7 @@ type Flags = { [K in ValueFlag]?: string } & {
 	'no-baseline'?: boolean;
 	'dry-run'?: boolean;
 	force?: boolean;
+	'no-color'?: boolean;
 };
 
 interface Args {
@@ -130,6 +184,8 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
   --force               Overwrite an existing config (init)
+  --no-color            Never colour the output (colour is on only when stdout
+                        is a terminal; NO_COLOR and FORCE_COLOR are honoured)
   --preset <name>       Use a bundled preset instead of discovering config
   --patterns <path>     Composite pattern registry (JSON)
   --components <path>   Component currency registry (JSON)
@@ -290,8 +346,16 @@ async function main(): Promise<number> {
 	const first = args._[0];
 	const command = first && !first.startsWith('-') ? first : 'check';
 
+	// Two readers are never human, whatever stdout happens to be attached to:
+	// the hook, whose report is fed back to an agent, and a machine format,
+	// which is parsed. Both would otherwise colour when someone runs them by
+	// hand in a terminal to see what they emit — and the escapes they emitted
+	// then would be exactly the ones the real consumer chokes on unseen.
+	if (command === 'hook' || args.flags['no-color'] || (args.flags.format && args.flags.format !== 'agent'))
+		setColor(false);
+
 	if (args.flags.help || command === 'help') {
-		process.stdout.write(USAGE);
+		process.stdout.write(usage());
 		return EXIT.OK;
 	}
 	if (command === 'presets') {
@@ -337,7 +401,7 @@ async function main(): Promise<number> {
 	const root = resolve(explicitRoot ?? (anchor ? dirname(anchor) : process.cwd()));
 	if (!existsSync(root)) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root}`);
-		process.stderr.write(`loupe: root does not exist: ${root}\n`);
+		fail(`loupe: root does not exist: ${root}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -356,7 +420,7 @@ async function main(): Promise<number> {
 	// *selection* would have made, so a typo checks strictly less than no flag at
 	// all. The sibling failure one screen down already warns; this one has to.
 	if (args.flags.profile && !forced && !isHook)
-		process.stderr.write(
+		note(
 			`loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve(args.flags.profiles) : 'any profiles directory (--profiles was not given)'}${
 				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
 			}\n`
@@ -418,7 +482,7 @@ async function main(): Promise<number> {
 		const statedProject = Boolean(args.flags.config) || Boolean(args.flags.preset) || Boolean(projectConfig);
 		if (!statedProject && needsProject(command, args, isHook) && !looksLikeProject(root)) {
 			if (isHook) return emitClean(`loupe: skipped \u2014 ${NOT_A_WORKTREE}`);
-			process.stderr.write(`loupe: ${NOT_A_WORKTREE}\n`);
+			fail(`loupe: ${NOT_A_WORKTREE}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 
@@ -436,7 +500,7 @@ async function main(): Promise<number> {
 			// profile, not a broken project: its registries still apply, so name
 			// what was ignored rather than failing the run over it.
 			else if (!isHook)
-				process.stderr.write(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed\n`);
+				note(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed\n`);
 		}
 		// Override the preset inference chose, not the run it produced. The
 		// namespaces are a reading of *this* project and hold whoever picked the
@@ -462,7 +526,7 @@ async function main(): Promise<number> {
 		// every project with nothing the agent could do about it. A gate that
 		// cannot configure itself stands aside and says so.
 		if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf(err)}`);
-		process.stderr.write(`loupe: config error \u2014 ${messageOf(err)}\n`);
+		fail(`loupe: config error \u2014 ${messageOf(err)}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -489,11 +553,11 @@ async function main(): Promise<number> {
 	const registries = applyRegistries(config, sources, { setPatterns, setComponentRegistry });
 	config.profiles = { available: profiles, active, ...registries };
 	if (!isHook) {
-		for (const err of registries.errors) process.stderr.write(`loupe: ${err}\n`);
+		for (const err of registries.errors) fail(`loupe: ${err}\n`);
 		// A registry handed over and then ignored has to say so: silently dropping
 		// it is indistinguishable from running it and finding nothing.
 		for (const s of registries.skipped)
-			process.stderr.write(
+			note(
 				`loupe: ${s.label} ${s.kind} registry skipped \u2014 scoped to ${s.packages.join(', ')}, and this config declares ${
 					config.designSystem.packages.length ? config.designSystem.packages.join(', ') : 'no design-system packages'
 				}\n`
@@ -502,7 +566,7 @@ async function main(): Promise<number> {
 		// what merging it was for: `--profile` forcing a registry in does not make
 		// its rules run, and forcing it onto a project on another design system
 		// makes them run against components they describe nothing about.
-		for (const n of registries.notes) process.stderr.write(`loupe: ${n.label} ${n.kind} registry ${n.note}\n`);
+		for (const n of registries.notes) note(`loupe: ${n.label} ${n.kind} registry ${n.note}\n`);
 	}
 
 	// Inference that stopped early is still used — a partial answer beats
@@ -512,7 +576,7 @@ async function main(): Promise<number> {
 	// where it speaks: appended to the systemMessage, which is one line either
 	// way. The hook is the caller this ceiling exists for; it cannot be the one
 	// caller that never hears about it.
-	if (detected?.truncated && !isHook) process.stderr.write(TRUNCATED_NOTE);
+	if (detected?.truncated && !isHook) note(TRUNCATED_NOTE);
 	const ceilingSuffix = detected?.truncated ? CEILING_SUFFIX : '';
 
 	// An inferred namespace list is a guess, and css/dead-class tells an agent to
@@ -537,11 +601,13 @@ async function main(): Promise<number> {
 	if (command === 'explain') {
 		const id = canonicalRuleId(args._[1] ?? '');
 		if (!isRuleId(id)) {
-			process.stderr.write(`loupe: unknown rule "${args._[1] ?? ''}"\n`);
+			fail(`loupe: unknown rule "${args._[1] ?? ''}"\n`);
 			return EXIT.CANNOT_RUN;
 		}
-		const state = config.enabled[id] ? config.severityOf(id) : 'disabled (config does not satisfy its requirements)';
-		process.stdout.write(`${id}  [${state}]\n  ${renderTitle(id, config.designSystem, config.suppression.keyword)}\n`);
+		const state = config.enabled[id]
+			? SEV_PAINT[config.severityOf(id)](config.severityOf(id))
+			: dim('disabled (config does not satisfy its requirements)');
+		process.stdout.write(`${magenta(id)}  [${state}]\n  ${renderTitle(id, config.designSystem, config.suppression.keyword)}\n`);
 		return EXIT.OK;
 	}
 
@@ -567,15 +633,15 @@ async function main(): Promise<number> {
 		// both let a baseline sit in a file the hook was never reading.
 		const base = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
 		const lines = [
-			`config:     ${src}`,
-			`namespaces: ${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
-			`suppress:   ${config.suppression.keyword} <ruleId> -- <reason>`,
+			`${key('config:     ')}${src}`,
+			`${key('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
+			`${key('suppress:   ')}${config.suppression.keyword} <ruleId> -- <reason>`,
 			// A legacy hit has to say so. `loupe baseline` writes the canonical path,
 			// so an unmarked legacy path here is `status` and `baseline` naming
 			// different files with nothing on hand to reconcile them — the exact
 			// shape of the bug that pinned the baseline to the project in the first
 			// place.
-			`baseline:   ${base.path}${
+			`${key('baseline:   ')}${base.path}${
 				base.found && readBaseline(root, base.path) === null
 					? '  (unreadable \u2014 every finding in it is live again)'
 					: base.fallback === 'legacy'
@@ -586,23 +652,23 @@ async function main(): Promise<number> {
 								? ''
 								: '  (none recorded yet)'
 			}`,
-			`state:      ${state.dir}${state.scope === 'plugin-data' ? '  (retry counter only, outside your repo)' : ''}`,
-			`options:    ${
+			`${key('state:      ')}${state.dir}${state.scope === 'plugin-data' ? '  (retry counter only, outside your repo)' : ''}`,
+			`${key('options:    ')}${
 				optionsSource === 'environment'
 					? 'from the plugin environment (hook context)'
 					: optionsSource === 'settings'
 						? 'from ~/.claude settings'
 						: 'none found — plugin defaults apply'
 			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
-			`plugin:     ${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
+			`${key('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
 			// Asked through the same predicate the gate uses. Reporting on mere
 			// truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
 			// blocking — a diagnostic lying about the one thing it exists to say.
-			...(hookSilenced() ? ['hook:       OFF for this session (LOUPE_OFF is set)'] : []),
+			...(hookSilenced() ? [yellow('hook:       OFF for this session (LOUPE_OFF is set)')] : []),
 			// Which design system's registries are in play, and — when none are —
 			// which ones were on offer. "No composite findings" and "no composite
 			// registry" look identical in a report; they must not look identical here.
-			`profile:    ${
+			`${key('profile:    ')}${
 				config.profiles?.active?.length
 					? config.profiles.active.map((p) => `${p.id} (${p.name})`).join(', ')
 					: config.profiles?.available?.length
@@ -610,7 +676,7 @@ async function main(): Promise<number> {
 						: 'none available'
 			}`,
 			'',
-			'rules:',
+			bold('rules:'),
 		];
 		for (const id of RULE_IDS) {
 			const def = RULES[id];
@@ -621,21 +687,24 @@ async function main(): Promise<number> {
 			// debugging a gate that "should" be blocking and isn't. `gateBlocks`
 			// rather than `blockingAllowed` for the same reason: a silenced hook
 			// blocks nothing, whatever the severities say.
-			const note = config.enabled[id]
+			// Coloured by what it does, not by the rule's configured severity —
+			// same reason the words are: an error-severity rule under a gate that
+			// cannot block is advisory, and painting it red says otherwise.
+			const verdict = config.enabled[id]
 				? sev === 'error' && gateBlocks
-					? 'BLOCKS'
+					? red('BLOCKS')
 					: sev === 'error'
-						? 'advisory (would block if enabled)'
-						: 'advisory'
-				: `off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`;
-			lines.push(`  ${id.padEnd(32)} ${note}`);
+						? yellow('advisory (would block if enabled)')
+						: yellow('advisory')
+				: dim(`off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`);
+			lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
 		}
 		const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
 		lines.push(
 			'',
 			gateBlocks && blockers.length
-				? `Turns are blocked by: ${blockers.join(', ')}`
-				: 'Nothing blocks turns; every finding is advisory.'
+				? `${red('Turns are blocked by:')} ${blockers.map((id) => magenta(id)).join(', ')}`
+				: green('Nothing blocks turns; every finding is advisory.')
 		);
 		if (hookSilenced()) {
 			lines.push('The gate is silenced for this session: LOUPE_OFF is set in the environment.');
@@ -660,14 +729,14 @@ async function main(): Promise<number> {
 		const info = detected ?? runDetection();
 		// `detected` is null only when a config file already exists, in which case
 		// the note above never ran and this is the run that has to carry it.
-		if (!detected && info.truncated) process.stderr.write(TRUNCATED_NOTE);
+		if (!detected && info.truncated) note(TRUNCATED_NOTE);
 		if (args.flags.format === 'json') {
 			process.stdout.write(`${JSON.stringify(info, null, 2)}\n`);
 			return EXIT.OK;
 		}
 		const lines = [
-			`preset:     ${info.preset}  [${info.presetConfidence} confidence]`,
-			`            ${info.presetReasons.join('; ')}`,
+			`${key('preset:     ')}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
+			dim(`            ${info.presetReasons.join('; ')}`),
 			// What inference concluded still gets reported; it is just no longer
 			// what the run uses. `init` writes the config below verbatim, so the
 			// two lines disagreeing without explanation is a file someone would
@@ -675,13 +744,15 @@ async function main(): Promise<number> {
 			...(profilePreset
 				? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`]
 				: []),
-			`namespaces: ${info.namespaces.project.join(', ') || '(none found)'}  [${info.namespaceConfidence} confidence]`,
-			`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`,
-			`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` +
-				(info.truncated ? `  (stopped at the ${CEILING})` : ''),
+			`${key('namespaces: ')}${info.namespaces.project.join(', ') || '(none found)'}  ${confidence(info.namespaceConfidence)}`,
+			dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
+			dim(
+				`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` +
+					(info.truncated ? `  (stopped at the ${CEILING})` : '')
+			),
 		];
 		if (command === 'detect') {
-			lines.push('', 'Inferred config:', JSON.stringify(info.config, null, 2));
+			lines.push('', bold('Inferred config:'), jsonKeys(JSON.stringify(info.config, null, 2)));
 			if (config.source.kind === 'file') lines.push('', `Note: ${config.source.path} exists and takes precedence.`);
 			process.stdout.write(`${lines.join('\n')}\n`);
 			return EXIT.OK;
@@ -696,18 +767,18 @@ async function main(): Promise<number> {
 		if (info.truncated && !args.flags.force) {
 			// The note above has already said why; this says only what it refuses
 			// to do about it, so the two lines do not read as one repeated twice.
-			process.stderr.write(
+			fail(
 				'loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. ' +
 					'Point --root at the project, or pass --force to write it anyway.\n'
 			);
 			return EXIT.CANNOT_RUN;
 		}
 		if (existsSync(target) && !args.flags.force) {
-			process.stderr.write(`loupe: ${target} already exists (use --force)\n`);
+			fail(`loupe: ${target} already exists (use --force)\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		writeFileSync(target, `${JSON.stringify(info.config, null, 2)}\n`);
-		process.stdout.write(`${lines.join('\n')}\n\nWrote ${target}\n`);
+		process.stdout.write(`${lines.join('\n')}\n\n${green(`Wrote ${target}`)}\n`);
 		return EXIT.OK;
 	}
 
@@ -728,7 +799,7 @@ async function main(): Promise<number> {
 			findings === entries
 				? `${findings} finding(s)`
 				: `${findings} finding(s) as ${entries} ${entries === 1 ? 'entry' : 'entries'}`;
-		process.stdout.write(`loupe: baselined ${recorded} \u2192 ${path}\n`);
+		process.stdout.write(green(`loupe: baselined ${recorded} \u2192 ${path}\n`));
 		return EXIT.OK;
 	}
 
@@ -745,7 +816,9 @@ async function main(): Promise<number> {
 		else
 			for (const d of directives)
 				process.stdout.write(
-					`${d.file}:${d.line}  ${d.rules.join(',')}  ${d.reason}${d.alias ? `  (${d.alias} \u2192 ${kw})` : ''}\n`
+					`${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(','))}  ${d.reason}${
+						d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ''
+					}\n`
 				);
 		return EXIT.OK;
 	}
@@ -758,14 +831,14 @@ async function main(): Promise<number> {
 	if (command === 'fix') {
 		const fixScope = resolveScope(config, args, { defaultChanged: false });
 		if (fixScope !== null && !Array.isArray(fixScope)) {
-			process.stderr.write(`loupe: ${fixScope.error}\n`);
+			fail(`loupe: ${fixScope.error}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
 		} catch (err) {
-			process.stderr.write(`loupe: ${messageOf(err)}\n`);
+			fail(`loupe: ${messageOf(err)}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		const dry = Boolean(args.flags['dry-run']);
@@ -781,18 +854,22 @@ async function main(): Promise<number> {
 		// applied line is the preview `--dry-run` exists to give — and an elided
 		// value is one neither of them can be matched against.
 		const decl = (f: TokenFix): string => oneLine(`${f.prop}: ${f.value}`);
-		for (const f of applied) process.stdout.write(`${f.file}:${f.line}  ${decl(f)} \u2192 var(${f.token})\n`);
-		for (const f of skipped) process.stdout.write(`skip ${f.file}:${f.line}  ${decl(f)} \u2014 ${f.why}\n`);
+		for (const f of applied)
+			process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2192 ${green(`var(${f.token})`)}\n`);
+		for (const f of skipped)
+			process.stdout.write(`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2014 ${f.why}\n`);
 		const left = toFix.findings.length - applied.length;
 		process.stdout.write(
-			`\nloupe: ${verb} ${applied.length} finding(s)${skipped.length ? `, skipped ${skipped.length}` : ''}. ` +
-				`${left} left for review.\n`
+			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${
+				skipped.length ? yellow(`, skipped ${skipped.length}`) : ''
+			}. ${left} left for review.\n`
 		);
 		return EXIT.OK;
 	}
 
 	if (command !== 'check' && !isHook) {
-		process.stderr.write(`loupe: unknown command "${command}"\n\n${USAGE}`);
+		fail(`loupe: unknown command "${command}"\n\n`);
+		process.stderr.write(usage());
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -800,7 +877,7 @@ async function main(): Promise<number> {
 	// misspelled flag should not first walk the repo.
 	const format = args.flags.format ?? 'agent';
 	if (!isHook && !isFormat(format)) {
-		process.stderr.write(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(', ')}\n`);
+		fail(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(', ')}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -814,7 +891,7 @@ async function main(): Promise<number> {
 	const scope: ScopeResult = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
 	if (scope !== null && !Array.isArray(scope)) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${scope.error}`);
-		process.stderr.write(`loupe: ${scope.error}\n`);
+		fail(`loupe: ${scope.error}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -823,7 +900,7 @@ async function main(): Promise<number> {
 		result = await analyze(config, { scope });
 	} catch (err) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
-		process.stderr.write(`loupe: ${messageOf(err)}\n`);
+		fail(`loupe: ${messageOf(err)}\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -846,7 +923,7 @@ async function main(): Promise<number> {
 		// stderr and Claude Code feeds that back on exit 2, so the line is carried
 		// by a channel that already exists.
 		if (found && !baseline)
-			process.stderr.write(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
+			note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
 		result = applyBaseline(result, baseline);
 	}
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
@@ -896,7 +973,7 @@ async function main(): Promise<number> {
 	else {
 		process.stdout.write(`${formatAgent(result, config, { maxFindings })}\n`);
 		if ('baselined' in result && result.baselined)
-			process.stdout.write(`\n${result.baselined} baselined finding(s) hidden.\n`);
+			process.stdout.write(dim(`\n${result.baselined} baselined finding(s) hidden.\n`));
 	}
 	return result.blocking ? EXIT.BLOCKED : EXIT.OK;
 }
@@ -909,6 +986,6 @@ main()
 		process.exitCode = code;
 	})
 	.catch((err: unknown) => {
-		process.stderr.write(`loupe: ${err instanceof Error ? err.stack : String(err)}\n`);
+		fail(`loupe: ${err instanceof Error ? err.stack : String(err)}\n`);
 		process.exitCode = EXIT.CANNOT_RUN;
 	});

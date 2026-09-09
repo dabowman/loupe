@@ -15,7 +15,8 @@
  * code contains the wrong substring is a page nobody can trust.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { analyze } from '../src/analyze.ts';
 import { loadConfig } from '../src/config.ts';
@@ -245,6 +246,107 @@ await check('--format html writes a whole document to stdout', () => {
 		assert(out.startsWith('<!doctype html>'), 'stdout is not a document');
 		assert(out.includes('<!-- loupe:begin -->') && out.includes('<!-- loupe:end -->'), 'the fragment markers are missing');
 		one([...out.matchAll(/<script type="application\/json" id="loupe-data">/g)], 'expected exactly one data block');
+	} finally {
+		cleanup(dir);
+	}
+});
+
+/**
+ * Colour.
+ *
+ * The whole of the risk is in one direction: an escape sequence reaching a
+ * reader that is not a terminal. Two of those readers are load-bearing — the
+ * agent, which is handed the hook's stderr verbatim, and any parser of
+ * `--format json` — and neither of them would fail loudly. So the first three
+ * checks are all negative, and the fourth exists only so a colour scheme that
+ * silently stopped emitting anything cannot pass the other three.
+ */
+const ESC = /\u001B\[/;
+
+function runColor(argv: readonly string[], extra: NodeJS.ProcessEnv, input?: string) {
+	const dir = scratch('loupe-color-');
+	writeAll(dir, DRIFTY);
+	try {
+		const r = spawnSync(process.execPath, [CLI, ...argv], {
+			cwd: dir,
+			encoding: 'utf8',
+			env: { ...process.env, ...extra },
+			...(input === undefined ? {} : { input }),
+		});
+		if (r.error) throw r.error;
+		return { stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+	} finally {
+		cleanup(dir);
+	}
+}
+
+await check('a piped run emits no escape sequences', () => {
+	const { stdout } = runColor(['check', '--all'], { NO_COLOR: '', FORCE_COLOR: '' });
+	assert(stdout.includes('css/dead-class'), `no report at all:\n${stdout}`);
+	assert(!ESC.test(stdout), 'a non-tty run coloured its output');
+});
+
+await check('the hook never colours the report it hands back', () => {
+	// FORCE_COLOR is the strongest "yes" the module takes, so a hook that stays
+	// plain under it stays plain under anything.
+	const { stdout, stderr } = runColor(
+		['hook'],
+		{ FORCE_COLOR: '1' },
+		JSON.stringify({ session_id: 'colour', tool_input: { file_path: 'styles/app.css' } })
+	);
+	assert(stderr.includes('loupe') || stdout.includes('loupe'), `the hook said nothing at all:\n${stderr}${stdout}`);
+	assert(!ESC.test(stderr), `the agent was handed ANSI: ${JSON.stringify(stderr)}`);
+	assert(!ESC.test(stdout), `the systemMessage carries ANSI: ${JSON.stringify(stdout)}`);
+});
+
+await check('a machine format stays parseable under FORCE_COLOR', () => {
+	const { stdout } = runColor(['check', '--all', '--format', 'json'], { FORCE_COLOR: '1' });
+	assert(!ESC.test(stdout), 'json output was coloured');
+	JSON.parse(stdout);
+});
+
+await check('FORCE_COLOR does colour the human report', () => {
+	const { stdout } = runColor(['check', '--all'], { FORCE_COLOR: '1' });
+	assert(ESC.test(stdout), `colour never turns on:\n${JSON.stringify(stdout)}`);
+	const { stdout: off } = runColor(['check', '--all', '--no-color'], { FORCE_COLOR: '1' });
+	assert(!ESC.test(off), '--no-color did not turn it off');
+});
+
+await check('rules, config keys and help wear their own colours', () => {
+	const { stdout } = runColor(['check', '--all'], { FORCE_COLOR: '1' });
+	assert(/\u001B\[35mcss\/dead-class/.test(stdout), `the rule id is not in rule colour:\n${JSON.stringify(stdout)}`);
+
+	const status = runColor(['status'], { FORCE_COLOR: '1' }).stdout;
+	assert(/\u001B\[2mnamespaces: /.test(status), `a config key went unpainted:\n${status}`);
+	assert(/\u001B\[35mcss\/dead-class/.test(status), `status prints rule ids in another colour:\n${status}`);
+
+	const help = runColor(['--help'], { FORCE_COLOR: '1' }).stdout;
+	assert(/\u001B\[36m--changed/.test(help), `an option went unpainted:\n${help}`);
+	assert(/\u001B\[1mcheck/.test(help), `a command went unpainted:\n${help}`);
+	// The text is also what `--help | grep` reads, and a pipe is not a terminal.
+	const piped = runColor(['--help'], { NO_COLOR: '1' }).stdout;
+	assert(!ESC.test(piped) && /^  --changed /m.test(piped), `piped help is not plain:\n${piped}`);
+});
+
+await check('component names are painted, and only at print time', () => {
+	const { stdout } = runColor(['check', '--all'], { FORCE_COLOR: '1' });
+	assert(/\u001B\[36m<Text>/.test(stdout), `a JSX mention went unpainted:\n${JSON.stringify(stdout)}`);
+
+	// The load-bearing half: `findingKey` falls back to `message`, so a name
+	// painted any earlier than the print site would rewrite every baseline key
+	// the moment someone ran this in a terminal.
+	const dir = scratch('loupe-color-key-');
+	writeAll(dir, DRIFTY);
+	try {
+		const colour = { ...process.env, FORCE_COLOR: '1' };
+		const recorded = spawnSync(process.execPath, [CLI, 'baseline'], { cwd: dir, encoding: 'utf8', env: colour });
+		assert(recorded.status === 0, `baseline failed: ${recorded.stderr}`);
+		assert(!ESC.test(readFileSync(join(dir, '.loupe-baseline.json'), 'utf8')), 'the baseline file carries ANSI');
+		const after = spawnSync(process.execPath, [CLI, 'check', '--all'], { cwd: dir, encoding: 'utf8', env: colour });
+		assert(
+			/clean\./.test(after.stdout),
+			`a baseline written in colour no longer matches its own findings:\n${after.stdout}`
+		);
 	} finally {
 		cleanup(dir);
 	}
