@@ -1,0 +1,18 @@
+{
+  "extends": "generic",
+  "detect": {
+    "priority": 30,
+    "confidence": "high",
+    "dependencies": ["@base-ui/react", "@base-ui-components/react"]
+  },
+  "designSystem": {
+    "name": "Base UI",
+    "packages": ["@base-ui/react", "@base-ui-components/react"],
+    "components": { "layout": [], "text": [] },
+    "substitutionProps": ["render"]
+  },
+  "rules": {
+    "system/override": "off",
+    "system/inline-style": "off"
+  }
+}

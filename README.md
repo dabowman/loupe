@@ -288,13 +288,38 @@ which skills belong to which design system stays written down.
 
 Presets: `wpds` (WPDS tokens + a severity policy that actually blocks),
 `wordpress-components` (the older admin surface), `wordpress-block-theme`,
-`generic`.
+`base-ui` (a starting point for a system built on Base UI), `generic`.
+
+`base-ui` is a parent, the way `wordpress-components` is: Base UI is headless,
+so it has no tokens, no layout primitive and no text component of its own, and
+styling its parts with a class is the documented way to use it rather than
+drift. What it does give you is the packages — so the compositional rules see
+`Dialog.Root(Dialog.Trigger,Dialog.Portal(…))` as a shape, and the same anatomy
+reassembled across files reports — plus `system/override` and
+`system/inline-style` off, because on an unstyled library they are wrong by
+construction. Your own layer goes on top:
+
+```jsonc
+{
+  "extends": "base-ui",
+  "designSystem": {
+    "packages": ["@base-ui/react", "@acme/ui"],
+    "tokenPrefixes": ["--acme-"],
+    "components": { "layout": ["Stack", "Row"], "text": ["Text", "Heading"] }
+  }
+}
+```
+
+Naming your own layout and text components switches the correlation rules back
+on. Leave `system/override` off unless your wrappers are the only thing anyone
+imports: `known` is per-package-set, not per-package, so re-enabling it reports
+the Base UI parts underneath as well.
 
 Without a config file, one is inferred: `@wordpress/components` or
 `@wordpress/ui` in **any** `package.json` within three levels selects `wpds`
 (a WordPress repo is usually a monorepo, and the manifest that imports the
 component library is rarely the root one); `theme.json` plus `templates/`
-selects `wordpress-block-theme`; and the class prefixes you own are read off the
+selects `wordpress-block-theme`; `@base-ui/react` selects `base-ui`; and the class prefixes you own are read off the
 classes appearing in **both** your CSS and your markup, minus any a dependency
 defines — `rbc-` looks exactly like a namespace you own until you notice
 react-big-calendar ships the stylesheet that declares it.

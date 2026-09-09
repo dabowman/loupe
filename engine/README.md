@@ -236,6 +236,9 @@ author wrote, with an analog to convert to.
 - `wordpress-components` — the Gutenberg/admin surface
 - `wordpress-block-theme` — `--wp--preset--*` tokens, `templates/`+`parts/` HTML
   as reference sources, no component layer
+- `base-ui` — the headless case: `@base-ui/react` packages so composites are
+  seen, no token or component layer to inherit, and the two rules that assume
+  you must not restyle a component turned off
 - `generic` — namespaces and token prefixes only
 
 ### Adding a design system
@@ -285,6 +288,13 @@ declares who it is for, and applies to nothing else:
   "patterns": [ /* … */ ]
 }
 ```
+
+A headless library (Base UI, Radix, Ark, React Aria) fills in only the packages
+half: it has no layout or text primitive to name, and the compositional rules
+ask for nothing else — a composite is built from every name imported out of
+`designSystem.packages`. `system/override` and `system/inline-style` are the two
+that do not carry over, because on an unstyled library a class on a component is
+the documented way to style it; turn them off in the preset, as `base-ui` does.
 
 A registry that declares no `packages` applies everywhere, which is what a
 project's own registry wants. Where one project genuinely runs two systems at

@@ -23547,7 +23547,7 @@ var RULES = {
   "patterns/unregistered-composite": {
     severity: "warn",
     rank: 14,
-    needs: ["components"],
+    needs: ["packages"],
     title: "the same composite is assembled in several files \u2014 extract it and register it as a pattern"
   },
   "tokens/unknown-token": {
@@ -24769,7 +24769,7 @@ function tokenRefsIn(value, prefixes) {
 
 // src/analyze.ts
 var messageOf3 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
-function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {} }) {
+function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {}, enabled = () => true }) {
   const isMargin = prop === "margin" || prop.startsWith("margin-");
   const marginKind = isMargin ? classifyMargin(value) : null;
   const isFlexish = FLEX_PROPS.has(prop) || prop === "display" && /\b(inline-)?(flex|grid)\b/.test(value);
@@ -24777,9 +24777,9 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
   const styling = isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
   const decl2 = `${prop}: ${value}`;
   let finding = null;
-  if (TYPE_PROPS.has(prop) && boundText[0]) {
+  if (TYPE_PROPS.has(prop) && boundText[0] && enabled("typography/in-css")) {
     finding = { rule: "typography/in-css", message: `${prop} on <${boundText[0].tag}>` };
-  } else if (boundSystem[0] && APPEARANCE_PROPS.has(prop)) {
+  } else if (boundSystem[0] && APPEARANCE_PROPS.has(prop) && enabled("system/override")) {
     finding = { rule: "system/override", message: `<${boundSystem[0].tag}> \u2190 ${prop}` };
   } else if (isMargin) {
     if (marginKind === "negative") finding = { rule: "layout/negative-margin", message: decl2, code: prop };
@@ -24836,6 +24836,7 @@ function collapsePerRule(pending) {
 }
 async function analyze(config, { scope = null } = {}) {
   const ds = config.designSystem;
+  const ruleIsLive = (rule2) => config.enabled[rule2];
   const parseSuppressions = makeSuppressionParser(config.suppression);
   const files = discover({ root: config.root, sources: config.sources });
   const MAX_BYTES = 15e5;
@@ -24989,7 +24990,7 @@ async function analyze(config, { scope = null } = {}) {
         const line = decl2.source?.start?.line ?? ruleLine;
         const { finding, styling } = classifyDeclaration(
           { prop, value: decl2.value },
-          { boundSystem, boundText, isGrid, options: config.optionsOf("tokens/hardcoded-value") }
+          { boundSystem, boundText, isGrid, options: config.optionsOf("tokens/hardcoded-value"), enabled: ruleIsLive }
         );
         if (styling) touchesStyle = true;
         if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
@@ -25000,7 +25001,7 @@ async function analyze(config, { scope = null } = {}) {
       if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
       if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
       const external = keyClasses.find((c) => config.isExternal(c) && !config.isProject(c));
-      if (external && touchesStyle)
+      if (external && touchesStyle && ruleIsLive("system/override"))
         emit({ rule: "system/override", line: ruleLine, message: `.${external} (library internal)`, scopeLines });
       else for (const f of collapsePerRule(pending)) emit(f);
       for (const cls of keyClasses) {
@@ -25029,7 +25030,7 @@ async function analyze(config, { scope = null } = {}) {
         suffix
       });
     };
-    if (el.isSystem) {
+    if (el.isSystem && ruleIsLive("system/inline-style")) {
       const shown = el.decls.map((d) => d.prop).slice(0, 3).join(", ");
       const extra = el.decls.length + el.dynamic - Math.min(el.decls.length, 3);
       push(
@@ -25045,7 +25046,11 @@ async function analyze(config, { scope = null } = {}) {
     );
     const pending = [];
     for (const d of el.decls) {
-      const { finding } = classifyDeclaration(d, { isGrid, options: config.optionsOf("tokens/hardcoded-value") });
+      const { finding } = classifyDeclaration(d, {
+        isGrid,
+        options: config.optionsOf("tokens/hardcoded-value"),
+        enabled: ruleIsLive
+      });
       if (finding)
         pending.push({ ...finding, line: d.line ?? el.line, code: finding.code ?? finding.message, suffix: " (inline)" });
     }
@@ -25072,7 +25077,8 @@ async function analyze(config, { scope = null } = {}) {
           boundSystem: onTarget ? boundSystem : [],
           boundText: onTarget ? boundText : [],
           isGrid: group.isGrid,
-          options: config.optionsOf("tokens/hardcoded-value")
+          options: config.optionsOf("tokens/hardcoded-value"),
+          enabled: ruleIsLive
         });
         if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
       }
@@ -25703,14 +25709,16 @@ function normalize(raw, { root: root2 }) {
     );
   const layoutComponents = ds.components?.layout ?? [];
   const textComponents = ds.components?.text ?? [];
-  const hasComponents = (ds.packages ?? []).length > 0 && layoutComponents.length + textComponents.length > 0;
+  const hasPackages = (ds.packages ?? []).length > 0;
+  const hasComponents = hasPackages && layoutComponents.length + textComponents.length > 0;
   const capability = {
+    packages: hasPackages,
     components: hasComponents,
     layoutComponents: hasComponents && layoutComponents.length > 0,
     textComponents: hasComponents && textComponents.length > 0,
     elementMap: elementMap.size > 0,
     tokenPrefixes: (ds.tokenPrefixes || []).length > 0,
-    patternRegistry: hasComponents && patterns.length > 0,
+    patternRegistry: hasPackages && patterns.length > 0,
     componentRegistry: componentRegistry.size > 0,
     projectNamespace: (cfg.namespaces.project ?? []).length > 0
   };
@@ -25773,12 +25781,13 @@ function normalize(raw, { root: root2 }) {
 }
 function setPatterns(config, patterns) {
   config.patterns = patterns ?? [];
-  const hasRegistry = config.patterns.length > 0 && // The same `hasComponents` normalization computes above, restated rather
-  // than recomputed. Dropping the packages half made this looser than the
-  // capability it stands in for: a composite is only ever built from names
-  // imported out of `designSystem.packages`, so a config declaring none can
-  // never produce one — and `status` reported the rule active anyway.
-  config.designSystem.packages.length > 0 && config.designSystem.knownComponents.size > 0;
+  const hasRegistry = config.patterns.length > 0 && // The same `patternRegistry` capability normalization computes above,
+  // restated rather than recomputed. A composite is only ever built from
+  // names imported out of `designSystem.packages`, so a config declaring
+  // none can never produce one — and `status` reported the rule active
+  // anyway. The layout/text lists are deliberately not part of this: a
+  // headless library has none and still composes.
+  config.designSystem.packages.length > 0;
   for (const rule2 of ["patterns/duplicate-composite", "patterns/superseded-composite"])
     config.enabled[rule2] = hasRegistry && config.severityOf(rule2) !== "off";
   return config;

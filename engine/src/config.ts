@@ -319,16 +319,23 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 
 	const layoutComponents = ds.components?.layout ?? [];
 	const textComponents = ds.components?.text ?? [];
-	const hasComponents = (ds.packages ?? []).length > 0 && layoutComponents.length + textComponents.length > 0;
+	// A composite is built from every name imported out of `designSystem.packages`,
+	// whether or not it is a layout or text primitive — so the compositional rules
+	// need the packages and nothing else. A headless library (Base UI, Radix) has
+	// no layout or text layer at all, and gating its composites on one meant the
+	// only rules that could ever have fired on it were off by construction.
+	const hasPackages = (ds.packages ?? []).length > 0;
+	const hasComponents = hasPackages && layoutComponents.length + textComponents.length > 0;
 
 	// A rule is available only if the active config satisfies its `needs`.
 	const capability: Record<Capability, boolean> = {
+		packages: hasPackages,
 		components: hasComponents,
 		layoutComponents: hasComponents && layoutComponents.length > 0,
 		textComponents: hasComponents && textComponents.length > 0,
 		elementMap: elementMap.size > 0,
 		tokenPrefixes: (ds.tokenPrefixes || []).length > 0,
-		patternRegistry: hasComponents && patterns.length > 0,
+		patternRegistry: hasPackages && patterns.length > 0,
 		componentRegistry: componentRegistry.size > 0,
 		projectNamespace: (cfg.namespaces.project ?? []).length > 0,
 	};
@@ -430,13 +437,13 @@ export function setPatterns(config: Config, patterns: Pattern[] | null | undefin
 	config.patterns = patterns ?? [];
 	const hasRegistry =
 		config.patterns.length > 0 &&
-		// The same `hasComponents` normalization computes above, restated rather
-		// than recomputed. Dropping the packages half made this looser than the
-		// capability it stands in for: a composite is only ever built from names
-		// imported out of `designSystem.packages`, so a config declaring none can
-		// never produce one — and `status` reported the rule active anyway.
-		config.designSystem.packages.length > 0 &&
-		config.designSystem.knownComponents.size > 0;
+		// The same `patternRegistry` capability normalization computes above,
+		// restated rather than recomputed. A composite is only ever built from
+		// names imported out of `designSystem.packages`, so a config declaring
+		// none can never produce one — and `status` reported the rule active
+		// anyway. The layout/text lists are deliberately not part of this: a
+		// headless library has none and still composes.
+		config.designSystem.packages.length > 0;
 	// Every rule reading the registry has to be wired here, not just the first
 	// one: a rule left out looks exactly like "nothing found".
 	for (const rule of ['patterns/duplicate-composite', 'patterns/superseded-composite'] as const)

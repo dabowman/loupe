@@ -42,6 +42,7 @@ export type Severity = 'error' | 'warn' | 'off';
  * true. A rule whose needs the active config cannot meet disables itself.
  */
 export type Capability =
+	| 'packages'
 	| 'components'
 	| 'layoutComponents'
 	| 'textComponents'
@@ -182,6 +183,13 @@ export interface ClassifyContext {
 	boundText?: readonly Binding[];
 	isGrid?: boolean;
 	options?: HardcodedOptions;
+	/**
+	 * Whether a rule is live in this run. Two branches of the classifier
+	 * *supersede* the ordinary verdict rather than adding to it, so a
+	 * superseding rule that is off has to step aside and let the ordinary one
+	 * through — otherwise turning it off deletes the other finding too.
+	 */
+	enabled?: (rule: RuleId) => boolean;
 }
 
 export interface HardcodedOptions {

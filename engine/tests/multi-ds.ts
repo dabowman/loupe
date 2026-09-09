@@ -453,4 +453,57 @@ await check('an unreadable registry is an error, not a crash', async () => {
 	}
 });
 
+// ── headless design systems ─────────────────────────────────────────────────
+// Base UI, Radix, Ark and React Aria ship behaviour and no styling. They have
+// no layout or text primitive at all, and styling their parts with a class is
+// not drift — it is the documented way to use them. That combination used to
+// leave nothing running: the compositional rules were gated on a layout/text
+// list the library will never have, so the one kind of drift a headless system
+// does produce — the same anatomy reassembled in five files — was off by
+// construction.
+
+/** The same dialog anatomy, twice over, from a headless package. */
+const dialog = (name: string): string => `import { Dialog } from '@base-ui/react/dialog';
+export const ${name} = () => (
+  <Dialog.Root>
+    <Dialog.Trigger className="trigger" />
+    <Dialog.Portal>
+      <Dialog.Backdrop />
+      <Dialog.Popup className="popup"><Dialog.Title>Hi</Dialog.Title></Dialog.Popup>
+    </Dialog.Portal>
+  </Dialog.Root>
+);
+`;
+
+await check('the base-ui preset is detected from the dependency alone', () => {
+	const root = repo({ 'package.json': JSON.stringify({ dependencies: { '@base-ui/react': '^1.0.0' } }) });
+	try {
+		const got = detectPreset(root);
+		assert(got.preset === 'base-ui', `expected base-ui, got ${got.preset}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a headless system composes without a layout or text layer', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: 'base-ui' }),
+		// Three files: an unregistered shape is house style at the third use.
+		'src/A.jsx': dialog('A'),
+		'src/B.jsx': dialog('B'),
+		'src/C.jsx': dialog('C'),
+		// Styling the parts is what the library asks for, not an override.
+		'styles/a.css': '.popup { background: #fff; border: 1px solid #ddd; }\n.trigger { color: #333; }\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root, configPath: join(root, 'loupe.config.json') }), { scope: null });
+		const unreg = r.findings.filter((f) => f.rule === 'patterns/unregistered-composite');
+		assert(unreg.length > 0, 'the repeated dialog anatomy should report');
+		const override = r.findings.filter((f) => f.rule === 'system/override' || f.rule === 'system/inline-style');
+		assert(!override.length, `an unstyled library must not report its own styling: ${override.map((f) => f.message)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();

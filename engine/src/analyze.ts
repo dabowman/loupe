@@ -70,7 +70,7 @@ const messageOf = (err: unknown): string =>
  */
 function classifyDeclaration(
 	{ prop, value }: Decl,
-	{ boundSystem = [], boundText = [], isGrid = false, options = {} }: ClassifyContext,
+	{ boundSystem = [], boundText = [], isGrid = false, options = {}, enabled = () => true }: ClassifyContext,
 ): { finding: ClassifiedFinding | null; styling: boolean } {
 	const isMargin = prop === 'margin' || prop.startsWith('margin-');
 	const marginKind = isMargin ? classifyMargin(value) : null;
@@ -83,10 +83,16 @@ function classifyDeclaration(
 	// on, `code` carries the whole of it — only the printed message is bounded.
 	const decl = `${prop}: ${value}`;
 
+	// The two superseding branches are conditional on their own rule being live.
+	// Both replace the ordinary verdict rather than adding to it, so when one is
+	// off — a headless library, where a class on a component is how you are meant
+	// to style it — the declaration has to fall through to the verdict it would
+	// have had. Emitting a finding nobody will print deleted the `background:
+	// #fff` beside it as well.
 	let finding: ClassifiedFinding | null = null;
-	if (TYPE_PROPS.has(prop) && boundText[0]) {
+	if (TYPE_PROPS.has(prop) && boundText[0] && enabled('typography/in-css')) {
 		finding = { rule: 'typography/in-css', message: `${prop} on <${boundText[0].tag}>` };
-	} else if (boundSystem[0] && APPEARANCE_PROPS.has(prop)) {
+	} else if (boundSystem[0] && APPEARANCE_PROPS.has(prop) && enabled('system/override')) {
 		finding = { rule: 'system/override', message: `<${boundSystem[0].tag}> \u2190 ${prop}` };
 	} else if (isMargin) {
 		// Zero and `auto` classify as null: a reset and a centering trick,
@@ -172,6 +178,7 @@ export async function analyze(
 	{ scope = null }: { scope?: readonly string[] | null } = {},
 ): Promise<AnalyzeResult> {
 	const ds = config.designSystem;
+	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
 	const parseSuppressions = makeSuppressionParser(config.suppression);
 	const files = discover({ root: config.root, sources: config.sources });
 
@@ -370,7 +377,7 @@ export async function analyze(
 				const line = decl.source?.start?.line ?? ruleLine;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, options: config.optionsOf('tokens/hardcoded-value') }
+					{ boundSystem, boundText, isGrid, options: config.optionsOf('tokens/hardcoded-value'), enabled: ruleIsLive }
 				);
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
@@ -388,7 +395,7 @@ export async function analyze(
 			// `wp-` external prefix, and reporting a project's own class as a
 			// library internal sends the agent to fix something it does not own.
 			const external = keyClasses.find((c) => config.isExternal(c) && !config.isProject(c));
-			if (external && touchesStyle)
+			if (external && touchesStyle && ruleIsLive('system/override'))
 				emit({ rule: 'system/override', line: ruleLine, message: `.${external} (library internal)`, scopeLines });
 			else for (const f of collapsePerRule(pending)) emit(f);
 
@@ -440,7 +447,7 @@ export async function analyze(
 		// "tokenize that value" — so one finding for the attribute supersedes
 		// the per-declaration ones, the same way a library-internal override
 		// supersedes advice about how to style it.
-		if (el.isSystem) {
+		if (el.isSystem && ruleIsLive('system/inline-style')) {
 			const shown = el.decls.map((d) => d.prop).slice(0, 3).join(', ');
 			const extra = el.decls.length + el.dynamic - Math.min(el.decls.length, 3);
 			push(
@@ -457,7 +464,11 @@ export async function analyze(
 		);
 		const pending: PendingFinding[] = [];
 		for (const d of el.decls) {
-			const { finding } = classifyDeclaration(d, { isGrid, options: config.optionsOf('tokens/hardcoded-value') });
+			const { finding } = classifyDeclaration(d, {
+				isGrid,
+				options: config.optionsOf('tokens/hardcoded-value'),
+				enabled: ruleIsLive,
+			});
 			if (finding)
 				pending.push({ ...finding, line: d.line ?? el.line, code: finding.code ?? finding.message, suffix: ' (inline)' });
 		}
@@ -495,6 +506,7 @@ export async function analyze(
 					boundText: onTarget ? boundText : [],
 					isGrid: group.isGrid,
 					options: config.optionsOf('tokens/hardcoded-value'),
+					enabled: ruleIsLive,
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
 			}

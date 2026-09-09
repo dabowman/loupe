@@ -1842,4 +1842,29 @@ await check('a spaced JSX comment carries a directive', async () => {
 	}
 });
 
+// `system/override` supersedes the per-declaration verdict rather than adding
+// to it, so with the rule off the superseded finding went with it: a headless
+// preset — where a class on a component is the documented way to style it —
+// reported nothing at all for `background: #ffffff`, and looked clean.
+await check('a superseded rule that is off does not delete the finding it superseded', async () => {
+	const root = scratch('loupe-supersede-');
+	writeAll(root, {
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			designSystem: { packages: ['@acme/ui'], components: { layout: ['Row'], text: ['Copy'] } },
+			rules: { 'system/override': 'off', 'system/inline-style': 'off' },
+		}),
+		'src/A.jsx': "import { Row } from '@acme/ui';\nexport const A = () => <Row className=\"panel\" style={{ background: '#ffffff' }} />;\n",
+		'styles/a.css': '.panel { background: #ffffff; }\n',
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const { findings } = await analyze(config, { scope: null });
+		const hardcoded = findings.filter((f) => f.rule === 'tokens/hardcoded-value');
+		assert(hardcoded.length === 2, `both channels should fall through, got ${hardcoded.length}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();

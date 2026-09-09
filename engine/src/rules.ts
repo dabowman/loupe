@@ -64,7 +64,7 @@ export const RULES = {
 	'patterns/unregistered-composite': {
 		severity: 'warn',
 		rank: 14,
-		needs: ['components'],
+		needs: ['packages'],
 		title: 'the same composite is assembled in several files — extract it and register it as a pattern',
 	},
 	'tokens/unknown-token': {
