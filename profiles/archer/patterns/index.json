@@ -1,7 +1,7 @@
 {
   "packages": ["@dabowman/archer"],
-  "version": 1,
-  "note": "Sanctioned Archer compositions. `signature` is the normalized component tree — a node is `[name, ...children]`, matching is containment rather than equality, and anything under four nodes the engine ignores as too generic to check. Archer's parts are flat sibling exports off one import (`DialogPopup`, not `Dialog.Popup`), so a signature is written in those names. Two kinds of entry live here and they do different jobs. **Anatomy entries** record a shape the library *requires* — a Dialog is a root, a trigger, a popup and a title, in every file that has one. They exist so `patterns/unregistered-composite` does not report a component's own mandatory anatomy as house style nobody wrote down; each carries `canonical` set to the root import, so any file actually using the component is skipped before either composite rule sees it, and they therefore never produce a finding. **Judgement entries** record a composite that has a right and a wrong form; those carry `instead_of` and, where the wrong form is a recognisable composite in its own right, `instead_of_signature`. Most do not — the shape reached for by default is usually one control, and a rule that fires on every `Select` is a rule people turn off, which is why reading this file before assembling matters more than the check does. Archer ships no page header, empty state, sidebar or settings drilldown: those entries are here without `canonical` on purpose, so the first project that builds one extracts it and fills that in rather than rebuilding it per screen.",
+  "version": 2,
+  "note": "Sanctioned Archer compositions. `signature` is the normalized component tree — a node is `[name, ...children]`, matching is containment rather than equality, and anything under four nodes the engine ignores as too generic to check. Archer's parts are flat sibling exports off one import (`DialogPopup`, not `Dialog.Popup`), so a signature is written in those names. Two kinds of entry live here and they do different jobs. **Anatomy entries** record a shape the library *requires* — a Dialog is a root, a trigger, a popup and a title, in every file that has one. They exist so `patterns/unregistered-composite` does not report a component's own mandatory anatomy as house style nobody wrote down; each carries `canonical` set to the root import, so any file actually using the component is skipped before either composite rule sees it, and they therefore never produce a finding. **Judgement entries** record a composite that has a right and a wrong form; those carry `instead_of` and, where the wrong form is a recognisable composite in its own right, `instead_of_signature`. Most do not — the shape reached for by default is usually one control, and a rule that fires on every `Select` is a rule people turn off, which is why reading this file before assembling matters more than the check does. Archer ships a page header (`PageHeader`) and an empty state (`Empty`), and those entries name them as `canonical`. It ships no detail sidebar or settings drilldown: those entries are here without `canonical` on purpose, so the first project that builds one extracts it and fills that in rather than rebuilding it per screen. `AppShell` and `PageHeader` take their regions as props (`nav`, `actions`, `breadcrumb`), which a signature does not see, so neither has an anatomy entry: what a file puts inside them is the page, not their structure.",
   "patterns": [
     {
       "id": "dialog-anatomy",
@@ -103,6 +103,49 @@
       "signature": ["NavigationMenu", ["NavigationMenuList", ["NavigationMenuItem", "NavigationMenuTrigger", "NavigationMenuContent"]]]
     },
     {
+      "id": "breadcrumb-anatomy",
+      "summary": "The parts a Breadcrumb is made of.",
+      "use": "The trail of pages above the current one, usually passed to `PageHeader`'s `breadcrumb`.",
+      "import": "@dabowman/archer",
+      "canonical": "Breadcrumb",
+      "signature": ["Breadcrumb", "BreadcrumbItem", "BreadcrumbItem", "BreadcrumbItem"]
+    },
+    {
+      "id": "table-anatomy",
+      "summary": "The parts a Table is made of.",
+      "use": "Tabular data.",
+      "import": "@dabowman/archer",
+      "canonical": "Table",
+      "signature": ["Table", ["TableBody", ["TableRow", "TableCell"]]],
+      "instead_of": [
+        "A Grid or a Stack of rows standing in for a table — it looks the same and is not navigable cell by cell"
+      ]
+    },
+    {
+      "id": "list-anatomy",
+      "summary": "The parts a List is made of.",
+      "use": "A bulleted or numbered list.",
+      "import": "@dabowman/archer",
+      "canonical": "List",
+      "signature": ["List", "ListItem", "ListItem", "ListItem"]
+    },
+    {
+      "id": "toggle-group-anatomy",
+      "summary": "The parts a ToggleGroup is made of.",
+      "use": "A segmented control: one value shared across a set of toggles.",
+      "import": "@dabowman/archer",
+      "canonical": "ToggleGroup",
+      "signature": ["ToggleGroup", "Toggle", "Toggle", "Toggle"]
+    },
+    {
+      "id": "radio-group-anatomy",
+      "summary": "The parts a RadioGroup is made of.",
+      "use": "Choosing one of a few options that should all stay visible.",
+      "import": "@dabowman/archer",
+      "canonical": "RadioGroup",
+      "signature": ["RadioGroup", "Radio", "Radio", "Radio"]
+    },
+    {
       "id": "form-field",
       "summary": "A labelled control with its description and validation message.",
       "use": "Any input that needs more than a placeholder.",
@@ -163,20 +206,24 @@
       "id": "page-header",
       "summary": "Screen title, optional description, and a trailing action cluster.",
       "use": "The top of any screen or pane.",
+      "import": "@dabowman/archer",
+      "canonical": "PageHeader",
       "instead_of": [
-        "An ad-hoc row rebuilt per screen, each with its own heading level and spacing"
+        "An ad-hoc row rebuilt per screen — a Stack holding a Heading, a Text and a Stack of Buttons — each with its own heading level and spacing"
       ],
-      "note": "Archer ships no header component and no text component — the heading is a semantic element carrying a `type-style`. Extract one implementation the first time a second screen needs it, then fill in `import` and `canonical` here so the engine stops reporting the rebuilds and starts naming the answer."
+      "note": "`PageHeader` takes `title`, `level` (1 for a screen, 2 for a pane), `description`, `breadcrumb` and `actions` as props, and its `children` are the row under the title — a `TabsList` or a horizontal `NavigationMenu`. The title is already a `Heading` with `variant=\"ui\"`, so do not pass one in. The anti-shape stays prose: a Card or a Dialog also holds a Heading beside a Stack of Buttons, and containment matching cannot tell those apart from a hand-built header."
     },
     {
       "id": "empty-state",
       "summary": "What a list, table or panel shows when it holds nothing yet.",
       "use": "Any collection that can legitimately be empty.",
+      "import": "@dabowman/archer",
+      "canonical": "Empty",
       "instead_of": [
         "A bare 'No results' string where the rows would be",
         "A spinner that never resolves because there is nothing to load"
       ],
-      "note": "Not shipped. Extract it once two exist and fill in `import`/`canonical`."
+      "note": "`Empty` takes `title`, `description` and a decorative `icon`; its `children` are the way out, usually one `Button`. An empty state is a finished, correct result — a failure is an `Alert`, and a wait is a `Spinner` or `Skeleton`."
     },
     {
       "id": "detail-sidebar",

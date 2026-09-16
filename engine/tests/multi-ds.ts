@@ -511,8 +511,8 @@ await check('a headless system composes without a layout or text layer', async (
 // The claim the profiles directory makes is that adding a design system is
 // adding a directory. Archer is the second one shipped, and it is the first
 // that is neither WordPress nor headless: a styled system built on Base UI,
-// with one layout primitive, no text component, and unprefixed tokens in
-// seventeen families. Each of those is a seam that fails quietly.
+// with flat part exports and unprefixed tokens in seventeen families. Each of
+// those is a seam that fails quietly.
 
 const PROFILES = join(HERE, '..', '..', 'profiles');
 
@@ -536,11 +536,11 @@ await check('the archer profile reaches a project that imports it, and only that
 	}
 });
 
-// A styled system with no text component is the shape neither WPDS nor base-ui
-// covered: the text rules have to stay off while the override rules stay on.
-// Turning the pair off together — which is what the headless preset does — was
+// A styled system built on a headless one is the shape neither WPDS nor base-ui
+// covered: it inherits Base UI's parts but not its licence to restyle them.
+// Turning the override rules off — which is what the headless preset does — was
 // the easy wrong answer, and it silently stops reporting real overrides.
-await check('a system with a layout primitive but no text component keeps its override rules', async () => {
+await check('a styled system on a headless library keeps its override rules', async () => {
 	const root = repo({
 		'loupe.config.json': JSON.stringify({ extends: 'archer' }),
 		'src/A.jsx': `import { Button } from '@dabowman/archer';\nexport const A = () => <Button className="save">Save</Button>;\n`,
@@ -550,7 +550,7 @@ await check('a system with a layout primitive but no text component keeps its ov
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		assert(config.enabled['system/override'], 'a styled system must keep system/override');
 		assert(config.enabled['layout/in-css'], 'a system with a layout primitive must keep layout/in-css');
-		assert(!config.enabled['typography/in-css'], 'no text component means typography/in-css cannot fire');
+		assert(config.enabled['typography/in-css'], 'a system with a text component must keep typography/in-css');
 		const r = await analyze(config, { scope: null });
 		assert(
 			r.findings.some((f) => f.rule === 'system/override'),

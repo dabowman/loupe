@@ -29,14 +29,27 @@ of margins for exactly this reason and baselines them rather than pretending
 ## `layout/in-css`
 
 Replace hand-rolled flexbox with `Stack` — `direction`, `gap`, `align`,
-`justify`, `wrap` cover it. When the element must stay a plain container, or
-lays out with CSS Grid, keep the CSS and drive the spacing from `--space-*`.
-Grid is never reported.
+`justify`, `wrap` cover it. A wrapping row of cards with a flex basis per card
+is `Grid` (`min`, `gap`), and a `max-width` with `margin-inline: auto` is
+`Center` (`max="content"` or `"measure"`). When the element must stay a plain
+container, or lays out with a CSS grid `Grid` cannot express, keep the CSS and
+drive the spacing from `--space-*`. CSS grid is never reported.
+
+## `typography/in-css`
+
+The class is on a `Heading` or a `Text`. Delete the type declarations and use
+the props: `Heading`'s `level` and `variant` (`prose` or `ui`), `Text`'s
+`variant` (`body-1`…`body-3`). A size that none of those give is not a
+heading or a paragraph at a different size — it is a different role, and it
+belongs in the type-style tokens rather than on one instance.
 
 ## `typography/untokenized`
 
-Archer ships no text component, so the remedy is always the token route: apply
-a `--type-styles-<role>-*` composite, all five longhands together. Roles are in
+If the element is a heading or a paragraph in markup, the remedy is the
+component: `Heading` (`level`, `variant="ui"` on application screens) or `Text`
+(`variant` `body-1`…`body-3`), which carry the type style — then delete the CSS.
+Otherwise — a component's own stylesheet, text inside a control — apply a
+`--type-styles-<role>-*` composite, all five longhands together. Roles are in
 `authoring.md`.
 
 Two failure modes specific to this:
@@ -61,7 +74,7 @@ them into Base UI's internal parts is not.
 ## `system/inline-style`
 
 `Stack` already has `direction`, `gap`, `align`, `justify`, `wrap`; `Button`
-has `variant` and `size`. Spacing between children moves to the parent's `gap`.
+has `variant` and `size`; `Heading` and `Text` have `variant`. Spacing between children moves to the parent's `gap`.
 
 Keep inline only what no stylesheet could express — a measured width, a drag
 offset, a computed percentage. A constant is never that. When some declarations
@@ -70,13 +83,16 @@ reason naming what is computed.
 
 ## `system/raw-element`
 
-Archer maps one element: a styled, laying-out `<div>` → `Stack`. It fires only
-when the div is actually laying something out, so what it reports is a flex
-container that should have been the primitive.
+`<p>` → `Text`, `<h1>`–`<h6>` → `Heading` with the same `level`, and a styled,
+laying-out `<div>` → `Stack`. The component sets the element and the type style
+together, where the raw element leaves the size to CSS; delete the rule that
+was styling it. Keep the level the outline needs, not the one whose size looked
+right.
 
-There is no mapping for `<p>` or `<h1>`–`<h6>`, and that is correct — Archer
-has no text component, so a heading stays a heading and carries a type-style
-role.
+The `<div>` mapping fires only when the div is actually laying something out,
+so what it reports is a flex container that should have been a primitive —
+usually `Stack`, `Grid` when the children line up in columns, or `Center` when
+all it does is cap a width.
 
 ## `tokens/hardcoded-value`
 

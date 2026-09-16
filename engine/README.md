@@ -239,8 +239,9 @@ author wrote, with an analog to convert to.
 - `base-ui` — the headless case: `@base-ui/react` packages so composites are
   seen, no token or component layer to inherit, and the two rules that assume
   you must not restyle a component turned off
-- `archer` — a *styled* system built on Base UI: one layout primitive (`Stack`),
-  no text component at all, unprefixed tokens in seventeen families, and the
+- `archer` — a *styled* system built on Base UI: its own layout primitives
+  (`Stack`, `Grid`, `Center`) and text components (`Heading`, `Text`),
+  unprefixed tokens in seventeen families, and the
   override rules back on, because a consumer of a styled system is not supposed
   to restyle its components from outside
 - `generic` — namespaces and token prefixes only

@@ -5,10 +5,12 @@ the order of resort, gap over margin, the inline-style rule and the escape
 hatch, all of which apply here unchanged. This file says what those rules mean
 in Archer terms.
 
-Archer is one package, `@dabowman/archer`: 36 components built on
-[Base UI](https://base-ui.com) for behaviour and accessibility, styled entirely
-with token custom properties. Colour comes from Leonardo against contrast
-targets, type and space from Utopia's fluid interpolation. Every value the
+Archer is one package, `@dabowman/archer`: 56 components. 36 wrap
+[Base UI](https://base-ui.com) for behaviour and accessibility; the other 20 are
+Archer's own — layout, content, status and application regions, where Base UI
+ships nothing. All of them are styled entirely with token custom properties.
+Colour comes from Leonardo against contrast targets, type and space from
+Utopia's fluid interpolation. Every value the
 system exposes is a CSS custom property, and both themes are just a different
 set of values for the same names.
 
@@ -39,29 +41,57 @@ Read it before reaching for one of the families where the wrong pick is easy:
 | Progress toward completion | `Progress` |
 | A static measurement in a range | `Meter` |
 | Several expandable sections | `Accordion`; one on its own is `Collapsible` |
+| One value shared across a set of toggles | `ToggleGroup` |
+| Multi-line text entry | `Textarea`, inside `Field` like `Input` |
+| The frame of an application | `AppShell` — `brand`, `actions` and `nav` are props |
+| The top of a screen or pane | `PageHeader`, with a `Breadcrumb` in its `breadcrumb` prop |
+| A heading | `Heading` — `variant="ui"` on application screens |
+| A paragraph of prose | `Text` |
+| Tabular data | `Table` |
+| A message that stays on the page | `Alert`; one that leaves on its own is a toast from `useToastManager()` |
+| A collection that correctly holds nothing | `Empty` |
+| A wait with no number | `Spinner`; a placeholder whose layout is known is `Skeleton` |
+| A short status, count or category label | `Badge` |
 
 Parts are flat sibling exports off the same import — `DialogPopup`, not
 `Dialog.Root`. A component's parts are its anatomy, not a separate choice.
 
-## Layout: Stack, and only Stack
+## Layout: Stack, Grid and Center
 
 Base UI ships **no layout components** — it bundles no CSS by design, so flow
-and spacing are Archer's half of the job. `Stack` is the whole of it:
+and spacing are Archer's half of the job. Three primitives own it; reach for
+one instead of a margin on a child.
+
+- **`Stack`** spaces siblings along one axis.
+  - `direction` — `column` (the default; the case margins were being used for) or `row`
+  - `gap` — a **single** step of the space scale: `4xs 3xs 2xs xs s m l xl 2xl 3xl`
+  - `align` — `start center end stretch baseline` · `justify` — `start center end between`
+  - `wrap` — boolean, row direction
+- **`Grid`** lines cells up in columns. `min` is the narrowest a column may be
+  (a CSS length, default `16rem`) and `gap` takes the same single steps. The
+  column count is the browser's: it fits as many as the container holds, and a
+  short last row keeps the columns above it, which a wrapping `Stack` cannot.
+- **`Center`** caps a column's width and centres it. `max` is `content` (the
+  default, `--size-content`, 72rem) for a screen's main column, or `measure`
+  (`--size-measure`, 42rem) for prose or a single-column form.
+
+A screen caps its column with `Center` and lines its cards up with `Grid`:
 
 ```jsx
-<Stack direction="row" gap="s" align="center" justify="between">
-	<Button variant="primary">Save</Button>
-	<Button variant="ghost">Cancel</Button>
-</Stack>
+<Center>
+	<Stack gap="l">
+		<PageHeader title="Billing" actions={<Button variant="primary">Upgrade</Button>} />
+		<Grid min="16rem">
+			<Card>…</Card>
+			<Card>…</Card>
+			<Card>…</Card>
+		</Grid>
+	</Stack>
+</Center>
 ```
 
-- `direction` — `column` (the default; the case margins were being used for) or `row`
-- `gap` — a **single** step of the space scale: `4xs 3xs 2xs xs s m l xl 2xl 3xl`
-- `align` — `start center end stretch baseline` · `justify` — `start center end between`
-- `wrap` — boolean, row direction
-
-Props map to custom properties (`--stack-direction`, `--stack-gap`, …), not to
-modifier classes, so the class count stays at one.
+Props map to custom properties (`--stack-gap`, `--grid-min`, `--center-max`, …),
+not to modifier classes, so the class count stays at one.
 
 The **pair steps** in the space scale (`--space-s-m`, `--space-l-xl`, …) are
 fluid ranges for container padding, not for the gap between two siblings.
@@ -72,10 +102,27 @@ Spacing a child from inside the child is the drift Archer's `Stack` exists to
 end. Every container Archer owns carries its rhythm as `gap` and its children
 set `margin: 0`.
 
-## Typography: composites, never loose longhands
+## Typography: components first, then composites
 
-Archer ships **no text component**. Type is a *composite* — five longhands that
-move together — applied from the `--type-styles-*` family:
+In markup, text is a component. A heading is `Heading` and a paragraph of prose
+is `Text`:
+
+```jsx
+<Heading level={2} variant="ui">Payment method</Heading>
+<Text variant="body-2">Charged on the first of each month.</Text>
+```
+
+- `Heading` — `level` 1–6 (default 2) sets the element *and* the size, so the
+  outline and the visual hierarchy cannot drift apart. `variant` is `prose`
+  (the default: `heading-1`…`heading-6`) or `ui` (`ui-title` at level 1,
+  `ui-heading` below it). Use `ui` on application screens. Never pick a level
+  for its size.
+- `Text` — `variant` is `body-1`, `body-2` (the default) or `body-3`: the prose
+  styles, for running text.
+
+Text *inside* a control is the control's job, and a type style your own
+component needs in its stylesheet is a *composite* — five longhands that move
+together — applied from the `--type-styles-*` family:
 
 ```css
 .panel-title {
@@ -106,8 +153,8 @@ Two things about this that bite:
 There is no `font` shorthand route: it cannot carry letter-spacing and it
 resets `font-variant`.
 
-Semantic HTML still applies — a heading is an `<h2>` carrying a `heading-2`
-role, not a `<div>` that looks like one.
+Semantic HTML still applies — a heading is a `Heading` (an `<h2>` underneath),
+not a `<div>` with a heading's type style.
 
 ## Tokens by role, not by value
 
@@ -141,7 +188,8 @@ Everything else:
 | Loose type values | `--font-size-{xs…5xl}`, `--font-weight-{extralight…extrabold}`, `--font-line-height-*`, `--font-family-{sans,serif,mono,pixel,hybrid}` |
 | Corners | `--radius-{none,1…6,full}` · Borders `--border-width-{0,1,2,4}` |
 | Elevation | `--shadow-{1…6}` |
-| Control heights | `--size-target` (24) `--size-control` (34) `--size-control-lg` (44) `--size-field` (40) `--size-icon` |
+| Control heights | `--size-sm` `--size-md` `--size-lg` (fluid steps) · `--size-target` (24px, the minimum hit area) · `--size-icon` (16px) |
+| Layout widths | `--size-measure` (42rem) `--size-content` (72rem) — through `Center`'s `max` |
 | Motion | `--duration-{fast,base,slow}`, `--easing-ease-{in,out,in-out}`, `--delay-{none,short,medium,long}` |
 | Stacking | `--z-index-{dropdown,sticky,fixed,modal-backdrop,modal,popover,tooltip}` |
 | Other | `--opacity-{0…100}`, `--cursor-*`, `--breakpoint-{xs…2xl}` |
@@ -161,8 +209,18 @@ resolves to nothing and fails silently.
 Archer pins control height to `--size-*` rather than growing it out of padding,
 because labels are cap-height trimmed and a trimmed box is shorter than its
 leading. A control you build to sit beside Archer's should take the same
-height: `--size-field` for anything on a row with an `Input` or a `Select`
-trigger, `--size-control` for anything on a row with a `Button`.
+height from the same three fluid steps:
+
+- `--size-md` (31.5→36px) — the default. Buttons, toggles, tabs, popup list
+  items, and every form field: `Input`, the `Select` trigger, `Combobox`,
+  `Autocomplete`, `NumberField`.
+- `--size-sm` (24.5→28px) — small buttons.
+- `--size-lg` (42→48px) — large buttons, the accordion trigger.
+
+`--size-target` (24px, fixed) is not a step: it is the WCAG 2.5.8 floor for a
+hit area, used as a `min-block-size`/`min-inline-size` on small interactive
+parts like a checkbox row or a slider thumb. `--size-icon` is the icon slot
+inside a control.
 
 ## State comes from data attributes
 

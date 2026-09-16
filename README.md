@@ -46,7 +46,7 @@ than using it.
 | `commands/` | `/loupe-audit`, `/loupe-fix`, `/loupe-baseline`, `/loupe-report` |
 | `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
 | `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, its two registries and its three authoring docs |
-| `profiles/archer/` | The Archer profile — the same, for a Base UI–based system with one layout primitive and no text component |
+| `profiles/archer/` | The Archer profile — the same, for a styled system built on Base UI, with its own layout and text components |
 | `profiles/*/patterns/index.json` | The composite registry |
 | `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
 | `engine/` | `loupe` — the conformance engine |
@@ -303,8 +303,8 @@ keeps an Archer screen on `Stack` and `--space-*`, without either set of names
 being baked into it.
 
 The second profile shipped is **Archer**: a personal design system built on Base
-UI, with one layout primitive, no text component at all, and unprefixed tokens
-in seventeen families. It exists partly to be used and partly as the proof —
+UI, with layout and text components Base UI does not have, flat part exports
+instead of `Dialog.Root`, and unprefixed tokens in seventeen families. It exists partly to be used and partly as the proof —
 every place the plugin still assumed WordPress showed up as something Archer
 could not express.
 
@@ -329,7 +329,7 @@ see **Adding a design system** in the
 
 Presets: `wpds` (WPDS tokens + a severity policy that actually blocks),
 `wordpress-components` (the older admin surface), `wordpress-block-theme`,
-`archer` (a styled system on Base UI — one layout primitive, no text component),
+`archer` (a styled system on Base UI, with its own layout and text components),
 `base-ui` (a starting point for any system built on Base UI), `generic`.
 
 `base-ui` is a parent, the way `wordpress-components` is: Base UI is headless,
