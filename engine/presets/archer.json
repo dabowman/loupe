@@ -20,10 +20,13 @@
       "node_modules/@dabowman/archer/dist"
     ],
     "components": {
-      "layout": ["Stack"],
-      "text": []
+      "layout": ["Stack", "Grid", "Center"],
+      "text": ["Heading", "Text"]
     },
     "elementMap": {
+      "p": "Text",
+      "h1": "Heading", "h2": "Heading", "h3": "Heading",
+      "h4": "Heading", "h5": "Heading", "h6": "Heading",
       "div": { "component": "Stack", "styledOnly": true }
     }
   },
@@ -39,6 +42,7 @@
     "system/inline-style": "error",
     "layout/negative-margin": "warn",
     "layout/in-css": "warn",
+    "typography/in-css": "warn",
     "typography/untokenized": "warn",
     "system/raw-element": "warn",
     "tokens/hardcoded-value": "warn",

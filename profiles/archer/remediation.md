@@ -35,6 +35,14 @@ is `Grid` (`min`, `gap`), and a `max-width` with `margin-inline: auto` is
 container, or lays out with a CSS grid `Grid` cannot express, keep the CSS and
 drive the spacing from `--space-*`. CSS grid is never reported.
 
+## `typography/in-css`
+
+The class is on a `Heading` or a `Text`. Delete the type declarations and use
+the props: `Heading`'s `level` and `variant` (`prose` or `ui`), `Text`'s
+`variant` (`body-1`…`body-3`). A size that none of those give is not a
+heading or a paragraph at a different size — it is a different role, and it
+belongs in the type-style tokens rather than on one instance.
+
 ## `typography/untokenized`
 
 If the element is a heading or a paragraph in markup, the remedy is the
@@ -66,7 +74,7 @@ them into Base UI's internal parts is not.
 ## `system/inline-style`
 
 `Stack` already has `direction`, `gap`, `align`, `justify`, `wrap`; `Button`
-has `variant` and `size`. Spacing between children moves to the parent's `gap`.
+has `variant` and `size`; `Heading` and `Text` have `variant`. Spacing between children moves to the parent's `gap`.
 
 Keep inline only what no stylesheet could express — a measured width, a drag
 offset, a computed percentage. A constant is never that. When some declarations
@@ -75,14 +83,16 @@ reason naming what is computed.
 
 ## `system/raw-element`
 
-Archer maps one element: a styled, laying-out `<div>` → `Stack`. It fires only
-when the div is actually laying something out, so what it reports is a flex
-container that should have been the primitive.
+`<p>` → `Text`, `<h1>`–`<h6>` → `Heading` with the same `level`, and a styled,
+laying-out `<div>` → `Stack`. The component sets the element and the type style
+together, where the raw element leaves the size to CSS; delete the rule that
+was styling it. Keep the level the outline needs, not the one whose size looked
+right.
 
-There is no mapping for `<p>` or `<h1>`–`<h6>`, so this rule never reports
-them. Archer does ship `Text` and `Heading`, though, and a raw heading or
-paragraph in consumer markup should be one: the component sets the element and
-the type style together, where the raw element leaves the size to CSS.
+The `<div>` mapping fires only when the div is actually laying something out,
+so what it reports is a flex container that should have been a primitive —
+usually `Stack`, `Grid` when the children line up in columns, or `Center` when
+all it does is cap a width.
 
 ## `tokens/hardcoded-value`
 
