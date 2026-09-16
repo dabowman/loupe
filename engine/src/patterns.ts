@@ -105,6 +105,21 @@ export function matches(pattern: PatternNode, tree: PatternNode): boolean {
 	return true;
 }
 
+/**
+ * Is every node of `tree` a part of the component `root`?
+ *
+ * A part is the root's name followed by a `.` (`Menu.Item`) or by a new
+ * PascalCase word (`MenuItem`). A lowercase continuation is another component
+ * that happens to share the spelling — `Menubar`, `Fieldset`.
+ */
+export function partsOf(root: string, tree: PatternNode): boolean {
+	return (
+		tree.name.startsWith(root) &&
+		/^([.A-Z]|$)/.test(tree.name.slice(root.length)) &&
+		tree.children.every((c) => partsOf(root, c))
+	);
+}
+
 /** A registry entry as authored: only `signature` is load-bearing. */
 interface RawPattern {
 	id?: string;

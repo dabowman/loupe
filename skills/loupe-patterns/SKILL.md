@@ -136,6 +136,12 @@ file that actually uses the component imports that name and is skipped before
 either composite rule sees it, so the entry absorbs the shape and never
 produces a finding of its own.
 
+The same entry covers the component's parts cut below its root — a file that
+renders only a row of cells, or only a menu's popup and items. Anything named
+as a part of the root counts, whether or not the signature lists it
+(`TableHeaderCell`, `Menu.Separator`). This holds only while the tree is nothing
+*but* parts: a popup that also holds a form is the form, and still reports.
+
 Do **not** register required anatomy without a `canonical`. That converts the
 finding into `patterns/duplicate-composite` and asks for an extraction that
 should not happen.

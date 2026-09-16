@@ -18,7 +18,7 @@ import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
 import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
 import { messageLine, messageParts, oneLine, snippet } from './text.ts';
-import { SUBSTANTIAL, matches, nodeCount } from './patterns.ts';
+import { SUBSTANTIAL, matches, nodeCount, partsOf } from './patterns.ts';
 import { harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
 import {
 	APPEARANCE_PROPS, FLEX_PROPS, GAP_PROPS, TYPE_PROPS,
@@ -576,6 +576,11 @@ export async function analyze(
 	const supEnabled = config.enabled['patterns/superseded-composite'];
 	if ((dupEnabled || newEnabled || supEnabled) && composites.length) {
 		const registry = config.patterns || [];
+		// Components whose anatomy the registry declares: an entry whose
+		// `canonical` is the root of its own signature.
+		const anatomyRoots = registry.flatMap((p) =>
+			p.canonical && p.canonical === p.node.name.split('.')[0] ? [p.canonical] : [],
+		);
 
 		// Largest match wins: a page header contains an action bar, and reporting
 		// both says the same thing twice at two levels of the same tree.
@@ -633,6 +638,12 @@ export async function analyze(
 				continue;
 			}
 			if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
+			// An anatomy entry matches from the component's root down, but a file
+			// that renders only a row or a popup cuts the same anatomy lower —
+			// `TableRow(TableCell,TableCell,TableCell)` is a Table's parts, not a
+			// composition anyone chose. Only a tree of nothing *but* parts: a
+			// `DialogPopup` holding a form is still the form.
+			if (anatomyRoots.some((root) => partsOf(root, c.tree))) continue;
 			const perFile = bySignature.get(c.signature) ?? new Map<string, Composite>();
 			bySignature.set(c.signature, perFile);
 			const prev = perFile.get(c.file);
