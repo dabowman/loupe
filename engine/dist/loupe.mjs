@@ -24238,6 +24238,9 @@ function matches(pattern, tree) {
   }
   return true;
 }
+function partsOf(root2, tree) {
+  return tree.name.startsWith(root2) && /^([.A-Z]|$)/.test(tree.name.slice(root2.length)) && tree.children.every((c) => partsOf(root2, c));
+}
 function loadPatterns(raw) {
   const list2 = Array.isArray(raw) ? raw : raw?.patterns ?? [];
   const out = [];
@@ -25127,6 +25130,9 @@ async function analyze(config, { scope = null } = {}) {
   const supEnabled = config.enabled["patterns/superseded-composite"];
   if ((dupEnabled || newEnabled || supEnabled) && composites.length) {
     const registry = config.patterns || [];
+    const anatomyRoots = registry.flatMap(
+      (p) => p.canonical && p.canonical === p.node.name.split(".")[0] ? [p.canonical] : []
+    );
     const bestMatch = (c) => registry.filter((p) => p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree)).sort((a, b) => b.size - a.size)[0] ?? null;
     const avoidMatch = (c) => {
       let best = null;
@@ -25160,6 +25166,7 @@ async function analyze(config, { scope = null } = {}) {
         continue;
       }
       if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
+      if (anatomyRoots.some((root2) => partsOf(root2, c.tree))) continue;
       const perFile = bySignature.get(c.signature) ?? /* @__PURE__ */ new Map();
       bySignature.set(c.signature, perFile);
       const prev = perFile.get(c.file);

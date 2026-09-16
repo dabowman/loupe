@@ -630,4 +630,47 @@ export const ${name} = () => (
 	}
 });
 
+// An anatomy entry matches from the component's root down. A file that only
+// renders a row, or a menu's popup, cuts the same anatomy below that root, and
+// `TableRow(TableCell,TableCell,TableCell)` then reported as house style in
+// every consumer with three tables — a component's parts, in the only shape
+// they come in. The negative half keeps the fix from passing by silencing the
+// rule, and `Tableau` is there because "starts with Table" is not "is a part".
+await check('a registered component’s own parts, cut below its root, are not a composite', async () => {
+	const file = (name: string): string => `import { TableHead, TableRow, TableHeaderCell, TableCell, Tableau, TableauItem } from '@acme/ui';
+export const ${name}Head = () => (
+  <TableHead><TableRow><TableHeaderCell /><TableHeaderCell /><TableHeaderCell /></TableRow></TableHead>
+);
+export const ${name}Row = () => (
+  <TableRow><TableCell /><TableCell /><TableCell /></TableRow>
+);
+export const ${name}Board = () => (
+  <Tableau><TableauItem /><TableauItem /><TableauItem /></Tableau>
+);
+`;
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: 'generic', designSystem: { packages: ['@acme/ui'] } }),
+		'registry.json': JSON.stringify({
+			patterns: [{ id: 'table', canonical: 'Table', signature: ['Table', ['TableBody', ['TableRow', 'TableCell']]] }],
+		}),
+		'src/A.jsx': file('A'),
+		'src/B.jsx': file('B'),
+		'src/C.jsx': file('C'),
+	});
+	try {
+		const r = await analyzeWith(root, join(root, 'registry.json'));
+		const shapes = new Set(r.findings.filter((f) => f.rule.startsWith('patterns/')).map((f) => f.code));
+		assert(
+			[...shapes].every((s) => !s?.startsWith('TableRow') && !s?.startsWith('TableHead')),
+			`a Table's own parts must not report: ${[...shapes]}`,
+		);
+		assert(
+			shapes.has('Tableau(TableauItem,TableauItem,TableauItem)'),
+			`a different component that shares a prefix still reports: ${[...shapes]}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();
