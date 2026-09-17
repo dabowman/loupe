@@ -190,8 +190,8 @@ fine on its own, and the finding only exists across files.
 
 A signature is the design-system component tree with everything else dropped, so
 an intervening `<div>` never hides a match and a prop change never invents one.
-Matching is containment: `form-modal` records its footer as a sibling of the
-body, real code nests it inside, and both are the same composition. A node may
+Matching is containment: `edit-record.dialog` records its footer as a sibling
+of the body, real code nests it inside, and both are the same composition. A node may
 name alternatives with `|` (`Stack|VStack|HStack|Flex`), because one shape
 usually has more than one spelling and an entry that knows only the newest one
 reports every file still writing the old one.
@@ -199,15 +199,27 @@ reports every file still writing the old one.
 - `patterns/duplicate-composite` — a registered pattern reassembled by hand in
   two or more files.
 - `patterns/superseded-composite` — a shape a pattern's `instead_of_signature`
-  records as the thing it replaces. One file is enough: a wrong choice is a
-  defect where it is made, not only across a set.
+  records as the thing it replaces, or a hit from one of the registry's AST
+  rules (a select with four short static options; a modal holding only a
+  consent pair). One file is enough: a wrong choice is a defect where it is
+  made, not only across a set.
 - `patterns/unregistered-composite` — the same shape in three or more files and
   in no registry. Two is a coincidence; three is house style.
 
 Signatures below four nodes are documentation, not checks. `Stack(Button,Button)`
 is a true description of an action bar and a useless finding — it matched 48
 files in one repo, and *"you have 48 action bars"* is not a defect anyone can act
-on.
+on. The wrong choice is usually one control, under that floor, which is what
+an entry's `detector` rules are for: the registry names the component and the
+limits, the engine ships the rule.
+
+Entries are keyed by user need, not component name — `confirm`,
+`choose.segmented`, `navigate-hierarchy#descend` — against an abstract pattern
+language in the top-level `patterns/index.json` that every profile realizes in
+its own way. The reach-for table in each profile's `patterns.md` is generated
+from the two files (`npm run patterns-doc` in `engine/`), so the prose an agent
+reads and the registry the engine checks cannot drift apart. The reasoning is
+in `docs/patterns-v2.md`.
 
 The registry reaches the engine through the `wpds` profile, which the hooks and
 commands pass automatically and which applies only to projects importing

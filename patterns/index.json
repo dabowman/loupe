@@ -1,0 +1,983 @@
+{
+  "version": 2,
+  "scope": "abstract",
+  "note": "The pattern language, independent of any design system. Every entry is one recurring user intent at one scale, resolved to a variant by forces. Profiles realize variants and parts in their own patterns/index.json and never add abstract patterns of their own. The schema is deliberately small: only fields the generator (engine/scripts/patterns-doc.ts) reads are here, because unread fields are the ones that grow. `resolve` is an ordered list; the first rule whose every listed force equals the declared value wins. A `redirect` rule that consults an undeclared force asks for it; a `variant` rule that does is skipped. Registration: a new abstract pattern must occupy an (intent, scale) cell nothing else does, or differ from its nearest neighbour on a named force; a new variant must be selected by a `when` no sibling already matches; anything else is a realization and belongs in a profile. See docs/patterns-v2.md.",
+  "vocabulary": {
+    "intents": {
+      "view": "Perceive information the system holds.",
+      "choose": "Pick from options the system already knows.",
+      "enter": "Supply a value the system does not have.",
+      "act": "Invoke a command that changes something.",
+      "confirm": "Consent to a consequence before it happens.",
+      "navigate": "Move between views, or learn where you are.",
+      "report": "Be told what happened, or what state things are in.",
+      "group": "See related things as one thing."
+    },
+    "scales": {
+      "control": "One interaction unit.",
+      "composite": "Several units acting as one.",
+      "region": "A named area of a screen.",
+      "screen": "One whole view.",
+      "flow": "A sequence of views."
+    },
+    "forces": {
+      "represents": {
+        "values": [
+          "value",
+          "command",
+          "destination"
+        ],
+        "about": "What an option or control stands for. Decides choose vs act vs navigate before anything else does."
+      },
+      "multiplicity": {
+        "values": [
+          "one",
+          "many"
+        ],
+        "about": "How many options may be chosen at once."
+      },
+      "cardinality": {
+        "values": [
+          "few",
+          "some",
+          "many"
+        ],
+        "about": "Size of a set: few is 2–5, some is 6–15, many is more than 15. Used for options, fields, actions and views alike."
+      },
+      "set": {
+        "values": [
+          "closed",
+          "open"
+        ],
+        "about": "Whether the user can supply something the system does not list."
+      },
+      "representation": {
+        "values": [
+          "named",
+          "rendered"
+        ],
+        "about": "Whether a value or option has a visual identity. If it does, show it: a name is a description of the choice, not the choice."
+      },
+      "fit": {
+        "values": [
+          "row",
+          "overflows"
+        ],
+        "about": "Whether the whole set sits on one line at rest."
+      },
+      "value-type": {
+        "values": [
+          "text",
+          "number",
+          "length",
+          "color",
+          "boolean",
+          "date",
+          "media",
+          "rich"
+        ],
+        "about": "The type of a value the user enters."
+      },
+      "optionality": {
+        "values": [
+          "required",
+          "optional"
+        ],
+        "about": "Optional means unset until the user sets it: it inherits a default and can be reset to it."
+      },
+      "binding": {
+        "values": [
+          "local",
+          "entity"
+        ],
+        "about": "Whether a form's fields are local state or a record the store owns and saves."
+      },
+      "context": {
+        "values": [
+          "in-place",
+          "overlay",
+          "own-screen"
+        ],
+        "about": "Where an interaction happens relative to the thing it concerns."
+      },
+      "relation": {
+        "values": [
+          "siblings",
+          "parent-child"
+        ],
+        "about": "How views relate: peers of one subject, or levels of one hierarchy."
+      },
+      "grouped": {
+        "values": [
+          true,
+          false
+        ],
+        "about": "Whether items fall into named groups that mean something."
+      },
+      "prominence": {
+        "values": [
+          "primary",
+          "secondary",
+          "destructive"
+        ],
+        "about": "How much attention an action deserves. At most one primary per surface."
+      },
+      "reversibility": {
+        "values": [
+          "reversible",
+          "irreversible"
+        ],
+        "about": "Whether the user can undo the action afterwards."
+      },
+      "persistence": {
+        "values": [
+          "transient",
+          "persistent"
+        ],
+        "about": "For messages: goes away on its own, or stays until dealt with."
+      },
+      "subject": {
+        "values": [
+          "outcome",
+          "empty",
+          "loading",
+          "invalid"
+        ],
+        "about": "For messages: what is being reported."
+      },
+      "selection": {
+        "values": [
+          "none",
+          "one",
+          "many"
+        ],
+        "about": "For collections: whether items are selectable, and whether one selection drives something else."
+      },
+      "boundary": {
+        "values": [
+          "strong",
+          "weak"
+        ],
+        "about": "For groups: whether the grouping needs a visible box or just rhythm."
+      }
+    },
+    "containers": {
+      "note": "Containers are not patterns. A pattern declares `context` and the profile maps the container. The decision that used to live in authoring.md's Modal/Dialog/AlertDialog/Drawer paragraph lives here.",
+      "screen": "The whole view.",
+      "region": "A persistent area within a screen: main, aside, header.",
+      "modal": "Blocks the parent view until dismissed. For a focused, single-decision task the user can scan without scrolling, reachable from more than one entry point.",
+      "drawer": "Slides over the parent view and keeps it visible. For editing something already on screen, or a multi-section task a modal would cramp.",
+      "popover": "Anchored to its trigger, non-modal, small. For a control that expands in place.",
+      "menu": "A popover of items: commands, destinations, or settings scoped to the thing the trigger sits on."
+    }
+  },
+  "patterns": [
+    {
+      "id": "choose",
+      "intent": "choose",
+      "scale": "control",
+      "problem": "The user picks from a set of options the system already knows.",
+      "forces": [
+        "represents",
+        "multiplicity",
+        "cardinality",
+        "set",
+        "representation",
+        "fit"
+      ],
+      "parts": [
+        {
+          "role": "options",
+          "note": "Each option is either its name or its rendering."
+        },
+        {
+          "role": "current",
+          "note": "The chosen option is visible at rest."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "represents": "command"
+          },
+          "redirect": "action-cluster.overflow",
+          "because": "A list of things to do is a menu, not a choice of value."
+        },
+        {
+          "when": {
+            "represents": "destination"
+          },
+          "redirect": "navigate-hierarchy#descend",
+          "because": "A list of places to go is navigation."
+        },
+        {
+          "when": {
+            "set": "open"
+          },
+          "variant": "combobox"
+        },
+        {
+          "when": {
+            "representation": "rendered"
+          },
+          "variant": "rendered"
+        },
+        {
+          "when": {
+            "multiplicity": "many",
+            "cardinality": "few"
+          },
+          "variant": "checklist"
+        },
+        {
+          "when": {
+            "multiplicity": "many"
+          },
+          "variant": "token-list"
+        },
+        {
+          "when": {
+            "cardinality": "few",
+            "fit": "row"
+          },
+          "variant": "segmented"
+        },
+        {
+          "when": {
+            "cardinality": "few"
+          },
+          "variant": "radio"
+        },
+        {
+          "when": {
+            "cardinality": "many"
+          },
+          "variant": "combobox"
+        },
+        {
+          "default": "select"
+        }
+      ],
+      "variants": {
+        "segmented": {
+          "summary": "All options visible on one row, the active one marked; re-selecting the active one clears it when 'no opinion' is a valid state.",
+          "consequences": "Costs width. Buys zero clicks to see the set — a dropdown for four icons costs a click and a popover to say what four icons say at rest."
+        },
+        "radio": {
+          "summary": "All options visible as a labelled vertical list.",
+          "consequences": "Costs height. Right when the labels are too long for a row."
+        },
+        "select": {
+          "summary": "The current value is the trigger; the set opens on demand.",
+          "consequences": "Costs a click to see the options. Buys space. The default, not the reflex."
+        },
+        "combobox": {
+          "summary": "Typed filtering over the set; may accept values the set lacks.",
+          "consequences": "Justified only when the set is large or open."
+        },
+        "rendered": {
+          "summary": "The option is its rendering — a swatch, a word set in its face, a live preview — laid out as a grid of tiles with the active one marked; the name is secondary, in a tooltip or caption.",
+          "consequences": "The only correct answer when options differ visibly. A dropdown of their names describes the choice instead of showing it."
+        },
+        "checklist": {
+          "summary": "Every option visible with an independent on/off."
+        },
+        "token-list": {
+          "summary": "Chosen options shown as removable tokens; unchosen ones found by typing."
+        }
+      }
+    },
+    {
+      "id": "enter-value",
+      "intent": "enter",
+      "scale": "control",
+      "problem": "The user supplies a value of a known type that the system cannot list in advance.",
+      "forces": [
+        "set",
+        "value-type",
+        "representation",
+        "optionality"
+      ],
+      "parts": [
+        {
+          "role": "input"
+        },
+        {
+          "role": "current",
+          "note": "A rendered value type shows the value, not its name."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "set": "closed"
+          },
+          "redirect": "choose",
+          "because": "A value from a fixed set is a choice."
+        },
+        {
+          "when": {
+            "value-type": "length"
+          },
+          "variant": "length"
+        },
+        {
+          "when": {
+            "value-type": "color"
+          },
+          "variant": "color"
+        },
+        {
+          "when": {
+            "value-type": "boolean"
+          },
+          "variant": "toggle"
+        },
+        {
+          "when": {
+            "value-type": "number"
+          },
+          "variant": "number"
+        },
+        {
+          "when": {
+            "value-type": "media"
+          },
+          "variant": "media"
+        },
+        {
+          "when": {
+            "value-type": "date"
+          },
+          "variant": "date"
+        },
+        {
+          "when": {
+            "value-type": "rich"
+          },
+          "variant": "rich-text"
+        },
+        {
+          "default": "text"
+        }
+      ],
+      "variants": {
+        "text": {
+          "summary": "A single- or multi-line text input."
+        },
+        "number": {
+          "summary": "A numeric input; a slider beside it when the range is bounded and feel matters more than the exact figure."
+        },
+        "length": {
+          "summary": "A CSS length: a unit-aware input and a slider under one label, the slider's range derived from the unit.",
+          "consequences": "One hardcoded range is wrong for one of the two unit families. A text field holding '16px' is this pattern missing."
+        },
+        "color": {
+          "summary": "The current color shown as itself; the editor opens on demand; reset appears only while a local value is set.",
+          "consequences": "An always-open picker per slot is a wall of pickers. An always-present reset on an inherited value lies about what it would do."
+        },
+        "toggle": {
+          "summary": "One on/off."
+        },
+        "media": {
+          "summary": "Pick or upload; the current asset shown as itself."
+        },
+        "date": {
+          "summary": "A calendar, or a typed date with the format shown."
+        },
+        "rich-text": {
+          "summary": "Formatted text."
+        }
+      }
+    },
+    {
+      "id": "field",
+      "intent": "enter",
+      "scale": "composite",
+      "problem": "A control needs a label the accessibility tree can find, a description, and somewhere for its validation message.",
+      "forces": [
+        "optionality"
+      ],
+      "parts": [
+        {
+          "role": "label"
+        },
+        {
+          "role": "control"
+        },
+        {
+          "role": "description"
+        },
+        {
+          "role": "error"
+        }
+      ],
+      "resolve": [
+        {
+          "default": "field"
+        }
+      ],
+      "variants": {
+        "field": {
+          "summary": "Label, control, description and error in the standard arrangement, with the associations wired.",
+          "consequences": "A placeholder is not a label. A label beside a control with no association is a picture of a field."
+        }
+      }
+    },
+    {
+      "id": "field-group",
+      "intent": "enter",
+      "scale": "composite",
+      "problem": "Several fields belong together under one heading, and some of them may not apply until the user says so.",
+      "forces": [
+        "optionality",
+        "cardinality"
+      ],
+      "parts": [
+        {
+          "role": "heading"
+        },
+        {
+          "role": "fields"
+        },
+        {
+          "role": "reset",
+          "note": "Per field, and for the group."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "optionality": "optional"
+          },
+          "variant": "progressive"
+        },
+        {
+          "when": {
+            "cardinality": "few"
+          },
+          "variant": "fieldset"
+        },
+        {
+          "default": "collapsible"
+        }
+      ],
+      "variants": {
+        "fieldset": {
+          "summary": "A legend and its fields, all shown."
+        },
+        "collapsible": {
+          "summary": "A heading that opens to its fields; closed by default when the group is auxiliary."
+        },
+        "progressive": {
+          "summary": "Only fields that hold a value, or are shown by default, render; each has its own reset and the group has reset-all.",
+          "consequences": "Twelve possible controls show as three. Every unconditionally rendered optional control is one the reader has to rule out. A hand-rolled 'Show advanced' toggle hides half of them and resets none."
+        }
+      }
+    },
+    {
+      "id": "edit-record",
+      "intent": "enter",
+      "scale": "region",
+      "problem": "The user edits the fields of one thing and the result is saved or discarded.",
+      "forces": [
+        "context",
+        "binding",
+        "cardinality"
+      ],
+      "parts": [
+        {
+          "role": "fields"
+        },
+        {
+          "role": "actions",
+          "note": "Absent when binding is entity and every edit is saved as it happens."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "binding": "entity"
+          },
+          "variant": "data-form"
+        },
+        {
+          "when": {
+            "context": "overlay",
+            "cardinality": "few"
+          },
+          "variant": "dialog"
+        },
+        {
+          "when": {
+            "context": "overlay"
+          },
+          "variant": "drawer"
+        },
+        {
+          "when": {
+            "context": "in-place"
+          },
+          "variant": "inspector"
+        },
+        {
+          "default": "form-screen"
+        }
+      ],
+      "variants": {
+        "data-form": {
+          "summary": "Fields declared as data and rendered by the system's form renderer against the record store: no local state, no save button, undo for free.",
+          "consequences": "The one form variant whose anti-shape is checkable — an overlay or card holding bare text controls with a state hook per field."
+        },
+        "dialog": {
+          "summary": "A modal with the fields and a submit/cancel cluster in the standard place.",
+          "consequences": "Right when the task is one decision the user can scan without scrolling."
+        },
+        "drawer": {
+          "summary": "A side surface for a multi-section edit that keeps the subject visible."
+        },
+        "inspector": {
+          "summary": "A persistent aside that edits whatever is selected in the main region, with its own header and scroll area."
+        },
+        "form-screen": {
+          "summary": "The form is the screen."
+        }
+      }
+    },
+    {
+      "id": "action-cluster",
+      "intent": "act",
+      "scale": "composite",
+      "problem": "More than one command applies here and they must read as a set with one obvious default.",
+      "forces": [
+        "represents",
+        "cardinality",
+        "grouped",
+        "prominence",
+        "reversibility"
+      ],
+      "parts": [
+        {
+          "role": "primary",
+          "note": "At most one per surface, positioned last."
+        },
+        {
+          "role": "secondary"
+        },
+        {
+          "role": "overflow",
+          "note": "Secondary and destructive commands that do not earn a visible button."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "represents": "destination"
+          },
+          "redirect": "navigate-hierarchy",
+          "because": "Something that navigates is a link, however it is styled."
+        },
+        {
+          "when": {
+            "prominence": "destructive"
+          },
+          "variant": "overflow",
+          "and": "confirm"
+        },
+        {
+          "when": {
+            "grouped": true
+          },
+          "variant": "toolbar"
+        },
+        {
+          "when": {
+            "cardinality": "some"
+          },
+          "variant": "toolbar"
+        },
+        {
+          "when": {
+            "prominence": "secondary"
+          },
+          "variant": "overflow"
+        },
+        {
+          "default": "bar"
+        }
+      ],
+      "variants": {
+        "bar": {
+          "summary": "Two or three visible actions, consistently ordered, gap-spaced, primary last.",
+          "consequences": "Too small to check by shape; it is the documented default. A div with hand-set margins between the buttons is this pattern missing."
+        },
+        "toolbar": {
+          "summary": "Grouped commands with one tab stop and arrow-key movement between them.",
+          "consequences": "A stack of buttons with a separator looks identical and makes every control a tab stop."
+        },
+        "overflow": {
+          "summary": "Secondary and destructive commands behind one icon-triggered menu. Items that would do nothing are omitted, not disabled. A destructive item opens confirm and never destroys on its own.",
+          "consequences": "Rename and Delete as two visible buttons compete with the one action that matters."
+        }
+      }
+    },
+    {
+      "id": "confirm",
+      "intent": "confirm",
+      "scale": "composite",
+      "problem": "An action cannot be undone and the user must consent to it knowingly.",
+      "forces": [
+        "reversibility"
+      ],
+      "parts": [
+        {
+          "role": "title",
+          "note": "Names the consequence, not the button."
+        },
+        {
+          "role": "description"
+        },
+        {
+          "role": "actions",
+          "note": "Exactly two: the consequence labelled as its verb, and cancel. Emphasis matches severity."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "reversibility": "reversible"
+          },
+          "redirect": "report.toast",
+          "because": "Reversible actions get an undo, not a question. A confirm on a reversible action trains the user to click through it."
+        },
+        {
+          "default": "confirm"
+        }
+      ],
+      "variants": {
+        "confirm": {
+          "summary": "A modal that blocks until the user chooses; dismissing is cancel.",
+          "consequences": "A form dialog also has a title, a description and two buttons, and tree matching cannot tell the two apart. The declaration can."
+        }
+      }
+    },
+    {
+      "id": "navigate-hierarchy",
+      "intent": "navigate",
+      "scale": "flow",
+      "problem": "Content is nested deeper than one level, and showing it all at once makes a wall.",
+      "forces": [
+        "relation",
+        "representation"
+      ],
+      "parts": [
+        {
+          "role": "stack",
+          "note": "One route per screen, declared flat. The path is the state, so a router can drive it and deep links work."
+        },
+        {
+          "role": "descend",
+          "note": "A row that names the sub-screen and opens it: one control, one tab stop, one accessible name. A trailing chevron means 'goes deeper'; a trailing value means 'this is the current setting'; never both. When representation is rendered, the row's leading element is the value itself — five swatches, the family name in its own face — not a label for it."
+        },
+        {
+          "role": "sub-screen-header",
+          "note": "Back, title, optional description, state controls on the right. No breadcrumb one level deep."
+        },
+        {
+          "role": "leaf",
+          "note": "Shows only what is actually set."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "relation": "siblings"
+          },
+          "redirect": "switch-view",
+          "because": "Tabs are for peers; depth wants navigation."
+        },
+        {
+          "default": "drilldown"
+        }
+      ],
+      "variants": {
+        "drilldown": {
+          "summary": "A stack of screens navigated one level at a time; rows descend, headers ascend.",
+          "consequences": "Depth beats breadth: twelve settings behind four rows is a menu; twelve on one screen is a wall. A select that swaps which panel renders, and tabs standing in for levels, are both this pattern refused."
+        }
+      }
+    },
+    {
+      "id": "switch-view",
+      "intent": "navigate",
+      "scale": "composite",
+      "problem": "One subject has several peer views and only one should show at a time.",
+      "forces": [
+        "relation",
+        "cardinality"
+      ],
+      "parts": [
+        {
+          "role": "list"
+        },
+        {
+          "role": "panel",
+          "note": "One per tab. A panel may itself hold a navigate-hierarchy; the outer footer stays put."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "relation": "parent-child"
+          },
+          "redirect": "navigate-hierarchy",
+          "because": "Levels are not peers."
+        },
+        {
+          "default": "tabs"
+        }
+      ],
+      "variants": {
+        "tabs": {
+          "summary": "A tab list and one panel per tab, sharing whatever surrounds them.",
+          "consequences": "A select that swaps the body is a tab bar that costs a click and hides the alternatives. Several overlays for one task with several sources is this pattern inside one overlay."
+        }
+      }
+    },
+    {
+      "id": "browse-collection",
+      "intent": "view",
+      "scale": "region",
+      "problem": "Many items of one kind must be found, compared and acted on.",
+      "forces": [
+        "selection",
+        "representation",
+        "grouped",
+        "cardinality"
+      ],
+      "parts": [
+        {
+          "role": "toolbar",
+          "note": "Search, one choose per filter dimension, bulk actions — one row above the items. Announce the result count when a filter changes."
+        },
+        {
+          "role": "items"
+        },
+        {
+          "role": "item-actions"
+        },
+        {
+          "role": "empty"
+        },
+        {
+          "role": "add"
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "representation": "rendered",
+            "selection": "one"
+          },
+          "redirect": "choose.rendered",
+          "because": "A grid of previews where one is picked is a choice, not a browse."
+        },
+        {
+          "when": {
+            "representation": "rendered"
+          },
+          "variant": "gallery"
+        },
+        {
+          "when": {
+            "selection": "one"
+          },
+          "variant": "selectable-list"
+        },
+        {
+          "when": {
+            "grouped": true
+          },
+          "variant": "grouped-list"
+        },
+        {
+          "default": "list"
+        }
+      ],
+      "variants": {
+        "list": {
+          "summary": "The system's data view: fields declared as data; sorting, filtering and pagination owned by the view.",
+          "consequences": "A hand-built table with its own filter row is this pattern reimplemented. A list long enough to need filtering that offers none is this pattern missing a part."
+        },
+        "selectable-list": {
+          "summary": "A listbox where one item is selected and the selection drives a preview elsewhere; one tab stop for the list, arrows within it.",
+          "consequences": "A stack of buttons with hand-managed aria-selected has the look and none of the semantics."
+        },
+        "gallery": {
+          "summary": "Grouped, live-rendered items as the reference — not screenshots, not names — with real group semantics; previews are inert.",
+          "consequences": "Sections built from headings alone group visually and not semantically."
+        },
+        "grouped-list": {
+          "summary": "Items sectioned by an attribute that decides what may be done to them, each section with its own add and overflow, each row descending to its own editor.",
+          "consequences": "Editing happens on the item's own screen, not inline in the row. One flat list hides the attribute that governs the actions."
+        }
+      }
+    },
+    {
+      "id": "report",
+      "intent": "report",
+      "scale": "composite",
+      "problem": "The system has something to tell the user about what happened or what state things are in.",
+      "forces": [
+        "subject",
+        "persistence",
+        "context"
+      ],
+      "parts": [
+        {
+          "role": "message"
+        },
+        {
+          "role": "action",
+          "note": "Undo, retry, dismiss, or the action that fills an empty region."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "subject": "empty"
+          },
+          "variant": "empty"
+        },
+        {
+          "when": {
+            "subject": "loading"
+          },
+          "variant": "loading"
+        },
+        {
+          "when": {
+            "subject": "invalid"
+          },
+          "variant": "inline"
+        },
+        {
+          "when": {
+            "persistence": "transient"
+          },
+          "variant": "toast"
+        },
+        {
+          "default": "notice"
+        }
+      ],
+      "variants": {
+        "toast": {
+          "summary": "Transient, raised from anywhere, queued and dismissed by a manager the app mounts once; carries undo when the action was reversible.",
+          "consequences": "A hand-managed array of messages in state, rendered into a fixed stack, is the manager reimplemented."
+        },
+        "notice": {
+          "summary": "Persistent and region-level, stacked by one container that owns order, spacing and dismissal.",
+          "consequences": "Individually placed notices with local margins disagree about spacing and never agree about order."
+        },
+        "inline": {
+          "summary": "Beside the field it concerns, in the field's own error slot."
+        },
+        "empty": {
+          "summary": "Why the region is empty and the action that fills it, centred in the space the content would occupy.",
+          "consequences": "A bare 'No results' string, or a spinner that never resolves, are both this pattern missing."
+        },
+        "loading": {
+          "summary": "A placeholder shaped like the content, or a spinner when the shape is unknown."
+        }
+      }
+    },
+    {
+      "id": "group",
+      "intent": "group",
+      "scale": "composite",
+      "problem": "Related content and its actions should read as one thing.",
+      "forces": [
+        "boundary"
+      ],
+      "parts": [
+        {
+          "role": "header"
+        },
+        {
+          "role": "content"
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "boundary": "strong"
+          },
+          "variant": "card"
+        },
+        {
+          "default": "section"
+        }
+      ],
+      "variants": {
+        "card": {
+          "summary": "A bounded surface with an optional header, title and actions.",
+          "consequences": "A styled div with a border rebuilt per surface disagrees with itself about radius, padding and header rhythm."
+        },
+        "section": {
+          "summary": "A heading and its content, rhythm from the parent, no box."
+        }
+      }
+    },
+    {
+      "id": "screen",
+      "intent": "navigate",
+      "scale": "screen",
+      "problem": "Every view must tell the user where they are and what they can do here before it shows them anything else.",
+      "forces": [
+        "context",
+        "relation"
+      ],
+      "parts": [
+        {
+          "role": "header",
+          "note": "Title, optional breadcrumbs or icon, optional description, trailing actions. Rebuilt per screen is the defect."
+        },
+        {
+          "role": "main"
+        },
+        {
+          "role": "aside"
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "relation": "parent-child"
+          },
+          "variant": "sub-screen"
+        },
+        {
+          "when": {
+            "context": "overlay"
+          },
+          "variant": "overlay"
+        },
+        {
+          "default": "page"
+        }
+      ],
+      "variants": {
+        "page": {
+          "summary": "A root screen: header, main, optional aside."
+        },
+        "sub-screen": {
+          "summary": "A screen below the root of a hierarchy; its header is navigate-hierarchy#sub-screen-header."
+        },
+        "overlay": {
+          "summary": "A screen hosted in a modal or drawer: the container supplies header and footer, the body may be a switch-view."
+        }
+      }
+    }
+  ]
+}

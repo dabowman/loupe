@@ -25,11 +25,12 @@ loupe status
 The `profile:` line names the active design-system profile and the directory it
 lives in. Everything below refers to that directory as `<profile dir>`.
 
-1. **Look first.** Read `<profile dir>/patterns.md` — the prose about which
-   shape to reach for — and `<profile dir>/patterns/index.json`, the registry
-   itself. Read the project's own `patterns/` directory too, if it has one. If a
-   pattern covers what you need, use it: import the shared implementation rather
-   than copying its structure.
+1. **Look first.** Read `<profile dir>/patterns.md` — the redirect table that
+   settles which pattern you are in, then the reach-for table — and
+   `<profile dir>/patterns/index.json`, the registry itself. Read the project's
+   own `patterns/` directory too, if it has one. If a pattern covers what you
+   need, use it: import the shared implementation rather than copying its
+   structure.
 2. **Check the component registry second.** Before assembling anything from
    primitives, check `<profile dir>/components/index.json` for whether the shape
    you are about to hand-roll already ships as a single real compound component
@@ -47,22 +48,37 @@ system. Steps 3 and 4 still apply, against the project's own registry.
 
 ## The registry format
 
-One entry per sanctioned composite:
+One entry per sanctioned composite, keyed by the **user need** it answers, not
+by a component name. The key names something in the shared pattern language
+(the repo's top-level `patterns/index.json`): an abstract pattern (`confirm`),
+a variant (`choose.segmented`), or a part (`navigate-hierarchy#descend`).
 
 ```jsonc
 {
-  "id": "confirm-modal",
-  "summary": "Destructive-action confirmation dialog with confirm/cancel actions.",
-  "use": "Any irreversible action needing explicit consent.",
+  "pattern": "confirm",
   "import": "@acme/ui",          // where the shared implementation lives
   "canonical": "ConfirmDialog",  // the name the code binds
+  "detector": ["signature", { "rule": "confirm-pair", "container": "Modal", "button": "Button" }],
   "signature": ["Modal", "Text", ["Stack", "Button", "Button"]],
   "instead_of": [
     "A hand-built Modal + Stack + Button pair reimplementing confirm/cancel",
     "window.confirm()"
-  ]
+  ],
+  "note": "The signature also matches a form dialog; the rule reads the labels."
 }
 ```
+
+`detector` says how the entry is checked, so an entry never has to inflate a
+signature to look checkable:
+
+| Detector | Checks |
+| --- | --- |
+| `signature` | Tree containment against `signature`. Four nodes or more. |
+| `import` | Nothing beyond the canonical import; the entry exists to name the remedy and to fill the table. |
+| A rule object | An AST rule the engine ships, parameterised here: `few-static-options` reads a select's option count and label width; `confirm-pair` reads a modal's button labels and looks for form controls. Either reports `patterns/superseded-composite` on the file that made the choice. |
+| `declared` | Documentation only, until a declaration tag exists. |
+
+A registry written before this format existed, keyed by `id`, still loads.
 
 `signature` is the normalized component tree. A node is `[name, ...children]`;
 each child is either a bare component name or another node. Only design-system
@@ -93,36 +109,41 @@ Matching is **containment, not equality**:
 **A signature under four nodes is documentation, not a check.** The engine skips
 it. `Stack(Button,Button)` is a true description of an action bar and a useless
 finding — it matched 48 files in one repo, and "you have 48 action bars" is not a
-defect anyone can act on. Entries like that are in a registry for you to read,
-not for the engine to enforce.
+defect anyone can act on. The wrong choice is usually one control, under that
+floor, and that is what a rule detector is for.
 
 `canonical` earns its keep the moment you fill it in: a file that imports it is
 using the pattern rather than rebuilding it, and is skipped before either
 composite rule sees it. Until then the remedy the engine offers is "extract one
 shared implementation", because telling an agent to import something that does
-not exist sends it hunting for a module.
+not exist sends it hunting for a module. **A container is not a canonical.**
+`Modal` is where a form dialog lives, not the shipped form dialog; naming it
+skips every file that imports `Modal`, which is every file.
 
 Write `canonical` as **the name the code binds**, not the import statement that
 produces it: `ConfirmDialog`, not `__experimentalConfirmDialog as ConfirmDialog`;
 `EmptyState`, not `EmptyState.Root`. It is matched against a file's local import
-names, so anything else silently never matches and the pattern reports every
-file that is already using it correctly.
+names; a dotted part name is cut to its root on load.
+
+A `parts` block nests one entry per part of the pattern, each loaded as
+`id#part` and inheriting the parent's `canonical` unless it sets its own to
+`null`. `rendered_signature` is the same part with the `representation:
+rendered` force applied — a second shape under the same key, not a second
+pattern.
 
 `instead_of_signature` records the shape a pattern *replaces*, in the same
 `[name, ...children]` form. It is `instead_of` promoted from prose to a check,
-and it obeys the same four-node floor. Most entries carry the anti-pattern as
-prose only, which is why reading the registry before assembling matters more
-than the check does.
+and it obeys the same four-node floor.
 
 The three rules this drives:
 
 | | |
 | --- | --- |
 | `patterns/duplicate-composite` | A registered pattern reassembled by hand in two or more files |
-| `patterns/superseded-composite` | A shape a pattern exists to replace — reported against the one file that built it, because a wrong choice is a defect where it is made |
+| `patterns/superseded-composite` | A shape a pattern exists to replace, or a rule detector's hit — reported against the one file that built it, because a wrong choice is a defect where it is made |
 | `patterns/unregistered-composite` | The same shape in three or more files, in no registry — two is a coincidence, three is house style |
 
-A project's own registry is merged over the profile's, winning on `id`.
+A project's own registry is merged over the profile's, winning on key.
 
 ## Anatomy entries
 
@@ -148,9 +169,21 @@ should not happen.
 
 ## Registering a pattern
 
-Add the entry, then keep it honest:
+Say which of three things you are adding. Nearly everything is the first.
 
-- **`summary` says what it is for**, not what it contains. "Destructive-action
+| Level | Allowed when | Must supply |
+| --- | --- | --- |
+| **Realization** (in the profile) | An abstract variant or part has no entry for this system yet | `pattern`, `canonical` or `signature`, `detector` |
+| **Variant** (in the abstract file) | A `when` no sibling variant already matches, using forces that exist | the `when`, a summary, its consequences |
+| **Abstract pattern** | An empty (intent, scale) cell, or an occupied one plus a *new* force that separates it | problem, forces, parts, resolve, and the nearest neighbour it differs from |
+
+A shape that would land in an occupied cell with no new force is a variant or a
+realization, not a pattern. That is the vocabulary doing the work a "be
+concise" rule cannot: there is nowhere to put a fourth copy of one idea.
+
+Then keep the entry honest:
+
+- **`note` says what it is for**, not what it contains. "Destructive-action
   confirmation" is useful; "Modal with two buttons" is not — the second
   describes a shape anyone could match by accident.
 - **`signature` is the structure that matters**, not every node. Four to six
@@ -160,13 +193,14 @@ Add the entry, then keep it honest:
   codebase. That is the line that stops the next rebuild.
 - **`instead_of_signature` only if the anti-pattern has a shape**, four nodes
   minimum. Most do not: the thing agents reach for by default is usually one
-  control, and a rule that fires on every dropdown is a rule people turn off.
-  Watch for collisions, too — an anti-shape that a legitimate composite also
-  contains will fire on the legitimate one, because matching is containment.
+  control, which is a rule detector's job, not a signature's.
 - **`import` and `canonical` earn the entry.** A pattern documented but never
   extracted still gets rebuilt. Once two call sites exist, extract it, point
   `import` at the module and `canonical` at the component name — the engine then
   stops reporting files that already use it, and starts naming it as the remedy.
+- **Regenerate the table.** `npm run patterns-doc` in `engine/` validates the
+  entry against the abstract language and rewrites the profile's reach-for
+  table. A key that names nothing fails the run.
 
 ## When a pattern does not fit
 

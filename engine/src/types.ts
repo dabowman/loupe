@@ -297,11 +297,22 @@ export interface PatternNode {
 	line?: number;
 }
 
+/**
+ * An AST rule a registry entry is checked by, with the parameters the registry
+ * gives it. The engine ships the rule; the registry names the components it
+ * runs against, so the engine itself names none.
+ */
+export interface RuleSpec {
+	rule: string;
+	[param: string]: unknown;
+}
+
 export interface Pattern {
 	id: string;
 	summary: string;
 	canonical: string | null;
-	node: PatternNode;
+	/** Null for an entry checked by its canonical import or a rule alone, or documented only. */
+	node: PatternNode | null;
 	size: number;
 	/**
 	 * Shapes this pattern replaces, as trees rather than the prose of
@@ -310,6 +321,7 @@ export interface Pattern {
 	 * substantial nodes survive the load, for the same reason signatures do.
 	 */
 	avoid: PatternNode[];
+	rules: RuleSpec[];
 }
 
 export interface Composite {
@@ -323,12 +335,32 @@ export interface Composite {
 	pattern?: Pattern;
 }
 
+/** A registry entry's AST rule, ready to run: which entry it reports as. */
+export interface PatternRule {
+	patternId: string;
+	spec: RuleSpec;
+}
+
+/**
+ * One place an AST rule matched. The composite matcher cannot see below its
+ * four-node floor, and the wrong choice is usually one control: a select for
+ * four options, a modal holding a consent pair. A hit is that finding.
+ */
+export interface RuleHit {
+	patternId: string;
+	rule: string;
+	line: number;
+	/** What was seen, in the words of the finding: `SelectControl with 4 static options`. */
+	detail: string;
+}
+
 export interface ScanResult {
 	bindings: Binding[];
 	rawEls: RawElement[];
 	inlineStyles: InlineStyleElement[];
 	cssInJs: CssInJsTemplate[];
 	composites: Composite[];
+	ruleHits: RuleHit[];
 	imports: Set<string>;
 	referenced: Set<string>;
 	stems: Set<string>;

@@ -11,7 +11,10 @@
   "designSystem": {
     "packages": [
       "@wordpress/components",
-      "@wordpress/ui"
+      "@wordpress/ui",
+      "@wordpress/dataviews",
+      "@wordpress/admin-ui",
+      "@wordpress/global-styles-ui"
     ],
     "tokenPrefixes": [
       "--wpds-"

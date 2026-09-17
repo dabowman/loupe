@@ -17,7 +17,7 @@
  * rules only ever fired on code that already came from the pattern.
  */
 
-import type { Pattern, PatternNode } from './types.ts';
+import type { Pattern, PatternNode, RuleSpec } from './types.ts';
 
 /**
  * `"Stack"` → any `Stack`; `"@wordpress/components::Stack"` → that package's.
@@ -120,24 +120,60 @@ export function partsOf(root: string, tree: PatternNode): boolean {
 	);
 }
 
-/** A registry entry as authored: only `signature` is load-bearing. */
+/**
+ * A registry entry as authored, in either format.
+ *
+ * Version 1 keys an entry by `id` and carries one `signature`. Version 2 keys
+ * it by `pattern` (an abstract id, `id.variant` or `id#part`), may nest
+ * `parts`, may carry a second shape as `rendered_signature`, and says in
+ * `detector` how it is checked at all. Both load here: the fields the matcher
+ * needs are the same, and a registry written before v2 existed keeps working.
+ */
 interface RawPattern {
 	id?: string;
+	pattern?: string;
 	summary?: string;
+	note?: string;
 	canonical?: string | null;
 	signature?: unknown;
+	rendered_signature?: unknown;
 	instead_of_signature?: unknown;
+	detector?: unknown;
+	parts?: Record<string, RawPattern>;
 }
+
+/**
+ * `canonical` is matched against a file's local import names, so it has to be
+ * the name the code binds. A part written as `Navigator.Button` can never be
+ * one; the import that produces it is `Navigator`.
+ */
+const bindName = (c: unknown): string | null => (typeof c === 'string' && c ? (c.split('.', 1)[0] ?? c) : null);
+
+/**
+ * The rule objects in `detector`. A bare string (`"signature"`, `"import"`,
+ * `"declared"`, `"rule:name"`) is documentation of how the entry is checked and
+ * nothing here acts on it: a signature present is matched, a canonical present
+ * is honoured, and a `rule:` string names a rule that is specified but not
+ * shipped. Only an object carries the parameters a shipped rule runs with.
+ */
+const ruleSpecs = (detector: unknown): RuleSpec[] => {
+	const list = Array.isArray(detector) ? detector : [detector];
+	return list.filter(
+		(d): d is RuleSpec => typeof d === 'object' && d !== null && typeof (d as RuleSpec).rule === 'string',
+	);
+};
 
 /** Normalize a registry file or inline array into matchable patterns. */
 export function loadPatterns(raw: unknown): Pattern[] {
-	const list: RawPattern[] = Array.isArray(raw)
-		? raw
-		: ((raw as { patterns?: RawPattern[] } | null)?.patterns ?? []);
+	const rec = raw as { patterns?: RawPattern[]; realizations?: RawPattern[] } | null;
+	const list: RawPattern[] = Array.isArray(raw) ? raw : (rec?.realizations ?? rec?.patterns ?? []);
 	const out: Pattern[] = [];
-	for (const p of list) {
-		const node = toNode(p?.signature);
-		if (!node) continue;
+	const load = (p: RawPattern, id: string | null, inheritedCanonical: string | null): void => {
+		// An explicit null opts a part out of its parent's canonical: a toolbar
+		// above a DataViews is not "using DataViews" the way a row of
+		// Navigator.Buttons is using Navigator.
+		const canonical = 'canonical' in (p ?? {}) ? bindName(p.canonical) : inheritedCanonical;
+		const shapes = [toNode(p?.signature), toNode(p?.rendered_signature)].filter((n): n is PatternNode => n !== null);
 		// A list of shapes, or — because `signature` next to it takes exactly one —
 		// a single shape written directly. A list never starts with a string, so
 		// the leading element settles it. Without this, `["Modal", ["VStack", …]]`
@@ -145,25 +181,44 @@ export function loadPatterns(raw: unknown): Pattern[] {
 		// context dropped under the floor, and the nested child survived as a
 		// standalone shape far broader than anything the author asked for.
 		const authored: unknown = p?.instead_of_signature;
-		const shapes: unknown[] = !Array.isArray(authored)
+		const antiShapes: unknown[] = !Array.isArray(authored)
 			? []
 			: typeof authored[0] === 'string'
 				? [authored]
 				: authored;
-		out.push({
-			id: p.id || signatureOf(node),
-			summary: p.summary ?? '',
-			canonical: p.canonical ?? null,
-			node,
-			size: nodeCount(node),
-			// An anti-shape below the floor would fire on half a codebase: a bare
-			// `SelectControl` is one node and says nothing about whether the
-			// choice it presents wanted a segmented control instead.
-			avoid: shapes
-				.map((shape) => toNode(shape))
-				.filter((n): n is PatternNode => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes),
-		});
-	}
+		// An anti-shape below the floor would fire on half a codebase: a bare
+		// `SelectControl` is one node and says nothing about whether the
+		// choice it presents wanted a segmented control instead.
+		const avoid = antiShapes
+			.map((shape) => toNode(shape))
+			.filter((n): n is PatternNode => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes);
+		const rules = ruleSpecs(p?.detector);
+		const summary = p?.summary ?? p?.note ?? '';
+		const own = id ?? (shapes[0] ? signatureOf(shapes[0]) : null);
+		if (own) {
+			// One entry per shape, all under one id: `rendered_signature` is the same
+			// part with a force applied, not a second pattern, so the two group as
+			// one when the duplicate rule counts files. An entry with no shape still
+			// loads — it is checked by its canonical import, by a rule, or not at
+			// all — because the file that names it may need it as a remedy.
+			const nodes: (PatternNode | null)[] = shapes.length ? shapes : [null];
+			nodes.forEach((node, i) =>
+				out.push({
+					id: own,
+					summary,
+					canonical,
+					node,
+					size: node ? nodeCount(node) : 0,
+					avoid: i === 0 ? avoid : [],
+					rules: i === 0 ? rules : [],
+				}),
+			);
+		}
+		const parts = p?.parts;
+		if (own && parts && typeof parts === 'object')
+			for (const [name, part] of Object.entries(parts)) load(part, `${own}#${name}`, canonical);
+	};
+	for (const p of list) load(p, p?.pattern ?? p?.id ?? null, null);
 	return out;
 }
 

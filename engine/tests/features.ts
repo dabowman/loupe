@@ -430,8 +430,8 @@ const registry = loadPatterns(JSON.parse(await import('node:fs').then((m) => m.r
 const componentRegistry = loadComponents(JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')));
 
 await check('a registered pattern matches through nesting and extra siblings', () => {
-	const formModal = registry.find((p) => p.id === 'form-modal');
-	assert(formModal, 'the shipped registry should carry form-modal');
+	const formModal = registry.find((p) => p.id === 'edit-record.dialog');
+	assert(formModal?.node, 'the shipped registry should carry edit-record.dialog');
 	// The registry records the footer as a sibling of the body; real code nests it.
 	const real = node(['Modal', ['Stack', 'TextControl', ['Stack', 'Button', 'Button']]]);
 	assert(matches(formModal.node, real), 'nested footer should still be a form-modal');
@@ -442,8 +442,8 @@ await check('a registered pattern matches through nesting and extra siblings', (
 // Measured on 2110 Gutenberg files: the `Stack` spelling alone missed nine real
 // form-modals written with VStack/Flex, which came back as unregistered noise.
 await check('a signature node names alternatives with |', () => {
-	const formModal = registry.find((p) => p.id === 'form-modal');
-	assert(formModal, 'the shipped registry should carry form-modal');
+	const formModal = registry.find((p) => p.id === 'edit-record.dialog');
+	assert(formModal?.node, 'the shipped registry should carry edit-record.dialog');
 	const legacy = node(['Modal', ['VStack', 'TextControl', ['HStack', 'Button', 'Button']]]);
 	assert(matches(formModal.node, legacy), 'VStack should satisfy Stack|VStack|HStack|Flex');
 	const modern = node(['Modal', ['Stack', 'TextControl', ['Stack', 'Button', 'Button']]]);
@@ -481,7 +481,7 @@ await check('a registered pattern rebuilt in two files is reported in both', asy
 	const dup = at(r, 'patterns/duplicate-composite');
 	assert(dup.length === 2, `expected one per file, got ${dup.length}`);
 	const named = first(dup, 'expected a duplicate-composite finding');
-	assert(named.message.includes('detail-sidebar'), `named the wrong pattern: ${named.message}`);
+	assert(named.message.includes('edit-record.inspector'), `named the wrong pattern: ${named.message}`);
 });
 
 // `canonical` is matched against the file's local import names, so it has to be
@@ -503,7 +503,7 @@ await check('a file importing the canonical component is using the pattern, not 
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': shipped('A'), 'src/B.jsx': shipped('B') },
 		{ patterns: registry }
 	);
-	assert(!at(r, 'patterns/duplicate-composite').length, 'importing EmptyState is using empty-state');
+	assert(!at(r, 'patterns/duplicate-composite').length, 'importing EmptyState is using report.empty');
 });
 
 await check('one file is a first use, not a duplicate', async () => {
@@ -525,7 +525,7 @@ await check('a signature below the floor is documentation, not a check', async (
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/B.jsx': src.replace('Bar', 'Bar2') },
 		{ patterns: registry }
 	);
-	assert(!at(r, 'patterns/duplicate-composite').length, 'action-bar is too generic to check');
+	assert(!at(r, 'patterns/duplicate-composite').length, 'action-cluster.bar has no shape to check');
 });
 
 await check('an unregistered shape needs three files before it is house style', async () => {
@@ -561,7 +561,7 @@ await check('the shape a pattern replaces is reported in the file that built it'
 	].join('\n');
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { patterns: registry });
 	const sup = first(at(r, 'patterns/superseded-composite'), 'one file is enough for a wrong choice');
-	assert(sup.message.includes('entity-dataform'), `named the wrong pattern: ${sup.message}`);
+	assert(sup.message.includes('edit-record.data-form'), `named the wrong pattern: ${sup.message}`);
 	assert(sup.message.includes('DataForm'), `should name the remedy: ${sup.message}`);
 });
 
@@ -587,6 +587,139 @@ await check('a file already importing the answer is not told to use it', async (
 	].join('\n');
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { patterns: registry });
 	assert(!at(r, 'patterns/superseded-composite').length, 'canonical import means the choice was deliberate');
+});
+
+// ── registry v2 ─────────────────────────────────────────────────────────────
+
+await check('a v2 entry loads under its pattern key, and its parts under id#part', () => {
+	const ids = new Set(registry.map((p) => p.id));
+	for (const id of ['confirm', 'choose.segmented', 'navigate-hierarchy#descend', 'screen.page#header', 'browse-collection.list#toolbar.filter'])
+		assert(ids.has(id), `the shipped registry should carry ${id}`);
+});
+
+await check('a part inherits its parent canonical, cut to the name the code binds', () => {
+	const descend = registry.filter((p) => p.id === 'navigate-hierarchy#descend');
+	assert(descend.length === 2, `descend should load two shapes (plain and rendered), got ${descend.length}`);
+	assert(descend.every((p) => p.canonical === 'Navigator'), `Navigator.Button binds as Navigator, got ${descend[0]?.canonical}`);
+	const stack = registry.find((p) => p.id === 'navigate-hierarchy#stack');
+	assert(stack?.canonical === 'Navigator', 'a part with no canonical of its own takes the parent’s');
+});
+
+await check('an entry checked by import alone loads with no tree and never matches a composite', async () => {
+	const notice = registry.find((p) => p.id === 'report.notice');
+	assert(notice && notice.node === null && notice.canonical === 'NoticeList', 'report.notice is import-only');
+	const src = [
+		"import { __experimentalVStack as VStack, Notice } from '@wordpress/components';",
+		'export const A = () => (<VStack><Notice>a</Notice><Notice>b</Notice><Notice>c</Notice></VStack>);',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/B.jsx': src.replace('A', 'B') }, { patterns: registry });
+	assert(!at(r, 'patterns/duplicate-composite').length, 'nothing to match against');
+});
+
+await check('a v1 registry still loads unchanged', () => {
+	const v1 = loadPatterns({ patterns: [{ id: 'x', summary: 's', canonical: 'Card', signature: ['Card.Root', 'Card.Header', 'Card.Title', 'Card.Content'] }] });
+	const [x] = v1;
+	assert(x && x.id === 'x' && x.size === 4 && x.canonical === 'Card' && x.rules.length === 0, 'v1 fields map one to one');
+});
+
+// ── AST rules ───────────────────────────────────────────────────────────────
+
+const select = (options: string, extra = ''): string =>
+	[
+		"import { SelectControl } from '@wordpress/components';",
+		extra,
+		`export const A = () => (<SelectControl label="Align" options={ ${options} } />);`,
+	].join('\n');
+const four = "[ { label: 'a', value: 'a' }, { label: 'b', value: 'b' }, { label: 'c', value: 'c' }, { label: 'd', value: 'd' } ]";
+
+await check('a select with four static options is the segmented choice refused', async () => {
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': select(four) }, { patterns: registry });
+	const hit = one(at(r, 'patterns/superseded-composite'), 'one select, one finding');
+	assert(hit.message.includes('choose.segmented') && hit.message.includes('ToggleGroupControl'), hit.message);
+	assert(hit.message.includes('4 short static options'), hit.message);
+});
+
+await check('a same-file const array counts as static; a spread or six options does not', async () => {
+	const viaConst = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select('ALIGN', `const ALIGN = ${four};`) },
+		{ patterns: registry },
+	);
+	assert(at(viaConst, 'patterns/superseded-composite').length === 1, 'a const bound in the module is static');
+	const spread = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select("[ { label: 'a', value: 'a' }, ...more ]") },
+		{ patterns: registry },
+	);
+	assert(!at(spread, 'patterns/superseded-composite').length, 'a spread could hold anything');
+	const six = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select(`[ ${Array(6).fill("{ label: 'x', value: 'x' }").join(', ')} ]`) },
+		{ patterns: registry },
+	);
+	assert(!at(six, 'patterns/superseded-composite').length, 'six options do not fit on a row');
+	const wide = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select("[ { label: __( 'Uppercase Roman numerals' ), value: 'I' }, { label: __( 'Lowercase Roman numerals' ), value: 'i' }, { label: 'Numbers', value: '1' } ]") },
+		{ patterns: registry },
+	);
+	assert(!at(wide, 'patterns/superseded-composite').length, 'three long labels do not fit on a row either');
+	const unread = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select("[ { label: labels.a, value: 'a' }, { label: labels.b, value: 'b' } ]") },
+		{ patterns: registry },
+	);
+	assert(!at(unread, 'patterns/superseded-composite').length, 'a label the rule cannot read leaves the width unknown');
+});
+
+await check('a file that already imports the segmented control made its choice', async () => {
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select(four, "import { __experimentalToggleGroupControl as ToggleGroupControl } from '@wordpress/components';") },
+		{ patterns: registry },
+	);
+	assert(!at(r, 'patterns/superseded-composite').length, 'the canonical import is the deliberate signal');
+});
+
+const modal = (body: string, extra = ''): string =>
+	[
+		"import { Modal, Button, TextControl } from '@wordpress/components';",
+		"import { __ } from '@wordpress/i18n';",
+		extra,
+		'export const A = ({ onClose, onDelete }) => (',
+		'\t<Modal title={ __( "Delete post?" ) } onRequestClose={ onClose }>',
+		'\t\t<p>{ __( "This cannot be undone." ) }</p>',
+		body,
+		'\t</Modal>',
+		');',
+	].join('\n');
+const pair = '\t\t<div><Button variant="tertiary" onClick={ onClose }>{ __( "Cancel" ) }</Button><Button variant="primary" isDestructive onClick={ onDelete }>{ __( "Delete permanently" ) }</Button></div>';
+
+await check('a modal holding only a consent pair is a confirm dialog rebuilt', async () => {
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': modal(pair) }, { patterns: registry });
+	const hit = one(at(r, 'patterns/superseded-composite'), 'one modal, one finding');
+	assert(hit.message.includes('`confirm`') && hit.message.includes('ConfirmDialog'), hit.message);
+	assert(hit.message.includes('Cancel / Delete permanently'), `labels read through __(): ${hit.message}`);
+});
+
+await check('a form control inside, a third button, or a computed label makes it a form, not a question', async () => {
+	const withField = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': modal(`\t\t<TextControl label="Reason" />\n${pair}`) },
+		{ patterns: registry },
+	);
+	assert(!at(withField, 'patterns/superseded-composite').length, 'a control makes it a form');
+	const three = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': modal(`${pair}\n\t\t<Button>{ __( "Cancel" ) }</Button>`) },
+		{ patterns: registry },
+	);
+	assert(!at(three, 'patterns/superseded-composite').length, 'three buttons is not a pair');
+	const computed = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': modal('\t\t<div><Button>{ __( "Cancel" ) }</Button><Button>{ label }</Button></div>') },
+		{ patterns: registry },
+	);
+	assert(!at(computed, 'patterns/superseded-composite').length, 'a label the rule cannot read is not a consent label');
+});
+
+await check('a file importing ConfirmDialog beside a hand-built pair is not told to use it', async () => {
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': modal(pair, "import { __experimentalConfirmDialog as ConfirmDialog } from '@wordpress/components';") },
+		{ patterns: registry },
+	);
+	assert(!at(r, 'patterns/superseded-composite').length, 'the canonical import means the choice was deliberate');
 });
 
 // ── component currency ────────────────────────────────────────────────────

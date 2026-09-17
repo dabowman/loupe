@@ -43,8 +43,10 @@ import type {
 	InlineStyleElement,
 	ParseError,
 	Pattern,
+	PatternRule,
 	PendingFinding,
 	RawElement,
+	RuleHit,
 	RuleId,
 	Suppressions,
 	TokenSet,
@@ -333,6 +335,13 @@ export async function analyze(
 	const inlineStyles: InlineStyleElement[] = [];
 	const cssInJs: CssInJsTemplate[] = [];
 	const composites: Composite[] = [];
+	// The registry's AST rules, run per file by the scanner. They exist for the
+	// wrong choice the composite matcher cannot see: one control, under the
+	// four-node floor.
+	const patternRules: PatternRule[] = (config.patterns ?? []).flatMap((p) =>
+		p.rules.map((spec) => ({ patternId: p.id, spec })),
+	);
+	const ruleHits: (RuleHit & { file: string })[] = [];
 	const importsByFile = new Map<string, Set<string>>();
 	const componentImports: ComponentImport[] = [];
 
@@ -345,7 +354,7 @@ export async function analyze(
 			continue;
 		}
 		diagnostics.filesScanned++;
-		const scanned = scanMarkup(text, rel, ds);
+		const scanned = scanMarkup(text, rel, ds, patternRules);
 		if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
 		scanned.referenced.forEach((t) => referenced.add(t));
 		scanned.stems.forEach((s) => stems.add(s));
@@ -359,6 +368,7 @@ export async function analyze(
 		inlineStyles.push(...scanned.inlineStyles);
 		cssInJs.push(...scanned.cssInJs);
 		composites.push(...scanned.composites);
+		for (const h of scanned.ruleHits) ruleHits.push({ ...h, file: rel });
 		if (scanned.imports) importsByFile.set(rel, scanned.imports);
 		for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
 		suppressionsFor(rel, text);
@@ -677,19 +687,19 @@ export async function analyze(
 	const dupEnabled = config.enabled['patterns/duplicate-composite'];
 	const newEnabled = config.enabled['patterns/unregistered-composite'];
 	const supEnabled = config.enabled['patterns/superseded-composite'];
-	if ((dupEnabled || newEnabled || supEnabled) && composites.length) {
+	if ((dupEnabled || newEnabled || supEnabled) && (composites.length || ruleHits.length)) {
 		const registry = config.patterns || [];
 		// Components whose anatomy the registry declares: an entry whose
 		// `canonical` is the root of its own signature.
 		const anatomyRoots = registry.flatMap((p) =>
-			p.canonical && p.canonical === p.node.name.split('.')[0] ? [p.canonical] : [],
+			p.node && p.canonical && p.canonical === p.node.name.split('.')[0] ? [p.canonical] : [],
 		);
 
 		// Largest match wins: a page header contains an action bar, and reporting
 		// both says the same thing twice at two levels of the same tree.
 		const bestMatch = (c: Composite): Pattern | null =>
 			registry
-				.filter((p) => p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree))
+				.filter((p) => p.node !== null && p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree))
 				.sort((a, b) => b.size - a.size)[0] ?? null;
 
 		// The shape a pattern exists to replace. Unlike the two rules below this
@@ -758,7 +768,13 @@ export async function analyze(
 		// past the line bound on its own. The remedy goes in `tail`, which that
 		// bound is built to spare: eliding the shape still names the file count
 		// and what to do about it, where eliding the end left neither.
-		const emitComposite = (rule: RuleId, c: Composite, signature: string, tail: string, group: string): void => {
+		const emitComposite = (
+			rule: RuleId,
+			c: Pick<Composite, 'file' | 'line' | 'signature'>,
+			signature: string,
+			tail: string,
+			group: string,
+		): void => {
 			if (!reports(c.file)) return;
 			const supp = suppByFile.get(c.file);
 			if (supp && isSuppressed(supp.byLine, c.line, rule)) return;
@@ -794,6 +810,23 @@ export async function analyze(
 		}
 		// One file is enough: this is a wrong choice made here, not a duplication
 		// that only exists across the set.
+		// A rule hit is the same finding from below the floor: the file in hand
+		// made the choice the entry exists to replace. The canonical import means
+		// the choice was deliberate, exactly as it does for a matched anti-shape.
+		if (supEnabled)
+			for (const h of ruleHits) {
+				const entry = registry.find((p) => p.id === h.patternId);
+				if (!entry) continue;
+				if (entry.canonical && importsByFile.get(h.file)?.has(entry.canonical)) continue;
+				const remedy = entry.canonical ? `use \`${entry.canonical}\`` : `follow the \`${entry.id}\` pattern`;
+				emitComposite(
+					'patterns/superseded-composite',
+					{ file: h.file, line: h.line, signature: `rule:${h.rule}:${h.detail}` },
+					h.detail,
+					` \u2014 \`${entry.id}\` covers this; ${remedy}`,
+					entry.id,
+				);
+			}
 		for (const [id, files] of bySuperseded) {
 			for (const c of files.values()) {
 				const remedy = c.pattern?.canonical ? `use \`${c.pattern.canonical}\`` : `follow the \`${id}\` pattern`;

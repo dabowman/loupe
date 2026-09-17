@@ -29,7 +29,10 @@ import type {
 	Decl,
 	DesignSystem,
 	InlineStyleElement,
+	PatternRule,
 	RawElement,
+	RuleHit,
+	RuleSpec,
 	ScanResult,
 } from './types.ts';
 
@@ -300,8 +303,12 @@ function systemImports(
 	layout: Set<string>;
 	componentImports: ComponentImport[];
 	packages: Map<string, string>;
+	canonicals: Map<string, string>;
 } {
 	const known = new Set<string>();
+	// local name -> canonical name, so a rule written against `SelectControl`
+	// finds it under whatever alias the file bound.
+	const canonicals = new Map<string, string>();
 	const text = new Set<string>();
 	const layout = new Set<string>();
 	// One entry per imported local: which package it actually came from, since
@@ -326,16 +333,77 @@ function systemImports(
 					: local;
 			const c = canonical(imported);
 			known.add(local);
+			canonicals.set(local, c);
 			if (ds.textComponents.includes(c)) text.add(local);
 			if (ds.layoutComponents.includes(c)) layout.add(local);
 			packages.set(local, node.source.value);
 			componentImports.push({ canonical: c, package: node.source.value, line: node.loc?.start?.line ?? 1 });
 		}
 	}
-	return { known, text, layout, componentImports, packages };
+	return { known, text, layout, componentImports, packages, canonicals };
 }
 
-export function scanMarkup(text: string, relPath: string, ds: DesignSystem): ScanResult {
+/** An expression with any type assertion peeled off; the value is the same. */
+const unwrapTs = (e: Node): Node =>
+	e.type === 'TSAsExpression' || e.type === 'TSSatisfiesExpression' || e.type === 'TSNonNullExpression' || e.type === 'TSTypeAssertion'
+		? unwrapTs(e.expression)
+		: e;
+
+/**
+ * The text a JSX element would render as its label, when that text is static.
+ *
+ * A literal child, a string in braces, a template with no holes, or one of
+ * WordPress's translation calls around a string (`__( 'Delete' )`, `_x( … )`).
+ * Anything computed is null: a rule that reads labels must not guess one.
+ * Elements among the children (an icon) are ignored rather than disqualifying.
+ */
+function staticLabel(el: JSXElement): string | null {
+	const parts: string[] = [];
+	for (const c of el.children) {
+		if (c.type === 'JSXText') {
+			parts.push(c.value);
+			continue;
+		}
+		if (c.type === 'JSXElement' || c.type === 'JSXFragment') continue;
+		if (c.type !== 'JSXExpressionContainer') return null;
+		if (c.expression.type === 'JSXEmptyExpression') continue;
+		const text = staticString(c.expression);
+		if (text === null) return null;
+		parts.push(text);
+	}
+	return parts.join('').replace(/\s+/g, ' ').trim();
+}
+
+/** A string the source states outright, through a translation call if any; null when computed. */
+function staticString(node: Node): string | null {
+	const e = unwrapTs(node);
+	if (e.type === 'StringLiteral') return e.value;
+	if (e.type === 'TemplateLiteral' && !e.expressions.length) return e.quasis.map((q) => q.value.cooked ?? '').join('');
+	if (e.type === 'CallExpression' && e.callee.type === 'Identifier' && /^_[_xn]$/.test(e.callee.name)) {
+		const arg = e.arguments[0];
+		return arg?.type === 'StringLiteral' ? arg.value : null;
+	}
+	return null;
+}
+
+/** A rule parameter that has to be a string, or the default. */
+const param = (spec: RuleSpec, key: string, fallback: string): string =>
+	typeof spec[key] === 'string' && spec[key] ? (spec[key] as string) : fallback;
+const numParam = (spec: RuleSpec, key: string, fallback: number): number =>
+	typeof spec[key] === 'number' ? (spec[key] as number) : fallback;
+const listParam = (spec: RuleSpec, key: string): string[] =>
+	Array.isArray(spec[key]) ? (spec[key] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+
+// Labels a button carries when it is asking for consent rather than input.
+// Matched at the start, so 'Delete permanently' and 'Yes, delete' both count;
+// 'Close' is left out because a pair of Cancel and Close is a notice, not a
+// question.
+const CONSENT = '^(cancel|delete|remove|discard|reset|confirm|ok|yes|no|continue|proceed|leave|revert)\\b';
+// What makes a modal a form rather than a question: any control that takes
+// input. A system component named like one, or a raw input element.
+const CONTROLS = '(Control|Field|Picker|Input|Textarea|Editor)$|^(DataForm|Field\\.Root|Fieldset)';
+
+export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rules: readonly PatternRule[] = []): ScanResult {
 	const referenced = harvestTokens(text);
 	const stems = harvestStems(text);
 	const bindings: Binding[] = [];
@@ -343,6 +411,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 	const inlineStyles: InlineStyleElement[] = [];
 	const cssInJs: CssInJsTemplate[] = [];
 	const composites: Composite[] = [];
+	const ruleHits: RuleHit[] = [];
 	const imports = new Set<string>();
 
 	let ast;
@@ -350,10 +419,10 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, componentImports: [], parseError: messageOf(err) };
+		return { bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports: [], parseError: messageOf(err) };
 	}
 
-	const { known, text: textLike, layout, componentImports, packages } = systemImports(ast, ds);
+	const { known, text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
 	const tags = cssInJsLocals(ast, ds.cssInJsPackages);
 	// `<Button css={css`…`}>` binds a template to an element the walk sees
 	// first, so the owner is recorded before the template is reached.
@@ -434,6 +503,94 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 		});
 	};
 
+	/** The canonical name of a design-system element, or null for anything else. */
+	const canonicalOf = (el: JSXElement): string | null => {
+		const name = jsxName(el);
+		return name ? (canonicals.get(baseOf(name)) ?? null) : null;
+	};
+	/** Every JSX element below `el`, through containers and callbacks alike. */
+	const allElements = (el: JSXElement, out: JSXElement[] = []): JSXElement[] => {
+		for (const c of jsxChildElements(el)) {
+			out.push(c);
+			allElements(c, out);
+		}
+		return out;
+	};
+	// Top-level `const options = [ … ]`, by name, so a prop bound to one is as
+	// static as the literal written inline. Only the module's own bindings: a
+	// prop or a store selector could hold anything.
+	const constArrays = new Map<string, (string | null)[] | null>();
+	for (const node of ast.program.body) {
+		const decl = node.type === 'ExportNamedDeclaration' ? node.declaration : node;
+		if (decl?.type !== 'VariableDeclaration' || decl.kind !== 'const') continue;
+		for (const d of decl.declarations)
+			if (d.id.type === 'Identifier' && d.init) constArrays.set(d.id.name, staticOptions(d.init));
+	}
+	/**
+	 * The entries of a static option array, each reduced to its label; null
+	 * when the array is not static. A label the source does not state is
+	 * recorded as null: the count is still known, the width is not.
+	 */
+	function staticOptions(e: Node): (string | null)[] | null {
+		const v = unwrapTs(e);
+		if (v.type === 'Identifier') return constArrays.get(v.name) ?? null;
+		if (v.type !== 'ArrayExpression') return null;
+		// A spread could hold anything; one is enough to make the count unknown.
+		if (v.elements.some((x) => !x || x.type === 'SpreadElement')) return null;
+		return v.elements.map((x) => {
+			if (!x || x.type !== 'ObjectExpression') return null;
+			const label = x.properties.find(
+				(pr) => pr.type === 'ObjectProperty' && !pr.computed && pr.key.type === 'Identifier' && pr.key.name === 'label',
+			);
+			return label?.type === 'ObjectProperty' ? staticString(label.value) : null;
+		});
+	}
+
+	const readRules = (el: JSXElement): void => {
+		if (!rules.length) return;
+		const canonical = canonicalOf(el);
+		if (!canonical) return;
+		const line = el.loc?.start?.line ?? 1;
+		for (const { patternId, spec } of rules) {
+			if (spec.rule === 'few-static-options') {
+				if (!listParam(spec, 'components').includes(canonical)) continue;
+				const prop = param(spec, 'prop', 'options');
+				const attr = el.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === prop);
+				const value = attr?.type === 'JSXAttribute' && attr.value?.type === 'JSXExpressionContainer' ? attr.value.expression : null;
+				const options = value && value.type !== 'JSXEmptyExpression' ? staticOptions(value) : null;
+				if (!options || options.length < numParam(spec, 'min', 2) || options.length > numParam(spec, 'max', 5)) continue;
+				// Few is not enough: the segmented control needs the set to sit on one
+				// row, and five "Uppercase Roman numerals" do not. Total label length
+				// stands in for that force; a label the source does not state leaves
+				// the width unknown, and an unknown width is not a finding.
+				if (!options.every((l): l is string => l !== null)) continue;
+				if (options.reduce((n, l) => n + l.length, 0) > numParam(spec, 'maxLabelChars', 32)) continue;
+				ruleHits.push({ patternId, rule: spec.rule, line, detail: `${canonical} with ${options.length} short static ${prop}` });
+			} else if (spec.rule === 'confirm-pair') {
+				if (canonical !== param(spec, 'container', '')) continue;
+				const button = param(spec, 'button', 'Button');
+				const consent = new RegExp(param(spec, 'labels', CONSENT), 'i');
+				const controls = new RegExp(param(spec, 'controls', CONTROLS));
+				const inside = allElements(el);
+				const isControl = (c: JSXElement): boolean => {
+					const name = jsxName(c);
+					const sys = canonicalOf(c);
+					if (sys) return controls.test(sys) || controls.test(name ?? '');
+					return !!name && /^(input|select|textarea)$/.test(name);
+				};
+				if (inside.some(isControl)) continue;
+				const labels = inside.filter((c) => canonicalOf(c) === button).map(staticLabel);
+				if (labels.length !== 2 || !labels.every((l) => l !== null && consent.test(l))) continue;
+				ruleHits.push({
+					patternId,
+					rule: spec.rule,
+					line,
+					detail: `${canonical} with two consent buttons (${labels.join(' / ')}) and no form control`,
+				});
+			}
+		}
+	};
+
 	const readTaggedTemplate = (node: TaggedTemplateExpression): void => {
 		if (!tags.any) return;
 		const t = node.tag;
@@ -471,7 +628,10 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 
 	walkAst(ast.program, (node) => {
 		if (node.type === 'TaggedTemplateExpression') return readTaggedTemplate(node);
-		if (node.type === 'JSXElement') readComposite(node);
+		if (node.type === 'JSXElement') {
+			readComposite(node);
+			readRules(node);
+		}
 		if (node.type !== 'JSXOpeningElement') return;
 		const name = node.name;
 		const tag =
@@ -577,5 +737,5 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem): Sca
 		}
 	});
 
-	return { bindings, rawEls, inlineStyles, cssInJs, composites, imports, referenced, stems, componentImports, parseError: null };
+	return { bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports, parseError: null };
 }
