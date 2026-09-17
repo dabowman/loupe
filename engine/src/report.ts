@@ -53,6 +53,46 @@ const components = (message: string): string => message.replace(COMPONENT, cyan)
 const titleFor = (config: Config) => (id: RuleId): string =>
 	renderTitle(id, config.designSystem, config.suppression.keyword);
 
+/** How far from a finding a directive can sit and still plausibly be for it. */
+const NEAR = 5;
+const MAX_NEAR_MISSES = 5;
+
+/**
+ * Directives written for a finding that is still firing — the placement missed.
+ *
+ * `isSuppressed` anchors to the finding's line and the one above it, so a
+ * directive naming the right rule in the right file, a few lines off, mutes
+ * nothing and says nothing. Every failure mode that produces one is silent: a
+ * comment below the element rather than above it, one inside a JSX attribute
+ * list, one on an import specifier whose finding anchors elsewhere. Naming the
+ * two line numbers turns a blind retry into a move.
+ */
+function nearMisses(result: AnalyzeResult | BaselinedResult): string[] {
+	const out: string[] = [];
+	for (const f of result.findings) {
+		if (out.length >= MAX_NEAR_MISSES) break;
+		const near = result.directives.find(
+			(d) => d.file === f.file && d.rules.includes(f.rule) && Math.abs(d.line - f.line) <= NEAR,
+		);
+		if (!near) continue;
+		// The line a correct directive would occupy may already be taken by a
+		// directive for a different rule on the same node. Stacking a second
+		// comment above it does not work — only the nearest line is consulted —
+		// so the remedy there is the comma list, not a move that would displace
+		// a suppression someone else signed off.
+		const occupant = result.directives.find((d) => d.file === f.file && d.line === f.line - 1 && !d.rules.includes(f.rule));
+		out.push(
+			occupant
+				? `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but line ${f.line - 1} already carries one for ` +
+					`\`${occupant.rules.join(', ')}\` — only the nearest line is read, so name both on it: ` +
+					`\`${occupant.rules.join(', ')}, ${f.rule} -- <reason>\`.`
+				: `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but this finding anchors to line ${f.line} — ` +
+					`move it to line ${f.line}, or the line directly above it.`,
+		);
+	}
+	return out;
+}
+
 export function formatAgent(
 	result: AnalyzeResult | BaselinedResult,
 	config: Config,
@@ -121,6 +161,12 @@ export function formatAgent(
 		}
 		lines.push('');
 		lines.push(dim(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`));
+		// A directive for the right rule, sitting just too far from the finding
+		// it was written for, is the single most expensive thing to debug from
+		// the report alone: the hint above is already followed, the finding is
+		// still there, and nothing says the placement is what failed. Retrying
+		// blind is what an agent does next, and the retry message is identical.
+		for (const m of nearMisses(result)) lines.push(yellow(`  ! ${m}`));
 	}
 
 	if (diagnostics.parseErrors.length) {

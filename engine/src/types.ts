@@ -245,7 +245,15 @@ export interface InlineStyleElement {
 export interface ComponentImport {
 	canonical: string;
 	package: string;
+	/** The specifier's own line — where a reader would write the suppression. */
 	line: number;
+	/**
+	 * The `import {` line. Kept as a second anchor so directives written against
+	 * the old, declaration-wide reporting keep muting what they were signed off
+	 * for. It mutes every specifier in the declaration, which is why it is not
+	 * where a new one should go.
+	 */
+	declLine: number;
 	/** Attached by the analyzer once it knows which file the scan came from. */
 	file?: string;
 }

@@ -23794,6 +23794,18 @@ var messageParts = (parts, tail = "") => {
 var ID = "(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)";
 var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 var OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
+function spannedLines(lines, i, raw, stripped) {
+  const opener = raw.slice(0, raw.length - stripped.length);
+  const close = /\/\*/.test(opener) ? "*/" : /<!--/.test(opener) ? "-->" : null;
+  if (close === null || stripped.includes(close)) return [];
+  const LIMIT = 40;
+  for (let j = i + 1; j < lines.length && j - i <= LIMIT; j++) {
+    const cont = lines[j];
+    if (cont === void 0) break;
+    if (cont.includes(close)) return Array.from({ length: j - i }, (_, k) => i + k + 2);
+  }
+  return [];
+}
 function makeSuppressionParser({
   keyword,
   blanket = [],
@@ -23823,6 +23835,11 @@ function makeSuppressionParser({
         const ids = m[2].split(",").map((s) => canonicalRuleId(s.trim()));
         const used = m[1] ?? keyword;
         byLine.set(line, new Set(ids));
+        for (const l of spannedLines(lines, i, raw, stripped)) {
+          const set = byLine.get(l) ?? /* @__PURE__ */ new Set();
+          for (const id of ids) set.add(id);
+          byLine.set(l, set);
+        }
         directives.push({
           file: relPath,
           line,
@@ -24469,7 +24486,12 @@ function systemImports(ast, ds) {
       if (ds.textComponents.includes(c)) text.add(local);
       if (ds.layoutComponents.includes(c)) layout.add(local);
       packages.set(local, node.source.value);
-      componentImports.push({ canonical: c, package: node.source.value, line: node.loc?.start?.line ?? 1 });
+      componentImports.push({
+        canonical: c,
+        package: node.source.value,
+        line: spec.loc?.start?.line ?? node.loc?.start?.line ?? 1,
+        declLine: node.loc?.start?.line ?? 1
+      });
     }
   }
   return { known, text, layout, componentImports, packages, canonicals };
@@ -24953,6 +24975,24 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
   }
   return { classes, dirs, unread };
 }
+var namedReplacements = (supersededBy) => [...(supersededBy ?? "").matchAll(/([A-Z][\w.]*)\s*\(\s*(@[\w@/.-]+)/g)].map((m) => ({
+  name: String(m[1]),
+  package: String(m[2])
+}));
+function usableReplacement(registry, supersededBy) {
+  const candidates = namedReplacements(supersededBy);
+  if (!candidates.length) return true;
+  return candidates.some((c) => {
+    const entry = registry.get(`${c.package}::${c.name}`) ?? registry.get(`${c.package}::${c.name.split(".")[0]}`);
+    return !entry || entry.status !== "locked" && entry.status !== "experimental";
+  });
+}
+function currentAnalog(registry, suggest) {
+  const entries = [...registry.values()].filter((e) => e.name === suggest);
+  if (!entries.length || entries.some((e) => e.status === "recommended")) return `<${suggest}>`;
+  const forwarded = entries.find((e) => e.supersededBy)?.supersededBy;
+  return forwarded ? forwarded : `<${suggest}>`;
+}
 function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {}, enabled: enabled2 = () => true }) {
   const isMargin = prop === "margin" || prop.startsWith("margin-");
   const marginKind = isMargin ? classifyMargin(value) : null;
@@ -25313,7 +25353,7 @@ async function analyze(config, { scope = null } = {}) {
       severity: config.severityOf("system/raw-element"),
       file: el.file,
       line: el.line,
-      message: `<${el.tag}> \u2192 <${el.suggest}>`,
+      message: `<${el.tag}> \u2192 ${currentAnalog(config.componentRegistry, el.suggest)}`,
       code: `<${el.tag}>`,
       rank: RULES["system/raw-element"].rank
     });
@@ -25428,11 +25468,12 @@ async function analyze(config, { scope = null } = {}) {
       if (!entry || entry.status !== "legacy" && entry.status !== "locked") continue;
       const rule2 = entry.status === "locked" ? "system/locked-component" : "system/superseded-component";
       if (!config.enabled[rule2] || !reports(ci.file)) continue;
+      if (!usableReplacement(config.componentRegistry, entry.supersededBy)) continue;
       const key2 = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
       if (seen2.has(key2)) continue;
       seen2.add(key2);
       const supp = suppByFile.get(ci.file);
-      if (supp && isSuppressed(supp.byLine, ci.line, rule2)) continue;
+      if (supp && isSuppressed(supp.byLine, ci.line, rule2, [ci.declLine, ci.declLine - 1])) continue;
       const remedy = entry.supersededBy ? ` \u2192 ${entry.supersededBy}` : "";
       const note2 = entry.note ? ` (${entry.note})` : "";
       findings.push({
@@ -26083,6 +26124,23 @@ var SEV_MARK = { error: "\u2717", warn: "\u2022" };
 var COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
 var components = (message) => message.replace(COMPONENT, cyan);
 var titleFor = (config) => (id) => renderTitle(id, config.designSystem, config.suppression.keyword);
+var NEAR = 5;
+var MAX_NEAR_MISSES = 5;
+function nearMisses(result) {
+  const out = [];
+  for (const f of result.findings) {
+    if (out.length >= MAX_NEAR_MISSES) break;
+    const near = result.directives.find(
+      (d) => d.file === f.file && d.rules.includes(f.rule) && Math.abs(d.line - f.line) <= NEAR
+    );
+    if (!near) continue;
+    const occupant = result.directives.find((d) => d.file === f.file && d.line === f.line - 1 && !d.rules.includes(f.rule));
+    out.push(
+      occupant ? `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but line ${f.line - 1} already carries one for \`${occupant.rules.join(", ")}\` \u2014 only the nearest line is read, so name both on it: \`${occupant.rules.join(", ")}, ${f.rule} -- <reason>\`.` : `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but this finding anchors to line ${f.line} \u2014 move it to line ${f.line}, or the line directly above it.`
+    );
+  }
+  return out;
+}
 function formatAgent(result, config, { maxFindings = 0, showSuppressed = false } = {}) {
   const { findings, diagnostics } = result;
   const kw = config.suppression.keyword;
@@ -26134,6 +26192,7 @@ function formatAgent(result, config, { maxFindings = 0, showSuppressed = false }
     }
     lines.push("");
     lines.push(dim(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`));
+    for (const m of nearMisses(result)) lines.push(yellow(`  ! ${m}`));
   }
   if (diagnostics.parseErrors.length) {
     lines.push("");

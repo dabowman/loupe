@@ -74,7 +74,19 @@ firing on nothing. That is what makes one engine serve very different projects.
 
 Rule id and reason are both mandatory. A directive on the line above, on the
 line itself, or on a rule's selector line (which covers that rule's own
-declarations) all count.
+declarations) all count. A block comment covers every line it spans, so a reason
+long enough for a formatter to wrap it still anchors.
+
+Only the nearest line is read, so two rules on one node are one directive, not
+two stacked comments:
+
+```jsx
+{ /* ds-allow system/raw-element, system/inline-style -- one reason for both */ }
+```
+
+An import reports on each specifier's own line. A directive above the name mutes
+that name; one above `import {` mutes every superseded name in the declaration,
+which is rarely what a reason is true of.
 
 Anything looser — `ds-disable`, a missing reason, a bare keyword — is not a mute
 but its own finding. That inversion is the point: the escape hatch stays

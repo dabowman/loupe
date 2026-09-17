@@ -337,7 +337,18 @@ function systemImports(
 			if (ds.textComponents.includes(c)) text.add(local);
 			if (ds.layoutComponents.includes(c)) layout.add(local);
 			packages.set(local, node.source.value);
-			componentImports.push({ canonical: c, package: node.source.value, line: node.loc?.start?.line ?? 1 });
+			// The specifier's line, not the declaration's. Every name in a
+			// multi-line import used to report on the `import {` line, so the one
+			// placement a reader reaches for — the comment above the offending
+			// name — anchored to nothing, and the placement that did work muted
+			// every other superseded name in the same declaration under a reason
+			// written for one of them.
+			componentImports.push({
+				canonical: c,
+				package: node.source.value,
+				line: spec.loc?.start?.line ?? node.loc?.start?.line ?? 1,
+				declLine: node.loc?.start?.line ?? 1,
+			});
 		}
 	}
 	return { known, text, layout, componentImports, packages, canonicals };

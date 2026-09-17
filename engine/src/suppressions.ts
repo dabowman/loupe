@@ -42,6 +42,37 @@ const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // unwritable in a JSX child position anywhere in a WordPress repo.
 const OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
 
+/**
+ * The lines after `i` that a directive's own block comment still covers.
+ *
+ * Empty unless the directive opened a block comment on this line that closes on
+ * a later one — a `//` or `#` comment ends with its line, and a block that
+ * already closed needs nothing. The closer is searched for within a bound: a
+ * comment that never closes is a broken file, and extending a suppression to
+ * the end of it would turn a typo into the blanket disable this grammar exists
+ * to refuse.
+ *
+ * ponytail: the opener is read off the line rather than tokenized, so a `/*`
+ * inside a string literal on the directive's own line reads as a comment. The
+ * whole scanner is line-and-regex already; upgrade both together if it matters.
+ */
+function spannedLines(lines: readonly string[], i: number, raw: string, stripped: string): number[] {
+	const opener = raw.slice(0, raw.length - stripped.length);
+	const close = /\/\*/.test(opener) ? '*/' : /<!--/.test(opener) ? '-->' : null;
+	// A continuation line inside a jsdoc block (`* <keyword> …`) strips to the
+	// same shape with no opener of its own. Nothing is extended from there,
+	// which under-covers rather than over-covers, and over-covering is the
+	// failure that silently mutes a rule nobody signed off.
+	if (close === null || stripped.includes(close)) return [];
+	const LIMIT = 40;
+	for (let j = i + 1; j < lines.length && j - i <= LIMIT; j++) {
+		const cont = lines[j];
+		if (cont === undefined) break;
+		if (cont.includes(close)) return Array.from({ length: j - i }, (_, k) => i + k + 2);
+	}
+	return [];
+}
+
 export function makeSuppressionParser({
 	keyword,
 	blanket = [],
@@ -111,6 +142,18 @@ export function makeSuppressionParser({
 				const ids = m[2].split(',').map((s) => canonicalRuleId(s.trim()));
 				const used = m[1] ?? keyword;
 				byLine.set(line, new Set(ids));
+				// A block comment covers every line it spans, not just the one the
+				// keyword sits on. `isSuppressed` only looks at the finding's line and
+				// the one above it, so a directive whose comment closes two lines
+				// higher anchors to nothing — and a reason good enough to be worth
+				// writing is usually long enough for a formatter to wrap it there.
+				// Refusing the wrapped form makes the escape hatch unwritable in
+				// exactly the repos whose formatter mandates it.
+				for (const l of spannedLines(lines, i, raw, stripped)) {
+					const set = byLine.get(l) ?? new Set<string>();
+					for (const id of ids) set.add(id);
+					byLine.set(l, set);
+				}
 				// Flattened for the same reason the malformed branch below is: a tab
 				// in the reason resets the columns `loupe suppressions` prints in,
 				// and the reason is quoted source like any other captured snippet.

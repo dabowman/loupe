@@ -31,6 +31,7 @@ import type {
 	Binding,
 	ClassifiedFinding,
 	ClassifyContext,
+	ComponentEntry,
 	ComponentImport,
 	Composite,
 	Config,
@@ -144,6 +145,76 @@ async function readLibrary(
 		if (!budget.left) unread.push({ file: toPosix(relative(root, dir)), message: 'read the first 400 stylesheets only' });
 	}
 	return { classes, dirs, unread };
+}
+
+/**
+ * Every `Name (@package)` a `supersededBy` string names.
+ *
+ * The field is prose — `Stack (@wordpress/ui, direction="row")`, or a sentence
+ * naming two candidates and when each applies — so the components in it are
+ * read off rather than parsed. A string that names none ("CSS grid or absolute
+ * positioning") yields nothing, which is the honest answer: the remedy there is
+ * hand-written, not an import swap.
+ */
+const namedReplacements = (supersededBy: string | undefined): { name: string; package: string }[] =>
+	[...(supersededBy ?? '').matchAll(/([A-Z][\w.]*)\s*\(\s*(@[\w@/.-]+)/g)].map((m) => ({
+		name: String(m[1]),
+		package: String(m[2]),
+	}));
+
+/**
+ * Whether a superseded entry's replacement is one the registry would recommend.
+ *
+ * True when the string names no component at all (the remedy is prose, and the
+ * finding is still worth making) or when at least one named candidate is not
+ * itself `locked` or `experimental`. False only when every candidate is one the
+ * design system's own metadata says not to reach for yet — `DropdownMenu` is
+ * the shipped case: `Menu (@wordpress/components)` is core-only and
+ * `Menu (@wordpress/ui)` is in flux, so the finding asks for a migration onto
+ * an API nobody should adopt, and the only answer available to whoever gets it
+ * is a suppression restating what the registry already records.
+ *
+ * This is the same judgement `experimental` status already earns on the *import*
+ * side, applied to the replacement rather than the thing being replaced.
+ */
+export function usableReplacement(
+	registry: ReadonlyMap<string, ComponentEntry>,
+	supersededBy: string | undefined,
+): boolean {
+	const candidates = namedReplacements(supersededBy);
+	if (!candidates.length) return true;
+	// Unknown to the registry is not a reason to stay silent: the registry
+	// records currency, not existence, and a name it has never heard of is far
+	// likelier to be a real component than a retracted one.
+	return candidates.some((c) => {
+		// `Menu.Group` is not its own entry — a compound component's currency is
+		// its root's, and the registry keys the root. Without this the dotted
+		// subcomponents of a locked component read as unknown, so `MenuGroup` and
+		// `MenuItem` went on demanding a migration their parent was spared.
+		const entry = registry.get(`${c.package}::${c.name}`) ?? registry.get(`${c.package}::${c.name.split('.')[0]}`);
+		return !entry || (entry.status !== 'locked' && entry.status !== 'experimental');
+	});
+}
+
+/**
+ * The element map's analog, forwarded if the registry has since superseded it.
+ *
+ * The map is keyed by tag and names a bare component; the registry is keyed by
+ * package and knows currency. Nothing reconciled them, so on a two-package
+ * system the two rules contradicted each other: `system/raw-element` said
+ * `<h3> → <Heading>`, and doing that earned a `system/superseded-component`
+ * saying `Heading` is legacy. An agent that follows the first finding
+ * manufactures the second, which is a loop a weaker model can run forever.
+ *
+ * Only forwards when *every* package carrying the name is stale, so a component
+ * that is legacy in one package and recommended in another (WPDS has several)
+ * keeps the bare name and lets the import rule speak to the package.
+ */
+function currentAnalog(registry: ReadonlyMap<string, ComponentEntry>, suggest: string): string {
+	const entries = [...registry.values()].filter((e) => e.name === suggest);
+	if (!entries.length || entries.some((e) => e.status === 'recommended')) return `<${suggest}>`;
+	const forwarded = entries.find((e) => e.supersededBy)?.supersededBy;
+	return forwarded ? forwarded : `<${suggest}>`;
 }
 
 /**
@@ -674,7 +745,7 @@ export async function analyze(
 			severity: config.severityOf('system/raw-element'),
 			file: el.file,
 			line: el.line,
-			message: `<${el.tag}> \u2192 <${el.suggest}>`,
+			message: `<${el.tag}> \u2192 ${currentAnalog(config.componentRegistry, el.suggest)}`,
 			code: `<${el.tag}>`,
 			rank: RULES['system/raw-element'].rank,
 		});
@@ -856,11 +927,19 @@ export async function analyze(
 			if (!entry || (entry.status !== 'legacy' && entry.status !== 'locked')) continue;
 			const rule = entry.status === 'locked' ? 'system/locked-component' : 'system/superseded-component';
 			if (!config.enabled[rule] || !reports(ci.file)) continue;
+			// A replacement the registry itself will not recommend is not a
+			// replacement. Firing anyway asks for a migration onto a private or
+			// in-flux API, and the only honest answer an agent can give is a
+			// suppression restating what the registry already knows.
+			if (!usableReplacement(config.componentRegistry, entry.supersededBy)) continue;
 			const key = `${ci.file} ${rule} ${ci.canonical} ${ci.package}`;
 			if (seen.has(key)) continue;
 			seen.add(key);
 			const supp = suppByFile.get(ci.file);
-			if (supp && isSuppressed(supp.byLine, ci.line, rule)) continue;
+			// The declaration line and the one above it: both were live anchors
+			// when every specifier reported on the declaration, and a directive
+			// someone signed off must not go silent because the reporting moved.
+			if (supp && isSuppressed(supp.byLine, ci.line, rule, [ci.declLine, ci.declLine - 1])) continue;
 			const remedy = entry.supersededBy ? ` → ${entry.supersededBy}` : '';
 			const note = entry.note ? ` (${entry.note})` : '';
 			findings.push({

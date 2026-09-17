@@ -21,7 +21,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
 import { loadConfig } from '../src/config.ts';
-import { formatJson, formatSarif, reportPayload } from '../src/report.ts';
+import { formatAgent, formatJson, formatSarif, reportPayload } from '../src/report.ts';
 import { formatHtml } from '../src/report-html.ts';
 import { CLI, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 
@@ -361,6 +361,69 @@ await check('component names are painted, and only at print time', () => {
 		);
 	} finally {
 		cleanup(dir);
+	}
+});
+
+// ── the near-miss note ───────────────────────────────────────────────────────
+// A directive that names the right rule in the right file and still mutes
+// nothing is the most expensive thing to debug from the report alone: the
+// stated hint has been followed, the finding is unchanged, and the blocked-turn
+// message is byte-identical on every retry. So the report says where it sits
+// and where it had to.
+
+await check('a directive that missed its anchor is named, with both line numbers', async () => {
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'src/A.jsx': [
+			'export const A = () => (',
+			'\t<>',
+			'\t\t<p className="wf-note">x</p>',
+			'\t\t{ /* wpds-allow system/raw-element -- written below the element it meant */ }',
+			'\t</>',
+			');',
+		].join('\n'),
+		'styles/a.css': '.wf-note { color: red }',
+	});
+	try {
+		const out = formatAgent(result, config);
+		assert(/directive is on src\/A\.jsx:4/.test(out), `did not name where the directive sits:\n${out}`);
+		assert(/anchors to line 3/.test(out), `did not name where it had to sit:\n${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Two rules on one node cannot be two stacked comments — only the nearest line
+// is read — so the note has to name the comma list rather than send someone to
+// displace a suppression that is already doing its job.
+await check('a taken anchor line is answered with the comma form, not a move', async () => {
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'src/A.jsx': [
+			'export const A = () => (',
+			'\t<>',
+			'\t\t{ /* wpds-allow system/raw-element -- reason A */ }',
+			'\t\t{ /* wpds-allow system/inline-style -- reason B */ }',
+			'\t\t<p className="wf-note" style={ { margin: 0 } }>x</p>',
+			'\t</>',
+			');',
+		].join('\n'),
+		'styles/a.css': '.wf-note { color: red }',
+	});
+	try {
+		const out = formatAgent(result, config);
+		assert(/system\/inline-style, system\/raw-element -- <reason>/.test(out), `did not offer the comma list:\n${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a clean report carries no near-miss noise', async () => {
+	const { result, config, root } = await run({ 'loupe.config.json': CONFIG, 'src/A.jsx': 'export const A = () => <div />;' });
+	try {
+		assert(!/directive is on/.test(formatAgent(result, config)), 'nothing to say should say nothing');
+	} finally {
+		cleanup(root);
 	}
 });
 

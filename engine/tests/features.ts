@@ -790,6 +790,111 @@ await check('a locked-component finding can be suppressed like any other', async
 	assert(!at(r, 'system/locked-component').length, 'a well-formed suppression mutes the finding');
 });
 
+// ── where a directive has to sit ──────────────────────────────────────────────
+// Every case here failed silently: the directive parsed, named the right rule,
+// and muted nothing, so the report was identical to having written none. Two
+// models in a row burned most of a session rediscovering the placement by
+// trial and error, which is the cost of an escape hatch that does not say why
+// it did not open.
+
+await check('a superseded component reports on its own specifier line', async () => {
+	const src = [
+		'import {',
+		'\tButton,',
+		'\t// wpds-allow system/superseded-component -- reviewed for this one name only',
+		'\t__experimentalVStack as VStack,',
+		'\t__experimentalHStack as HStack,',
+		"} from '@wordpress/components';",
+		'export const A = () => (<Button><VStack /><HStack /></Button>);',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const f = one(at(r, 'system/superseded-component'), 'the directive should mute VStack and only VStack');
+	assert(f.message.startsWith('HStack'), `the wrong specifier survived: ${f.message}`);
+	assert(f.line === 5, `HStack should report on its own line, got ${f.line}`);
+});
+
+// The declaration line is where every specifier used to report, so directives
+// already written against it must keep muting what they were signed off for.
+await check('a directive on the `import {` line still mutes the declaration', async () => {
+	const src = [
+		'// wpds-allow system/superseded-component -- the whole import, as it was written before',
+		'import {',
+		'\t__experimentalVStack as VStack,',
+		'\t__experimentalHStack as HStack,',
+		"} from '@wordpress/components';",
+		'export const A = () => (<><VStack /><HStack /></>);',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	assert(!at(r, 'system/superseded-component').length, 'a directive written for the declaration still covers it');
+});
+
+// Prettier wraps a reason worth writing, and the wrapped form anchored to
+// nothing: `isSuppressed` reads the finding's line and the one above it, and a
+// comment that closes two lines higher is on neither.
+await check('a directive in a wrapped block comment covers the lines it spans', async () => {
+	const src = [
+		'export const A = () => (',
+		'\t<>',
+		'\t\t{ /* wpds-allow system/raw-element -- the reason runs long enough that',
+		'\t\t     the formatter wraps it onto a second physical line */ }',
+		'\t\t<p className="acme-note">x</p>',
+		'\t</>',
+		');',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/a.css': '.acme-note { color: red }' });
+	assert(!at(r, 'system/raw-element').length, 'a wrapped directive must mute what the one-line form would');
+});
+
+// The span is bounded. A comment that runs for pages is a licence nobody read,
+// and reading one as a suppression is how a typo becomes the blanket disable
+// this grammar exists to refuse. (An unterminated comment needs no guard: the
+// file stops parsing, so there is nothing left to mute.)
+await check('a block comment that runs too long stops covering what follows', async () => {
+	const filler = Array.from({ length: 50 }, (_, i) => `\t\t   line ${i} of a very long comment`);
+	const src = [
+		'export const A = () => (',
+		'\t<>',
+		'\t\t{ /* wpds-allow system/raw-element -- opens here',
+		...filler,
+		'\t\t   and only closes here */ }',
+		'\t\t<p className="acme-note">x</p>',
+		'\t</>',
+		');',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/a.css': '.acme-note { color: red }' });
+	assert(at(r, 'system/raw-element').length > 0, 'a directive that far away must not still be muting');
+});
+
+// ── a replacement has to be one you could actually adopt ──────────────────────
+
+await check('a component whose only replacements are locked or in flux does not fire', async () => {
+	const src = ["import { DropdownMenu, MenuItem } from '@wordpress/components';", 'export const A = () => (<DropdownMenu><MenuItem /></DropdownMenu>);'].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	assert(
+		!at(r, 'system/superseded-component').length,
+		'Menu is core-only in one package and experimental in the other — neither is a migration target',
+	);
+});
+
+// A dotted subcomponent has no entry of its own; its currency is its root's.
+await check('a prose remedy still fires — it names no component to be unusable', async () => {
+	const src = ["import { __experimentalSpacer as Spacer } from '@wordpress/components';", 'export const A = () => <Spacer />;'].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const f = one(at(r, 'system/superseded-component'), 'a hand-written remedy is still a remedy');
+	assert(f.message.includes('gap'), `the remedy was lost: ${f.message}`);
+});
+
+// `system/raw-element` read the element map and `system/superseded-component`
+// read the registry, and nothing reconciled them: taking the first finding's
+// advice earned the second, which is a loop rather than a fix.
+await check('a raw element is never sent to a component the registry supersedes', async () => {
+	const src = 'export const A = () => <h3>title</h3>;';
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const f = one(at(r, 'system/raw-element'), 'expected the heading finding');
+	assert(!/<Heading>/.test(f.message), `sent to a legacy component: ${f.message}`);
+	assert(f.message.includes('@wordpress/ui'), `did not forward to the current analog: ${f.message}`);
+});
+
 // ── library internals by stylesheet ───────────────────────────────────────────
 // An unprefixed system (`.field-label`, `.toast-viewport`) has no prefix for
 // `namespaces.external` to match, and the component renders those classes
