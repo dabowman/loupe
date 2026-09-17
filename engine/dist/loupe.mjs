@@ -20111,7 +20111,7 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync9, readFileSync: readFileSync9, realpathSync: realpathSync2 } = __require("fs");
+    var { existsSync: existsSync9, readFileSync: readFileSync10, realpathSync: realpathSync2 } = __require("fs");
     var { dirname: dirname7, isAbsolute: isAbsolute8, join: join12, relative: relative5, sep: sep4 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
@@ -20193,7 +20193,7 @@ var require_previous_map = __commonJS({
         this.root = dirname7(path);
         if (existsSync9(path)) {
           this.mapFile = path;
-          return readFileSync9(path, "utf-8").toString().trim();
+          return readFileSync10(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -20259,7 +20259,7 @@ var require_input = __commonJS({
     var { nanoid } = require_non_secure();
     var { isAbsolute: isAbsolute8, resolve: resolve7 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
-    var { fileURLToPath: fileURLToPath4, pathToFileURL: pathToFileURL2 } = __require("url");
+    var { fileURLToPath: fileURLToPath5, pathToFileURL: pathToFileURL2 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
     var PreviousMap = require_previous_map();
     var terminalHighlight = require_terminal_highlight();
@@ -20452,8 +20452,8 @@ var require_input = __commonJS({
           url: fromUrl.toString()
         };
         if (fromUrl.protocol === "file:") {
-          if (fileURLToPath4) {
-            result.file = fileURLToPath4(fromUrl);
+          if (fileURLToPath5) {
+            result.file = fileURLToPath5(fromUrl);
           } else {
             throw new Error(`file: protocol is not available in this PostCSS build`);
           }
@@ -23494,8 +23494,9 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync8, writeFileSync as writeFileSync4 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute7, join as join11, relative as relative4, resolve as resolve6 } from "node:path";
+import { existsSync as existsSync8, readFileSync as readFileSync9, writeFileSync as writeFileSync4 } from "node:fs";
+import { basename, dirname as dirname6, isAbsolute as isAbsolute7, join as join11, relative as relative4, resolve as resolve6 } from "node:path";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/analyze.ts
 import { readFileSync as readFileSync2, realpathSync, statSync as statSync2 } from "node:fs";
@@ -27301,6 +27302,16 @@ var note = (msg) => {
 };
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
 var key = (label) => dim(label);
+var HERE3 = dirname6(fileURLToPath4(import.meta.url));
+function versionLine() {
+  let version = "unknown";
+  try {
+    version = JSON.parse(readFileSync9(join11(HERE3, "..", "package.json"), "utf8")).version ?? version;
+  } catch {
+  }
+  const entry = basename(HERE3) === "src" ? "source" : "bundle";
+  return `loupe ${version} (${entry}, ${resolve6(HERE3, "..", "..")})`;
+}
 var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${key(`"${name}"`)}:`);
 var usage = () => USAGE.replace(/^  (--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^  ([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
 var VALUE_FLAGS = [
@@ -27346,6 +27357,7 @@ Commands:
   suppressions          List every active suppression directive
   explain <rule>        Print a rule's guidance
   presets               List bundled presets
+  version               Print the version, whether it runs from source or the bundle, and where
   detect                Show the config that would be inferred for this project
   init                  Write the inferred config to loupe.config.json
   status                Show the effective config: rules, severities, what blocks
@@ -27364,6 +27376,7 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
   --force               Overwrite an existing config (init)
+  --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
                         is a terminal; NO_COLOR and FORCE_COLOR are honoured)
   --preset <name>       Use a bundled preset instead of discovering config
@@ -27424,6 +27437,11 @@ async function main() {
     setColor(false);
   if (args.flags.help || command === "help") {
     process.stdout.write(usage());
+    return EXIT.OK;
+  }
+  if (args.flags.version || command === "version") {
+    process.stdout.write(`${versionLine()}
+`);
     return EXIT.OK;
   }
   if (command === "presets") {
@@ -27551,6 +27569,7 @@ async function main() {
     const ds = config.designSystem;
     const orNone = (arr) => arr?.length ? arr.join(", ") : "(none)";
     const lines = [
+      `${key("version:    ")}${versionLine()}`,
       `${key("config:     ")}${src}`,
       `${key("system:     ")}${ds.name || "(unnamed)"}`,
       `${key("packages:   ")}${orNone(ds.packages)}`,

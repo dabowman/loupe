@@ -17,12 +17,15 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
 import { loadConfig } from '../src/config.ts';
 import { formatJson, formatSarif, reportPayload } from '../src/report.ts';
 import { formatHtml } from '../src/report-html.ts';
 import { CLI, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 import type { AnalyzeResult, Config } from '../src/types.ts';
 
 async function run(files: Record<string, string>): Promise<{ result: AnalyzeResult; config: Config; root: string }> {
@@ -310,6 +313,15 @@ await check('FORCE_COLOR does colour the human report', () => {
 	assert(ESC.test(stdout), `colour never turns on:\n${JSON.stringify(stdout)}`);
 	const { stdout: off } = runColor(['check', '--all', '--no-color'], { FORCE_COLOR: '1' });
 	assert(!ESC.test(off), '--no-color did not turn it off');
+});
+
+await check('--version names the version, the entry and the install', () => {
+	const out = runColor(['--version'], { NO_COLOR: '1' }).stdout;
+	const manifest = JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')) as { version: string };
+	assert(out.startsWith(`loupe ${manifest.version} (source, `), `expected the manifest version from source: ${out}`);
+	assert(out.trim().endsWith(`, ${resolve(HERE, '..', '..')})`), `should end with the plugin root: ${out}`);
+	const status = runColor(['status', '--no-color'], {}).stdout;
+	assert(status.includes(`version:    loupe ${manifest.version}`), `status should carry the same line: ${status.split('\n')[0]}`);
 });
 
 await check('rules, config keys and help wear their own colours', () => {

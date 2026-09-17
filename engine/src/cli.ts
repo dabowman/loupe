@@ -7,8 +7,9 @@
  *   2  could not run (bad usage, not a git worktree, config error)
  */
 
-import { existsSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { analyze } from './analyze.ts';
 import { applyTokenFixes } from './autofix.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
@@ -72,6 +73,27 @@ const confidence = (level: string): string =>
  */
 const key = (label: string): string => dim(label);
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Which loupe this is: the version, whether it runs from source or the built
+ * bundle, and where it lives. Three copies of the plugin can coexist on one
+ * machine (a checkout, a dotfiles clone on PATH, the marketplace install the
+ * hook runs), and the manifest alone cannot say which one answered. Both
+ * entries sit one level below `engine/`, which is what lets one relative path
+ * find the manifest from either.
+ */
+function versionLine(): string {
+	let version = 'unknown';
+	try {
+		version = (JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')) as { version?: string }).version ?? version;
+	} catch {
+		/* a manifest that cannot be read leaves the version unknown, not the command broken */
+	}
+	const entry = basename(HERE) === 'src' ? 'source' : 'bundle';
+	return `loupe ${version} (${entry}, ${resolve(HERE, '..', '..')})`;
+}
+
 /** The keys inside a printed JSON config, painted without reserialising it. */
 const jsonKeys = (json: string): string => json.replace(/"([^"\\]+)":/g, (_m, name: string) => `${key(`"${name}"`)}:`);
 
@@ -124,6 +146,7 @@ const isFormat = (f: string): f is Format => (FORMATS as readonly string[]).incl
  */
 type Flags = { [K in ValueFlag]?: string } & {
 	help?: boolean;
+	version?: boolean;
 	all?: boolean;
 	changed?: boolean;
 	'no-baseline'?: boolean;
@@ -166,6 +189,7 @@ Commands:
   suppressions          List every active suppression directive
   explain <rule>        Print a rule's guidance
   presets               List bundled presets
+  version               Print the version, whether it runs from source or the bundle, and where
   detect                Show the config that would be inferred for this project
   init                  Write the inferred config to loupe.config.json
   status                Show the effective config: rules, severities, what blocks
@@ -184,6 +208,7 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
   --force               Overwrite an existing config (init)
+  --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
                         is a terminal; NO_COLOR and FORCE_COLOR are honoured)
   --preset <name>       Use a bundled preset instead of discovering config
@@ -356,6 +381,10 @@ async function main(): Promise<number> {
 
 	if (args.flags.help || command === 'help') {
 		process.stdout.write(usage());
+		return EXIT.OK;
+	}
+	if (args.flags.version || command === 'version') {
+		process.stdout.write(`${versionLine()}\n`);
 		return EXIT.OK;
 	}
 	if (command === 'presets') {
@@ -642,6 +671,7 @@ async function main(): Promise<number> {
 		const ds = config.designSystem;
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
 		const lines = [
+			`${key('version:    ')}${versionLine()}`,
 			`${key('config:     ')}${src}`,
 			`${key('system:     ')}${ds.name || '(unnamed)'}`,
 			`${key('packages:   ')}${orNone(ds.packages)}`,
