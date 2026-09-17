@@ -8,7 +8,7 @@
  * *fewer* findings, which no failing build ever reveals.
  */
 
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, symlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze, findingKey } from '../src/analyze.ts';
@@ -655,6 +655,123 @@ await check('a locked-component finding can be suppressed like any other', async
 		{ components: componentRegistry }
 	);
 	assert(!at(r, 'system/locked-component').length, 'a well-formed suppression mutes the finding');
+});
+
+// ── library internals by stylesheet ───────────────────────────────────────────
+// An unprefixed system (`.field-label`, `.toast-viewport`) has no prefix for
+// `namespaces.external` to match, and the component renders those classes
+// itself, so no JSX binds them. A consumer rule restyling one reported nothing.
+
+const DS_SHEET = '.field { display: flex; &-label { font-weight: 600; } }\n.toast-viewport { position: fixed; }';
+
+await check('a class the system\'s stylesheets define is a library internal', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG({ designSystem: { styleSources: ['ds'] } }),
+		'ds/field.scss': DS_SHEET,
+		'styles/a.scss': '.acme-bar .field-label { font-size: 11px; }',
+		'src/A.jsx': 'export const A = () => <div className="acme-bar" />;',
+	});
+	const f = one(at(r, 'system/override'), 'one override for the restyled part');
+	assert(f.message.includes('.field-label (library internal)'), `wrong message: ${f.message}`);
+	assert(!at(r, 'typography/untokenized').length, 'the library-internal verdict supersedes per-declaration findings');
+});
+
+await check('without styleSources an unprefixed library class stays invisible', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'ds/field.scss': DS_SHEET,
+		'styles/a.scss': '.acme-bar .field-label { color: red; }',
+		'src/A.jsx': 'export const A = () => <div className="acme-bar" />;',
+	});
+	assert(!r.findings.some((f) => f.message.includes('library internal')), 'nothing declared, nothing inferred');
+});
+
+// Keyed on a library part, or the custom-property guard is never reached: a
+// project class is not an override whatever it declares.
+await check('rebinding a slot is not an override, even on a library part', async () => {
+	const sheet = (decls: string) => ({
+		'loupe.config.json': CONFIG({ designSystem: { styleSources: ['ds'] } }),
+		'ds/field.scss': DS_SHEET,
+		'styles/a.scss': `.acme-bar .field-label { ${decls} }`,
+		'src/A.jsx': 'export const A = () => <div className="acme-bar" />;',
+	});
+	const r = await run(sheet('--field-label-color: var(--wpds-color-fg-content-neutral);'));
+	assert(!at(r, 'system/override').length, `a custom property is the component's contract: ${JSON.stringify(r.findings)}`);
+	const mixed = await run(sheet('--field-label-color: var(--wpds-color-fg-content-neutral); color: red;'));
+	one(at(mixed, 'system/override'), 'a real declaration beside the rebind is still an override');
+});
+
+// Harvesting every class a library selector mentions made the project's own
+// state and context classes "library internals", and that verdict replaced the
+// real findings on the rule.
+await check('a state, context or module class is not a part the system styles', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG({ designSystem: { styleSources: ['ds'] } }),
+		'ds/tabs.scss': '.tab { padding: 4px; &.is-active { font-weight: 600; } }\n.dark .field-label { color: #fff; }\n.dark { --field-bg: #111; }\n.btn:not(.is-busy) { cursor: pointer; }',
+		'ds/Card.module.css': '.root { display: flex; }',
+		'styles/a.scss': '.acme-tab.is-active { margin-top: 8px; }\n.acme-app.dark { margin-bottom: 8px; }\n.acme-x.is-busy { margin-left: 8px; }',
+		'styles/Card.module.css': '.root { margin-bottom: 8px; }',
+		'src/A.jsx': 'export const A = () => <div className="acme-tab acme-app acme-x" />;',
+	});
+	assert(!at(r, 'system/override').length, `a project rule read as a library internal: ${JSON.stringify(at(r, 'system/override'))}`);
+	assert(at(r, 'layout/margin-on-child').length === 4, `the real findings were replaced: ${JSON.stringify(r.findings)}`);
+});
+
+// A workspace link is how an in-repo design system is usually installed, and a
+// string compare of the two spellings checked its own sheets as project code —
+// where every rule then reported an override of itself.
+await check("the system's sheets are recognised through a link, and their tokens still count", async () => {
+	const root = scratch('dsh-feat-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG({
+				designSystem: { tokenSources: ['tokens.css'], styleSources: ['node_modules/@acme/ui/src'] },
+			}),
+			'tokens.css': TOKENS,
+			'packages/ui/src/field.scss': `:root { --wpds-color-fg-brand: #3858e9; }\n${DS_SHEET}`,
+			'styles/a.scss': '.acme-bar .field-label { font-size: 11px; }\n.acme-card { color: var(--wpds-color-fg-brand); }',
+			'src/A.jsx': 'export const A = () => <div className="acme-bar acme-card" />;',
+		});
+		mkdirSync(join(root, 'node_modules', '@acme'), { recursive: true });
+		symlinkSync(join('..', '..', 'packages', 'ui'), join(root, 'node_modules', '@acme', 'ui'));
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const r = await analyze(config, { scope: null });
+		const f = one(r.findings, `only the consumer's override: ${JSON.stringify(r.findings)}`);
+		assert(f.file === 'styles/a.scss' && f.message.includes('.field-label (library internal)'), `wrong finding: ${f.message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('an unreadable system sheet is reported, not silently dropped', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG({ designSystem: { styleSources: ['ds'] } }),
+		'ds/field.css': '.field-label { font-weight: 600; }\n.x { color }',
+		'src/A.jsx': 'export const A = () => <div />;',
+	});
+	assert(r.diagnostics.parseErrors.some((e) => e.file === 'ds/field.css'), `no diagnostic: ${JSON.stringify(r.diagnostics)}`);
+	assert(!at(r, 'stylesheet/unparsed').length, 'the library sheet is not project code to fix');
+});
+
+await check('styleSources must be a list of paths, not one', async () => {
+	let threw = '';
+	await run({
+		'loupe.config.json': CONFIG({ designSystem: { styleSources: 'ds' } }),
+		'styles/a.scss': '.acme-x { margin-top: 8px; }',
+	}).catch((err: unknown) => {
+		threw = err instanceof Error ? err.message : String(err);
+	});
+	assert(/styleSources must be an array/.test(threw), `a bare string was walked: ${threw || 'no throw'}`);
+});
+
+await check('a project class never reads as a library internal, even when the system defines it', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG({ designSystem: { styleSources: ['ds'] } }),
+		'ds/field.scss': '.acme-bar { color: blue; }',
+		'styles/a.scss': '.acme-bar { color: red; }',
+		'src/A.jsx': 'export const A = () => <div className="acme-bar" />;',
+	});
+	assert(!r.findings.some((f) => f.message.includes('library internal')), 'the project prefix wins');
 });
 
 finish();

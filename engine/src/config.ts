@@ -46,6 +46,10 @@ export const DEFAULTS: MergedConfig = {
 		packages: [],
 		tokenPrefixes: [],
 		tokenSources: [],
+		// The system's own stylesheets, read for the classes they define. A
+		// prefixed system is covered by `namespaces.external`; an unprefixed one
+		// (`.field-label`) is only recognisable by what its stylesheets declare.
+		styleSources: [],
 		cssInJsPackages: [],
 		normalizeExports: '',
 		components: { layout: [], text: [] },
@@ -317,6 +321,13 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 			`designSystem.substitutionProps must be an array of prop names, got: ${JSON.stringify(substitutionProps)}`,
 		);
 
+	// The same mistake costs more here. A bare string is walked one character at
+	// a time, `/` is the repo root, and every project stylesheet is then skipped
+	// as the library's own: a clean report from a gate that read nothing.
+	const styleSources: unknown = ds.styleSources ?? [];
+	if (!Array.isArray(styleSources) || styleSources.some((p) => typeof p !== 'string' || p === ''))
+		throw new Error(`designSystem.styleSources must be an array of paths, got: ${JSON.stringify(styleSources)}`);
+
 	const layoutComponents = ds.components?.layout ?? [];
 	const textComponents = ds.components?.text ?? [];
 	// A composite is built from every name imported out of `designSystem.packages`,
@@ -402,6 +413,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 			packages: ds.packages ?? [],
 			tokenPrefixes: ds.tokenPrefixes ?? [],
 			tokenSources: ds.tokenSources ?? [],
+			styleSources: styleSources as string[],
 			cssInJsPackages: ds.cssInJsPackages ?? [],
 			normalizeExports: ds.normalizeExports ? new RegExp(ds.normalizeExports) : null,
 			layoutComponents,

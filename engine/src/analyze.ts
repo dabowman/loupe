@@ -11,15 +11,16 @@
  * every unchanged reference look absent and every class look dead.
  */
 
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
-import { discover } from './discover.ts';
+import { discover, toPosix } from './discover.ts';
 import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
 import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
 import { messageLine, messageParts, oneLine, snippet } from './text.ts';
 import { SUBSTANTIAL, matches, nodeCount, partsOf } from './patterns.ts';
-import { harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
+import { cssFilesUnder, harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
 import {
 	APPEARANCE_PROPS, FLEX_PROPS, GAP_PROPS, TYPE_PROPS,
 	classesIn, classifyMargin, isHardcodedTokenValue, isInertValue, keySelector, ownDecls,
@@ -40,6 +41,7 @@ import type {
 	Finding,
 	Hint,
 	InlineStyleElement,
+	ParseError,
 	Pattern,
 	PendingFinding,
 	RawElement,
@@ -51,6 +53,96 @@ import type {
 /** First line of an unknown throw — a parser may reject with anything. */
 const messageOf = (err: unknown): string =>
 	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
+
+/** A path resolved through symlinks and case, or null when nothing is there. */
+const realPath = (path: string): string | null => {
+	try {
+		return realpathSync.native(path);
+	} catch {
+		return null;
+	}
+};
+
+/**
+ * The part a library selector styles: the first class of its key compound.
+ *
+ * Ancestors (`.dark .label`), state modifiers (`.tab.is-active`), pseudo-class
+ * arguments and attribute values are context, not a part — and harvesting them
+ * made a project's own `.acme-tab.is-active` a "library internal" whose verdict
+ * replaced the real findings on the rule. An escaped name (`.md\:flex`) is not
+ * cut short into a class that was never written.
+ *
+ * ponytail: a part whose class is not first in its compound (`.is-open.popover`)
+ * is missed — a missed override, never a false one.
+ */
+const partClass = (sel: string): string | undefined =>
+	keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, '')).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+
+/**
+ * The design system's own stylesheets: the parts they style, and where they are.
+ *
+ * `namespaces.external` recognises a library's internals by prefix, and a
+ * system whose classes carry none — `.field-label`, `.toast-viewport` — slipped
+ * past it entirely. No JSX binds those classes (the component renders them
+ * itself), so a consumer rule restyling one correlated with nothing and
+ * reported nothing: the override most likely to break on upgrade was the one
+ * the gate could not see. Reading the classes out of the system's stylesheets
+ * recognises them without a prefix to match.
+ *
+ * `dirs` are resolved through symlinks, so a vendored library is recognised
+ * however the project walk spelled its path — a workspace link, a different
+ * case — and never checked as the project's own code. Its token definitions
+ * still count: that is what the project walk used to read them for.
+ *
+ * A sheet that cannot be read fails nothing — the project has nothing to fix in
+ * it — but it is reported, since its classes then go unrecognised.
+ */
+async function readLibrary(
+	root: string,
+	sources: readonly string[],
+	tokenPrefixes: readonly string[],
+	tokenSet: TokenSet,
+): Promise<{ classes: Set<string>; dirs: string[]; unread: ParseError[] }> {
+	const classes = new Set<string>();
+	const dirs: string[] = [];
+	const unread: ParseError[] = [];
+	for (const src of sources) {
+		const dir = realPath(isAbsolute(src) ? src : join(root, src));
+		if (!dir) continue; // not installed: nothing to recognise, and not an error
+		dirs.push(dir);
+		const budget = { left: 400 };
+		for (const file of cssFilesUnder(dir, budget, ['.css', '.scss', '.less'])) {
+			const shown = toPosix(relative(root, file));
+			const syntax = await syntaxFor(file);
+			if (!syntax.parse) {
+				unread.push({ file: shown, message: `needs \`npm i -D ${syntax.missing}\` to be read` });
+				continue;
+			}
+			let sheet;
+			try {
+				sheet = syntax.parse(readFileSync(file, 'utf8'), { from: file });
+			} catch (err) {
+				unread.push({ file: shown, message: messageOf(err) });
+				continue;
+			}
+			harvestTokenDefs(sheet, tokenPrefixes, tokenSet);
+			// Local names, hashed at build: nothing a consumer can reach to override.
+			if (/\.module\.[^./\\]+$/i.test(file)) continue;
+			sheet.walkRules((rule) => {
+				const decls = [...ownDecls(rule)];
+				// A theme block (`.dark { --color-bg: #111 }`) declares tokens, not a part.
+				if (decls.length && decls.every((d) => d.prop.startsWith('--'))) return;
+				for (const sel of resolvedSelectors(rule)) {
+					if (/^[.#][\w-]+\s*\(/.test(sel)) continue; // a Less mixin definition is never emitted
+					const part = partClass(sel);
+					if (part) classes.add(part);
+				}
+			});
+		}
+		if (!budget.left) unread.push({ file: toPosix(relative(root, dir)), message: 'read the first 400 stylesheets only' });
+	}
+	return { classes, dirs, unread };
+}
 
 /**
  * Which rule, if any, a single declaration violates.
@@ -200,6 +292,14 @@ export async function analyze(
 	// `--wpds-font-size-13` rather than looking one up.
 	const tokenPrefixes = ds.tokenPrefixes ?? [];
 	const tokenSet: TokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
+	// Real paths on both sides: the walk never follows a symlink below the root,
+	// so the root is the only link a discovered path can have come through.
+	const realRoot = realPath(config.root) ?? config.root;
+	const library = await readLibrary(realRoot, ds.styleSources, tokenPrefixes, tokenSet);
+	const isLibrarySheet = (rel: string): boolean => {
+		const abs = join(realRoot, rel);
+		return library.dirs.some((d) => abs === d || abs.startsWith(`${d}${sep}`));
+	};
 	/** Resolved after the walk: an empty token set proves nothing. */
 	const unknownTokens: {
 		file: string;
@@ -211,7 +311,7 @@ export async function analyze(
 
 	const findings: Finding[] = [];
 	const directives: Directive[] = [];
-	const diagnostics: Diagnostics = { parseErrors: [], filesScanned: 0 };
+	const diagnostics: Diagnostics = { parseErrors: [...library.unread], filesScanned: 0 };
 	const suppByFile = new Map<string, Suppressions>();
 	const inScope = scope ? new Set(scope) : null;
 	const reports = (rel: string): boolean => !inScope || inScope.has(rel);
@@ -284,6 +384,7 @@ export async function analyze(
 	const seenDead = new Set<string>(); // `${file}\u0000${class}` — report each once per file
 
 	for (const { abs, rel } of files.styles) {
+		if (isLibrarySheet(rel)) continue; // the design system's own sheet, not the project's
 		let text;
 		try {
 			text = readFileSync(abs, 'utf8');
@@ -394,7 +495,9 @@ export async function analyze(
 			// A project prefix wins over a library one. `wp-parsely-*` matches the
 			// `wp-` external prefix, and reporting a project's own class as a
 			// library internal sends the agent to fix something it does not own.
-			const external = keyClasses.find((c) => config.isExternal(c) && !config.isProject(c));
+			const external = keyClasses.find(
+				(c) => (config.isExternal(c) || library.classes.has(c)) && !config.isProject(c),
+			);
 			if (external && touchesStyle && ruleIsLive('system/override'))
 				emit({ rule: 'system/override', line: ruleLine, message: `.${external} (library internal)`, scopeLines });
 			else for (const f of collapsePerRule(pending)) emit(f);

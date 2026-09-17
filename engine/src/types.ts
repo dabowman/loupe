@@ -392,6 +392,12 @@ export interface MergedConfig {
 		packages: string[];
 		tokenPrefixes: string[];
 		tokenSources: string[];
+		/**
+		 * The design system's own stylesheets. Every class they define is a
+		 * library internal, for a system whose classes carry no prefix that
+		 * `namespaces.external` could match.
+		 */
+		styleSources: string[];
 		cssInJsPackages: string[];
 		normalizeExports: string;
 		components: { layout: string[]; text: string[] };
@@ -433,6 +439,7 @@ export interface DesignSystem {
 	packages: string[];
 	tokenPrefixes: string[];
 	tokenSources: string[];
+	styleSources: string[];
 	cssInJsPackages: string[];
 	normalizeExports: RegExp | null;
 	layoutComponents: string[];

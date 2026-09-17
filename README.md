@@ -322,6 +322,8 @@ see **Adding a design system** in the
   "namespaces": {
     "project": ["acme-"],        // classes you own; only these can be "dead"
     "external": ["components-"], // third-party internals; styling them is an override
+    // An unprefixed system has no prefix to list: point `designSystem.styleSources`
+    // at its stylesheets instead, and every class they define counts as internal.
     "neverDead": ["has-*"]       // generated at runtime, never in source
   }
 }

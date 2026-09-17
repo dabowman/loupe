@@ -570,6 +570,7 @@ await check('a rule title names a token namespace only when there is one', () =>
 		packages: [],
 		tokenPrefixes,
 		tokenSources: [],
+		styleSources: [],
 		cssInJsPackages: [],
 		normalizeExports: null,
 		layoutComponents: [],

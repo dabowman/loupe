@@ -79,15 +79,20 @@ export function harvestTokenDefs(root: Root, prefixes: readonly string[], into: 
 	return into;
 }
 
-/** `.css` files under a path, which may be a file or a directory. Bounded. */
-function cssFilesUnder(path: string, budget: { left: number } = { left: 200 }): string[] {
+/** Stylesheets under a path, which may be a file or a directory. Bounded. */
+export function cssFilesUnder(
+	path: string,
+	budget: { left: number } = { left: 200 },
+	exts: readonly string[] = ['.css'],
+): string[] {
+	const wanted = (name: string): boolean => exts.some((e) => name.endsWith(e));
 	let st;
 	try {
 		st = statSync(path);
 	} catch {
 		return []; // a token source that isn't installed is not an error
 	}
-	if (st.isFile()) return path.endsWith('.css') ? [path] : [];
+	if (st.isFile()) return wanted(path) ? [path] : [];
 	const out: string[] = [];
 	const walk = (dir: string): void => {
 		if (budget.left <= 0) return;
@@ -100,8 +105,9 @@ function cssFilesUnder(path: string, budget: { left: number } = { left: 200 }): 
 		for (const e of entries) {
 			if (budget.left <= 0) return;
 			const full = join(dir, e.name);
-			if (e.isDirectory()) walk(full);
-			else if (e.name.endsWith('.css')) {
+			if (e.isDirectory()) {
+				if (e.name !== 'node_modules') walk(full); // a dependency's sheets are not this package's
+			} else if (wanted(e.name)) {
 				out.push(full);
 				budget.left--;
 			}
