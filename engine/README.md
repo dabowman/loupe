@@ -403,6 +403,23 @@ number edits the wrong declaration. `!important` and the terminator survive.
 The baseline is ignored here. It exists to stop the gate blocking on an accepted
 backlog; burning that backlog down is what this command is for.
 
+## Judging
+
+```bash
+loupe check --judge
+```
+
+This covers the `system/raw-element` findings whose analog has `variants` in
+the component registry: `Text (@wordpress/ui)` in the WPDS profile. It sends
+each element's source and parent lines to TypeSafe in one request per 40
+elements, and asks which variant fits, or `not_<name>` when the element is not
+that component's content. A pick at 0.5 confidence or above is appended to the
+message; anything below leaves the finding alone. Verdicts, severities and the
+baseline identity (`code`) are untouched. The key comes from
+`TYPESAFE_API_KEY` in the environment, or from the `.env` two directories above
+the engine entry point, which is the repo root of a checkout. A failed request
+prints a note and the report goes out unjudged.
+
 ## Baseline
 
 The first run on an existing codebase is the adoption blocker. Record the

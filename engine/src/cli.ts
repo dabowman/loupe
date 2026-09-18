@@ -12,6 +12,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { fileURLToPath } from 'node:url';
 import { analyze, usableReplacement } from './analyze.ts';
 import { applyTokenFixes } from './autofix.ts';
+import { judgeVariants } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
@@ -151,6 +152,7 @@ type Flags = { [K in ValueFlag]?: string } & {
 	changed?: boolean;
 	'no-baseline'?: boolean;
 	'dry-run'?: boolean;
+	judge?: boolean;
 	force?: boolean;
 	'no-color'?: boolean;
 };
@@ -207,6 +209,9 @@ Options:
                         path (default: .loupe-baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
+  --judge               Ask TypeSafe which variant a raw-element finding needs
+                        (check only; TYPESAFE_API_KEY from the environment or
+                        loupe's own .env)
   --force               Overwrite an existing config (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
@@ -955,6 +960,21 @@ async function main(): Promise<number> {
 		fail(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(', ')}\n`);
 		return EXIT.CANNOT_RUN;
 	}
+	// The one network call in the engine, so the key is checked before the walk
+	// and the hook never makes it.
+	let judgeKey: string | undefined;
+	if (args.flags.judge && !isHook) {
+		try {
+			if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join(HERE, '..', '..', '.env'));
+		} catch {
+			/* no .env beside the checkout is the ordinary case */
+		}
+		judgeKey = process.env.TYPESAFE_API_KEY;
+		if (!judgeKey) {
+			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join(HERE, '..', '..', '.env')}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+	}
 
 	// ── check / hook ──────────────────────────────────────────────────────────
 	// A PostToolUse payload names the file just written; scope to it so drift is
@@ -1002,6 +1022,15 @@ async function main(): Promise<number> {
 		result = applyBaseline(result, baseline);
 	}
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
+	if (judgeKey) {
+		// Judged after the baseline, so accepted findings cost nothing. A failed
+		// request leaves the findings as the engine wrote them.
+		try {
+			await judgeVariants(root, result.findings, config.componentRegistry, judgeKey);
+		} catch (err) {
+			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
+		}
+	}
 
 	if (isHook) {
 		const sessionId = payload.session_id ?? payload.sessionId ?? '';

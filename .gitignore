@@ -15,3 +15,6 @@ node_modules/
 
 # Engine state written into a project under check
 .loupe/
+
+# Local secrets. .env.example is the committed template.
+.env

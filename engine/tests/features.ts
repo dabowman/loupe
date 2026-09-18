@@ -15,6 +15,7 @@ import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
+import { judgeVariants } from '../src/judge.ts';
 import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, ComponentEntry, Pattern, PatternNode, RuleId } from '../src/types.ts';
 
@@ -1042,6 +1043,45 @@ await check('a project class never reads as a library internal, even when the sy
 		'src/A.jsx': 'export const A = () => <div className="acme-bar" />;',
 	});
 	assert(!r.findings.some((f) => f.message.includes('library internal')), 'the project prefix wins');
+});
+
+// ── --judge ─────────────────────────────────────────────────────────────────
+
+// Offline: the stub stands in for TypeSafe and hands back one answer per
+// question it was sent, so the check is on what is asked and what is written.
+await check('--judge asks only about analogs with variants, and appends only what clears the floor', async () => {
+	const root = scratch('dsh-judge-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<p className="description">Help</p>\n<span style={{ background: c }} />\n<p>Hi</p>\n<div />' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
+			{ name: 'Stack', package: '@wordpress/ui', status: 'recommended' },
+		]);
+		const at = (line: number, analog: string) =>
+			({ rule: 'system/raw-element', severity: 'warn', rank: 0, file: 'src/A.jsx', line, code: '<p>', message: `<p> \u2192 <${analog}>` }) as const;
+		const findings = [at(1, 'Text'), at(2, 'Text'), at(3, 'Text'), at(4, 'Stack')].map((f) => ({ ...f }));
+		const replies = [
+			{ choice: 'body-sm', confidence: 0.8 },
+			{ choice: 'not_text', confidence: 0.99 },
+			{ choice: 'body-sm', confidence: 0.3 },
+		];
+		let asked: Record<string, { criteria: Record<string, string> }> = {};
+		const stub = (async (_url: string, init: { body: string }) => {
+			asked = JSON.parse(init.body).questions;
+			const answers = Object.fromEntries(Object.keys(asked).map((k, i) => [k, replies[i]]));
+			return new Response(JSON.stringify({ answers }));
+		}) as unknown as typeof fetch;
+		const n = await judgeVariants(root, findings, registry, 'key', stub);
+		assert(Object.keys(asked).length === 3, `asked about ${Object.keys(asked).length} elements, expected the 3 Text ones`);
+		assert('not_text' in (asked.e0?.criteria ?? {}), 'no no-match option offered');
+		assert(n === 2, `annotated ${n}, expected 2`);
+		assert(findings[0]?.message.endsWith('judged variant="body-sm" (0.80)'), findings[0]?.message ?? '');
+		assert(findings[1]?.message.includes('judged not Text content (0.99)'), findings[1]?.message ?? '');
+		assert(findings[2]?.message === '<p> \u2192 <Text>', `a sub-floor pick was written: ${findings[2]?.message}`);
+		assert(findings[3]?.message === '<p> \u2192 <Stack>', 'a component with no variants was judged');
+	} finally {
+		cleanup(root);
+	}
 });
 
 finish();

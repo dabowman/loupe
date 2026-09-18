@@ -65,7 +65,18 @@
     {
       "name": "Text",
       "package": "@wordpress/ui",
-      "status": "recommended"
+      "status": "recommended",
+      "variants": {
+        "heading-2xl": "Page title. 32px, semibold. One per screen, at the top.",
+        "heading-xl": "Major section title. 20px, semibold.",
+        "heading-lg": "Section or card title. 15px, semibold.",
+        "heading-md": "Subsection title or group label. 13px, semibold: body size, set apart only by weight.",
+        "heading-sm": "Small overline or eyebrow label above a group. 11px, semibold.",
+        "body-xl": "Large lead or display copy. 20px, regular.",
+        "body-lg": "Emphasised intro paragraph. 15px, regular.",
+        "body-md": "Default body text: paragraphs, labels, values. 13px, regular.",
+        "body-sm": "Secondary text: help text, descriptions, captions, metadata, muted notes. 12px, regular."
+      }
     },
     {
       "name": "Text",

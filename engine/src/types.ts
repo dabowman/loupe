@@ -298,6 +298,8 @@ export interface ComponentEntry {
 	status: 'recommended' | 'legacy' | 'locked' | 'experimental';
 	supersededBy?: string;
 	note?: string;
+	/** Variant name → what it is for. Read only by `check --judge`. */
+	variants?: Record<string, string>;
 }
 
 // ── css-in-js ───────────────────────────────────────────────────────────────

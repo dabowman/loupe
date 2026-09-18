@@ -182,6 +182,25 @@ tokens is a semantic choice, so it is left alone. Paying a model to read a file
 back and retype an answer nothing had to reason about is the expensive way to
 apply a substitution, and this is usually the highest-volume rule in a report.
 
+### Judged variants
+
+`<p> → <Text>` names the component, not the variant, and sometimes the
+component is wrong too: a `<span>` that is a colour swatch, or a `<p>` that
+only wraps a button. `loupe check --judge` sends those elements to
+[TypeSafe](https://docs.typesafe.ai) in one request. It picks from the
+`variants` the profile's component registry declares for the analog, or says
+the element is not text at all:
+
+```
+src/components/build-summary.tsx:142  <p> → <Text> — judged variant="body-sm" (0.82)
+src/components/brand-picker.tsx:101  <span> → <Text> — judged not Text content (1.00); the analog likely does not apply
+```
+
+Below 0.5 confidence the finding is left as it was. The judgment is appended
+and never changes a verdict. The hook never calls it, so the gate stays
+deterministic and offline. It needs `TYPESAFE_API_KEY`, from the environment
+or a `.env` beside the checkout (see `.env.example`).
+
 ### Composites
 
 The expensive drift is compositional: six page headers, four modal footers, each
