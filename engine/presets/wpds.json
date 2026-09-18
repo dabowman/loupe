@@ -40,7 +40,7 @@
       ]
     },
     "tokenSources": [
-      "node_modules/@wordpress/theme/src/prebuilt/css/design-tokens.css",
+      "node_modules/@wordpress/theme/prebuilt/css/design-tokens.css",
       "node_modules/@wordpress/theme/build-style",
       "node_modules/@wordpress/components/build-style"
     ]

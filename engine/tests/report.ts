@@ -471,4 +471,28 @@ await check('a registry note keeps its last clause on screen and ships whole in 
 	assert(shipped === note, `json shipped a note the reader cannot act on: ${String(shipped)}`);
 });
 
+// `@wordpress/theme` moved its stylesheet out of `src/`, the preset kept
+// pointing at the old path, and `tokens/unknown-token` — which fires only on a
+// non-empty set, so a project declaring no sources is not told every token it
+// writes is unknown — quietly switched off. An invented `--wpds-font-size-13`
+// passed, and the report said `clean`.
+await check('a prefix with no tokens behind it is said out loud, not failed open', async () => {
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'src/A.jsx': 'export const A = () => <div />;',
+	});
+	try {
+		const starved: AnalyzeResult = { ...result, diagnostics: { ...result.diagnostics, tokensKnown: 0 } };
+		const out = formatAgent(starved, config);
+		assert(/no .+ tokens were found/.test(out), `the rule went off without saying so:\n${out}`);
+		assert(/designSystem\.tokenSources/.test(out), `named the symptom and not where to fix it:\n${out}`);
+		const fed: AnalyzeResult = { ...result, diagnostics: { ...result.diagnostics, tokensKnown: 167 } };
+		assert(!/tokens were found/.test(formatAgent(fed, config)), 'a healthy token set should say nothing');
+		const summary = (JSON.parse(formatJson(starved, config)) as { summary: { tokensKnown: number } }).summary;
+		assert(summary.tokensKnown === 0, `json hid the empty set: ${summary.tokensKnown}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();

@@ -25101,7 +25101,11 @@ async function analyze(config, { scope = null } = {}) {
   const unknownTokens = [];
   const findings = [];
   const directives = [];
-  const diagnostics = { parseErrors: [...library.unread], filesScanned: 0 };
+  const diagnostics = {
+    parseErrors: [...library.unread],
+    filesScanned: 0,
+    tokensKnown: tokenSet.known.size
+  };
   const suppByFile = /* @__PURE__ */ new Map();
   const inScope = scope ? new Set(scope) : null;
   const reports = (rel) => !inScope || inScope.has(rel);
@@ -26254,6 +26258,14 @@ function formatAgent(result, config, { maxFindings = 0, terse = false } = {}) {
     lines.push(yellow(`! ${diagnostics.parseErrors.length} file(s) could not be parsed and were skipped:`));
     for (const e of diagnostics.parseErrors.slice(0, 5)) lines.push(`    ${dim(e.file)}: ${e.message}`);
   }
+  if (config.designSystem.tokenPrefixes.length && !diagnostics.tokensKnown) {
+    lines.push("");
+    lines.push(
+      yellow(
+        `! no ${config.designSystem.tokenPrefixes.join("/")} tokens were found, so unknown ones cannot be reported \u2014 check designSystem.tokenSources against what the package actually ships.`
+      )
+    );
+  }
   return lines.join("\n");
 }
 function formatSummary(result, { prefix = true } = {}) {
@@ -26294,6 +26306,7 @@ function reportPayload(result, config) {
       warn: result.findings.filter((f) => f.severity === "warn").length,
       suppressions: result.directives.length,
       parseErrors: result.diagnostics.parseErrors.length,
+      tokensKnown: result.diagnostics.tokensKnown,
       filesScanned: result.diagnostics.filesScanned,
       byFile: Object.fromEntries(tally(result.findings.map((f) => f.file))),
       // Only when a baseline was applied. Without it, the number the agent

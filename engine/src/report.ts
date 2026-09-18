@@ -292,6 +292,17 @@ export function formatAgent(
 		lines.push(yellow(`! ${diagnostics.parseErrors.length} file(s) could not be parsed and were skipped:`));
 		for (const e of diagnostics.parseErrors.slice(0, 5)) lines.push(`    ${dim(e.file)}: ${e.message}`);
 	}
+	// A prefix declared and not one token behind it: `tokens/unknown-token` is
+	// off, and every invented name passes. Silent, this reads as a clean repo —
+	// it is how a `tokenSources` path that stopped resolving went unnoticed.
+	if (config.designSystem.tokenPrefixes.length && !diagnostics.tokensKnown) {
+		lines.push('');
+		lines.push(
+			yellow(
+				`! no ${config.designSystem.tokenPrefixes.join('/')} tokens were found, so unknown ones cannot be reported \u2014 check designSystem.tokenSources against what the package actually ships.`
+			)
+		);
+	}
 	return lines.join('\n');
 }
 
@@ -372,6 +383,7 @@ export function reportPayload(result: AnalyzeResult | BaselinedResult, config: C
 			warn: result.findings.filter((f) => f.severity === 'warn').length,
 			suppressions: result.directives.length,
 			parseErrors: result.diagnostics.parseErrors.length,
+			tokensKnown: result.diagnostics.tokensKnown,
 			filesScanned: result.diagnostics.filesScanned,
 			byFile: Object.fromEntries(tally(result.findings.map((f) => f.file))),
 			// Only when a baseline was applied. Without it, the number the agent

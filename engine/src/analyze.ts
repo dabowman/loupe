@@ -384,7 +384,11 @@ export async function analyze(
 
 	const findings: Finding[] = [];
 	const directives: Directive[] = [];
-	const diagnostics: Diagnostics = { parseErrors: [...library.unread], filesScanned: 0 };
+	const diagnostics: Diagnostics = {
+		parseErrors: [...library.unread],
+		filesScanned: 0,
+		tokensKnown: tokenSet.known.size,
+	};
 	const suppByFile = new Map<string, Suppressions>();
 	const inScope = scope ? new Set(scope) : null;
 	const reports = (rel: string): boolean => !inScope || inScope.has(rel);

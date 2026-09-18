@@ -147,6 +147,17 @@ export interface ParseError {
 export interface Diagnostics {
 	parseErrors: ParseError[];
 	filesScanned: number;
+	/**
+	 * How many tokens the declared `tokenSources` actually yielded.
+	 *
+	 * `tokens/unknown-token` fires only when the set is non-empty, because a
+	 * project that declares no sources must not have every token it writes
+	 * called unknown. That fail-open is silent, so a `tokenSources` path that
+	 * stops resolving — a dependency moving its stylesheet, which
+	 * `@wordpress/theme` did — turns the rule off and reports `clean`. Carrying
+	 * the count is what lets the report say so.
+	 */
+	tokensKnown: number;
 }
 
 export interface Directive {
@@ -674,6 +685,8 @@ export interface ReportPayload {
 		warn: number;
 		suppressions: number;
 		parseErrors: number;
+		/** Tokens the declared sources yielded; 0 means `tokens/unknown-token` is off. */
+		tokensKnown: number;
 		/**
 		 * Files read. Without it, "no `stylesheet/unparsed` findings" and "no
 		 * stylesheets were found" are the same report, and a consumer cannot tell
