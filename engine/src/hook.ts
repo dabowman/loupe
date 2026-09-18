@@ -147,8 +147,7 @@ export function hookRoot(): string {
  * it came through. It also made `status` disagree with the gate: `LOUPE_OFF=0`
  * reported the hook OFF while the hook went right on blocking.
  */
-export const isOn = (v: string | undefined): boolean =>
-	v !== undefined && /^(1|true|yes|on)$/i.test(v);
+export const isOn = (v: string | undefined): boolean => v !== undefined && /^(1|true|yes|on)$/i.test(v);
 
 /**
  * The per-session off switch, asked once.
@@ -245,15 +244,14 @@ export function resolvedOptions(): {
 
 /** This plugin's name, from the manifest two levels above the engine. */
 function pluginName(): string | null {
-	const roots = [
-		process.env.CLAUDE_PLUGIN_ROOT,
-		join(dirname(fileURLToPath(import.meta.url)), '..', '..'),
-	].filter((r): r is string => Boolean(r));
+	const roots = [process.env.CLAUDE_PLUGIN_ROOT, join(dirname(fileURLToPath(import.meta.url)), '..', '..')].filter(
+		(r): r is string => Boolean(r),
+	);
 	for (const root of roots) {
 		try {
-			const manifest = JSON.parse(
-				readFileSync(join(root, '.claude-plugin', 'plugin.json'), 'utf8'),
-			) as { name?: string };
+			const manifest = JSON.parse(readFileSync(join(root, '.claude-plugin', 'plugin.json'), 'utf8')) as {
+				name?: string;
+			};
 			return manifest.name ?? null;
 		} catch {
 			/* try the next candidate */
@@ -264,8 +262,7 @@ function pluginName(): string | null {
 
 /** Settings hold real JSON types; the env path hands us strings. Normalize. */
 function coerce(opts: Record<string, unknown>): PluginOptions {
-	const str = (v: unknown): string | undefined =>
-		v === undefined || v === null || v === '' ? undefined : String(v);
+	const str = (v: unknown): string | undefined => (v === undefined || v === null || v === '' ? undefined : String(v));
 	const num = (v: unknown): number | undefined =>
 		Number.isFinite(Number(v)) && str(v) !== undefined ? Number(v) : undefined;
 	const list = (v: unknown): string[] | undefined => {
@@ -274,11 +271,11 @@ function coerce(opts: Record<string, unknown>): PluginOptions {
 		return t === undefined ? undefined : t.split(/[,\s]+/).filter(Boolean);
 	};
 	return {
-		preset: str(opts['preset']),
-		projectPrefixes: list(opts['project_prefixes']),
-		blocking: opts['blocking'] === undefined ? undefined : isOn(String(opts['blocking'])),
-		maxAttempts: num(opts['max_attempts']),
-		maxFindings: num(opts['max_findings']),
+		preset: str(opts.preset),
+		projectPrefixes: list(opts.project_prefixes),
+		blocking: opts.blocking === undefined ? undefined : isOn(String(opts.blocking)),
+		maxAttempts: num(opts.max_attempts),
+		maxFindings: num(opts.max_findings),
 	};
 }
 

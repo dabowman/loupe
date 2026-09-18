@@ -14,8 +14,11 @@ import { oneLine } from '../../text.ts';
 
 export const layoutInCss: DeclarationCheck = ({ prop, value }, { boundSystem, isGrid }) => {
 	const decl = `${prop}: ${value}`;
-	if (GAP_PROPS.has(prop)) return !boundSystem.length && !isGrid ? { rule: 'layout/in-css', message: decl, code: prop } : null;
+	if (GAP_PROPS.has(prop))
+		return !boundSystem.length && !isGrid ? { rule: 'layout/in-css', message: decl, code: prop } : null;
 	if (!isFlexDecl(prop, value)) return undefined;
 	const gridDisplay = prop === 'display' && /\bgrid\b/.test(value);
-	return !boundSystem.length && !isGrid && !gridDisplay ? { rule: 'layout/in-css', message: decl, code: oneLine(decl) } : null;
+	return !boundSystem.length && !isGrid && !gridDisplay
+		? { rule: 'layout/in-css', message: decl, code: oneLine(decl) }
+		: null;
 };

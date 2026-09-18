@@ -422,8 +422,17 @@ on the finding, the spans being what the agent format paints green. Anything
 below leaves the finding alone. Verdicts, severities and the
 baseline identity (`code`) are untouched. The key comes from
 `TYPESAFE_API_KEY` in the environment, or from the `.env` two directories above
-the engine entry point, which is the repo root of a checkout. A failed request
-prints a note and the report goes out unjudged.
+the engine entry point, which is the repo root of a checkout — and from the
+working directory for a compiled binary, which has no checkout above it. A
+failed request prints a note and the report goes out unjudged.
+
+The key is always the caller's own. None is compiled into any artifact, and
+that is checked rather than assumed: a canary value placed in the checkout's
+`.env`, exported into the build environment, or dropped as a `.env` beside the
+build leaves `dist/loupe.mjs` and every binary clean, and a binary run without a
+key refuses `--judge` and says where to put one. The value is read through
+`process.env` at runtime and neither compiler substitutes it — which is why
+`scripts/build-binary.mjs` must never grow a `--define` for it.
 
 ### Judged values
 
@@ -725,6 +734,44 @@ npm run typecheck    # tsc, no emit
 npm run build        # rebuild dist/loupe.mjs, and commit it
 npm run build:check  # fail if dist/ no longer matches src/
 ```
+
+### Binary
+
+A third artifact, for hosts that have no Node and should not be made to grow
+one. `npm run build:binary` compiles the engine into one self-contained
+executable; Bun does the compiling and is needed only to build, never to run.
+
+```bash
+npm run build:binary                      # this machine
+npm run build:binary -- --target=linux-x64
+npm run build:binary:all                  # all seven targets
+```
+
+Output lands in `binaries/`, which is gitignored: these are 60-110 MB each, 674
+MB for the set, and belong on a release rather than in the history.
+`.github/workflows/release.yml` is what puts them there — push a `v*` tag and it
+runs the engine's own gate first (a tag matches no branch, so `ci.yml` does not
+fire on one), checks the tag against `package.json` and against the version the
+built binary reports, proves the glibc build runs and the musl build runs on
+Alpine, writes `SHA256SUMS`, and attaches the lot. Running it by hand from the
+Actions tab builds and verifies without publishing. Targets are `linux-x64`,
+`linux-arm64`, their `-musl` variants, `darwin-x64`, `darwin-arm64` and
+`windows-x64`, and every one of them cross-compiles from any one machine.
+
+The data the engine ships — the presets, and the pattern language `--judge`
+reads — is imported rather than read from disk, so it is inside whichever
+artifact the bundler produced. Disk still wins wherever a `presets/` directory
+exists, so an ordinary install behaves exactly as it did and a preset dropped in
+by hand still takes effect. A side effect worth knowing: `patterns/index.json`
+sits above the package and `files` never shipped it, so `--judge` from a
+published npm install used to fail; embedding it fixes that too.
+
+Two things the compiled binary does not inherit from a directory install. It
+reports its own path from `execPath` rather than from `import.meta.url`, which
+inside an executable resolves to a synthetic root — `loupe version` says
+`binary` where it would otherwise say `source` or `bundle`. And `--judge` looks
+for a `.env` in the working directory rather than beside a checkout that is not
+there; in CI the key comes from the environment anyway.
 
 ### Types
 

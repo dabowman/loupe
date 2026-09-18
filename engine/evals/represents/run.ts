@@ -39,7 +39,7 @@ interface Row extends Pick<Control, 'file' | 'line' | 'component' | 'enclosing' 
 	id: string;
 }
 
-const represents = loadLanguage().vocabulary.forces['represents']?.judge;
+const represents = loadLanguage().vocabulary.forces.represents?.judge;
 if (!represents) throw new Error('patterns/index.json gives `represents` no judge block');
 
 const controls = JSON.parse(readFileSync(join(HERE, 'controls.json'), 'utf8')) as Row[];
@@ -98,7 +98,9 @@ controls.forEach((c, i) => {
 	if (picks.size === 1) stable++;
 	else flips.push(`${c.id} ${[...picks].join('/')} (labelled ${truth(c.id)})`);
 });
-process.stdout.write(`stable across ${times} runs: ${pct(stable, controls.length)}${flips.length ? ` — flipped: ${flips.join(', ')}` : ''}\n`);
+process.stdout.write(
+	`stable across ${times} runs: ${pct(stable, controls.length)}${flips.length ? ` — flipped: ${flips.join(', ')}` : ''}\n`,
+);
 
 // Per class. `destination` is the one that matters: every redirect in the
 // abstract language fires on it, so a false positive sends an agent to the
@@ -108,17 +110,19 @@ for (const cls of CLASSES) {
 	let tp = 0;
 	let fp = 0;
 	let fn = 0;
-	runs.forEach((answers) =>
+	runs.forEach((answers) => {
 		controls.forEach((c, i) => {
 			const picked = answers[i]?.choice === cls;
 			const is = truth(c.id) === cls;
 			if (picked && is) tp++;
 			else if (picked) fp++;
 			else if (is) fn++;
-		}),
-	);
+		});
+	});
 	if (tp + fn === 0) continue;
-	process.stdout.write(`${cls.padEnd(13)} ${pct(tp, tp + fp).padStart(9)}  ${pct(tp, tp + fn).padStart(6)}  (tp${tp} fp${fp} fn${fn})\n`);
+	process.stdout.write(
+		`${cls.padEnd(13)} ${pct(tp, tp + fp).padStart(9)}  ${pct(tp, tp + fn).padStart(6)}  (tp${tp} fp${fp} fn${fn})\n`,
+	);
 }
 
 // Calibration: does confidence mean anything? Only useful if a high band is
@@ -131,14 +135,14 @@ for (const [name, lo, hi] of [
 ] as const) {
 	let n = 0;
 	let ok = 0;
-	runs.forEach((answers) =>
+	runs.forEach((answers) => {
 		controls.forEach((c, i) => {
 			const a = answers[i];
 			if (!a || a.confidence < lo || a.confidence >= hi) return;
 			n++;
 			if (a.choice === truth(c.id)) ok++;
-		}),
-	);
+		});
+	});
 	process.stdout.write(`${name.padEnd(17)} ${String(n).padStart(5)}  ${pct(ok, n).padStart(7)}\n`);
 }
 
@@ -149,14 +153,14 @@ for (const cls of CLASSES) {
 	const cell = (hi: boolean): string => {
 		let n = 0;
 		let ok = 0;
-		runs.forEach((answers) =>
+		runs.forEach((answers) => {
 			controls.forEach((c, i) => {
 				const a = answers[i];
 				if (a?.choice !== cls || a.confidence >= 0.9 !== hi) return;
 				n++;
 				if (truth(c.id) === cls) ok++;
-			}),
-		);
+			});
+		});
 		return `${ok}/${n}`.padStart(8);
 	};
 	process.stdout.write(`${cls.padEnd(13)} ${cell(true)}      ${cell(false)}\n`);
@@ -176,16 +180,18 @@ for (const cls of ['command', 'destination'] as const) {
 		for (const bar of [0.8, 0.9]) {
 			let acted = 0;
 			let wrong = 0;
-			runs.forEach((answers) =>
+			runs.forEach((answers) => {
 				controls.forEach((c, i) => {
 					const a = answers[i];
 					if (!a || !acts(a, bar)) return;
 					acted++;
 					if (truth(c.id) !== cls) wrong++;
-				}),
-			);
+				});
+			});
 			const label = `${cls} ${name} >= ${bar.toFixed(2)}`;
-			process.stdout.write(`${label.padEnd(25)} ${String(acted).padStart(5)}  ${String(wrong).padStart(5)}  ${pct(acted - wrong, truly).padStart(6)}\n`);
+			process.stdout.write(
+				`${label.padEnd(25)} ${String(acted).padStart(5)}  ${String(wrong).padStart(5)}  ${pct(acted - wrong, truly).padStart(6)}\n`,
+			);
 		}
 }
 

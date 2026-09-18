@@ -59,7 +59,8 @@ const asked = items.flatMap((it) => {
 	const candidates = candidatesFor(set, it.prop, it.part);
 	return candidates ? [{ ...it, candidates }] : [];
 });
-if (asked.length !== items.length) process.stderr.write(`eval: ${items.length - asked.length} item(s) no longer have candidates\n`);
+if (asked.length !== items.length)
+	process.stderr.write(`eval: ${items.length - asked.length} item(s) no longer have candidates\n`);
 
 const ok = (id: string, pick: string | undefined): boolean => pick !== undefined && (labels[id] ?? []).includes(pick);
 const covered = (id: string, c: Candidates): boolean =>
@@ -79,14 +80,18 @@ if (!key) {
 }
 
 const nCovered = asked.filter((it) => covered(it.id, it.candidates)).length;
-process.stdout.write(`coverage: a right answer was on offer for ${nCovered}/${asked.length} (${pct(nCovered, asked.length)})\n\n`);
+process.stdout.write(
+	`coverage: a right answer was on offer for ${nCovered}/${asked.length} (${pct(nCovered, asked.length)})\n\n`,
+);
 
 // The WPDS profile's token descriptions, as `check --judge` sends them.
 // `--bare` asks with names and values alone, which is the ablation that
 // justified shipping them: 85% without, 92% with.
 const about = process.argv.includes('--bare')
 	? new Map<string, string>()
-	: tokenDescriptions([{ tokenDescriptions: join(HERE, '..', '..', '..', 'profiles', 'wpds', 'token-descriptions.json') }]);
+	: tokenDescriptions([
+			{ tokenDescriptions: join(HERE, '..', '..', '..', 'profiles', 'wpds', 'token-descriptions.json') },
+		]);
 const times = Number(process.argv.find((a, i) => i >= 2 && /^\d+$/.test(a)) ?? 3);
 process.stdout.write(`model: ${MODEL}\n`);
 const runs: (Choice | undefined)[][] = [];
@@ -117,7 +122,9 @@ for (const tier of ['exact', 'near', 'end', 'family'] as const) {
 		const it = asked[i];
 		return it && covered(it.id, it.candidates);
 	}).length;
-	process.stdout.write(`${tier.padEnd(8)} ${String(idx.length).padStart(5)}  ${pct(right, idx.length * runs.length).padStart(5)}  ${pct(cov, idx.length).padStart(9)}\n`);
+	process.stdout.write(
+		`${tier.padEnd(8)} ${String(idx.length).padStart(5)}  ${pct(right, idx.length * runs.length).padStart(5)}  ${pct(cov, idx.length).padStart(9)}\n`,
+	);
 }
 
 // The two ways to be wrong cost differently. A wrong token changes the design;
@@ -196,7 +203,9 @@ for (const r of runs)
 			if (l.includes(KEEP)) keepsAllowed++;
 		}
 	});
-process.stdout.write(`\nkeep: recall on keep-only items ${pct(keptWhenOnly, keepOnly)}, precision ${pct(keepsAllowed, keeps)} (${keeps} keeps)\n`);
+process.stdout.write(
+	`\nkeep: recall on keep-only items ${pct(keptWhenOnly, keepOnly)}, precision ${pct(keepsAllowed, keeps)} (${keeps} keeps)\n`,
+);
 
 // Where it disagreed, so the labels stay auditable: on a real disagreement the
 // label is as likely to be wrong as the model.

@@ -35,7 +35,8 @@ export function deadClasses(
 		isNeverDead: (cls: string) => boolean;
 	},
 ): Candidate[] {
-	const isReferenced = (cls: string): boolean => referenced.has(cls) || isNeverDead(cls) || stems.some((s) => cls.startsWith(s));
+	const isReferenced = (cls: string): boolean =>
+		referenced.has(cls) || isNeverDead(cls) || stems.some((s) => cls.startsWith(s));
 	const seen = new Set<string>(); // `${file}\u0000${class}`
 	return declared.flatMap(({ file, line, cls, scopeLines }): Candidate[] => {
 		const key = `${file}\u0000${cls}`;

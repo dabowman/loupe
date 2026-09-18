@@ -36,7 +36,11 @@ const COMPONENT_REGISTRY = join(PROFILE, 'components', 'index.json');
 /** Analyze a throwaway repo. `files` maps relative path to contents. */
 async function run(
 	files: Record<string, string>,
-	{ patterns, components, judge }: { patterns?: Pattern[]; components?: Map<string, ComponentEntry>; judge?: boolean } = {},
+	{
+		patterns,
+		components,
+		judge,
+	}: { patterns?: Pattern[]; components?: Map<string, ComponentEntry>; judge?: boolean } = {},
 ): Promise<AnalyzeResult> {
 	const root = scratch('dsh-feat-');
 	try {
@@ -52,7 +56,8 @@ async function run(
 
 const CONFIG = (extra: Record<string, unknown> = {}): string =>
 	JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, ...extra });
-const TOKENS = ':root { --wpds-border-radius-md: 4px; --wpds-color-fg-content-neutral: #1e1e1e;\n' +
+const TOKENS =
+	':root { --wpds-border-radius-md: 4px; --wpds-color-fg-content-neutral: #1e1e1e;\n' +
 	'--wpds-color-bg-surface-neutral: #fcfcfc; --wpds-typography-font-size-md: 13px; }';
 const at = (r: AnalyzeResult, rule: RuleId) => r.findings.filter((f) => f.rule === rule);
 
@@ -128,7 +133,10 @@ await check('a keyword or zero is not untokenized type styling', async () => {
 		'styles/a.css': '.acme-t { font-family: inherit; line-height: 0; font-weight: normal; }',
 		'src/A.jsx': 'export const A = () => <span className="acme-t" />;',
 	});
-	assert(!at(r, 'typography/untokenized').length, `flagged inert values: ${at(r, 'typography/untokenized').map((f) => f.message)}`);
+	assert(
+		!at(r, 'typography/untokenized').length,
+		`flagged inert values: ${at(r, 'typography/untokenized').map((f) => f.message)}`,
+	);
 });
 
 // ── CSS-in-JS ───────────────────────────────────────────────────────────────
@@ -162,13 +170,22 @@ await check('styled(Component) inherits that component’s verdict', async () =>
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED });
 	const override = at(r, 'system/override');
 	const typo = at(r, 'typography/in-css');
-	assert(override.some((f) => f.line === 9), `styled(Button) should be an override; got ${override.map((f) => f.line)}`);
-	assert(typo.some((f) => f.line === 12), `styled(Text) should be typography/in-css; got ${typo.map((f) => f.line)}`);
+	assert(
+		override.some((f) => f.line === 9),
+		`styled(Button) should be an override; got ${override.map((f) => f.line)}`,
+	);
+	assert(
+		typo.some((f) => f.line === 12),
+		`styled(Text) should be typography/in-css; got ${typo.map((f) => f.line)}`,
+	);
 });
 
 await check('an interpolated value produces no finding', async () => {
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED });
-	assert(!r.findings.some((f) => f.line === 6), `guessed at an opaque value: ${r.findings.filter((f) => f.line === 6).map((f) => f.message)}`);
+	assert(
+		!r.findings.some((f) => f.line === 6),
+		`guessed at an opaque value: ${r.findings.filter((f) => f.line === 6).map((f) => f.message)}`,
+	);
 });
 
 await check('a descendant selector does not answer for the styled component', async () => {
@@ -254,7 +271,10 @@ await check('the baseline key is byte-for-byte what it was before the cap', asyn
 		`tokens/hardcoded-value|src/A.tsx|css-in-js:${FLAT}`,
 		`tokens/hardcoded-value|styles/a.css|${FLAT}`,
 	].sort();
-	assert(JSON.stringify(keys) === JSON.stringify(want), `baselines would break:\n got ${JSON.stringify(keys, null, 1)}\nwant ${JSON.stringify(want, null, 1)}`);
+	assert(
+		JSON.stringify(keys) === JSON.stringify(want),
+		`baselines would break:\n got ${JSON.stringify(keys, null, 1)}\nwant ${JSON.stringify(want, null, 1)}`,
+	);
 });
 
 // The cap is on what a finding PRINTS, so it must not reach the dedupe key:
@@ -301,7 +321,10 @@ await check('a multi-line selector is flattened into the finding', async () => {
 		].join('\n'),
 	});
 	const f = one(at(r, 'tokens/hardcoded-value'), 'expected the nested declaration');
-	assert(f.message.includes('in `& .outer > .inner:not(.x) + .sibling`'), `selector not flattened: ${JSON.stringify(f.message)}`);
+	assert(
+		f.message.includes('in `& .outer > .inner:not(.x) + .sibling`'),
+		`selector not flattened: ${JSON.stringify(f.message)}`,
+	);
 	assert(!/[\n\t]/.test(f.message), `message spans lines: ${JSON.stringify(f.message)}`);
 });
 
@@ -337,7 +360,10 @@ await check('the cap never splits a character', async () => {
 		'src/A.jsx': 'export const A = () => <div className="acme-u" />;',
 	});
 	const f = one(at(r, 'typography/untokenized'), 'expected the type finding');
-	assert(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(f.message), `lone surrogate in ${JSON.stringify(f.message)}`);
+	assert(
+		!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(f.message),
+		`lone surrogate in ${JSON.stringify(f.message)}`,
+	);
 	assert(f.message.includes('\u{1F600}'), `the character itself was lost: ${f.message}`);
 });
 
@@ -347,7 +373,12 @@ await check('the cap never splits a character', async () => {
 await check('a malformed suppression is quoted on one line', async () => {
 	const r = await run({
 		'loupe.config.json': CONFIG(),
-		'src/D.jsx': ['export const D = () => (', '\t/* wpds-allow\tlayout/in-css */', '\t<div style={{ display: 999 }} />', ');'].join('\n'),
+		'src/D.jsx': [
+			'export const D = () => (',
+			'\t/* wpds-allow\tlayout/in-css */',
+			'\t<div style={{ display: 999 }} />',
+			');',
+		].join('\n'),
 	});
 	const f = one(at(r, 'suppression/malformed'), 'expected the malformed directive');
 	assert(!/[\n\t]/.test(f.message), `message carries a tab: ${JSON.stringify(f.message)}`);
@@ -360,12 +391,17 @@ await check('a malformed suppression is quoted on one line', async () => {
 await check('a long malformed directive keys the same as it always did', async () => {
 	const r = await run({
 		'loupe.config.json': CONFIG(),
-		'src/D.jsx': ['export const D = () => (', '\t/* wpds-allow   layout/in-css   because  the  design  system  has  no  equivalent */', '\t<div />', ');'].join('\n'),
+		'src/D.jsx': [
+			'export const D = () => (',
+			'\t/* wpds-allow   layout/in-css   because  the  design  system  has  no  equivalent */',
+			'\t<div />',
+			');',
+		].join('\n'),
 	});
 	const f = one(at(r, 'suppression/malformed'), 'expected the malformed directive');
 	assert(
 		findingKey(f) === 'suppression/malformed|src/D.jsx|wpds-allow layout/in-css because the design system h',
-		`baselines would break: ${findingKey(f)}`
+		`baselines would break: ${findingKey(f)}`,
 	);
 });
 
@@ -377,7 +413,10 @@ await check('the directive cut never splits a character', async () => {
 		'src/D.jsx': `export const D = () => (\n\t/* wpds-allow ${'a'.repeat(48)}\u{1F600} and then some more */\n\t<div />\n);`,
 	});
 	const f = one(at(r, 'suppression/malformed'), 'expected the malformed directive');
-	assert(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(f.code ?? ''), `lone surrogate in ${JSON.stringify(f.code)}`);
+	assert(
+		!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(f.code ?? ''),
+		`lone surrogate in ${JSON.stringify(f.code)}`,
+	);
 });
 
 // The selector is the only thing telling these two apart — it is not in `code`,
@@ -494,7 +533,7 @@ await check('a registered pattern rebuilt in two files is reported in both', asy
 			'src/A.jsx': composite('A'),
 			'src/B.jsx': composite('B'),
 		},
-		{ patterns: registry }
+		{ patterns: registry },
 	);
 	const dup = at(r, 'patterns/duplicate-composite');
 	assert(dup.length === 2, `expected one per file, got ${dup.length}`);
@@ -519,16 +558,13 @@ await check('a file importing the canonical component is using the pattern, not 
 		].join('\n');
 	const r = await run(
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': shipped('A'), 'src/B.jsx': shipped('B') },
-		{ patterns: registry }
+		{ patterns: registry },
 	);
 	assert(!at(r, 'patterns/duplicate-composite').length, 'importing EmptyState is using report.empty');
 });
 
 await check('one file is a first use, not a duplicate', async () => {
-	const r = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': composite('A') },
-		{ patterns: registry }
-	);
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': composite('A') }, { patterns: registry });
 	assert(!at(r, 'patterns/duplicate-composite').length, 'a single instance is not drift');
 });
 
@@ -541,7 +577,7 @@ await check('a signature below the floor is documentation, not a check', async (
 	].join('\n');
 	const r = await run(
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/B.jsx': src.replace('Bar', 'Bar2') },
-		{ patterns: registry }
+		{ patterns: registry },
 	);
 	assert(!at(r, 'patterns/duplicate-composite').length, 'action-cluster.bar has no shape to check');
 });
@@ -554,12 +590,12 @@ await check('an unregistered shape needs three files before it is house style', 
 		].join('\n');
 	const two = await run(
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': shape('A'), 'src/B.jsx': shape('B') },
-		{ patterns: registry }
+		{ patterns: registry },
 	);
 	assert(!at(two, 'patterns/unregistered-composite').length, 'two is a coincidence');
 	const three = await run(
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': shape('A'), 'src/B.jsx': shape('B'), 'src/C.jsx': shape('C') },
-		{ patterns: registry }
+		{ patterns: registry },
 	);
 	assert(at(three, 'patterns/unregistered-composite').length === 3, 'three is a pattern');
 });
@@ -611,14 +647,23 @@ await check('a file already importing the answer is not told to use it', async (
 
 await check('a v2 entry loads under its pattern key, and its parts under id#part', () => {
 	const ids = new Set(registry.map((p) => p.id));
-	for (const id of ['confirm', 'choose.segmented', 'navigate-hierarchy#descend', 'screen.page#header', 'browse-collection.list#toolbar.filter'])
+	for (const id of [
+		'confirm',
+		'choose.segmented',
+		'navigate-hierarchy#descend',
+		'screen.page#header',
+		'browse-collection.list#toolbar.filter',
+	])
 		assert(ids.has(id), `the shipped registry should carry ${id}`);
 });
 
 await check('a part inherits its parent canonical, cut to the name the code binds', () => {
 	const descend = registry.filter((p) => p.id === 'navigate-hierarchy#descend');
 	assert(descend.length === 2, `descend should load two shapes (plain and rendered), got ${descend.length}`);
-	assert(descend.every((p) => p.canonical === 'Navigator'), `Navigator.Button binds as Navigator, got ${descend[0]?.canonical}`);
+	assert(
+		descend.every((p) => p.canonical === 'Navigator'),
+		`Navigator.Button binds as Navigator, got ${descend[0]?.canonical}`,
+	);
 	const stack = registry.find((p) => p.id === 'navigate-hierarchy#stack');
 	assert(stack?.canonical === 'Navigator', 'a part with no canonical of its own takes the parent’s');
 });
@@ -630,14 +675,29 @@ await check('an entry checked by import alone loads with no tree and never match
 		"import { __experimentalVStack as VStack, Notice } from '@wordpress/components';",
 		'export const A = () => (<VStack><Notice>a</Notice><Notice>b</Notice><Notice>c</Notice></VStack>);',
 	].join('\n');
-	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/B.jsx': src.replace('A', 'B') }, { patterns: registry });
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/B.jsx': src.replace('A', 'B') },
+		{ patterns: registry },
+	);
 	assert(!at(r, 'patterns/duplicate-composite').length, 'nothing to match against');
 });
 
 await check('a v1 registry still loads unchanged', () => {
-	const v1 = loadPatterns({ patterns: [{ id: 'x', summary: 's', canonical: 'Card', signature: ['Card.Root', 'Card.Header', 'Card.Title', 'Card.Content'] }] });
+	const v1 = loadPatterns({
+		patterns: [
+			{
+				id: 'x',
+				summary: 's',
+				canonical: 'Card',
+				signature: ['Card.Root', 'Card.Header', 'Card.Title', 'Card.Content'],
+			},
+		],
+	});
 	const [x] = v1;
-	assert(x && x.id === 'x' && x.size === 4 && x.canonical === 'Card' && x.rules.length === 0, 'v1 fields map one to one');
+	assert(
+		x && x.id === 'x' && x.size === 4 && x.canonical === 'Card' && x.rules.length === 0,
+		'v1 fields map one to one',
+	);
 });
 
 // ── AST rules ───────────────────────────────────────────────────────────────
@@ -648,7 +708,8 @@ const select = (options: string, extra = ''): string =>
 		extra,
 		`export const A = () => (<SelectControl label="Align" options={ ${options} } />);`,
 	].join('\n');
-const four = "[ { label: 'a', value: 'a' }, { label: 'b', value: 'b' }, { label: 'c', value: 'c' }, { label: 'd', value: 'd' } ]";
+const four =
+	"[ { label: 'a', value: 'a' }, { label: 'b', value: 'b' }, { label: 'c', value: 'c' }, { label: 'd', value: 'd' } ]";
 
 await check('a select with four static options is the segmented choice refused', async () => {
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': select(four) }, { patterns: registry });
@@ -669,17 +730,28 @@ await check('a same-file const array counts as static; a spread or six options d
 	);
 	assert(!at(spread, 'patterns/superseded-composite').length, 'a spread could hold anything');
 	const six = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select(`[ ${Array(6).fill("{ label: 'x', value: 'x' }").join(', ')} ]`) },
+		{
+			'loupe.config.json': CONFIG(),
+			'src/A.jsx': select(`[ ${Array(6).fill("{ label: 'x', value: 'x' }").join(', ')} ]`),
+		},
 		{ patterns: registry },
 	);
 	assert(!at(six, 'patterns/superseded-composite').length, 'six options do not fit on a row');
 	const wide = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select("[ { label: __( 'Uppercase Roman numerals' ), value: 'I' }, { label: __( 'Lowercase Roman numerals' ), value: 'i' }, { label: 'Numbers', value: '1' } ]") },
+		{
+			'loupe.config.json': CONFIG(),
+			'src/A.jsx': select(
+				"[ { label: __( 'Uppercase Roman numerals' ), value: 'I' }, { label: __( 'Lowercase Roman numerals' ), value: 'i' }, { label: 'Numbers', value: '1' } ]",
+			),
+		},
 		{ patterns: registry },
 	);
 	assert(!at(wide, 'patterns/superseded-composite').length, 'three long labels do not fit on a row either');
 	const unread = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select("[ { label: labels.a, value: 'a' }, { label: labels.b, value: 'b' } ]") },
+		{
+			'loupe.config.json': CONFIG(),
+			'src/A.jsx': select("[ { label: labels.a, value: 'a' }, { label: labels.b, value: 'b' } ]"),
+		},
 		{ patterns: registry },
 	);
 	assert(!at(unread, 'patterns/superseded-composite').length, 'a label the rule cannot read leaves the width unknown');
@@ -687,7 +759,13 @@ await check('a same-file const array counts as static; a spread or six options d
 
 await check('a file that already imports the segmented control made its choice', async () => {
 	const r = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': select(four, "import { __experimentalToggleGroupControl as ToggleGroupControl } from '@wordpress/components';") },
+		{
+			'loupe.config.json': CONFIG(),
+			'src/A.jsx': select(
+				four,
+				"import { __experimentalToggleGroupControl as ToggleGroupControl } from '@wordpress/components';",
+			),
+		},
 		{ patterns: registry },
 	);
 	assert(!at(r, 'patterns/superseded-composite').length, 'the canonical import is the deliberate signal');
@@ -705,7 +783,8 @@ const modal = (body: string, extra = ''): string =>
 		'\t</Modal>',
 		');',
 	].join('\n');
-const pair = '\t\t<div><Button variant="tertiary" onClick={ onClose }>{ __( "Cancel" ) }</Button><Button variant="primary" isDestructive onClick={ onDelete }>{ __( "Delete permanently" ) }</Button></div>';
+const pair =
+	'\t\t<div><Button variant="tertiary" onClick={ onClose }>{ __( "Cancel" ) }</Button><Button variant="primary" isDestructive onClick={ onDelete }>{ __( "Delete permanently" ) }</Button></div>';
 
 await check('a modal holding only a consent pair is a confirm dialog rebuilt', async () => {
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': modal(pair) }, { patterns: registry });
@@ -726,7 +805,10 @@ await check('a form control inside, a third button, or a computed label makes it
 	);
 	assert(!at(three, 'patterns/superseded-composite').length, 'three buttons is not a pair');
 	const computed = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': modal('\t\t<div><Button>{ __( "Cancel" ) }</Button><Button>{ label }</Button></div>') },
+		{
+			'loupe.config.json': CONFIG(),
+			'src/A.jsx': modal('\t\t<div><Button>{ __( "Cancel" ) }</Button><Button>{ label }</Button></div>'),
+		},
 		{ patterns: registry },
 	);
 	assert(!at(computed, 'patterns/superseded-composite').length, 'a label the rule cannot read is not a consent label');
@@ -734,7 +816,10 @@ await check('a form control inside, a third button, or a computed label makes it
 
 await check('a file importing ConfirmDialog beside a hand-built pair is not told to use it', async () => {
 	const r = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': modal(pair, "import { __experimentalConfirmDialog as ConfirmDialog } from '@wordpress/components';") },
+		{
+			'loupe.config.json': CONFIG(),
+			'src/A.jsx': modal(pair, "import { __experimentalConfirmDialog as ConfirmDialog } from '@wordpress/components';"),
+		},
 		{ patterns: registry },
 	);
 	assert(!at(r, 'patterns/superseded-composite').length, 'the canonical import means the choice was deliberate');
@@ -748,10 +833,7 @@ await check('a locked component is reported, its recommended sibling is not', as
 		"import { Badge as UiBadge } from '@wordpress/ui';",
 		'export const A = () => (<><Badge>old</Badge><UiBadge>new</UiBadge></>);',
 	].join('\n');
-	const r = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
-		{ components: componentRegistry }
-	);
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	const locked = one(at(r, 'system/locked-component'), 'expected one locked finding');
 	assert(locked.message.includes('@wordpress/components'), `wrong package named: ${locked.message}`);
 	assert(!at(r, 'system/superseded-component').length, 'the @wordpress/ui sibling should not also be flagged legacy');
@@ -763,10 +845,7 @@ await check('a superseded component names its replacement, once per file', async
 		'export const A = () => (<HStack><Button>a</Button><Button>b</Button></HStack>);',
 		'export const B = () => (<HStack><Button>c</Button></HStack>);',
 	].join('\n');
-	const r = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
-		{ components: componentRegistry }
-	);
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	const superseded = one(
 		at(r, 'system/superseded-component'),
 		'two HStack usages in one file should collapse to one finding',
@@ -776,22 +855,19 @@ await check('a superseded component names its replacement, once per file', async
 
 await check('a recommended component is never flagged', async () => {
 	const src = ["import { Stack } from '@wordpress/ui';", 'export const A = () => <Stack>x</Stack>;'].join('\n');
-	const r = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
-		{ components: componentRegistry }
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	assert(
+		!at(r, 'system/locked-component').length && !at(r, 'system/superseded-component').length,
+		'Stack is recommended',
 	);
-	assert(!at(r, 'system/locked-component').length && !at(r, 'system/superseded-component').length, 'Stack is recommended');
 });
 
 await check('an experimental component is not flagged — the call is contextual, not mechanical', async () => {
 	const src = ["import { Dialog } from '@wordpress/ui';", 'export const A = () => <Dialog.Root />;'].join('\n');
-	const r = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
-		{ components: componentRegistry }
-	);
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	assert(
 		!at(r, 'system/locked-component').length && !at(r, 'system/superseded-component').length,
-		'experimental status must never auto-fire — WPDS itself says this is not yet safe to recommend broadly'
+		'experimental status must never auto-fire — WPDS itself says this is not yet safe to recommend broadly',
 	);
 });
 
@@ -800,10 +876,9 @@ await check('an experimental component is not flagged — the call is contextual
 // lost its last clause to the display cap, and a finding anchored at the import
 // gave no clue whether the migration was one edit or a dozen.
 await check('a currency finding carries the registry note apart, and counts its call sites', async () => {
-	const src = [
-		"import { Grid } from '@wordpress/components';",
-		'export const A = () => (<><Grid /><Grid /></>);',
-	].join('\n');
+	const src = ["import { Grid } from '@wordpress/components';", 'export const A = () => (<><Grid /><Grid /></>);'].join(
+		'\n',
+	);
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	const f = one(at(r, 'system/superseded-component'), 'expected one Grid finding');
 	assert(/\u00d72/.test(f.message), `the message did not say how many call sites: ${f.message}`);
@@ -817,10 +892,7 @@ await check('a locked-component finding can be suppressed like any other', async
 		"import { Badge } from '@wordpress/components';",
 		'export const A = () => <Badge>old</Badge>;',
 	].join('\n');
-	const r = await run(
-		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
-		{ components: componentRegistry }
-	);
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	assert(!at(r, 'system/locked-component').length, 'a well-formed suppression mutes the finding');
 });
 
@@ -902,7 +974,10 @@ await check('a block comment that runs too long stops covering what follows', as
 // ── a replacement has to be one you could actually adopt ──────────────────────
 
 await check('a component whose only replacements are locked or in flux does not fire', async () => {
-	const src = ["import { DropdownMenu, MenuItem } from '@wordpress/components';", 'export const A = () => (<DropdownMenu><MenuItem /></DropdownMenu>);'].join('\n');
+	const src = [
+		"import { DropdownMenu, MenuItem } from '@wordpress/components';",
+		'export const A = () => (<DropdownMenu><MenuItem /></DropdownMenu>);',
+	].join('\n');
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	assert(
 		!at(r, 'system/superseded-component').length,
@@ -912,7 +987,10 @@ await check('a component whose only replacements are locked or in flux does not 
 
 // A dotted subcomponent has no entry of its own; its currency is its root's.
 await check('a prose remedy still fires — it names no component to be unusable', async () => {
-	const src = ["import { __experimentalSpacer as Spacer } from '@wordpress/components';", 'export const A = () => <Spacer />;'].join('\n');
+	const src = [
+		"import { __experimentalSpacer as Spacer } from '@wordpress/components';",
+		'export const A = () => <Spacer />;',
+	].join('\n');
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	const f = one(at(r, 'system/superseded-component'), 'a hand-written remedy is still a remedy');
 	assert(f.message.includes('gap'), `the remedy was lost: ${f.message}`);
@@ -936,7 +1014,7 @@ await check('a raw element is never sent to a component the registry supersedes'
 
 const DS_SHEET = '.field { display: flex; &-label { font-weight: 600; } }\n.toast-viewport { position: fixed; }';
 
-await check('a class the system\'s stylesheets define is a library internal', async () => {
+await check("a class the system's stylesheets define is a library internal", async () => {
 	const r = await run({
 		'loupe.config.json': CONFIG({ designSystem: { styleSources: ['ds'] } }),
 		'ds/field.scss': DS_SHEET,
@@ -968,7 +1046,10 @@ await check('rebinding a slot is not an override, even on a library part', async
 		'src/A.jsx': 'export const A = () => <div className="acme-bar" />;',
 	});
 	const r = await run(sheet('--field-label-color: var(--wpds-color-fg-content-neutral);'));
-	assert(!at(r, 'system/override').length, `a custom property is the component's contract: ${JSON.stringify(r.findings)}`);
+	assert(
+		!at(r, 'system/override').length,
+		`a custom property is the component's contract: ${JSON.stringify(r.findings)}`,
+	);
 	const mixed = await run(sheet('--field-label-color: var(--wpds-color-fg-content-neutral); color: red;'));
 	one(at(mixed, 'system/override'), 'a real declaration beside the rebind is still an override');
 });
@@ -979,14 +1060,22 @@ await check('rebinding a slot is not an override, even on a library part', async
 await check('a state, context or module class is not a part the system styles', async () => {
 	const r = await run({
 		'loupe.config.json': CONFIG({ designSystem: { styleSources: ['ds'] } }),
-		'ds/tabs.scss': '.tab { padding: 4px; &.is-active { font-weight: 600; } }\n.dark .field-label { color: #fff; }\n.dark { --field-bg: #111; }\n.btn:not(.is-busy) { cursor: pointer; }',
+		'ds/tabs.scss':
+			'.tab { padding: 4px; &.is-active { font-weight: 600; } }\n.dark .field-label { color: #fff; }\n.dark { --field-bg: #111; }\n.btn:not(.is-busy) { cursor: pointer; }',
 		'ds/Card.module.css': '.root { display: flex; }',
-		'styles/a.scss': '.acme-tab.is-active { margin-top: 8px; }\n.acme-app.dark { margin-bottom: 8px; }\n.acme-x.is-busy { margin-left: 8px; }',
+		'styles/a.scss':
+			'.acme-tab.is-active { margin-top: 8px; }\n.acme-app.dark { margin-bottom: 8px; }\n.acme-x.is-busy { margin-left: 8px; }',
 		'styles/Card.module.css': '.root { margin-bottom: 8px; }',
 		'src/A.jsx': 'export const A = () => <div className="acme-tab acme-app acme-x" />;',
 	});
-	assert(!at(r, 'system/override').length, `a project rule read as a library internal: ${JSON.stringify(at(r, 'system/override'))}`);
-	assert(at(r, 'layout/margin-on-child').length === 4, `the real findings were replaced: ${JSON.stringify(r.findings)}`);
+	assert(
+		!at(r, 'system/override').length,
+		`a project rule read as a library internal: ${JSON.stringify(at(r, 'system/override'))}`,
+	);
+	assert(
+		at(r, 'layout/margin-on-child').length === 4,
+		`the real findings were replaced: ${JSON.stringify(r.findings)}`,
+	);
 });
 
 // A workspace link is how an in-repo design system is usually installed, and a
@@ -1009,7 +1098,10 @@ await check("the system's sheets are recognised through a link, and their tokens
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		const r = await analyze(config, { scope: null });
 		const f = one(r.findings, `only the consumer's override: ${JSON.stringify(r.findings)}`);
-		assert(f.file === 'styles/a.scss' && f.message.includes('.field-label (library internal)'), `wrong finding: ${f.message}`);
+		assert(
+			f.file === 'styles/a.scss' && f.message.includes('.field-label (library internal)'),
+			`wrong finding: ${f.message}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -1021,7 +1113,10 @@ await check('an unreadable system sheet is reported, not silently dropped', asyn
 		'ds/field.css': '.field-label { font-weight: 600; }\n.x { color }',
 		'src/A.jsx': 'export const A = () => <div />;',
 	});
-	assert(r.diagnostics.parseErrors.some((e) => e.file === 'ds/field.css'), `no diagnostic: ${JSON.stringify(r.diagnostics)}`);
+	assert(
+		r.diagnostics.parseErrors.some((e) => e.file === 'ds/field.css'),
+		`no diagnostic: ${JSON.stringify(r.diagnostics)}`,
+	);
 	assert(!at(r, 'stylesheet/unparsed').length, 'the library sheet is not project code to fix');
 });
 
@@ -1050,63 +1145,86 @@ await check('a project class never reads as a library internal, even when the sy
 
 // Offline: the stub stands in for TypeSafe and hands back one answer per
 // question it was sent, so the check is on what is asked and what is written.
-await check('--judge asks only about analogs with variants, and writes only what clears the floor into the suggestion', async () => {
-	const root = scratch('dsh-judge-');
-	try {
-		writeAll(root, { 'src/A.jsx': '<p className="description">Help</p>\n<span style={{ background: c }} />\n<p>Hi</p>\n<div />\n<h3>Build</h3>' });
-		const registry = loadComponents([
-			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
-			{ name: 'Stack', package: '@wordpress/ui', status: 'recommended' },
-		]);
-		const at = (line: number, analog: string) =>
-			({ rule: 'system/raw-element', severity: 'warn', rank: 0, file: 'src/A.jsx', line, code: '<p>', message: `<p> \u2192 <${analog}>` }) as const;
-		// The analog a legacy `Heading` forwards to names a placeholder to fill.
-		const forwarded = {
-			...at(5, 'Text'),
-			code: '<h3>',
-			message: '<h3> \u2192 Text (@wordpress/ui) with variant="heading-*" and render for the semantic element',
-		};
-		const findings = [at(1, 'Text'), at(2, 'Text'), at(3, 'Text'), at(4, 'Stack'), forwarded].map((f): Finding => ({ ...f }));
-		// Keyed by the element's own line: one request per element, in any order.
-		const replies: Record<string, { choice: string; confidence: number }> = {
-			'<p className="description">Help</p>': { choice: 'body-sm', confidence: 0.8 },
-			'<span style={{ background: c }} />': { choice: 'not_text', confidence: 0.99 },
-			'<p>Hi</p>': { choice: 'body-sm', confidence: 0.3 },
-			'<h3>Build</h3>': { choice: 'heading-lg', confidence: 0.58 },
-		};
-		const asked: { criteria: Record<string, string> }[] = [];
-		const stub = (async (_url: string, init: { body: string }) => {
-			const body = JSON.parse(init.body);
-			asked.push(...Object.values(body.questions as Record<string, { criteria: Record<string, string> }>));
-			const answers = { e0: replies[body.state.elements[0].source.split('\n')[0]] };
-			return new Response(JSON.stringify({ answers }));
-		}) as unknown as typeof fetch;
-		const n = await judgeVariants(root, findings, registry, 'key', stub);
-		assert(asked.length === 4, `asked about ${asked.length} elements, expected the 4 Text ones`);
-		assert('not_text' in (asked[0]?.criteria ?? {}), 'no no-match option offered');
-		assert(n === 3, `wrote ${n}, expected 3`);
-		// The answer goes into the suggestion, not after it.
-		assert(findings[0]?.message === '<p> \u2192 <Text variant="body-sm"> (judged 0.80)', findings[0]?.message ?? '');
-		assert(findings[1]?.message === '<p> \u2192 no analog, not Text content (judged 0.99)', findings[1]?.message ?? '');
-		assert(findings[2]?.message === '<p> \u2192 <Text>', `a sub-floor pick was written: ${findings[2]?.message}`);
-		assert(findings[3]?.message === '<p> \u2192 <Stack>', 'a component with no variants was judged');
-		assert(
-			findings[4]?.message === '<h3> \u2192 Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.58)',
-			`the placeholder was not filled: ${findings[4]?.message}`,
-		);
-		// As data too, for whatever acts on a judgement without parsing prose.
-		const j = findings[0]?.judged;
-		assert(j?.answer === 'body-sm' && j.confidence === 0.8, JSON.stringify(j));
-		assert(j.spans.every((s) => findings[0]?.message.includes(s)), `a span is not in the message: ${JSON.stringify(j.spans)}`);
-		assert(findings[2]?.judged === undefined, 'a sub-floor pick was recorded');
-	} finally {
-		cleanup(root);
-	}
-});
+await check(
+	'--judge asks only about analogs with variants, and writes only what clears the floor into the suggestion',
+	async () => {
+		const root = scratch('dsh-judge-');
+		try {
+			writeAll(root, {
+				'src/A.jsx':
+					'<p className="description">Help</p>\n<span style={{ background: c }} />\n<p>Hi</p>\n<div />\n<h3>Build</h3>',
+			});
+			const registry = loadComponents([
+				{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
+				{ name: 'Stack', package: '@wordpress/ui', status: 'recommended' },
+			]);
+			const at = (line: number, analog: string) =>
+				({
+					rule: 'system/raw-element',
+					severity: 'warn',
+					rank: 0,
+					file: 'src/A.jsx',
+					line,
+					code: '<p>',
+					message: `<p> \u2192 <${analog}>`,
+				}) as const;
+			// The analog a legacy `Heading` forwards to names a placeholder to fill.
+			const forwarded = {
+				...at(5, 'Text'),
+				code: '<h3>',
+				message: '<h3> \u2192 Text (@wordpress/ui) with variant="heading-*" and render for the semantic element',
+			};
+			const findings = [at(1, 'Text'), at(2, 'Text'), at(3, 'Text'), at(4, 'Stack'), forwarded].map(
+				(f): Finding => ({ ...f }),
+			);
+			// Keyed by the element's own line: one request per element, in any order.
+			const replies: Record<string, { choice: string; confidence: number }> = {
+				'<p className="description">Help</p>': { choice: 'body-sm', confidence: 0.8 },
+				'<span style={{ background: c }} />': { choice: 'not_text', confidence: 0.99 },
+				'<p>Hi</p>': { choice: 'body-sm', confidence: 0.3 },
+				'<h3>Build</h3>': { choice: 'heading-lg', confidence: 0.58 },
+			};
+			const asked: { criteria: Record<string, string> }[] = [];
+			const stub = (async (_url: string, init: { body: string }) => {
+				const body = JSON.parse(init.body);
+				asked.push(...Object.values(body.questions as Record<string, { criteria: Record<string, string> }>));
+				const answers = { e0: replies[body.state.elements[0].source.split('\n')[0]] };
+				return new Response(JSON.stringify({ answers }));
+			}) as unknown as typeof fetch;
+			const n = await judgeVariants(root, findings, registry, 'key', stub);
+			assert(asked.length === 4, `asked about ${asked.length} elements, expected the 4 Text ones`);
+			assert('not_text' in (asked[0]?.criteria ?? {}), 'no no-match option offered');
+			assert(n === 3, `wrote ${n}, expected 3`);
+			// The answer goes into the suggestion, not after it.
+			assert(findings[0]?.message === '<p> \u2192 <Text variant="body-sm"> (judged 0.80)', findings[0]?.message ?? '');
+			assert(
+				findings[1]?.message === '<p> \u2192 no analog, not Text content (judged 0.99)',
+				findings[1]?.message ?? '',
+			);
+			assert(findings[2]?.message === '<p> \u2192 <Text>', `a sub-floor pick was written: ${findings[2]?.message}`);
+			assert(findings[3]?.message === '<p> \u2192 <Stack>', 'a component with no variants was judged');
+			assert(
+				findings[4]?.message ===
+					'<h3> \u2192 Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.58)',
+				`the placeholder was not filled: ${findings[4]?.message}`,
+			);
+			// As data too, for whatever acts on a judgement without parsing prose.
+			const j = findings[0]?.judged;
+			assert(j?.answer === 'body-sm' && j.confidence === 0.8, JSON.stringify(j));
+			assert(
+				j.spans.every((s) => findings[0]?.message.includes(s)),
+				`a span is not in the message: ${JSON.stringify(j.spans)}`,
+			);
+			assert(findings[2]?.judged === undefined, 'a sub-floor pick was recorded');
+		} finally {
+			cleanup(root);
+		}
+	},
+);
 
 // ── --judge: forces and redirects ───────────────────────────────────────────
 
-const represents = loadLanguage().vocabulary.forces['represents']?.judge;
+const represents = loadLanguage().vocabulary.forces.represents?.judge;
 assert(represents, 'patterns/index.json gives `represents` no judge block');
 
 // The wording is scored live by evals/represents; what is pinned here is the
@@ -1119,14 +1237,20 @@ await check('the force query sends one control per request, and keeps answers in
 		enclosing: 'Screen',
 		source: `<Button onClick={ go${i} }>Go ${i}</Button>`,
 	}));
-	type Sent = { elements: { file: string }[]; questions: Record<string, { instructions: string; criteria: Record<string, string> }> };
+	type Sent = {
+		elements: { file: string }[];
+		questions: Record<string, { instructions: string; criteria: Record<string, string> }>;
+	};
 	const sent: Sent[] = [];
 	const stub = (async (_url: string, init: { body: string }) => {
 		const body = JSON.parse(init.body);
 		sent.push({ elements: body.state.elements, questions: body.questions });
 		// Answer with the question's own index, so a misplaced result is visible.
 		const answers = Object.fromEntries(
-			Object.keys(body.questions).map((k) => [k, { choice: 'command', confidence: Number(`0.${k.slice(1).padStart(2, '0')}`) }]),
+			Object.keys(body.questions).map((k) => [
+				k,
+				{ choice: 'command', confidence: Number(`0.${k.slice(1).padStart(2, '0')}`) },
+			]),
 		);
 		return new Response(JSON.stringify({ answers }));
 	}) as unknown as typeof fetch;
@@ -1161,9 +1285,16 @@ await check('a 429 waits as long as retry-after says, then asks again', async ()
 	const stub = (async () =>
 		++calls === 1
 			? new Response('slow down', { status: 429, headers: { 'retry-after': '0.01' } })
-			: new Response(JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }))) as unknown as typeof fetch;
+			: new Response(
+					JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }),
+				)) as unknown as typeof fetch;
 	const started = Date.now();
-	const [a] = await ask(forceQuery(represents), [{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }], 'key', stub);
+	const [a] = await ask(
+		forceQuery(represents),
+		[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+		'key',
+		stub,
+	);
 	assert(calls === 2 && a?.choice === 'command', `${calls} calls, answer ${JSON.stringify(a)}`);
 	// Without the header the first wait is 500ms.
 	assert(Date.now() - started < 400, `waited ${Date.now() - started}ms for a 10ms retry-after`);
@@ -1183,57 +1314,69 @@ await check('resolve runs on known forces, and stops at a row it cannot decide',
 	assert(resolveRule(table, { represents: 'value' }) === null, 'answered past a row it could not decide');
 	assert(resolveRule(table, {}) === null, 'nothing known decides nothing');
 	// One known force contradicting a row skips it, whatever else it asks.
-	assert(resolveRule(table, { represents: 'value', set: 'closed', cardinality: 'many' })?.default === 'select', 'a contradicted row was not skipped');
+	assert(
+		resolveRule(table, { represents: 'value', set: 'closed', cardinality: 'many' })?.default === 'select',
+		'a contradicted row was not skipped',
+	);
 });
 
 // The shipped WPDS realization carries the detectors, so this is the real
 // wiring: which elements are asked, which are not, and what one becomes.
-await check('--judge turns a destination read off a Button into judged-redirect, and asks only what it must', async () => {
-	const file = [
-		"import { Button, SelectControl } from '@wordpress/components';",
-		'export function Screen() {',
-		'	return (<>',
-		'		<Button onClick={ () => history.navigate( \'/pages\' ) }>Pages</Button>',
-		'		<Button href="/wp-admin">Admin</Button>',
-		'		<Button render={ <Link href="/wp-admin" /> }>Admin</Button>',
-		'		<Button { ...linkProps }>Revisions</Button>',
-		'		<Button onClick={ save }>Save</Button>',
-		'		<SelectControl label="Size" options={ sizes } onChange={ setSize } />',
-		'	</>);',
-		'}',
-	].join('\n');
-	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': file }, { patterns: registry, judge: true });
-	const controls = r.controls ?? [];
-	// `href`, or a `render` that swaps the element, already realizes the
-	// redirect's target, and a spread might carry either: none is asked.
-	assert(controls.length === 3, `collected ${controls.map((c) => c.line).join(',')}, expected lines 4, 8 and 9`);
-	assert(controls.every((c) => c.enclosing === 'Screen'), `enclosing ${controls.map((c) => c.enclosing).join(',')}`);
-	assert(controls[0]?.source.startsWith('<Button onClick') && controls[0]?.source.endsWith('</Button>'), controls[0]?.source ?? '');
+await check(
+	'--judge turns a destination read off a Button into judged-redirect, and asks only what it must',
+	async () => {
+		const file = [
+			"import { Button, SelectControl } from '@wordpress/components';",
+			'export function Screen() {',
+			'	return (<>',
+			"		<Button onClick={ () => history.navigate( '/pages' ) }>Pages</Button>",
+			'		<Button href="/wp-admin">Admin</Button>',
+			'		<Button render={ <Link href="/wp-admin" /> }>Admin</Button>',
+			'		<Button { ...linkProps }>Revisions</Button>',
+			'		<Button onClick={ save }>Save</Button>',
+			'		<SelectControl label="Size" options={ sizes } onChange={ setSize } />',
+			'	</>);',
+			'}',
+		].join('\n');
+		const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': file }, { patterns: registry, judge: true });
+		const controls = r.controls ?? [];
+		// `href`, or a `render` that swaps the element, already realizes the
+		// redirect's target, and a spread might carry either: none is asked.
+		assert(controls.length === 3, `collected ${controls.map((c) => c.line).join(',')}, expected lines 4, 8 and 9`);
+		assert(
+			controls.every((c) => c.enclosing === 'Screen'),
+			`enclosing ${controls.map((c) => c.enclosing).join(',')}`,
+		);
+		assert(
+			controls[0]?.source.startsWith('<Button onClick') && controls[0]?.source.endsWith('</Button>'),
+			controls[0]?.source ?? '',
+		);
 
-	// Under the floor is unknown, not a finding: a destination at 0.83 here is
-	// the pagination band Gutenberg showed, and a command at 0.85 on a select
-	// would fire the menu redirect on a third-wrong guess.
-	const replies: Record<string, { choice: string; confidence: number }> = {
-		Pages: { choice: 'destination', confidence: 0.97 },
-		Save: { choice: 'destination', confidence: 0.83 },
-		Size: { choice: 'command', confidence: 0.85 },
-	};
-	const stub = (async (_url: string, init: { body: string }) => {
-		const body = JSON.parse(init.body);
-		const src: string = body.state.elements[0].source;
-		const key = Object.keys(replies).find((k) => src.includes(k)) ?? '';
-		return new Response(JSON.stringify({ answers: { e0: replies[key] } }));
-	}) as unknown as typeof fetch;
-	const found = await judgeRedirects(controls, 'key', 'warn', stub);
-	const f = one(found, 'one redirect');
-	assert(f.rule === 'patterns/judged-redirect' && f.line === 4, `${f.rule} at ${f.line}`);
-	assert(f.message === '<Button> (represents: destination) \u2192 `navigate-hierarchy` (judged 0.97)', f.message);
-	assert(f.judged?.answer === 'destination' && f.judged.confidence === 0.97, JSON.stringify(f.judged));
-	assert(Boolean(f.note), 'the redirect\'s `because` was dropped');
+		// Under the floor is unknown, not a finding: a destination at 0.83 here is
+		// the pagination band Gutenberg showed, and a command at 0.85 on a select
+		// would fire the menu redirect on a third-wrong guess.
+		const replies: Record<string, { choice: string; confidence: number }> = {
+			Pages: { choice: 'destination', confidence: 0.97 },
+			Save: { choice: 'destination', confidence: 0.83 },
+			Size: { choice: 'command', confidence: 0.85 },
+		};
+		const stub = (async (_url: string, init: { body: string }) => {
+			const body = JSON.parse(init.body);
+			const src: string = body.state.elements[0].source;
+			const key = Object.keys(replies).find((k) => src.includes(k)) ?? '';
+			return new Response(JSON.stringify({ answers: { e0: replies[key] } }));
+		}) as unknown as typeof fetch;
+		const found = await judgeRedirects(controls, 'key', 'warn', stub);
+		const f = one(found, 'one redirect');
+		assert(f.rule === 'patterns/judged-redirect' && f.line === 4, `${f.rule} at ${f.line}`);
+		assert(f.message === '<Button> (represents: destination) \u2192 `navigate-hierarchy` (judged 0.97)', f.message);
+		assert(f.judged?.answer === 'destination' && f.judged.confidence === 0.97, JSON.stringify(f.judged));
+		assert(Boolean(f.note), "the redirect's `because` was dropped");
 
-	// Off unless asked: a plain check and the hook never collect a control.
-	const plain = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': file }, { patterns: registry });
-	assert(plain.controls === undefined, 'collected controls without --judge');
-});
+		// Off unless asked: a plain check and the hook never collect a control.
+		const plain = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': file }, { patterns: registry });
+		assert(plain.controls === undefined, 'collected controls without --judge');
+	},
+);
 
 finish();

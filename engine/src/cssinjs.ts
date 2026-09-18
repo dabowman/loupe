@@ -17,7 +17,7 @@
  */
 
 import postcss from 'postcss';
-import type { Container, Rule } from 'postcss';
+import type { Container, Root, Rule } from 'postcss';
 import type { File, ImportDeclaration, TemplateLiteral } from '@babel/types';
 import type { CssInJsLocals, Decl, TemplateGroup } from './types.ts';
 
@@ -104,11 +104,8 @@ const GRID_DECL = (p: string, v: string): boolean =>
  * without a newline so every line number still maps straight back to source.
  *
  */
-export function parseTemplate(
-	cssText: string,
-	startLine: number,
-): { groups: TemplateGroup[]; error: string | null } {
-	let root;
+export function parseTemplate(cssText: string, startLine: number): { groups: TemplateGroup[]; error: string | null } {
+	let root: Root;
 	try {
 		root = postcss.parse(`.dsh-root{${cssText}\n}`, { from: undefined });
 	} catch (err) {
@@ -128,8 +125,8 @@ export function parseTemplate(
 					// property whose value we cannot see is noise, not a finding.
 					if (node.value.includes('dsh-e')) continue;
 					decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
-				}
-				else if (node.type === 'atrule') walk(node); // @media keeps the enclosing selector
+				} else if (node.type === 'atrule')
+					walk(node); // @media keeps the enclosing selector
 				else if (node.type === 'rule') nested.push(node);
 			}
 		};

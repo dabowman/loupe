@@ -48,7 +48,8 @@ export const variantQuery = (root: string): Query<VariantItem> => ({
 		// floor more often and called real text `not_text` doing it.
 		criteria: {
 			...target.variants,
-			[notKey(target)]: `The element is not a run of content ${target.name} renders — a wrapper around controls, an icon holder or colour swatch, a layout box — so no ${target.name} variant applies.`,
+			[notKey(target)]:
+				`The element is not a run of content ${target.name} renders — a wrapper around controls, an icon holder or colour swatch, a layout box — so no ${target.name} variant applies.`,
 		},
 	}),
 });

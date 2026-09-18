@@ -41,7 +41,8 @@ export function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
 		if (f.rule !== 'tokens/hardcoded-value' || !CSS_FILE.test(f.file)) continue;
 		const only = f.suggest?.length === 1 ? f.suggest[0] : undefined;
 		const token = only?.tokens.length === 1 ? only.tokens[0] : undefined;
-		if (only && token !== undefined) out.push({ file: f.file, line: f.line, prop: only.prop, value: only.value, to: `var(${token})` });
+		if (only && token !== undefined)
+			out.push({ file: f.file, line: f.line, prop: only.prop, value: only.value, to: `var(${token})` });
 		else if (f.decl && f.judged && f.judged.answer !== KEEP)
 			out.push({ file: f.file, line: f.line, prop: f.decl.prop, value: f.decl.value, to: f.judged.answer });
 	}
@@ -72,7 +73,7 @@ export function applyTokenFixes(
 	const skipped: SkippedFix[] = [];
 	for (const [file, group] of byFile) {
 		const abs = join(root, file);
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch (err) {
@@ -97,7 +98,7 @@ export function applyTokenFixes(
 			// alone — only the value is replaced.
 			const re = new RegExp(
 				`(^|[;{\\s])(${escapeRe(fix.prop)}\\s*:\\s*)${escapeRe(fix.value.trim())}(?=\\s*(?:!important)?\\s*(?:[;}]|$))`,
-				'gi'
+				'gi',
 			);
 			const hits = line.match(re);
 			if (hits?.length !== 1) {
@@ -139,18 +140,25 @@ export function applyKeeps(
 	const skipped: SkippedKeep[] = [];
 	for (const f of findings) {
 		if (f.rule !== 'tokens/hardcoded-value' || f.judged?.answer !== KEEP || !f.decl) continue;
-		const kept: KeptValue = { file: f.file, line: f.line, prop: f.decl.prop, value: f.decl.value, reason: f.judged.spans.join(' ') };
+		const kept: KeptValue = {
+			file: f.file,
+			line: f.line,
+			prop: f.decl.prop,
+			value: f.decl.value,
+			reason: f.judged.spans.join(' '),
+		};
 		if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: 'not a stylesheet' });
 		else if (onLine.get(`${f.file}\u0000${f.line}`)?.some((o) => o.judged?.answer !== KEEP))
 			skipped.push({ ...kept, why: 'shares its line with a value that was not kept' });
 		// One directive per line, however many values on it were kept.
-		else if (!byFile.get(f.file)?.some((k) => k.line === f.line)) byFile.set(f.file, [...(byFile.get(f.file) ?? []), kept]);
+		else if (!byFile.get(f.file)?.some((k) => k.line === f.line))
+			byFile.set(f.file, [...(byFile.get(f.file) ?? []), kept]);
 	}
 
 	const applied: KeptValue[] = [];
 	for (const [file, group] of byFile) {
 		const abs = join(root, file);
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch (err) {

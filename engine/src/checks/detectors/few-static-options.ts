@@ -12,7 +12,8 @@ export const fewStaticOptions: Detector = (el, spec, ctx) => {
 	if (!listParam(spec, 'components').includes(ctx.canonical)) return null;
 	const prop = stringParam(spec, 'prop', 'options');
 	const attr = el.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === prop);
-	const value = attr?.type === 'JSXAttribute' && attr.value?.type === 'JSXExpressionContainer' ? attr.value.expression : null;
+	const value =
+		attr?.type === 'JSXAttribute' && attr.value?.type === 'JSXExpressionContainer' ? attr.value.expression : null;
 	const options = value && value.type !== 'JSXEmptyExpression' ? ctx.optionsIn(value) : null;
 	if (!options || options.length < numParam(spec, 'min', 2) || options.length > numParam(spec, 'max', 5)) return null;
 	// Few is not enough: the segmented control needs the set to sit on one

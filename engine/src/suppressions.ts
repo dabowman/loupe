@@ -95,7 +95,10 @@ export function makeSuppressionParser({
 	// term is not already followed by mandatory whitespace — which is the
 	// malformed gate below, not `strict`.
 	const alternation = (terms: readonly string[]): string =>
-		[...new Set(terms)].sort((a, b) => b.length - a.length).map(esc).join('|');
+		[...new Set(terms)]
+			.sort((a, b) => b.length - a.length)
+			.map(esc)
+			.join('|');
 	const keywordHead = `(${alternation(heads)})(?![\\w-])`;
 	const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
 	// The reason may not be the comment terminator itself: `<kw> <ids> -- */`
@@ -201,7 +204,7 @@ export function isSuppressed(
 ): boolean {
 	for (const L of [line, line - 1, ...scopeLines]) {
 		const s = byLine.get(L);
-		if (s && s.has(ruleId)) return true;
+		if (s?.has(ruleId)) return true;
 	}
 	return false;
 }

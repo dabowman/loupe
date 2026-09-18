@@ -122,15 +122,27 @@ await check('a registry naming no packages still applies anywhere', () => {
 
 await check('a package-qualified node matches only that package', () => {
 	const pattern = node(['@wordpress/components::Stack', '@wordpress/components::Button']);
-	const wp = { name: 'Stack', pkg: '@wordpress/components', children: [{ name: 'Button', pkg: '@wordpress/components', children: [] }] };
-	const chakra = { name: 'Stack', pkg: '@chakra-ui/react', children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }] };
+	const wp = {
+		name: 'Stack',
+		pkg: '@wordpress/components',
+		children: [{ name: 'Button', pkg: '@wordpress/components', children: [] }],
+	};
+	const chakra = {
+		name: 'Stack',
+		pkg: '@chakra-ui/react',
+		children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }],
+	};
 	assert(matches(pattern, wp), 'should match its own package');
 	assert(!matches(pattern, chakra), 'must not match another package');
 });
 
 await check('an unqualified node still matches any package', () => {
 	const pattern = node(['Stack', 'Button']);
-	const chakra = { name: 'Stack', pkg: '@chakra-ui/react', children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }] };
+	const chakra = {
+		name: 'Stack',
+		pkg: '@chakra-ui/react',
+		children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }],
+	};
 	const unknown = { name: 'Stack', pkg: null, children: [{ name: 'Button', pkg: null, children: [] }] };
 	assert(matches(pattern, chakra), 'bare names are the default and must stay permissive');
 	// An import the scanner could not resolve is not evidence of a mismatch.
@@ -151,7 +163,7 @@ await check('a preset dropped into presets/ is detected without touching the eng
 			extends: 'generic',
 			detect: { priority: 40, confidence: 'high', dependencies: ['@zz/design-system'] },
 			designSystem: { name: 'ZZ', packages: ['@zz/design-system'], components: { layout: ['Row'], text: ['Copy'] } },
-		})
+		}),
 	);
 	const root = repo({ 'package.json': JSON.stringify({ dependencies: { '@zz/design-system': '^1.0.0' } }) });
 	try {
@@ -330,7 +342,10 @@ await check('a profile is selected by what the project imports', () => {
 });
 
 await check('a skipped registry is reported, not silently dropped', async () => {
-	const root = repo({ 'loupe.config.json': configFor('@chakra-ui/react'), 'registry.json': registryFile(['@wordpress/components']) });
+	const root = repo({
+		'loupe.config.json': configFor('@chakra-ui/react'),
+		'registry.json': registryFile(['@wordpress/components']),
+	});
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		const out = applyRegistries(config, [{ label: 'profile wpds', patterns: join(root, 'registry.json') }], {
@@ -607,7 +622,9 @@ export const ${name} = () => (
 	const sig = ['Dlg', 'DlgTrigger', ['DlgPopup', 'DlgTitle']];
 	const withCanonical = repo({
 		...files,
-		'registry.json': JSON.stringify({ patterns: [{ id: 'dlg', summary: 'anatomy', canonical: 'Dlg', signature: sig }] }),
+		'registry.json': JSON.stringify({
+			patterns: [{ id: 'dlg', summary: 'anatomy', canonical: 'Dlg', signature: sig }],
+		}),
 	});
 	const without = repo({
 		...files,
@@ -638,7 +655,9 @@ export const ${name} = () => (
 // they come in. The negative half keeps the fix from passing by silencing the
 // rule, and `Tableau` is there because "starts with Table" is not "is a part".
 await check('a registered component’s own parts, cut below its root, are not a composite', async () => {
-	const file = (name: string): string => `import { TableHead, TableRow, TableHeaderCell, TableCell, Tableau, TableauItem } from '@acme/ui';
+	const file = (
+		name: string,
+	): string => `import { TableHead, TableRow, TableHeaderCell, TableCell, Tableau, TableauItem } from '@acme/ui';
 export const ${name}Head = () => (
   <TableHead><TableRow><TableHeaderCell /><TableHeaderCell /><TableHeaderCell /></TableRow></TableHead>
 );

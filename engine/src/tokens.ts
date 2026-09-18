@@ -17,8 +17,10 @@
  * rather than declaring every token unknown.
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
+import type { Stats } from 'node:fs';
 import { join } from 'node:path';
+import { readDir } from './discover.ts';
 import postcss from 'postcss';
 import type { Root } from 'postcss';
 import type { TokenSet } from './types.ts';
@@ -60,7 +62,11 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 
 /** Comparable form of a CSS value: case, spacing, shorthand hex, `!important`. */
 export function normalizeValue(value: unknown): string {
-	let v = String(value).trim().toLowerCase().replace(/\s*!important\s*$/, '').replace(/\s+/g, ' ');
+	let v = String(value)
+		.trim()
+		.toLowerCase()
+		.replace(/\s*!important\s*$/, '')
+		.replace(/\s+/g, ' ');
 	v = v.replace(/#([0-9a-f])([0-9a-f])([0-9a-f])\b/g, '#$1$1$2$2$3$3');
 	return v;
 }
@@ -96,7 +102,7 @@ export function cssFilesUnder(
 	exts: readonly string[] = ['.css'],
 ): string[] {
 	const wanted = (name: string): boolean => exts.some((e) => name.endsWith(e));
-	let st;
+	let st: Stats;
 	try {
 		st = statSync(path);
 	} catch {
@@ -106,13 +112,7 @@ export function cssFilesUnder(
 	const out: string[] = [];
 	const walk = (dir: string): void => {
 		if (budget.left <= 0) return;
-		let entries;
-		try {
-			entries = readdirSync(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const e of entries) {
+		for (const e of readDir(dir)) {
 			if (budget.left <= 0) return;
 			const full = join(dir, e.name);
 			if (e.isDirectory()) {
@@ -173,7 +173,12 @@ export function tokensFor(set: TokenSet, prop: string, value: string): string[] 
 /** Every on-role token for `prop` that has a literal value, as `[name, value]`, whatever the value. */
 export function familyFor(set: TokenSet, prop: string): [string, string][] {
 	const all = [...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v]));
-	const keep = new Set(onRole(all.map(([n]) => n), prop));
+	const keep = new Set(
+		onRole(
+			all.map(([n]) => n),
+			prop,
+		),
+	);
 	return all.filter(([n]) => keep.has(n));
 }
 
@@ -280,7 +285,9 @@ export const partsOf = (value: string): string[] => value.trim().match(/(?:[^\s(
 
 /** A part a token could stand for. Zeros, keywords and `url()` pass through. */
 const isLiteralPart = (p: string): boolean =>
-	(/^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0) || /^#[0-9a-f]+$/i.test(p) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
+	(/^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0) ||
+	/^#[0-9a-f]+$/i.test(p) ||
+	/^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
 
 /** What `check --judge` answers for a value that should stay as written. */
 export const KEEP = 'keep';
@@ -296,7 +303,11 @@ export type Slot = { at: number; part: string } & ({ token: string } | { candida
  * is a literal no token here can stand for (`5%`, `-4px`, `hsl()`) — rewriting
  * the rest would leave the finding standing and call it fixed.
  */
-export function planValue(set: TokenSet, prop: string, value: string): 'none' | { parts: string[]; slots: Slot[] } | null {
+export function planValue(
+	set: TokenSet,
+	prop: string,
+	value: string,
+): 'none' | { parts: string[]; slots: Slot[] } | null {
 	const family = familyFor(set, prop);
 	if (!family.length) return 'none';
 	// A family the engine can measure takes a value apart; one it cannot —
@@ -322,7 +333,10 @@ export function planValue(set: TokenSet, prop: string, value: string): 'none' | 
 export function suggestionFor(set: TokenSet, prop: string, value: string): string {
 	const names = tokensFor(set, prop, value);
 	if (!names.length) return '';
-	const shown = names.slice(0, 2).map((n) => `var(${n})`).join(' or ');
+	const shown = names
+		.slice(0, 2)
+		.map((n) => `var(${n})`)
+		.join(' or ');
 	return ` → ${shown}${names.length > 2 ? ` (+${names.length - 2} more)` : ''}`;
 }
 

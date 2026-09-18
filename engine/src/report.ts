@@ -13,7 +13,15 @@ import { SEV_PAINT, cyan, dim, green, magenta, red, yellow } from './color.ts';
 import { RULES, renderTitle } from './rules.ts';
 import { messageLine } from './text.ts';
 import type {
-	AnalyzeResult, BaselinedResult, Config, Directive, Finding, ReportPayload, RuleDescriptor, RuleId, Severity,
+	AnalyzeResult,
+	BaselinedResult,
+	Config,
+	Directive,
+	Finding,
+	ReportPayload,
+	RuleDescriptor,
+	RuleId,
+	Severity,
 } from './types.ts';
 
 const SEV_MARK: Partial<Record<Severity, string>> = { error: '\u2717', warn: '\u2022' };
@@ -81,8 +89,10 @@ const painted = (f: Finding): string => {
  * Binding this per formatter keeps the obligation in one place, so a fourth
  * format cannot quietly skip it.
  */
-const titleFor = (config: Config) => (id: RuleId): string =>
-	renderTitle(id, config.designSystem, config.suppression.keyword);
+const titleFor =
+	(config: Config) =>
+	(id: RuleId): string =>
+		renderTitle(id, config.designSystem, config.suppression.keyword);
 
 /** How far from a finding a directive can sit and still plausibly be for it. */
 const NEAR = 5;
@@ -111,14 +121,16 @@ function nearMisses(result: AnalyzeResult | BaselinedResult): string[] {
 		// comment above it does not work — only the nearest line is consulted —
 		// so the remedy there is the comma list, not a move that would displace
 		// a suppression someone else signed off.
-		const occupant = result.directives.find((d) => d.file === f.file && d.line === f.line - 1 && !d.rules.includes(f.rule));
+		const occupant = result.directives.find(
+			(d) => d.file === f.file && d.line === f.line - 1 && !d.rules.includes(f.rule),
+		);
 		out.push(
 			occupant
 				? `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but line ${f.line - 1} already carries one for ` +
-					`\`${occupant.rules.join(', ')}\` — only the nearest line is read, so name both on it: ` +
-					`\`${occupant.rules.join(', ')}, ${f.rule} -- <reason>\`.`
+						`\`${occupant.rules.join(', ')}\` — only the nearest line is read, so name both on it: ` +
+						`\`${occupant.rules.join(', ')}, ${f.rule} -- <reason>\`.`
 				: `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but this finding anchors to line ${f.line} — ` +
-					`move it to line ${f.line}, or the line directly above it.`,
+						`move it to line ${f.line}, or the line directly above it.`,
 		);
 	}
 	return out;
@@ -170,12 +182,10 @@ function suppressionLine(directives: readonly Directive[]): string {
 	const rules = tally(directives.flatMap((d) => d.rules));
 	const rest = rules.length - TOP;
 	const files = new Set(directives.map((d) => d.file)).size;
-	return (
-		`${directives.length} active suppression(s) in ${files} file(s), silencing ${rules
-			.slice(0, TOP)
-			.map(([rule, n]) => `${rule} (${n})`)
-			.join(', ')}${rest > 0 ? `, +${rest} more rule(s)` : ''}` + ' — run `loupe suppressions` to read them.'
-	);
+	return `${directives.length} active suppression(s) in ${files} file(s), silencing ${rules
+		.slice(0, TOP)
+		.map(([rule, n]) => `${rule} (${n})`)
+		.join(', ')}${rest > 0 ? `, +${rest} more rule(s)` : ''} — run \`loupe suppressions\` to read them.`;
 }
 
 /**
@@ -266,7 +276,7 @@ export function formatAgent(
 			// thing on the line that did not look like itself.
 			lines.push(
 				`${SEV_PAINT[sev](SEV_MARK[sev] ?? '\u2022')} ${magenta(ruleId)} ${dim(`(${group.length})`)} ` +
-					`${SEV_PAINT[sev](SEV_WORD[sev] ?? 'advisory')} \u2014 ${title(ruleId)}`
+					`${SEV_PAINT[sev](SEV_WORD[sev] ?? 'advisory')} \u2014 ${title(ruleId)}`,
 			);
 			const show = group.slice(0, quota.get(ruleId) ?? 0);
 			hidden += group.length - show.length;
@@ -278,7 +288,9 @@ export function formatAgent(
 		}
 		if (hidden) {
 			lines.push('');
-			lines.push(dim(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`));
+			lines.push(
+				dim(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`),
+			);
 		}
 		if (!terse) {
 			const dense = densestLine(findings);
@@ -294,10 +306,14 @@ export function formatAgent(
 		lines.push(
 			dim(
 				'Next: `loupe fix` applies the unambiguous token substitutions, `loupe explain <ruleId>` says what a rule wants, ' +
-					'`--format json` carries every finding whole.'
-			)
+					'`--format json` carries every finding whole.',
+			),
 		);
-		lines.push(dim(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`));
+		lines.push(
+			dim(
+				`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`,
+			),
+		);
 		// A directive for the right rule, sitting just too far from the finding
 		// it was written for, is the single most expensive thing to debug from
 		// the report alone: the hint above is already followed, the finding is
@@ -318,8 +334,8 @@ export function formatAgent(
 		lines.push('');
 		lines.push(
 			yellow(
-				`! no ${config.designSystem.tokenPrefixes.join('/')} tokens were found, so unknown ones cannot be reported \u2014 check designSystem.tokenSources against what the package actually ships.`
-			)
+				`! no ${config.designSystem.tokenPrefixes.join('/')} tokens were found, so unknown ones cannot be reported \u2014 check designSystem.tokenSources against what the package actually ships.`,
+			),
 		);
 	}
 	return lines.join('\n');
@@ -468,6 +484,6 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 			],
 		},
 		null,
-		2
+		2,
 	);
 }

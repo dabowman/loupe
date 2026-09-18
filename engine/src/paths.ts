@@ -164,8 +164,7 @@ export function findExistingBaseline(
 	// syscall and a second answer to a question already answered above.
 	if (byDefaultName !== target && existsSync(byDefaultName))
 		return { path: byDefaultName, found: true, fallback: 'default-name' };
-	for (const path of legacyBaselines(root))
-		if (existsSync(path)) return { path, found: true, fallback: 'legacy' };
+	for (const path of legacyBaselines(root)) if (existsSync(path)) return { path, found: true, fallback: 'legacy' };
 	return { path: target, found: false, fallback: 'none' };
 }
 

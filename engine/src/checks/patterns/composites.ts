@@ -123,7 +123,15 @@ export function composites({
 		tail: string,
 		group: string,
 	): void => {
-		out.push({ rule, file: c.file, line: c.line, message: `${signature}${tail}`, suffix: tail, code: c.signature, group });
+		out.push({
+			rule,
+			file: c.file,
+			line: c.line,
+			message: `${signature}${tail}`,
+			suffix: tail,
+			code: c.signature,
+			group,
+		});
 	};
 
 	// Two files is already a pattern being rebuilt; one is just the first use.
@@ -134,7 +142,13 @@ export function composites({
 			// yet, and telling an agent to import it would send it looking for a
 			// module that does not exist.
 			const remedy = c.pattern?.canonical ? `import \`${c.pattern.canonical}\`` : 'extract one shared implementation';
-			emit('patterns/duplicate-composite', c, c.signature, ` — rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`, id);
+			emit(
+				'patterns/duplicate-composite',
+				c,
+				c.signature,
+				` — rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`,
+				id,
+			);
 		}
 	}
 	// One file is enough: this is a wrong choice made here, not a duplication

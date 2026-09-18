@@ -15,8 +15,16 @@
  */
 
 import { parse as babelParse } from '@babel/parser';
-import type { ParserPlugin } from '@babel/parser';
-import type { Expression, File, JSXAttribute, JSXElement, JSXOpeningElement, Node, TaggedTemplateExpression } from '@babel/types';
+import type { ParseResult, ParserPlugin } from '@babel/parser';
+import type {
+	Expression,
+	File,
+	JSXAttribute,
+	JSXElement,
+	JSXOpeningElement,
+	Node,
+	TaggedTemplateExpression,
+} from '@babel/types';
 import { keyName, toCssProp, toCssValue } from './inline.ts';
 import { FLEX_PROPS, GAP_PROPS } from './styles.ts';
 import { cssInJsLocals, parseTemplate, templateText } from './cssinjs.ts';
@@ -95,8 +103,7 @@ function substitutionTargets(expr: Node | null | undefined, out: JSXElement[] = 
 			// callback takes the moment it touches its props, and missing it
 			// reproduces the unsatisfiable finding this exemption exists to end.
 			if (expr.body.type !== 'BlockStatement') return substitutionTargets(expr.body, out);
-			for (const stmt of expr.body.body)
-				if (stmt.type === 'ReturnStatement') substitutionTargets(stmt.argument, out);
+			for (const stmt of expr.body.body) if (stmt.type === 'ReturnStatement') substitutionTargets(stmt.argument, out);
 			break;
 		}
 		case 'ConditionalExpression':
@@ -139,8 +146,7 @@ const canonicalName = (name: string, normalize: RegExp | null): string =>
 	normalize ? name.replace(normalize, '') : name;
 
 /** `Set.has` for a name that may not exist. */
-const held = (set: ReadonlySet<string>, name: string | undefined): boolean =>
-	name !== undefined && set.has(name);
+const held = (set: ReadonlySet<string>, name: string | undefined): boolean => name !== undefined && set.has(name);
 
 /** First line of an unknown throw — a parser may reject with anything. */
 const messageOf = (err: unknown): string =>
@@ -192,10 +198,10 @@ function stringsIn(node: unknown, out: string[] = []): string[] {
 		return out;
 	}
 	const rec = node as Record<string, unknown>;
-	if (rec['type'] === 'StringLiteral') {
-		if (typeof rec['value'] === 'string') out.push(rec['value']);
-	} else if (rec['type'] === 'TemplateElement') {
-		const v = rec['value'] as { cooked?: string; raw?: string } | undefined;
+	if (rec.type === 'StringLiteral') {
+		if (typeof rec.value === 'string') out.push(rec.value);
+	} else if (rec.type === 'TemplateElement') {
+		const v = rec.value as { cooked?: string; raw?: string } | undefined;
 		out.push(v?.cooked ?? v?.raw ?? '');
 	}
 	for (const key of Object.keys(rec)) {
@@ -284,7 +290,7 @@ function walkAst(node: unknown, visit: (n: Node) => void): void {
 		return;
 	}
 	const rec = node as Record<string, unknown>;
-	if (typeof rec['type'] === 'string') visit(node as Node);
+	if (typeof rec.type === 'string') visit(node as Node);
 	for (const key of Object.keys(rec)) {
 		if (key === 'loc' || key === 'start' || key === 'end' || key === 'leadingComments' || key === 'trailingComments')
 			continue;
@@ -361,7 +367,10 @@ function systemImports(
 
 /** An expression with any type assertion peeled off; the value is the same. */
 const unwrapTs = (e: Node): Node =>
-	e.type === 'TSAsExpression' || e.type === 'TSSatisfiesExpression' || e.type === 'TSNonNullExpression' || e.type === 'TSTypeAssertion'
+	e.type === 'TSAsExpression' ||
+	e.type === 'TSSatisfiesExpression' ||
+	e.type === 'TSNonNullExpression' ||
+	e.type === 'TSTypeAssertion'
 		? unwrapTs(e.expression)
 		: e;
 
@@ -451,7 +460,12 @@ function componentRanges(program: Node): { start: number; end: number; name: str
 	return out;
 }
 
-export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rules: readonly PatternRule[] = []): ScanResult {
+export function scanMarkup(
+	text: string,
+	relPath: string,
+	ds: DesignSystem,
+	rules: readonly PatternRule[] = [],
+): ScanResult {
 	const referenced = harvestTokens(text);
 	const stems = harvestStems(text);
 	const bindings: Binding[] = [];
@@ -463,22 +477,32 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 	const controls: Control[] = [];
 	const imports = new Set<string>();
 
-	let ast;
+	let ast: ParseResult<File>;
 	try {
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return { controls, bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports: [], parseError: messageOf(err) };
+		return {
+			controls,
+			bindings,
+			rawEls,
+			inlineStyles,
+			cssInJs,
+			composites,
+			ruleHits,
+			imports,
+			referenced,
+			stems,
+			componentImports: [],
+			parseError: messageOf(err),
+		};
 	}
 
 	const { known, text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
 	const tags = cssInJsLocals(ast, ds.cssInJsPackages);
 	// `<Button css={css`…`}>` binds a template to an element the walk sees
 	// first, so the owner is recorded before the template is reached.
-	const cssPropOwner = new Map<
-		number,
-		{ target: string; isSystem: boolean; isText: boolean; isLayout: boolean }
-	>();
+	const cssPropOwner = new Map<number, { target: string; isSystem: boolean; isText: boolean; isLayout: boolean }>();
 	// Opening elements handed to a substitution prop. Recorded while the carrying
 	// element's attributes are read, which the walk reaches first, and held by
 	// node identity — `walkAst` visits these very objects, so nothing has to be
@@ -491,27 +515,30 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		if (node.type === 'ImportDeclaration') for (const sp of node.specifiers) imports.add(sp.local.name);
 
 	/**
- * A CSS-in-JS tagged template, resolved to the thing it styles.
- *
- * `styled(Button)` styles a design-system component, so its declarations get
- * that component's binding and the "use the props" remedy — the same verdict
- * the stylesheet pass reaches for a class bound to the same component.
- */
+	 * A CSS-in-JS tagged template, resolved to the thing it styles.
+	 *
+	 * `styled(Button)` styles a design-system component, so its declarations get
+	 * that component's binding and the "use the props" remedy — the same verdict
+	 * the stylesheet pass reaches for a class bound to the same component.
+	 */
 	/**
- * Direct design-system children of a JSX element.
- *
- * Descends through anything that is not itself an element — expression
- * containers, fragments, conditionals — because `{items.map((i) => <Button />)}`
- * is a child in every sense that matters here, and stopping at the container
- * would make a mapped list look empty.
- */
+	 * Direct design-system children of a JSX element.
+	 *
+	 * Descends through anything that is not itself an element — expression
+	 * containers, fragments, conditionals — because `{items.map((i) => <Button />)}`
+	 * is a child in every sense that matters here, and stopping at the container
+	 * would make a mapped list look empty.
+	 */
 	const jsxChildElements = (el: JSXElement): JSXElement[] => {
 		const out: JSXElement[] = [];
 		const dig = (n: unknown): void => {
 			if (!n || typeof n !== 'object') return;
-			if (Array.isArray(n)) return n.forEach(dig);
+			if (Array.isArray(n)) {
+				n.forEach(dig);
+				return;
+			}
 			const rec = n as Record<string, unknown>;
-			if (rec['type'] === 'JSXElement') return void out.push(n as JSXElement);
+			if (rec.type === 'JSXElement') return void out.push(n as JSXElement);
 			for (const k of Object.keys(rec)) if (k !== 'loc' && k !== 'start' && k !== 'end') dig(rec[k]);
 		};
 		for (const c of el.children ?? []) dig(c);
@@ -590,7 +617,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		// A spread could hold anything; one is enough to make the count unknown.
 		if (v.elements.some((x) => !x || x.type === 'SpreadElement')) return null;
 		return v.elements.map((x) => {
-			if (!x || x.type !== 'ObjectExpression') return null;
+			if (x?.type !== 'ObjectExpression') return null;
 			const label = x.properties.find(
 				(pr) => pr.type === 'ObjectProperty' && !pr.computed && pr.key.type === 'Identifier' && pr.key.name === 'label',
 			);
@@ -777,8 +804,12 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 			// out with style={{ display: 'flex' }} and no className at all.
 			if (mapped.styledOnly && !classes.length && !style?.present) return;
 			rawEls.push({
-				tag: lower, classes, file: relPath, line,
-				suggest: mapped.component, styledOnly: mapped.styledOnly,
+				tag: lower,
+				classes,
+				file: relPath,
+				line,
+				suggest: mapped.component,
+				styledOnly: mapped.styledOnly,
 				inlineStyled: Boolean(style?.present),
 				inlineLayout: Boolean(style?.decls?.some(isLayoutDecl)),
 			});
@@ -786,7 +817,16 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 	});
 
 	return {
-		controls, bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems,
+		controls,
+		bindings,
+		rawEls,
+		inlineStyles,
+		cssInJs,
+		composites,
+		ruleHits,
+		imports,
+		referenced,
+		stems,
 		componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })),
 		parseError: null,
 	};

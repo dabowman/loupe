@@ -70,7 +70,7 @@ await check('html embeds exactly what --format json prints', () => {
 	const page = embedded(formatHtml(result, config)) as { findings: unknown[] };
 	assert(
 		JSON.stringify(page) === JSON.stringify(JSON.parse(formatJson(result, config))),
-		'the page and the JSON describe different reports'
+		'the page and the JSON describe different reports',
 	);
 	// The equality above holds by construction while both read one payload
 	// builder, and is here to fail the day someone gives the page its own field
@@ -139,7 +139,7 @@ await check('the rules roster resolves title placeholders', () => {
 	const ranks = payload.rules.map((r) => r.rank);
 	assert(
 		ranks.every((r, i) => i === 0 || (ranks[i - 1] ?? 0) >= r),
-		'the rules roster is not ordered by rank'
+		'the rules roster is not ordered by rank',
 	);
 });
 
@@ -151,7 +151,7 @@ await check('sarif fingerprints survive a line move', () => {
 	assert(before.length === result.findings.length, 'not every result carries a fingerprint');
 	// The whole point: an edit above a finding must not re-open its alert.
 	const moved = JSON.parse(
-		formatSarif({ ...result, findings: result.findings.map((f) => ({ ...f, line: f.line + 40 })) }, config)
+		formatSarif({ ...result, findings: result.findings.map((f) => ({ ...f, line: f.line + 40 })) }, config),
 	) as typeof sarif;
 	const after = moved.runs[0]?.results.map((r) => r.partialFingerprints.loupeCode) ?? [];
 	assert(JSON.stringify(before) === JSON.stringify(after), 'a fingerprint moved with its line number');
@@ -205,14 +205,17 @@ export default function ${name}() {
 	try {
 		const composites = r.findings.filter((f) => f.rule === 'patterns/unregistered-composite');
 		assert(composites.length >= 3, `expected a cluster, got ${composites.length} composite findings`);
-		assert(composites.every((f) => typeof f.group === 'string' && f.group.length > 0), 'a composite finding has no group');
+		assert(
+			composites.every((f) => typeof f.group === 'string' && f.group.length > 0),
+			'a composite finding has no group',
+		);
 		const files = new Set(composites.filter((f) => f.group === composites[0]?.group).map((f) => f.file));
 		assert(files.size === 3, `the cluster spans ${files.size} files, expected 3`);
 		// Every other rule leaves it unset: `group` means "one member of an N-way
 		// relation", and a rule that sets it on a single-file finding says nothing.
 		assert(
 			r.findings.filter((f) => !f.rule.startsWith('patterns/')).every((f) => f.group === undefined),
-			'a non-composite finding carries a cluster key'
+			'a non-composite finding carries a cluster key',
 		);
 	} finally {
 		cleanup(dir);
@@ -228,7 +231,10 @@ await check('an unknown --format is rejected, not silently treated as agent', ()
 	} catch (err) {
 		const e = execFailure(err);
 		assert(e.status === 2, `expected exit 2 (cannot run), got ${String(e.status)}`);
-		assert(e.stderr.includes('sarf') && e.stderr.includes('html'), `stderr did not name the valid formats: ${e.stderr}`);
+		assert(
+			e.stderr.includes('sarf') && e.stderr.includes('html'),
+			`stderr did not name the valid formats: ${e.stderr}`,
+		);
 	} finally {
 		cleanup(dir);
 	}
@@ -248,7 +254,10 @@ await check('--format html writes a whole document to stdout', () => {
 			out = e.stdout;
 		}
 		assert(out.startsWith('<!doctype html>'), 'stdout is not a document');
-		assert(out.includes('<!-- loupe:begin -->') && out.includes('<!-- loupe:end -->'), 'the fragment markers are missing');
+		assert(
+			out.includes('<!-- loupe:begin -->') && out.includes('<!-- loupe:end -->'),
+			'the fragment markers are missing',
+		);
 		one([...out.matchAll(/<script type="application\/json" id="loupe-data">/g)], 'expected exactly one data block');
 	} finally {
 		cleanup(dir);
@@ -296,7 +305,7 @@ await check('the hook never colours the report it hands back', () => {
 	const { stdout, stderr } = runColor(
 		['hook'],
 		{ FORCE_COLOR: '1' },
-		JSON.stringify({ session_id: 'colour', tool_input: { file_path: 'styles/app.css' } })
+		JSON.stringify({ session_id: 'colour', tool_input: { file_path: 'styles/app.css' } }),
 	);
 	assert(stderr.includes('loupe') || stdout.includes('loupe'), `the hook said nothing at all:\n${stderr}${stdout}`);
 	assert(!ESC.test(stderr), `the agent was handed ANSI: ${JSON.stringify(stderr)}`);
@@ -322,7 +331,10 @@ await check('--version names the version, the entry and the install', () => {
 	assert(out.startsWith(`loupe ${manifest.version} (source, `), `expected the manifest version from source: ${out}`);
 	assert(out.trim().endsWith(`, ${resolve(HERE, '..', '..')})`), `should end with the plugin root: ${out}`);
 	const status = runColor(['status', '--no-color'], {}).stdout;
-	assert(status.includes(`version:    loupe ${manifest.version}`), `status should carry the same line: ${status.split('\n')[0]}`);
+	assert(
+		status.includes(`version:    loupe ${manifest.version}`),
+		`status should carry the same line: ${status.split('\n')[0]}`,
+	);
 });
 
 await check('rules, config keys and help wear their own colours', () => {
@@ -338,7 +350,7 @@ await check('rules, config keys and help wear their own colours', () => {
 	assert(/\u001B\[1mcheck/.test(help), `a command went unpainted:\n${help}`);
 	// The text is also what `--help | grep` reads, and a pipe is not a terminal.
 	const piped = runColor(['--help'], { NO_COLOR: '1' }).stdout;
-	assert(!ESC.test(piped) && /^  --changed /m.test(piped), `piped help is not plain:\n${piped}`);
+	assert(!ESC.test(piped) && /^ {2}--changed /m.test(piped), `piped help is not plain:\n${piped}`);
 });
 
 await check('component names are painted, and only at print time', () => {
@@ -358,7 +370,7 @@ await check('component names are painted, and only at print time', () => {
 		const after = spawnSync(process.execPath, [CLI, 'check', '--all'], { cwd: dir, encoding: 'utf8', env: colour });
 		assert(
 			/clean\./.test(after.stdout),
-			`a baseline written in colour no longer matches its own findings:\n${after.stdout}`
+			`a baseline written in colour no longer matches its own findings:\n${after.stdout}`,
 		);
 	} finally {
 		cleanup(dir);
@@ -420,7 +432,10 @@ await check('a taken anchor line is answered with the comma form, not a move', a
 });
 
 await check('a clean report carries no near-miss noise', async () => {
-	const { result, config, root } = await run({ 'loupe.config.json': CONFIG, 'src/A.jsx': 'export const A = () => <div />;' });
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'src/A.jsx': 'export const A = () => <div />;',
+	});
 	try {
 		assert(!/directive is on/.test(formatAgent(result, config)), 'nothing to say should say nothing');
 	} finally {
@@ -434,7 +449,10 @@ await check('a clean report carries no near-miss noise', async () => {
 // with nothing to mute. An agent that read one told its user the codebase was
 // clean. Every line asserted here replaced a second run of the tool.
 await check('a clean report still says what was scanned and what is silenced', async () => {
-	const { result, config, root } = await run({ 'loupe.config.json': CONFIG, 'src/A.jsx': 'export const A = () => <div />;' });
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'src/A.jsx': 'export const A = () => <div />;',
+	});
 	try {
 		const silenced: AnalyzeResult = {
 			...result,
@@ -450,7 +468,10 @@ await check('a clean report still says what was scanned and what is silenced', a
 		// the tallies are what they silence, and they are allowed to disagree.
 		assert(/2 active suppression\(s\) in 2 file\(s\)/.test(out), `the directives went unmentioned:\n${out}`);
 		assert(/system\/override \(2\)/.test(out), `the count did not say what it silences:\n${out}`);
-		assert(!/active suppression/.test(formatAgent(silenced, config, { terse: true })), 'the hook does not want a repo-wide inventory');
+		assert(
+			!/active suppression/.test(formatAgent(silenced, config, { terse: true })),
+			'the hook does not want a repo-wide inventory',
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -467,7 +488,10 @@ await check('a registry note keeps its last clause on screen and ships whole in 
 	const noted: AnalyzeResult = { ...result, findings: result.findings.map((f, i) => (i === 0 ? { ...f, note } : f)) };
 	const out = formatAgent(noted, config);
 	assert(/not Grid\.\)/.test(out), `the actionable end of the note was cut:\n${out}`);
-	assert(/\(\d+\) (blocking|advisory) \u2014/.test(out), `a rule group that only says its severity in a glyph:\n${out}`);
+	assert(
+		/\(\d+\) (blocking|advisory) \u2014/.test(out),
+		`a rule group that only says its severity in a glyph:\n${out}`,
+	);
 	const shipped = (JSON.parse(formatJson(noted, config)) as { findings: { note?: string }[] }).findings[0]?.note;
 	assert(shipped === note, `json shipped a note the reader cannot act on: ${String(shipped)}`);
 });
@@ -487,7 +511,10 @@ await check('what --judge wrote is painted green, and nothing else on the line i
 		const out = formatAgent(withJudge, config);
 		for (const span of judged.spans)
 			assert(out.includes(`\u001B[32m${span}\u001B[0m`), `"${span}" was not painted on its own:\n${out}`);
-		assert(out.includes('<p> \u2192 \u001B[36m<Text\u001B[0m '), `the component the variant belongs to lost its colour:\n${out}`);
+		assert(
+			out.includes('<p> \u2192 \u001B[36m<Text\u001B[0m '),
+			`the component the variant belongs to lost its colour:\n${out}`,
+		);
 		assert((out.match(/\u001B\[32m/g) ?? []).length === 2, 'a parse-only finding was painted as judged');
 	} finally {
 		setColor(false);

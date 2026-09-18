@@ -88,7 +88,8 @@ const inferrableRepo = (): string =>
 			'  </div>',
 			');',
 		].join('\n'),
-		'styles/a.css': '.acme-a { color: #f00; }\n.acme-b { margin-bottom: 16px; }\n.acme-c { padding: 4px; }\n.acme-d { display: block; }\n',
+		'styles/a.css':
+			'.acme-a { color: #f00; }\n.acme-b { margin-bottom: 16px; }\n.acme-c { padding: 4px; }\n.acme-d { display: block; }\n',
 	});
 
 // `check` exits 1 whenever a finding survives the baseline, and `execFileSync`
@@ -134,9 +135,9 @@ const EMPTY_HOME = scratch('dsh-home-');
 
 const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
 	const e: NodeJS.ProcessEnv = { ...process.env, HOME: EMPTY_HOME, ...extra };
-	if (!('LOUPE_OFF' in extra)) delete e['LOUPE_OFF'];
-	if (!('CLAUDE_PLUGIN_DATA' in extra)) delete e['CLAUDE_PLUGIN_DATA'];
-	if (!('CLAUDE_PLUGIN_ROOT' in extra)) delete e['CLAUDE_PLUGIN_ROOT'];
+	if (!('LOUPE_OFF' in extra)) delete e.LOUPE_OFF;
+	if (!('CLAUDE_PLUGIN_DATA' in extra)) delete e.CLAUDE_PLUGIN_DATA;
+	if (!('CLAUDE_PLUGIN_ROOT' in extra)) delete e.CLAUDE_PLUGIN_ROOT;
 	for (const k of Object.keys(e)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_') && !(k in extra)) delete e[k];
 	return e;
 };
@@ -209,7 +210,10 @@ await check('--files accepts an absolute path', () => {
 		const abs = JSON.parse(run(join(root, 'style.css'))) as { summary: { total: number } };
 		const rel = JSON.parse(run('style.css')) as { summary: { total: number } };
 		assert(rel.summary.total > 0, 'fixture should produce a finding');
-		assert(abs.summary.total === rel.summary.total, `absolute path found ${abs.summary.total}, relative found ${rel.summary.total}`);
+		assert(
+			abs.summary.total === rel.summary.total,
+			`absolute path found ${abs.summary.total}, relative found ${rel.summary.total}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -279,7 +283,7 @@ await check('status reports the blocking switch it cannot see in the environment
 		mkdirSync(join(home, '.claude'), { recursive: true });
 		writeFileSync(
 			join(home, '.claude', 'settings.json'),
-			JSON.stringify({ pluginConfigs: { 'loupe@somewhere': { options: { blocking: true } } } })
+			JSON.stringify({ pluginConfigs: { 'loupe@somewhere': { options: { blocking: true } } } }),
 		);
 		// `env({HOME: home})`, not a hand-rolled scrub: this test needs one door
 		// open — the settings file it just wrote — and the helper closes the rest.
@@ -298,7 +302,7 @@ await check('the hook blocks when the setting says it should', () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
-			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
 	try {
@@ -327,7 +331,7 @@ await check('a baseline recorded from a shell is visible to the plugin hook', ()
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
-			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
 	const pluginData = scratch('dsh-plugin-data-');
@@ -370,14 +374,14 @@ await check('baseline reports the findings recorded and the entries they collaps
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
-			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <><Text className=\"acme-one\">one</Text><Text className=\"acme-two\">two</Text><Text className=\"acme-three\">three</Text></>;",
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <><Text className="acme-one">one</Text><Text className="acme-two">two</Text><Text className="acme-three">three</Text></>;',
 		'styles/a.css': '.acme-one { color: #f00; }\n.acme-two { color: #f00; }\n.acme-three { color: #f00; }',
 	});
 	// Nothing collapses here, so both counts are the same one and only one is named.
 	const distinct = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
-			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-one\">one</Text>;",
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-one">one</Text>;',
 		'styles/a.css': '.acme-one { color: #f00; font-size: 13px; }',
 	});
 	try {
@@ -389,7 +393,10 @@ await check('baseline reports the findings recorded and the entries they collaps
 		const [, findings, entries, noun] = both;
 		assert(noun === (entries === '1' ? 'entry' : 'entries'), `wrong plural for ${entries}: ${recorded}`);
 		const written = JSON.parse(readFileSync(join(root, '.loupe-baseline.json'), 'utf8')) as { entries: string[] };
-		assert(Number(entries) === written.entries.length, `entry count is not what was written: ${entries} vs ${written.entries.length}`);
+		assert(
+			Number(entries) === written.entries.length,
+			`entry count is not what was written: ${entries} vs ${written.entries.length}`,
+		);
 		assert(Number(findings) > Number(entries), `fixture did not collapse anything: ${recorded}`);
 
 		// The number `check` hides next is the findings one, not the entries one.
@@ -413,7 +420,7 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
-			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
 	// A fresh session id per run. The gate budgets retries per session and stands
@@ -494,7 +501,7 @@ await check('an unreadable baseline is named, not silently ignored', () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
-			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
 	const baseline = join(root, '.loupe-baseline.json');
@@ -507,7 +514,8 @@ await check('an unreadable baseline is named, not silently ignored', () => {
 		// `catch` that guards the first never sees it, and an `entries` default of
 		// `[]` reported it as a healthy empty baseline while the backlog went live.
 		const corruptions = {
-			'conflict markers': '<<<<<<< ours\n{"version":1,"entries":["a"]}\n=======\n{"version":1,"entries":["b"]}\n>>>>>>> theirs\n',
+			'conflict markers':
+				'<<<<<<< ours\n{"version":1,"entries":["a"]}\n=======\n{"version":1,"entries":["b"]}\n>>>>>>> theirs\n',
 			'valid JSON without entries': '{"version":1,"createdAt":"","count":3,"findings":3}\n',
 		};
 		for (const [name, body] of Object.entries(corruptions)) {
@@ -524,7 +532,7 @@ await check('an unreadable baseline is named, not silently ignored', () => {
 					} catch (err) {
 						return err;
 					}
-				})()
+				})(),
 			);
 			assert(/is unreadable/.test(f.stderr), `${name}: check did not name the baseline:\n${f.stderr}`);
 
@@ -562,9 +570,13 @@ await check('an unreadable baseline is named, not silently ignored', () => {
 // reported as success.
 await check('--baseline names the same file for the writer and the readers', () => {
 	const root = tmpRepo({
-		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, baseline: 'cfg/b.json' }),
+		'loupe.config.json': JSON.stringify({
+			extends: 'wpds',
+			namespaces: { project: ['acme-'] },
+			baseline: 'cfg/b.json',
+		}),
 		'src/A.jsx':
-			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
 	try {
@@ -581,10 +593,16 @@ await check('--baseline names the same file for the writer and the readers', () 
 		// agree it means "nobody named one" — `??` on either side sends them to
 		// different files, which is how the flag reported success into a file the
 		// gate never opened.
-		const empty = execFileSync('node', [CLI, 'baseline', '--root', root, '--baseline='], { encoding: 'utf8', env: env() });
+		const empty = execFileSync('node', [CLI, 'baseline', '--root', root, '--baseline='], {
+			encoding: 'utf8',
+			env: env(),
+		});
 		assert(/cfg\/b\.json/.test(empty), `--baseline= did not fall back to the configured path:\n${empty}`);
 		const emptyRead = checkAll(root, ['--baseline=']);
-		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(emptyRead), `--baseline= read a different file than it wrote:\n${emptyRead}`);
+		assert(
+			/[1-9]\d* baselined finding\(s\) hidden/.test(emptyRead),
+			`--baseline= read a different file than it wrote:\n${emptyRead}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -599,7 +617,7 @@ await check('an older baseline location is honored and named for what it is', ()
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
-			"import { __experimentalText as Text } from '@wordpress/components';\nexport const A = () => <Text className=\"acme-t\">x</Text>;",
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
 	try {
@@ -622,13 +640,19 @@ await check('an older baseline location is honored and named for what it is', ()
 		writeFileSync(join(root, '.loupe-baseline.json'), recorded);
 		writeFileSync(
 			join(root, 'loupe.config.json'),
-			JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, baseline: 'cfg/b.json' })
+			JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, baseline: 'cfg/b.json' }),
 		);
 		const byName = checkAll(root);
-		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(byName), `the committed default-name file was dropped:\n${byName}`);
+		assert(
+			/[1-9]\d* baselined finding\(s\) hidden/.test(byName),
+			`the committed default-name file was dropped:\n${byName}`,
+		);
 		const byNameStatus = execFileSync('node', [CLI, 'status', '--root', root], { encoding: 'utf8', env: env() });
 		assert(/the default name/.test(byNameStatus), `status mislabelled the default-name fallback:\n${byNameStatus}`);
-		assert(!/0\.1\.x location/.test(byNameStatus), `a file in the project was called an old location:\n${byNameStatus}`);
+		assert(
+			!/0\.1\.x location/.test(byNameStatus),
+			`a file in the project was called an old location:\n${byNameStatus}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -730,7 +754,7 @@ await check('a baseline recorded from a subdirectory is the one the hook reads',
 		const recorded = execFileSync('node', [CLI, 'baseline'], { encoding: 'utf8', cwd: app, env: env() });
 		assert(
 			recorded.includes(join(repo, '.loupe-baseline.json')),
-			`baseline anchored to the cwd, not the project:\n${recorded}`
+			`baseline anchored to the cwd, not the project:\n${recorded}`,
 		);
 
 		// The gate, rooted where the hook roots it, must honor what was just recorded.
@@ -769,7 +793,7 @@ await check("a project's own config outranks the plugin's preset setting", () =>
 		});
 		assert(
 			/config:\s+\S*loupe\.config\.json/.test(withOption),
-			`the plugin setting discarded the project's config:\n${withOption}`
+			`the plugin setting discarded the project's config:\n${withOption}`,
 		);
 
 		// A typed `--preset` is a different thing: someone asking, at the moment of
@@ -902,7 +926,10 @@ await check('a named profile brings its preset and its registries', () => {
 		assert(/extending preset wpds/.test(stdout), `the profile's preset did not apply:\n${stdout}`);
 		assert(/suppress:\s+wpds-allow/.test(stdout), `the profile's preset did not reach the ruleset:\n${stdout}`);
 		assert(!/registry skipped/.test(stderr), `the named profile's registries were dropped:\n${stderr}`);
-		assert(!/patterns\/duplicate-composite\s+off/.test(stdout), `the pattern registry never reached its rule:\n${stdout}`);
+		assert(
+			!/patterns\/duplicate-composite\s+off/.test(stdout),
+			`the pattern registry never reached its rule:\n${stdout}`,
+		);
 		assert(!/system\/locked-component\s+off/.test(stdout), `the component registry never reached its rule:\n${stdout}`);
 	} finally {
 		cleanup(root);
@@ -1106,7 +1133,11 @@ await check('a preset rename does not orphan directives written in the old keywo
 	try {
 		const config = await loadConfig({ root });
 		const r = await analyze(config, { scope: null });
-		const lines = (rule: string): number[] => r.findings.filter((f) => f.rule === rule).map((f) => f.line).sort();
+		const lines = (rule: string): number[] =>
+			r.findings
+				.filter((f) => f.rule === rule)
+				.map((f) => f.line)
+				.sort();
 
 		// Both keywords mute. A blanket alias stays blanket: `ds-disable` is
 		// carried in the preset's blanket list, and reading `ds-allow` must not
@@ -1126,7 +1157,10 @@ await check('a preset rename does not orphan directives written in the old keywo
 		// and it carries the keyword it was written with so the rename is findable.
 		assert(r.directives.length === 2, `expected 2 active directives, got ${r.directives.length}`);
 		const aliased = r.directives.filter((d) => d.alias !== undefined);
-		assert(aliased.length === 1 && aliased[0]?.alias === 'ds-allow', `expected one directive marked ds-allow, got ${JSON.stringify(aliased)}`);
+		assert(
+			aliased.length === 1 && aliased[0]?.alias === 'ds-allow',
+			`expected one directive marked ds-allow, got ${JSON.stringify(aliased)}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -1154,7 +1188,7 @@ await check('a named profile keeps what inference found about the project', () =
 // one turned a clean repo into exit 1 under `wpds`, where malformed is an
 // error. An upgrade that reports new errors on comments nobody changed is a
 // worse trade than the bug it fixes.
-await check('prose mentioning another preset\'s keyword stays prose', async () => {
+await check("prose mentioning another preset's keyword stays prose", async () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'styles/a.css': [
@@ -1209,7 +1243,10 @@ await check('an aliased directive missing its reason still reports', async () =>
 	try {
 		const r = await analyze(await loadConfig({ root }), { scope: null });
 		const malformed = r.findings.filter((f) => f.rule === 'suppression/malformed');
-		assert(malformed.length === 1 && malformed[0]?.line === 1, `expected one malformed at line 1, got ${JSON.stringify(malformed)}`);
+		assert(
+			malformed.length === 1 && malformed[0]?.line === 1,
+			`expected one malformed at line 1, got ${JSON.stringify(malformed)}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -1241,14 +1278,20 @@ await check('declared aliases are escaped, and a blanket term is never one', asy
 	try {
 		const r = await analyze(await loadConfig({ root }), { scope: null });
 		const lines = (rule: string): number[] =>
-			r.findings.filter((f) => f.rule === rule).map((f) => f.line).sort((a, b) => a - b);
+			r.findings
+				.filter((f) => f.rule === rule)
+				.map((f) => f.line)
+				.sort((a, b) => a - b);
 		assert(
 			JSON.stringify(lines('tokens/hardcoded-value')) === '[4,8]',
 			`expected the escaped aliases to mute and only those — got ${JSON.stringify(lines('tokens/hardcoded-value'))}`,
 		);
 		// `ds-disable` is a blanket term of the active preset, so naming it as an
 		// alias buys nothing: it reports, exactly as it did before.
-		assert(lines('suppression/malformed').includes(7), `a blanket term declared as an alias must still report — got ${JSON.stringify(lines('suppression/malformed'))}`);
+		assert(
+			lines('suppression/malformed').includes(7),
+			`a blanket term declared as an alias must still report — got ${JSON.stringify(lines('suppression/malformed'))}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -1307,7 +1350,10 @@ await check('a broken directive written in an alias still reports', async () => 
 	});
 	try {
 		const r = await analyze(await loadConfig({ root }), { scope: null });
-		const at = r.findings.filter((f) => f.rule === 'suppression/malformed').map((f) => f.line).sort((a, b) => a - b);
+		const at = r.findings
+			.filter((f) => f.rule === 'suppression/malformed')
+			.map((f) => f.line)
+			.sort((a, b) => a - b);
 		assert(JSON.stringify(at) === '[1,3]', `expected malformed at lines 1 and 3, got ${JSON.stringify(at)}`);
 	} finally {
 		cleanup(root);
@@ -1372,7 +1418,7 @@ await check('the hook stands aside on a non-project root instead of indexing it'
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(
 			parsed.systemMessage?.includes('not a git worktree'),
-			`the hook analyzed a root that is not a project: ${out}`
+			`the hook analyzed a root that is not a project: ${out}`,
 		);
 	} finally {
 		cleanup(root);
@@ -1393,7 +1439,10 @@ await check('init under a profile writes the profile preset and the real prefixe
 		const written: unknown = JSON.parse(readFileSync(join(root, 'loupe.config.json'), 'utf8'));
 		const cfg = written as { extends?: string; namespaces?: { project?: string[] } };
 		assert(cfg.extends === 'wpds', `init recorded the wrong preset: ${JSON.stringify(written)}`);
-		assert(cfg.namespaces?.project?.join(',') === 'wf-', `init recorded the wrong namespaces: ${JSON.stringify(written)}`);
+		assert(
+			cfg.namespaces?.project?.join(',') === 'wf-',
+			`init recorded the wrong namespaces: ${JSON.stringify(written)}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -1430,7 +1479,10 @@ await check('everything more explicit than a profile outranks its preset', () =>
 		const cases: [string, { stdout: string }][] = [
 			['--config', runCli(['status', '--root', root, '--config', explicit, ...named])],
 			['--preset', runCli(['status', '--root', root, '--preset', 'generic', ...named])],
-			['the preset plugin option', runCli(['status', '--root', root, ...named], { CLAUDE_PLUGIN_OPTION_PRESET: 'generic' })],
+			[
+				'the preset plugin option',
+				runCli(['status', '--root', root, ...named], { CLAUDE_PLUGIN_OPTION_PRESET: 'generic' }),
+			],
 			["the project's own config", runCli(['status', '--root', configured, ...named])],
 		];
 		for (const [what, { stdout }] of cases)
@@ -1481,7 +1533,10 @@ await check('an unusable suppression keyword falls back rather than flooding', a
 	});
 	try {
 		const config = await loadConfig({ root });
-		assert(config.suppression.keyword === 'ds-allow', `expected the default keyword, got ${JSON.stringify(config.suppression.keyword)}`);
+		assert(
+			config.suppression.keyword === 'ds-allow',
+			`expected the default keyword, got ${JSON.stringify(config.suppression.keyword)}`,
+		);
 		const r = await analyze(config, { scope: null });
 		assert(
 			!r.findings.some((f) => f.rule === 'suppression/malformed'),
@@ -1501,16 +1556,16 @@ await check('--changed outside a worktree still refuses with exit 2', () => {
 	// which is the whole reason both say it through one constant.
 	const root = tmpRepo({ 'package.json': '{}', 'style.css': '.acme-a { margin-bottom: 16px; }' });
 	try {
-		execFileSync('node', [CLI, 'check', '--changed', '--root', root], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+		execFileSync('node', [CLI, 'check', '--changed', '--root', root], {
+			encoding: 'utf8',
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
 		throw new Error('check --changed exited 0 outside a worktree');
 	} catch (err) {
 		const f = execFailure(err);
 		if (f.message.includes('exited 0 outside a worktree')) throw err;
 		assert(f.status === 2, `expected exit 2, got ${f.status}`);
-		assert(
-			f.stderr.includes('not a git worktree; use --all or --files'),
-			`the refusal changed wording: ${f.stderr}`
-		);
+		assert(f.stderr.includes('not a git worktree; use --all or --files'), `the refusal changed wording: ${f.stderr}`);
 	} finally {
 		cleanup(root);
 	}
@@ -1523,7 +1578,9 @@ await check('a profile naming an uninstalled preset says so and carries on', () 
 	const profiles = scratch('dsh-prof-');
 	const root = inferrableRepo();
 	try {
-		writeAll(profiles, { 'acme/profile.json': JSON.stringify({ id: 'acme', name: 'Acme', preset: 'nope', packages: ['@acme/ui'] }) });
+		writeAll(profiles, {
+			'acme/profile.json': JSON.stringify({ id: 'acme', name: 'Acme', preset: 'nope', packages: ['@acme/ui'] }),
+		});
 		const { stdout, stderr } = runCli(['status', '--root', root, '--profile', 'acme', '--profiles', profiles]);
 		assert(/names preset nope, which is not installed/.test(stderr), `the broken profile said nothing:\n${stderr}`);
 		assert(/config:\s+inferred/.test(stdout), `the run should fall back to inference:\n${stdout}`);
@@ -1547,7 +1604,10 @@ await check('a skipped registry names the config that rejected it', () => {
 	try {
 		const { stderr } = runCli(['status', '--root', root, '--patterns', join(root, 'registry.json')]);
 		assert(/registry skipped/.test(stderr), `the skip must still be reported:\n${stderr}`);
-		assert(/this config declares no design-system packages/.test(stderr), `the skip still blames the imports:\n${stderr}`);
+		assert(
+			/this config declares no design-system packages/.test(stderr),
+			`the skip still blames the imports:\n${stderr}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -1584,7 +1644,10 @@ await check('a --profile that matches nothing says so', () => {
 		// The other way to reach the same state: the id is real, the directory it
 		// lives in was never passed.
 		const noDir = runCli(['status', '--root', root, '--profile', 'wpds']);
-		assert(/--profiles was not given/.test(noDir.stderr), `a profile with nowhere to look said nothing:\n${noDir.stderr}`);
+		assert(
+			/--profiles was not given/.test(noDir.stderr),
+			`a profile with nowhere to look said nothing:\n${noDir.stderr}`,
+		);
 	} finally {
 		cleanup(root);
 	}
@@ -1598,7 +1661,12 @@ await check('a profile may name its preset the way extends spells it', () => {
 	const root = inferrableRepo();
 	try {
 		writeAll(profiles, {
-			'acme/profile.json': JSON.stringify({ id: 'acme', name: 'Acme', preset: 'loupe/presets/wpds', packages: ['@acme/ui'] }),
+			'acme/profile.json': JSON.stringify({
+				id: 'acme',
+				name: 'Acme',
+				preset: 'loupe/presets/wpds',
+				packages: ['@acme/ui'],
+			}),
 		});
 		const { stdout, stderr } = runCli(['status', '--root', root, '--profile', 'acme', '--profiles', profiles]);
 		assert(!/not installed/.test(stderr), `a resolvable preset was rejected:\n${stderr}`);
@@ -1671,7 +1739,7 @@ await check('a block theme with no manifest and no worktree is still gated', () 
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(
 			!parsed.systemMessage?.includes('not a git worktree'),
-			`the gate stood aside on a theme it detects at high confidence: ${out}`
+			`the gate stood aside on a theme it detects at high confidence: ${out}`,
 		);
 	} finally {
 		cleanup(root);
@@ -1696,7 +1764,7 @@ await check('a repo git refuses to answer about is still gated', () => {
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(
 			!parsed.systemMessage?.includes('not a git worktree'),
-			`git declining to answer was read as "no project": ${out}`
+			`git declining to answer was read as "no project": ${out}`,
 		);
 	} finally {
 		cleanup(root);
@@ -1744,12 +1812,12 @@ await check('a repo subdirectory git refuses to answer about is still gated', ()
 		const out = execFileSync('node', [CLI, 'hook', '--root', join(root, 'packages', 'ui')], {
 			encoding: 'utf8',
 			input: '{"session_id":"sd","tool_input":{"file_path":"style.css"}}',
-			env: { ...process.env, PATH: `${bin}:${process.env['PATH'] ?? ''}` },
+			env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` },
 		});
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(
 			!parsed.systemMessage?.includes('not a git worktree'),
-			`git declining to answer about a subdirectory was read as "no project": ${out}`
+			`git declining to answer about a subdirectory was read as "no project": ${out}`,
 		);
 	} finally {
 		cleanup(root);
@@ -1772,7 +1840,7 @@ await check('a pinned plugin preset does not vouch for a non-project root', () =
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(
 			parsed.systemMessage?.includes('not a git worktree'),
-			`a user-wide preset let the gate index a non-project root: ${out}`
+			`a user-wide preset let the gate index a non-project root: ${out}`,
 		);
 	} catch (err) {
 		const f = execFailure(err);
@@ -1813,7 +1881,7 @@ await check('a spaced var() on a margin is not a negative margin', async () => {
 		assert(!negative.length, `a tokenized margin read as a bleed: ${JSON.stringify(negative)}`);
 		assert(
 			findings.some((f) => f.rule === 'layout/margin-on-child'),
-			'the margin stopped reporting at all'
+			'the margin stopped reporting at all',
 		);
 	} finally {
 		cleanup(root);
@@ -1858,7 +1926,8 @@ await check('a superseded rule that is off does not delete the finding it supers
 			designSystem: { packages: ['@acme/ui'], components: { layout: ['Row'], text: ['Copy'] } },
 			rules: { 'system/override': 'off', 'system/inline-style': 'off' },
 		}),
-		'src/A.jsx': "import { Row } from '@acme/ui';\nexport const A = () => <Row className=\"panel\" style={{ background: '#ffffff' }} />;\n",
+		'src/A.jsx':
+			"import { Row } from '@acme/ui';\nexport const A = () => <Row className=\"panel\" style={{ background: '#ffffff' }} />;\n",
 		'styles/a.css': '.panel { background: #ffffff; }\n',
 	});
 	try {
