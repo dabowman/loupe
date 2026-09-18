@@ -163,6 +163,14 @@ const ruleSpecs = (detector: unknown): RuleSpec[] => {
 	);
 };
 
+/** A detector's parameter that has to be a non-empty string, or the default. */
+export const stringParam = (spec: RuleSpec, key: string, fallback: string): string =>
+	typeof spec[key] === 'string' && spec[key] ? (spec[key] as string) : fallback;
+export const numParam = (spec: RuleSpec, key: string, fallback: number): number =>
+	typeof spec[key] === 'number' ? (spec[key] as number) : fallback;
+export const listParam = (spec: RuleSpec, key: string): string[] =>
+	Array.isArray(spec[key]) ? (spec[key] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+
 /** Normalize a registry file or inline array into matchable patterns. */
 export function loadPatterns(raw: unknown): Pattern[] {
 	const rec = raw as { patterns?: RawPattern[]; realizations?: RawPattern[] } | null;

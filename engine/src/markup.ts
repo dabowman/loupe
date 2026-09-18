@@ -21,6 +21,9 @@ import { keyName, toCssProp, toCssValue } from './inline.ts';
 import { FLEX_PROPS, GAP_PROPS } from './styles.ts';
 import { cssInJsLocals, parseTemplate, templateText } from './cssinjs.ts';
 import { depthOf, nodeCount, signatureOf, systemTree } from './patterns.ts';
+import { confirmPair } from './checks/detectors/confirm-pair.ts';
+import { fewStaticOptions } from './checks/detectors/few-static-options.ts';
+import { judgeControl } from './checks/detectors/judge.ts';
 import type {
 	Binding,
 	ComponentImport,
@@ -399,26 +402,38 @@ function staticString(node: Node): string | null {
 	return null;
 }
 
-/** A rule parameter that has to be a string, or the default. */
-const param = (spec: RuleSpec, key: string, fallback: string): string =>
-	typeof spec[key] === 'string' && spec[key] ? (spec[key] as string) : fallback;
-const numParam = (spec: RuleSpec, key: string, fallback: number): number =>
-	typeof spec[key] === 'number' ? (spec[key] as number) : fallback;
-const listParam = (spec: RuleSpec, key: string): string[] =>
-	Array.isArray(spec[key]) ? (spec[key] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+/** What a registry detector can read about the element it runs on, and around it. */
+export interface DetectorContext {
+	/** The registry's name for the element's component, alias resolved. */
+	canonical: string;
+	/** Any element's name as written: `Menu.Item`, `div`. */
+	nameOf(el: JSXElement): string | null;
+	/** Any element's registry name, or null for anything not from the design system. */
+	canonicalOf(el: JSXElement): string | null;
+	/** Every JSX element below `el`, through containers and callbacks alike. */
+	elementsIn(el: JSXElement): JSXElement[];
+	/** A static option array, each entry reduced to its label; null when it is not static. */
+	optionsIn(e: Node): (string | null)[] | null;
+	/** The text `el` renders as its label, when the source states it. */
+	labelOf(el: JSXElement): string | null;
+	/** The component function `el` sits in, when the parse found a name. */
+	enclosingOf(el: JSXElement): string | null;
+	/** `el` as written, opening tag to close. */
+	sourceOf(el: JSXElement): string;
+}
 
-// Labels a button carries when it is asking for consent rather than input.
-// Matched at the start, so 'Delete permanently' and 'Yes, delete' both count;
-// 'Close' is left out because a pair of Cancel and Close is a notice, not a
-// question.
-const CONSENT = '^(cancel|delete|remove|discard|reset|confirm|ok|yes|no|continue|proceed|leave|revert)\\b';
-// What makes a modal a form rather than a question: any control that takes
-// input. A system component named like one, or a raw input element.
-const CONTROLS = '(Control|Field|Picker|Input|Textarea|Editor)$|^(DataForm|Field\\.Root|Fieldset)';
+/**
+ * A registry detector: the finding's detail — `SelectControl with 4 short
+ * static options` — when `el` makes the choice the entry exists to replace,
+ * else null. Each lives in `checks/detectors/`, parameterised by the `spec`
+ * the registry writes for it.
+ */
+export type Detector = (el: JSXElement, spec: RuleSpec, ctx: DetectorContext) => string | null;
 
-// A control is a few lines. The cap is for the one that wraps a whole panel,
-// which would spend a request's tokens on markup the question is not about.
-const MAX_CONTROL_SOURCE = 2000;
+const DETECTORS = new Map<string, Detector>([
+	['few-static-options', fewStaticOptions],
+	['confirm-pair', confirmPair],
+]);
 
 /** Named, capitalised scopes: the components a control can sit in. */
 function componentRanges(program: Node): { start: number; end: number; name: string }[] {
@@ -594,73 +609,29 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		return best?.name ?? null;
 	};
 
+	const reading: Omit<DetectorContext, 'canonical'> = {
+		nameOf: jsxName,
+		canonicalOf,
+		elementsIn: (el) => allElements(el),
+		optionsIn: staticOptions,
+		labelOf: staticLabel,
+		enclosingOf,
+		sourceOf: (el) => text.slice(el.start ?? 0, el.end ?? 0),
+	};
 	const readRules = (el: JSXElement): void => {
 		if (!rules.length) return;
 		const canonical = canonicalOf(el);
 		if (!canonical) return;
 		const line = el.loc?.start?.line ?? 1;
+		const ctx = { ...reading, canonical };
 		for (const { patternId, spec } of rules) {
 			if (spec.rule === 'judge') {
-				// `Menu.Item` is the registry's name for it; the file binds `Menu`,
-				// maybe under an alias, and the member is written as-is.
-				const name = jsxName(el) ?? '';
-				const component = name.includes('.') ? `${canonical}${name.slice(name.indexOf('.'))}` : canonical;
-				if (!listParam(spec, 'components').includes(component)) continue;
-				// A spread could carry any of `unless` — Gutenberg's revisions button
-				// spreads an `href` in one branch — so it is enough to not ask.
-				const unless = listParam(spec, 'unless');
-				const realized =
-					unless.length > 0 &&
-					el.openingElement.attributes.some(
-						(a) =>
-							a.type === 'JSXSpreadAttribute' ||
-							(a.name.type === 'JSXIdentifier' && unless.includes(a.name.name)),
-					);
-				if (realized) continue;
-				controls.push({
-					file: relPath,
-					line,
-					component,
-					enclosing: enclosingOf(el),
-					source: text.slice(el.start ?? 0, el.end ?? 0).slice(0, MAX_CONTROL_SOURCE),
-					patternId,
-				});
-			} else if (spec.rule === 'few-static-options') {
-				if (!listParam(spec, 'components').includes(canonical)) continue;
-				const prop = param(spec, 'prop', 'options');
-				const attr = el.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === prop);
-				const value = attr?.type === 'JSXAttribute' && attr.value?.type === 'JSXExpressionContainer' ? attr.value.expression : null;
-				const options = value && value.type !== 'JSXEmptyExpression' ? staticOptions(value) : null;
-				if (!options || options.length < numParam(spec, 'min', 2) || options.length > numParam(spec, 'max', 5)) continue;
-				// Few is not enough: the segmented control needs the set to sit on one
-				// row, and five "Uppercase Roman numerals" do not. Total label length
-				// stands in for that force; a label the source does not state leaves
-				// the width unknown, and an unknown width is not a finding.
-				if (!options.every((l): l is string => l !== null)) continue;
-				if (options.reduce((n, l) => n + l.length, 0) > numParam(spec, 'maxLabelChars', 32)) continue;
-				ruleHits.push({ patternId, rule: spec.rule, line, detail: `${canonical} with ${options.length} short static ${prop}` });
-			} else if (spec.rule === 'confirm-pair') {
-				if (canonical !== param(spec, 'container', '')) continue;
-				const button = param(spec, 'button', 'Button');
-				const consent = new RegExp(param(spec, 'labels', CONSENT), 'i');
-				const controls = new RegExp(param(spec, 'controls', CONTROLS));
-				const inside = allElements(el);
-				const isControl = (c: JSXElement): boolean => {
-					const name = jsxName(c);
-					const sys = canonicalOf(c);
-					if (sys) return controls.test(sys) || controls.test(name ?? '');
-					return !!name && /^(input|select|textarea)$/.test(name);
-				};
-				if (inside.some(isControl)) continue;
-				const labels = inside.filter((c) => canonicalOf(c) === button).map(staticLabel);
-				if (labels.length !== 2 || !labels.every((l) => l !== null && consent.test(l))) continue;
-				ruleHits.push({
-					patternId,
-					rule: spec.rule,
-					line,
-					detail: `${canonical} with two consent buttons (${labels.join(' / ')}) and no form control`,
-				});
+				const control = judgeControl(el, spec, ctx);
+				if (control) controls.push({ file: relPath, line, ...control, patternId });
+				continue;
 			}
+			const detail = DETECTORS.get(spec.rule)?.(el, spec, ctx);
+			if (detail) ruleHits.push({ patternId, rule: spec.rule, line, detail });
 		}
 	};
 
