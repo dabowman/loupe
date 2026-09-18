@@ -1,5 +1,4 @@
 node_modules/
-.loupe/
 
 # Compiled executables: 60-100 MB each, built on demand and released, never committed.
 binaries/

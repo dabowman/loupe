@@ -15,35 +15,28 @@
  * check — "does this occupy an empty cell" is a judgement, but "does this
  * point at anything" is not.
  *
- *   npx tsx scripts/patterns-doc.ts            # rewrite every profile that extends the abstract file
- *   npx tsx scripts/patterns-doc.ts --check    # exit 1 if any patterns.md is stale (CI)
- *   npx tsx scripts/patterns-doc.ts --profile wpds
+ *   node scripts/patterns-doc.ts            # rewrite every profile that extends the abstract file
+ *   node scripts/patterns-doc.ts --check    # exit 1 if any patterns.md is stale (CI)
  */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { ForceJudge } from '../src/judge/force.ts';
+import type { ResolveRule } from '../src/patterns.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OPEN = '<!-- generated:patterns -->';
 const CLOSE = '<!-- /generated:patterns -->';
 
-interface Resolve {
-	when?: Record<string, unknown>;
-	variant?: string;
-	redirect?: string;
-	default?: string;
+interface Resolve extends ResolveRule {
 	and?: string;
-	because?: string;
 }
 interface Abstract {
 	vocabulary: {
 		intents: Record<string, string>;
 		scales: Record<string, string>;
-		forces: Record<
-			string,
-			{ values: unknown[]; about: string; judge?: { question: string; criteria: Record<string, string> } }
-		>;
+		forces: Record<string, { values: unknown[]; about: string; judge?: ForceJudge }>;
 		containers?: Record<string, string>;
 	};
 	patterns: {
@@ -253,13 +246,10 @@ function render(abstract: Abstract, real: Realization, profileId: string): strin
 }
 
 function main(): void {
-	const args = process.argv.slice(2);
-	const check = args.includes('--check');
-	const only = args[args.indexOf('--profile') + 1];
+	const check = process.argv.includes('--check');
 	const profilesDir = join(ROOT, 'profiles');
-	const ids = args.includes('--profile') && only ? [only] : readdirSync(profilesDir);
 	let failed = false;
-	for (const id of ids) {
+	for (const id of readdirSync(profilesDir)) {
 		const regPath = join(profilesDir, id, 'patterns', 'index.json');
 		if (!existsSync(regPath)) continue;
 		const real = readJson<Realization>(regPath);

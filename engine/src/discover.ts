@@ -27,6 +27,13 @@ import type { Discovered, DiscoveredFile, SourceGlobs, SourceKind } from './type
 export const toPosix = (p: string): string => p.split(sep).join('/').split('\\').join('/');
 
 /**
+ * Byte order, not collation. `localeCompare` folds case and treats `-` as
+ * ignorable, and answers differently under a different ICU or `LANG`; an order
+ * this engine reports has to be a property of the input, not of the host.
+ */
+export const byBytes = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
  * One directory's entries, in an order that does not depend on the machine.
  *
  * `readdirSync` hands back whatever order the filesystem holds, and that
@@ -46,7 +53,7 @@ export const toPosix = (p: string): string => p.split(sep).join('/').split('\\')
  */
 export function readDir(dir: string): Dirent[] {
 	try {
-		return readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+		return readdirSync(dir, { withFileTypes: true }).sort((a, b) => byBytes(a.name, b.name));
 	} catch {
 		return [];
 	}
@@ -151,7 +158,7 @@ export function discover({
 		}
 	};
 	walk(root);
-	for (const kind of KINDS) out[kind].sort((a, b) => a.rel.localeCompare(b.rel));
+	for (const kind of KINDS) out[kind].sort((a, b) => byBytes(a.rel, b.rel));
 	return out;
 }
 

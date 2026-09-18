@@ -26,9 +26,8 @@ import type { ComponentEntry, RawElement } from '../../types.ts';
  */
 function currentAnalog(registry: ReadonlyMap<string, ComponentEntry>, suggest: string): string {
 	const entries = [...registry.values()].filter((e) => e.name === suggest);
-	if (!entries.length || entries.some((e) => e.status === 'recommended')) return `<${suggest}>`;
-	const forwarded = entries.find((e) => e.supersededBy)?.supersededBy;
-	return forwarded ? forwarded : `<${suggest}>`;
+	const current = entries.some((e) => e.status === 'recommended');
+	return (!current && entries.find((e) => e.supersededBy)?.supersededBy) || `<${suggest}>`;
 }
 
 export function rawElements(
@@ -55,9 +54,7 @@ export function rawElements(
 		// bordered `<div>` into an `<HStack>` — the largest single source of
 		// findings in a real repo, and wrong nearly every time.
 		if (el.styledOnly) {
-			const suggestsLayout = String(el.suggest)
-				.split('/')
-				.some((n) => layoutComponents.includes(n.trim()));
+			const suggestsLayout = el.suggest.split('/').some((n) => layoutComponents.includes(n.trim()));
 			const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
 			const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
 			if (suggestsLayout ? !laidOut : !styled) return [];

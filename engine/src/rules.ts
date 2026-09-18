@@ -137,7 +137,7 @@ export const RULES = {
 		needs: ['textComponents'],
 		title: 'text component typed in CSS — use its style/size prop instead',
 	},
-} satisfies Record<RuleId, RuleDef>;
+} satisfies Record<string, RuleDef>;
 
 /** Every rule id, once, in declaration order — `Object.keys` loses the union. */
 export const RULE_IDS = Object.keys(RULES) as RuleId[];
@@ -166,7 +166,7 @@ export const canonicalRuleId = (id: string): string => ALIASES[id as keyof typeo
 /** Narrow an arbitrary string to a rule the engine actually has. */
 export const isRuleId = (id: string): id is RuleId => Object.hasOwn(RULES, id);
 
-export const SEVERITIES: ReadonlySet<string> = new Set<Severity>(['error', 'warn', 'off']);
+const SEVERITIES: ReadonlySet<string> = new Set<Severity>(['error', 'warn', 'off']);
 
 /** Narrow an arbitrary string to a severity. */
 export const isSeverity = (v: unknown): v is Severity => typeof v === 'string' && SEVERITIES.has(v);

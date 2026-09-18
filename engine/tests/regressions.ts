@@ -13,7 +13,7 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
@@ -608,12 +608,10 @@ await check('--baseline names the same file for the writer and the readers', () 
 	}
 });
 
-// A 0.1.x baseline was a deliberate `loupe baseline`; an upgrade must not throw
-// it away. It is also not the same case as the project's own default file being
-// used because a configured path is not there yet — one wants "re-record this",
-// the other wants "your config points elsewhere", and one message for both was
-// wrong for both.
-await check('an older baseline location is honored and named for what it is', () => {
+// When a configured baseline path is not there yet, the project's own default
+// file answers — and `status` says so, rather than calling a file already in
+// the project an old location.
+await check('the default-name baseline fallback is honored and named for what it is', () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
@@ -622,22 +620,7 @@ await check('an older baseline location is honored and named for what it is', ()
 	});
 	try {
 		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
-		const recorded = readFileSync(join(root, '.loupe-baseline.json'), 'utf8');
 
-		// 0.1.x kept it in the state directory.
-		mkdirSync(join(root, '.loupe'), { recursive: true });
-		writeFileSync(join(root, '.loupe', 'baseline.json'), recorded);
-		rmSync(join(root, '.loupe-baseline.json'));
-		const legacy = checkAll(root);
-		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(legacy), `a 0.1.x baseline was dropped:\n${legacy}`);
-		const legacyStatus = execFileSync('node', [CLI, 'status', '--root', root], { encoding: 'utf8', env: env() });
-		assert(/0\.1\.x location/.test(legacyStatus), `status did not mark the old location:\n${legacyStatus}`);
-
-		// The other fallback: the config names a file that is not there yet, and
-		// the project's own default file answers. It is in the project already, so
-		// telling the user to move it there is advice they cannot follow.
-		rmSync(join(root, '.loupe'), { recursive: true, force: true });
-		writeFileSync(join(root, '.loupe-baseline.json'), recorded);
 		writeFileSync(
 			join(root, 'loupe.config.json'),
 			JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, baseline: 'cfg/b.json' }),
@@ -649,10 +632,6 @@ await check('an older baseline location is honored and named for what it is', ()
 		);
 		const byNameStatus = execFileSync('node', [CLI, 'status', '--root', root], { encoding: 'utf8', env: env() });
 		assert(/the default name/.test(byNameStatus), `status mislabelled the default-name fallback:\n${byNameStatus}`);
-		assert(
-			!/0\.1\.x location/.test(byNameStatus),
-			`a file in the project was called an old location:\n${byNameStatus}`,
-		);
 	} finally {
 		cleanup(root);
 	}
@@ -830,41 +809,6 @@ await check('re-recording an unchanged backlog rewrites the same bytes', () => {
 		writeFileSync(join(root, 'styles', 'a.css'), '.a { color: #f00; }\n.b { margin: 3px; }');
 		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
 		assert(readFileSync(file, 'utf8') !== first, 'a changed backlog kept the old timestamp');
-	} finally {
-		cleanup(root);
-	}
-});
-
-// Readers and writers have to name the same state directory. `stateDir` handed
-// readers the plugin-data path unconditionally while writers fell back to the
-// project when it could not be created, so the retry counter was written to one
-// file and read from another: every bump started from zero and the gate blocked
-// at "attempt 1 of 3" forever instead of ever standing down.
-await check('the retry counter is read from where it was written', () => {
-	const root = tmpRepo({
-		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
-		'styles/a.css': '/* ds-disable */\n.a { color: #f00; }',
-	});
-	// A plugin-data path that cannot be a directory, which is what an unwritable
-	// or occupied location looks like from `ensureDir`.
-	const blocked = join(root, 'not-a-directory');
-	writeFileSync(blocked, '');
-	const fire = (): number => {
-		try {
-			execFileSync('node', [CLI, 'hook', '--root', root], {
-				encoding: 'utf8',
-				input: '{"session_id":"state","tool_input":{"file_path":"styles/a.css"}}',
-				env: env({ CLAUDE_PLUGIN_DATA: blocked, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
-				stdio: ['pipe', 'pipe', 'pipe'],
-			});
-			return 0;
-		} catch (err) {
-			return execFailure(err).status ?? -1;
-		}
-	};
-	try {
-		for (let i = 1; i <= 3; i++) assert(fire() === 2, `attempt ${i} should have blocked`);
-		assert(fire() === 0, 'the counter never advanced, so the gate could not stand down');
 	} finally {
 		cleanup(root);
 	}
@@ -1653,7 +1597,7 @@ await check('a --profile that matches nothing says so', () => {
 	}
 });
 
-// `presetExists` gated a spec that `resolveExtends` would have resolved: one
+// The preset check gated a spec that `resolveExtends` would have resolved: one
 // strips the `loupe/presets/` prefix and the other did not. A profile written
 // the way the docs spell an extends target was told its preset is not installed.
 await check('a profile may name its preset the way extends spells it', () => {

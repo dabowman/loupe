@@ -7,27 +7,27 @@
  *   2  could not run (bad usage, not a git worktree, config error)
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseArgs as parseArgv } from 'node:util';
 import { analyze } from './analyze.ts';
 import { usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes } from './autofix.ts';
 import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
-import { EMBEDDED_VERSION } from './embedded.ts';
-import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
+import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
+import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
 import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
-import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
-import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
+import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
+import { formatAgent, formatSarif, formatSummary, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
 import { oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
 import type { RegistrySource } from './profiles.ts';
-import { baselinePath, findExistingBaseline, isPluginContext, stateDir } from './paths.ts';
-import { RULE_IDS } from './rules.ts';
+import { baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
 import {
 	bumpAttempts,
 	clearAttempts,
@@ -41,7 +41,7 @@ import {
 	resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
-import type { AnalyzeResult, BaselinedResult, Config, KeptValue, TokenFix } from './types.ts';
+import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
@@ -88,16 +88,6 @@ const note = (msg: string): void => {
 const confidence = (level: string): string =>
 	(level === 'high' ? green : level === 'none' ? red : yellow)(`[${level} confidence]`);
 
-/**
- * A key: a `status` label, or a property in the config `detect` prints.
- *
- * Both are the same thing to a reader — the name of a setting, next to what it
- * resolved to — so they wear one colour and the value beside them keeps the
- * page's default. Dim rather than bright: the label column is the part you
- * already know, and the value is what you came to read.
- */
-const key = (label: string): string => dim(label);
-
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -120,23 +110,15 @@ const ENV_FILE = SINGLE_FILE ? resolve('.env') : join(HERE, '..', '..', '.env');
  * find the manifest from either.
  */
 function versionLine(): string {
-	// A compiled binary has no engine directory to look into: `import.meta.url`
-	// resolves inside the executable, so the manifest beside it is the honest
-	// test, and `execPath` is the only location that means anything.
+	// A compiled binary has no engine directory: `execPath` is the only location
+	// that means anything.
 	if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
-	let version = 'unknown';
-	try {
-		version =
-			(JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')) as { version?: string }).version ?? version;
-	} catch {
-		/* a manifest that cannot be read leaves the version unknown, not the command broken */
-	}
 	const entry = basename(HERE) === 'src' ? 'source' : 'bundle';
-	return `loupe ${version} (${entry}, ${resolve(HERE, '..', '..')})`;
+	return `loupe ${EMBEDDED_VERSION} (${entry}, ${resolve(HERE, '..', '..')})`;
 }
 
 /** The keys inside a printed JSON config, painted without reserialising it. */
-const jsonKeys = (json: string): string => json.replace(/"([^"\\]+)":/g, (_m, name: string) => `${key(`"${name}"`)}:`);
+const jsonKeys = (json: string): string => json.replace(/"([^"\\]+)":/g, (_m, name: string) => `${dim(`"${name}"`)}:`);
 
 /**
  * {@link USAGE}, painted at the print site.
@@ -212,24 +194,16 @@ interface Args {
 	flags: Flags;
 }
 
-const isValueFlag = (key: string): key is ValueFlag => (VALUE_FLAGS as readonly string[]).includes(key);
-
-function parseArgs(argv: readonly string[]): Args {
-	const positional: string[] = [];
-	const flags: Record<string, string | boolean | undefined> = {};
-	for (let i = 0; i < argv.length; i++) {
-		const a = argv[i];
-		if (a === undefined) continue;
-		if (!a.startsWith('--')) {
-			positional.push(a);
-			continue;
-		}
-		const [key, inline] = a.slice(2).split(/=(.*)/s);
-		if (key === undefined) continue;
-		if (isValueFlag(key)) flags[key] = inline ?? argv[++i];
-		else flags[key] = inline === undefined ? true : inline !== 'false';
-	}
-	return { _: positional, flags: flags as Flags };
+function parseArgs(args: string[]): Args {
+	const { values, positionals } = parseArgv({
+		args,
+		options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: 'string' }])),
+		allowPositionals: true,
+		strict: false,
+	});
+	// A value flag given no value parses as `true`; treat it as not given.
+	for (const f of VALUE_FLAGS) if (typeof values[f] !== 'string') delete values[f];
+	return { _: positionals, flags: values as Flags };
 }
 
 const USAGE = `loupe <command> [options]
@@ -587,7 +561,7 @@ async function main(): Promise<number> {
 		// merged its registries into a config that knew none of its components
 		// and left every severity at the generic default.
 		if (unconfigured && forced?.preset) {
-			if (presetExists(forced.preset)) profilePreset = forced.preset;
+			if (hasPreset(forced.preset)) profilePreset = forced.preset;
 			// A profile naming a preset this install does not carry is a broken
 			// profile, not a broken project: its registries still apply, so name
 			// what was ignored rather than failing the run over it.
@@ -641,7 +615,7 @@ async function main(): Promise<number> {
 			components: args.flags.components ?? null,
 		});
 
-	const registries = applyRegistries(config, sources, { setPatterns, setComponentRegistry });
+	const registries = applyRegistries(config, sources);
 	config.profiles = { available: profiles, active, ...registries };
 	if (!isHook) {
 		for (const err of registries.errors) fail(`loupe: ${err}\n`);
@@ -749,10 +723,6 @@ async function main(): Promise<number> {
 					: config.source.kind === 'inferred'
 						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
-		const state = stateDir(root);
-		// Report the baseline separately from the retry state. They resolve
-		// differently now, and the whole reason they do is that one line covering
-		// both let a baseline sit in a file the hook was never reading.
 		const base = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
 		// What design system this run thinks it is checking, in the terms the
 		// rules are written against. The rules roster below says which checks are
@@ -764,40 +734,32 @@ async function main(): Promise<number> {
 		const ds = config.designSystem;
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
 		const lines = [
-			`${key('version:    ')}${versionLine()}`,
-			`${key('config:     ')}${src}`,
-			`${key('system:     ')}${ds.name || '(unnamed)'}`,
-			`${key('packages:   ')}${orNone(ds.packages)}`,
-			`${key('layout:     ')}${orNone(ds.layoutComponents)}`,
-			`${key('text:       ')}${orNone(ds.textComponents)}`,
-			`${key('tokens:     ')}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(', ') : '(none \u2014 token rules inactive)'}`,
-			`${key('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
-			`${key('suppress:   ')}${config.suppression.keyword} <ruleId> -- <reason>`,
-			// A legacy hit has to say so. `loupe baseline` writes the canonical path,
-			// so an unmarked legacy path here is `status` and `baseline` naming
-			// different files with nothing on hand to reconcile them — the exact
-			// shape of the bug that pinned the baseline to the project in the first
-			// place.
-			`${key('baseline:   ')}${base.path}${
-				base.found && readBaseline(root, base.path) === null
+			`${dim('version:    ')}${versionLine()}`,
+			`${dim('config:     ')}${src}`,
+			`${dim('system:     ')}${ds.name || '(unnamed)'}`,
+			`${dim('packages:   ')}${orNone(ds.packages)}`,
+			`${dim('layout:     ')}${orNone(ds.layoutComponents)}`,
+			`${dim('text:       ')}${orNone(ds.textComponents)}`,
+			`${dim('tokens:     ')}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(', ') : '(none \u2014 token rules inactive)'}`,
+			`${dim('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
+			`${dim('suppress:   ')}${config.suppression.keyword} <ruleId> -- <reason>`,
+			`${dim('baseline:   ')}${base.path}${
+				base.found && readBaseline(base.path) === null
 					? '  (unreadable \u2014 every finding in it is live again)'
-					: base.fallback === 'legacy'
-						? "  (0.1.x location — run 'loupe baseline' to record it in the project)"
-						: base.fallback === 'default-name'
-							? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)`
-							: base.found
-								? ''
-								: '  (none recorded yet)'
+					: base.fallback === 'default-name'
+						? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)`
+						: base.found
+							? ''
+							: '  (none recorded yet)'
 			}`,
-			`${key('state:      ')}${state.dir}${state.scope === 'plugin-data' ? '  (retry counter only, outside your repo)' : ''}`,
-			`${key('options:    ')}${
+			`${dim('options:    ')}${
 				optionsSource === 'environment'
 					? 'from the plugin environment (hook context)'
 					: optionsSource === 'settings'
 						? 'from ~/.claude settings'
 						: 'none found — plugin defaults apply'
 			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
-			`${key('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
+			`${dim('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
 			// Asked through the same predicate the gate uses. Reporting on mere
 			// truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
 			// blocking — a diagnostic lying about the one thing it exists to say.
@@ -810,7 +772,7 @@ async function main(): Promise<number> {
 			// it are written for no design system in particular. Told only "archer",
 			// a skill has to guess where that lives \u2014 and guesses wrong the moment
 			// the profiles root is a project's own rather than the plugin's.
-			`${key('profile:    ')}${
+			`${dim('profile:    ')}${
 				config.profiles?.active?.length
 					? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(', ')
 					: config.profiles?.available?.length
@@ -874,7 +836,7 @@ async function main(): Promise<number> {
 			return EXIT.OK;
 		}
 		const lines = [
-			`${key('preset:     ')}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
+			`${dim('preset:     ')}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
 			dim(`            ${info.presetReasons.join('; ')}`),
 			// What inference concluded still gets reported; it is just no longer
 			// what the run uses. `init` writes the config below verbatim, so the
@@ -883,7 +845,7 @@ async function main(): Promise<number> {
 			...(profilePreset
 				? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`]
 				: []),
-			`${key('namespaces: ')}${info.namespaces.project.join(', ') || '(none found)'}  ${confidence(info.namespaceConfidence)}`,
+			`${dim('namespaces: ')}${info.namespaces.project.join(', ') || '(none found)'}  ${confidence(info.namespaceConfidence)}`,
 			dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
 			dim(
 				`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` +
@@ -921,9 +883,8 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
-	// Writes to the canonical project path, never to wherever a legacy baseline
-	// happens to sit: a backlog recorded here has to be visible to the hook, and
-	// the hook is a different process with a different environment.
+	// Writes to the project path: a backlog recorded here has to be visible to
+	// the hook, which is a different process with a different environment.
 	if (command === 'baseline') {
 		const result = await analyze(config, { scope: null });
 		// `||`, not `??`: an empty `--baseline=` is not a path. `findExistingBaseline`
@@ -962,6 +923,14 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
+	// The one network call in the engine, so the key is checked before the walk
+	// and the hook never makes it.
+	const apiKey = args.flags.judge && !isHook ? judgeKey() : undefined;
+	if (args.flags.judge && !isHook && !apiKey) {
+		fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
 	// ── fix ───────────────────────────────────────────────────────────────────
 	// Only substitutions the engine resolved to exactly one on-role token. The
 	// baseline is deliberately ignored: it exists to stop the gate blocking on an
@@ -973,16 +942,11 @@ async function main(): Promise<number> {
 			fail(`loupe: ${fixScope.error}\n`);
 			return EXIT.CANNOT_RUN;
 		}
-		const key = args.flags.judge ? judgeKey() : undefined;
-		if (args.flags.judge && !key) {
-			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}\n`);
-			return EXIT.CANNOT_RUN;
-		}
 		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
-			if (key && toFix.tokens && toFix.findings.some((f) => f.rule === 'tokens/hardcoded-value'))
-				await judgeValues(root, toFix.findings, toFix.tokens, key, tokenDescriptions(config.profiles?.active ?? []));
+			if (apiKey && toFix.tokens && toFix.findings.some((f) => f.rule === 'tokens/hardcoded-value'))
+				await judgeValues(root, toFix.findings, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
 			fail(`loupe: ${messageOf(err)}\n`);
 			return EXIT.CANNOT_RUN;
@@ -991,7 +955,7 @@ async function main(): Promise<number> {
 		const { applied, skipped } = applyTokenFixes(root, toFix.findings, { dry });
 		// After the rewrites, which never move a line, and bottom up within a file,
 		// because a directive is a line of its own.
-		const kept = key
+		const kept = apiKey
 			? applyKeeps(root, toFix.findings, config.suppression.keyword, { dry })
 			: { applied: [], skipped: [] };
 		const verb = dry ? 'would fix' : 'fixed';
@@ -1004,22 +968,19 @@ async function main(): Promise<number> {
 		// names a value the reader now has to find and edit by hand, and the
 		// applied line is the preview `--dry-run` exists to give — and an elided
 		// value is one neither of them can be matched against.
-		const decl = (f: TokenFix): string => oneLine(`${f.prop}: ${f.value}`);
+		const decl = (f: { prop: string; value: string }): string => oneLine(`${f.prop}: ${f.value}`);
 		for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2192 ${green(f.to)}\n`);
-		const keptDecl = (k: KeptValue): string => oneLine(`${k.prop}: ${k.value}`);
 		for (const k of kept.applied)
 			process.stdout.write(
-				`${dim(`${k.file}:${k.line}`)}  ${keptDecl(k)} \u2192 ${green(`${config.suppression.keyword}, ${k.reason}`)}\n`,
+				`${dim(`${k.file}:${k.line}`)}  ${decl(k)} \u2192 ${green(`${config.suppression.keyword}, ${k.reason}`)}\n`,
 			);
 		for (const f of [...skipped, ...kept.skipped])
-			process.stdout.write(
-				`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${'to' in f ? decl(f) : keptDecl(f)} \u2014 ${f.why}\n`,
-			);
+			process.stdout.write(`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2014 ${f.why}\n`);
 		const left = toFix.findings.length - applied.length - kept.applied.length;
 		const nSkipped = skipped.length + kept.skipped.length;
 		process.stdout.write(
 			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${
-				key ? `, ${dry ? 'would suppress' : 'suppressed'} ${kept.applied.length}` : ''
+				apiKey ? `, ${dry ? 'would suppress' : 'suppressed'} ${kept.applied.length}` : ''
 			}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ''}. ${left} left for review.\n`,
 		);
 		return EXIT.OK;
@@ -1038,16 +999,6 @@ async function main(): Promise<number> {
 		fail(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(', ')}\n`);
 		return EXIT.CANNOT_RUN;
 	}
-	// The one network call in the engine, so the key is checked before the walk
-	// and the hook never makes it.
-	const checkKey = args.flags.judge && !isHook ? judgeKey() : undefined;
-	if (args.flags.judge && !isHook) {
-		if (!checkKey) {
-			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}\n`);
-			return EXIT.CANNOT_RUN;
-		}
-	}
-
 	// ── check / hook ──────────────────────────────────────────────────────────
 	// A PostToolUse payload names the file just written; scope to it so drift is
 	// reported at write time. Stop payloads carry no file and fall through to
@@ -1063,7 +1014,7 @@ async function main(): Promise<number> {
 
 	let result: AnalyzeResult | BaselinedResult;
 	try {
-		result = await analyze(config, { scope, judge: Boolean(checkKey) });
+		result = await analyze(config, { scope, judge: Boolean(apiKey) });
 	} catch (err) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
 		fail(`loupe: ${messageOf(err)}\n`);
@@ -1075,7 +1026,7 @@ async function main(): Promise<number> {
 		// runs on every write, so don't pay a second stat inside `readBaseline`
 		// just to be told the same thing.
 		const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
-		const baseline = found ? readBaseline(root, bPath) : null;
+		const baseline = found ? readBaseline(bPath) : null;
 		// A file that is present and unparseable is not the same as no file, and
 		// treating it as one puts the whole backlog back with the gate blocking on
 		// all of it — silently, which is how this class of bug stays unfound.
@@ -1091,7 +1042,7 @@ async function main(): Promise<number> {
 		if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
 		result = applyBaseline(result, baseline);
 	}
-	if (checkKey) {
+	if (apiKey) {
 		// Judged after the baseline, so accepted findings cost nothing, and a
 		// judged finding never enters one: its confidence moves between runs, and
 		// a baselined finding that comes and goes is noise in both directions.
@@ -1100,9 +1051,9 @@ async function main(): Promise<number> {
 		try {
 			if (result.controls?.length)
 				result.findings.push(
-					...(await judgeRedirects(result.controls, checkKey, config.severityOf('patterns/judged-redirect'))),
+					...(await judgeRedirects(result.controls, apiKey, config.severityOf('patterns/judged-redirect'))),
 				);
-			await judgeVariants(root, result.findings, config.componentRegistry, checkKey);
+			await judgeVariants(root, result.findings, config.componentRegistry, apiKey);
 		} catch (err) {
 			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
 		}
@@ -1113,7 +1064,7 @@ async function main(): Promise<number> {
 					root,
 					result.findings,
 					result.tokens,
-					checkKey,
+					apiKey,
 					tokenDescriptions(config.profiles?.active ?? []),
 				);
 		} catch (err) {
@@ -1123,7 +1074,7 @@ async function main(): Promise<number> {
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
 
 	if (isHook) {
-		const sessionId = payload.session_id ?? payload.sessionId ?? '';
+		const sessionId = payload.session_id ?? '';
 		if (!result.blocking) {
 			clearAttempts(root, touched ? `${sessionId}\u0000${touched}` : sessionId);
 			return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
@@ -1160,7 +1111,7 @@ async function main(): Promise<number> {
 	}
 
 	const maxFindings = Number(args.flags['max-findings'] ?? 0) || 0;
-	if (format === 'json') process.stdout.write(`${formatJson(result, config)}\n`);
+	if (format === 'json') process.stdout.write(`${JSON.stringify(reportPayload(result, config), null, 2)}\n`);
 	else if (format === 'sarif') process.stdout.write(`${formatSarif(result, config)}\n`);
 	// Already newline-terminated, and large: it is the one format most likely to
 	// be redirected, which is what the process.exitCode note below is about.

@@ -26,8 +26,9 @@ import type {
 	TaggedTemplateExpression,
 } from '@babel/types';
 import { keyName, toCssProp, toCssValue } from './inline.ts';
-import { FLEX_PROPS, GAP_PROPS } from './styles.ts';
-import { cssInJsLocals, parseTemplate, templateText } from './cssinjs.ts';
+import { isLayoutDecl } from './styles.ts';
+import { messageOf } from './text.ts';
+import { cssInJsLocals, fromPackage, importedName, parseTemplate, templateText } from './cssinjs.ts';
 import { depthOf, nodeCount, signatureOf, systemTree } from './patterns.ts';
 import { confirmPair } from './checks/detectors/confirm-pair.ts';
 import { fewStaticOptions } from './checks/detectors/few-static-options.ts';
@@ -89,7 +90,9 @@ const identifierOf = (t: Expression): string | undefined => (t.type === 'Identif
  * markup the author wrote and React renders as markup, so it stays subject to
  * every rule.
  */
-function substitutionTargets(expr: Node | null | undefined, out: JSXElement[] = []): JSXElement[] {
+function substitutionTargets(node: Node | null | undefined, out: JSXElement[] = []): JSXElement[] {
+	// A type assertion is not a different value: `render={ ( <h4 /> ) as ReactElement }`.
+	const expr = node && unwrapTs(node);
 	switch (expr?.type) {
 		case 'JSXElement':
 			out.push(expr);
@@ -118,16 +121,6 @@ function substitutionTargets(expr: Node | null | undefined, out: JSXElement[] = 
 			substitutionTargets(expr.left, out);
 			substitutionTargets(expr.right, out);
 			break;
-		// A type assertion is not a different value. `.tsx` is a first-class input
-		// here, and `render={ ( <h4 /> ) as ReactElement }` is what a narrower prop
-		// type makes an author write; the wrapper says nothing about which element
-		// the prop receives.
-		case 'TSAsExpression':
-		case 'TSSatisfiesExpression':
-		case 'TSNonNullExpression':
-		case 'TSTypeAssertion':
-			substitutionTargets(expr.expression, out);
-			break;
 		// `render={ <h4 /> }`. JSX also allows the braces to be dropped entirely
 		// (`render=<h4 />`), which arrives as the element itself and is caught by
 		// the `JSXElement` case above.
@@ -147,10 +140,6 @@ const canonicalName = (name: string, normalize: RegExp | null): string =>
 
 /** `Set.has` for a name that may not exist. */
 const held = (set: ReadonlySet<string>, name: string | undefined): boolean => name !== undefined && set.has(name);
-
-/** First line of an unknown throw — a parser may reject with anything. */
-const messageOf = (err: unknown): string =>
-	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
 
 /** Every identifier-like token in the source. See note (2) above. */
 export function harvestTokens(text: string, into: Set<string> = new Set()): Set<string> {
@@ -182,33 +171,6 @@ export function harvestStems(text: string, into: Set<string> = new Set()): Set<s
 /** [A-Za-z0-9_-] */
 function isWordChar(c: number): boolean {
 	return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95 || c === 45;
-}
-
-/**
- * Every string literal anywhere below a node.
- *
- * Genuinely untyped by design: this runs over whatever a `className` expression
- * turns out to be — a conditional, a `clsx()` call, a template — so it reads
- * shapes rather than node types, and says so in its signature.
- */
-function stringsIn(node: unknown, out: string[] = []): string[] {
-	if (!node || typeof node !== 'object') return out;
-	if (Array.isArray(node)) {
-		for (const n of node) stringsIn(n, out);
-		return out;
-	}
-	const rec = node as Record<string, unknown>;
-	if (rec.type === 'StringLiteral') {
-		if (typeof rec.value === 'string') out.push(rec.value);
-	} else if (rec.type === 'TemplateElement') {
-		const v = rec.value as { cooked?: string; raw?: string } | undefined;
-		out.push(v?.cooked ?? v?.raw ?? '');
-	}
-	for (const key of Object.keys(rec)) {
-		if (key === 'loc' || key === 'type' || key === 'start' || key === 'end') continue;
-		stringsIn(rec[key], out);
-	}
-	return out;
 }
 
 const CLASS_TOKEN = /^[a-z_][\w-]*$/i;
@@ -267,22 +229,6 @@ function readStyleAttr(value: JSXAttribute['value']): {
 	return { decls, dynamic, present: true };
 }
 
-/**
- * Does this declaration lay anything out?
- *
- * `<div>` maps to a layout primitive, so the suggestion is only true when the
- * div is actually laying something out. A `<div className="acme-card">` whose
- * class sets a border and a colour has no layout primitive analog, and telling
- * an agent to make it an `HStack` is wrong advice at scale — it was the single
- * largest source of findings in a real repo.
- */
-export const isLayoutDecl = ({ prop, value }: Decl): boolean =>
-	FLEX_PROPS.has(prop) ||
-	GAP_PROPS.has(prop) ||
-	(prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value)) ||
-	prop.startsWith('grid-template') ||
-	prop.startsWith('grid-auto');
-
 function walkAst(node: unknown, visit: (n: Node) => void): void {
 	if (!node || typeof node !== 'object') return;
 	if (Array.isArray(node)) {
@@ -308,14 +254,12 @@ function systemImports(
 	ast: File,
 	ds: DesignSystem,
 ): {
-	known: Set<string>;
 	text: Set<string>;
 	layout: Set<string>;
 	componentImports: ComponentImport[];
 	packages: Map<string, string>;
 	canonicals: Map<string, string>;
 } {
-	const known = new Set<string>();
 	// local name -> canonical name, so a rule written against `SelectControl`
 	// finds it under whatever alias the file bound.
 	const canonicals = new Map<string, string>();
@@ -329,20 +273,12 @@ function systemImports(
 	// *whose* `Stack` this is. Names are the one thing design systems share.
 	const packages = new Map<string, string>();
 	const canonical = (name: string): string => canonicalName(name, ds.normalizeExports);
-	const fromPackage = (src: string): boolean => ds.packages.some((p) => src === p || src.startsWith(`${p}/`));
 
 	for (const node of ast.program.body) {
-		if (node.type !== 'ImportDeclaration' || !fromPackage(node.source.value)) continue;
+		if (node.type !== 'ImportDeclaration' || !fromPackage(ds.packages, node.source.value)) continue;
 		for (const spec of node.specifiers) {
 			const local = spec.local.name;
-			const imported =
-				spec.type === 'ImportSpecifier'
-					? spec.imported.type === 'Identifier'
-						? spec.imported.name
-						: spec.imported.value
-					: local;
-			const c = canonical(imported);
-			known.add(local);
+			const c = canonical(spec.type === 'ImportSpecifier' ? importedName(spec) : local);
 			canonicals.set(local, c);
 			if (ds.textComponents.includes(c)) text.add(local);
 			if (ds.layoutComponents.includes(c)) layout.add(local);
@@ -362,7 +298,7 @@ function systemImports(
 			});
 		}
 	}
-	return { known, text, layout, componentImports, packages, canonicals };
+	return { text, layout, componentImports, packages, canonicals };
 }
 
 /** An expression with any type assertion peeled off; the value is the same. */
@@ -476,33 +412,34 @@ export function scanMarkup(
 	const ruleHits: RuleHit[] = [];
 	const controls: Control[] = [];
 	const imports = new Set<string>();
+	const result: ScanResult = {
+		controls,
+		bindings,
+		rawEls,
+		inlineStyles,
+		cssInJs,
+		composites,
+		ruleHits,
+		imports,
+		referenced,
+		stems,
+		componentImports: [],
+		parseError: null,
+	};
 
 	let ast: ParseResult<File>;
 	try {
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return {
-			controls,
-			bindings,
-			rawEls,
-			inlineStyles,
-			cssInJs,
-			composites,
-			ruleHits,
-			imports,
-			referenced,
-			stems,
-			componentImports: [],
-			parseError: messageOf(err),
-		};
+		return { ...result, parseError: messageOf(err) };
 	}
 
-	const { known, text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
+	const { text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
 	const tags = cssInJsLocals(ast, ds.cssInJsPackages);
 	// `<Button css={css`…`}>` binds a template to an element the walk sees
 	// first, so the owner is recorded before the template is reached.
-	const cssPropOwner = new Map<number, { target: string; isSystem: boolean; isText: boolean; isLayout: boolean }>();
+	const cssPropOwner = new Map<number, { target: string; isSystem: boolean; isText: boolean }>();
 	// Opening elements handed to a substitution prop. Recorded while the carrying
 	// element's attributes are read, which the walk reaches first, and held by
 	// node identity — `walkAst` visits these very objects, so nothing has to be
@@ -549,8 +486,8 @@ export function scanMarkup(
 	// composite tree even though only `Card` is ever imported — keep the full
 	// dotted name so they don't collapse into one indistinguishable node, but
 	// test import membership against the object half.
-	const jsxName = (el: JSXElement): string | null => {
-		const n = el.openingElement.name;
+	const jsxName = (el: JSXElement | JSXOpeningElement): string | null => {
+		const n = ('openingElement' in el ? el.openingElement : el).name;
 		if (n.type === 'JSXIdentifier') return n.name;
 		if (n.type === 'JSXMemberExpression')
 			return n.object.type === 'JSXIdentifier' ? `${n.object.name}.${n.property.name}` : null;
@@ -560,10 +497,10 @@ export function scanMarkup(
 
 	const readComposite = (el: JSXElement): void => {
 		const name = jsxName(el);
-		if (!name || !known.has(baseOf(name))) return;
+		if (!name || !canonicals.has(baseOf(name))) return;
 		const tree = systemTree(
 			el,
-			(n) => known.has(baseOf(n)),
+			(n) => canonicals.has(baseOf(n)),
 			jsxChildElements,
 			jsxName,
 			(n) => packages.get(baseOf(n)) ?? null,
@@ -676,7 +613,7 @@ export function scanMarkup(
 			target = memberProperty(t) ?? null; // styled.div
 		} else if (held(tags.styled, calleeOf(t))) {
 			target = firstArgOf(t) ?? null; // styled(Button)
-			isSystem = Boolean(target && known.has(target));
+			isSystem = Boolean(target && canonicals.has(target));
 		} else if (held(tags.bare, identifierOf(t))) {
 			target = null; // css`…`, createGlobalStyle`…`
 		} else {
@@ -691,7 +628,6 @@ export function scanMarkup(
 			target,
 			isSystem,
 			isText: isSystem && target !== null && textLike.has(target),
-			isLayout: isSystem && target !== null && layout.has(target),
 			groups,
 			error,
 		});
@@ -704,19 +640,13 @@ export function scanMarkup(
 			readRules(node);
 		}
 		if (node.type !== 'JSXOpeningElement') return;
-		const name = node.name;
-		const tag =
-			name.type === 'JSXIdentifier'
-				? name.name
-				: name.type === 'JSXMemberExpression'
-					? `${name.object.type === 'JSXIdentifier' ? name.object.name : '?'}.${name.property.name}`
-					: null;
+		const tag = jsxName(node);
 		if (!tag) return;
 		const line = node.loc?.start?.line ?? 1;
 
 		const root = tag.split('.')[0] ?? tag;
 		const isComponent = /^[A-Z]/.test(root);
-		const isSystem = isComponent && known.has(root);
+		const isSystem = isComponent && canonicals.has(root);
 		if (isSystem) {
 			const c = canonicals.get(root) ?? root;
 			uses.set(c, (uses.get(c) ?? 0) + 1);
@@ -733,7 +663,7 @@ export function scanMarkup(
 		const emitsTag = member
 			? // `<UI.Text render={ <h4 /> }>` — the namespace is what was imported,
 				// so the component name is the member.
-				known.has(root) &&
+				canonicals.has(root) &&
 				(ds.textComponents.includes(canonicalName(member, ds.normalizeExports)) ||
 					ds.layoutComponents.includes(canonicalName(member, ds.normalizeExports)))
 			: textLike.has(root) || layout.has(root);
@@ -744,7 +674,11 @@ export function scanMarkup(
 		for (const attr of node.attributes) {
 			if (attr.type !== 'JSXAttribute') continue;
 			const an = attr.name.type === 'JSXIdentifier' ? attr.name.name : attr.name.name.name;
-			if (an === 'className' || an === 'class') stringsIn(attr.value, strings);
+			if (an === 'className' || an === 'class')
+				walkAst(attr.value, (n) => {
+					if (n.type === 'StringLiteral') strings.push(n.value);
+					else if (n.type === 'TemplateElement') strings.push(n.value.cooked ?? n.value.raw);
+				});
 			else if (an === 'style') style = readStyleAttr(attr.value);
 			else if (an === 'css') cssAttr = attr.value;
 			// Only a tag-emitting design-system component's substitution prop earns the
@@ -768,7 +702,6 @@ export function scanMarkup(
 				target: isComponent ? root : tag.toLowerCase(),
 				isSystem,
 				isText: isSystem && textLike.has(root),
-				isLayout: isSystem && layout.has(root),
 			});
 
 		if (style?.present)
@@ -776,7 +709,6 @@ export function scanMarkup(
 				tag: isComponent ? root : tag.toLowerCase(),
 				isSystem,
 				isText: isSystem && textLike.has(root),
-				isLayout: isSystem && layout.has(root),
 				decls: style.decls,
 				dynamic: style.dynamic,
 				file: relPath,
@@ -786,9 +718,7 @@ export function scanMarkup(
 		if (isComponent) {
 			if (!isSystem) return;
 			const isText = textLike.has(root);
-			const isLayout = layout.has(root);
-			for (const cls of classes)
-				bindings.push({ cls, tag: root, isSystem: true, isText, isLayout, file: relPath, line });
+			for (const cls of classes) bindings.push({ cls, tag: root, isSystem: true, isText, file: relPath, line });
 		} else {
 			// `render={ <h4 /> }` is not markup being rendered — it is the argument
 			// telling a design-system component which tag to emit, and it is the
@@ -816,18 +746,5 @@ export function scanMarkup(
 		}
 	});
 
-	return {
-		controls,
-		bindings,
-		rawEls,
-		inlineStyles,
-		cssInJs,
-		composites,
-		ruleHits,
-		imports,
-		referenced,
-		stems,
-		componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })),
-		parseError: null,
-	};
+	return { ...result, componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })) };
 }

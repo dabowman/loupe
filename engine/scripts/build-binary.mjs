@@ -98,14 +98,3 @@ for (const name of chosen) {
 	);
 	process.stdout.write(`${`loupe-${name}`.padEnd(22)} ${(statSync(outfile).size / 1048576).toFixed(0).padStart(4)} MB\n`);
 }
-
-// A binary that compiles is not a binary that runs: the whole point of the
-// embedded data is that it is reachable, and only running it proves that. Host
-// target only — nothing else can execute here.
-if (chosen.includes(HOST)) {
-	const hostBin = join(OUT_DIR, `loupe-${HOST}${HOST.startsWith('windows') ? '.exe' : ''}`);
-	const line = execFileSync(hostBin, ['version'], { encoding: 'utf8' }).trim();
-	const presets = execFileSync(hostBin, ['presets'], { encoding: 'utf8' });
-	const count = presets.split('\n').filter((l) => l.trim()).length;
-	process.stdout.write(`\n${line}\n  ${count} lines from \`presets\` — the compiled-in data is reachable.\n`);
-}

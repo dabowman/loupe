@@ -6,35 +6,16 @@
  * grouped in `report.ts`, keyed in `baseline.ts` and rewritten in `autofix.ts`.
  * A shape that four modules read is not owned by any of them.
  *
- * The rule ids and capability names are written out as unions rather than
- * derived from `RULES`, so a typo in a rule id is an error at the place it was
- * typed rather than a silently-absent lookup somewhere downstream.
+ * Rule ids are the keys of `RULES`, so a typo in one is an error at the place
+ * it was typed rather than a silently-absent lookup somewhere downstream.
  */
 
 import type { Rule as PostcssRule } from 'postcss';
+import type { RULES } from './rules.ts';
 
 // ── rules ───────────────────────────────────────────────────────────────────
 
-export type RuleId =
-	| 'suppression/malformed'
-	| 'stylesheet/unparsed'
-	| 'css/dead-class'
-	| 'system/locked-component'
-	| 'system/superseded-component'
-	| 'patterns/duplicate-composite'
-	| 'patterns/unregistered-composite'
-	| 'patterns/superseded-composite'
-	| 'patterns/judged-redirect'
-	| 'tokens/unknown-token'
-	| 'tokens/hardcoded-value'
-	| 'layout/margin-on-child'
-	| 'layout/negative-margin'
-	| 'layout/in-css'
-	| 'typography/untokenized'
-	| 'system/override'
-	| 'system/inline-style'
-	| 'system/raw-element'
-	| 'typography/in-css';
+export type RuleId = keyof typeof RULES;
 
 export type Severity = 'error' | 'warn' | 'off';
 
@@ -141,7 +122,7 @@ export interface ClassifiedFinding {
 	rule: RuleId;
 	message: string;
 	code?: string | undefined;
-	hint?: Hint | undefined;
+	hints?: Hint[] | undefined;
 }
 
 /**
@@ -150,7 +131,6 @@ export interface ClassifiedFinding {
  */
 export interface PendingFinding extends ClassifiedFinding {
 	line: number;
-	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
 	scopeLines?: number[] | undefined;
 }
@@ -229,18 +209,13 @@ export interface ClassifyContext {
 	boundSystem?: readonly Binding[];
 	boundText?: readonly Binding[];
 	isGrid?: boolean;
-	options?: HardcodedOptions;
 	/**
 	 * Whether a rule is live in this run. Two branches of the classifier
 	 * *supersede* the ordinary verdict rather than adding to it, so a
 	 * superseding rule that is off has to step aside and let the ordinary one
 	 * through — otherwise turning it off deletes the other finding too.
 	 */
-	enabled?: (rule: RuleId) => boolean;
-}
-
-export interface HardcodedOptions {
-	allowZero?: boolean;
+	enabled: (rule: RuleId) => boolean;
 }
 
 export type { PostcssRule };
@@ -262,7 +237,6 @@ export interface Binding {
 	tag: string | null;
 	isSystem: boolean;
 	isText?: boolean;
-	isLayout?: boolean;
 	file?: string;
 	line?: number;
 }
@@ -282,7 +256,6 @@ export interface InlineStyleElement {
 	tag: string;
 	isSystem: boolean;
 	isText: boolean;
-	isLayout: boolean;
 	decls: Decl[];
 	dynamic: number;
 	file: string;
@@ -334,7 +307,6 @@ export interface TemplateGroup {
 	isGrid: boolean;
 	/** Do these declarations style the tagged component itself, or a descendant? */
 	onTarget: boolean;
-	line: number;
 }
 
 export interface CssInJsTemplate {
@@ -343,7 +315,6 @@ export interface CssInJsTemplate {
 	target: string | null;
 	isSystem: boolean;
 	isText: boolean;
-	isLayout: boolean;
 	groups: TemplateGroup[];
 	error: string | null;
 }
@@ -521,7 +492,7 @@ export interface MergedConfig {
 	namespaces: { project: string[]; external: string[]; neverDead: string[] };
 	sources: SourceGlobs;
 	suppression: SuppressionConfig;
-	rules: Record<string, Severity | [Severity, HardcodedOptions]>;
+	rules: Record<string, Severity>;
 	patterns: string | unknown[] | null;
 	componentRegistry: string | unknown[] | null;
 	baseline: string;
@@ -540,7 +511,7 @@ export interface AuthoredConfig {
 	namespaces?: Partial<MergedConfig['namespaces']>;
 	sources?: Partial<SourceGlobs>;
 	suppression?: Partial<SuppressionConfig>;
-	rules?: Record<string, Severity | [Severity, HardcodedOptions]>;
+	rules?: Record<string, Severity>;
 	patterns?: string | unknown[] | null;
 	componentRegistry?: string | unknown[] | null;
 	baseline?: string;
@@ -566,7 +537,6 @@ export interface DesignSystem {
 
 export interface RuleSetting {
 	severity: Severity;
-	options: HardcodedOptions;
 }
 
 /** One design system, as a directory: what it is, and what describes it. */
@@ -575,7 +545,6 @@ export interface Profile {
 	name: string;
 	preset: string | null;
 	packages: string[];
-	skills: string[];
 	patterns: string | null;
 	components: string | null;
 	/** `{ token: description }`, the design system's own words for what each token is for. */
@@ -639,7 +608,6 @@ export interface Config {
 	rules: Record<RuleId, RuleSetting>;
 	enabled: Record<RuleId, boolean>;
 	severityOf: (id: RuleId) => Severity;
-	optionsOf: (id: RuleId) => HardcodedOptions;
 	isProject: (cls: string) => boolean;
 	isExternal: (cls: string) => boolean;
 	isNeverDead: (cls: string) => boolean;
@@ -670,8 +638,6 @@ export type Discovered = Record<SourceKind, DiscoveredFile[]> & { truncated: boo
 
 // ── state ───────────────────────────────────────────────────────────────────
 
-export type StateScope = 'plugin-data' | 'project' | 'none';
-
 /** A baseline as written to disk. */
 export interface BaselineFile {
 	version: number;
@@ -687,7 +653,7 @@ export interface BaselineFile {
 }
 
 /** A baseline once read, with its entries indexed for lookup. */
-export interface Baseline extends BaselineFile {
+export interface Baseline extends Pick<BaselineFile, 'createdAt' | 'entries'> {
 	set: Set<string>;
 }
 

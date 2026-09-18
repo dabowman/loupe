@@ -249,21 +249,17 @@ export function formatAgent(
 		// and an agent that only ever sees one rule only ever fixes one rule.
 		const quota = new Map<RuleId, number>(groups.map(([id]) => [id, 0]));
 		let budget = maxFindings > 0 ? maxFindings : Infinity;
-		if (budget !== Infinity) {
-			let progress = true;
-			while (budget > 0 && progress) {
-				progress = false;
-				for (const [id, group] of groups) {
-					if (budget <= 0) break;
-					const taken = quota.get(id) ?? 0;
-					if (taken >= group.length) continue;
-					quota.set(id, taken + 1);
-					budget--;
-					progress = true;
-				}
+		let progress = true;
+		while (budget > 0 && progress) {
+			progress = false;
+			for (const [id, group] of groups) {
+				if (budget <= 0) break;
+				const taken = quota.get(id) ?? 0;
+				if (taken >= group.length) continue;
+				quota.set(id, taken + 1);
+				budget--;
+				progress = true;
 			}
-		} else {
-			for (const [id, group] of groups) quota.set(id, group.length);
 		}
 
 		let hidden = 0;
@@ -402,7 +398,7 @@ function fingerprints(findings: readonly Finding[]): string[] {
 /**
  * The one machine-readable shape of a report.
  *
- * `formatJson` prints this and `formatHtml` embeds it, so the page and the JSON
+ * `--format json` prints this and `formatHtml` embeds it, so the page and the JSON
  * cannot disagree about what was found — a divergence that would otherwise be
  * invisible, because each looks correct on its own.
  */
@@ -432,10 +428,6 @@ export function reportPayload(result: AnalyzeResult | BaselinedResult, config: C
 		parseErrors: result.diagnostics.parseErrors,
 		config: { rules: config.rules, enabled: config.enabled },
 	};
-}
-
-export function formatJson(result: AnalyzeResult | BaselinedResult, config: Config): string {
-	return JSON.stringify(reportPayload(result, config), null, 2);
 }
 
 export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Config): string {

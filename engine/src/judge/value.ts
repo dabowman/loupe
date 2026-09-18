@@ -15,7 +15,7 @@ import type { Query } from '../judge.ts';
 import { KEEP } from '../tokens.ts';
 import type { Candidates } from '../tokens.ts';
 
-export interface ValueItem {
+interface ValueItem {
 	file: string;
 	context_before: string;
 	/** Opens on the declaration. */
@@ -45,8 +45,6 @@ const TIER: Record<Candidates['tier'], string> = {
  * and values alone.
  */
 export const valueQuery = (about: ReadonlyMap<string, string>): Query<ValueItem> => ({
-	// One per request, as forces are asked, until this has its own batch sweep.
-	size: 1,
 	element: ({ file, context_before, source }) => ({ file, context_before, source }),
 	question: ({ prop, value, part, candidates }, i) => ({
 		type: 'choice',

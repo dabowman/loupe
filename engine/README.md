@@ -195,14 +195,14 @@ error-severity findings, so CI behaviour does not depend on this.
 
   "rules": {
     "css/dead-class": "error",
-    "layout/margin-on-child": "off",
-    "tokens/hardcoded-value": ["warn", { "allowZero": true }]
+    "layout/margin-on-child": "off"
   }
 }
 ```
 
-Full surface, with defaults, in `presets/generic.json`. The design-system block
-is what makes a preset:
+Defaults are `DEFAULTS` in `src/config.ts`; `presets/generic.json` adds the
+ignore globs and CSS-in-JS packages every shipped preset inherits. The
+design-system block is what makes a preset:
 
 ```jsonc
 {
@@ -496,7 +496,7 @@ skipped.
 
 ```bash
 npm run eval:values                     # three runs
-npx tsx evals/values/run.ts --bare     # without the token descriptions
+node evals/values/run.ts --bare         # without the token descriptions
 ```
 
 `evals/values` carries all 145 literals `--judge` asks about in
@@ -561,7 +561,7 @@ why the floor is not lower.
 
 ```bash
 npm run eval:represents                          # three runs
-npx tsx evals/represents/run.ts 1 --batch 10     # sweep the batch size
+node evals/represents/run.ts 1 --batch 10         # sweep the batch size
 ```
 
 `evals/represents` carries 100 controls lifted from
@@ -601,13 +601,9 @@ a gate that blocks on findings it was told to accept. Set `baseline` in the
 config, or pass `--baseline <path>`, to put it elsewhere. `loupe status` prints
 the path in use, and says so when that path is a fallback.
 
-Baselines written by earlier versions are still read: a committed
-`.loupe-baseline.json` the config has since pointed away from, then
-`.loupe/baseline.json`, then the plugin data directory. Re-run `loupe baseline`
-to move one into place — the plugin-data fallback is reachable only where
-`CLAUDE_PLUGIN_DATA` is set, so until you do, a 0.1.0 backlog recorded inside
-Claude Code is honored by the hook and invisible to `loupe check` in a
-terminal.
+A committed `.loupe-baseline.json` the config has since pointed away from is
+still read. 0.1.x baseline locations (`.loupe/baseline.json`, the plugin data
+directory) are not: re-run `loupe baseline` to record one in the project.
 
 ## Claude Code hook
 

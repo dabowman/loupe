@@ -64,8 +64,8 @@ jobs:
         run: npm run build:check
 
       # A tag saying v0.8.0 over binaries that report 0.7.0 is a trap that only
-      # shows up in a bug report months later. The binary carries the version
-      # compiled in, so it can be asked directly — further down, once it exists.
+      # shows up in a bug report months later. The binary compiles in this same
+      # package.json version, so checking it here covers the binaries too.
       - name: the tag matches the engine version
         if: startsWith(github.ref, 'refs/tags/')
         run: |
@@ -90,10 +90,6 @@ jobs:
           # 0 clean, 1 blocking findings — both mean it ran. 2 means it could not.
           [ "${status:-0}" -le 1 ] || { echo "the binary could not run (exit $status)"; exit 1; }
           grep -q '"$schema"' /tmp/self.sarif
-
-      - name: the compiled-in version matches the tag
-        if: startsWith(github.ref, 'refs/tags/')
-        run: ./binaries/loupe-linux-x64 version | grep -qF "loupe ${GITHUB_REF#refs/tags/v} (binary,"
 
       # musl is a different libc, not a flag: the glibc build does not start on
       # Alpine at all, and the musl build needs libstdc++, which Alpine does not

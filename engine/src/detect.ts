@@ -14,9 +14,10 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { discover, readDir } from './discover.ts';
-import { presetNames, readPreset } from './embedded.ts';
-import type { AuthoredConfig, SourceGlobs } from './types.ts';
+import { DEFAULTS, compilePatterns, merge } from './config.ts';
+import { byBytes, discover, readDir } from './discover.ts';
+import { presetKey, presetNames, readPreset } from './embedded.ts';
+import type { AuthoredConfig } from './types.ts';
 
 /** How much a match is worth. Presets name these; nothing else interprets them. */
 export type Confidence = 'high' | 'low' | 'none' | (string & {});
@@ -36,7 +37,7 @@ interface PresetFile extends AuthoredConfig {
 }
 
 /** Which preset fits, and the evidence for saying so. */
-export interface PresetMatch {
+interface PresetMatch {
 	preset: string;
 	reasons: string[];
 	confidence: Confidence;
@@ -44,7 +45,7 @@ export interface PresetMatch {
 	packageDir: string;
 }
 
-export interface NamespaceDetection {
+interface NamespaceDetection {
 	project: string[];
 	coverage: number;
 	confidence: Confidence;
@@ -249,7 +250,7 @@ export function detectPreset(root: string): PresetMatch {
 	const candidates = presetNames()
 		.map((name) => ({ name, detect: preset(name).detect }))
 		.filter((c): c is { name: string; detect: DetectBlock } => c.detect !== undefined)
-		.sort((a, b) => (b.detect.priority ?? 0) - (a.detect.priority ?? 0) || a.name.localeCompare(b.name));
+		.sort((a, b) => (b.detect.priority ?? 0) - (a.detect.priority ?? 0) || byBytes(a.name, b.name));
 
 	for (const { name, detect } of candidates) {
 		const hit = matchPreset(name, detect, root, found);
@@ -266,6 +267,12 @@ export function detectPreset(root: string): PresetMatch {
 }
 
 const CLASS_RE = /\.(-?[_a-zA-Z][\w-]*)/g;
+
+/** A class's namespace — everything up to and including its first `-` — or null when it has none. */
+const prefixOf = (cls: string | undefined): string | null => {
+	const i = cls?.indexOf('-') ?? -1;
+	return cls && i >= 1 ? cls.slice(0, i + 1) : null;
+};
 
 /**
  * Which of these prefixes are defined by an installed dependency?
@@ -306,12 +313,8 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 				}
 				if (text.length > 2_000_000) continue;
 				for (const m of text.matchAll(CLASS_RE)) {
-					const cls = m[1];
-					if (cls === undefined) continue;
-					const i = cls.indexOf('-');
-					if (i < 1) continue;
-					const prefix = cls.slice(0, i + 1);
-					if (want.delete(prefix)) found.add(prefix);
+					const prefix = prefixOf(m[1]);
+					if (prefix && want.delete(prefix)) found.add(prefix);
 				}
 			}
 		}
@@ -321,29 +324,14 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 	return found;
 }
 
-/** Resolve a preset's `extends` chain far enough to read namespaces and sources. */
+/** Resolve a shipped preset's `extends` chain, merged the way `loadConfig` merges it. */
 function resolvePreset(name: string, seen = new Set<string>()): PresetFile {
 	if (seen.has(name)) return {};
 	seen.add(name);
-	const raw = preset(name);
-	if (!raw.extends) return raw;
-	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
-	let base: PresetFile = {};
-	for (const spec of specs) {
-		const parent = resolvePreset(String(spec).replace(/^loupe\/presets\//, ''), seen);
-		base = {
-			...base,
-			...parent,
-			namespaces: { ...(base.namespaces ?? {}), ...(parent.namespaces ?? {}) },
-			sources: { ...(base.sources ?? {}), ...(parent.sources ?? {}) },
-		};
-	}
-	return {
-		...base,
-		...raw,
-		namespaces: { ...(base.namespaces ?? {}), ...(raw.namespaces ?? {}) },
-		sources: { ...(base.sources ?? {}), ...(raw.sources ?? {}) },
-	};
+	const { extends: parents, ...raw } = preset(name);
+	const specs = parents === undefined ? [] : Array.isArray(parents) ? parents : [parents];
+	const base = specs.reduce<PresetFile>((acc, spec) => merge(acc, resolvePreset(presetKey(spec), seen)), {});
+	return merge(base, raw);
 }
 
 /**
@@ -354,7 +342,7 @@ function resolvePreset(name: string, seen = new Set<string>()): PresetFile {
  * on CSS evidence alone would let the dead-class rule bootstrap its own false
  * positives.
  */
-export function detectNamespaces(
+function detectNamespaces(
 	root: string,
 	presetName: string,
 	packageDir = '',
@@ -362,8 +350,7 @@ export function detectNamespaces(
 	limit: number,
 ): NamespaceDetection {
 	const base = resolvePreset(presetName);
-	const generic = resolvePreset('generic');
-	const sources = { ...generic.sources, ...(base.sources ?? {}) } as SourceGlobs;
+	const sources = merge(DEFAULTS.sources, base.sources);
 	const files = discover({ root, sources, limit });
 
 	// Library prefixes from *every* shipped preset, not just the detected one, so
@@ -375,10 +362,10 @@ export function detectNamespaces(
 		.filter((n) => n !== presetName)
 		.map((n) => resolvePreset(n));
 	const external = [...(base.namespaces?.external ?? []), ...others.flatMap((p) => p.namespaces?.external ?? [])];
-	const neverDead = [
+	const neverDead = compilePatterns([
 		...(base.namespaces?.neverDead ?? []),
 		...others.flatMap((p) => p.namespaces?.neverDead ?? []),
-	].map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`));
+	]);
 	const isExcluded = (cls: string): boolean =>
 		external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
 
@@ -392,10 +379,8 @@ export function detectNamespaces(
 		}
 		for (const m of text.matchAll(CLASS_RE)) {
 			const cls = m[1];
-			if (cls === undefined || isExcluded(cls)) continue;
-			const idx = cls.indexOf('-');
-			if (idx < 1) continue;
-			const prefix = cls.slice(0, idx + 1);
+			const prefix = prefixOf(cls);
+			if (cls === undefined || !prefix || isExcluded(cls)) continue;
 			cssCounts.set(prefix, (cssCounts.get(prefix) ?? 0) + 1);
 		}
 	}

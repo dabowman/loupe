@@ -27,26 +27,9 @@ export interface ForceJudge {
 	criteria: Record<string, string>;
 }
 
-export type ForceItem = Pick<Control, 'file' | 'component' | 'enclosing' | 'source'>;
+type ForceItem = Pick<Control, 'file' | 'component' | 'enclosing' | 'source'>;
 
 export const forceQuery = (force: ForceJudge): Query<ForceItem> => ({
-	// Measured, one run over the eval's 100 controls — destination recall is the
-	// column that decides it, because every redirect in the abstract language
-	// fires on that class:
-	//
-	//   batch   all   destination P/R
-	//      40   81%      91% / 69%
-	//      20   90%      96% / 83%
-	//      10   90%     100% / 86%
-	//       4   91%     100% / 90%
-	//       1   93%     100% / 97%
-	//
-	// Sharing a state with 39 other controls costs nearly a third of the
-	// destinations. A control is a few lines, so one request each is cheap; the
-	// pool in `ask` is what keeps it quick. Every force is asked this way until
-	// its own eval says otherwise: this table is `represents`, not forces in
-	// general.
-	size: 1,
 	element: (c) => ({ file: c.file, component: c.component, enclosing_component: c.enclosing, source: c.source }),
 	question: (_c, i) => ({
 		type: 'choice',

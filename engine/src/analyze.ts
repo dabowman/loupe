@@ -45,9 +45,9 @@ import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
 import { discover, toPosix } from './discover.ts';
 import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
-import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.ts';
+import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
-import { messageLine, messageParts, oneLine, snippet } from './text.ts';
+import { messageLine, messageOf, messageParts, oneLine, snippet } from './text.ts';
 import { cssFilesUnder, harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
 import {
 	APPEARANCE_PROPS,
@@ -55,7 +55,9 @@ import {
 	TYPE_PROPS,
 	classesIn,
 	isFlexDecl,
+	isGridDecl,
 	isHardcodedTokenValue,
+	isLayoutDecl,
 	isMarginProp,
 	keySelector,
 	ownDecls,
@@ -90,7 +92,6 @@ import type {
 	Diagnostics,
 	Directive,
 	Finding,
-	Hint,
 	InlineStyleElement,
 	ParseError,
 	PatternRule,
@@ -101,10 +102,6 @@ import type {
 	Suppressions,
 	TokenSet,
 } from './types.ts';
-
-/** First line of an unknown throw — a parser may reject with anything. */
-const messageOf = (err: unknown): string =>
-	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
 
 /** A path resolved through symlinks and case, or null when nothing is there. */
 const realPath = (path: string): string | null => {
@@ -202,7 +199,7 @@ async function readLibrary(
  * which config and the catalog supply, plus any lines besides its own that a
  * suppression for it may sit on.
  */
-export type Candidate = Omit<Finding, 'severity' | 'rank'> & { scopeLines?: readonly number[] };
+export type Candidate = Omit<Finding, 'severity' | 'rank'> & { scopeLines?: readonly number[] | undefined };
 
 /**
  * One rule's verdict on one CSS declaration, whichever channel it came from.
@@ -245,16 +242,16 @@ const DECLARATIONS: readonly DeclarationCheck[] = [
  */
 function classifyDeclaration(
 	{ prop, value }: Decl,
-	{ boundSystem = [], boundText = [], isGrid = false, options = {}, enabled = () => true }: ClassifyContext,
+	{ boundSystem = [], boundText = [], isGrid = false, enabled }: ClassifyContext,
 ): { finding: ClassifiedFinding | null; styling: boolean } {
 	const styling =
 		isMarginProp(prop) ||
 		isFlexDecl(prop, value) ||
 		GAP_PROPS.has(prop) ||
 		TYPE_PROPS.has(prop) ||
-		isHardcodedTokenValue(prop, value, options) ||
+		isHardcodedTokenValue(prop, value) ||
 		APPEARANCE_PROPS.has(prop);
-	const ctx = { boundSystem, boundText, isGrid, options, enabled };
+	const ctx = { boundSystem, boundText, isGrid, enabled };
 	// Deliberately unbounded. `message` is what the dedupe tells two findings
 	// apart by, and on the rules whose `code` is only the property (`margin-*`,
 	// `gap`) it is the ONLY thing that tells them apart — so a cap applied at
@@ -304,15 +301,13 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 		const props = [...new Set(group.map((f) => (f.message.split(':')[0] ?? f.message).trim()))];
 		out.push({
 			...first,
-			rule,
 			// Bounded per contributor, so one long value cannot spend the whole
 			// line and crowd the others out of a message that is several of them.
 			// Safe to bound here where it is not at capture: a collapsed finding
 			// always carries its own `code` below, so identity does not fall back
 			// to this string.
 			message: group.map((f) => snippet(f.message)).join('; '),
-			hints: group.flatMap((f) => f.hints ?? (f.hint ? [f.hint] : [])),
-			suffix: first.suffix,
+			hints: group.flatMap((f) => f.hints ?? []),
 			code: `${rule}:${props.sort().join(',')}`,
 		});
 	}
@@ -383,11 +378,12 @@ export async function analyze(
 	 * is out of scope, or a directive on its line, the line above, or one of
 	 * its `scopeLines` suppresses it.
 	 */
-	const report = ({ scopeLines, rule, ...f }: Candidate): void => {
-		if (!config.enabled[rule] || !reports(f.file)) return;
-		const supp = suppByFile.get(f.file);
-		if (supp && isSuppressed(supp.byLine, f.line, rule, scopeLines)) return;
-		findings.push({ rule, severity: config.severityOf(rule), ...f, rank: RULES[rule].rank });
+	const report = ({ scopeLines, rule, file, line, message, ...f }: Candidate): void => {
+		if (!config.enabled[rule] || !reports(file)) return;
+		const supp = suppByFile.get(file);
+		if (supp && isSuppressed(supp.byLine, line, rule, scopeLines)) return;
+		// Keys in one order whichever channel built the candidate, so `--format json` reads alike.
+		findings.push({ rule, severity: config.severityOf(rule), file, line, message, ...f, rank: RULES[rule].rank });
 	};
 
 	// ── index markup, repo-wide ───────────────────────────────────────────────
@@ -421,12 +417,8 @@ export async function analyze(
 		diagnostics.filesScanned++;
 		const scanned = scanMarkup(text, rel, ds, patternRules);
 		if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
-		scanned.referenced.forEach((t) => {
-			referenced.add(t);
-		});
-		scanned.stems.forEach((s) => {
-			stems.add(s);
-		});
+		for (const t of scanned.referenced) referenced.add(t);
+		for (const t of scanned.stems) stems.add(t);
 		for (const b of scanned.bindings) {
 			if (b.cls === undefined) continue;
 			const group = bindings.get(b.cls) ?? [];
@@ -468,7 +460,7 @@ export async function analyze(
 			continue;
 		}
 		diagnostics.filesScanned++;
-		const supp = suppressionsFor(rel, text);
+		suppressionsFor(rel, text); // cached for `report`
 		// A stylesheet we cannot read is a hole in coverage, not a diagnostic:
 		// it reports as a finding so a clean run always means "checked and clean".
 		const unparsed = (message: string): void => {
@@ -504,26 +496,7 @@ export async function analyze(
 			continue;
 		}
 
-		const emit = ({ rule, line, message, code, scopeLines = [], hint, hints, suffix }: PendingFinding): void => {
-			if (!config.enabled[rule] || !reports(rel)) return;
-			if (isSuppressed(supp.byLine, line, rule, scopeLines)) return;
-			findings.push({
-				rule,
-				severity: config.severityOf(rule),
-				file: rel,
-				line,
-				message,
-				code: code ?? message,
-				rank: RULES[rule].rank,
-				hints: hints || (hint ? [hint] : undefined),
-				// Forwarded rather than blanked. Nothing in this channel sets one
-				// today, but `collapsePerRule` carries `suffix` through on purpose
-				// and it is now what keeps a message tail out of the line bound —
-				// so dropping it here would silently disarm that for whichever rule
-				// reaches for it first.
-				suffix,
-			});
-		};
+		const emit = (f: PendingFinding): void => report({ ...f, file: rel, code: f.code ?? f.message });
 
 		harvestTokenDefs(root, tokenPrefixes, tokenSet);
 
@@ -554,7 +527,7 @@ export async function analyze(
 				const line = decl.source?.start?.line ?? ruleLine;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, options: config.optionsOf('tokens/hardcoded-value'), enabled: ruleIsLive },
+					{ boundSystem, boundText, isGrid, enabled: ruleIsLive },
 				);
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
@@ -593,52 +566,17 @@ export async function analyze(
 	// something to look right immediately — so tightening the CSS gate quietly
 	// makes the unchecked path the attractive one.
 	for (const el of inlineStyles) {
-		if (!reports(el.file)) continue;
-		const supp = suppByFile.get(el.file);
-		const muted = (rule: RuleId, line: number): boolean =>
-			supp !== undefined && isSuppressed(supp.byLine, line, rule, [el.line, el.line - 1]);
-
-		const push = (
-			rule: RuleId,
-			line: number,
-			message: string,
-			code?: string,
-			hints?: Hint[],
-			suffix?: string,
-		): void => {
-			if (!config.enabled[rule] || muted(rule, line)) return;
-			findings.push({
-				rule,
-				severity: config.severityOf(rule),
-				file: el.file,
-				line,
-				message,
-				code: code ?? message,
-				rank: RULES[rule].rank,
-				hints,
-				suffix,
-			});
-		};
-
+		const scopeLines = [el.line, el.line - 1];
 		const whole = ruleIsLive('system/inline-style') ? inlineStyle(el) : null;
 		if (whole) {
-			push(whole.rule, el.line, whole.message, whole.code);
+			report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
 			continue;
 		}
 
-		const isGrid = el.decls.some(
-			(d) =>
-				(d.prop === 'display' && /\bgrid\b/.test(d.value)) ||
-				d.prop.startsWith('grid-template') ||
-				d.prop.startsWith('grid-auto'),
-		);
+		const isGrid = el.decls.some((d) => isGridDecl(d.prop, d.value));
 		const pending: PendingFinding[] = [];
 		for (const d of el.decls) {
-			const { finding } = classifyDeclaration(d, {
-				isGrid,
-				options: config.optionsOf('tokens/hardcoded-value'),
-				enabled: ruleIsLive,
-			});
+			const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
 			if (finding)
 				pending.push({
 					...finding,
@@ -648,14 +586,7 @@ export async function analyze(
 				});
 		}
 		for (const f of collapsePerRule(pending))
-			push(
-				f.rule,
-				f.line,
-				`${f.message}${f.suffix ?? ''}`,
-				f.code,
-				f.hints ?? (f.hint ? [f.hint] : undefined),
-				f.suffix,
-			);
+			report({ ...f, file: el.file, message: `${f.message}${f.suffix ?? ''}`, code: f.code ?? f.message, scopeLines });
 	}
 
 	// ── CSS-in-JS template literals ───────────────────────────────────────────
@@ -687,7 +618,6 @@ export async function analyze(
 					boundSystem: onTarget ? boundSystem : [],
 					boundText: onTarget ? boundText : [],
 					isGrid: group.isGrid,
-					options: config.optionsOf('tokens/hardcoded-value'),
 					enabled: ruleIsLive,
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
@@ -701,21 +631,15 @@ export async function analyze(
 			// `analyze` is where it gets shortened, from the front, so the part
 			// that distinguishes two sibling selectors is the part that survives.
 			const where = group.selector ? ` in \`${group.selector}\`` : '';
-			for (const f of collapsePerRule(pending)) {
-				if (!config.enabled[f.rule]) continue;
-				if (supp && isSuppressed(supp.byLine, f.line, f.rule, [tpl.line, tpl.line - 1])) continue;
-				findings.push({
-					rule: f.rule,
-					severity: config.severityOf(f.rule),
+			for (const f of collapsePerRule(pending))
+				report({
+					...f,
 					file: tpl.file,
-					line: f.line,
 					message: `${f.message}${where} (css-in-js)`,
-					suffix: `${where} (css-in-js)`,
 					code: `css-in-js:${f.code ?? f.message}`,
-					rank: RULES[f.rule].rank,
-					hints: f.hints ?? (f.hint ? [f.hint] : undefined),
+					suffix: `${where} (css-in-js)`,
+					scopeLines: [tpl.line, tpl.line - 1],
 				});
-			}
 		}
 	}
 

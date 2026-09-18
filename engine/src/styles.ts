@@ -8,10 +8,10 @@
  */
 
 import type { Container, Declaration, Rule } from 'postcss';
-import type { HardcodedOptions, MarginKind } from './types.ts';
+import type { Decl, MarginKind } from './types.ts';
 
 /** Token-backed props whose literal values duplicate a design token. */
-export const COLOR_PROPS = new Set([
+const COLOR_PROPS = new Set([
 	'color',
 	'background',
 	'background-color',
@@ -28,7 +28,7 @@ export const COLOR_PROPS = new Set([
 	'caret-color',
 	'accent-color',
 ]);
-export const SPACING_PROPS = new Set([
+const SPACING_PROPS = new Set([
 	'padding',
 	'padding-top',
 	'padding-right',
@@ -46,7 +46,7 @@ export const SPACING_PROPS = new Set([
 	'bottom',
 	'left',
 ]);
-export const RADIUS_PROPS = new Set([
+const RADIUS_PROPS = new Set([
 	'border-radius',
 	'border-top-left-radius',
 	'border-top-right-radius',
@@ -56,7 +56,7 @@ export const RADIUS_PROPS = new Set([
 export const TYPE_PROPS = new Set(['font', 'font-size', 'font-weight', 'font-family', 'line-height', 'letter-spacing']);
 export const GAP_PROPS = new Set(['gap', 'row-gap', 'column-gap']);
 /** Token-backed too: the design system ships a border-width scale. */
-export const BORDER_WIDTH_PROPS = new Set([
+const BORDER_WIDTH_PROPS = new Set([
 	'border-width',
 	'border-top-width',
 	'border-right-width',
@@ -64,7 +64,7 @@ export const BORDER_WIDTH_PROPS = new Set([
 	'border-left-width',
 	'outline-width',
 ]);
-export const FLEX_PROPS = new Set([
+const FLEX_PROPS = new Set([
 	'flex-direction',
 	'align-items',
 	'justify-content',
@@ -75,14 +75,14 @@ export const FLEX_PROPS = new Set([
 	'place-content',
 ]);
 /** Token-backed: the design system ships duration and easing scales. */
-export const MOTION_PROPS = new Set([
+const MOTION_PROPS = new Set([
 	'transition-duration',
 	'animation-duration',
 	'transition-timing-function',
 	'animation-timing-function',
 ]);
 /** Token-backed: the design system ships a cursor scale for interactive controls. */
-export const CURSOR_PROPS = new Set(['cursor']);
+const CURSOR_PROPS = new Set(['cursor']);
 
 /**
  * Appearance-only. Layout and box-model props are deliberately excluded: on a
@@ -118,12 +118,12 @@ const KEYWORD = /^(inherit|initial|unset|revert|revert-layer|none|auto|transpare
 const ZERO = /^0([a-z%]*)$/i;
 
 export const usesToken = (value: string): boolean => /var\(\s*--/.test(value);
-export const isLiteralColor = (v: string): boolean =>
+const isLiteralColor = (v: string): boolean =>
 	/#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|oklch|lab|color)\(/i.test(v);
-export const isLiteralLength = (v: string): boolean =>
+const isLiteralLength = (v: string): boolean =>
 	/(^|\s|,)-?\d*\.?\d+(px|rem|em|%|vh|vw|vmin|vmax|pt|ch)\b/.test(v) || /(^|\s)-?\d+(\s|$)/.test(v);
-export const isLiteralDuration = (v: string): boolean => /^-?\d*\.?\d+m?s$/i.test(v.trim());
-export const isLiteralEasing = (v: string): boolean =>
+const isLiteralDuration = (v: string): boolean => /^-?\d*\.?\d+m?s$/i.test(v.trim());
+const isLiteralEasing = (v: string): boolean =>
 	/^(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$/i.test(v.trim()) ||
 	/^(cubic-bezier|steps)\(/i.test(v.trim());
 
@@ -132,6 +132,21 @@ export const isMarginProp = (prop: string): boolean => prop === 'margin' || prop
 /** A declaration that makes or tunes a flex (or grid) container. */
 export const isFlexDecl = (prop: string, value: string): boolean =>
 	FLEX_PROPS.has(prop) || (prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value));
+
+/** A declaration that establishes a CSS Grid. Grid is a genuine keep: flex primitives can't replace it. */
+export const isGridDecl = (prop: string, value: string): boolean =>
+	(prop === 'display' && /\bgrid\b/.test(value)) ||
+	prop === 'grid' ||
+	prop.startsWith('grid-template') ||
+	prop.startsWith('grid-auto');
+
+/**
+ * Does this declaration lay anything out? `<div>` maps to a layout primitive,
+ * so that suggestion is only true when the div is actually laying something
+ * out — a bordered, coloured `<div>` has no layout primitive analog.
+ */
+export const isLayoutDecl = ({ prop, value }: Decl): boolean =>
+	isFlexDecl(prop, value) || GAP_PROPS.has(prop) || isGridDecl(prop, value);
 
 /**
  * Classify a margin declaration: `'spacing' | 'negative' | null`.
@@ -176,14 +191,10 @@ export const isInertValue = (value: string): boolean => {
 };
 
 /** A token-backed prop carrying a raw literal instead of a token reference. */
-export function isHardcodedTokenValue(
-	prop: string,
-	value: string,
-	{ allowZero = true }: HardcodedOptions = {},
-): boolean {
+export function isHardcodedTokenValue(prop: string, value: string): boolean {
 	const v = value.trim();
 	if (usesToken(value) || KEYWORD.test(v)) return false;
-	if (allowZero && v.split(/\s+/).every((part) => ZERO.test(part))) return false;
+	if (v.split(/\s+/).every((part) => ZERO.test(part))) return false;
 	if (COLOR_PROPS.has(prop)) return isLiteralColor(value);
 	if (SPACING_PROPS.has(prop) || RADIUS_PROPS.has(prop) || BORDER_WIDTH_PROPS.has(prop)) return isLiteralLength(value);
 	if (MOTION_PROPS.has(prop)) return isLiteralDuration(value) || isLiteralEasing(value);
@@ -239,17 +250,6 @@ export const keySelector = (sel: string): string =>
 export const classesIn = (sel: string): string[] =>
 	[...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
 
-/** Does this rule establish a CSS Grid? Grid is a genuine keep: flex primitives can't replace it. */
-export function ruleIsGrid(rule: Container): boolean {
-	for (const d of ownDecls(rule)) {
-		const p = d.prop.toLowerCase();
-		if (
-			(p === 'display' && /\bgrid\b/.test(d.value)) ||
-			p === 'grid' ||
-			p.startsWith('grid-template') ||
-			p.startsWith('grid-auto')
-		)
-			return true;
-	}
-	return false;
-}
+/** Does this rule establish a CSS Grid? */
+export const ruleIsGrid = (rule: Container): boolean =>
+	[...ownDecls(rule)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));

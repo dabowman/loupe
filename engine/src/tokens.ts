@@ -61,7 +61,7 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 ];
 
 /** Comparable form of a CSS value: case, spacing, shorthand hex, `!important`. */
-export function normalizeValue(value: unknown): string {
+function normalizeValue(value: unknown): string {
 	let v = String(value)
 		.trim()
 		.toLowerCase()
@@ -171,7 +171,7 @@ export function tokensFor(set: TokenSet, prop: string, value: string): string[] 
 }
 
 /** Every on-role token for `prop` that has a literal value, as `[name, value]`, whatever the value. */
-export function familyFor(set: TokenSet, prop: string): [string, string][] {
+function familyFor(set: TokenSet, prop: string): [string, string][] {
 	const all = [...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v]));
 	const keep = new Set(
 		onRole(
@@ -281,7 +281,7 @@ export function candidatesFor(set: TokenSet, prop: string, part: string): Candid
  * A value's parts, split on whitespace outside parentheses, so `padding: 6px
  * 12px` is two literals and `rgba(0, 0, 0, 0.5)` is one.
  */
-export const partsOf = (value: string): string[] => value.trim().match(/(?:[^\s(]+|\([^)]*\))+/g) ?? [];
+const partsOf = (value: string): string[] => value.trim().match(/(?:[^\s(]+|\([^)]*\))+/g) ?? [];
 
 /** A part a token could stand for. Zeros, keywords and `url()` pass through. */
 const isLiteralPart = (p: string): boolean =>

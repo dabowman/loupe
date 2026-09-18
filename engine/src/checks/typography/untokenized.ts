@@ -12,5 +12,5 @@ export const untokenizedType: DeclarationCheck = ({ prop, value }) => {
 	if (!TYPE_PROPS.has(prop)) return undefined;
 	if (usesToken(value) || isInertValue(value)) return null;
 	const decl = `${prop}: ${value}`;
-	return { rule: 'typography/untokenized', message: decl, code: oneLine(decl), hint: { prop, value } };
+	return { rule: 'typography/untokenized', message: decl, code: oneLine(decl), hints: [{ prop, value }] };
 };

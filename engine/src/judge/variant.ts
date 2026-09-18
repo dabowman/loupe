@@ -13,32 +13,35 @@ import { join } from 'node:path';
 import type { Query } from '../judge.ts';
 import type { ComponentEntry, Finding } from '../types.ts';
 
-export interface VariantItem {
+interface VariantItem {
 	f: Finding;
 	/** The registry entry, with variants, the finding points at. */
 	target: ComponentEntry;
+}
+
+/** The lines a judged element is read with: `before` above it, and `source` opening on it. */
+export function around(
+	root: string,
+	file: string,
+	line: number,
+	before: number,
+	after: number,
+): { context_before: string; source: string } {
+	const lines = readFileSync(join(root, file), 'utf8').split('\n');
+	const i = line - 1;
+	return {
+		context_before: lines.slice(Math.max(0, i - before), i).join('\n'),
+		source: lines.slice(i, i + after).join('\n'),
+	};
 }
 
 /** The option that says the analog was the wrong call. */
 export const notKey = (e: ComponentEntry): string => `not_${e.name.toLowerCase()}`;
 
 export const variantQuery = (root: string): Query<VariantItem> => ({
-	// One per request, as forces are: `represents` lost a third of its
-	// destinations sharing a state 40 ways, and this has no eval of its own to
-	// say it fares better. Each question needs only its own element, so the
-	// tokens are about the same either way.
-	size: 1,
-	element: ({ f }) => {
-		const lines = readFileSync(join(root, f.file), 'utf8').split('\n');
-		const i = f.line - 1;
-		return {
-			file: f.file,
-			// The flagged element opens on the first line of `source`; the lines
-			// before it are its parent, which is often what decides the role.
-			context_before: lines.slice(Math.max(0, i - 5), i).join('\n'),
-			source: lines.slice(i, i + 10).join('\n'),
-		};
-	},
+	// The lines before the flagged element are its parent, which is often what
+	// decides the role.
+	element: ({ f }) => ({ file: f.file, ...around(root, f.file, f.line, 5, 10) }),
 	question: ({ f, target }, i) => ({
 		type: 'choice',
 		instructions: `The ${f.code ?? 'element'} on the first line of \`elements[${i}].source\` is flagged to be replaced by the design system's ${target.name} component. Which ${target.name} variant matches the role this element plays in its interface?`,

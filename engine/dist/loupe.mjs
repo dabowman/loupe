@@ -27,9 +27,9 @@ var __export = (target, all) => {
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
-    for (let key2 of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key2) && key2 !== except)
-        __defProp(to, key2, { get: () => from[key2], enumerable: !(desc = __getOwnPropDesc(from, key2)) || desc.enumerable });
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
   }
   return to;
 };
@@ -1073,14 +1073,14 @@ var require_parse = __commonJS({
       };
       if (opts.fastpaths !== false && !/(^[*!]|[/()[\]{}"])/.test(input)) {
         let backslashes = false;
-        let output = input.replace(REGEX_SPECIAL_CHARS_BACKREF, (m, esc2, chars, first, rest, index2) => {
+        let output = input.replace(REGEX_SPECIAL_CHARS_BACKREF, (m, esc, chars, first, rest, index2) => {
           if (first === "\\") {
             backslashes = true;
             return m;
           }
           if (first === "?") {
-            if (esc2) {
-              return esc2 + first + (rest ? QMARK.repeat(rest.length) : "");
+            if (esc) {
+              return esc + first + (rest ? QMARK.repeat(rest.length) : "");
             }
             if (index2 === 0) {
               return qmarkNoDot + (rest ? QMARK.repeat(rest.length) : "");
@@ -1091,12 +1091,12 @@ var require_parse = __commonJS({
             return DOT_LITERAL.repeat(chars.length);
           }
           if (first === "*") {
-            if (esc2) {
-              return esc2 + first + (rest ? star : "");
+            if (esc) {
+              return esc + first + (rest ? star : "");
             }
             return star;
           }
-          return esc2 ? m : `\\${m}`;
+          return esc ? m : `\\${m}`;
         });
         if (backslashes === true) {
           if (opts.unescape === true) {
@@ -2018,8 +2018,8 @@ var require_lib = __commonJS({
       ModuleAttributeDifferentFromType: "The only accepted module attribute is `type`.",
       ModuleAttributeInvalidValue: "Only string literals are allowed as module attribute values.",
       ModuleAttributesWithDuplicateKeys: ({
-        key: key2
-      }) => `Duplicate key "${key2}" is not allowed in module attributes.`,
+        key
+      }) => `Duplicate key "${key}" is not allowed in module attributes.`,
       ModuleExportNameHasLoneSurrogate: ({
         surrogateCharCode
       }) => `An export name cannot include a lone surrogate, found '\\u${surrogateCharCode.toString(16)}'.`,
@@ -2155,8 +2155,8 @@ var require_lib = __commonJS({
       UnsupportedBindRHS: "The right-hand side of binding can not be super or import."
     };
     var _excluded = ["message"];
-    function defineHidden(obj, key2, value) {
-      Object.defineProperty(obj, key2, {
+    function defineHidden(obj, key, value) {
+      Object.defineProperty(obj, key, {
         enumerable: false,
         configurable: true,
         value
@@ -2276,8 +2276,8 @@ var require_lib = __commonJS({
       if (opts.annexB != null && opts.annexB !== false) {
         throw new Error("The `annexB` option can only be set to `false`.");
       }
-      for (const key2 of Object.keys(options)) {
-        if (opts[key2] != null) options[key2] = opts[key2];
+      for (const key of Object.keys(options)) {
+        if (opts[key] != null) options[key] = opts[key];
       }
       if (options.startLine === 1) {
         if (opts.startIndex == null && options.startColumn > 0) {
@@ -2306,11 +2306,11 @@ var require_lib = __commonJS({
     var {
       defineProperty
     } = Object;
-    var toUnenumerable = (object, key2) => {
+    var toUnenumerable = (object, key) => {
       if (object) {
-        defineProperty(object, key2, {
+        defineProperty(object, key, {
           enumerable: false,
-          value: object[key2]
+          value: object[key]
         });
       }
     };
@@ -2500,9 +2500,9 @@ var require_lib = __commonJS({
           return this.finishNode(node, "MethodDefinition");
         }
       }
-      nameIsConstructor(key2) {
-        if (key2.type === "Literal") return key2.value === "constructor";
-        return super.nameIsConstructor(key2);
+      nameIsConstructor(key) {
+        if (key.type === "Literal") return key.value === "constructor";
+        return super.nameIsConstructor(key);
       }
       parseClassProperty(...args) {
         const propertyNode = super.parseClassProperty(...args);
@@ -2558,11 +2558,11 @@ var require_lib = __commonJS({
       toAssignable(node, isLHS = false) {
         if (node != null && this.isObjectProperty(node)) {
           const {
-            key: key2,
+            key,
             value
           } = node;
-          if (this.isPrivateName(key2)) {
-            this.classScope.usePrivateName(this.getPrivateNameSV(key2), key2.loc.start);
+          if (this.isPrivateName(key)) {
+            this.classScope.usePrivateName(this.getPrivateNameSV(key), key.loc.start);
           }
           this.toAssignable(value, isLHS);
         } else {
@@ -6798,13 +6798,13 @@ var require_lib = __commonJS({
         if (typeof pluginConfig === "string") {
           return this.plugins.has(pluginConfig);
         } else {
-          const [pluginName2, pluginOptions2] = pluginConfig;
-          if (!this.hasPlugin(pluginName2)) {
+          const [pluginName, pluginOptions] = pluginConfig;
+          if (!this.hasPlugin(pluginName)) {
             return false;
           }
-          const actualOptions = this.plugins.get(pluginName2);
-          for (const key2 of Object.keys(pluginOptions2)) {
-            if ((actualOptions == null ? void 0 : actualOptions[key2]) !== pluginOptions2[key2]) {
+          const actualOptions = this.plugins.get(pluginName);
+          for (const key of Object.keys(pluginOptions)) {
+            if ((actualOptions == null ? void 0 : actualOptions[key]) !== pluginOptions[key]) {
               return false;
             }
           }
@@ -8393,12 +8393,12 @@ var require_lib = __commonJS({
               continue;
             }
             ++this.state.pos;
-            const esc2 = this.readCodePoint(true);
-            if (esc2 !== null) {
-              if (!identifierCheck(esc2)) {
+            const esc = this.readCodePoint(true);
+            if (esc !== null) {
+              if (!identifierCheck(esc)) {
                 this.raise(Errors.EscapedCharNotAnIdentifier, escStart);
               }
-              word += String.fromCodePoint(esc2);
+              word += String.fromCodePoint(esc);
             }
             chunkStart = this.state.pos;
           } else {
@@ -8453,12 +8453,12 @@ var require_lib = __commonJS({
           expected: type ? tokenLabelName(type) : null
         });
       }
-      expectPlugin(pluginName2, loc) {
-        if (this.hasPlugin(pluginName2)) {
+      expectPlugin(pluginName, loc) {
+        if (this.hasPlugin(pluginName)) {
           return true;
         }
         throw this.raise(Errors.MissingPlugin, loc != null ? loc : this.state.startLoc, {
-          missingPlugin: [pluginName2]
+          missingPlugin: [pluginName]
         });
       }
       expectOnePlugin(pluginNames) {
@@ -8664,7 +8664,7 @@ var require_lib = __commonJS({
       return new ExpressionScope();
     }
     var UtilParser = class extends Tokenizer {
-      addExtra(node, key2, value, enumerable = true) {
+      addExtra(node, key, value, enumerable = true) {
         if (!node) return;
         let {
           extra
@@ -8674,9 +8674,9 @@ var require_lib = __commonJS({
           node.extra = extra;
         }
         if (enumerable) {
-          extra[key2] = value;
+          extra[key] = value;
         } else {
-          Object.defineProperty(extra, key2, {
+          Object.defineProperty(extra, key, {
             enumerable,
             value
           });
@@ -8909,9 +8909,9 @@ var require_lib = __commonJS({
       const newNode = new Node2(void 0, this.start, this.loc.start);
       const keys = Object.keys(this);
       for (let i = 0, length = keys.length; i < length; i++) {
-        const key2 = keys[i];
-        if (key2 !== "leadingComments" && key2 !== "trailingComments" && key2 !== "innerComments") {
-          newNode[key2] = this[key2];
+        const key = keys[i];
+        if (key !== "leadingComments" && key !== "trailingComments" && key !== "innerComments") {
+          newNode[key] = this[key];
         }
       }
       return newNode;
@@ -9037,11 +9037,11 @@ var require_lib = __commonJS({
             break;
           case "ObjectProperty": {
             const {
-              key: key2,
+              key,
               value
             } = node;
-            if (this.isPrivateName(key2)) {
-              this.classScope.usePrivateName(this.getPrivateNameSV(key2), key2.loc.start);
+            if (this.isPrivateName(key)) {
+              this.classScope.usePrivateName(this.getPrivateNameSV(key), key.loc.start);
             }
             this.toAssignable(value, isLHS);
             break;
@@ -9352,17 +9352,17 @@ var require_lib = __commonJS({
           });
           return;
         }
-        let key2, isParenthesizedExpression;
+        let key, isParenthesizedExpression;
         if (typeof validity === "string") {
-          key2 = validity;
+          key = validity;
           isParenthesizedExpression = type === "ParenthesizedExpression";
         } else {
-          [key2, isParenthesizedExpression] = validity;
+          [key, isParenthesizedExpression] = validity;
         }
         const nextAncestor = type === "ArrayPattern" || type === "ObjectPattern" ? {
           type
         } : ancestor;
-        const val = expression[key2];
+        const val = expression[key];
         if (Array.isArray(val)) {
           for (const child of val) {
             if (child) {
@@ -11484,10 +11484,10 @@ var require_lib = __commonJS({
         }
         if (node.abstract && this.match(29)) {
           const {
-            key: key2
+            key
           } = node;
           this.raise(TSErrors.AbstractPropertyHasInitializer, this.state.startLoc, {
-            propertyName: key2.type === "Identifier" && !node.computed ? key2.name : `[${this.input.slice(this.offsetToSourcePos(key2.start), this.offsetToSourcePos(key2.end))}]`
+            propertyName: key.type === "Identifier" && !node.computed ? key.name : `[${this.input.slice(this.offsetToSourcePos(key.start), this.offsetToSourcePos(key.end))}]`
           });
         }
         return super.parseClassProperty(node);
@@ -11924,10 +11924,10 @@ var require_lib = __commonJS({
           const methodFn = hasEstreePlugin ? method.value : method;
           if (methodFn.body) {
             const {
-              key: key2
+              key
             } = method;
             this.raise(TSErrors.AbstractMethodHasImplementation, method, {
-              methodName: key2.type === "Identifier" && !method.computed ? key2.name : `[${this.input.slice(this.offsetToSourcePos(key2.start), this.offsetToSourcePos(key2.end))}]`
+              methodName: key.type === "Identifier" && !method.computed ? key.name : `[${this.input.slice(this.offsetToSourcePos(key.start), this.offsetToSourcePos(key.end))}]`
             });
           }
         }
@@ -12552,20 +12552,20 @@ var require_lib = __commonJS({
         if (prop.type === "SpreadElement" || this.isObjectMethod(prop) || prop.computed || prop.shorthand) {
           return sawProto;
         }
-        const key2 = prop.key;
-        const name = key2.type === "Identifier" ? key2.name : key2.value;
+        const key = prop.key;
+        const name = key.type === "Identifier" ? key.name : key.value;
         if (name === "__proto__") {
           if (isRecord) {
-            this.raise(Errors.RecordNoProto, key2);
+            this.raise(Errors.RecordNoProto, key);
             return true;
           }
           if (sawProto) {
             if (refExpressionErrors) {
               if (refExpressionErrors.doubleProtoLoc === null) {
-                refExpressionErrors.doubleProtoLoc = key2.loc.start;
+                refExpressionErrors.doubleProtoLoc = key.loc.start;
               }
             } else {
-              this.raise(Errors.DuplicateProto, key2);
+              this.raise(Errors.DuplicateProto, key);
             }
           }
           return true;
@@ -13706,18 +13706,18 @@ var require_lib = __commonJS({
         this.parsePropertyName(prop, refExpressionErrors);
         if (!isGenerator && !containsEsc && this.maybeAsyncOrAccessorProp(prop)) {
           const {
-            key: key2
+            key
           } = prop;
-          const keyName2 = key2.name;
+          const keyName2 = key.name;
           if (keyName2 === "async" && !this.hasPrecedingLineBreak()) {
             isAsync = true;
-            this.resetPreviousNodeTrailingComments(key2);
+            this.resetPreviousNodeTrailingComments(key);
             isGenerator = this.eat(55);
             this.parsePropertyName(prop);
           }
           if (keyName2 === "get" || keyName2 === "set") {
             isAccessor = true;
-            this.resetPreviousNodeTrailingComments(key2);
+            this.resetPreviousNodeTrailingComments(key);
             prop.kind = keyName2;
             if (this.match(55)) {
               isGenerator = true;
@@ -13806,19 +13806,19 @@ var require_lib = __commonJS({
             type,
             value
           } = this.state;
-          let key2;
+          let key;
           if (tokenIsKeywordOrIdentifier(type)) {
-            key2 = this.parseIdentifier(true);
+            key = this.parseIdentifier(true);
           } else {
             switch (type) {
               case 135:
-                key2 = this.parseNumericLiteral(value);
+                key = this.parseNumericLiteral(value);
                 break;
               case 134:
-                key2 = this.parseStringLiteral(value);
+                key = this.parseStringLiteral(value);
                 break;
               case 136:
-                key2 = this.parseBigIntLiteral(value);
+                key = this.parseBigIntLiteral(value);
                 break;
               case 139: {
                 const privateKeyLoc = this.state.startLoc;
@@ -13829,18 +13829,18 @@ var require_lib = __commonJS({
                 } else {
                   this.raise(Errors.UnexpectedPrivateField, privateKeyLoc);
                 }
-                key2 = this.parsePrivateName();
+                key = this.parsePrivateName();
                 break;
               }
               default:
                 if (type === 137) {
-                  key2 = this.parseDecimalLiteral(value);
+                  key = this.parseDecimalLiteral(value);
                   break;
                 }
                 this.unexpected();
             }
           }
-          prop.key = key2;
+          prop.key = key;
           if (type !== 139) {
             prop.computed = false;
           }
@@ -15291,8 +15291,8 @@ var require_lib = __commonJS({
       isClassMethod() {
         return this.match(10);
       }
-      nameIsConstructor(key2) {
-        return key2.type === "Identifier" && key2.name === "constructor" || key2.type === "StringLiteral" && key2.value === "constructor";
+      nameIsConstructor(key) {
+        return key.type === "Identifier" && key.name === "constructor" || key.type === "StringLiteral" && key.value === "constructor";
       }
       isNonstaticConstructor(method) {
         return !method.computed && !method.static && this.nameIsConstructor(method.key);
@@ -15340,24 +15340,24 @@ var require_lib = __commonJS({
         return this.finishNode(classBody, "ClassBody");
       }
       parseClassMemberFromModifier(classBody, member) {
-        const key2 = this.parseIdentifier(true);
+        const key = this.parseIdentifier(true);
         if (this.isClassMethod()) {
           const method = member;
           method.kind = "method";
           method.computed = false;
-          method.key = key2;
+          method.key = key;
           method.static = false;
           this.pushClassMethod(classBody, method, false, false, false, false);
           return true;
         } else if (this.isClassProperty()) {
           const prop = member;
           prop.computed = false;
-          prop.key = key2;
+          prop.key = key;
           prop.static = false;
           classBody.body.push(this.parseClassProperty(prop));
           return true;
         }
-        this.resetPreviousNodeTrailingComments(key2);
+        this.resetPreviousNodeTrailingComments(key);
         return false;
       }
       parseClassMember(classBody, member, state) {
@@ -15399,9 +15399,9 @@ var require_lib = __commonJS({
           return;
         }
         const isContextual = !this.state.containsEsc && tokenIsIdentifier(this.state.type);
-        const key2 = this.parseClassElementName(member);
-        const maybeContextualKw = isContextual ? key2.name : null;
-        const isPrivate = this.isPrivateName(key2);
+        const key = this.parseClassElementName(member);
+        const maybeContextualKw = isContextual ? key.name : null;
+        const isPrivate = this.isPrivateName(key);
         const maybeQuestionTokenStartLoc = this.state.startLoc;
         this.parsePostMemberNameModifiers(publicMember);
         if (this.isClassMethod()) {
@@ -15415,10 +15415,10 @@ var require_lib = __commonJS({
           if (isConstructor) {
             publicMethod.kind = "constructor";
             if (state.hadConstructor && !this.hasPlugin("typescript")) {
-              this.raise(Errors.DuplicateConstructor, key2);
+              this.raise(Errors.DuplicateConstructor, key);
             }
             if (isConstructor && this.hasPlugin("typescript") && member.override) {
-              this.raise(Errors.OverrideOnConstructor, key2);
+              this.raise(Errors.OverrideOnConstructor, key);
             }
             state.hadConstructor = true;
             allowsDirectSuper = state.hadSuperClass;
@@ -15431,7 +15431,7 @@ var require_lib = __commonJS({
             this.pushClassProperty(classBody, publicProp);
           }
         } else if (maybeContextualKw === "async" && !this.isLineTerminator()) {
-          this.resetPreviousNodeTrailingComments(key2);
+          this.resetPreviousNodeTrailingComments(key);
           const isGenerator = this.eat(55);
           if (publicMember.optional) {
             this.unexpected(maybeQuestionTokenStartLoc);
@@ -15449,7 +15449,7 @@ var require_lib = __commonJS({
             this.pushClassMethod(classBody, publicMethod, isGenerator, true, false, false);
           }
         } else if ((maybeContextualKw === "get" || maybeContextualKw === "set") && !(this.match(55) && this.isLineTerminator())) {
-          this.resetPreviousNodeTrailingComments(key2);
+          this.resetPreviousNodeTrailingComments(key);
           method.kind = maybeContextualKw;
           const isPrivate2 = this.match(139);
           this.parseClassElementName(publicMethod);
@@ -15464,7 +15464,7 @@ var require_lib = __commonJS({
           this.checkGetterSetterParams(publicMethod);
         } else if (maybeContextualKw === "accessor" && !this.isLineTerminator()) {
           this.expectPlugin("decoratorAutoAccessors");
-          this.resetPreviousNodeTrailingComments(key2);
+          this.resetPreviousNodeTrailingComments(key);
           const isPrivate2 = this.match(139);
           this.parseClassElementName(publicProp);
           this.pushClassAccessorProperty(classBody, accessorProp, isPrivate2);
@@ -15490,9 +15490,9 @@ var require_lib = __commonJS({
           if (value === "constructor") {
             this.raise(Errors.ConstructorClassPrivateField, this.state.startLoc);
           }
-          const key2 = this.parsePrivateName();
-          member.key = key2;
-          return key2;
+          const key = this.parsePrivateName();
+          member.key = key;
+          return key;
         }
         this.parsePropertyName(member);
         return member.key;
@@ -15937,10 +15937,10 @@ var require_lib = __commonJS({
       isJSONModuleImport(node) {
         if (node.assertions != null) {
           return node.assertions.some(({
-            key: key2,
+            key,
             value
           }) => {
-            return value.value === "json" && (key2.type === "Identifier" ? key2.name === "type" : key2.value === "type");
+            return value.value === "json" && (key.type === "Identifier" ? key.name === "type" : key.value === "type");
           });
         }
         return false;
@@ -16379,14 +16379,14 @@ var require_lib = __commonJS({
           pluginList.push(name);
         }
       }
-      const key2 = pluginList.join("|");
-      let cls = parserClassCache.get(key2);
+      const key = pluginList.join("|");
+      let cls = parserClassCache.get(key);
       if (!cls) {
         cls = Parser;
         for (const plugin2 of pluginList) {
           cls = mixinPlugins[plugin2](cls);
         }
-        parserClassCache.set(key2, cls);
+        parserClassCache.set(key, cls);
       }
       return cls;
     }
@@ -16797,15 +16797,15 @@ var require_css_syntax_error = __commonJS({
         if (!this.source) return "";
         let css = this.source;
         if (color == null) color = pico.isColorSupported;
-        let aside = (text) => text;
-        let mark = (text) => text;
-        let highlight = (text) => text;
+        let aside = (text2) => text2;
+        let mark = (text2) => text2;
+        let highlight = (text2) => text2;
         if (color) {
           let { bold: bold2, gray, red: red2 } = pico.createColors(true);
-          mark = (text) => bold2(red2(text));
-          aside = (text) => gray(text);
+          mark = (text2) => bold2(red2(text2));
+          aside = (text2) => gray(text2);
           if (terminalHighlight) {
-            highlight = (text) => terminalHighlight(text);
+            highlight = (text2) => terminalHighlight(text2);
           }
         }
         let lines = css.split(/\r?\n/);
@@ -17585,9 +17585,9 @@ var require_node = __commonJS({
         let holderOfRoot = [];
         let queue = [[this, holderOfRoot, 0]];
         for (let step = 0; step < queue.length; step++) {
-          let [node, holder, key2] = queue[step];
+          let [node, holder, key] = queue[step];
           let fixed2 = {};
-          holder[key2] = fixed2;
+          holder[key] = fixed2;
           for (let name in node) {
             if (!Object.prototype.hasOwnProperty.call(node, name)) {
               continue;
@@ -17652,10 +17652,10 @@ var require_node = __commonJS({
         });
         return result;
       }
-      warn(result, text, opts = {}) {
+      warn(result, text2, opts = {}) {
         let data = { node: this };
         for (let i in opts) data[i] = opts[i];
-        return result.warn(text, data);
+        return result.warn(text2, data);
       }
     };
     module.exports = Node2;
@@ -18381,7 +18381,7 @@ var require_util = __commonJS({
         }
         path = url.path;
       }
-      var isAbsolute8 = exports.isAbsolute(path);
+      var isAbsolute7 = exports.isAbsolute(path);
       var parts = [];
       var start = 0;
       var i = 0;
@@ -18416,7 +18416,7 @@ var require_util = __commonJS({
       }
       path = parts.join("/");
       if (path === "") {
-        path = isAbsolute8 ? "/" : ".";
+        path = isAbsolute7 ? "/" : ".";
       }
       if (url) {
         url.path = path;
@@ -18425,7 +18425,7 @@ var require_util = __commonJS({
       return path;
     });
     exports.normalize = normalize2;
-    function join15(aRoot, aPath) {
+    function join13(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -18457,7 +18457,7 @@ var require_util = __commonJS({
       }
       return joined;
     }
-    exports.join = join15;
+    exports.join = join13;
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
@@ -18671,7 +18671,7 @@ var require_util = __commonJS({
             parsed.path = parsed.path.substring(0, index2 + 1);
           }
         }
-        sourceURL = join15(urlGenerate(parsed), sourceURL);
+        sourceURL = join13(urlGenerate(parsed), sourceURL);
       }
       return normalize2(sourceURL);
     }
@@ -19052,8 +19052,8 @@ var require_source_map_generator = __commonJS({
         if (aSourceRoot != null) {
           source = util.relative(aSourceRoot, source);
         }
-        var key2 = util.toSetString(source);
-        return Object.prototype.hasOwnProperty.call(this._sourcesContents, key2) ? this._sourcesContents[key2] : null;
+        var key = util.toSetString(source);
+        return Object.prototype.hasOwnProperty.call(this._sourcesContents, key) ? this._sourcesContents[key] : null;
       }, this);
     };
     SourceMapGenerator.prototype.toJSON = function SourceMapGenerator_toJSON() {
@@ -20111,8 +20111,8 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync11, readFileSync: readFileSync13, realpathSync: realpathSync2 } = __require("fs");
-    var { dirname: dirname8, isAbsolute: isAbsolute8, join: join15, relative: relative5, sep: sep4 } = __require("path");
+    var { existsSync: existsSync10, readFileSync: readFileSync12, realpathSync: realpathSync2 } = __require("fs");
+    var { dirname: dirname7, isAbsolute: isAbsolute7, join: join13, relative: relative5, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -20135,12 +20135,12 @@ var require_previous_map = __commonJS({
         this.loadAnnotation(css);
         this.inline = this.startWith(this.annotation, "data:");
         let prev = opts.map ? opts.map.prev : void 0;
-        let text = this.loadMap(opts.from, prev);
+        let text2 = this.loadMap(opts.from, prev);
         if (!this.mapFile && opts.from) {
           this.mapFile = opts.from;
         }
-        if (this.mapFile) this.root = dirname8(this.mapFile);
-        if (text) this.text = text;
+        if (this.mapFile) this.root = dirname7(this.mapFile);
+        if (text2) this.text = text2;
       }
       consumer() {
         if (!this.consumerCache) {
@@ -20148,20 +20148,20 @@ var require_previous_map = __commonJS({
         }
         return this.consumerCache;
       }
-      decodeInline(text) {
+      decodeInline(text2) {
         let baseCharsetUri = /^data:application\/json;charset=utf-?8;base64,/;
         let baseUri = /^data:application\/json;base64,/;
         let charsetUri = /^data:application\/json;charset=utf-?8,/;
         let uri = /^data:application\/json,/;
-        let uriMatch = text.match(charsetUri) || text.match(uri);
+        let uriMatch = text2.match(charsetUri) || text2.match(uri);
         if (uriMatch) {
-          return decodeURIComponent(text.substr(uriMatch[0].length));
+          return decodeURIComponent(text2.substr(uriMatch[0].length));
         }
-        let baseUriMatch = text.match(baseCharsetUri) || text.match(baseUri);
+        let baseUriMatch = text2.match(baseCharsetUri) || text2.match(baseUri);
         if (baseUriMatch) {
-          return fromBase64(text.substr(baseUriMatch[0].length));
+          return fromBase64(text2.substr(baseUriMatch[0].length));
         }
-        let encoding = text.slice("data:application/json;".length);
+        let encoding = text2.slice("data:application/json;".length);
         encoding = encoding.slice(0, encoding.indexOf(","));
         throw new Error("Unsupported source map encoding " + encoding);
       }
@@ -20185,15 +20185,15 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative5(realPath2(dirname8(cssFile)), realPath2(path));
-          if (rel === ".." || rel.startsWith(".." + sep4) || isAbsolute8(rel)) {
+          let rel = relative5(realPath2(dirname7(cssFile)), realPath2(path));
+          if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute7(rel)) {
             return void 0;
           }
         }
-        this.root = dirname8(path);
-        if (existsSync11(path)) {
+        this.root = dirname7(path);
+        if (existsSync10(path)) {
           this.mapFile = path;
-          return readFileSync13(path, "utf-8").toString().trim();
+          return readFileSync12(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join15(dirname8(file), map);
+          if (file) map = join13(dirname7(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -20257,15 +20257,15 @@ var require_input = __commonJS({
   "node_modules/postcss/lib/input.js"(exports, module) {
     "use strict";
     var { nanoid } = require_non_secure();
-    var { isAbsolute: isAbsolute8, resolve: resolve7 } = __require("path");
+    var { isAbsolute: isAbsolute7, resolve: resolve7 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
-    var { fileURLToPath: fileURLToPath5, pathToFileURL: pathToFileURL2 } = __require("url");
+    var { fileURLToPath: fileURLToPath3, pathToFileURL: pathToFileURL2 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
     var PreviousMap = require_previous_map();
     var terminalHighlight = require_terminal_highlight();
     var lineToIndexCache = Symbol("lineToIndexCache");
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(resolve7 && isAbsolute8);
+    var pathAvailable = Boolean(resolve7 && isAbsolute7);
     function getLineToIndex(input) {
       if (input[lineToIndexCache]) return input[lineToIndexCache];
       let lines = input.css.split("\n");
@@ -20296,7 +20296,7 @@ var require_input = __commonJS({
         this.document = this.css;
         if (opts.document) this.document = opts.document.toString();
         if (opts.from) {
-          if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute8(opts.from)) {
+          if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute7(opts.from)) {
             this.file = opts.from;
           } else {
             this.file = resolve7(opts.from);
@@ -20436,7 +20436,7 @@ var require_input = __commonJS({
           if (toPosition.source) to = toPosition;
         }
         let fromUrl;
-        if (isAbsolute8(from.source)) {
+        if (isAbsolute7(from.source)) {
           fromUrl = pathToFileURL2(from.source);
         } else {
           fromUrl = new URL(
@@ -20452,8 +20452,8 @@ var require_input = __commonJS({
           url: fromUrl.toString()
         };
         if (fromUrl.protocol === "file:") {
-          if (fileURLToPath5) {
-            result.file = fileURLToPath5(fromUrl);
+          if (fileURLToPath3) {
+            result.file = fileURLToPath3(fromUrl);
           } else {
             throw new Error(`file: protocol is not available in this PostCSS build`);
           }
@@ -20617,8 +20617,8 @@ var require_rule = __commonJS({
       }
       set selectors(values) {
         let match = this.selector ? this.selector.match(/,\s*/) : null;
-        let sep4 = match ? match[0] : "," + this.raw("between", "beforeOpen");
-        this.selector = values.join(sep4);
+        let sep3 = match ? match[0] : "," + this.raw("between", "beforeOpen");
+        this.selector = values.join(sep3);
       }
       constructor(defaults) {
         super(defaults);
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname8, relative: relative5, resolve: resolve7, sep: sep4 } = __require("path");
+    var { dirname: dirname7, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL2 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname8 && resolve7 && relative5 && sep4);
+    var pathAvailable = Boolean(dirname7 && resolve7 && relative5 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20767,7 +20767,7 @@ var require_map_generator = __commonJS({
       applyPrevMaps() {
         for (let prev of this.previous()) {
           let from = this.toUrl(this.path(prev.file));
-          let root2 = prev.root || dirname8(prev.file);
+          let root2 = prev.root || dirname7(prev.file);
           let map;
           if (this.mapOpts.sourcesContent === false) {
             map = new SourceMapConsumer(prev.text);
@@ -20962,9 +20962,9 @@ var require_map_generator = __commonJS({
         if (/^\w+:\/\//.test(file)) return file;
         let cached = this.memoizedPaths.get(file);
         if (cached) return cached;
-        let from = this.opts.to ? dirname8(this.opts.to) : ".";
+        let from = this.opts.to ? dirname7(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname8(resolve7(from, this.mapOpts.annotation));
+          from = dirname7(resolve7(from, this.mapOpts.annotation));
         }
         let path = relative5(from, file);
         this.memoizedPaths.set(file, path);
@@ -21039,7 +21039,7 @@ var require_map_generator = __commonJS({
       toUrl(path) {
         let cached = this.memoizedURLs.get(path);
         if (cached) return cached;
-        if (sep4 === "\\") {
+        if (sep3 === "\\") {
           path = path.replace(/\\/g, "/");
         }
         let url = encodeURI(path).replace(/[#?]/g, encodeURIComponent);
@@ -21212,13 +21212,13 @@ var require_parser = __commonJS({
         this.init(node, token[2]);
         node.source.end = this.getPosition(token[3] || token[2]);
         node.source.end.offset++;
-        let text = token[1].slice(2, -2);
-        if (!text.trim()) {
+        let text2 = token[1].slice(2, -2);
+        if (!text2.trim()) {
           node.text = "";
-          node.raws.left = text;
+          node.raws.left = text2;
           node.raws.right = "";
         } else {
-          let match = text.match(/^(\s*)([^]*\S)(\s*)$/);
+          let match = text2.match(/^(\s*)([^]*\S)(\s*)$/);
           node.text = match[2];
           node.raws.left = match[1];
           node.raws.right = match[3];
@@ -21632,9 +21632,9 @@ var require_warning = __commonJS({
     var Container2 = require_container();
     var { my } = require_symbols();
     var Warning2 = class {
-      constructor(text, opts = {}) {
+      constructor(text2, opts = {}) {
         this.type = "warning";
-        this.text = text;
+        this.text = text2;
         if (opts.node && opts.node.source) {
           if (!opts.node[my]) {
             Container2.rebuild(opts.node);
@@ -21686,13 +21686,13 @@ var require_result = __commonJS({
       toString() {
         return this.css;
       }
-      warn(text, opts = {}) {
+      warn(text2, opts = {}) {
         if (!opts.plugin) {
           if (this.lastPlugin && this.lastPlugin.postcssPlugin) {
             opts.plugin = this.lastPlugin.postcssPlugin;
           }
         }
-        let warning = new Warning2(text, opts);
+        let warning = new Warning2(text2, opts);
         this.messages.push(warning);
         return warning;
       }
@@ -21769,23 +21769,23 @@ var require_lazy_result = __commonJS({
       return typeof obj === "object" && typeof obj.then === "function";
     }
     function getEvents(node) {
-      let key2 = false;
+      let key = false;
       let type = TYPE_TO_CLASS_NAME[node.type];
       if (node.type === "decl") {
-        key2 = node.prop.toLowerCase();
+        key = node.prop.toLowerCase();
       } else if (node.type === "atrule") {
-        key2 = node.name.toLowerCase();
+        key = node.name.toLowerCase();
       }
-      if (key2 && node.append) {
+      if (key && node.append) {
         return [
           type,
-          type + "-" + key2,
+          type + "-" + key,
           CHILDREN,
           type + "Exit",
-          type + "Exit-" + key2
+          type + "Exit-" + key
         ];
-      } else if (key2) {
-        return [type, type + "-" + key2, type + "Exit", type + "Exit-" + key2];
+      } else if (key) {
+        return [type, type + "-" + key, type + "Exit", type + "Exit-" + key];
       } else if (node.append) {
         return [type, CHILDREN, type + "Exit"];
       } else {
@@ -21912,14 +21912,14 @@ var require_lazy_result = __commonJS({
             error.setMessage();
           } else if (plugin2.postcssVersion) {
             if (process.env.NODE_ENV !== "production") {
-              let pluginName2 = plugin2.postcssPlugin;
+              let pluginName = plugin2.postcssPlugin;
               let pluginVer = plugin2.postcssVersion;
               let runtimeVer = this.result.processor.version;
               let a = pluginVer.split(".");
               let b = runtimeVer.split(".");
               if (a[0] !== b[0] || parseInt(a[1]) > parseInt(b[1])) {
                 console.error(
-                  "Unknown error from PostCSS plugin. Your current PostCSS version is " + runtimeVer + ", but " + pluginName2 + " uses " + pluginVer + ". Perhaps this is the source of the error below."
+                  "Unknown error from PostCSS plugin. Your current PostCSS version is " + runtimeVer + ", but " + pluginName + " uses " + pluginVer + ". Perhaps this is the source of the error below."
                 );
               }
             }
@@ -22517,8 +22517,8 @@ var require_scss_stringifier = __commonJS({
         let left = this.raw(node, "left", "commentLeft");
         let right = this.raw(node, "right", "commentRight");
         if (node.raws.inline) {
-          let text = node.raws.text || node.text;
-          this.builder("//" + left + text + right, node);
+          let text2 = node.raws.text || node.text;
+          this.builder("//" + left + text2 + right, node);
         } else {
           this.builder("/*" + left + node.text + right + "*/", node);
         }
@@ -22885,13 +22885,13 @@ var require_scss_parser = __commonJS({
             line: pos.line,
             offset: token[3] + 1
           };
-          let text = token[1].slice(2);
-          if (/^\s*$/.test(text)) {
+          let text2 = token[1].slice(2);
+          if (/^\s*$/.test(text2)) {
             node.text = "";
-            node.raws.left = text;
+            node.raws.left = text2;
             node.raws.right = "";
           } else {
-            let match = text.match(/^(\s*)([^]*\S)(\s*)$/);
+            let match = text2.match(/^(\s*)([^]*\S)(\s*)$/);
             let fixed = match[2].replace(/(\*\/|\/\*)/g, "*//*");
             node.text = fixed;
             node.raws.left = match[1];
@@ -22911,8 +22911,8 @@ var require_scss_parser = __commonJS({
           let scss = node.raws[prop].raw;
           node.raws[prop].raw = tokens.reduce((all, i) => {
             if (i[0] === "comment" && i[4] === "inline") {
-              let text = i[1].slice(2).replace(/(\*\/|\/\*)/g, "*//*");
-              return all + "/*" + text + "*/";
+              let text2 = i[1].slice(2).replace(/(\*\/|\/\*)/g, "*//*");
+              return all + "/*" + text2 + "*/";
             } else {
               return all + i[1];
             }
@@ -23287,17 +23287,17 @@ var require_LessParser = __commonJS({
       }
       inlineComment(token) {
         const node = new Comment2();
-        const text = token[1].slice(2);
+        const text2 = token[1].slice(2);
         this.init(node, token[2]);
         node.source.end = this.getPosition(token[3] || token[2]);
         node.inline = true;
         node.raws.begin = "//";
-        if (/^\s*$/.test(text)) {
+        if (/^\s*$/.test(text2)) {
           node.text = "";
-          node.raws.left = text;
+          node.raws.left = text2;
           node.raws.right = "";
         } else {
-          const match = text.match(/^(\s*)([^]*[^\s])(\s*)$/);
+          const match = text2.match(/^(\s*)([^]*[^\s])(\s*)$/);
           [, node.raws.left, node.text, node.raws.right] = match;
         }
       }
@@ -23494,9 +23494,10 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync10, readFileSync as readFileSync12, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute7, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
-import { fileURLToPath as fileURLToPath4 } from "node:url";
+import { existsSync as existsSync9, writeFileSync as writeFileSync4 } from "node:fs";
+import { basename, dirname as dirname6, isAbsolute as isAbsolute6, join as join12, relative as relative4, resolve as resolve6 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { parseArgs as parseArgv } from "node:util";
 
 // src/analyze.ts
 import { readFileSync as readFileSync2, realpathSync, statSync as statSync2 } from "node:fs";
@@ -23648,9 +23649,10 @@ import { existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join, relative, resolve, sep } from "node:path";
 var toPosix = (p) => p.split(sep).join("/").split("\\").join("/");
+var byBytes = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function readDir(dir) {
   try {
-    return readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    return readdirSync(dir, { withFileTypes: true }).sort((a, b) => byBytes(a.name, b.name));
   } catch {
     return [];
   }
@@ -23706,7 +23708,7 @@ function discover({
     }
   };
   walk(root2);
-  for (const kind of KINDS) out[kind].sort((a, b) => a.rel.localeCompare(b.rel));
+  for (const kind of KINDS) out[kind].sort((a, b) => byBytes(a.rel, b.rel));
   return out;
 }
 function isSource(sources, rel) {
@@ -23755,22 +23757,24 @@ function changedFiles(root2) {
 }
 
 // src/text.ts
-var flatten = (text) => text.replace(/\s+/g, " ");
-var oneLine = (text) => flatten(text).trim();
-var clip = (text, max) => {
-  const line = oneLine(text);
+var messageOf = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
+var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var flatten = (text2) => text2.replace(/\s+/g, " ");
+var oneLine = (text2) => flatten(text2).trim();
+var clip = (text2, max) => {
+  const line = oneLine(text2);
   if (max <= 0) return "";
   if (line.length <= max) return line;
   const chars = [...line];
   return chars.length > max ? `${chars.slice(0, max - 1).join("")}\u2026` : line;
 };
-var head = (text, max) => text.length <= max ? text : [...text].slice(0, max).join("");
+var head = (text2, max) => text2.length <= max ? text2 : [...text2].slice(0, max).join("");
 var SNIPPET_MAX = 80;
-var snippet = (text) => clip(text, SNIPPET_MAX);
+var snippet = (text2) => clip(text2, SNIPPET_MAX);
 var MESSAGE_MAX = 200;
 var TAIL_MAX = 100;
-var clipFront = (text, max) => {
-  const line = flatten(text);
+var clipFront = (text2, max) => {
+  const line = flatten(text2);
   if (line.length <= max) return line;
   const chars = [...line];
   return chars.length > max ? `\u2026${chars.slice(chars.length - (max - 1)).join("")}` : line;
@@ -23800,7 +23804,6 @@ var messageParts = (parts, tail = "") => {
 
 // src/suppressions.ts
 var ID = "(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)";
-var esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 var OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
 function spannedLines(lines, i, raw, stripped) {
   const opener = raw.slice(0, raw.length - stripped.length);
@@ -23820,18 +23823,18 @@ function makeSuppressionParser({
   aliases = []
 }) {
   const heads = [keyword, ...aliases.filter((a) => a !== keyword && !blanket.includes(a))];
-  const alternation = (terms) => [...new Set(terms)].sort((a, b) => b.length - a.length).map(esc).join("|");
+  const alternation = (terms) => [...new Set(terms)].sort((a, b) => b.length - a.length).map(escapeRe).join("|");
   const keywordHead = `(${alternation(heads)})(?![\\w-])`;
   const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
   const strict = new RegExp(`^${keywordHead}\\s+(${IDS})\\s*--\\s*(?!\\*/|-->|\\})(\\S.*?)(?:\\*/|-->|\\}|$)`);
   const shaped = new RegExp(`^${keywordHead}\\s*(?:${IDS}\\s*)?(?:--|\\*/|-->|\\}|$)`);
   const written = new RegExp(`^(?:${alternation([keyword, ...blanket])})(?![\\w-])`);
   const anyHead = [...heads, ...blanket];
-  return function scan(text, relPath) {
+  return function scan(text2, relPath) {
     const byLine = /* @__PURE__ */ new Map();
     const directives = [];
     const malformed = [];
-    const lines = text.split("\n");
+    const lines = text2.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i];
       if (raw === void 0 || !anyHead.some((p) => raw.includes(p))) continue;
@@ -23932,11 +23935,11 @@ var UNITLESS = /* @__PURE__ */ new Set([
   "stroke-opacity",
   "stroke-width"
 ]);
-function toCssProp(key2) {
-  if (key2.startsWith("--")) return key2;
-  if (key2.includes("-")) return key2.toLowerCase();
-  const kebab = key2.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`);
-  return /^[A-Z]/.test(key2) ? `-${kebab.replace(/^-/, "")}` : kebab;
+function toCssProp(key) {
+  if (key.startsWith("--")) return key;
+  if (key.includes("-")) return key.toLowerCase();
+  const kebab = key.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`);
+  return /^[A-Z]/.test(key) ? `-${kebab.replace(/^-/, "")}` : kebab;
 }
 function toCssValue(prop, node) {
   if (!node) return null;
@@ -24067,6 +24070,8 @@ var isLiteralDuration = (v) => /^-?\d*\.?\d+m?s$/i.test(v.trim());
 var isLiteralEasing = (v) => /^(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$/i.test(v.trim()) || /^(cubic-bezier|steps)\(/i.test(v.trim());
 var isMarginProp = (prop) => prop === "margin" || prop.startsWith("margin-");
 var isFlexDecl = (prop, value) => FLEX_PROPS.has(prop) || prop === "display" && /\b(inline-)?(flex|grid)\b/.test(value);
+var isGridDecl = (prop, value) => prop === "display" && /\bgrid\b/.test(value) || prop === "grid" || prop.startsWith("grid-template") || prop.startsWith("grid-auto");
+var isLayoutDecl = ({ prop, value }) => isFlexDecl(prop, value) || GAP_PROPS.has(prop) || isGridDecl(prop, value);
 function classifyMargin(value) {
   const parts = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!parts.length) return null;
@@ -24079,10 +24084,10 @@ var isInertValue = (value) => {
   const parts = String(value).trim().split(/\s+/).filter(Boolean);
   return parts.length > 0 && parts.every((p) => ZERO.test(p) || KEYWORD.test(p));
 };
-function isHardcodedTokenValue(prop, value, { allowZero = true } = {}) {
+function isHardcodedTokenValue(prop, value) {
   const v = value.trim();
   if (usesToken(value) || KEYWORD.test(v)) return false;
-  if (allowZero && v.split(/\s+/).every((part) => ZERO.test(part))) return false;
+  if (v.split(/\s+/).every((part) => ZERO.test(part))) return false;
   if (COLOR_PROPS.has(prop)) return isLiteralColor(value);
   if (SPACING_PROPS.has(prop) || RADIUS_PROPS.has(prop) || BORDER_WIDTH_PROPS.has(prop)) return isLiteralLength(value);
   if (MOTION_PROPS.has(prop)) return isLiteralDuration(value) || isLiteralEasing(value);
@@ -24108,14 +24113,7 @@ function resolvedSelectors(rule2) {
 }
 var keySelector = (sel) => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() ?? sel;
 var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => m[1] === void 0 ? [] : [m[1]]);
-function ruleIsGrid(rule2) {
-  for (const d of ownDecls(rule2)) {
-    const p = d.prop.toLowerCase();
-    if (p === "display" && /\bgrid\b/.test(d.value) || p === "grid" || p.startsWith("grid-template") || p.startsWith("grid-auto"))
-      return true;
-  }
-  return false;
-}
+var ruleIsGrid = (rule2) => [...ownDecls(rule2)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
 
 // node_modules/postcss/lib/postcss.mjs
 var import_postcss = __toESM(require_postcss(), 1);
@@ -24150,13 +24148,13 @@ var importedName = (spec) => {
   if (spec.type !== "ImportSpecifier") return "default";
   return spec.imported.type === "Identifier" ? spec.imported.name : spec.imported.value;
 };
+var fromPackage = (packages, src) => packages.some((p) => src === p || src.startsWith(`${p}/`));
 function cssInJsLocals(ast, packages) {
   const styled = /* @__PURE__ */ new Set();
   const bare = /* @__PURE__ */ new Set();
   if (!packages?.length) return { styled, bare, any: false };
-  const fromPackage = (src) => packages.some((p) => src === p || src.startsWith(`${p}/`));
   for (const node of ast.program.body) {
-    if (node.type !== "ImportDeclaration" || !fromPackage(node.source.value)) continue;
+    if (node.type !== "ImportDeclaration" || !fromPackage(packages, node.source.value)) continue;
     for (const spec of node.specifiers) {
       const local = spec.local.name;
       const imported = importedName(spec);
@@ -24177,7 +24175,6 @@ function templateText(quasi) {
   }
   return out;
 }
-var GRID_DECL = (p, v) => p === "display" && /\bgrid\b/.test(v) || p === "grid" || p.startsWith("grid-template") || p.startsWith("grid-auto");
 function parseTemplate(cssText, startLine) {
   let root2;
   try {
@@ -24202,15 +24199,8 @@ function parseTemplate(cssText, startLine) {
       }
     };
     walk(rule2);
-    const first = decls[0];
-    if (first)
-      groups.push({
-        selector,
-        decls,
-        isGrid: decls.some((d) => GRID_DECL(d.prop, d.value)),
-        onTarget,
-        line: first.line ?? startLine
-      });
+    if (decls.length)
+      groups.push({ selector, decls, isGrid: decls.some((d) => isGridDecl(d.prop, d.value)), onTarget });
     for (const child of nested) {
       const sel = child.selectors.join(", ");
       collect(child, sel, onTarget && child.selectors.every((s) => /^&[^\s>+~]*$/.test(s.trim())));
@@ -24220,7 +24210,6 @@ function parseTemplate(cssText, startLine) {
   if (top) collect(top, null, true);
   return { groups, error: null };
 }
-var messageOf = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
 
 // src/patterns.ts
 var split = (spec) => {
@@ -24245,7 +24234,7 @@ function descendants(tree, out = []) {
   }
   return out;
 }
-var nameMatches = (spec, actual) => spec === actual || spec.includes("|") && spec.split("|").includes(actual);
+var nameMatches = (spec, actual) => spec.split("|").includes(actual);
 function matches(pattern, tree) {
   if (!nameMatches(pattern.name, tree.name)) return false;
   if (pattern.pkg && tree.pkg && pattern.pkg !== tree.pkg) return false;
@@ -24270,9 +24259,9 @@ var ruleSpecs = (detector) => {
     (d) => typeof d === "object" && d !== null && typeof d.rule === "string"
   );
 };
-var stringParam = (spec, key2, fallback) => typeof spec[key2] === "string" && spec[key2] ? spec[key2] : fallback;
-var numParam = (spec, key2, fallback) => typeof spec[key2] === "number" ? spec[key2] : fallback;
-var listParam = (spec, key2) => Array.isArray(spec[key2]) ? spec[key2].filter((x) => typeof x === "string") : [];
+var stringParam = (spec, key, fallback) => typeof spec[key] === "string" && spec[key] ? spec[key] : fallback;
+var numParam = (spec, key, fallback) => typeof spec[key] === "number" ? spec[key] : fallback;
+var listParam = (spec, key) => Array.isArray(spec[key]) ? spec[key].filter((x) => typeof x === "string") : [];
 function loadPatterns(raw) {
   const rec = raw;
   const list2 = Array.isArray(raw) ? raw : rec?.realizations ?? rec?.patterns ?? [];
@@ -24397,7 +24386,8 @@ var firstArgOf = (t) => {
   return arg?.type === "Identifier" ? arg.name : void 0;
 };
 var identifierOf = (t) => t.type === "Identifier" ? t.name : void 0;
-function substitutionTargets(expr, out = []) {
+function substitutionTargets(node, out = []) {
+  const expr = node && unwrapTs(node);
   switch (expr?.type) {
     case "JSXElement":
       out.push(expr);
@@ -24416,16 +24406,6 @@ function substitutionTargets(expr, out = []) {
       substitutionTargets(expr.left, out);
       substitutionTargets(expr.right, out);
       break;
-    // A type assertion is not a different value. `.tsx` is a first-class input
-    // here, and `render={ ( <h4 /> ) as ReactElement }` is what a narrower prop
-    // type makes an author write; the wrapper says nothing about which element
-    // the prop receives.
-    case "TSAsExpression":
-    case "TSSatisfiesExpression":
-    case "TSNonNullExpression":
-    case "TSTypeAssertion":
-      substitutionTargets(expr.expression, out);
-      break;
     // `render={ <h4 /> }`. JSX also allows the braces to be dropped entirely
     // (`render=<h4 />`), which arrives as the element itself and is caught by
     // the `JSXElement` case above.
@@ -24437,43 +24417,23 @@ function substitutionTargets(expr, out = []) {
 }
 var canonicalName = (name, normalize2) => normalize2 ? name.replace(normalize2, "") : name;
 var held = (set, name) => name !== void 0 && set.has(name);
-var messageOf2 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
-function harvestTokens(text, into = /* @__PURE__ */ new Set()) {
-  for (const t of text.match(/[A-Za-z_][\w-]*/g) ?? []) into.add(t);
+function harvestTokens(text2, into = /* @__PURE__ */ new Set()) {
+  for (const t of text2.match(/[A-Za-z_][\w-]*/g) ?? []) into.add(t);
   return into;
 }
 var MAX_STEM = 128;
-function harvestStems(text, into = /* @__PURE__ */ new Set()) {
-  for (let i = text.indexOf("${"); i !== -1; i = text.indexOf("${", i + 2)) {
+function harvestStems(text2, into = /* @__PURE__ */ new Set()) {
+  for (let i = text2.indexOf("${"); i !== -1; i = text2.indexOf("${", i + 2)) {
     let s = i;
     const floor = Math.max(0, i - MAX_STEM);
-    while (s > floor && isWordChar(text.charCodeAt(s - 1))) s--;
-    const stem = text.slice(s, i);
+    while (s > floor && isWordChar(text2.charCodeAt(s - 1))) s--;
+    const stem = text2.slice(s, i);
     if (stem.includes("-") && /^[A-Za-z_]/.test(stem)) into.add(stem);
   }
   return into;
 }
 function isWordChar(c) {
   return c >= 97 && c <= 122 || c >= 65 && c <= 90 || c >= 48 && c <= 57 || c === 95 || c === 45;
-}
-function stringsIn(node, out = []) {
-  if (!node || typeof node !== "object") return out;
-  if (Array.isArray(node)) {
-    for (const n of node) stringsIn(n, out);
-    return out;
-  }
-  const rec = node;
-  if (rec.type === "StringLiteral") {
-    if (typeof rec.value === "string") out.push(rec.value);
-  } else if (rec.type === "TemplateElement") {
-    const v = rec.value;
-    out.push(v?.cooked ?? v?.raw ?? "");
-  }
-  for (const key2 of Object.keys(rec)) {
-    if (key2 === "loc" || key2 === "type" || key2 === "start" || key2 === "end") continue;
-    stringsIn(rec[key2], out);
-  }
-  return out;
 }
 var CLASS_TOKEN = /^[a-z_][\w-]*$/i;
 function classesFrom(strings) {
@@ -24499,12 +24459,12 @@ function readStyleAttr(value) {
       dynamic++;
       continue;
     }
-    const key2 = keyName(prop);
-    if (!key2) {
+    const key = keyName(prop);
+    if (!key) {
       dynamic++;
       continue;
     }
-    const cssProp = toCssProp(key2);
+    const cssProp = toCssProp(key);
     const cssValue = toCssValue(cssProp, prop.value);
     if (cssValue === null) {
       dynamic++;
@@ -24514,7 +24474,6 @@ function readStyleAttr(value) {
   }
   return { decls, dynamic, present: true };
 }
-var isLayoutDecl = ({ prop, value }) => FLEX_PROPS.has(prop) || GAP_PROPS.has(prop) || prop === "display" && /\b(inline-)?(flex|grid)\b/.test(value) || prop.startsWith("grid-template") || prop.startsWith("grid-auto");
 function walkAst(node, visit) {
   if (!node || typeof node !== "object") return;
   if (Array.isArray(node)) {
@@ -24523,30 +24482,26 @@ function walkAst(node, visit) {
   }
   const rec = node;
   if (typeof rec.type === "string") visit(node);
-  for (const key2 of Object.keys(rec)) {
-    if (key2 === "loc" || key2 === "start" || key2 === "end" || key2 === "leadingComments" || key2 === "trailingComments")
+  for (const key of Object.keys(rec)) {
+    if (key === "loc" || key === "start" || key === "end" || key === "leadingComments" || key === "trailingComments")
       continue;
-    walkAst(rec[key2], visit);
+    walkAst(rec[key], visit);
   }
 }
 function systemImports(ast, ds) {
-  const known = /* @__PURE__ */ new Set();
   const canonicals = /* @__PURE__ */ new Map();
-  const text = /* @__PURE__ */ new Set();
+  const text2 = /* @__PURE__ */ new Set();
   const layout = /* @__PURE__ */ new Set();
   const componentImports = [];
   const packages = /* @__PURE__ */ new Map();
   const canonical = (name) => canonicalName(name, ds.normalizeExports);
-  const fromPackage = (src) => ds.packages.some((p) => src === p || src.startsWith(`${p}/`));
   for (const node of ast.program.body) {
-    if (node.type !== "ImportDeclaration" || !fromPackage(node.source.value)) continue;
+    if (node.type !== "ImportDeclaration" || !fromPackage(ds.packages, node.source.value)) continue;
     for (const spec of node.specifiers) {
       const local = spec.local.name;
-      const imported = spec.type === "ImportSpecifier" ? spec.imported.type === "Identifier" ? spec.imported.name : spec.imported.value : local;
-      const c = canonical(imported);
-      known.add(local);
+      const c = canonical(spec.type === "ImportSpecifier" ? importedName(spec) : local);
       canonicals.set(local, c);
-      if (ds.textComponents.includes(c)) text.add(local);
+      if (ds.textComponents.includes(c)) text2.add(local);
       if (ds.layoutComponents.includes(c)) layout.add(local);
       packages.set(local, node.source.value);
       componentImports.push({
@@ -24559,7 +24514,7 @@ function systemImports(ast, ds) {
       });
     }
   }
-  return { known, text, layout, componentImports, packages, canonicals };
+  return { text: text2, layout, componentImports, packages, canonicals };
 }
 var unwrapTs = (e) => e.type === "TSAsExpression" || e.type === "TSSatisfiesExpression" || e.type === "TSNonNullExpression" || e.type === "TSTypeAssertion" ? unwrapTs(e.expression) : e;
 function staticLabel(el) {
@@ -24572,9 +24527,9 @@ function staticLabel(el) {
     if (c.type === "JSXElement" || c.type === "JSXFragment") continue;
     if (c.type !== "JSXExpressionContainer") return null;
     if (c.expression.type === "JSXEmptyExpression") continue;
-    const text = staticString(c.expression);
-    if (text === null) return null;
-    parts.push(text);
+    const text2 = staticString(c.expression);
+    if (text2 === null) return null;
+    parts.push(text2);
   }
   return parts.join("").replace(/\s+/g, " ").trim();
 }
@@ -24601,9 +24556,9 @@ function componentRanges(program) {
   });
   return out;
 }
-function scanMarkup(text, relPath, ds, rules = []) {
-  const referenced = harvestTokens(text);
-  const stems = harvestStems(text);
+function scanMarkup(text2, relPath, ds, rules = []) {
+  const referenced = harvestTokens(text2);
+  const stems = harvestStems(text2);
   const bindings = [];
   const rawEls = [];
   const inlineStyles = [];
@@ -24612,26 +24567,27 @@ function scanMarkup(text, relPath, ds, rules = []) {
   const ruleHits = [];
   const controls = [];
   const imports = /* @__PURE__ */ new Set();
+  const result = {
+    controls,
+    bindings,
+    rawEls,
+    inlineStyles,
+    cssInJs,
+    composites: composites2,
+    ruleHits,
+    imports,
+    referenced,
+    stems,
+    componentImports: [],
+    parseError: null
+  };
   let ast;
   try {
-    ast = (0, import_parser.parse)(text, { sourceType: "unambiguous", errorRecovery: true, plugins: PLUGINS });
+    ast = (0, import_parser.parse)(text2, { sourceType: "unambiguous", errorRecovery: true, plugins: PLUGINS });
   } catch (err) {
-    return {
-      controls,
-      bindings,
-      rawEls,
-      inlineStyles,
-      cssInJs,
-      composites: composites2,
-      ruleHits,
-      imports,
-      referenced,
-      stems,
-      componentImports: [],
-      parseError: messageOf2(err)
-    };
+    return { ...result, parseError: messageOf(err) };
   }
-  const { known, text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
+  const { text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
   const tags = cssInJsLocals(ast, ds.cssInJsPackages);
   const cssPropOwner = /* @__PURE__ */ new Map();
   const substituted = /* @__PURE__ */ new Set();
@@ -24654,7 +24610,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
     return out;
   };
   const jsxName = (el) => {
-    const n = el.openingElement.name;
+    const n = ("openingElement" in el ? el.openingElement : el).name;
     if (n.type === "JSXIdentifier") return n.name;
     if (n.type === "JSXMemberExpression")
       return n.object.type === "JSXIdentifier" ? `${n.object.name}.${n.property.name}` : null;
@@ -24663,10 +24619,10 @@ function scanMarkup(text, relPath, ds, rules = []) {
   const baseOf = (name) => name.split(".", 1)[0] ?? name;
   const readComposite = (el) => {
     const name = jsxName(el);
-    if (!name || !known.has(baseOf(name))) return;
+    if (!name || !canonicals.has(baseOf(name))) return;
     const tree = systemTree(
       el,
-      (n) => known.has(baseOf(n)),
+      (n) => canonicals.has(baseOf(n)),
       jsxChildElements,
       jsxName,
       (n) => packages.get(baseOf(n)) ?? null,
@@ -24728,7 +24684,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
     optionsIn: staticOptions,
     labelOf: staticLabel,
     enclosingOf,
-    sourceOf: (el) => text.slice(el.start ?? 0, el.end ?? 0)
+    sourceOf: (el) => text2.slice(el.start ?? 0, el.end ?? 0)
   };
   const readRules = (el) => {
     if (!rules.length) return;
@@ -24760,7 +24716,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
       target = memberProperty(t) ?? null;
     } else if (held(tags.styled, calleeOf(t))) {
       target = firstArgOf(t) ?? null;
-      isSystem = Boolean(target && known.has(target));
+      isSystem = Boolean(target && canonicals.has(target));
     } else if (held(tags.bare, identifierOf(t))) {
       target = null;
     } else {
@@ -24774,7 +24730,6 @@ function scanMarkup(text, relPath, ds, rules = []) {
       target,
       isSystem,
       isText: isSystem && target !== null && textLike.has(target),
-      isLayout: isSystem && target !== null && layout.has(target),
       groups,
       error
     });
@@ -24786,13 +24741,12 @@ function scanMarkup(text, relPath, ds, rules = []) {
       readRules(node);
     }
     if (node.type !== "JSXOpeningElement") return;
-    const name = node.name;
-    const tag = name.type === "JSXIdentifier" ? name.name : name.type === "JSXMemberExpression" ? `${name.object.type === "JSXIdentifier" ? name.object.name : "?"}.${name.property.name}` : null;
+    const tag = jsxName(node);
     if (!tag) return;
     const line = node.loc?.start?.line ?? 1;
     const root2 = tag.split(".")[0] ?? tag;
     const isComponent = /^[A-Z]/.test(root2);
-    const isSystem = isComponent && known.has(root2);
+    const isSystem = isComponent && canonicals.has(root2);
     if (isSystem) {
       const c = canonicals.get(root2) ?? root2;
       uses.set(c, (uses.get(c) ?? 0) + 1);
@@ -24801,7 +24755,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
     const emitsTag = member ? (
       // `<UI.Text render={ <h4 /> }>` — the namespace is what was imported,
       // so the component name is the member.
-      known.has(root2) && (ds.textComponents.includes(canonicalName(member, ds.normalizeExports)) || ds.layoutComponents.includes(canonicalName(member, ds.normalizeExports)))
+      canonicals.has(root2) && (ds.textComponents.includes(canonicalName(member, ds.normalizeExports)) || ds.layoutComponents.includes(canonicalName(member, ds.normalizeExports)))
     ) : textLike.has(root2) || layout.has(root2);
     const strings = [];
     let style = null;
@@ -24809,7 +24763,11 @@ function scanMarkup(text, relPath, ds, rules = []) {
     for (const attr of node.attributes) {
       if (attr.type !== "JSXAttribute") continue;
       const an = attr.name.type === "JSXIdentifier" ? attr.name.name : attr.name.name.name;
-      if (an === "className" || an === "class") stringsIn(attr.value, strings);
+      if (an === "className" || an === "class")
+        walkAst(attr.value, (n) => {
+          if (n.type === "StringLiteral") strings.push(n.value);
+          else if (n.type === "TemplateElement") strings.push(n.value.cooked ?? n.value.raw);
+        });
       else if (an === "style") style = readStyleAttr(attr.value);
       else if (an === "css") cssAttr = attr.value;
       else if (emitsTag && attr.name.type === "JSXIdentifier" && ds.substitutionProps.has(an))
@@ -24821,15 +24779,13 @@ function scanMarkup(text, relPath, ds, rules = []) {
       cssPropOwner.set(owned.start, {
         target: isComponent ? root2 : tag.toLowerCase(),
         isSystem,
-        isText: isSystem && textLike.has(root2),
-        isLayout: isSystem && layout.has(root2)
+        isText: isSystem && textLike.has(root2)
       });
     if (style?.present)
       inlineStyles.push({
         tag: isComponent ? root2 : tag.toLowerCase(),
         isSystem,
         isText: isSystem && textLike.has(root2),
-        isLayout: isSystem && layout.has(root2),
         decls: style.decls,
         dynamic: style.dynamic,
         file: relPath,
@@ -24838,9 +24794,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
     if (isComponent) {
       if (!isSystem) return;
       const isText = textLike.has(root2);
-      const isLayout = layout.has(root2);
-      for (const cls of classes)
-        bindings.push({ cls, tag: root2, isSystem: true, isText, isLayout, file: relPath, line });
+      for (const cls of classes) bindings.push({ cls, tag: root2, isSystem: true, isText, file: relPath, line });
     } else {
       if (substituted.has(node)) return;
       const lower = tag.toLowerCase();
@@ -24859,20 +24813,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
       });
     }
   });
-  return {
-    controls,
-    bindings,
-    rawEls,
-    inlineStyles,
-    cssInJs,
-    composites: composites2,
-    ruleHits,
-    imports,
-    referenced,
-    stems,
-    componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })),
-    parseError: null
-  };
+  return { ...result, componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })) };
 }
 
 // src/syntax.ts
@@ -24894,7 +24835,7 @@ var extOf = (path) => {
 async function syntaxFor(path) {
   const ext = extOf(path);
   const pkg = SYNTAX_PACKAGES[ext];
-  if (!pkg) return { parse: (text, opts) => postcss_default.parse(text, opts) };
+  if (!pkg) return { parse: (text2, opts) => postcss_default.parse(text2, opts) };
   const cached = cache.get(pkg);
   if (cached) return cached;
   let resolved;
@@ -24905,7 +24846,7 @@ async function syntaxFor(path) {
     const parse3 = syntax.parse ?? syntax;
     if (typeof parse3 !== "function") throw new Error(`${pkg} exposes no parse()`);
     const parseFn = parse3;
-    resolved = { parse: (text, opts) => parseFn(text, opts) };
+    resolved = { parse: (text2, opts) => parseFn(text2, opts) };
   } catch {
     resolved = { missing: pkg };
   }
@@ -25103,9 +25044,9 @@ function deadClasses(declared, {
   const isReferenced = (cls) => referenced.has(cls) || isNeverDead(cls) || stems.some((s) => cls.startsWith(s));
   const seen = /* @__PURE__ */ new Set();
   return declared.flatMap(({ file, line, cls, scopeLines }) => {
-    const key2 = `${file}\0${cls}`;
-    if (seen.has(key2) || !isProject(cls) || isReferenced(cls)) return [];
-    seen.add(key2);
+    const key = `${file}\0${cls}`;
+    if (seen.has(key) || !isProject(cls) || isReferenced(cls)) return [];
+    seen.add(key);
     return [{ rule: "css/dead-class", file, line, message: `.${cls}`, code: `.${cls}`, scopeLines }];
   });
 }
@@ -25259,9 +25200,9 @@ function currency(imports, registry, enabled2) {
     const rule2 = entry.status === "locked" ? "system/locked-component" : "system/superseded-component";
     if (!enabled2(rule2)) continue;
     if (!usableReplacement(registry, entry.supersededBy)) continue;
-    const key2 = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
-    if (seen.has(key2)) continue;
-    seen.add(key2);
+    const key = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     const remedy = entry.supersededBy ? ` \u2192 ${entry.supersededBy}` : "";
     const uses = ci.uses > 1 ? ` \xD7${ci.uses}` : "";
     out.push({
@@ -25305,9 +25246,8 @@ function libraryOverride(keyClasses, isLibrary, isProject) {
 // src/checks/system/raw-element.ts
 function currentAnalog(registry, suggest) {
   const entries = [...registry.values()].filter((e) => e.name === suggest);
-  if (!entries.length || entries.some((e) => e.status === "recommended")) return `<${suggest}>`;
-  const forwarded = entries.find((e) => e.supersededBy)?.supersededBy;
-  return forwarded ? forwarded : `<${suggest}>`;
+  const current = entries.some((e) => e.status === "recommended");
+  return !current && entries.find((e) => e.supersededBy)?.supersededBy || `<${suggest}>`;
 }
 function rawElements(els, {
   layoutComponents,
@@ -25317,7 +25257,7 @@ function rawElements(els, {
 }) {
   return els.flatMap((el) => {
     if (el.styledOnly) {
-      const suggestsLayout = String(el.suggest).split("/").some((n) => layoutComponents.includes(n.trim()));
+      const suggestsLayout = el.suggest.split("/").some((n) => layoutComponents.includes(n.trim()));
       const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
       const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
       if (suggestsLayout ? !laidOut : !styled) return [];
@@ -25335,10 +25275,10 @@ function rawElements(els, {
 }
 
 // src/checks/tokens/hardcoded-value.ts
-var hardcodedValue = ({ prop, value }, { options }) => {
-  if (!isHardcodedTokenValue(prop, value, options)) return void 0;
+var hardcodedValue = ({ prop, value }) => {
+  if (!isHardcodedTokenValue(prop, value)) return void 0;
   const decl2 = `${prop}: ${value}`;
-  return { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hint: { prop, value } };
+  return { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hints: [{ prop, value }] };
 };
 
 // src/checks/tokens/unknown-token.ts
@@ -25346,9 +25286,9 @@ function unknownTokens(refs, known) {
   if (!known.size) return [];
   const seen = /* @__PURE__ */ new Set();
   return refs.flatMap(({ file, line, name, scopeLines }) => {
-    const key2 = `${file}\0${name}`;
-    if (known.has(name) || seen.has(key2)) return [];
-    seen.add(key2);
+    const key = `${file}\0${name}`;
+    if (known.has(name) || seen.has(key)) return [];
+    seen.add(key);
     return [{ rule: "tokens/unknown-token", file, line, message: `var(${name})`, code: name, scopeLines }];
   });
 }
@@ -25361,11 +25301,10 @@ var untokenizedType = ({ prop, value }) => {
   if (!TYPE_PROPS.has(prop)) return void 0;
   if (usesToken(value) || isInertValue(value)) return null;
   const decl2 = `${prop}: ${value}`;
-  return { rule: "typography/untokenized", message: decl2, code: oneLine(decl2), hint: { prop, value } };
+  return { rule: "typography/untokenized", message: decl2, code: oneLine(decl2), hints: [{ prop, value }] };
 };
 
 // src/analyze.ts
-var messageOf3 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
 var realPath = (path) => {
   try {
     return realpathSync.native(path);
@@ -25394,7 +25333,7 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
       try {
         sheet = syntax.parse(readFileSync2(file, "utf8"), { from: file });
       } catch (err) {
-        unread.push({ file: shown, message: messageOf3(err) });
+        unread.push({ file: shown, message: messageOf(err) });
         continue;
       }
       harvestTokenDefs(sheet, tokenPrefixes, tokenSet);
@@ -25422,9 +25361,9 @@ var DECLARATIONS = [
   layoutInCss,
   hardcodedValue
 ];
-function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {}, enabled: enabled2 = () => true }) {
-  const styling = isMarginProp(prop) || isFlexDecl(prop, value) || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || isHardcodedTokenValue(prop, value, options) || APPEARANCE_PROPS.has(prop);
-  const ctx = { boundSystem, boundText, isGrid, options, enabled: enabled2 };
+function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, enabled: enabled2 }) {
+  const styling = isMarginProp(prop) || isFlexDecl(prop, value) || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || isHardcodedTokenValue(prop, value) || APPEARANCE_PROPS.has(prop);
+  const ctx = { boundSystem, boundText, isGrid, enabled: enabled2 };
   for (const check of DECLARATIONS) {
     const verdict = check({ prop, value }, ctx);
     if (verdict !== void 0) return { finding: verdict, styling };
@@ -25454,15 +25393,13 @@ function collapsePerRule(pending) {
     const props = [...new Set(group.map((f) => (f.message.split(":")[0] ?? f.message).trim()))];
     out.push({
       ...first,
-      rule: rule2,
       // Bounded per contributor, so one long value cannot spend the whole
       // line and crowd the others out of a message that is several of them.
       // Safe to bound here where it is not at capture: a collapsed finding
       // always carries its own `code` below, so identity does not fall back
       // to this string.
       message: group.map((f) => snippet(f.message)).join("; "),
-      hints: group.flatMap((f) => f.hints ?? (f.hint ? [f.hint] : [])),
-      suffix: first.suffix,
+      hints: group.flatMap((f) => f.hints ?? []),
       code: `${rule2}:${props.sort().join(",")}`
     });
   }
@@ -25500,18 +25437,18 @@ async function analyze(config, { scope = null, judge = false } = {}) {
   const suppByFile = /* @__PURE__ */ new Map();
   const inScope = scope ? new Set(scope) : null;
   const reports = (rel) => !inScope || inScope.has(rel);
-  const suppressionsFor = (rel, text) => {
+  const suppressionsFor = (rel, text2) => {
     const cached = suppByFile.get(rel);
     if (cached) return cached;
-    const parsed = parseSuppressions(text, rel);
+    const parsed = parseSuppressions(text2, rel);
     suppByFile.set(rel, parsed);
     return parsed;
   };
-  const report = ({ scopeLines, rule: rule2, ...f }) => {
-    if (!config.enabled[rule2] || !reports(f.file)) return;
-    const supp = suppByFile.get(f.file);
-    if (supp && isSuppressed(supp.byLine, f.line, rule2, scopeLines)) return;
-    findings.push({ rule: rule2, severity: config.severityOf(rule2), ...f, rank: RULES[rule2].rank });
+  const report = ({ scopeLines, rule: rule2, file, line, message, ...f }) => {
+    if (!config.enabled[rule2] || !reports(file)) return;
+    const supp = suppByFile.get(file);
+    if (supp && isSuppressed(supp.byLine, line, rule2, scopeLines)) return;
+    findings.push({ rule: rule2, severity: config.severityOf(rule2), file, line, message, ...f, rank: RULES[rule2].rank });
   };
   const referenced = /* @__PURE__ */ new Set();
   const stems = /* @__PURE__ */ new Set();
@@ -25529,21 +25466,17 @@ async function analyze(config, { scope = null, judge = false } = {}) {
   const componentImports = [];
   for (const { abs, rel } of files.markup) {
     if (tooBig(abs)) continue;
-    let text;
+    let text2;
     try {
-      text = readFileSync2(abs, "utf8");
+      text2 = readFileSync2(abs, "utf8");
     } catch {
       continue;
     }
     diagnostics.filesScanned++;
-    const scanned = scanMarkup(text, rel, ds, patternRules);
+    const scanned = scanMarkup(text2, rel, ds, patternRules);
     if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
-    scanned.referenced.forEach((t) => {
-      referenced.add(t);
-    });
-    scanned.stems.forEach((s) => {
-      stems.add(s);
-    });
+    for (const t of scanned.referenced) referenced.add(t);
+    for (const t of scanned.stems) stems.add(t);
     for (const b of scanned.bindings) {
       if (b.cls === void 0) continue;
       const group = bindings.get(b.cls) ?? [];
@@ -25558,7 +25491,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     controls.push(...scanned.controls);
     if (scanned.imports) importsByFile.set(rel, scanned.imports);
     for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
-    suppressionsFor(rel, text);
+    suppressionsFor(rel, text2);
   }
   for (const { abs } of files.references) {
     if (tooBig(abs)) continue;
@@ -25573,14 +25506,14 @@ async function analyze(config, { scope = null, judge = false } = {}) {
   const declared = [];
   for (const { abs, rel } of files.styles) {
     if (isLibrarySheet(rel)) continue;
-    let text;
+    let text2;
     try {
-      text = readFileSync2(abs, "utf8");
+      text2 = readFileSync2(abs, "utf8");
     } catch {
       continue;
     }
     diagnostics.filesScanned++;
-    const supp = suppressionsFor(rel, text);
+    suppressionsFor(rel, text2);
     const unparsed = (message) => {
       diagnostics.parseErrors.push({ file: rel, message });
       if (config.enabled["stylesheet/unparsed"] && reports(rel))
@@ -25605,31 +25538,12 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     }
     let root2;
     try {
-      root2 = syntax.parse(text, { from: abs });
+      root2 = syntax.parse(text2, { from: abs });
     } catch (err) {
-      unparsed(messageOf3(err));
+      unparsed(messageOf(err));
       continue;
     }
-    const emit = ({ rule: rule2, line, message, code, scopeLines = [], hint, hints, suffix }) => {
-      if (!config.enabled[rule2] || !reports(rel)) return;
-      if (isSuppressed(supp.byLine, line, rule2, scopeLines)) return;
-      findings.push({
-        rule: rule2,
-        severity: config.severityOf(rule2),
-        file: rel,
-        line,
-        message,
-        code: code ?? message,
-        rank: RULES[rule2].rank,
-        hints: hints || (hint ? [hint] : void 0),
-        // Forwarded rather than blanked. Nothing in this channel sets one
-        // today, but `collapsePerRule` carries `suffix` through on purpose
-        // and it is now what keeps a message tail out of the line bound —
-        // so dropping it here would silently disarm that for whichever rule
-        // reaches for it first.
-        suffix
-      });
-    };
+    const emit = (f) => report({ ...f, file: rel, code: f.code ?? f.message });
     harvestTokenDefs(root2, tokenPrefixes, tokenSet);
     root2.walkRules((cssRule) => {
       const ruleLine = cssRule.source?.start?.line ?? 1;
@@ -25650,7 +25564,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
         const line = decl2.source?.start?.line ?? ruleLine;
         const { finding, styling } = classifyDeclaration(
           { prop, value: decl2.value },
-          { boundSystem, boundText, isGrid, options: config.optionsOf("tokens/hardcoded-value"), enabled: ruleIsLive }
+          { boundSystem, boundText, isGrid, enabled: ruleIsLive }
         );
         if (styling) touchesStyle = true;
         if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
@@ -25674,38 +25588,16 @@ async function analyze(config, { scope = null, judge = false } = {}) {
   }))
     report(f);
   for (const el of inlineStyles) {
-    if (!reports(el.file)) continue;
-    const supp = suppByFile.get(el.file);
-    const muted = (rule2, line) => supp !== void 0 && isSuppressed(supp.byLine, line, rule2, [el.line, el.line - 1]);
-    const push = (rule2, line, message, code, hints, suffix) => {
-      if (!config.enabled[rule2] || muted(rule2, line)) return;
-      findings.push({
-        rule: rule2,
-        severity: config.severityOf(rule2),
-        file: el.file,
-        line,
-        message,
-        code: code ?? message,
-        rank: RULES[rule2].rank,
-        hints,
-        suffix
-      });
-    };
+    const scopeLines = [el.line, el.line - 1];
     const whole = ruleIsLive("system/inline-style") ? inlineStyle(el) : null;
     if (whole) {
-      push(whole.rule, el.line, whole.message, whole.code);
+      report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
       continue;
     }
-    const isGrid = el.decls.some(
-      (d) => d.prop === "display" && /\bgrid\b/.test(d.value) || d.prop.startsWith("grid-template") || d.prop.startsWith("grid-auto")
-    );
+    const isGrid = el.decls.some((d) => isGridDecl(d.prop, d.value));
     const pending = [];
     for (const d of el.decls) {
-      const { finding } = classifyDeclaration(d, {
-        isGrid,
-        options: config.optionsOf("tokens/hardcoded-value"),
-        enabled: ruleIsLive
-      });
+      const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
       if (finding)
         pending.push({
           ...finding,
@@ -25715,14 +25607,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
         });
     }
     for (const f of collapsePerRule(pending))
-      push(
-        f.rule,
-        f.line,
-        `${f.message}${f.suffix ?? ""}`,
-        f.code,
-        f.hints ?? (f.hint ? [f.hint] : void 0),
-        f.suffix
-      );
+      report({ ...f, file: el.file, message: `${f.message}${f.suffix ?? ""}`, code: f.code ?? f.message, scopeLines });
   }
   for (const tpl of cssInJs) {
     if (!reports(tpl.file)) continue;
@@ -25744,27 +25629,20 @@ async function analyze(config, { scope = null, judge = false } = {}) {
           boundSystem: onTarget ? boundSystem : [],
           boundText: onTarget ? boundText : [],
           isGrid: group.isGrid,
-          options: config.optionsOf("tokens/hardcoded-value"),
           enabled: ruleIsLive
         });
         if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
       }
       const where = group.selector ? ` in \`${group.selector}\`` : "";
-      for (const f of collapsePerRule(pending)) {
-        if (!config.enabled[f.rule]) continue;
-        if (supp && isSuppressed(supp.byLine, f.line, f.rule, [tpl.line, tpl.line - 1])) continue;
-        findings.push({
-          rule: f.rule,
-          severity: config.severityOf(f.rule),
+      for (const f of collapsePerRule(pending))
+        report({
+          ...f,
           file: tpl.file,
-          line: f.line,
           message: `${f.message}${where} (css-in-js)`,
-          suffix: `${where} (css-in-js)`,
           code: `css-in-js:${f.code ?? f.message}`,
-          rank: RULES[f.rule].rank,
-          hints: f.hints ?? (f.hint ? [f.hint] : void 0)
+          suffix: `${where} (css-in-js)`,
+          scopeLines: [tpl.line, tpl.line - 1]
         });
-      }
     }
   }
   for (const f of rawElements(rawEls, {
@@ -25846,7 +25724,6 @@ var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.messag
 import { readFileSync as readFileSync3, writeFileSync } from "node:fs";
 import { join as join4 } from "node:path";
 var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
-var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 function tokenFixes(findings) {
   const out = [];
   for (const f of findings) {
@@ -25871,15 +25748,15 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
   const skipped = [];
   for (const [file, group] of byFile) {
     const abs = join4(root2, file);
-    let text;
+    let text2;
     try {
-      text = readFileSync3(abs, "utf8");
+      text2 = readFileSync3(abs, "utf8");
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       for (const fix of group) skipped.push({ ...fix, why });
       continue;
     }
-    const lines = text.split("\n");
+    const lines = text2.split("\n");
     let dirty = false;
     for (const fix of group) {
       const i = fix.line - 1;
@@ -25932,15 +25809,15 @@ function applyKeeps(root2, findings, keyword, { dry = false } = {}) {
   const applied = [];
   for (const [file, group] of byFile) {
     const abs = join4(root2, file);
-    let text;
+    let text2;
     try {
-      text = readFileSync3(abs, "utf8");
+      text2 = readFileSync3(abs, "utf8");
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       for (const k of group) skipped.push({ ...k, why });
       continue;
     }
-    const lines = text.split("\n");
+    const lines = text2.split("\n");
     for (const k of [...group].sort((a, b) => b.line - a.line)) {
       const line = lines[k.line - 1];
       if (line === void 0) {
@@ -25958,9 +25835,7 @@ function applyKeeps(root2, findings, keyword, { dry = false } = {}) {
 }
 
 // src/judge.ts
-import { existsSync as existsSync3, readFileSync as readFileSync6 } from "node:fs";
-import { dirname as dirname3, join as join7 } from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
+import { readFileSync as readFileSync6 } from "node:fs";
 
 // src/embedded.ts
 import { existsSync as existsSync2, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "node:fs";
@@ -26052,7 +25927,6 @@ var base_ui_default = {
   designSystem: {
     name: "Base UI",
     packages: ["@base-ui/react", "@base-ui-components/react"],
-    components: { layout: [], text: [] },
     substitutionProps: ["render"]
   },
   rules: {
@@ -26064,17 +25938,9 @@ var base_ui_default = {
 // presets/generic.json
 var generic_default = {
   designSystem: {
-    packages: [],
-    tokenPrefixes: [],
-    tokenSources: [],
-    cssInJsPackages: ["styled-components", "@emotion/styled", "@emotion/react", "@emotion/css", "@emotion/native"],
-    components: { layout: [], text: [] },
-    elementMap: {}
+    cssInJsPackages: ["styled-components", "@emotion/styled", "@emotion/react", "@emotion/css", "@emotion/native"]
   },
-  namespaces: { project: [], external: [], neverDead: [] },
   sources: {
-    styles: ["**/*.css", "**/*.scss"],
-    markup: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
     references: ["**/*.php", "**/*.html", "**/*.twig"],
     ignore: [
       "**/node_modules/**",
@@ -26095,8 +25961,7 @@ var generic_default = {
       "**/*.min.js",
       "**/*.bundle.js"
     ]
-  },
-  suppression: { keyword: "ds-allow", blanket: ["ds-disable"] }
+  }
 };
 
 // presets/wordpress-block-theme.json
@@ -26109,10 +25974,7 @@ var wordpress_block_theme_default = {
   },
   designSystem: {
     name: "WordPress",
-    packages: [],
-    tokenPrefixes: ["--wp--preset--", "--wp--style--", "--wp--custom--"],
-    components: { layout: [], text: [] },
-    elementMap: {}
+    tokenPrefixes: ["--wp--preset--", "--wp--style--", "--wp--custom--"]
   },
   namespaces: {
     external: ["wp-block-", "wp-elements-", "wp-container-", "is-layout-"],
@@ -26233,7 +26095,6 @@ var wpds_default = {
     tokenPrefixes: [
       "--wpds-"
     ],
-    normalizeExports: "^__(experimental|unstable)",
     components: {
       layout: [
         "Stack",
@@ -27312,11 +27173,11 @@ var package_default = {
     lint: "biome check .",
     "lint:fix": "biome check --write .",
     typecheck: "tsc -p tsconfig.json",
-    "patterns-doc": "tsx scripts/patterns-doc.ts",
-    "patterns-doc:check": "tsx scripts/patterns-doc.ts --check",
-    "eval:represents": "tsx evals/represents/run.ts",
-    "eval:values": "tsx evals/values/run.ts",
-    test: "npm run lint && npm run typecheck && tsx tests/run.ts && tsx tests/detect.ts && tsx tests/regressions.ts && tsx tests/features.ts && tsx tests/autofix.ts && tsx tests/multi-ds.ts && tsx tests/report.ts"
+    "patterns-doc": "node scripts/patterns-doc.ts",
+    "patterns-doc:check": "node scripts/patterns-doc.ts --check",
+    "eval:represents": "node evals/represents/run.ts",
+    "eval:values": "node evals/values/run.ts",
+    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts"
   },
   dependencies: {
     "@babel/parser": "^7.24.0",
@@ -27334,7 +27195,6 @@ var package_default = {
     "@types/node": "^22.20.1",
     "@types/picomatch": "^4.0.3",
     esbuild: "^0.25.0",
-    tsx: "^4.23.12",
     typescript: "^5.9.3"
   }
 };
@@ -27354,7 +27214,7 @@ var presetKey = (spec) => spec.replace(/^loupe\/presets\//, "");
 var PRESET_DIR = join5(dirname2(fileURLToPath(import.meta.url)), "..", "presets");
 var presetNames = () => {
   try {
-    return readdirSync2(PRESET_DIR).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, "")).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+    return readdirSync2(PRESET_DIR).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, "")).sort();
   } catch {
     return Object.keys(EMBEDDED_PRESETS);
   }
@@ -27374,23 +27234,6 @@ var hasPreset = (spec) => existsSync2(join5(PRESET_DIR, `${presetKey(spec)}.json
 
 // src/judge/force.ts
 var forceQuery = (force) => ({
-  // Measured, one run over the eval's 100 controls — destination recall is the
-  // column that decides it, because every redirect in the abstract language
-  // fires on that class:
-  //
-  //   batch   all   destination P/R
-  //      40   81%      91% / 69%
-  //      20   90%      96% / 83%
-  //      10   90%     100% / 86%
-  //       4   91%     100% / 90%
-  //       1   93%     100% / 97%
-  //
-  // Sharing a state with 39 other controls costs nearly a third of the
-  // destinations. A control is a few lines, so one request each is cheap; the
-  // pool in `ask` is what keeps it quick. Every force is asked this way until
-  // its own eval says otherwise: this table is `represents`, not forces in
-  // general.
-  size: 1,
   element: (c) => ({ file: c.file, component: c.component, enclosing_component: c.enclosing, source: c.source }),
   question: (_c, i) => ({
     type: "choice",
@@ -27408,8 +27251,6 @@ var TIER = {
   family: "No token carries exactly this value; these are all the tokens for this property."
 };
 var valueQuery = (about) => ({
-  // One per request, as forces are asked, until this has its own batch sweep.
-  size: 1,
   element: ({ file, context_before, source }) => ({ file, context_before, source }),
   question: ({ prop, value, part, candidates }, i) => ({
     type: "choice",
@@ -27424,24 +27265,19 @@ var valueQuery = (about) => ({
 // src/judge/variant.ts
 import { readFileSync as readFileSync5 } from "node:fs";
 import { join as join6 } from "node:path";
+function around(root2, file, line, before, after) {
+  const lines = readFileSync5(join6(root2, file), "utf8").split("\n");
+  const i = line - 1;
+  return {
+    context_before: lines.slice(Math.max(0, i - before), i).join("\n"),
+    source: lines.slice(i, i + after).join("\n")
+  };
+}
 var notKey = (e) => `not_${e.name.toLowerCase()}`;
 var variantQuery = (root2) => ({
-  // One per request, as forces are: `represents` lost a third of its
-  // destinations sharing a state 40 ways, and this has no eval of its own to
-  // say it fares better. Each question needs only its own element, so the
-  // tokens are about the same either way.
-  size: 1,
-  element: ({ f }) => {
-    const lines = readFileSync5(join6(root2, f.file), "utf8").split("\n");
-    const i = f.line - 1;
-    return {
-      file: f.file,
-      // The flagged element opens on the first line of `source`; the lines
-      // before it are its parent, which is often what decides the role.
-      context_before: lines.slice(Math.max(0, i - 5), i).join("\n"),
-      source: lines.slice(i, i + 10).join("\n")
-    };
-  },
+  // The lines before the flagged element are its parent, which is often what
+  // decides the role.
+  element: ({ f }) => ({ file: f.file, ...around(root2, f.file, f.line, 5, 10) }),
   question: ({ f, target }, i) => ({
     type: "choice",
     instructions: `The ${f.code ?? "element"} on the first line of \`elements[${i}].source\` is flagged to be replaced by the design system's ${target.name} component. Which ${target.name} variant matches the role this element plays in its interface?`,
@@ -27462,7 +27298,7 @@ var MODEL = "jev-1.13.0";
 var FLOOR = 0.5;
 var CONCURRENCY = 6;
 var RETRIES = 4;
-async function ask(query, items, apiKey, fetchImpl = fetch, size = query.size) {
+async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
   const batches = [];
   for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
   const sendBatch = async (batch) => {
@@ -27531,20 +27367,15 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
   });
   return annotated;
 }
-var LANGUAGE = join7(dirname3(fileURLToPath2(import.meta.url)), "..", "..", "patterns", "index.json");
-var loadLanguage = (path) => {
-  if (path !== void 0) return JSON.parse(readFileSync6(path, "utf8"));
-  if (existsSync3(LANGUAGE)) return JSON.parse(readFileSync6(LANGUAGE, "utf8"));
-  return EMBEDDED_LANGUAGE;
-};
+var LANGUAGE = EMBEDDED_LANGUAGE;
 var REDIRECT_FLOOR = 0.9;
-async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch, language = loadLanguage()) {
-  const byId = new Map(language.patterns.map((p) => [p.id, p]));
+async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch) {
+  const byId = new Map(LANGUAGE.patterns.map((p) => [p.id, p]));
   const abstractOf = (patternId) => patternId.split("#", 1)[0]?.split(".", 1)[0] ?? patternId;
   const tableOf = (c) => byId.get(abstractOf(c.patternId))?.resolve ?? [];
   const known = controls.map(() => ({}));
   const sure = controls.map(() => ({}));
-  for (const [name, force] of Object.entries(language.vocabulary.forces)) {
+  for (const [name, force] of Object.entries(LANGUAGE.vocabulary.forces)) {
     if (!force.judge) continue;
     const asked = controls.flatMap((c, i) => tableOf(c).some((r) => r.when && name in r.when) ? [i] : []);
     if (!asked.length) continue;
@@ -27589,8 +27420,8 @@ function tokenDescriptions(profiles) {
     if (!p.tokenDescriptions) continue;
     try {
       const raw = JSON.parse(readFileSync6(p.tokenDescriptions, "utf8"));
-      for (const [name, text] of Object.entries(raw))
-        if (!name.startsWith("$") && typeof text === "string") out.set(name, text);
+      for (const [name, text2] of Object.entries(raw))
+        if (!name.startsWith("$") && typeof text2 === "string") out.set(name, text2);
     } catch {
     }
   }
@@ -27608,14 +27439,6 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
     throw new Error(
       "no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships"
     );
-  const files = /* @__PURE__ */ new Map();
-  const linesOf = (file) => {
-    const cached = files.get(file);
-    if (cached) return cached;
-    const lines = readFileSync6(join7(root2, file), "utf8").split("\n");
-    files.set(file, lines);
-    return lines;
-  };
   const plans = [];
   let written = 0;
   for (const f of findings) {
@@ -27632,15 +27455,12 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
   const asked = plans.flatMap(
     ({ f, parts, slots }) => slots.flatMap((slot) => {
       if (!("candidates" in slot) || !f.decl) return [];
-      const lines = linesOf(f.file);
-      const i = f.line - 1;
       return [
         {
           file: f.file,
-          // Enough before it to reach the selector of an ordinary rule, which
+          // Eight lines before it reach the selector of an ordinary rule, which
           // is most of what says what the value is for.
-          context_before: lines.slice(Math.max(0, i - 8), i).join("\n"),
-          source: lines.slice(i, i + 3).join("\n"),
+          ...around(root2, f.file, f.line, 8, 3),
           prop: f.decl.prop,
           value: parts.join(" "),
           part: slot.part,
@@ -27683,14 +27503,14 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
 }
 
 // src/baseline.ts
-import { existsSync as existsSync5, readFileSync as readFileSync7, writeFileSync as writeFileSync2 } from "node:fs";
-import { dirname as dirname4, isAbsolute as isAbsolute3, join as join9, resolve as resolve3 } from "node:path";
+import { existsSync as existsSync4, readFileSync as readFileSync7, writeFileSync as writeFileSync2 } from "node:fs";
+import { dirname as dirname3, resolve as resolve3 } from "node:path";
 
 // src/paths.ts
 import { createHash } from "node:crypto";
-import { existsSync as existsSync4, mkdirSync } from "node:fs";
-import { isAbsolute as isAbsolute2, join as join8, resolve as resolve2 } from "node:path";
-var pluginDataDir = () => process.env.CLAUDE_PLUGIN_DATA ?? null;
+import { existsSync as existsSync3, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute as isAbsolute2, join as join7, resolve as resolve2 } from "node:path";
 var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
 function projectKey(root2) {
   const full = resolve2(root2);
@@ -27706,79 +27526,41 @@ function ensureDir(dir) {
     return null;
   }
 }
-function stateDir(root2, { create = false } = {}) {
-  const data = pluginDataDir();
-  const project = join8(root2, ".loupe");
-  if (data) {
-    const dir = join8(data, "projects", projectKey(root2));
-    if (create) {
-      const made2 = ensureDir(dir);
-      if (made2) return { dir: made2, scope: "plugin-data" };
-    } else if (existsSync4(dir) || !existsSync4(project)) {
-      return { dir, scope: "plugin-data" };
-    }
-  }
-  if (!create) return { dir: project, scope: "project" };
-  const made = ensureDir(project);
-  return made ? { dir: made, scope: "project" } : { dir: null, scope: "none" };
-}
+var attemptsPath = (root2) => join7(tmpdir(), "loupe", projectKey(root2), "attempts.json");
 var DEFAULT_BASELINE = ".loupe-baseline.json";
 function baselinePath(root2, named) {
   const p = named || DEFAULT_BASELINE;
-  return isAbsolute2(p) ? p : join8(root2, p);
-}
-function legacyBaselines(root2) {
-  const data = pluginDataDir();
-  return [
-    join8(root2, ".loupe", "baseline.json"),
-    ...data ? [join8(data, "projects", projectKey(root2), "baseline.json")] : []
-  ];
+  return isAbsolute2(p) ? p : join7(root2, p);
 }
 function findExistingBaseline(root2, explicit, configured) {
   if (explicit) {
     const path = baselinePath(root2, explicit);
-    return { path, found: existsSync4(path), fallback: "none" };
+    return { path, found: existsSync3(path), fallback: "none" };
   }
   const target = baselinePath(root2, configured);
-  if (existsSync4(target)) return { path: target, found: true, fallback: "none" };
-  const byDefaultName = join8(root2, DEFAULT_BASELINE);
-  if (byDefaultName !== target && existsSync4(byDefaultName))
+  if (existsSync3(target)) return { path: target, found: true, fallback: "none" };
+  const byDefaultName = join7(root2, DEFAULT_BASELINE);
+  if (byDefaultName !== target && existsSync3(byDefaultName))
     return { path: byDefaultName, found: true, fallback: "default-name" };
-  for (const path of legacyBaselines(root2)) if (existsSync4(path)) return { path, found: true, fallback: "legacy" };
   return { path: target, found: false, fallback: "none" };
-}
-function attemptsPath(root2, create = false) {
-  const { dir } = stateDir(root2, { create });
-  return dir ? join8(dir, "attempts.json") : null;
 }
 
 // src/baseline.ts
-var resolvePath = (root2, p) => isAbsolute3(p) ? p : join9(root2, p);
-function readBaseline(root2, path) {
-  const full = resolvePath(root2, path);
-  if (!existsSync5(full)) return null;
+function readBaseline(path) {
+  if (!existsSync4(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync7(full, "utf8"));
+    const parsed = JSON.parse(readFileSync7(path, "utf8"));
     if (!Array.isArray(parsed.entries)) return null;
-    const entries = parsed.entries;
-    return {
-      version: parsed.version ?? 1,
-      createdAt: parsed.createdAt ?? "",
-      count: parsed.count ?? entries.length,
-      findings: parsed.findings ?? entries.length,
-      entries,
-      set: new Set(entries)
-    };
+    return { createdAt: parsed.createdAt ?? "", entries: parsed.entries, set: new Set(parsed.entries) };
   } catch {
     return null;
   }
 }
-function writeBaseline(root2, path, result) {
-  const full = resolvePath(root2, path);
-  const dir = dirname4(full);
+function writeBaseline(root2, full, result) {
+  const dir = dirname3(full);
   if (dir !== resolve3(root2)) ensureDir(dir);
   const entries = [...new Set(result.findings.map(findingKey))].sort();
-  const prior = readBaseline(root2, path);
+  const prior = readBaseline(full);
   const unchanged = prior !== null && prior.entries.length === entries.length && prior.entries.every((e, i) => e === entries[i]);
   const file = {
     version: 1,
@@ -27797,9 +27579,9 @@ function applyBaseline(result, baseline) {
   const kept = [];
   let baselined = 0;
   for (const f of result.findings) {
-    const key2 = findingKey(f);
-    seen.add(key2);
-    if (baseline.set.has(key2)) baselined++;
+    const key = findingKey(f);
+    seen.add(key);
+    if (baseline.set.has(key)) baselined++;
     else kept.push(f);
   }
   const fixed = [...baseline.set].filter((k) => !seen.has(k)).length;
@@ -27813,8 +27595,8 @@ function applyBaseline(result, baseline) {
 }
 
 // src/config.ts
-import { existsSync as existsSync6, readFileSync as readFileSync8 } from "node:fs";
-import { dirname as dirname5, isAbsolute as isAbsolute4, join as join10, resolve as resolve4 } from "node:path";
+import { existsSync as existsSync5, readFileSync as readFileSync8 } from "node:fs";
+import { dirname as dirname4, isAbsolute as isAbsolute3, join as join8, resolve as resolve4 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // src/registry.ts
@@ -27827,7 +27609,6 @@ function registryApplies(raw, dsPackages) {
   if (!declared.length) return true;
   return (dsPackages ?? []).some((p) => declared.includes(p));
 }
-var registryPackages = (raw) => declaredPackages(raw);
 
 // src/components.ts
 var isEntry = (c) => Boolean(c?.name && c?.package && c?.status);
@@ -27895,24 +27676,24 @@ function findConfig(start) {
   let dir = resolve4(start);
   for (; ; ) {
     for (const name of CONFIG_NAMES) {
-      const p = join10(dir, name);
-      if (existsSync6(p)) return p;
+      const p = join8(dir, name);
+      if (existsSync5(p)) return p;
     }
-    const pkg = join10(dir, "package.json");
-    if (existsSync6(pkg)) {
+    const pkg = join8(dir, "package.json");
+    if (existsSync5(pkg)) {
       try {
         const parsed = JSON.parse(readFileSync8(pkg, "utf8"));
         if (isObj(parsed) && parsed.loupe) return pkg;
       } catch {
       }
     }
-    const up = dirname5(dir);
+    const up = dirname4(dir);
     if (up === dir) return null;
     dir = up;
   }
 }
 async function readConfigFile(path) {
-  if (path.startsWith(PRESET_DIR) && !existsSync6(path)) {
+  if (path.startsWith(PRESET_DIR) && !existsSync5(path)) {
     const embedded = EMBEDDED_PRESETS[presetKey(path.slice(PRESET_DIR.length + 1).replace(/\.json$/, ""))];
     if (embedded) return embedded;
   }
@@ -27923,12 +27704,10 @@ async function readConfigFile(path) {
   const mod = await import(pathToFileURL(path).href);
   return mod.default ?? mod;
 }
-var presetPath = (spec) => join10(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, "")}.json`);
 async function resolveExtends(spec, fromDir) {
-  const asPreset = presetPath(spec);
-  if (hasPreset(spec)) return { path: asPreset, dir: PRESET_DIR };
-  const asPath = isAbsolute4(spec) ? spec : join10(fromDir, spec);
-  if (existsSync6(asPath)) return { path: asPath, dir: dirname5(asPath) };
+  if (hasPreset(spec)) return { path: join8(PRESET_DIR, `${presetKey(spec)}.json`), dir: PRESET_DIR };
+  const asPath = isAbsolute3(spec) ? spec : join8(fromDir, spec);
+  if (existsSync5(asPath)) return { path: asPath, dir: dirname4(asPath) };
   throw new Error(`cannot resolve extends: ${spec}`);
 }
 async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
@@ -27936,7 +27715,7 @@ async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
   if (seen.has(real)) throw new Error(`circular extends at ${real}`);
   seen.add(real);
   const raw = await readConfigFile(real) ?? {};
-  return expandExtends(raw, dirname5(real), seen);
+  return expandExtends(raw, dirname4(real), seen);
 }
 async function expandExtends(raw, fromDir, seen = /* @__PURE__ */ new Set()) {
   if (!raw?.extends) return raw ?? {};
@@ -27950,9 +27729,8 @@ async function expandExtends(raw, fromDir, seen = /* @__PURE__ */ new Set()) {
   return merge(base, rest);
 }
 function listPresets() {
-  return presetNames().sort((a, b) => a === "generic" ? 1 : b === "generic" ? -1 : a.localeCompare(b));
+  return presetNames().sort((a, b) => Number(a === "generic") - Number(b === "generic"));
 }
-var presetExists = (name) => hasPreset(name);
 function shippedVocabulary() {
   const keywords = /* @__PURE__ */ new Set([DEFAULTS.suppression.keyword]);
   const blanket = new Set(DEFAULTS.suppression.blanket);
@@ -27981,35 +27759,18 @@ function compilePatterns(patterns) {
 function normalize(raw, { root: root2 }) {
   const cfg = merge(DEFAULTS, raw ?? {});
   const ds = cfg.designSystem;
-  let patterns = [];
-  if (Array.isArray(cfg.patterns)) patterns = loadPatterns(cfg.patterns);
-  else if (typeof cfg.patterns === "string") {
-    const p = isAbsolute4(cfg.patterns) ? cfg.patterns : join10(root2, cfg.patterns);
-    try {
-      const raw2 = JSON.parse(readFileSync8(p, "utf8"));
-      patterns = registryApplies(raw2, ds.packages) ? loadPatterns(raw2) : [];
-    } catch {
-      patterns = [];
-    }
-  }
-  let componentRegistry = /* @__PURE__ */ new Map();
-  if (Array.isArray(cfg.componentRegistry)) componentRegistry = loadComponents(cfg.componentRegistry);
-  else if (typeof cfg.componentRegistry === "string") {
-    const p = isAbsolute4(cfg.componentRegistry) ? cfg.componentRegistry : join10(root2, cfg.componentRegistry);
-    try {
-      const raw2 = JSON.parse(readFileSync8(p, "utf8"));
-      componentRegistry = registryApplies(raw2, ds.packages) ? loadComponents(raw2) : /* @__PURE__ */ new Map();
-    } catch {
-      componentRegistry = /* @__PURE__ */ new Map();
-    }
-  }
-  const rules = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity, options: {} }]));
+  const patterns = readRegistry(cfg.patterns, root2, ds.packages, loadPatterns, []);
+  const componentRegistry = readRegistry(cfg.componentRegistry, root2, ds.packages, loadComponents, /* @__PURE__ */ new Map());
+  const rules = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity }]));
   for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
     const id = canonicalRuleId(rawId);
     if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
-    const [sev, opts] = Array.isArray(value) ? value : [value, {}];
-    if (!isSeverity(sev)) throw new Error(`bad severity for ${rawId}: ${String(sev)}`);
-    rules[id] = { severity: sev, options: { ...opts } };
+    const sev = value;
+    if (!isSeverity(sev))
+      throw new Error(
+        Array.isArray(sev) ? `rule options are no longer supported \u2014 write "${rawId}": ${JSON.stringify(sev[0])}` : `bad severity for ${rawId}: ${String(sev)}`
+      );
+    rules[id] = { severity: sev };
   }
   const elementMap = /* @__PURE__ */ new Map();
   for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
@@ -28026,22 +27787,6 @@ function normalize(raw, { root: root2 }) {
     throw new Error(`designSystem.styleSources must be an array of paths, got: ${JSON.stringify(styleSources)}`);
   const layoutComponents = ds.components?.layout ?? [];
   const textComponents = ds.components?.text ?? [];
-  const hasPackages = (ds.packages ?? []).length > 0;
-  const hasComponents = hasPackages && layoutComponents.length + textComponents.length > 0;
-  const capability = {
-    packages: hasPackages,
-    components: hasComponents,
-    layoutComponents: hasComponents && layoutComponents.length > 0,
-    textComponents: hasComponents && textComponents.length > 0,
-    elementMap: elementMap.size > 0,
-    tokenPrefixes: (ds.tokenPrefixes || []).length > 0,
-    patternRegistry: hasPackages && patterns.length > 0,
-    componentRegistry: componentRegistry.size > 0,
-    projectNamespace: (cfg.namespaces.project ?? []).length > 0
-  };
-  const enabled2 = Object.fromEntries(
-    RULE_IDS.map((id) => [id, RULES[id].needs.every((n) => capability[n]) && rules[id].severity !== "off"])
-  );
   const shipped = shippedVocabulary();
   const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
   const isTerm = (v) => typeof v === "string" && v !== "";
@@ -28058,7 +27803,7 @@ function normalize(raw, { root: root2 }) {
   const neverDead = compilePatterns(cfg.namespaces.neverDead);
   const projectPrefixes = cfg.namespaces.project ?? [];
   const externalPrefixes = cfg.namespaces.external ?? [];
-  return {
+  const config = {
     root: root2,
     raw: cfg,
     // Overwritten by `loadConfig`, which knows which of the five resolution
@@ -28086,35 +27831,52 @@ function normalize(raw, { root: root2 }) {
     baselinePath: cfg.baseline,
     hook: cfg.hook,
     rules,
-    enabled: enabled2,
-    severityOf: (id) => rules[id]?.severity ?? "warn",
-    optionsOf: (id) => rules[id]?.options ?? {},
+    severityOf: (id) => rules[id].severity,
     isProject: (cls) => projectPrefixes.some((p) => cls.startsWith(p)),
     isExternal: (cls) => externalPrefixes.some((p) => cls.startsWith(p)),
     isNeverDead: (cls) => neverDead.some((re) => re.test(cls))
   };
+  return { ...config, enabled: enabledRules(config) };
+}
+function readRegistry(spec, root2, packages, load, empty) {
+  if (!Array.isArray(spec) && typeof spec !== "string") return empty;
+  try {
+    const raw = typeof spec === "string" ? JSON.parse(readFileSync8(isAbsolute3(spec) ? spec : join8(root2, spec), "utf8")) : spec;
+    return registryApplies(raw, packages) ? load(raw) : empty;
+  } catch {
+    return empty;
+  }
+}
+function enabledRules(config) {
+  const ds = config.designSystem;
+  const hasPackages = ds.packages.length > 0;
+  const hasComponents = hasPackages && ds.layoutComponents.length + ds.textComponents.length > 0;
+  const capability = {
+    packages: hasPackages,
+    components: hasComponents,
+    layoutComponents: hasComponents && ds.layoutComponents.length > 0,
+    textComponents: hasComponents && ds.textComponents.length > 0,
+    elementMap: ds.elementMap.size > 0,
+    tokenPrefixes: ds.tokenPrefixes.length > 0,
+    patternRegistry: hasPackages && config.patterns.length > 0,
+    componentRegistry: config.componentRegistry.size > 0,
+    projectNamespace: (config.raw.namespaces.project ?? []).length > 0
+  };
+  return Object.fromEntries(
+    RULE_IDS.map((id) => [
+      id,
+      RULES[id].needs.every((n) => capability[n]) && config.rules[id].severity !== "off"
+    ])
+  );
 }
 function setPatterns(config, patterns) {
   config.patterns = patterns ?? [];
-  const hasRegistry = config.patterns.length > 0 && // The same `patternRegistry` capability normalization computes above,
-  // restated rather than recomputed. A composite is only ever built from
-  // names imported out of `designSystem.packages`, so a config declaring
-  // none can never produce one — and `status` reported the rule active
-  // anyway. The layout/text lists are deliberately not part of this: a
-  // headless library has none and still composes.
-  config.designSystem.packages.length > 0;
-  for (const rule2 of [
-    "patterns/duplicate-composite",
-    "patterns/superseded-composite",
-    "patterns/judged-redirect"
-  ])
-    config.enabled[rule2] = hasRegistry && config.severityOf(rule2) !== "off";
+  config.enabled = enabledRules(config);
   return config;
 }
 function setComponentRegistry(config, componentRegistry) {
   config.componentRegistry = componentRegistry ?? /* @__PURE__ */ new Map();
-  config.enabled["system/locked-component"] = config.componentRegistry.size > 0 && config.severityOf("system/locked-component") !== "off";
-  config.enabled["system/superseded-component"] = config.componentRegistry.size > 0 && config.severityOf("system/superseded-component") !== "off";
+  config.enabled = enabledRules(config);
   return config;
 }
 async function loadConfig({
@@ -28130,8 +27892,8 @@ async function loadConfig({
     raw = await loadChain(resolve4(configPath));
     source = { kind: "file", path: resolve4(configPath) };
   } else if (preset2) {
-    if (!presetExists(preset2)) throw new Error(`unknown preset: ${preset2}`);
-    raw = await loadChain(join10(PRESET_DIR, `${preset2}.json`));
+    if (!hasPreset(preset2)) throw new Error(`unknown preset: ${preset2}`);
+    raw = await loadChain(join8(PRESET_DIR, `${presetKey(preset2)}.json`));
     source = { kind: "preset", name: preset2 };
   } else {
     const found = findConfig(root2);
@@ -28142,7 +27904,7 @@ async function loadConfig({
       raw = await expandExtends(inline, root2);
       source = { kind: inferred ? "inferred" : "inline" };
     } else {
-      raw = await loadChain(join10(PRESET_DIR, "generic.json"));
+      raw = await loadChain(join8(PRESET_DIR, "generic.json"));
       source = { kind: "preset", name: "generic" };
     }
   }
@@ -28158,7 +27920,7 @@ var enabled = NO_COLOR ? false : FORCE_COLOR ? FORCE_COLOR !== "0" : Boolean(pro
 var setColor = (on) => {
   enabled = on;
 };
-var paint = (code) => (text) => enabled ? `\x1B[${code}m${text}\x1B[0m` : text;
+var paint = (code) => (text2) => enabled ? `\x1B[${code}m${text2}\x1B[0m` : text2;
 var bold = paint("1");
 var dim = paint("2");
 var red = paint("31");
@@ -28246,21 +28008,17 @@ function formatAgent(result, config, { maxFindings = 0, terse = false } = {}) {
     const groups = [...byRule.entries()].sort((a, b) => RULES[b[0]].rank - RULES[a[0]].rank);
     const quota = new Map(groups.map(([id]) => [id, 0]));
     let budget = maxFindings > 0 ? maxFindings : Infinity;
-    if (budget !== Infinity) {
-      let progress = true;
-      while (budget > 0 && progress) {
-        progress = false;
-        for (const [id, group] of groups) {
-          if (budget <= 0) break;
-          const taken = quota.get(id) ?? 0;
-          if (taken >= group.length) continue;
-          quota.set(id, taken + 1);
-          budget--;
-          progress = true;
-        }
+    let progress = true;
+    while (budget > 0 && progress) {
+      progress = false;
+      for (const [id, group] of groups) {
+        if (budget <= 0) break;
+        const taken = quota.get(id) ?? 0;
+        if (taken >= group.length) continue;
+        quota.set(id, taken + 1);
+        budget--;
+        progress = true;
       }
-    } else {
-      for (const [id, group] of groups) quota.set(id, group.length);
     }
     let hidden = 0;
     for (const [ruleId, group] of groups) {
@@ -28335,10 +28093,10 @@ function usedRules(result, config) {
 function fingerprints(findings) {
   const seen = /* @__PURE__ */ new Map();
   return findings.map((f) => {
-    const key2 = findingKey(f);
-    const nth = seen.get(key2) ?? 0;
-    seen.set(key2, nth + 1);
-    return createHash2("sha256").update(nth === 0 ? key2 : `${key2}|#${nth}`).digest("hex").slice(0, 16);
+    const key = findingKey(f);
+    const nth = seen.get(key) ?? 0;
+    seen.set(key, nth + 1);
+    return createHash2("sha256").update(nth === 0 ? key : `${key}|#${nth}`).digest("hex").slice(0, 16);
   });
 }
 function reportPayload(result, config) {
@@ -28367,9 +28125,6 @@ function reportPayload(result, config) {
     parseErrors: result.diagnostics.parseErrors,
     config: { rules: config.rules, enabled: config.enabled }
   };
-}
-function formatJson(result, config) {
-  return JSON.stringify(reportPayload(result, config), null, 2);
 }
 function formatSarif(result, config) {
   const title = titleFor(config);
@@ -28425,48 +28180,22 @@ function formatSarif(result, config) {
 var embed = (json) => json.replace(/</g, "\\u003c");
 var CSS = `
 :root {
-  color-scheme: light;
-  --surface: #fcfcfb;
-  --plane: #f9f9f7;
-  --ink: #0b0b0b;
-  --ink-2: #52514e;
+  color-scheme: light dark;
+  --surface: light-dark(#fcfcfb, #1a1a19);
+  --plane: light-dark(#f9f9f7, #0d0d0d);
+  --ink: light-dark(#0b0b0b, #ffffff);
+  --ink-2: light-dark(#52514e, #c3c2b7);
   --ink-muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --hairline: rgba(11,11,11,0.10);
+  --grid: light-dark(#e1e0d9, #2c2c2a);
+  --axis: light-dark(#c3c2b7, #383835);
+  --hairline: light-dark(rgba(11,11,11,0.10), rgba(255,255,255,0.10));
   --sev-error: #d03b3b;
   --sev-warn: #fab219;
-  --seq: #2a78d6;
-  --track: rgba(11,11,11,0.06);
+  --seq: light-dark(#2a78d6, #3987e5);
+  --track: light-dark(rgba(11,11,11,0.06), rgba(255,255,255,0.08));
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --surface: #1a1a19;
-    --plane: #0d0d0d;
-    --ink: #ffffff;
-    --ink-2: #c3c2b7;
-    --ink-muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --hairline: rgba(255,255,255,0.10);
-    --seq: #3987e5;
-    --track: rgba(255,255,255,0.08);
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --surface: #1a1a19;
-  --plane: #0d0d0d;
-  --ink: #ffffff;
-  --ink-2: #c3c2b7;
-  --ink-muted: #898781;
-  --grid: #2c2c2a;
-  --axis: #383835;
-  --hairline: rgba(255,255,255,0.10);
-  --seq: #3987e5;
-  --track: rgba(255,255,255,0.08);
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -28561,6 +28290,7 @@ var JS = `
   var state = { rule: null, severity: null, q: '' };
   var MARK = { error: '\\u2717', warn: '\\u2022' };
   var WORD = { error: 'blocking', warn: 'advisory' };
+  var byRank = new Map(data.rules.map(function (r) { return [r.id, r]; }));
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -28655,8 +28385,6 @@ var JS = `
 
   function renderRules(rows) {
     var counts = tally(rows, function (f) { return f.rule; });
-    var byRank = new Map();
-    data.rules.forEach(function (r) { byRank.set(r.id, r); });
     // Frequency order, deliberately not the agent format's rank order. The two
     // answer different questions \u2014 rank is "fix this first", length is "there is
     // the most of this" \u2014 and a bar chart sorted by neither its own lengths nor a
@@ -28734,8 +28462,6 @@ var JS = `
       if (!groups.has(f.rule)) groups.set(f.rule, []);
       groups.get(f.rule).push(f);
     });
-    var byRank = new Map();
-    data.rules.forEach(function (r) { byRank.set(r.id, r); });
     var order = Array.from(groups.entries()).sort(function (a, b) {
       var ra = byRank.get(a[0]), rb = byRank.get(b[0]);
       return b[1].length - a[1].length || (rb ? rb.rank : 0) - (ra ? ra.rank : 0);
@@ -28801,23 +28527,8 @@ var JS = `
 function body(payload, clean, parseErrors) {
   const banner = parseErrors ? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely \u2014 ${clean ? "a clean result covers only what could be read" : "every number below is a floor, not a total"}. See <code>stylesheet/unparsed</code>.</div>
 ` : "";
-  if (clean) {
-    return `<!-- loupe:begin -->
-<style>${CSS}</style>
-<div class="wrap">
-  <h1>Loupe</h1>
-  <p class="sub">Design-system conformance report</p>
-${banner}  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
-</div>
-<script type="application/json" id="loupe-data">${payload}</script>
-<!-- loupe:end -->`;
-  }
-  return `<!-- loupe:begin -->
-<style>${CSS}</style>
-<div class="wrap">
-  <h1>Loupe</h1>
-  <p class="sub">Design-system conformance report</p>
-${banner}  <div class="kpis" id="kpis"></div>
+  const main2 = clean ? `  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
+</div>` : `  <div class="kpis" id="kpis"></div>
 
   <div class="filters">
     <input type="search" id="q" placeholder="Filter by file, rule or value\u2026" aria-label="Filter findings">
@@ -28852,8 +28563,14 @@ ${banner}  <div class="kpis" id="kpis"></div>
   </div>
 </div>
 <div id="tip" role="status" aria-live="polite"></div>
+<script>${JS}</script>`;
+  return `<!-- loupe:begin -->
+<style>${CSS}</style>
 <script type="application/json" id="loupe-data">${payload}</script>
-<script>${JS}</script>
+<div class="wrap">
+  <h1>Loupe</h1>
+  <p class="sub">Design-system conformance report</p>
+${banner}${main2}
 <!-- loupe:end -->`;
 }
 function formatHtml(result, config) {
@@ -28874,8 +28591,8 @@ ${body(payload, clean, result.diagnostics.parseErrors.length)}
 }
 
 // src/detect.ts
-import { existsSync as existsSync7, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
-import { join as join11 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
+import { join as join9 } from "node:path";
 var readJson = (p) => {
   try {
     return JSON.parse(readFileSync9(p, "utf8"));
@@ -28890,12 +28607,12 @@ function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
   const walk = (dir, rel, depth) => {
     if (depth > maxDepth || out.length >= budget) return;
-    const pkg = join11(dir, "package.json");
-    if (existsSync7(pkg)) out.push({ dir, rel });
+    const pkg = join9(dir, "package.json");
+    if (existsSync6(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
     for (const e of readDir(dir)) {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walk(join11(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      walk(join9(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(root2, "", 0);
@@ -28903,8 +28620,8 @@ function manifests(root2, maxDepth = 3, budget = 60) {
 }
 function markerAt(dir, marker) {
   const name = marker.replace(/\/$/, "");
-  const full = join11(dir, name);
-  if (!existsSync7(full)) return false;
+  const full = join9(dir, name);
+  if (!existsSync6(full)) return false;
   if (!marker.endsWith("/")) return true;
   try {
     return statSync3(full).isDirectory();
@@ -28916,7 +28633,7 @@ function probeDirs(root2) {
   const out = [{ dir: root2, rel: "" }];
   for (const e of readDir(root2)) {
     if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-    out.push({ dir: join11(root2, e.name), rel: e.name });
+    out.push({ dir: join9(root2, e.name), rel: e.name });
   }
   return out;
 }
@@ -28924,7 +28641,7 @@ var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? det
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson(join11(root2, rel, "package.json")) ?? {};
+      const pkg = readJson(join9(root2, rel, "package.json")) ?? {};
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
       const first = hit[0];
@@ -28966,7 +28683,7 @@ function matchPreset(name, detect, root2, found) {
 }
 function detectPreset(root2) {
   const found = manifests(root2);
-  const candidates = presetNames().map((name) => ({ name, detect: preset(name).detect })).filter((c) => c.detect !== void 0).sort((a, b) => (b.detect.priority ?? 0) - (a.detect.priority ?? 0) || a.name.localeCompare(b.name));
+  const candidates = presetNames().map((name) => ({ name, detect: preset(name).detect })).filter((c) => c.detect !== void 0).sort((a, b) => (b.detect.priority ?? 0) - (a.detect.priority ?? 0) || byBytes(a.name, b.name));
   for (const { name, detect } of candidates) {
     const hit = matchPreset(name, detect, root2, found);
     if (hit) return hit;
@@ -28980,6 +28697,10 @@ function detectPreset(root2) {
   };
 }
 var CLASS_RE = /\.(-?[_a-zA-Z][\w-]*)/g;
+var prefixOf = (cls) => {
+  const i = cls?.indexOf("-") ?? -1;
+  return cls && i >= 1 ? cls.slice(0, i + 1) : null;
+};
 function libraryPrefixes(dirs, candidates) {
   const want = new Set(candidates);
   const found = /* @__PURE__ */ new Set();
@@ -28989,82 +28710,60 @@ function libraryPrefixes(dirs, candidates) {
     if (depth > 4 || budget <= 0 || !want.size) return;
     for (const e of readDir(dir)) {
       if (budget <= 0 || !want.size) return;
-      const full = join11(dir, e.name);
+      const full = join9(dir, e.name);
       if (e.isDirectory()) {
         if (e.name === ".bin" || e.name === "node_modules") continue;
         walk(full, depth + 1);
       } else if (e.name.endsWith(".css") && !e.name.endsWith(".min.css")) {
         budget--;
-        let text;
+        let text2;
         try {
-          text = readFileSync9(full, "utf8");
+          text2 = readFileSync9(full, "utf8");
         } catch {
           continue;
         }
-        if (text.length > 2e6) continue;
-        for (const m of text.matchAll(CLASS_RE)) {
-          const cls = m[1];
-          if (cls === void 0) continue;
-          const i = cls.indexOf("-");
-          if (i < 1) continue;
-          const prefix = cls.slice(0, i + 1);
-          if (want.delete(prefix)) found.add(prefix);
+        if (text2.length > 2e6) continue;
+        for (const m of text2.matchAll(CLASS_RE)) {
+          const prefix = prefixOf(m[1]);
+          if (prefix && want.delete(prefix)) found.add(prefix);
         }
       }
     }
   };
-  for (const dir of dirs) if (existsSync7(dir)) walk(dir, 0);
+  for (const dir of dirs) if (existsSync6(dir)) walk(dir, 0);
   return found;
 }
 function resolvePreset(name, seen = /* @__PURE__ */ new Set()) {
   if (seen.has(name)) return {};
   seen.add(name);
-  const raw = preset(name);
-  if (!raw.extends) return raw;
-  const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
-  let base = {};
-  for (const spec of specs) {
-    const parent = resolvePreset(String(spec).replace(/^loupe\/presets\//, ""), seen);
-    base = {
-      ...base,
-      ...parent,
-      namespaces: { ...base.namespaces ?? {}, ...parent.namespaces ?? {} },
-      sources: { ...base.sources ?? {}, ...parent.sources ?? {} }
-    };
-  }
-  return {
-    ...base,
-    ...raw,
-    namespaces: { ...base.namespaces ?? {}, ...raw.namespaces ?? {} },
-    sources: { ...base.sources ?? {}, ...raw.sources ?? {} }
-  };
+  const { extends: parents, ...raw } = preset(name);
+  const specs = parents === void 0 ? [] : Array.isArray(parents) ? parents : [parents];
+  const base = specs.reduce((acc, spec) => merge(acc, resolvePreset(presetKey(spec), seen)), {});
+  return merge(base, raw);
 }
 function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const base = resolvePreset(presetName);
-  const generic = resolvePreset("generic");
-  const sources = { ...generic.sources, ...base.sources ?? {} };
+  const sources = merge(DEFAULTS.sources, base.sources);
   const files = discover({ root: root2, sources, limit });
   const others = presetNames().filter((n) => n !== presetName).map((n) => resolvePreset(n));
   const external = [...base.namespaces?.external ?? [], ...others.flatMap((p) => p.namespaces?.external ?? [])];
-  const neverDead = [
+  const neverDead = compilePatterns([
     ...base.namespaces?.neverDead ?? [],
     ...others.flatMap((p) => p.namespaces?.neverDead ?? [])
-  ].map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`));
+  ]);
   const isExcluded = (cls) => external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
   const cssCounts = /* @__PURE__ */ new Map();
   for (const { abs } of files.styles) {
-    let text;
+    let text2;
     try {
-      text = readFileSync9(abs, "utf8");
+      text2 = readFileSync9(abs, "utf8");
     } catch {
       continue;
     }
-    for (const m of text.matchAll(CLASS_RE)) {
+    for (const m of text2.matchAll(CLASS_RE)) {
       const cls = m[1];
-      if (cls === void 0 || isExcluded(cls)) continue;
-      const idx = cls.indexOf("-");
-      if (idx < 1) continue;
-      const prefix = cls.slice(0, idx + 1);
+      const prefix = prefixOf(cls);
+      if (cls === void 0 || !prefix || isExcluded(cls)) continue;
       cssCounts.set(prefix, (cssCounts.get(prefix) ?? 0) + 1);
     }
   }
@@ -29078,7 +28777,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const haystack = markupText.join("\n");
   const candidates = [...cssCounts.entries()].filter(([prefix, count]) => count >= 3 && haystack.includes(prefix)).sort((a, b) => b[1] - a[1]);
   const vendored = libraryPrefixes(
-    [join11(root2, "node_modules"), ...packageDir ? [join11(root2, packageDir, "node_modules")] : []],
+    [join9(root2, "node_modules"), ...packageDir ? [join9(root2, packageDir, "node_modules")] : []],
     candidates.map(([p]) => p)
   );
   const accepted = [];
@@ -29130,22 +28829,21 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/profiles.ts
-import { existsSync as existsSync8, readFileSync as readFileSync10 } from "node:fs";
-import { isAbsolute as isAbsolute5, join as join12, resolve as resolve5 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync10 } from "node:fs";
+import { isAbsolute as isAbsolute4, join as join10, resolve as resolve5 } from "node:path";
 var readJson2 = (p) => JSON.parse(readFileSync10(p, "utf8"));
-var under = (dir, rel) => isAbsolute5(rel) ? rel : join12(dir, rel);
+var under = (dir, rel) => isAbsolute4(rel) ? rel : join10(dir, rel);
 var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString = (v) => typeof v === "string" && v !== "" ? v : null;
-var byBytes = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function readProfiles(root2) {
-  if (!root2 || !existsSync8(root2)) return [];
+  if (!root2 || !existsSync7(root2)) return [];
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   for (const e of readDir(root2)) {
     if (!e.isDirectory()) continue;
-    const dir = join12(root2, e.name);
-    const manifest = join12(dir, "profile.json");
-    if (!existsSync8(manifest)) continue;
+    const dir = join10(root2, e.name);
+    const manifest = join10(dir, "profile.json");
+    if (!existsSync7(manifest)) continue;
     try {
       const raw = readJson2(manifest);
       const id = asString(raw.id) ?? e.name;
@@ -29158,7 +28856,6 @@ function readProfiles(root2) {
         name: asString(raw.name) ?? asString(raw.id) ?? e.name,
         preset: asString(raw.preset),
         packages: asStrings(raw.packages),
-        skills: asStrings(raw.skills),
         patterns: patterns ? under(dir, patterns) : null,
         components: components2 ? under(dir, components2) : null,
         tokenDescriptions: tokenDescriptions2 ? under(dir, tokenDescriptions2) : null,
@@ -29176,71 +28873,50 @@ function selectProfiles(profiles, config, force = null) {
   if (!pkgs.length) return [];
   return profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
 }
-function applyRegistries(config, sources, {
-  setPatterns: setPatterns2,
-  setComponentRegistry: setComponentRegistry2
-}) {
+function applyRegistries(config, sources) {
   const applied = [];
   const skipped = [];
   const errors = [];
   const forced = [];
   let patterns = config.patterns ?? [];
   const components2 = new Map(config.componentRegistry ?? []);
-  let sawPatterns = false;
-  let sawComponents = false;
+  const add = {
+    patterns: (raw) => {
+      const own = new Set(patterns.map((p) => p.id));
+      const fresh = loadPatterns(raw).filter((p) => !own.has(p.id));
+      patterns = [...patterns, ...fresh];
+      return fresh.length;
+    },
+    components: (raw) => {
+      const before = components2.size;
+      for (const [key, entry] of loadComponents(raw)) if (!components2.has(key)) components2.set(key, entry);
+      return components2.size - before;
+    }
+  };
+  const saw = { patterns: false, components: false };
   for (const src of sources) {
     let used = false;
-    if (src.patterns) {
+    for (const kind of ["patterns", "components"]) {
+      const path = src[kind];
+      if (!path) continue;
       try {
-        const raw = readJson2(resolve5(src.patterns));
+        const raw = readJson2(resolve5(path));
         const inScope = registryApplies(raw, config.designSystem.packages);
-        if (src.forced || inScope) {
-          const own = new Set(patterns.map((p) => p.id));
-          const fresh = loadPatterns(raw).filter((p) => !own.has(p.id));
-          patterns = [...patterns, ...fresh];
-          sawPatterns = true;
-          used = true;
-          if (src.forced)
-            forced.push({
-              label: src.label,
-              kind: "patterns",
-              added: fresh.length,
-              offScope: inScope ? [] : registryPackages(raw)
-            });
-        } else {
-          skipped.push({ label: src.label, kind: "patterns", packages: registryPackages(raw) });
+        if (!src.forced && !inScope) {
+          skipped.push({ label: src.label, kind, packages: declaredPackages(raw) });
+          continue;
         }
+        const added = add[kind](raw);
+        saw[kind] = used = true;
+        if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
       } catch (err) {
-        errors.push(`could not read ${src.label} patterns \u2014 ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-    if (src.components) {
-      try {
-        const raw = readJson2(resolve5(src.components));
-        const inScope = registryApplies(raw, config.designSystem.packages);
-        if (src.forced || inScope) {
-          const before = components2.size;
-          for (const [key2, entry] of loadComponents(raw)) if (!components2.has(key2)) components2.set(key2, entry);
-          sawComponents = true;
-          used = true;
-          if (src.forced)
-            forced.push({
-              label: src.label,
-              kind: "components",
-              added: components2.size - before,
-              offScope: inScope ? [] : registryPackages(raw)
-            });
-        } else {
-          skipped.push({ label: src.label, kind: "components", packages: registryPackages(raw) });
-        }
-      } catch (err) {
-        errors.push(`could not read ${src.label} components \u2014 ${err instanceof Error ? err.message : String(err)}`);
+        errors.push(`could not read ${src.label} ${kind} \u2014 ${err instanceof Error ? err.message : String(err)}`);
       }
     }
     if (used) applied.push(src.label);
   }
-  if (sawPatterns) setPatterns2(config, patterns);
-  if (sawComponents) setComponentRegistry2(config, components2);
+  if (saw.patterns) setPatterns(config, patterns);
+  if (saw.components) setComponentRegistry(config, components2);
   const registryRules = [
     "patterns/duplicate-composite",
     "patterns/superseded-composite",
@@ -29276,22 +28952,15 @@ function applyRegistries(config, sources, {
 }
 
 // src/hook.ts
-import { existsSync as existsSync9, readFileSync as readFileSync11, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute6, join as join13, relative as relative3, sep as sep3 } from "node:path";
+import { existsSync as existsSync8, readFileSync as readFileSync11, writeFileSync as writeFileSync3 } from "node:fs";
+import { dirname as dirname5, isAbsolute as isAbsolute5, join as join11, relative as relative3 } from "node:path";
 import { homedir } from "node:os";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
-async function readStdin() {
-  if (process.stdin.isTTY) return "";
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  return Buffer.concat(chunks).toString("utf8");
-}
+var readStdin = async () => process.stdin.isTTY ? "" : text(process.stdin);
 function readState(root2) {
   try {
-    const p = attemptsPath(root2);
-    if (!p) return { sessions: {} };
-    const raw = JSON.parse(readFileSync11(p, "utf8"));
+    const raw = JSON.parse(readFileSync11(attemptsPath(root2), "utf8"));
     const now = Date.now();
     const sessions = {};
     for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -29303,8 +28972,9 @@ function readState(root2) {
 }
 function writeState(root2, state) {
   try {
-    const p = attemptsPath(root2, true);
-    if (p) writeFileSync3(p, JSON.stringify(state));
+    const p = attemptsPath(root2);
+    ensureDir(dirname5(p));
+    writeFileSync3(p, JSON.stringify(state));
   } catch {
   }
 }
@@ -29332,95 +29002,57 @@ function parsePayload(raw) {
   }
 }
 function payloadFile(payload, root2) {
-  const raw = payload?.tool_input?.file_path ?? payload?.tool_input?.filePath;
+  const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute6(raw) ? raw : join13(root2, raw);
+  const abs = isAbsolute5(raw) ? raw : join11(root2, raw);
   const rel = relative3(root2, abs);
   if (!rel || rel.startsWith("..")) return null;
-  return rel.split(sep3).join("/");
+  return toPosix(rel);
 }
 function hookRoot() {
   const fromEnv = process.env.CLAUDE_PROJECT_DIR;
-  if (fromEnv && existsSync9(fromEnv)) return fromEnv;
+  if (fromEnv && existsSync8(fromEnv)) return fromEnv;
   return process.cwd();
 }
 var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
 var hookSilenced = () => isOn(process.env.LOUPE_OFF);
-function pluginOptions() {
-  const get = (key2) => {
-    const v = process.env[`CLAUDE_PLUGIN_OPTION_${key2.toUpperCase()}`];
-    return v === void 0 || v === "" ? void 0 : v;
-  };
-  const bool = (key2) => {
-    const v = get(key2);
-    return v === void 0 ? void 0 : isOn(v);
-  };
-  const num = (key2) => {
-    const v = Number(get(key2));
-    return Number.isFinite(v) ? v : void 0;
-  };
-  const list2 = (key2) => {
-    const v = get(key2);
-    if (v === void 0) return void 0;
-    if (v.startsWith("[")) {
-      try {
-        const parsed = JSON.parse(v);
-        if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
-      } catch {
-      }
-    }
-    return v.split(/[,\s]+/).filter(Boolean);
-  };
-  return {
-    preset: get("preset"),
-    projectPrefixes: list2("project_prefixes"),
-    blocking: bool("blocking"),
-    maxAttempts: num("max_attempts"),
-    maxFindings: num("max_findings")
-  };
-}
+var OPTION_KEYS = ["preset", "project_prefixes", "blocking", "max_attempts", "max_findings"];
 function resolvedOptions() {
-  const fromEnv = pluginOptions();
+  const fromEnv = coerce(
+    Object.fromEntries(OPTION_KEYS.map((k) => [k, process.env[`CLAUDE_PLUGIN_OPTION_${k.toUpperCase()}`]]))
+  );
   if (Object.values(fromEnv).some((v) => v !== void 0)) return { options: fromEnv, source: "environment" };
-  const name = pluginName();
-  if (!name) return { options: fromEnv, source: "none" };
   for (const file of ["settings.local.json", "settings.json"]) {
     try {
-      const raw = JSON.parse(readFileSync11(join13(homedir(), ".claude", file), "utf8"));
+      const raw = JSON.parse(readFileSync11(join11(homedir(), ".claude", file), "utf8"));
       const configs = raw.pluginConfigs ?? {};
-      const key2 = Object.keys(configs).find((k) => k === name || k.startsWith(`${name}@`));
-      const opts = key2 === void 0 ? void 0 : configs[key2]?.options;
+      const key = Object.keys(configs).find((k) => k === "loupe" || k.startsWith("loupe@"));
+      const opts = key === void 0 ? void 0 : configs[key]?.options;
       if (opts) return { options: coerce(opts), source: "settings" };
     } catch {
     }
   }
   return { options: fromEnv, source: "none" };
 }
-function pluginName() {
-  const roots = [process.env.CLAUDE_PLUGIN_ROOT, join13(dirname6(fileURLToPath3(import.meta.url)), "..", "..")].filter(
-    (r) => Boolean(r)
-  );
-  for (const root2 of roots) {
-    try {
-      const manifest = JSON.parse(readFileSync11(join13(root2, ".claude-plugin", "plugin.json"), "utf8"));
-      return manifest.name ?? null;
-    } catch {
-    }
-  }
-  return null;
-}
 function coerce(opts) {
   const str = (v) => v === void 0 || v === null || v === "" ? void 0 : String(v);
   const num = (v) => Number.isFinite(Number(v)) && str(v) !== void 0 ? Number(v) : void 0;
   const list2 = (v) => {
-    if (Array.isArray(v)) return v.map(String).filter(Boolean);
+    let parsed = v;
+    if (typeof v === "string" && v.startsWith("[")) {
+      try {
+        parsed = JSON.parse(v);
+      } catch {
+      }
+    }
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
     const t = str(v);
     return t === void 0 ? void 0 : t.split(/[,\s]+/).filter(Boolean);
   };
   return {
     preset: str(opts.preset),
     projectPrefixes: list2(opts.project_prefixes),
-    blocking: opts.blocking === void 0 ? void 0 : isOn(String(opts.blocking)),
+    blocking: str(opts.blocking) === void 0 ? void 0 : isOn(String(opts.blocking)),
     maxAttempts: num(opts.max_attempts),
     maxFindings: num(opts.max_findings)
   };
@@ -29437,7 +29069,7 @@ function emitBlocking(report) {
 
 // src/cli.ts
 var EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
-var messageOf4 = (err) => err instanceof Error ? err.message : String(err);
+var messageOf2 = (err) => err instanceof Error ? err.message : String(err);
 function judgeKey() {
   try {
     if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(ENV_FILE);
@@ -29452,21 +29084,15 @@ var note = (msg) => {
   process.stderr.write(yellow(msg));
 };
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
-var key = (label) => dim(label);
-var HERE = dirname7(fileURLToPath4(import.meta.url));
-var SINGLE_FILE = !existsSync10(join14(HERE, "..", "package.json"));
-var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
+var HERE = dirname6(fileURLToPath2(import.meta.url));
+var SINGLE_FILE = !existsSync9(join12(HERE, "..", "package.json"));
+var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join12(HERE, "..", "..", ".env");
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
-  let version = "unknown";
-  try {
-    version = JSON.parse(readFileSync12(join14(HERE, "..", "package.json"), "utf8")).version ?? version;
-  } catch {
-  }
   const entry = basename(HERE) === "src" ? "source" : "bundle";
-  return `loupe ${version} (${entry}, ${resolve6(HERE, "..", "..")})`;
+  return `loupe ${EMBEDDED_VERSION} (${entry}, ${resolve6(HERE, "..", "..")})`;
 }
-var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${key(`"${name}"`)}:`);
+var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${dim(`"${name}"`)}:`);
 var usage = () => USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^ {2}([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
 var VALUE_FLAGS = [
   "format",
@@ -29484,23 +29110,15 @@ var VALUE_FLAGS = [
 ];
 var FORMATS = ["agent", "json", "sarif", "html"];
 var isFormat = (f) => FORMATS.includes(f);
-var isValueFlag = (key2) => VALUE_FLAGS.includes(key2);
-function parseArgs(argv) {
-  const positional = [];
-  const flags = {};
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === void 0) continue;
-    if (!a.startsWith("--")) {
-      positional.push(a);
-      continue;
-    }
-    const [key2, inline] = a.slice(2).split(/=(.*)/s);
-    if (key2 === void 0) continue;
-    if (isValueFlag(key2)) flags[key2] = inline ?? argv[++i];
-    else flags[key2] = inline === void 0 ? true : inline !== "false";
-  }
-  return { _: positional, flags };
+function parseArgs(args) {
+  const { values, positionals } = parseArgv({
+    args,
+    options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: "string" }])),
+    allowPositionals: true,
+    strict: false
+  });
+  for (const f of VALUE_FLAGS) if (typeof values[f] !== "string") delete values[f];
+  return { _: positionals, flags: values };
 }
 var USAGE = `loupe <command> [options]
 
@@ -29567,7 +29185,7 @@ var needsProject = (command, args, isHook) => {
   if (args.flags.all || args.flags.files) return false;
   return isHook || Boolean(args.flags.changed) && SCOPED_COMMANDS.has(command);
 };
-var looksLikeProject = (root2) => existsSync10(join14(root2, "package.json")) || existsSync10(join14(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
+var looksLikeProject = (root2) => existsSync9(join12(root2, "package.json")) || existsSync9(join12(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
 var CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString("en-US")}-entry ceiling`;
 var CEILING_WHY = "this root is larger than a project, so the namespaces are a guess from the part of it that was read";
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
@@ -29578,7 +29196,7 @@ function resolveScope(config, args, { defaultChanged = false }) {
   if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(" ")}` };
   if (args.flags.all) return null;
   if (args.flags.files)
-    return args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute7(f) ? relative4(config.root, resolve6(f)) : f)).filter((f) => f && !f.startsWith(".."));
+    return args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative4(config.root, resolve6(f)) : f)).filter((f) => f && !f.startsWith(".."));
   if (args.flags.changed || defaultChanged) {
     const changed = changedFiles(config.root);
     if (changed === null) return { error: NOT_A_WORKTREE };
@@ -29617,8 +29235,8 @@ async function main() {
   if (isHook && hookSilenced()) return EXIT.OK;
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
   const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
-  const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
-  if (!existsSync10(root2)) {
+  const root2 = resolve6(explicitRoot ?? (anchor ? dirname6(anchor) : process.cwd()));
+  if (!existsSync9(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
 `);
@@ -29654,7 +29272,7 @@ async function main() {
     }
     const unconfigured = !args.flags.config && !explicitPreset && !projectConfig;
     if (unconfigured && forced?.preset) {
-      if (presetExists(forced.preset)) profilePreset = forced.preset;
+      if (hasPreset(forced.preset)) profilePreset = forced.preset;
       else if (!isHook) note(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed
 `);
     }
@@ -29667,8 +29285,8 @@ async function main() {
       inferred: Boolean(detected)
     });
   } catch (err) {
-    if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf4(err)}`);
-    fail(`loupe: config error \u2014 ${messageOf4(err)}
+    if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf2(err)}`);
+    fail(`loupe: config error \u2014 ${messageOf2(err)}
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -29687,7 +29305,7 @@ async function main() {
       patterns: args.flags.patterns ?? null,
       components: args.flags.components ?? null
     });
-  const registries = applyRegistries(config, sources, { setPatterns, setComponentRegistry });
+  const registries = applyRegistries(config, sources);
   config.profiles = { available: profiles, active, ...registries };
   if (!isHook) {
     for (const err of registries.errors) fail(`loupe: ${err}
@@ -29748,29 +29366,22 @@ async function main() {
   if (command === "status") {
     const gateBlocks = blockingAllowed && !hookSilenced();
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ""}` : config.source.kind;
-    const state = stateDir(root2);
     const base = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const ds = config.designSystem;
     const orNone = (arr) => arr?.length ? arr.join(", ") : "(none)";
     const lines = [
-      `${key("version:    ")}${versionLine()}`,
-      `${key("config:     ")}${src}`,
-      `${key("system:     ")}${ds.name || "(unnamed)"}`,
-      `${key("packages:   ")}${orNone(ds.packages)}`,
-      `${key("layout:     ")}${orNone(ds.layoutComponents)}`,
-      `${key("text:       ")}${orNone(ds.textComponents)}`,
-      `${key("tokens:     ")}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(", ") : "(none \u2014 token rules inactive)"}`,
-      `${key("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
-      `${key("suppress:   ")}${config.suppression.keyword} <ruleId> -- <reason>`,
-      // A legacy hit has to say so. `loupe baseline` writes the canonical path,
-      // so an unmarked legacy path here is `status` and `baseline` naming
-      // different files with nothing on hand to reconcile them — the exact
-      // shape of the bug that pinned the baseline to the project in the first
-      // place.
-      `${key("baseline:   ")}${base.path}${base.found && readBaseline(root2, base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "legacy" ? "  (0.1.x location \u2014 run 'loupe baseline' to record it in the project)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
-      `${key("state:      ")}${state.dir}${state.scope === "plugin-data" ? "  (retry counter only, outside your repo)" : ""}`,
-      `${key("options:    ")}${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
-      `${key("plugin:     ")}${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
+      `${dim("version:    ")}${versionLine()}`,
+      `${dim("config:     ")}${src}`,
+      `${dim("system:     ")}${ds.name || "(unnamed)"}`,
+      `${dim("packages:   ")}${orNone(ds.packages)}`,
+      `${dim("layout:     ")}${orNone(ds.layoutComponents)}`,
+      `${dim("text:       ")}${orNone(ds.textComponents)}`,
+      `${dim("tokens:     ")}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(", ") : "(none \u2014 token rules inactive)"}`,
+      `${dim("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
+      `${dim("suppress:   ")}${config.suppression.keyword} <ruleId> -- <reason>`,
+      `${dim("baseline:   ")}${base.path}${base.found && readBaseline(base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
+      `${dim("options:    ")}${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
+      `${dim("plugin:     ")}${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
       // Asked through the same predicate the gate uses. Reporting on mere
       // truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
       // blocking — a diagnostic lying about the one thing it exists to say.
@@ -29783,7 +29394,7 @@ async function main() {
       // it are written for no design system in particular. Told only "archer",
       // a skill has to guess where that lives \u2014 and guesses wrong the moment
       // the profiles root is a project's own rather than the plugin's.
-      `${key("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(", ") : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
+      `${dim("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(", ") : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
       "",
       bold("rules:")
     ];
@@ -29823,14 +29434,14 @@ async function main() {
       return EXIT.OK;
     }
     const lines = [
-      `${key("preset:     ")}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
+      `${dim("preset:     ")}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
       dim(`            ${info.presetReasons.join("; ")}`),
       // What inference concluded still gets reported; it is just no longer
       // what the run uses. `init` writes the config below verbatim, so the
       // two lines disagreeing without explanation is a file someone would
       // have to reverse-engineer.
       ...profilePreset ? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`] : [],
-      `${key("namespaces: ")}${info.namespaces.project.join(", ") || "(none found)"}  ${confidence(info.namespaceConfidence)}`,
+      `${dim("namespaces: ")}${info.namespaces.project.join(", ") || "(none found)"}  ${confidence(info.namespaceConfidence)}`,
       dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
       dim(
         `scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` + (info.truncated ? `  (stopped at the ${CEILING})` : "")
@@ -29843,14 +29454,14 @@ async function main() {
 `);
       return EXIT.OK;
     }
-    const target = join14(root2, "loupe.config.json");
+    const target = join12(root2, "loupe.config.json");
     if (info.truncated && !args.flags.force) {
       fail(
         "loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. Point --root at the project, or pass --force to write it anyway.\n"
       );
       return EXIT.CANNOT_RUN;
     }
-    if (existsSync10(target) && !args.flags.force) {
+    if (existsSync9(target) && !args.flags.force) {
       fail(`loupe: ${target} already exists (use --force)
 `);
       return EXIT.CANNOT_RUN;
@@ -29885,6 +29496,12 @@ ${green(`Wrote ${target}`)}
         );
     return EXIT.OK;
   }
+  const apiKey = args.flags.judge && !isHook ? judgeKey() : void 0;
+  if (args.flags.judge && !isHook && !apiKey) {
+    fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}
+`);
+    return EXIT.CANNOT_RUN;
+  }
   if (command === "fix") {
     const fixScope = resolveScope(config, args, { defaultChanged: false });
     if (fixScope !== null && !Array.isArray(fixScope)) {
@@ -29892,45 +29509,36 @@ ${green(`Wrote ${target}`)}
 `);
       return EXIT.CANNOT_RUN;
     }
-    const key2 = args.flags.judge ? judgeKey() : void 0;
-    if (args.flags.judge && !key2) {
-      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}
-`);
-      return EXIT.CANNOT_RUN;
-    }
     let toFix;
     try {
       toFix = await analyze(config, { scope: fixScope });
-      if (key2 && toFix.tokens && toFix.findings.some((f) => f.rule === "tokens/hardcoded-value"))
-        await judgeValues(root2, toFix.findings, toFix.tokens, key2, tokenDescriptions(config.profiles?.active ?? []));
+      if (apiKey && toFix.tokens && toFix.findings.some((f) => f.rule === "tokens/hardcoded-value"))
+        await judgeValues(root2, toFix.findings, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
-      fail(`loupe: ${messageOf4(err)}
+      fail(`loupe: ${messageOf2(err)}
 `);
       return EXIT.CANNOT_RUN;
     }
     const dry = Boolean(args.flags["dry-run"]);
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
-    const kept = key2 ? applyKeeps(root2, toFix.findings, config.suppression.keyword, { dry }) : { applied: [], skipped: [] };
+    const kept = apiKey ? applyKeeps(root2, toFix.findings, config.suppression.keyword, { dry }) : { applied: [], skipped: [] };
     const verb = dry ? "would fix" : "fixed";
     const decl2 = (f) => oneLine(`${f.prop}: ${f.value}`);
     for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2192 ${green(f.to)}
 `);
-    const keptDecl = (k) => oneLine(`${k.prop}: ${k.value}`);
     for (const k of kept.applied)
       process.stdout.write(
-        `${dim(`${k.file}:${k.line}`)}  ${keptDecl(k)} \u2192 ${green(`${config.suppression.keyword}, ${k.reason}`)}
+        `${dim(`${k.file}:${k.line}`)}  ${decl2(k)} \u2192 ${green(`${config.suppression.keyword}, ${k.reason}`)}
 `
       );
     for (const f of [...skipped, ...kept.skipped])
-      process.stdout.write(
-        `${yellow("skip")} ${dim(`${f.file}:${f.line}`)}  ${"to" in f ? decl2(f) : keptDecl(f)} \u2014 ${f.why}
-`
-      );
+      process.stdout.write(`${yellow("skip")} ${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2014 ${f.why}
+`);
     const left = toFix.findings.length - applied.length - kept.applied.length;
     const nSkipped = skipped.length + kept.skipped.length;
     process.stdout.write(
       `
-loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${key2 ? `, ${dry ? "would suppress" : "suppressed"} ${kept.applied.length}` : ""}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ""}. ${left} left for review.
+loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${apiKey ? `, ${dry ? "would suppress" : "suppressed"} ${kept.applied.length}` : ""}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ""}. ${left} left for review.
 `
     );
     return EXIT.OK;
@@ -29948,14 +29556,6 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
 `);
     return EXIT.CANNOT_RUN;
   }
-  const checkKey = args.flags.judge && !isHook ? judgeKey() : void 0;
-  if (args.flags.judge && !isHook) {
-    if (!checkKey) {
-      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}
-`);
-      return EXIT.CANNOT_RUN;
-    }
-  }
   const touched = isHook ? payloadFile(payload, root2) : null;
   if (touched && !isSource(config.sources, touched)) return emitClean("loupe: skipped \u2014 not a checked file type.");
   const scope = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
@@ -29967,29 +29567,29 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
   }
   let result;
   try {
-    result = await analyze(config, { scope, judge: Boolean(checkKey) });
+    result = await analyze(config, { scope, judge: Boolean(apiKey) });
   } catch (err) {
-    if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf4(err)}`);
-    fail(`loupe: ${messageOf4(err)}
+    if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf2(err)}`);
+    fail(`loupe: ${messageOf2(err)}
 `);
     return EXIT.CANNOT_RUN;
   }
   if (!args.flags["no-baseline"]) {
     const { path: bPath, found } = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
-    const baseline = found ? readBaseline(root2, bPath) : null;
+    const baseline = found ? readBaseline(bPath) : null;
     if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
 `);
     result = applyBaseline(result, baseline);
   }
-  if (checkKey) {
+  if (apiKey) {
     try {
       if (result.controls?.length)
         result.findings.push(
-          ...await judgeRedirects(result.controls, checkKey, config.severityOf("patterns/judged-redirect"))
+          ...await judgeRedirects(result.controls, apiKey, config.severityOf("patterns/judged-redirect"))
         );
-      await judgeVariants(root2, result.findings, config.componentRegistry, checkKey);
+      await judgeVariants(root2, result.findings, config.componentRegistry, apiKey);
     } catch (err) {
-      note(`loupe: --judge skipped \u2014 ${messageOf4(err)}
+      note(`loupe: --judge skipped \u2014 ${messageOf2(err)}
 `);
     }
     try {
@@ -29998,17 +29598,17 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
           root2,
           result.findings,
           result.tokens,
-          checkKey,
+          apiKey,
           tokenDescriptions(config.profiles?.active ?? [])
         );
     } catch (err) {
-      note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf4(err)}
+      note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf2(err)}
 `);
     }
   }
   if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   if (isHook) {
-    const sessionId = payload.session_id ?? payload.sessionId ?? "";
+    const sessionId = payload.session_id ?? "";
     if (!result.blocking) {
       clearAttempts(root2, touched ? `${sessionId}\0${touched}` : sessionId);
       return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
@@ -30032,7 +29632,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
 (attempt ${attempts} of ${max})${ceilingSuffix}`);
   }
   const maxFindings = Number(args.flags["max-findings"] ?? 0) || 0;
-  if (format === "json") process.stdout.write(`${formatJson(result, config)}
+  if (format === "json") process.stdout.write(`${JSON.stringify(reportPayload(result, config), null, 2)}
 `);
   else if (format === "sarif") process.stdout.write(`${formatSarif(result, config)}
 `);

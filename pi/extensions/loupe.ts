@@ -15,15 +15,16 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(HERE, "..", "..");
 const ENGINE = join(PACKAGE_ROOT, "engine", "bin", "loupe.mjs");
 const PROFILES = join(PACKAGE_ROOT, "profiles");
+
+/** Files the engine can say something about. */
+const UI_FILE = /\.(jsx?|tsx?|s?css|less|styl)$/i;
 
 /** Build the engine command prefix with profiles. */
 function loupe(...args: string[]): string {
@@ -40,44 +41,27 @@ async function runCheck(
 	cwd: string,
 	signal?: AbortSignal,
 ): Promise<{ blocking: boolean; output: string }> {
-	const scope = files.length > 0 ? `--files ${files.join(",")}` : "--changed";
+	const scope = files.length > 0 ? ["--files", files.join(",")] : ["--changed"];
 	const result = await pi.exec(
 		"node",
-		[ENGINE, "check", scope, "--format", "agent", "--profiles", PROFILES],
+		[ENGINE, "check", ...scope, "--format", "agent", "--profiles", PROFILES],
 		{ cwd, signal, timeout: 60_000 },
 	);
 	return {
-		blocking: result.code === 2,
+		// 1 is blocking findings; 2 is the engine failing to run.
+		blocking: result.code === 1,
 		output: (result.stdout + result.stderr).trim(),
 	};
 }
 
-/** Extract the file path from an edit or write tool call's input. */
-function extractFilePath(event: { toolName: string; input: Record<string, unknown> }): string | null {
-	if (event.toolName === "edit" || event.toolName === "write") {
-		const path = event.input?.path;
-		return typeof path === "string" ? path : null;
-	}
-	return null;
-}
-
-/** Track files touched during the current agent run, keyed by turn. */
-interface RunState {
-	touchedFiles: Set<string>;
-}
-
 export default function (pi: ExtensionAPI) {
-	let runState: RunState = { touchedFiles: new Set() };
+	/** Files touched during the current agent run. */
+	const touched = new Set<string>();
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────
 
-	pi.on("session_start", () => {
-		runState = { touchedFiles: new Set() };
-	});
-
-	pi.on("agent_start", () => {
-		runState = { touchedFiles: new Set() };
-	});
+	pi.on("session_start", () => touched.clear());
+	pi.on("agent_start", () => touched.clear());
 
 	// ── PostToolUse equivalent: check the file just written ────────────────
 
@@ -85,14 +69,13 @@ export default function (pi: ExtensionAPI) {
 		if (event.toolName !== "edit" && event.toolName !== "write") return;
 		if (event.isError) return;
 
-		const filePath = extractFilePath(event);
-		if (!filePath) return;
+		const filePath = event.input?.path;
+		if (typeof filePath !== "string" || !filePath) return;
 
 		// Track for the Stop-hook equivalent at agent_end.
-		runState.touchedFiles.add(filePath);
+		touched.add(filePath);
 
-		// Skip non-UI files the engine cannot say anything about.
-		if (!/\.(jsx?|tsx?|s?css|less|styl)$/i.test(filePath)) return;
+		if (!UI_FILE.test(filePath)) return;
 
 		const { blocking, output } = await runCheck(pi, [filePath], ctx.cwd, ctx.signal);
 
@@ -115,9 +98,7 @@ export default function (pi: ExtensionAPI) {
 	// ── Stop hook equivalent: check all changed files at agent_end ─────────
 
 	pi.on("agent_end", async (_event, ctx) => {
-		const files = [...runState.touchedFiles].filter((f) =>
-			/\.(jsx?|tsx?|s?css|less|styl)$/i.test(f),
-		);
+		const files = [...touched].filter((f) => UI_FILE.test(f));
 		if (files.length === 0) return;
 
 		const { blocking, output } = await runCheck(pi, files, ctx.cwd, ctx.signal);
@@ -142,7 +123,6 @@ export default function (pi: ExtensionAPI) {
 			"Run a design-system conformance audit over the repo (or just changed files) and summarize what needs fixing",
 		handler: async (args, ctx) => {
 			const flags = args?.trim() || "--all";
-			const skillPath = join(PACKAGE_ROOT, "skills", "loupe-remediation", "SKILL.md");
 
 			const prompt = `Run the conformance engine and report what it finds, against whatever design system this project is on.
 

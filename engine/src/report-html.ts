@@ -44,59 +44,33 @@ const embed = (json: string): string => json.replace(/</g, '\\u003c');
 /**
  * Palette and chrome.
  *
- * Light values sit on bare `:root`; the dark values are declared twice — once
- * for the OS setting and once for an explicit theme stamp — so a viewer's
- * toggle wins in both directions. Severity uses the reserved status colors
- * rather than a series hue, because severity is a state, not an identity. On
- * the light surface the advisory amber falls below 3:1, which is by design for
- * that palette and carries an obligation with it: every severity is rendered
- * with its glyph and the word, never the color alone, and the findings table is
- * the table view that makes each value readable without reference to hue.
+ * Every themed value is `light-dark(light, dark)`: `color-scheme` follows the
+ * OS setting, and a `data-theme` stamp on the root overrides it either way.
+ * Severity uses the reserved status colors rather than a series hue, because
+ * severity is a state, not an identity. On the light surface the advisory amber
+ * falls below 3:1, which is by design for that palette and carries an
+ * obligation with it: every severity is rendered with its glyph and the word,
+ * never the color alone, and the findings table is the table view that makes
+ * each value readable without reference to hue.
  */
 const CSS = `
 :root {
-  color-scheme: light;
-  --surface: #fcfcfb;
-  --plane: #f9f9f7;
-  --ink: #0b0b0b;
-  --ink-2: #52514e;
+  color-scheme: light dark;
+  --surface: light-dark(#fcfcfb, #1a1a19);
+  --plane: light-dark(#f9f9f7, #0d0d0d);
+  --ink: light-dark(#0b0b0b, #ffffff);
+  --ink-2: light-dark(#52514e, #c3c2b7);
   --ink-muted: #898781;
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --hairline: rgba(11,11,11,0.10);
+  --grid: light-dark(#e1e0d9, #2c2c2a);
+  --axis: light-dark(#c3c2b7, #383835);
+  --hairline: light-dark(rgba(11,11,11,0.10), rgba(255,255,255,0.10));
   --sev-error: #d03b3b;
   --sev-warn: #fab219;
-  --seq: #2a78d6;
-  --track: rgba(11,11,11,0.06);
+  --seq: light-dark(#2a78d6, #3987e5);
+  --track: light-dark(rgba(11,11,11,0.06), rgba(255,255,255,0.08));
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --surface: #1a1a19;
-    --plane: #0d0d0d;
-    --ink: #ffffff;
-    --ink-2: #c3c2b7;
-    --ink-muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --hairline: rgba(255,255,255,0.10);
-    --seq: #3987e5;
-    --track: rgba(255,255,255,0.08);
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --surface: #1a1a19;
-  --plane: #0d0d0d;
-  --ink: #ffffff;
-  --ink-2: #c3c2b7;
-  --ink-muted: #898781;
-  --grid: #2c2c2a;
-  --axis: #383835;
-  --hairline: rgba(255,255,255,0.10);
-  --seq: #3987e5;
-  --track: rgba(255,255,255,0.08);
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -198,6 +172,7 @@ const JS = `
   var state = { rule: null, severity: null, q: '' };
   var MARK = { error: '\\u2717', warn: '\\u2022' };
   var WORD = { error: 'blocking', warn: 'advisory' };
+  var byRank = new Map(data.rules.map(function (r) { return [r.id, r]; }));
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -292,8 +267,6 @@ const JS = `
 
   function renderRules(rows) {
     var counts = tally(rows, function (f) { return f.rule; });
-    var byRank = new Map();
-    data.rules.forEach(function (r) { byRank.set(r.id, r); });
     // Frequency order, deliberately not the agent format's rank order. The two
     // answer different questions — rank is "fix this first", length is "there is
     // the most of this" — and a bar chart sorted by neither its own lengths nor a
@@ -371,8 +344,6 @@ const JS = `
       if (!groups.has(f.rule)) groups.set(f.rule, []);
       groups.get(f.rule).push(f);
     });
-    var byRank = new Map();
-    data.rules.forEach(function (r) { byRank.set(r.id, r); });
     var order = Array.from(groups.entries()).sort(function (a, b) {
       var ra = byRank.get(a[0]), rb = byRank.get(b[0]);
       return b[1].length - a[1].length || (rb ? rb.rank : 0) - (ra ? ra.rank : 0);
@@ -452,23 +423,10 @@ function body(payload: string, clean: boolean, parseErrors: number): string {
 				clean ? 'a clean result covers only what could be read' : 'every number below is a floor, not a total'
 			}. See <code>stylesheet/unparsed</code>.</div>\n`
 		: '';
-	if (clean) {
-		return `<!-- loupe:begin -->
-<style>${CSS}</style>
-<div class="wrap">
-  <h1>Loupe</h1>
-  <p class="sub">Design-system conformance report</p>
-${banner}  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
-</div>
-<script type="application/json" id="loupe-data">${payload}</script>
-<!-- loupe:end -->`;
-	}
-	return `<!-- loupe:begin -->
-<style>${CSS}</style>
-<div class="wrap">
-  <h1>Loupe</h1>
-  <p class="sub">Design-system conformance report</p>
-${banner}  <div class="kpis" id="kpis"></div>
+	const main = clean
+		? `  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
+</div>`
+		: `  <div class="kpis" id="kpis"></div>
 
   <div class="filters">
     <input type="search" id="q" placeholder="Filter by file, rule or value…" aria-label="Filter findings">
@@ -503,8 +461,14 @@ ${banner}  <div class="kpis" id="kpis"></div>
   </div>
 </div>
 <div id="tip" role="status" aria-live="polite"></div>
+<script>${JS}</script>`;
+	return `<!-- loupe:begin -->
+<style>${CSS}</style>
 <script type="application/json" id="loupe-data">${payload}</script>
-<script>${JS}</script>
+<div class="wrap">
+  <h1>Loupe</h1>
+  <p class="sub">Design-system conformance report</p>
+${banner}${main}
 <!-- loupe:end -->`;
 }
 

@@ -8,7 +8,6 @@
 			"scripts/**/*.ts",
 			"bin/**/*.mjs",
 			"build.mjs",
-			"audit-suppressions.ts",
 			"!tests/fixtures",
 			"!dist",
 			"!node_modules"

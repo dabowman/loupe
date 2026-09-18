@@ -19,7 +19,6 @@
     "tokenPrefixes": [
       "--wpds-"
     ],
-    "normalizeExports": "^__(experimental|unstable)",
     "components": {
       "layout": [
         "Stack",

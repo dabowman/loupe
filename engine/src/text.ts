@@ -21,6 +21,13 @@
  * on.
  */
 
+/** First line of an unknown throw — a parser may reject with anything. */
+export const messageOf = (err: unknown): string =>
+	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
+
+/** `s` as a literal inside a regex. */
+export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /** Every run of whitespace — newlines and tabs included — as a single space. */
 const flatten = (text: string): string => text.replace(/\s+/g, ' ');
 

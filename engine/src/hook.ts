@@ -16,10 +16,11 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 import { homedir } from 'node:os';
-import { fileURLToPath } from 'node:url';
-import { attemptsPath } from './paths.ts';
+import { text } from 'node:stream/consumers';
+import { toPosix } from './discover.ts';
+import { attemptsPath, ensureDir } from './paths.ts';
 
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
@@ -36,10 +37,8 @@ interface AttemptState {
 /** What a Claude Code hook payload carries that this cares about. */
 export interface HookPayload {
 	session_id?: string;
-	/** The camelCase spelling some payloads use instead. */
-	sessionId?: string;
 	stop_hook_active?: boolean;
-	tool_input?: { file_path?: string; filePath?: string };
+	tool_input?: { file_path?: string };
 	[key: string]: unknown;
 }
 
@@ -52,18 +51,11 @@ export interface PluginOptions {
 	maxFindings: number | undefined;
 }
 
-export async function readStdin(): Promise<string> {
-	if (process.stdin.isTTY) return '';
-	const chunks: Buffer[] = [];
-	for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
-	return Buffer.concat(chunks).toString('utf8');
-}
+export const readStdin = async (): Promise<string> => (process.stdin.isTTY ? '' : text(process.stdin));
 
 function readState(root: string): AttemptState {
 	try {
-		const p = attemptsPath(root);
-		if (!p) return { sessions: {} };
-		const raw = JSON.parse(readFileSync(p, 'utf8')) as Partial<AttemptState>;
+		const raw = JSON.parse(readFileSync(attemptsPath(root), 'utf8')) as Partial<AttemptState>;
 		const now = Date.now();
 		const sessions: Record<string, Attempt> = {};
 		for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -76,8 +68,9 @@ function readState(root: string): AttemptState {
 
 function writeState(root: string, state: AttemptState): void {
 	try {
-		const p = attemptsPath(root, true);
-		if (p) writeFileSync(p, JSON.stringify(state));
+		const p = attemptsPath(root);
+		ensureDir(dirname(p));
+		writeFileSync(p, JSON.stringify(state));
 	} catch {
 		// No writable state dir just means no retry budget tracking; never let
 		// bookkeeping failure take down the gate.
@@ -122,13 +115,13 @@ export function parsePayload(raw: string): HookPayload {
  * which the caller maps to the changed-files scope.
  */
 export function payloadFile(payload: HookPayload | null | undefined, root: string): string | null {
-	const raw = payload?.tool_input?.file_path ?? payload?.tool_input?.filePath;
+	const raw = payload?.tool_input?.file_path;
 	if (typeof raw !== 'string' || !raw) return null;
 	const abs = isAbsolute(raw) ? raw : join(root, raw);
 	const rel = relative(root, abs);
 	// Outside the project: nothing to say about it.
 	if (!rel || rel.startsWith('..')) return null;
-	return rel.split(sep).join('/');
+	return toPosix(rel);
 }
 
 /** Where the project lives, in order of trustworthiness. */
@@ -157,82 +150,36 @@ export const isOn = (v: string | undefined): boolean => v !== undefined && /^(1|
  */
 export const hookSilenced = (): boolean => isOn(process.env.LOUPE_OFF);
 
+const OPTION_KEYS = ['preset', 'project_prefixes', 'blocking', 'max_attempts', 'max_findings'] as const;
+
 /**
  * Options the user set when enabling the plugin.
  *
  * Claude Code refuses to substitute ${user_config.*} into a shell-form hook
- * command — the value would reach a shell — but it does export every option to
- * hook processes as CLAUDE_PLUGIN_OPTION_<KEY>. So read the environment.
- */
-export function pluginOptions(): PluginOptions {
-	const get = (key: string): string | undefined => {
-		const v = process.env[`CLAUDE_PLUGIN_OPTION_${key.toUpperCase()}`];
-		return v === undefined || v === '' ? undefined : v;
-	};
-	const bool = (key: string): boolean | undefined => {
-		const v = get(key);
-		return v === undefined ? undefined : isOn(v);
-	};
-	const num = (key: string): number | undefined => {
-		const v = Number(get(key));
-		return Number.isFinite(v) ? v : undefined;
-	};
-	const list = (key: string): string[] | undefined => {
-		const v = get(key);
-		if (v === undefined) return undefined;
-		// The option is a comma-separated string, but a `multiple: true` option
-		// would arrive JSON-encoded — accept both rather than silently adopting
-		// `["wf-` as a class prefix.
-		if (v.startsWith('[')) {
-			try {
-				const parsed: unknown = JSON.parse(v);
-				if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
-			} catch {
-				/* not JSON after all; fall through to the split */
-			}
-		}
-		return v.split(/[,\s]+/).filter(Boolean);
-	};
-	return {
-		preset: get('preset'),
-		projectPrefixes: list('project_prefixes'),
-		blocking: bool('blocking'),
-		maxAttempts: num('max_attempts'),
-		maxFindings: num('max_findings'),
-	};
-}
-
-/**
- * The same options, for a run that is not a hook.
- *
- * Claude Code exports `CLAUDE_PLUGIN_OPTION_*` to hook processes only — not to
- * terminals, and not to tool calls. So `status`, whose entire job is to say
- * what the gate will actually do, could never see the blocking switch and
- * reported every inferred config as advisory no matter how it was configured.
- * A diagnostic that cannot observe the setting it is diagnosing is worse than
- * no diagnostic: it sends you looking for the bug somewhere else.
- *
- * The values are in the settings file, under a key naming this plugin. Read
- * them there when the environment has nothing to say, and report the source so
- * a stale answer is recognizable as one.
- *
+ * command, but it exports every option to hook processes as
+ * CLAUDE_PLUGIN_OPTION_<KEY> — to hook processes only, not to terminals or
+ * tool calls. So `status`, whose entire job is to say what the gate will
+ * actually do, could not see the blocking switch from a terminal. The values
+ * are also in the settings file, under this plugin's key: read them there when
+ * the environment has nothing to say, and report the source so a stale answer
+ * is recognizable as one.
  */
 export function resolvedOptions(): {
 	options: PluginOptions;
 	source: 'environment' | 'settings' | 'none';
 } {
-	const fromEnv = pluginOptions();
+	const fromEnv = coerce(
+		Object.fromEntries(OPTION_KEYS.map((k) => [k, process.env[`CLAUDE_PLUGIN_OPTION_${k.toUpperCase()}`]])),
+	);
 	if (Object.values(fromEnv).some((v) => v !== undefined)) return { options: fromEnv, source: 'environment' };
 
-	const name = pluginName();
-	if (!name) return { options: fromEnv, source: 'none' };
 	for (const file of ['settings.local.json', 'settings.json']) {
 		try {
 			const raw = JSON.parse(readFileSync(join(homedir(), '.claude', file), 'utf8')) as {
 				pluginConfigs?: Record<string, { options?: Record<string, unknown> }>;
 			};
 			const configs = raw.pluginConfigs ?? {};
-			const key = Object.keys(configs).find((k) => k === name || k.startsWith(`${name}@`));
+			const key = Object.keys(configs).find((k) => k === 'loupe' || k.startsWith('loupe@'));
 			const opts = key === undefined ? undefined : configs[key]?.options;
 			if (opts) return { options: coerce(opts), source: 'settings' };
 		} catch {
@@ -242,38 +189,30 @@ export function resolvedOptions(): {
 	return { options: fromEnv, source: 'none' };
 }
 
-/** This plugin's name, from the manifest two levels above the engine. */
-function pluginName(): string | null {
-	const roots = [process.env.CLAUDE_PLUGIN_ROOT, join(dirname(fileURLToPath(import.meta.url)), '..', '..')].filter(
-		(r): r is string => Boolean(r),
-	);
-	for (const root of roots) {
-		try {
-			const manifest = JSON.parse(readFileSync(join(root, '.claude-plugin', 'plugin.json'), 'utf8')) as {
-				name?: string;
-			};
-			return manifest.name ?? null;
-		} catch {
-			/* try the next candidate */
-		}
-	}
-	return null;
-}
-
-/** Settings hold real JSON types; the env path hands us strings. Normalize. */
+/** Settings hold real JSON types; the environment hands us strings. Normalize both. */
 function coerce(opts: Record<string, unknown>): PluginOptions {
 	const str = (v: unknown): string | undefined => (v === undefined || v === null || v === '' ? undefined : String(v));
 	const num = (v: unknown): number | undefined =>
 		Number.isFinite(Number(v)) && str(v) !== undefined ? Number(v) : undefined;
 	const list = (v: unknown): string[] | undefined => {
-		if (Array.isArray(v)) return v.map(String).filter(Boolean);
+		let parsed = v;
+		// A `multiple: true` option arrives in the environment JSON-encoded —
+		// accept it rather than silently adopting `["wf-` as a class prefix.
+		if (typeof v === 'string' && v.startsWith('[')) {
+			try {
+				parsed = JSON.parse(v);
+			} catch {
+				/* not JSON after all; fall through to the split */
+			}
+		}
+		if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
 		const t = str(v);
 		return t === undefined ? undefined : t.split(/[,\s]+/).filter(Boolean);
 	};
 	return {
 		preset: str(opts.preset),
 		projectPrefixes: list(opts.project_prefixes),
-		blocking: opts.blocking === undefined ? undefined : isOn(String(opts.blocking)),
+		blocking: str(opts.blocking) === undefined ? undefined : isOn(String(opts.blocking)),
 		maxAttempts: num(opts.max_attempts),
 		maxFindings: num(opts.max_findings),
 	};

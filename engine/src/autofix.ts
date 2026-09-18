@@ -17,6 +17,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { KEEP } from './tokens.ts';
+import { escapeRe } from './text.ts';
 import type { FixCandidate, KeptValue, SkippedFix, SkippedKeep, TokenFix } from './types.ts';
 
 /**
@@ -28,14 +29,12 @@ import type { FixCandidate, KeptValue, SkippedFix, SkippedKeep, TokenFix } from 
  */
 const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 
-const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 /**
  * The findings that carry one property, one value, and one rewrite for it: a
  * single exact token, or — only once `--judge` has written one — the judged
  * replacement.
  */
-export function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
+function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
 	const out: TokenFix[] = [];
 	for (const f of findings) {
 		if (f.rule !== 'tokens/hardcoded-value' || !CSS_FILE.test(f.file)) continue;

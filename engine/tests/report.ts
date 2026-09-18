@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
 import { setColor } from '../src/color.ts';
 import { loadConfig } from '../src/config.ts';
-import { formatAgent, formatJson, formatSarif, reportPayload } from '../src/report.ts';
+import { formatAgent, formatSarif, reportPayload } from '../src/report.ts';
 import { formatHtml } from '../src/report-html.ts';
 import { CLI, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 
@@ -69,7 +69,7 @@ assert(result.findings.length > 3, `fixture produced only ${result.findings.leng
 await check('html embeds exactly what --format json prints', () => {
 	const page = embedded(formatHtml(result, config)) as { findings: unknown[] };
 	assert(
-		JSON.stringify(page) === JSON.stringify(JSON.parse(formatJson(result, config))),
+		JSON.stringify(page) === JSON.stringify(reportPayload(result, config)),
 		'the page and the JSON describe different reports',
 	);
 	// The equality above holds by construction while both read one payload
@@ -492,7 +492,7 @@ await check('a registry note keeps its last clause on screen and ships whole in 
 		/\(\d+\) (blocking|advisory) \u2014/.test(out),
 		`a rule group that only says its severity in a glyph:\n${out}`,
 	);
-	const shipped = (JSON.parse(formatJson(noted, config)) as { findings: { note?: string }[] }).findings[0]?.note;
+	const shipped = reportPayload(noted, config).findings[0]?.note;
 	assert(shipped === note, `json shipped a note the reader cannot act on: ${String(shipped)}`);
 });
 
@@ -538,7 +538,7 @@ await check('a prefix with no tokens behind it is said out loud, not failed open
 		assert(/designSystem\.tokenSources/.test(out), `named the symptom and not where to fix it:\n${out}`);
 		const fed: AnalyzeResult = { ...result, diagnostics: { ...result.diagnostics, tokensKnown: 167 } };
 		assert(!/tokens were found/.test(formatAgent(fed, config)), 'a healthy token set should say nothing');
-		const summary = (JSON.parse(formatJson(starved, config)) as { summary: { tokensKnown: number } }).summary;
+		const summary = reportPayload(starved, config).summary;
 		assert(summary.tokensKnown === 0, `json hid the empty set: ${summary.tokensKnown}`);
 	} finally {
 		cleanup(root);

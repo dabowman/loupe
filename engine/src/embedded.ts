@@ -68,7 +68,7 @@ export const presetNames = (): string[] => {
 		return readdirSync(PRESET_DIR)
 			.filter((f) => f.endsWith('.json'))
 			.map((f) => f.replace(/\.json$/, ''))
-			.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+			.sort();
 	} catch {
 		return Object.keys(EMBEDDED_PRESETS);
 	}

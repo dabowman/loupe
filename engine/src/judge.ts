@@ -20,14 +20,12 @@
  * only when asked.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { EMBEDDED_LANGUAGE } from './embedded.ts';
 import type { ForceJudge } from './judge/force.ts';
 import { forceQuery } from './judge/force.ts';
 import { valueQuery } from './judge/value.ts';
-import { notKey, variantQuery } from './judge/variant.ts';
+import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
@@ -62,12 +60,6 @@ export interface Choice {
 
 /** One question put to Jev, and everything that is specific to it. */
 export interface Query<T> {
-	/**
-	 * How many items share one request. Not one number: the state budget allows
-	 * 40, but a question's accuracy does not always survive sharing its state
-	 * with 39 others. `evals/represents/run.ts --batch N` is how to pick it.
-	 */
-	size: number;
 	/** What the model reads about one item: `state.elements[i]`. */
 	element: (item: T) => object;
 	/** What it is asked about `elements[index]`. */
@@ -83,6 +75,12 @@ export interface Query<T> {
  * Every element in a batch is visible to every question in it, which is why a
  * batched question has to be scored batched — see the represents eval.
  *
+ * `size` is how many items share one request. The state budget allows 40, but
+ * accuracy does not survive the sharing: `represents` kept 97% of its
+ * destinations one per request and 69% at 40 (`evals/represents/run.ts --batch
+ * N` measures it). A control is a few lines, so one each is cheap, and the pool
+ * below keeps it quick.
+ *
  * Throws on a failed request; the caller reports it and keeps what it had.
  */
 export async function ask<T>(
@@ -90,7 +88,7 @@ export async function ask<T>(
 	items: readonly T[],
 	apiKey: string,
 	fetchImpl: Fetch = fetch,
-	size: number = query.size,
+	size = 1,
 ): Promise<(Choice | undefined)[]> {
 	const batches: T[][] = [];
 	for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
@@ -199,27 +197,15 @@ export async function judgeVariants(
 
 // ── patterns/judged-redirect ────────────────────────────────────────────────
 
-export interface Language {
+interface Language {
 	vocabulary: { forces: Record<string, { values: unknown[]; about: string; judge?: ForceJudge }> };
 	patterns: { id: string; resolve?: ResolveRule[] }[];
 }
 
-// The abstract language sits at the checkout's root beside the profiles that
-// realize it, and nothing but the judge reads it at runtime: a signature is
-// all the deterministic rules can check, and every force is beyond one.
-const LANGUAGE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'patterns', 'index.json');
-
-/**
- * A path given explicitly is read and allowed to fail — that is a caller naming
- * a file it expects to exist. Only the default falls back to the compiled-in
- * copy, which is the one a binary has, and is also the one a published npm
- * install has: `patterns/` sits above the package and `files` never shipped it.
- */
-export const loadLanguage = (path?: string): Language => {
-	if (path !== undefined) return JSON.parse(readFileSync(path, 'utf8')) as Language;
-	if (existsSync(LANGUAGE)) return JSON.parse(readFileSync(LANGUAGE, 'utf8')) as Language;
-	return EMBEDDED_LANGUAGE as Language;
-};
+// The abstract language, `patterns/index.json`. Nothing but the judge reads it
+// at runtime: a signature is all the deterministic rules can check, and every
+// force is beyond one.
+export const LANGUAGE = EMBEDDED_LANGUAGE as Language;
 
 // A redirect sends an agent to a different pattern, which is the expensive
 // error, so an answer counts only where the eval found nothing wrong: every
@@ -253,15 +239,14 @@ export async function judgeRedirects(
 	apiKey: string,
 	severity: Severity,
 	fetchImpl: Fetch = fetch,
-	language: Language = loadLanguage(),
 ): Promise<Finding[]> {
-	const byId = new Map(language.patterns.map((p) => [p.id, p]));
+	const byId = new Map(LANGUAGE.patterns.map((p) => [p.id, p]));
 	const abstractOf = (patternId: string): string => patternId.split('#', 1)[0]?.split('.', 1)[0] ?? patternId;
 	const tableOf = (c: Control): ResolveRule[] => byId.get(abstractOf(c.patternId))?.resolve ?? [];
 
 	const known = controls.map((): Record<string, string> => ({}));
 	const sure = controls.map((): Record<string, number> => ({}));
-	for (const [name, force] of Object.entries(language.vocabulary.forces)) {
+	for (const [name, force] of Object.entries(LANGUAGE.vocabulary.forces)) {
 		if (!force.judge) continue;
 		const asked = controls.flatMap((c, i) => (tableOf(c).some((r) => r.when && name in r.when) ? [i] : []));
 		if (!asked.length) continue;
@@ -375,15 +360,6 @@ export async function judgeValues(
 		throw new Error(
 			'no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships',
 		);
-	const files = new Map<string, string[]>();
-	const linesOf = (file: string): string[] => {
-		const cached = files.get(file);
-		if (cached) return cached;
-		const lines = readFileSync(join(root, file), 'utf8').split('\n');
-		files.set(file, lines);
-		return lines;
-	};
-
 	type Plan = { f: Finding; parts: string[]; slots: Slot[] };
 	const plans: Plan[] = [];
 	let written = 0;
@@ -407,15 +383,12 @@ export async function judgeValues(
 	const asked = plans.flatMap(({ f, parts, slots }) =>
 		slots.flatMap((slot) => {
 			if (!('candidates' in slot) || !f.decl) return [];
-			const lines = linesOf(f.file);
-			const i = f.line - 1;
 			return [
 				{
 					file: f.file,
-					// Enough before it to reach the selector of an ordinary rule, which
+					// Eight lines before it reach the selector of an ordinary rule, which
 					// is most of what says what the value is for.
-					context_before: lines.slice(Math.max(0, i - 8), i).join('\n'),
-					source: lines.slice(i, i + 3).join('\n'),
+					...around(root, f.file, f.line, 8, 3),
 					prop: f.decl.prop,
 					value: parts.join(' '),
 					part: slot.part,

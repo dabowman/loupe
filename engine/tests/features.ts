@@ -15,7 +15,7 @@ import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
-import { ask, judgeRedirects, judgeVariants, loadLanguage } from '../src/judge.ts';
+import { LANGUAGE, ask, judgeRedirects, judgeVariants } from '../src/judge.ts';
 import { forceQuery } from '../src/judge/force.ts';
 import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, ComponentEntry, Finding, Pattern, PatternNode, RuleId } from '../src/types.ts';
@@ -1224,7 +1224,7 @@ await check(
 
 // ── --judge: forces and redirects ───────────────────────────────────────────
 
-const represents = loadLanguage().vocabulary.forces.represents?.judge;
+const represents = LANGUAGE.vocabulary.forces.represents?.judge;
 assert(represents, 'patterns/index.json gives `represents` no judge block');
 
 // The wording is scored live by evals/represents; what is pinned here is the

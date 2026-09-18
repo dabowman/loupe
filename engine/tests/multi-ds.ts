@@ -20,7 +20,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
-import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
+import { loadConfig } from '../src/config.ts';
 import { matches, toNode } from '../src/patterns.ts';
 import { registryApplies } from '../src/registry.ts';
 import { renderTitle } from '../src/rules.ts';
@@ -73,8 +73,7 @@ const configFor = (pkg: string): string =>
 /** Analyze `root`, attaching `patternsPath` the way the CLI would. */
 async function analyzeWith(root: string, patternsPath?: string | null): Promise<AnalyzeResult> {
 	const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-	if (patternsPath)
-		applyRegistries(config, [{ label: 'test', patterns: patternsPath }], { setPatterns, setComponentRegistry });
+	if (patternsPath) applyRegistries(config, [{ label: 'test', patterns: patternsPath }]);
 	return analyze(config, { scope: null });
 }
 
@@ -348,10 +347,7 @@ await check('a skipped registry is reported, not silently dropped', async () => 
 	});
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(config, [{ label: 'profile wpds', patterns: join(root, 'registry.json') }], {
-			setPatterns,
-			setComponentRegistry,
-		});
+		const out = applyRegistries(config, [{ label: 'profile wpds', patterns: join(root, 'registry.json') }]);
 		assert(out.applied.length === 0, 'nothing should have applied');
 		const skip = one(out.skipped, 'the skip must be reported');
 		assert(skip.packages.includes('@wordpress/components'), 'the report should name the scope');
@@ -370,11 +366,9 @@ await check('a profile named outright applies its registries anyway', async () =
 	});
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(
-			config,
-			[{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true }],
-			{ setPatterns, setComponentRegistry },
-		);
+		const out = applyRegistries(config, [
+			{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true },
+		]);
 		assert(!out.skipped.length, 'a forced registry must not be re-gated on scope');
 		assert(out.applied.length === 1, `expected the registry applied, got ${out.applied.length}`);
 		assert(config.enabled['patterns/duplicate-composite'], 'the rule the registry exists to enable stayed off');
@@ -409,11 +403,9 @@ await check('a forced registry that enables nothing says so', async () => {
 	});
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(
-			config,
-			[{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true }],
-			{ setPatterns, setComponentRegistry },
-		);
+		const out = applyRegistries(config, [
+			{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true },
+		]);
 		assert(!out.skipped.length && out.applied.length === 1, 'the forced registry should still merge');
 		const note = one(out.notes, 'a merge that changed nothing must be reported');
 		// Named precisely: a merged component *registry* never feeds
@@ -441,11 +433,9 @@ await check('a forced registry the project already covers is not reported as fin
 	});
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(
-			config,
-			[{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true }],
-			{ setPatterns, setComponentRegistry },
-		);
+		const out = applyRegistries(config, [
+			{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true },
+		]);
 		assert(config.enabled['patterns/duplicate-composite'], 'the project’s own registry should still enable the rule');
 		const note = one(out.notes, 'a forced registry that added nothing must be reported');
 		assert(/added no patterns/.test(note.note), `the note should say it added nothing: ${note.note}`);
@@ -458,10 +448,7 @@ await check('an unreadable registry is an error, not a crash', async () => {
 	const root = repo({ 'loupe.config.json': configFor('@acme/ui') });
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(config, [{ label: 'profile gone', patterns: join(root, 'missing.json') }], {
-			setPatterns,
-			setComponentRegistry,
-		});
+		const out = applyRegistries(config, [{ label: 'profile gone', patterns: join(root, 'missing.json') }]);
 		assert(out.errors.length === 1, 'the failure should be reported');
 		assert(config.enabled['patterns/duplicate-composite'] === false, 'the rule stays off rather than half-configured');
 	} finally {
@@ -688,6 +675,23 @@ export const ${name}Board = () => (
 			shapes.has('Tableau(TableauItem,TableauItem,TableauItem)'),
 			`a different component that shares a prefix still reports: ${[...shapes]}`,
 		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Rule options were removed. A config still written in that form has to say
+// so, not report `bad severity for x: warn,[object Object]`.
+await check('a rule in the removed [severity, options] form fails with the fix', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ rules: { 'tokens/hardcoded-value': ['warn', { allowZero: true }] } }),
+	});
+	try {
+		const err = await loadConfig({ root, configPath: join(root, 'loupe.config.json') }).then(
+			() => null,
+			(e: unknown) => e,
+		);
+		assert(err instanceof Error && /no longer supported.*"warn"/.test(err.message), `got ${String(err)}`);
 	} finally {
 		cleanup(root);
 	}

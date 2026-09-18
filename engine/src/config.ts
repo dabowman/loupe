@@ -82,7 +82,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof
  * it is what keeps a settled config strict downstream. Extra keys an override
  * carries do survive at runtime; nothing reads them.
  */
-function merge<T>(base: T, over: unknown): T {
+export function merge<T>(base: T, over: unknown): T {
 	if (!isObj(base) || !isObj(over)) return over === undefined ? base : (over as T);
 	const out: Record<string, unknown> = { ...base };
 	for (const [k, v] of Object.entries(over)) out[k] = isObj(v) && isObj(base[k]) ? merge(base[k], v) : v;
@@ -129,20 +129,9 @@ async function readConfigFile(path: string): Promise<AuthoredConfig | undefined>
 	return mod.default ?? (mod as AuthoredConfig);
 }
 
-/**
- * Where a preset spec would live, if it names a shipped preset at all.
- *
- * Shared with {@link presetExists} so the two cannot disagree: a check that
- * strips the `loupe/presets/` prefix and a check that does not will reject a
- * spec the resolver would have accepted, which is how `--profile` came to
- * report a perfectly resolvable preset as "not installed".
- */
-const presetPath = (spec: string): string => join(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, '')}.json`);
-
 /** Resolve `extends`, which may name a shipped preset or a path. */
 async function resolveExtends(spec: string, fromDir: string): Promise<{ path: string; dir: string }> {
-	const asPreset = presetPath(spec);
-	if (hasPreset(spec)) return { path: asPreset, dir: PRESET_DIR };
+	if (hasPreset(spec)) return { path: join(PRESET_DIR, `${presetKey(spec)}.json`), dir: PRESET_DIR };
 	const asPath = isAbsolute(spec) ? spec : join(fromDir, spec);
 	if (existsSync(asPath)) return { path: asPath, dir: dirname(asPath) };
 	throw new Error(`cannot resolve extends: ${spec}`);
@@ -178,13 +167,10 @@ async function expandExtends(
 	return merge(base, rest);
 }
 
+/** Shipped presets, `generic` last — it is the fallback, not a choice. */
 export function listPresets(): string[] {
-	// Read the directory rather than hardcode: a list maintained by hand drifts
-	// the moment someone adds a preset and forgets this line.
-	return presetNames().sort((a, b) => (a === 'generic' ? 1 : b === 'generic' ? -1 : a.localeCompare(b)));
+	return presetNames().sort((a, b) => Number(a === 'generic') - Number(b === 'generic'));
 }
-
-export const presetExists = (name: string): boolean => hasPreset(name);
 
 /**
  * The suppression vocabulary of every shipped preset: the keywords each one
@@ -227,7 +213,7 @@ function shippedVocabulary(): { keywords: string[]; blanket: Set<string> } {
 }
 
 /** Compile `has-*` style patterns into anchored regexes. */
-function compilePatterns(patterns: readonly string[] | undefined): RegExp[] {
+export function compilePatterns(patterns: readonly string[] | undefined): RegExp[] {
 	return (patterns ?? []).map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`));
 }
 
@@ -238,51 +224,26 @@ function compilePatterns(patterns: readonly string[] | undefined): RegExp[] {
 export function normalize(raw: AuthoredConfig | undefined, { root }: { root: string }): Config {
 	const cfg = merge(DEFAULTS, raw ?? {});
 	const ds = cfg.designSystem;
+	const patterns = readRegistry(cfg.patterns, root, ds.packages, loadPatterns, []);
+	const componentRegistry = readRegistry(cfg.componentRegistry, root, ds.packages, loadComponents, new Map());
 
-	// A registry may be inline or a path. A path that does not resolve leaves the
-	// registry empty, which disables the rules that need one rather than throwing
-	// — the engine has to keep working in a project that ships no patterns.
-	let patterns: Pattern[] = [];
-	if (Array.isArray(cfg.patterns)) patterns = loadPatterns(cfg.patterns);
-	else if (typeof cfg.patterns === 'string') {
-		const p = isAbsolute(cfg.patterns) ? cfg.patterns : join(root, cfg.patterns);
-		try {
-			const raw: unknown = JSON.parse(readFileSync(p, 'utf8'));
-			// A registry scoped to packages this project does not import applies to
-			// some other design system that happens to name its components the same.
-			patterns = registryApplies(raw, ds.packages) ? loadPatterns(raw) : [];
-		} catch {
-			patterns = [];
-		}
-	}
-
-	// Same inline-or-path shape as patterns, for the same reason: a bad path
-	// disables the rules that need it rather than throwing.
-	let componentRegistry = new Map<string, ComponentEntry>();
-	if (Array.isArray(cfg.componentRegistry)) componentRegistry = loadComponents(cfg.componentRegistry);
-	else if (typeof cfg.componentRegistry === 'string') {
-		const p = isAbsolute(cfg.componentRegistry) ? cfg.componentRegistry : join(root, cfg.componentRegistry);
-		try {
-			const raw: unknown = JSON.parse(readFileSync(p, 'utf8'));
-			componentRegistry = registryApplies(raw, ds.packages) ? loadComponents(raw) : new Map();
-		} catch {
-			componentRegistry = new Map();
-		}
-	}
-
-	// Rule severities + options. Accepts "warn" | ["warn", {opts}] | "off".
-	// Seeded for every rule first, so the record is complete by construction and
-	// the cast below is describing what the loop guarantees rather than hoping.
-	const rules = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity, options: {} }])) as Record<
+	// Rule severities. Seeded for every rule first, so the record is complete by
+	// construction and the cast is describing what the loop guarantees.
+	const rules = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity }])) as Record<
 		RuleId,
 		RuleSetting
 	>;
 	for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
 		const id = canonicalRuleId(rawId);
 		if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
-		const [sev, opts] = Array.isArray(value) ? value : [value, {}];
-		if (!isSeverity(sev)) throw new Error(`bad severity for ${rawId}: ${String(sev)}`);
-		rules[id] = { severity: sev, options: { ...opts } };
+		const sev: unknown = value;
+		if (!isSeverity(sev))
+			throw new Error(
+				Array.isArray(sev)
+					? `rule options are no longer supported — write "${rawId}": ${JSON.stringify(sev[0])}`
+					: `bad severity for ${rawId}: ${String(sev)}`,
+			);
+		rules[id] = { severity: sev };
 	}
 
 	// Element map: "p": "Text" or "div": { component, styledOnly }.
@@ -317,30 +278,6 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 
 	const layoutComponents = ds.components?.layout ?? [];
 	const textComponents = ds.components?.text ?? [];
-	// A composite is built from every name imported out of `designSystem.packages`,
-	// whether or not it is a layout or text primitive — so the compositional rules
-	// need the packages and nothing else. A headless library (Base UI, Radix) has
-	// no layout or text layer at all, and gating its composites on one meant the
-	// only rules that could ever have fired on it were off by construction.
-	const hasPackages = (ds.packages ?? []).length > 0;
-	const hasComponents = hasPackages && layoutComponents.length + textComponents.length > 0;
-
-	// A rule is available only if the active config satisfies its `needs`.
-	const capability: Record<Capability, boolean> = {
-		packages: hasPackages,
-		components: hasComponents,
-		layoutComponents: hasComponents && layoutComponents.length > 0,
-		textComponents: hasComponents && textComponents.length > 0,
-		elementMap: elementMap.size > 0,
-		tokenPrefixes: (ds.tokenPrefixes || []).length > 0,
-		patternRegistry: hasPackages && patterns.length > 0,
-		componentRegistry: componentRegistry.size > 0,
-		projectNamespace: (cfg.namespaces.project ?? []).length > 0,
-	};
-
-	const enabled = Object.fromEntries(
-		RULE_IDS.map((id) => [id, RULES[id].needs.every((n: Capability) => capability[n]) && rules[id].severity !== 'off']),
-	) as Record<RuleId, boolean>;
 
 	// Read aliases: every keyword the shipped presets know, plus any this config
 	// names itself. The keyword is preset-scoped, so adopting a preset renames it
@@ -361,7 +298,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	// non-object value from authored JSON verbatim, so the declared types are a
 	// contract with the author, not a check: `"keyword": ""` makes the parser's
 	// `startsWith`/`includes` universally true and reports every line of every
-	// file as malformed, `"keyword": 12` throws out of `esc`, and `"blanket":
+	// file as malformed, `"keyword": 12` throws out of `escapeRe`, and `"blanket":
 	// "ds-disable"` spreads into eleven single-character prefixes. An unusable
 	// value falls back to the default vocabulary for the same reason an
 	// unreadable preset directory does — a broken install still has to run.
@@ -385,7 +322,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	const projectPrefixes = cfg.namespaces.project ?? [];
 	const externalPrefixes = cfg.namespaces.external ?? [];
 
-	return {
+	const config: Omit<Config, 'enabled'> = {
 		root,
 		raw: cfg,
 		// Overwritten by `loadConfig`, which knows which of the five resolution
@@ -413,41 +350,80 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		baselinePath: cfg.baseline,
 		hook: cfg.hook,
 		rules,
-		enabled,
-		severityOf: (id: RuleId) => rules[id]?.severity ?? 'warn',
-		optionsOf: (id: RuleId) => rules[id]?.options ?? {},
+		severityOf: (id: RuleId) => rules[id].severity,
 		isProject: (cls: string) => projectPrefixes.some((p) => cls.startsWith(p)),
 		isExternal: (cls: string) => externalPrefixes.some((p) => cls.startsWith(p)),
 		isNeverDead: (cls: string) => neverDead.some((re) => re.test(cls)),
 	};
+	return { ...config, enabled: enabledRules(config) };
 }
 
 /**
- * Attach a pattern registry after the fact, keeping `enabled` in step.
+ * A registry given inline or as a path. A path that does not resolve leaves it
+ * empty, which disables the rules that need one rather than throwing — the
+ * engine has to keep working in a project that ships no patterns. So does a
+ * registry scoped to packages this project does not import: it describes some
+ * other design system that happens to name its components the same.
+ */
+function readRegistry<T>(
+	spec: string | unknown[] | null,
+	root: string,
+	packages: readonly string[],
+	load: (raw: unknown) => T,
+	empty: T,
+): T {
+	if (!Array.isArray(spec) && typeof spec !== 'string') return empty;
+	try {
+		const raw: unknown =
+			typeof spec === 'string' ? JSON.parse(readFileSync(isAbsolute(spec) ? spec : join(root, spec), 'utf8')) : spec;
+		return registryApplies(raw, packages) ? load(raw) : empty;
+	} catch {
+		return empty;
+	}
+}
+
+/**
+ * Which rules run: on in config, and every capability they `need` is met.
  *
- * `patternRegistry` is a capability computed during normalization, so assigning
- * `config.patterns` on its own leaves the rule disabled and the registry
- * silently unused — which looks exactly like "no composite drift found".
+ * One computation for normalization and for a registry attached afterwards, so
+ * the two cannot disagree about what a registry enables.
+ */
+function enabledRules(config: Omit<Config, 'enabled'>): Record<RuleId, boolean> {
+	const ds = config.designSystem;
+	// A composite is built from every name imported out of `designSystem.packages`,
+	// whether or not it is a layout or text primitive — so the compositional rules
+	// need the packages and nothing else. A headless library (Base UI, Radix) has
+	// no layout or text layer at all, and gating its composites on one meant the
+	// only rules that could ever have fired on it were off by construction.
+	const hasPackages = ds.packages.length > 0;
+	const hasComponents = hasPackages && ds.layoutComponents.length + ds.textComponents.length > 0;
+	const capability: Record<Capability, boolean> = {
+		packages: hasPackages,
+		components: hasComponents,
+		layoutComponents: hasComponents && ds.layoutComponents.length > 0,
+		textComponents: hasComponents && ds.textComponents.length > 0,
+		elementMap: ds.elementMap.size > 0,
+		tokenPrefixes: ds.tokenPrefixes.length > 0,
+		patternRegistry: hasPackages && config.patterns.length > 0,
+		componentRegistry: config.componentRegistry.size > 0,
+		projectNamespace: (config.raw.namespaces.project ?? []).length > 0,
+	};
+	return Object.fromEntries(
+		RULE_IDS.map((id) => [
+			id,
+			RULES[id].needs.every((n: Capability) => capability[n]) && config.rules[id].severity !== 'off',
+		]),
+	) as Record<RuleId, boolean>;
+}
+
+/**
+ * Attach a pattern registry after the fact, keeping `enabled` in step —
+ * assigning `config.patterns` alone leaves the rules that read it off, which
+ * looks exactly like "no composite drift found".
  */
 export function setPatterns(config: Config, patterns: Pattern[] | null | undefined): Config {
 	config.patterns = patterns ?? [];
-	const hasRegistry =
-		config.patterns.length > 0 &&
-		// The same `patternRegistry` capability normalization computes above,
-		// restated rather than recomputed. A composite is only ever built from
-		// names imported out of `designSystem.packages`, so a config declaring
-		// none can never produce one — and `status` reported the rule active
-		// anyway. The layout/text lists are deliberately not part of this: a
-		// headless library has none and still composes.
-		config.designSystem.packages.length > 0;
-	// Every rule reading the registry has to be wired here, not just the first
-	// one: a rule left out looks exactly like "nothing found".
-	for (const rule of [
-		'patterns/duplicate-composite',
-		'patterns/superseded-composite',
-		'patterns/judged-redirect',
-	] as const)
-		config.enabled[rule] = hasRegistry && config.severityOf(rule) !== 'off';
+	config.enabled = enabledRules(config);
 	return config;
 }
 
@@ -457,10 +433,7 @@ export function setComponentRegistry(
 	componentRegistry: Map<string, ComponentEntry> | null | undefined,
 ): Config {
 	config.componentRegistry = componentRegistry ?? new Map();
-	config.enabled['system/locked-component'] =
-		config.componentRegistry.size > 0 && config.severityOf('system/locked-component') !== 'off';
-	config.enabled['system/superseded-component'] =
-		config.componentRegistry.size > 0 && config.severityOf('system/superseded-component') !== 'off';
+	config.enabled = enabledRules(config);
 	return config;
 }
 
@@ -496,8 +469,8 @@ export async function loadConfig({
 		raw = await loadChain(resolve(configPath));
 		source = { kind: 'file', path: resolve(configPath) };
 	} else if (preset) {
-		if (!presetExists(preset)) throw new Error(`unknown preset: ${preset}`);
-		raw = await loadChain(join(PRESET_DIR, `${preset}.json`));
+		if (!hasPreset(preset)) throw new Error(`unknown preset: ${preset}`);
+		raw = await loadChain(join(PRESET_DIR, `${presetKey(preset)}.json`));
 		source = { kind: 'preset', name: preset };
 	} else {
 		const found = findConfig(root);

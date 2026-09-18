@@ -5,6 +5,5 @@
   "packages": ["@wordpress/components", "@wordpress/ui"],
   "patterns": "./patterns/index.json",
   "components": "./components/index.json",
-  "tokenDescriptions": "./token-descriptions.json",
-  "skills": ["loupe-authoring", "loupe-patterns", "loupe-remediation"]
+  "tokenDescriptions": "./token-descriptions.json"
 }

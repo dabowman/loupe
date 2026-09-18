@@ -102,8 +102,7 @@ It runs against the project you are in — the directory holding the
 project is and read the same baseline. Pass `--root` when you mean the
 subdirectory itself. It needs nothing added to that project: the engine carries its own dependencies, so there is no config file to
 commit and nothing to install. Nothing appears unless you run the thing that
-writes it: `loupe baseline` records `.loupe-baseline.json`, a hook run outside a
-plugin keeps its retry counter in `.loupe/`, and `loupe fix` rewrites the
+writes it: `loupe baseline` records `.loupe-baseline.json`, and `loupe fix` rewrites the
 stylesheets whose findings it can settle without judgment. It also passes the
 shipped pattern and component registries unless you name your own with
 `--patterns`/`--components`.
@@ -355,8 +354,7 @@ and applies a profile only to a project importing its packages.
   "preset": "wpds",
   "packages": ["@wordpress/components", "@wordpress/ui"],
   "patterns": "./patterns/index.json",
-  "components": "./components/index.json",
-  "skills": ["loupe-authoring", "loupe-patterns", "loupe-remediation"]
+  "components": "./components/index.json"
 }
 ```
 
@@ -558,20 +556,12 @@ The baseline is written to `.loupe-baseline.json` in the project and is meant to
 be committed: it is a statement about this repo, and the CLI and the hook are
 different processes that have to read the same file. Set `baseline` in the
 config, or pass `--baseline <path>`, to move it. The hook's retry counter is the
-one piece of state that does not live in the project — under a plugin it goes to
-the plugin's data directory keyed by project, and only when there is no such
-directory (plain `npx`, CI) does it fall back to `.loupe/` in the repo.
-`status` prints both locations.
+one piece of state that does not live in the project: it goes in the OS temp
+directory, keyed by project, and expires after six hours.
 
-Two older locations are still read, and `status` says which one answered.
-
-A baseline recorded by 0.1.x sits in one of those state directories. `status`
-marks it as a 0.1.x location — run `loupe baseline` once to record it in the
-project, because the plugin-data copy is only visible to a process that has
-`CLAUDE_PLUGIN_DATA` set, which a terminal does not.
-
-The other case is a committed `.loupe-baseline.json` in a project whose config
-has since pointed `baseline` somewhere that does not exist yet. That file is
+One fallback is read, and `status` says when it answered: a committed
+`.loupe-baseline.json` in a project whose config has since pointed `baseline`
+somewhere that does not exist yet. That file is
 already in the project, so there is nothing to move: `status` names it as the
 default-name file and says which configured path is missing. Without this
 fallback, a config change and the file move landing in separate commits would
@@ -835,8 +825,8 @@ Two things keep the artifact from becoming a second source of truth:
   it is a checkout someone is editing, and pinning that to a bundle would mean
   edits to `src/` silently doing nothing until a rebuild. That is a gate
   reporting yesterday's verdict on today's code — the exact failure this engine
-  exists to refuse. (`tsx` is what lets that file import a `.ts` entry point at
-  all; absent it, the bundle.)
+  exists to refuse. (Running `.ts` directly needs Node 22.18+; on an older
+  Node, the bundle.)
 - `npm run build:check` re-bundles and compares. It is what CI runs, and it is
   the only thing standing between a `src/` change and a marketplace install
   still serving the version before it, because the staleness is invisible on the

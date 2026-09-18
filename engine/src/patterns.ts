@@ -61,6 +61,19 @@ function descendants(tree: PatternNode, out: PatternNode[] = []): PatternNode[] 
 }
 
 /**
+ * `"Stack"` matches `Stack`; `"Stack|VStack|HStack"` matches any of the three.
+ *
+ * One shape often has more than one spelling — `ToggleGroupControlOption` and
+ * `ToggleGroupControlOptionIcon` are the same segmented control, and the same
+ * modal footer is written with `Stack` in new code and `VStack` in old. Without
+ * this, each spelling needs its own registry entry, and the ones nobody wrote
+ * come back as `unregistered-composite` noise against code that is in fact
+ * using the pattern. Only pattern nodes carry alternations; a tree built from
+ * real code is always one name.
+ */
+const nameMatches = (spec: string, actual: string): boolean => spec.split('|').includes(actual);
+
+/**
  * Does `pattern` occur within `tree`?
  *
  * A registered child has to appear *somewhere* beneath the root, not as a
@@ -75,20 +88,6 @@ function descendants(tree: PatternNode, out: PatternNode[] = []): PatternNode[] 
  * child first; a registered pattern is a handful of nodes, so the cases where
  * greedy loses to a smarter assignment do not arise in practice.
  */
-/**
- * `"Stack"` matches `Stack`; `"Stack|VStack|HStack"` matches any of the three.
- *
- * One shape often has more than one spelling — `ToggleGroupControlOption` and
- * `ToggleGroupControlOptionIcon` are the same segmented control, and the same
- * modal footer is written with `Stack` in new code and `VStack` in old. Without
- * this, each spelling needs its own registry entry, and the ones nobody wrote
- * come back as `unregistered-composite` noise against code that is in fact
- * using the pattern. Only pattern nodes carry alternations; a tree built from
- * real code is always one name.
- */
-const nameMatches = (spec: string, actual: string): boolean =>
-	spec === actual || (spec.includes('|') && spec.split('|').includes(actual));
-
 export function matches(pattern: PatternNode, tree: PatternNode): boolean {
 	if (!nameMatches(pattern.name, tree.name)) return false;
 	// Only when both sides know: an unqualified pattern node matches any package,

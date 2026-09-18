@@ -19,20 +19,20 @@
  * not among the candidates is a miss the narrowing made, not the model —
  * counted separately as coverage.
  *
- *   npx tsx evals/values/run.ts          # three runs
- *   npx tsx evals/values/run.ts 1        # one
- *   npx tsx evals/values/run.ts --bare   # without the token descriptions
+ *   node evals/values/run.ts          # three runs
+ *   node evals/values/run.ts 1        # one
+ *   node evals/values/run.ts --bare   # without the token descriptions
  */
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MODEL, ask, tokenDescriptions } from '../../src/judge.ts';
+import { ask, tokenDescriptions } from '../../src/judge.ts';
 import { valueQuery } from '../../src/judge/value.ts';
-import type { Choice } from '../../src/judge.ts';
 import { KEEP, candidatesFor } from '../../src/tokens.ts';
 import type { Candidates } from '../../src/tokens.ts';
 import type { TokenSet } from '../../src/types.ts';
+import { apiKey, pct, repeat, runCount, stability } from '../lib.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -65,19 +65,9 @@ if (asked.length !== items.length)
 const ok = (id: string, pick: string | undefined): boolean => pick !== undefined && (labels[id] ?? []).includes(pick);
 const covered = (id: string, c: Candidates): boolean =>
 	(labels[id] ?? []).some((l) => (l === KEEP ? c.keep : c.options.some(([n]) => n === l)));
-const pct = (a: number, b: number): string => (b ? `${((a / b) * 100).toFixed(0)}%` : '—');
 const short = (t: string | undefined): string => (t ?? '—').replace(/^--wpds-(color-)?/, '');
 
-try {
-	if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join(HERE, '..', '..', '..', '.env'));
-} catch {
-	/* no .env beside the checkout is the ordinary case */
-}
-const key = process.env.TYPESAFE_API_KEY;
-if (!key) {
-	process.stderr.write(`eval: needs TYPESAFE_API_KEY, in the environment or ${join(HERE, '..', '..', '..', '.env')}\n`);
-	process.exit(2);
-}
+const key = apiKey();
 
 const nCovered = asked.filter((it) => covered(it.id, it.candidates)).length;
 process.stdout.write(
@@ -92,24 +82,16 @@ const about = process.argv.includes('--bare')
 	: tokenDescriptions([
 			{ tokenDescriptions: join(HERE, '..', '..', '..', 'profiles', 'wpds', 'token-descriptions.json') },
 		]);
-const times = Number(process.argv.find((a, i) => i >= 2 && /^\d+$/.test(a)) ?? 3);
-process.stdout.write(`model: ${MODEL}\n`);
-const runs: (Choice | undefined)[][] = [];
-for (let r = 1; r <= times; r++) {
-	const started = Date.now();
-	const answers = await ask(valueQuery(about), asked, key, fetch);
-	runs.push(answers);
-	const right = asked.filter((it, i) => ok(it.id, answers[i]?.choice)).length;
-	const rightCovered = asked.filter((it, i) => covered(it.id, it.candidates) && ok(it.id, answers[i]?.choice)).length;
-	process.stdout.write(
-		`run ${r}: ${answers.filter(Boolean).length}/${asked.length} answered in ${((Date.now() - started) / 1000).toFixed(1)}s — ` +
-			`all ${pct(right, asked.length)}, where coverable ${pct(rightCovered, nCovered)}\n`,
-	);
-}
-
-// Stability: a judgement that flips between runs cannot be applied unattended.
-const flips = asked.filter((_, i) => new Set(runs.map((r) => r[i]?.choice)).size > 1);
-process.stdout.write(`stable across ${times} runs: ${pct(asked.length - flips.length, asked.length)}\n`);
+const runs = await repeat(
+	runCount(),
+	() => ask(valueQuery(about), asked, key, fetch),
+	(answers) => {
+		const right = asked.filter((it, i) => ok(it.id, answers[i]?.choice)).length;
+		const rightCovered = asked.filter((it, i) => covered(it.id, it.candidates) && ok(it.id, answers[i]?.choice)).length;
+		return `all ${pct(right, asked.length)}, where coverable ${pct(rightCovered, nCovered)}`;
+	},
+);
+stability(runs, asked.length, (i) => asked[i]?.id ?? '');
 
 // By tier: whether narrowing to the close tokens helps, and where the model
 // earns its keep — the `family` tier is the design judgement.
@@ -152,38 +134,6 @@ for (const floor of [0.5, 0.7, 0.8, 0.9]) {
 	);
 }
 
-// The same answers gated on probability, as two decisions: keep when P(keep)
-// clears the bar, else the likeliest token when P(any token) does. Confidence
-// falls when the model splits between two tokens either of which would do —
-// `padding-sm` or `padding-md`, neighbouring greys — and the floor above
-// counts that as unsure.
-process.stdout.write('\nsplit  acted  right  wrong-token  wrong-keep\n');
-for (const bar of [0.5, 0.7, 0.8, 0.9]) {
-	let acted = 0;
-	let right = 0;
-	let wrongToken = 0;
-	let wrongKeep = 0;
-	for (const r of runs)
-		asked.forEach((it, i) => {
-			const a = r[i];
-			if (!a) return;
-			const pKeep = a.probabilities?.[KEEP] ?? 0;
-			const token = Object.entries(a.probabilities ?? {})
-				.filter(([k]) => k !== KEEP)
-				.sort(([, x], [, y]) => y - x)[0]?.[0];
-			const pick = !it.candidates.keep ? a.choice : pKeep >= bar ? KEEP : 1 - pKeep >= bar ? token : undefined;
-			if (!pick) return;
-			acted++;
-			if (ok(it.id, pick)) right++;
-			else if (pick === KEEP) wrongKeep++;
-			else wrongToken++;
-		});
-	const n = asked.length * runs.length;
-	process.stdout.write(
-		`${bar.toFixed(2)}  ${pct(acted, n).padStart(5)}  ${pct(right, acted).padStart(5)}  ${String(wrongToken).padStart(11)}  ${String(wrongKeep).padStart(10)}\n`,
-	);
-}
-
 // The keep axis on its own: of the literals that can only be kept (scrims,
 // pills, a CSS triangle), how many were; and of the keeps, how many were
 // allowed.
@@ -219,4 +169,3 @@ asked.forEach((it, i) => {
 		`  ${it.id} ${it.prop}: ${it.part} (${it.candidates.tier}) — judged ${short(a?.choice)} ${a ? a.confidence.toFixed(2) : ''}, labelled ${(labels[it.id] ?? []).map(short).join(' | ')}${miss}\n`,
 	);
 });
-if (flips.length) process.stdout.write(`\nflipped: ${flips.map((it) => it.id).join(', ')}\n`);
