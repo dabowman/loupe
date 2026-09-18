@@ -192,7 +192,11 @@ convert, and say what the element actually is.
 ### `tokens/hardcoded-value`
 
 When the finding names a token, it read that from the design system's own
-definitions. Use it.
+definitions. Use it. A token ending `(judged 0.xx)` came from `check --judge`,
+which picked it by what the rule styles among the tokens near the value. It is
+usually right but check it against the role. `deliberate, no token fits
+(judged …)` means the model read the value as a decision: suppress it with
+what it actually is (a scrim, a pill, a brand colour), not with the judgement.
 
 When it names none, the engine found no token on-role for that value. Do not
 substitute one that merely matches: a token is chosen by what the value is

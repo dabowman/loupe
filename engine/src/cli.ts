@@ -11,8 +11,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze, usableReplacement } from './analyze.ts';
-import { applyTokenFixes } from './autofix.ts';
-import { judgeRedirects, judgeVariants } from './judge.ts';
+import { applyKeeps, applyTokenFixes } from './autofix.ts';
+import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
@@ -31,13 +31,27 @@ import {
 	parsePayload, payloadFile, readStdin, resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
-import type { AnalyzeResult, BaselinedResult, Config, TokenFix } from './types.ts';
+import type { AnalyzeResult, BaselinedResult, Config, KeptValue, TokenFix } from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 
 /** First line of an unknown throw. Anything can be thrown; only Errors carry a message. */
 const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * The TypeSafe key, from the environment or loupe's own `.env`, or undefined.
+ * `--judge` is the one network call in the engine, so its callers check this
+ * before the walk, and the hook never asks.
+ */
+function judgeKey(): string | undefined {
+	try {
+		if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join(HERE, '..', '..', '.env'));
+	} catch {
+		/* no .env beside the checkout is the ordinary case */
+	}
+	return process.env.TYPESAFE_API_KEY;
+}
 
 /**
  * The two things stderr carries, told apart by colour as well as by wording.
@@ -186,7 +200,8 @@ const USAGE = `loupe <command> [options]
 
 Commands:
   check                 Analyze the project (default)
-  fix                   Apply the fixes the engine can make without judgement
+  fix                   Apply the fixes the engine can make without judgement;
+                        with --judge, also the ones TypeSafe settles
   baseline              Record current findings as the accepted backlog
   suppressions          List every active suppression directive
   explain <rule>        Print a rule's guidance
@@ -210,10 +225,13 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
-                        element needs, and whether a control stands for the
-                        pattern it was built as (patterns/judged-redirect)
-                        (check only; TYPESAFE_API_KEY from the environment or
-                        loupe's own .env)
+                        element needs, whether a control stands for the
+                        pattern it was built as (patterns/judged-redirect), and
+                        which token a hardcoded value should be, or whether it
+                        is deliberate. With fix, rewrites the values it settled
+                        and suppresses the ones it kept; add --dry-run to
+                        review them first. (TYPESAFE_API_KEY from the
+                        environment or loupe's own .env)
   --force               Overwrite an existing config (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
@@ -916,15 +934,25 @@ async function main(): Promise<number> {
 			fail(`loupe: ${fixScope.error}\n`);
 			return EXIT.CANNOT_RUN;
 		}
+		const key = args.flags.judge ? judgeKey() : undefined;
+		if (args.flags.judge && !key) {
+			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join(HERE, '..', '..', '.env')}\n`);
+			return EXIT.CANNOT_RUN;
+		}
 		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
+			if (key && toFix.tokens)
+				await judgeValues(root, toFix.findings, toFix.tokens, key, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
 			fail(`loupe: ${messageOf(err)}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		const dry = Boolean(args.flags['dry-run']);
 		const { applied, skipped } = applyTokenFixes(root, toFix.findings, { dry });
+		// After the rewrites, which never move a line, and bottom up within a file,
+		// because a directive is a line of its own.
+		const kept = key ? applyKeeps(root, toFix.findings, config.suppression.keyword, { dry }) : { applied: [], skipped: [] };
 		const verb = dry ? 'would fix' : 'fixed';
 		// The value is held raw — it is what the substitution matches against —
 		// so this is the one place the flattening belongs at the print site
@@ -937,14 +965,18 @@ async function main(): Promise<number> {
 		// value is one neither of them can be matched against.
 		const decl = (f: TokenFix): string => oneLine(`${f.prop}: ${f.value}`);
 		for (const f of applied)
-			process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2192 ${green(`var(${f.token})`)}\n`);
-		for (const f of skipped)
-			process.stdout.write(`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2014 ${f.why}\n`);
-		const left = toFix.findings.length - applied.length;
+			process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2192 ${green(f.to)}\n`);
+		const keptDecl = (k: KeptValue): string => oneLine(`${k.prop}: ${k.value}`);
+		for (const k of kept.applied)
+			process.stdout.write(`${dim(`${k.file}:${k.line}`)}  ${keptDecl(k)} \u2192 ${green(`${config.suppression.keyword}, ${k.reason}`)}\n`);
+		for (const f of [...skipped, ...kept.skipped])
+			process.stdout.write(`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${'to' in f ? decl(f) : keptDecl(f)} \u2014 ${f.why}\n`);
+		const left = toFix.findings.length - applied.length - kept.applied.length;
+		const nSkipped = skipped.length + kept.skipped.length;
 		process.stdout.write(
 			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${
-				skipped.length ? yellow(`, skipped ${skipped.length}`) : ''
-			}. ${left} left for review.\n`
+				key ? `, ${dry ? 'would suppress' : 'suppressed'} ${kept.applied.length}` : ''
+			}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ''}. ${left} left for review.\n`
 		);
 		return EXIT.OK;
 	}
@@ -964,15 +996,9 @@ async function main(): Promise<number> {
 	}
 	// The one network call in the engine, so the key is checked before the walk
 	// and the hook never makes it.
-	let judgeKey: string | undefined;
+	const checkKey = args.flags.judge && !isHook ? judgeKey() : undefined;
 	if (args.flags.judge && !isHook) {
-		try {
-			if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join(HERE, '..', '..', '.env'));
-		} catch {
-			/* no .env beside the checkout is the ordinary case */
-		}
-		judgeKey = process.env.TYPESAFE_API_KEY;
-		if (!judgeKey) {
+		if (!checkKey) {
 			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join(HERE, '..', '..', '.env')}\n`);
 			return EXIT.CANNOT_RUN;
 		}
@@ -994,7 +1020,7 @@ async function main(): Promise<number> {
 
 	let result: AnalyzeResult | BaselinedResult;
 	try {
-		result = await analyze(config, { scope, judge: Boolean(judgeKey) });
+		result = await analyze(config, { scope, judge: Boolean(checkKey) });
 	} catch (err) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
 		fail(`loupe: ${messageOf(err)}\n`);
@@ -1023,7 +1049,7 @@ async function main(): Promise<number> {
 			note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
 		result = applyBaseline(result, baseline);
 	}
-	if (judgeKey) {
+	if (checkKey) {
 		// Judged after the baseline, so accepted findings cost nothing, and a
 		// judged finding never enters one: its confidence moves between runs, and
 		// a baselined finding that comes and goes is noise in both directions.
@@ -1032,9 +1058,11 @@ async function main(): Promise<number> {
 		try {
 			if (result.controls?.length)
 				result.findings.push(
-					...(await judgeRedirects(result.controls, judgeKey, config.severityOf('patterns/judged-redirect'))),
+					...(await judgeRedirects(result.controls, checkKey, config.severityOf('patterns/judged-redirect'))),
 				);
-			await judgeVariants(root, result.findings, config.componentRegistry, judgeKey);
+			await judgeVariants(root, result.findings, config.componentRegistry, checkKey);
+			if (result.tokens)
+				await judgeValues(root, result.findings, result.tokens, checkKey, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
 			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
 		}

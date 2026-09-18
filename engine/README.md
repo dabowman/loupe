@@ -341,7 +341,7 @@ it, and the registries describing its components and composites:
 ```
 profiles/
   acme/
-    profile.json       { id, name, packages, preset, patterns, components }
+    profile.json       { id, name, packages, preset, patterns, components, tokenDescriptions }
     patterns/index.json
     components/index.json
     authoring.md       read by the plugin's skills, not by this engine
@@ -387,7 +387,7 @@ rather than looking like a registry that found nothing.
 ## Fixing
 
 ```bash
-loupe fix   # apply; --dry-run to preview
+loupe fix   # apply; --dry-run to preview; --judge for the values below
 ```
 
 Applies only `tokens/hardcoded-value` findings the engine already resolved to
@@ -424,6 +424,81 @@ baseline identity (`code`) are untouched. The key comes from
 `TYPESAFE_API_KEY` in the environment, or from the `.env` two directories above
 the engine entry point, which is the repo root of a checkout. A failed request
 prints a note and the report goes out unjudged.
+
+### Judged values
+
+`tokens/hardcoded-value` suggests a token only when exactly one on-role token
+carries the value. `--judge` settles the rest, and `fix --judge` applies what
+it settled.
+
+`planValue` splits a flagged value into parts (on whitespace outside
+parentheses), skips zeros and keywords, and settles each literal part a single
+exact token carries. For each remaining part, `candidatesFor` builds the
+options from the property's on-role family (the same role table the exact match
+uses):
+
+- **exact**: several on-role tokens carry the value, so only role separates
+  them (`top: 24px`: padding, gap or size).
+- **near**: a length or duration, narrowed to the scale steps either side of
+  it (`10px` of padding: `padding-sm` or `padding-md`). Past the end of the
+  scale, the end.
+- **family**: anything else, colours included, gets every on-role token.
+
+A negative length, a `%` or an `hsl()` on a px or colour family is a literal no
+token can stand for. That value is not asked about, since rewriting the rest
+would leave the finding standing. A property whose family is empty
+(`box-shadow` in WPDS) is settled without a model, as kept.
+
+Each open part is one request, six in flight. The state is the file, the eight
+lines before the declaration and the three from it. The options are the
+candidate tokens plus `keep`, each token described by the active profile's
+`tokenDescriptions` (for WPDS, the `$description` of every token in
+`@wordpress/theme`'s DTCG sources). A value settles only if every part clears
+0.5. A part judged `keep` keeps the whole declaration, because a
+half-tokenized value is still a finding. The result is written into the finding
+(`padding: 6px 12px → var(…-sm) var(…-md) (judged 0.60)`, or
+`deliberate, no token fits`) and recorded on `judged`. For values, `answer` is
+the replacement text or `keep`.
+
+`fix --judge` applies those answers in stylesheets only. A replacement goes
+through the same line-exact substitution as `fix`. A kept value gets a
+directive on its own line above the declaration, with the judgement as its
+reason:
+
+```css
+	/* wpds-allow tokens/hardcoded-value -- deliberate, no token fits (judged 0.98) */
+	background: rgba(0, 0, 0, 0.55);
+```
+
+A directive mutes its whole next line. So one is written only where every
+hardcoded value on that line was kept, and otherwise the value is reported as
+skipped.
+
+```bash
+npm run eval:values                     # three runs
+npx tsx evals/values/run.ts --bare     # without the token descriptions
+```
+
+`evals/values` carries all 145 literals `--judge` asks about in
+`vip-digital-asset-manager`, an un-remediated WPDS plugin written against the
+wp-admin palette. Each one is hand-labelled with every answer a careful reader
+would accept: `10px` of padding is `sm` or `md`, a scrim is `keep`. It scores
+95% on each of three runs, and 95% of its answers repeat run to run. At the
+0.5 floor it acts on 60% of the literals and is right on 99% of them: two wrong
+tokens, and not one wrong keep, across three runs. Two measurements shaped the
+design:
+
+- **Descriptions.** Without them it scores 85% and makes 16 wrong token picks
+  at the floor. The name says `track`; the description says "eg. scrollbar
+  track", which is what stops a `#f0f0f1` badge becoming one because its value
+  is a digit away.
+- **Colours get the whole family.** Narrowing them to the perceptually nearest
+  tokens scored 91%. A light tint's nearest tokens are greys of the wrong role,
+  and the success wash `#edf6ee` should have been is further away than they are.
+
+Applied to that plugin, `fix --judge` took `tokens/hardcoded-value` from 183
+findings to 63, with 16 suppressions and no other finding moved. What is left
+is mostly the coin-flips: `10px` between 8 and 12, `3px` between 2 and 4.
 
 ### Judged redirects
 

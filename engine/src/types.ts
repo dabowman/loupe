@@ -125,6 +125,12 @@ export interface Finding {
 	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
 	suggest?: Suggestion[] | undefined;
+	/**
+	 * The declaration `tokens/hardcoded-value` flagged, as written. `suggest`
+	 * only exists where a token matched exactly; this is what a judgement acts
+	 * on where none did, without reading it back out of `message`.
+	 */
+	decl?: Hint | undefined;
 }
 
 /**
@@ -204,6 +210,8 @@ export interface AnalyzeResult {
 	 * `check --judge` asks about it.
 	 */
 	controls?: Control[];
+	/** The token set the run read, which `--judge` chooses from. */
+	tokens?: TokenSet;
 }
 
 // ── CSS ─────────────────────────────────────────────────────────────────────
@@ -570,6 +578,8 @@ export interface Profile {
 	skills: string[];
 	patterns: string | null;
 	components: string | null;
+	/** `{ token: description }`, the design system's own words for what each token is for. */
+	tokenDescriptions: string | null;
 	dir: string;
 }
 
@@ -756,17 +766,31 @@ export interface ReportPayload {
  * nothing else, and asking for a whole finding would mean a caller with a
  * candidate in hand had to invent a severity and a rank to be allowed to ask.
  */
-export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest'>;
+export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest' | 'decl' | 'judged'>;
 
-/** One unambiguous substitution: this property, this value, this token. */
+/** One substitution: this property, this value, rewritten `to` this. */
 export interface TokenFix {
 	file: string;
 	line: number;
 	prop: string;
 	value: string;
-	token: string;
+	/** `var(--token)`, or one per part for a shorthand the judge settled. */
+	to: string;
 }
 
 export interface SkippedFix extends TokenFix {
+	why: string;
+}
+
+/** A value `fix --judge` suppressed rather than rewrote, and the reason it wrote down. */
+export interface KeptValue {
+	file: string;
+	line: number;
+	prop: string;
+	value: string;
+	reason: string;
+}
+
+export interface SkippedKeep extends KeptValue {
 	why: string;
 }

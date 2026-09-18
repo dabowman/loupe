@@ -34,7 +34,9 @@ import { fileURLToPath } from 'node:url';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import type { ComponentEntry, Control, Finding, Severity } from './types.ts';
+import { KEEP, planValue } from './tokens.ts';
+import type { Candidates, Slot } from './tokens.ts';
+import type { ComponentEntry, Control, Finding, Profile, Severity, TokenSet } from './types.ts';
 
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 // ponytail: one floor for every outcome. Split it per outcome if an eval shows
@@ -360,4 +362,184 @@ export async function judgeRedirects(
 			},
 		];
 	});
+}
+
+// ── tokens/hardcoded-value: which token, or is it deliberate? ───────────────
+
+// The keep option, worded as a decision with examples of one, so that it is
+// chosen for a reason and not as the answer to "none of these is exact".
+const KEEP_CRITERION =
+	'None of these. The hardcoded value is a deliberate one-off the design system has no token for — a brand or illustration colour, an overlay or scrim, a size locked to something outside the system — and should stay as written.';
+
+const TIER: Record<Candidates['tier'], string> = {
+	exact: 'Several tokens carry exactly this value; they differ in the role they are for.',
+	near: 'No token carries exactly this value; these are the steps of the scale either side of it.',
+	family: 'No token carries exactly this value; these are all the tokens for this property.',
+};
+
+/**
+ * Read one hardcoded literal against the tokens it could have been.
+ *
+ * The candidates arrive already narrowed where arithmetic can narrow them —
+ * `candidatesFor` picks the scale steps either side of a length — so what is
+ * asked is the half code cannot do: which token this rule *means*, judged by
+ * what it styles, and whether the value was a decision at all. The pink card
+ * background is the case the keep option is for: it is either a mistake with a
+ * system default it should have used, or a choice to suppress and leave alone.
+ */
+export async function judgeLiterals(
+	items: readonly { file: string; context_before: string; source: string; prop: string; value: string; part: string; candidates: Candidates }[],
+	apiKey: string,
+	fetchImpl: Fetch = fetch,
+	about: ReadonlyMap<string, string> = new Map(),
+): Promise<(Choice | undefined)[]> {
+	return ask(
+		items,
+		({ file, context_before, source }) => ({ file, context_before, source }),
+		({ prop, value, part, candidates }, i) => ({
+			type: 'choice',
+			instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use — or is the value a deliberate choice the system has no token for?`,
+			criteria: {
+				...Object.fromEntries(candidates.options.map(([n, v]) => [n, about.has(n) ? `${v} — ${about.get(n) ?? ''}` : v])),
+				[KEEP]: KEEP_CRITERION,
+			},
+		}),
+		apiKey,
+		fetchImpl,
+		BATCH.forces,
+	);
+}
+
+/**
+ * What each token is for, in the design system's words: every active
+ * profile's `tokenDescriptions`, merged. Token names carry their system's
+ * prefix, so two profiles cannot collide.
+ *
+ * Measured on `evals/values`: sending these as each option's meaning took the
+ * question from 85% to 92%, and cut the wrong tokens it would act on at 0.5
+ * from 16 to 3 over three runs. The name alone says `track`; the description
+ * says "eg. scrollbar track", which is what stops `#f0f0f1` on a badge
+ * becoming one for being a digit away from its value.
+ */
+export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescriptions'>[]): Map<string, string> {
+	const out = new Map<string, string>();
+	for (const p of profiles) {
+		if (!p.tokenDescriptions) continue;
+		try {
+			const raw = JSON.parse(readFileSync(p.tokenDescriptions, 'utf8')) as Record<string, unknown>;
+			for (const [name, text] of Object.entries(raw)) if (!name.startsWith('$') && typeof text === 'string') out.set(name, text);
+		} catch {
+			/* a profile without readable descriptions is asked with names alone */
+		}
+	}
+	return out;
+}
+
+/** Where a channel marker sits on a message: ` (inline)`, `` in `.a` (css-in-js)``. */
+const MARKER = / (?:in `[^`]*` )?\((?:inline|css-in-js)\)$/;
+
+/** `padding: 10px → <what> <tail>`, the channel marker kept last. */
+function rewrite(f: Finding, what: string, tail: string): void {
+	const marker = MARKER.exec(f.message)?.[0] ?? '';
+	const body = f.message.slice(0, f.message.length - marker.length);
+	const head = body.includes(' → ') ? body.slice(0, body.indexOf(' → ')) : body;
+	f.message = `${head} → ${what}${tail ? ` ${tail}` : ''}${marker}`;
+}
+
+/**
+ * Settle every hardcoded value a single exact token did not: write the token
+ * it should use, or that it stays, into the finding. Returns how many were
+ * written.
+ *
+ * A value is asked about part by part, and settles only when every part does:
+ * `padding: 10px 12px` becomes two tokens or nothing, and a part judged
+ * deliberate keeps the whole declaration, since a half-tokenized value is
+ * still a finding. Where the set has no token for the property at all there
+ * is nothing to ask, and the answer is written without a model.
+ *
+ * `judged` carries the replacement value (or {@link KEEP}) so `fix --judge`
+ * applies what this wrote, not a second reading of it.
+ */
+export async function judgeValues(
+	root: string,
+	findings: readonly Finding[],
+	set: TokenSet,
+	apiKey: string,
+	about: ReadonlyMap<string, string> = new Map(),
+	fetchImpl: Fetch = fetch,
+): Promise<number> {
+	const files = new Map<string, string[]>();
+	const linesOf = (file: string): string[] => {
+		const cached = files.get(file);
+		if (cached) return cached;
+		const lines = readFileSync(join(root, file), 'utf8').split('\n');
+		files.set(file, lines);
+		return lines;
+	};
+
+	type Plan = { f: Finding; parts: string[]; slots: Slot[] };
+	const plans: Plan[] = [];
+	let written = 0;
+	for (const f of findings) {
+		// The single exact token is plain `fix`'s already.
+		if (f.rule !== 'tokens/hardcoded-value' || !f.decl || (f.suggest?.length === 1 && f.suggest[0]?.tokens.length === 1)) continue;
+		const plan = planValue(set, f.decl.prop, f.decl.value);
+		if (plan === 'none') {
+			const why = `no ${f.decl.prop} token in the design system`;
+			rewrite(f, why, '');
+			f.judged = { answer: KEEP, confidence: 1, spans: [why] };
+			written++;
+		} else if (plan) plans.push({ f, ...plan });
+	}
+
+	const asked = plans.flatMap(({ f, parts, slots }) =>
+		slots.flatMap((slot) => {
+			if (!('candidates' in slot) || !f.decl) return [];
+			const lines = linesOf(f.file);
+			const i = f.line - 1;
+			return [
+				{
+					file: f.file,
+					// Enough before it to reach the selector of an ordinary rule, which
+					// is most of what says what the value is for.
+					context_before: lines.slice(Math.max(0, i - 8), i).join('\n'),
+					source: lines.slice(i, i + 3).join('\n'),
+					prop: f.decl.prop,
+					value: parts.join(' '),
+					part: slot.part,
+					candidates: slot.candidates,
+					slot,
+				},
+			];
+		}),
+	);
+	const answers = await judgeLiterals(asked, apiKey, fetchImpl, about);
+	const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
+
+	for (const { f, parts, slots } of plans) {
+		const got = slots.map((s) => ('token' in s ? { choice: s.token, confidence: 1 } : answerOf.get(s)));
+		// The shared floor holds here: on `evals/values` it acts on 60% of the
+		// literals and is right on 99%, and no keep it let through was wrong.
+		if (got.some((a) => !a || a.confidence < FLOOR)) continue;
+		const confidence = Math.min(...got.map((a) => a?.confidence ?? 0));
+		const kept = got.find((a) => a?.choice === KEEP);
+		if (kept) {
+			const why = 'deliberate, no token fits';
+			const tail = judgedTail(kept.confidence);
+			rewrite(f, why, tail);
+			f.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+		} else {
+			const out = [...parts];
+			slots.forEach((s, k) => {
+				out[s.at] = `var(${got[k]?.choice ?? ''})`;
+			});
+			const to = out.join(' ');
+			// Settled without a question when every part was exact.
+			const tail = confidence < 1 ? judgedTail(confidence) : '';
+			rewrite(f, to, tail);
+			f.judged = { answer: to, confidence, spans: tail ? [to, tail] : [to] };
+		}
+		written++;
+	}
+	return written;
 }

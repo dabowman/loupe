@@ -1,0 +1,1452 @@
+[
+ {
+  "id": "v001",
+  "file": "assets/css/admin-panels.css",
+  "line": 27,
+  "prop": "padding-top",
+  "value": "10px",
+  "part": "10px",
+  "context_before": ".compat-item tr.compat-field-vip_dam_panel .vip-dam-metabox {\n\tmargin-top: 4px;\n}\n\n/* Full-width section heading. In a meta box this is a plain block, so a\n\tnormal top border spans the whole panel, no table-cell clipping. */\n.vip-dam-sec {\n\tmargin: 14px 0 8px;",
+  "source": "\tpadding-top: 10px;\n\tborder-top: 1px solid #dcdcde;\n\tfont-size: 12px;"
+ },
+ {
+  "id": "v002",
+  "file": "assets/css/admin-panels.css",
+  "line": 33,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": ".vip-dam-sec {\n\tmargin: 14px 0 8px;\n\tpadding-top: 10px;\n\tborder-top: 1px solid #dcdcde;\n\tfont-size: 12px;\n\tfont-weight: 700;\n\ttext-transform: uppercase;\n\tletter-spacing: .02em;",
+  "source": "\tcolor: #1d2327;\n}\n.vip-dam-sec:first-child {"
+ },
+ {
+  "id": "v003",
+  "file": "assets/css/admin-panels.css",
+  "line": 57,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\tmax-width: 480px;\n}\n/* Match native attachment fields: muted gray label, normal weight. */\n.vip-dam-field label {\n\tmargin-bottom: 2px;\n\tfont-weight: 400;\n\tfont-size: 12px;\n\tline-height: 16px;",
+  "source": "\tcolor: #646970;\n}\n.vip-dam-field input,"
+ },
+ {
+  "id": "v004",
+  "file": "assets/css/admin-panels.css",
+  "line": 68,
+  "prop": "padding",
+  "value": "2px",
+  "part": "2px",
+  "context_before": ".vip-dam-field select {\n\twidth: 100%;\n}\n\n/* Folder picker: a multi-select needs real height to be usable, and the\n\thelper note under it must not read as another field label. */\n.vip-dam-folder-select {\n\tmin-height: 96px;",
+  "source": "\tpadding: 2px;\n}\n.vip-dam-field-note {"
+ },
+ {
+  "id": "v005",
+  "file": "assets/css/admin-panels.css",
+  "line": 74,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": ".vip-dam-folder-select {\n\tmin-height: 96px;\n\tpadding: 2px;\n}\n.vip-dam-field-note {\n\tmargin: 2px 0 6px;\n\tfont-size: 12px;\n\tline-height: 16px;",
+  "source": "\tcolor: #646970;\n}\n"
+ },
+ {
+  "id": "v006",
+  "file": "assets/css/admin-panels.css",
+  "line": 81,
+  "prop": "padding",
+  "value": "10px 12px",
+  "part": "10px",
+  "context_before": "\tline-height: 16px;\n\tcolor: #646970;\n}\n\n/* Takedown: the one irreversible action on this screen, so it does not get\n\tto look like the others. */\n.vip-dam-takedown {\n\tmax-width: 480px;",
+  "source": "\tpadding: 10px 12px;\n\tborder: 1px solid #d63638;\n\tborder-left-width: 4px;"
+ },
+ {
+  "id": "v007",
+  "file": "assets/css/admin-panels.css",
+  "line": 84,
+  "prop": "border-radius",
+  "value": "3px",
+  "part": "3px",
+  "context_before": "\n/* Takedown: the one irreversible action on this screen, so it does not get\n\tto look like the others. */\n.vip-dam-takedown {\n\tmax-width: 480px;\n\tpadding: 10px 12px;\n\tborder: 1px solid #d63638;\n\tborder-left-width: 4px;",
+  "source": "\tborder-radius: 3px;\n\tbackground: #fcf0f1;\n}"
+ },
+ {
+  "id": "v008",
+  "file": "assets/css/admin-panels.css",
+  "line": 85,
+  "prop": "background",
+  "value": "#fcf0f1",
+  "part": "#fcf0f1",
+  "context_before": "/* Takedown: the one irreversible action on this screen, so it does not get\n\tto look like the others. */\n.vip-dam-takedown {\n\tmax-width: 480px;\n\tpadding: 10px 12px;\n\tborder: 1px solid #d63638;\n\tborder-left-width: 4px;\n\tborder-radius: 3px;",
+  "source": "\tbackground: #fcf0f1;\n}\n.vip-dam-takedown .vip-dam-msg {"
+ },
+ {
+  "id": "v009",
+  "file": "assets/css/admin-panels.css",
+  "line": 89,
+  "prop": "color",
+  "value": "#d63638",
+  "part": "#d63638",
+  "context_before": "\tpadding: 10px 12px;\n\tborder: 1px solid #d63638;\n\tborder-left-width: 4px;\n\tborder-radius: 3px;\n\tbackground: #fcf0f1;\n}\n.vip-dam-takedown .vip-dam-msg {\n\tmargin-left: 8px;",
+  "source": "\tcolor: #d63638;\n}\n"
+ },
+ {
+  "id": "v010",
+  "file": "assets/css/admin-panels.css",
+  "line": 109,
+  "prop": "padding",
+  "value": "6px 0",
+  "part": "6px",
+  "context_before": "\tborder-top: 1px solid #dcdcde;\n}\n.vip-dam-share-row {\n\tdisplay: flex;\n\tgap: 8px;\n\talign-items: center;\n\tflex-wrap: wrap;\n\tmargin: 0;",
+  "source": "\tpadding: 6px 0;\n\tborder-bottom: 1px solid #f0f0f1;\n}"
+ },
+ {
+  "id": "v011",
+  "file": "assets/css/admin-panels.css",
+  "line": 114,
+  "prop": "padding",
+  "value": "1px 7px",
+  "part": "1px",
+  "context_before": "\talign-items: center;\n\tflex-wrap: wrap;\n\tmargin: 0;\n\tpadding: 6px 0;\n\tborder-bottom: 1px solid #f0f0f1;\n}\n.vip-dam-share-status {\n\tflex: 0 0 auto;",
+  "source": "\tpadding: 1px 7px;\n\tborder-radius: 9px;\n\tfont-size: 11px;"
+ },
+ {
+  "id": "v012",
+  "file": "assets/css/admin-panels.css",
+  "line": 114,
+  "prop": "padding",
+  "value": "1px 7px",
+  "part": "7px",
+  "context_before": "\talign-items: center;\n\tflex-wrap: wrap;\n\tmargin: 0;\n\tpadding: 6px 0;\n\tborder-bottom: 1px solid #f0f0f1;\n}\n.vip-dam-share-status {\n\tflex: 0 0 auto;",
+  "source": "\tpadding: 1px 7px;\n\tborder-radius: 9px;\n\tfont-size: 11px;"
+ },
+ {
+  "id": "v013",
+  "file": "assets/css/admin-panels.css",
+  "line": 115,
+  "prop": "border-radius",
+  "value": "9px",
+  "part": "9px",
+  "context_before": "\tflex-wrap: wrap;\n\tmargin: 0;\n\tpadding: 6px 0;\n\tborder-bottom: 1px solid #f0f0f1;\n}\n.vip-dam-share-status {\n\tflex: 0 0 auto;\n\tpadding: 1px 7px;",
+  "source": "\tborder-radius: 9px;\n\tfont-size: 11px;\n\tfont-weight: 600;"
+ },
+ {
+  "id": "v014",
+  "file": "assets/css/admin-panels.css",
+  "line": 119,
+  "prop": "background",
+  "value": "#f0f0f1",
+  "part": "#f0f0f1",
+  "context_before": "}\n.vip-dam-share-status {\n\tflex: 0 0 auto;\n\tpadding: 1px 7px;\n\tborder-radius: 9px;\n\tfont-size: 11px;\n\tfont-weight: 600;\n\tline-height: 18px;",
+  "source": "\tbackground: #f0f0f1;\n\tcolor: #50575e;\n}"
+ },
+ {
+  "id": "v015",
+  "file": "assets/css/admin-panels.css",
+  "line": 120,
+  "prop": "color",
+  "value": "#50575e",
+  "part": "#50575e",
+  "context_before": ".vip-dam-share-status {\n\tflex: 0 0 auto;\n\tpadding: 1px 7px;\n\tborder-radius: 9px;\n\tfont-size: 11px;\n\tfont-weight: 600;\n\tline-height: 18px;\n\tbackground: #f0f0f1;",
+  "source": "\tcolor: #50575e;\n}\n.vip-dam-share-row.is-active .vip-dam-share-status {"
+ },
+ {
+  "id": "v016",
+  "file": "assets/css/admin-panels.css",
+  "line": 123,
+  "prop": "background",
+  "value": "#edfaef",
+  "part": "#edfaef",
+  "context_before": "\tborder-radius: 9px;\n\tfont-size: 11px;\n\tfont-weight: 600;\n\tline-height: 18px;\n\tbackground: #f0f0f1;\n\tcolor: #50575e;\n}\n.vip-dam-share-row.is-active .vip-dam-share-status {",
+  "source": "\tbackground: #edfaef;\n\tcolor: #007017;\n}"
+ },
+ {
+  "id": "v017",
+  "file": "assets/css/admin-panels.css",
+  "line": 124,
+  "prop": "color",
+  "value": "#007017",
+  "part": "#007017",
+  "context_before": "\tfont-size: 11px;\n\tfont-weight: 600;\n\tline-height: 18px;\n\tbackground: #f0f0f1;\n\tcolor: #50575e;\n}\n.vip-dam-share-row.is-active .vip-dam-share-status {\n\tbackground: #edfaef;",
+  "source": "\tcolor: #007017;\n}\n.vip-dam-share-row.is-revoked .vip-dam-share-status {"
+ },
+ {
+  "id": "v018",
+  "file": "assets/css/admin-panels.css",
+  "line": 127,
+  "prop": "background",
+  "value": "#fcf0f1",
+  "part": "#fcf0f1",
+  "context_before": "\tbackground: #f0f0f1;\n\tcolor: #50575e;\n}\n.vip-dam-share-row.is-active .vip-dam-share-status {\n\tbackground: #edfaef;\n\tcolor: #007017;\n}\n.vip-dam-share-row.is-revoked .vip-dam-share-status {",
+  "source": "\tbackground: #fcf0f1;\n\tcolor: #d63638;\n}"
+ },
+ {
+  "id": "v019",
+  "file": "assets/css/admin-panels.css",
+  "line": 128,
+  "prop": "color",
+  "value": "#d63638",
+  "part": "#d63638",
+  "context_before": "\tcolor: #50575e;\n}\n.vip-dam-share-row.is-active .vip-dam-share-status {\n\tbackground: #edfaef;\n\tcolor: #007017;\n}\n.vip-dam-share-row.is-revoked .vip-dam-share-status {\n\tbackground: #fcf0f1;",
+  "source": "\tcolor: #d63638;\n}\n.vip-dam-share-meta {"
+ },
+ {
+  "id": "v020",
+  "file": "assets/css/admin-panels.css",
+  "line": 134,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": ".vip-dam-share-row.is-revoked .vip-dam-share-status {\n\tbackground: #fcf0f1;\n\tcolor: #d63638;\n}\n.vip-dam-share-meta {\n\tflex: 1 1 auto;\n\tfont-size: 12px;\n\tline-height: 16px;",
+  "source": "\tcolor: #646970;\n}\n.vip-dam-share-minted {"
+ },
+ {
+  "id": "v021",
+  "file": "assets/css/admin-panels.css",
+  "line": 138,
+  "prop": "padding",
+  "value": "10px 12px",
+  "part": "10px",
+  "context_before": ".vip-dam-share-meta {\n\tflex: 1 1 auto;\n\tfont-size: 12px;\n\tline-height: 16px;\n\tcolor: #646970;\n}\n.vip-dam-share-minted {\n\tmargin: 8px 0 0;",
+  "source": "\tpadding: 10px 12px;\n\tborder: 1px solid #dba617;\n\tborder-left-width: 4px;"
+ },
+ {
+  "id": "v022",
+  "file": "assets/css/admin-panels.css",
+  "line": 141,
+  "prop": "border-radius",
+  "value": "3px",
+  "part": "3px",
+  "context_before": "\tline-height: 16px;\n\tcolor: #646970;\n}\n.vip-dam-share-minted {\n\tmargin: 8px 0 0;\n\tpadding: 10px 12px;\n\tborder: 1px solid #dba617;\n\tborder-left-width: 4px;",
+  "source": "\tborder-radius: 3px;\n\tbackground: #fcf9e8;\n}"
+ },
+ {
+  "id": "v023",
+  "file": "assets/css/admin-panels.css",
+  "line": 142,
+  "prop": "background",
+  "value": "#fcf9e8",
+  "part": "#fcf9e8",
+  "context_before": "\tcolor: #646970;\n}\n.vip-dam-share-minted {\n\tmargin: 8px 0 0;\n\tpadding: 10px 12px;\n\tborder: 1px solid #dba617;\n\tborder-left-width: 4px;\n\tborder-radius: 3px;",
+  "source": "\tbackground: #fcf9e8;\n}\n.vip-dam-share-once {"
+ },
+ {
+  "id": "v024",
+  "file": "assets/css/admin-panels.css",
+  "line": 149,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\tborder-radius: 3px;\n\tbackground: #fcf9e8;\n}\n.vip-dam-share-once {\n\tmargin: 0 0 6px;\n\tfont-size: 12px;\n\tline-height: 16px;\n\tfont-weight: 600;",
+  "source": "\tcolor: #646970;\n}\n.vip-dam-copy-msg {"
+ },
+ {
+  "id": "v025",
+  "file": "assets/css/admin-panels.css",
+  "line": 154,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\tfont-size: 12px;\n\tline-height: 16px;\n\tfont-weight: 600;\n\tcolor: #646970;\n}\n.vip-dam-copy-msg {\n\tmargin-left: 8px;\n\tfont-size: 12px;",
+  "source": "\tcolor: #646970;\n}\n"
+ },
+ {
+  "id": "v026",
+  "file": "assets/css/admin-panels.css",
+  "line": 165,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": "/* Master panel title (edit-screen meta box gets this from its box header;\n\tthe modal has no chrome, so we render + style it here). */\n.vip-dam-title {\n\tmargin: 0 0 6px;\n\tpadding: 0;\n\tfont-size: 14px;\n\tfont-weight: 600;\n\tline-height: 1.4;",
+  "source": "\tcolor: #1d2327;\n}\n"
+ },
+ {
+  "id": "v027",
+  "file": "assets/css/admin-panels.css",
+  "line": 187,
+  "prop": "padding-top",
+  "value": "9px",
+  "part": "9px",
+  "context_before": "\t\tmodal. flow-root creates the same block formatting context and clips\n\t\tnothing. */\n\tdisplay: flow-root;\n}\n.compat-field-vip_dam_panel .vip-dam-field label {\n\tfloat: left;\n\twidth: 30%;\n\tmargin: 0;",
+  "source": "\tpadding-top: 9px;\n\tbox-sizing: border-box;\n}"
+ },
+ {
+  "id": "v028",
+  "file": "assets/css/admin-panels.css",
+  "line": 206,
+  "prop": "padding",
+  "value": "2px 8px",
+  "part": "2px",
+  "context_before": "\tfloat: right;\n\twidth: 68%;\n}\n\n/* Rights status badge, trailing the Rights & Licensing heading. */\n.vip-dam-status {\n\tdisplay: inline-block;\n\tmargin-left: 8px;",
+  "source": "\tpadding: 2px 8px;\n\tborder-radius: 3px;\n\tfont-size: 10px;"
+ },
+ {
+  "id": "v029",
+  "file": "assets/css/admin-panels.css",
+  "line": 207,
+  "prop": "border-radius",
+  "value": "3px",
+  "part": "3px",
+  "context_before": "\twidth: 68%;\n}\n\n/* Rights status badge, trailing the Rights & Licensing heading. */\n.vip-dam-status {\n\tdisplay: inline-block;\n\tmargin-left: 8px;\n\tpadding: 2px 8px;",
+  "source": "\tborder-radius: 3px;\n\tfont-size: 10px;\n\tfont-weight: 700;"
+ },
+ {
+  "id": "v030",
+  "file": "assets/css/admin-panels.css",
+  "line": 214,
+  "prop": "background",
+  "value": "#edfaef",
+  "part": "#edfaef",
+  "context_before": "\tpadding: 2px 8px;\n\tborder-radius: 3px;\n\tfont-size: 10px;\n\tfont-weight: 700;\n\ttext-transform: uppercase;\n\tvertical-align: middle;\n}\n.vip-dam-status-active {",
+  "source": "\tbackground: #edfaef;\n\tcolor: #007017;\n}"
+ },
+ {
+  "id": "v031",
+  "file": "assets/css/admin-panels.css",
+  "line": 215,
+  "prop": "color",
+  "value": "#007017",
+  "part": "#007017",
+  "context_before": "\tborder-radius: 3px;\n\tfont-size: 10px;\n\tfont-weight: 700;\n\ttext-transform: uppercase;\n\tvertical-align: middle;\n}\n.vip-dam-status-active {\n\tbackground: #edfaef;",
+  "source": "\tcolor: #007017;\n}\n.vip-dam-status-expired {"
+ },
+ {
+  "id": "v032",
+  "file": "assets/css/admin-panels.css",
+  "line": 218,
+  "prop": "background",
+  "value": "#fcf0f1",
+  "part": "#fcf0f1",
+  "context_before": "\ttext-transform: uppercase;\n\tvertical-align: middle;\n}\n.vip-dam-status-active {\n\tbackground: #edfaef;\n\tcolor: #007017;\n}\n.vip-dam-status-expired {",
+  "source": "\tbackground: #fcf0f1;\n\tcolor: #b32d2e;\n}"
+ },
+ {
+  "id": "v033",
+  "file": "assets/css/admin-panels.css",
+  "line": 219,
+  "prop": "color",
+  "value": "#b32d2e",
+  "part": "#b32d2e",
+  "context_before": "\tvertical-align: middle;\n}\n.vip-dam-status-active {\n\tbackground: #edfaef;\n\tcolor: #007017;\n}\n.vip-dam-status-expired {\n\tbackground: #fcf0f1;",
+  "source": "\tcolor: #b32d2e;\n}\n.vip-dam-status-embargoed {"
+ },
+ {
+  "id": "v034",
+  "file": "assets/css/admin-panels.css",
+  "line": 222,
+  "prop": "background",
+  "value": "#fcf9e8",
+  "part": "#fcf9e8",
+  "context_before": "\tbackground: #edfaef;\n\tcolor: #007017;\n}\n.vip-dam-status-expired {\n\tbackground: #fcf0f1;\n\tcolor: #b32d2e;\n}\n.vip-dam-status-embargoed {",
+  "source": "\tbackground: #fcf9e8;\n\tcolor: #996800;\n}"
+ },
+ {
+  "id": "v035",
+  "file": "assets/css/admin-panels.css",
+  "line": 223,
+  "prop": "color",
+  "value": "#996800",
+  "part": "#996800",
+  "context_before": "\tcolor: #007017;\n}\n.vip-dam-status-expired {\n\tbackground: #fcf0f1;\n\tcolor: #b32d2e;\n}\n.vip-dam-status-embargoed {\n\tbackground: #fcf9e8;",
+  "source": "\tcolor: #996800;\n}\n"
+ },
+ {
+  "id": "v036",
+  "file": "assets/css/admin-panels.css",
+  "line": 249,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\talign-items: flex-start;\n\tgap: 6px;\n\tmax-width: calc( 100% - 26px ); /* leave room for the trailing tip icon */\n\tpadding-left: 4px;\n\tvertical-align: top;\n\tfont-weight: 400;\n\tfont-size: 12px;\n\tline-height: 1.5;",
+  "source": "\tcolor: #646970;\n}\n.vip-dam-ai-check input[type=\"checkbox\"] {"
+ },
+ {
+  "id": "v037",
+  "file": "assets/css/admin-panels.css",
+  "line": 270,
+  "prop": "padding",
+  "value": "6px 0",
+  "part": "6px",
+  "context_before": "\n/* Version list. */\n.vip-dam-version-list {\n\tmargin: 0;\n\tpadding: 0;\n\tlist-style: none;\n}\n.vip-dam-version-list li {",
+  "source": "\tpadding: 6px 0;\n\tborder-bottom: 1px solid #f0f0f1;\n\tfont-size: 12px;"
+ },
+ {
+  "id": "v038",
+  "file": "assets/css/admin-panels.css",
+  "line": 276,
+  "prop": "color",
+  "value": "#787c82",
+  "part": "#787c82",
+  "context_before": "}\n.vip-dam-version-list li {\n\tpadding: 6px 0;\n\tborder-bottom: 1px solid #f0f0f1;\n\tfont-size: 12px;\n}\n.vip-dam-version-meta {\n\tdisplay: block;",
+  "source": "\tcolor: #787c82;\n\tfont-size: 11px;\n}"
+ },
+ {
+  "id": "v039",
+  "file": "assets/css/admin-panels.css",
+  "line": 282,
+  "prop": "color",
+  "value": "#50575e",
+  "part": "#50575e",
+  "context_before": ".vip-dam-version-meta {\n\tdisplay: block;\n\tcolor: #787c82;\n\tfont-size: 11px;\n}\n.vip-dam-version-note {\n\tdisplay: block;\n\tfont-style: italic;",
+  "source": "\tcolor: #50575e;\n}\n.vip-dam-msg {"
+ },
+ {
+  "id": "v040",
+  "file": "assets/css/admin-panels.css",
+  "line": 288,
+  "prop": "color",
+  "value": "#007017",
+  "part": "#007017",
+  "context_before": "\tdisplay: block;\n\tfont-style: italic;\n\tcolor: #50575e;\n}\n.vip-dam-msg {\n\tdisplay: inline-block;\n\tmargin-left: 8px;\n\tfont-size: 12px;",
+  "source": "\tcolor: #007017;\n}\n"
+ },
+ {
+  "id": "v041",
+  "file": "assets/css/admin-panels.css",
+  "line": 304,
+  "prop": "color",
+  "value": "#007017",
+  "part": "#007017",
+  "context_before": "\tmargin: 8px 0 0;\n}\n\n.vip-dam-folder-status:empty {\n\tdisplay: none;\n}\n\n.vip-dam-folder-status[data-state=\"ok\"] {",
+  "source": "\tcolor: #007017;\n}\n"
+ },
+ {
+  "id": "v042",
+  "file": "assets/css/admin-panels.css",
+  "line": 308,
+  "prop": "color",
+  "value": "#b32d2e",
+  "part": "#b32d2e",
+  "context_before": "\tdisplay: none;\n}\n\n.vip-dam-folder-status[data-state=\"ok\"] {\n\tcolor: #007017;\n}\n\n.vip-dam-folder-status[data-state=\"error\"] {",
+  "source": "\tcolor: #b32d2e;\n}\n"
+ },
+ {
+  "id": "v043",
+  "file": "assets/css/admin-panels.css",
+  "line": 312,
+  "prop": "color",
+  "value": "#b32d2e",
+  "part": "#b32d2e",
+  "context_before": "\tcolor: #007017;\n}\n\n.vip-dam-folder-status[data-state=\"error\"] {\n\tcolor: #b32d2e;\n}\n\n/* Editorial schema-builder: required-field marker in the meta box. */",
+  "source": ".vip-dam-required { color: #b32d2e; font-weight: 600; margin-left: 2px; }\n\n/* AI description shown in the AI Transparency section. */"
+ },
+ {
+  "id": "v044",
+  "file": "assets/css/admin-panels.css",
+  "line": 316,
+  "prop": "padding",
+  "value": "6px 10px",
+  "part": "6px",
+  "context_before": "\tcolor: #b32d2e;\n}\n\n/* Editorial schema-builder: required-field marker in the meta box. */\n.vip-dam-required { color: #b32d2e; font-weight: 600; margin-left: 2px; }\n\n/* AI description shown in the AI Transparency section. */\n.vip-dam-ai-description { margin-top: 10px; }",
+  "source": ".vip-dam-ai-desc-text { margin: 4px 0 8px; padding: 6px 10px; border-left: 3px solid #c3c4c7; background: #f6f7f7; color: #1d2327; font-style: italic; }\n"
+ },
+ {
+  "id": "v045",
+  "file": "assets/css/admin-panels.css",
+  "line": 316,
+  "prop": "padding",
+  "value": "6px 10px",
+  "part": "10px",
+  "context_before": "\tcolor: #b32d2e;\n}\n\n/* Editorial schema-builder: required-field marker in the meta box. */\n.vip-dam-required { color: #b32d2e; font-weight: 600; margin-left: 2px; }\n\n/* AI description shown in the AI Transparency section. */\n.vip-dam-ai-description { margin-top: 10px; }",
+  "source": ".vip-dam-ai-desc-text { margin: 4px 0 8px; padding: 6px 10px; border-left: 3px solid #c3c4c7; background: #f6f7f7; color: #1d2327; font-style: italic; }\n"
+ },
+ {
+  "id": "v046",
+  "file": "assets/css/admin-panels.css",
+  "line": 316,
+  "prop": "background",
+  "value": "#f6f7f7",
+  "part": "#f6f7f7",
+  "context_before": "\tcolor: #b32d2e;\n}\n\n/* Editorial schema-builder: required-field marker in the meta box. */\n.vip-dam-required { color: #b32d2e; font-weight: 600; margin-left: 2px; }\n\n/* AI description shown in the AI Transparency section. */\n.vip-dam-ai-description { margin-top: 10px; }",
+  "source": ".vip-dam-ai-desc-text { margin: 4px 0 8px; padding: 6px 10px; border-left: 3px solid #c3c4c7; background: #f6f7f7; color: #1d2327; font-style: italic; }\n"
+ },
+ {
+  "id": "v047",
+  "file": "assets/css/admin-panels.css",
+  "line": 316,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": "\tcolor: #b32d2e;\n}\n\n/* Editorial schema-builder: required-field marker in the meta box. */\n.vip-dam-required { color: #b32d2e; font-weight: 600; margin-left: 2px; }\n\n/* AI description shown in the AI Transparency section. */\n.vip-dam-ai-description { margin-top: 10px; }",
+  "source": ".vip-dam-ai-desc-text { margin: 4px 0 8px; padding: 6px 10px; border-left: 3px solid #c3c4c7; background: #f6f7f7; color: #1d2327; font-style: italic; }\n"
+ },
+ {
+  "id": "v048",
+  "file": "assets/css/bulk-edit.css",
+  "line": 30,
+  "prop": "background",
+  "value": "rgba(0, 0, 0, 0.55)",
+  "part": "rgba(0, 0, 0, 0.55)",
+  "context_before": "\ttop: 0;\n\tright: 0;\n\tbottom: 0;\n\tleft: 0;\n\tz-index: 190000;\n\tdisplay: flex;\n\talign-items: center;\n\tjustify-content: center;",
+  "source": "\tbackground: rgba(0, 0, 0, 0.55);\n}\n"
+ },
+ {
+  "id": "v049",
+  "file": "assets/css/bulk-edit.css",
+  "line": 52,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": "\tmax-height: calc(100vh - 80px);\n\tmax-height: calc(100dvh - 80px);\n\toverflow-y: auto;\n\tpadding: 20px 24px 24px;\n\tbackground: #fff;\n\tborder-radius: 4px;\n\tbox-shadow: 0 5px 15px rgba(0, 0, 0, 0.7);\n\tfont-size: 13px;",
+  "source": "\tcolor: #1d2327;\n}\n"
+ },
+ {
+  "id": "v050",
+  "file": "assets/css/bulk-edit.css",
+  "line": 64,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\tmargin: 0 0 4px;\n\tfont-size: 16px;\n\tfont-weight: 600;\n\tline-height: 1.4;\n}\n\n.vip-dam-be-count {\n\tmargin: 0 0 12px;",
+  "source": "\tcolor: #646970;\n}\n"
+ },
+ {
+  "id": "v051",
+  "file": "assets/css/bulk-edit.css",
+  "line": 76,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": ".vip-dam-be-sec {\n\tmargin: 18px 0 10px;\n\tpadding-top: 12px;\n\tborder-top: 1px solid #dcdcde;\n\tfont-size: 12px;\n\tfont-weight: 700;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.02em;",
+  "source": "\tcolor: #1d2327;\n}\n"
+ },
+ {
+  "id": "v052",
+  "file": "assets/css/bulk-edit.css",
+  "line": 81,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\tfont-weight: 700;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.02em;\n\tcolor: #1d2327;\n}\n\n.vip-dam-be-hint {\n\tmargin: 0 0 10px;",
+  "source": "\tcolor: #646970;\n\tfont-style: italic;\n}"
+ },
+ {
+  "id": "v053",
+  "file": "assets/css/bulk-edit.css",
+  "line": 96,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\tmargin: 0 0 10px;\n}\n.vip-dam-be-field label {\n\tdisplay: block;\n\tmargin-bottom: 3px;\n\tfont-weight: 400;\n\tfont-size: 12px;\n\tline-height: 16px;",
+  "source": "\tcolor: #646970;\n}\n.vip-dam-be-field input[type=\"text\"],"
+ },
+ {
+  "id": "v054",
+  "file": "assets/css/bulk-edit.css",
+  "line": 109,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": "\twidth: 100%;\n\tbox-sizing: border-box;\n}\n\n/* Radio row (tags add/replace): inline options. */\n.vip-dam-be-radios label {\n\tdisplay: inline-block;\n\tmargin-right: 16px;",
+  "source": "\tcolor: #1d2327;\n}\n"
+ },
+ {
+  "id": "v055",
+  "file": "assets/css/bulk-edit.css",
+  "line": 125,
+  "prop": "background",
+  "value": "#dcdcde",
+  "part": "#dcdcde",
+  "context_before": "\n/* Progress bar. */\n.vip-dam-be-progress-wrap {\n\tmargin: 16px 0 0;\n}\n.vip-dam-be-progress {\n\theight: 8px;\n\toverflow: hidden;",
+  "source": "\tbackground: #dcdcde;\n\tborder-radius: 4px;\n}"
+ },
+ {
+  "id": "v056",
+  "file": "assets/css/bulk-edit.css",
+  "line": 131,
+  "prop": "background",
+  "value": "#2271b1",
+  "part": "#2271b1",
+  "context_before": "\theight: 8px;\n\toverflow: hidden;\n\tbackground: #dcdcde;\n\tborder-radius: 4px;\n}\n.vip-dam-be-progress-bar {\n\twidth: 0;\n\theight: 100%;",
+  "source": "\tbackground: #2271b1;\n\ttransition: width 0.2s ease;\n}"
+ },
+ {
+  "id": "v057",
+  "file": "assets/css/bulk-edit.css",
+  "line": 136,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": ".vip-dam-be-progress-bar {\n\twidth: 0;\n\theight: 100%;\n\tbackground: #2271b1;\n\ttransition: width 0.2s ease;\n}\n.vip-dam-be-progress-text {\n\tmargin: 6px 0 0;",
+  "source": "\tcolor: #646970;\n}\n"
+ },
+ {
+  "id": "v058",
+  "file": "assets/css/bulk-edit.css",
+  "line": 145,
+  "prop": "color",
+  "value": "#00751a",
+  "part": "#00751a",
+  "context_before": "}\n\n/* Results. */\n.vip-dam-be-results {\n\tmargin-top: 12px;\n}\n.vip-dam-be-success {\n\tmargin: 0;",
+  "source": "\tcolor: #00751a;\n\tfont-weight: 600;\n}"
+ },
+ {
+  "id": "v059",
+  "file": "assets/css/bulk-edit.css",
+  "line": 150,
+  "prop": "color",
+  "value": "#b32d2e",
+  "part": "#b32d2e",
+  "context_before": "}\n.vip-dam-be-success {\n\tmargin: 0;\n\tcolor: #00751a;\n\tfont-weight: 600;\n}\n.vip-dam-be-error {\n\tmargin: 0;",
+  "source": "\tcolor: #b32d2e;\n\tfont-weight: 600;\n}"
+ },
+ {
+  "id": "v060",
+  "file": "assets/css/bulk-edit.css",
+  "line": 157,
+  "prop": "padding",
+  "value": "8px 10px",
+  "part": "10px",
+  "context_before": "\tmargin: 0;\n\tcolor: #b32d2e;\n\tfont-weight: 600;\n}\n.vip-dam-be-failures {\n\tmax-height: 160px;\n\toverflow-y: auto;\n\tmargin: 0;",
+  "source": "\tpadding: 8px 10px;\n\tbackground: #fcf0f1;\n\tborder: 1px solid #f0c2c4;"
+ },
+ {
+  "id": "v061",
+  "file": "assets/css/bulk-edit.css",
+  "line": 158,
+  "prop": "background",
+  "value": "#fcf0f1",
+  "part": "#fcf0f1",
+  "context_before": "\tcolor: #b32d2e;\n\tfont-weight: 600;\n}\n.vip-dam-be-failures {\n\tmax-height: 160px;\n\toverflow-y: auto;\n\tmargin: 0;\n\tpadding: 8px 10px;",
+  "source": "\tbackground: #fcf0f1;\n\tborder: 1px solid #f0c2c4;\n\tborder-radius: 3px;"
+ },
+ {
+  "id": "v062",
+  "file": "assets/css/bulk-edit.css",
+  "line": 160,
+  "prop": "border-radius",
+  "value": "3px",
+  "part": "3px",
+  "context_before": "}\n.vip-dam-be-failures {\n\tmax-height: 160px;\n\toverflow-y: auto;\n\tmargin: 0;\n\tpadding: 8px 10px;\n\tbackground: #fcf0f1;\n\tborder: 1px solid #f0c2c4;",
+  "source": "\tborder-radius: 3px;\n\tlist-style: none;\n}"
+ },
+ {
+  "id": "v063",
+  "file": "assets/css/bulk-edit.css",
+  "line": 171,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": ".vip-dam-be-failures li {\n\tmargin: 0 0 4px;\n\tline-height: 1.5;\n}\n.vip-dam-be-failures li:last-child {\n\tmargin-bottom: 0;\n}\n.vip-dam-be-failures em {",
+  "source": "\tcolor: #646970;\n}\n"
+ },
+ {
+  "id": "v064",
+  "file": "assets/css/folders.css",
+  "line": 66,
+  "prop": "padding",
+  "value": "6px 12px 0",
+  "part": "6px",
+  "context_before": "\tpadding: 0 12px 8px;\n\tborder-bottom: 1px solid #f0f0f1;\n}\n\n/* View controls: sort orders, and (below) the select-mode toggle. Compact,\n   because the sidebar is 220px wide and these sit above the tree they\n   configure, the tree has to stay the thing the eye lands on. */\n.vip-dam-folders-sort {",
+  "source": "\tpadding: 6px 12px 0;\n}\n"
+ },
+ {
+  "id": "v065",
+  "file": "assets/css/folders.css",
+  "line": 76,
+  "prop": "color",
+  "value": "#50575e",
+  "part": "#50575e",
+  "context_before": "\n.vip-dam-folders-field {\n\tmargin: 0 0 6px;\n}\n\n.vip-dam-folders-field label {\n\tdisplay: block;\n\tfont-size: 11px;",
+  "source": "\tcolor: #50575e;\n\tmargin-bottom: 2px;\n}"
+ },
+ {
+  "id": "v066",
+  "file": "assets/css/folders.css",
+  "line": 102,
+  "prop": "padding",
+  "value": "6px 12px 0",
+  "part": "6px",
+  "context_before": "   ordinary tab stops, bulk delete needs a route that is not the per-folder\n   context menu, since \"delete the twelve I marked\" is not an operation on any\n   one of them. */\n.vip-dam-folders-select {\n\tdisplay: flex;\n\talign-items: center;\n\tjustify-content: space-between;\n\tgap: 8px;",
+  "source": "\tpadding: 6px 12px 0;\n}\n"
+ },
+ {
+  "id": "v067",
+  "file": "assets/css/folders.css",
+  "line": 107,
+  "prop": "cursor",
+  "value": "default",
+  "part": "default",
+  "context_before": "\talign-items: center;\n\tjustify-content: space-between;\n\tgap: 8px;\n\tpadding: 6px 12px 0;\n}\n\n.vip-dam-folder-delete-marked[disabled] {\n\topacity: 0.6;",
+  "source": "\tcursor: default;\n}\n"
+ },
+ {
+  "id": "v068",
+  "file": "assets/css/folders.css",
+  "line": 114,
+  "prop": "background",
+  "value": "#f0f6fc",
+  "part": "#f0f6fc",
+  "context_before": "\topacity: 0.6;\n\tcursor: default;\n}\n\n/* A marked row, indicated by background AND by the filled dashicon in the row\n   controls, a tint alone would be the only signal, and it is the same tint\n   family as the active row. */\n.vip-dam-folder-node.marked {",
+  "source": "\tbackground: #f0f6fc;\n\tborder-left-color: #d63638;\n}"
+ },
+ {
+  "id": "v069",
+  "file": "assets/css/folders.css",
+  "line": 115,
+  "prop": "border-left-color",
+  "value": "#d63638",
+  "part": "#d63638",
+  "context_before": "\tcursor: default;\n}\n\n/* A marked row, indicated by background AND by the filled dashicon in the row\n   controls, a tint alone would be the only signal, and it is the same tint\n   family as the active row. */\n.vip-dam-folder-node.marked {\n\tbackground: #f0f6fc;",
+  "source": "\tborder-left-color: #d63638;\n}\n"
+ },
+ {
+  "id": "v070",
+  "file": "assets/css/folders.css",
+  "line": 177,
+  "prop": "color",
+  "value": "#787c82",
+  "part": "#787c82",
+  "context_before": "\tjustify-content: center;\n}\n\n.vip-dam-folder-toggle {\n\tborder: 0;\n\tpadding: 0;\n\tbackground: transparent;\n\tcursor: pointer;",
+  "source": "\tcolor: #787c82;\n}\n"
+ },
+ {
+  "id": "v071",
+  "file": "assets/css/folders.css",
+  "line": 181,
+  "prop": "color",
+  "value": "#2271b1",
+  "part": "#2271b1",
+  "context_before": "\tborder: 0;\n\tpadding: 0;\n\tbackground: transparent;\n\tcursor: pointer;\n\tcolor: #787c82;\n}\n\n.vip-dam-folder-toggle:hover {",
+  "source": "\tcolor: #2271b1;\n}\n"
+ },
+ {
+  "id": "v072",
+  "file": "assets/css/folders.css",
+  "line": 197,
+  "prop": "color",
+  "value": "#2271b1",
+  "part": "#2271b1",
+  "context_before": "\n/* \"Show more\" node for a level wider than the server's page size. */\n.vip-dam-folder-more-node {\n\tdisplay: flex;\n\talign-items: center;\n\tgap: 4px;\n\tpadding: 4px 12px 4px 32px;\n\tcursor: pointer;",
+  "source": "\tcolor: #2271b1;\n\tfont-size: 12px;\n\tborder-left: 3px solid transparent;"
+ },
+ {
+  "id": "v073",
+  "file": "assets/css/folders.css",
+  "line": 203,
+  "prop": "background",
+  "value": "#f6f7f7",
+  "part": "#f6f7f7",
+  "context_before": "\tpadding: 4px 12px 4px 32px;\n\tcursor: pointer;\n\tcolor: #2271b1;\n\tfont-size: 12px;\n\tborder-left: 3px solid transparent;\n}\n\n.vip-dam-folder-more-node:hover {",
+  "source": "\tbackground: #f6f7f7;\n}\n"
+ },
+ {
+  "id": "v074",
+  "file": "assets/css/folders.css",
+  "line": 245,
+  "prop": "background",
+  "value": "#f6f7f7",
+  "part": "#f6f7f7",
+  "context_before": "\t   the gesture. Rename goes through window.prompt, so nothing here needs the\n\t   label to be selectable. */\n\tuser-select: none;\n\t-webkit-touch-callout: none;\n\tborder-left: 3px solid transparent;\n}\n\n.vip-dam-folder-node:hover {",
+  "source": "\tbackground: #f6f7f7;\n}\n"
+ },
+ {
+  "id": "v075",
+  "file": "assets/css/folders.css",
+  "line": 249,
+  "prop": "background",
+  "value": "#f0f6fc",
+  "part": "#f0f6fc",
+  "context_before": "\tborder-left: 3px solid transparent;\n}\n\n.vip-dam-folder-node:hover {\n\tbackground: #f6f7f7;\n}\n\n.vip-dam-folder-node.active {",
+  "source": "\tbackground: #f0f6fc;\n\tborder-left-color: #2271b1;\n\tfont-weight: 600;"
+ },
+ {
+  "id": "v076",
+  "file": "assets/css/folders.css",
+  "line": 250,
+  "prop": "border-left-color",
+  "value": "#2271b1",
+  "part": "#2271b1",
+  "context_before": "}\n\n.vip-dam-folder-node:hover {\n\tbackground: #f6f7f7;\n}\n\n.vip-dam-folder-node.active {\n\tbackground: #f0f6fc;",
+  "source": "\tborder-left-color: #2271b1;\n\tfont-weight: 600;\n}"
+ },
+ {
+  "id": "v077",
+  "file": "assets/css/folders.css",
+  "line": 255,
+  "prop": "background",
+  "value": "#e5f1f8",
+  "part": "#e5f1f8",
+  "context_before": "\n.vip-dam-folder-node.active {\n\tbackground: #f0f6fc;\n\tborder-left-color: #2271b1;\n\tfont-weight: 600;\n}\n\n.vip-dam-folder-node.drop-target {",
+  "source": "\tbackground: #e5f1f8;\n\tborder-left-color: #2271b1;\n\toutline: 1px dashed #2271b1;"
+ },
+ {
+  "id": "v078",
+  "file": "assets/css/folders.css",
+  "line": 256,
+  "prop": "border-left-color",
+  "value": "#2271b1",
+  "part": "#2271b1",
+  "context_before": ".vip-dam-folder-node.active {\n\tbackground: #f0f6fc;\n\tborder-left-color: #2271b1;\n\tfont-weight: 600;\n}\n\n.vip-dam-folder-node.drop-target {\n\tbackground: #e5f1f8;",
+  "source": "\tborder-left-color: #2271b1;\n\toutline: 1px dashed #2271b1;\n\toutline-offset: -1px;"
+ },
+ {
+  "id": "v079",
+  "file": "assets/css/folders.css",
+  "line": 279,
+  "prop": "color",
+  "value": "#787c82",
+  "part": "#787c82",
+  "context_before": "\tflex: 1 1 auto;\n\toverflow: hidden;\n\ttext-overflow: ellipsis;\n\twhite-space: nowrap;\n}\n\n.vip-dam-folder-tree .vip-dam-folder-node .vip-dam-folder-count {\n\tflex: 0 0 auto;",
+  "source": "\tcolor: #787c82;\n\tfont-size: 11px;\n\tbackground: #f0f0f1;"
+ },
+ {
+  "id": "v080",
+  "file": "assets/css/folders.css",
+  "line": 281,
+  "prop": "background",
+  "value": "#f0f0f1",
+  "part": "#f0f0f1",
+  "context_before": "\ttext-overflow: ellipsis;\n\twhite-space: nowrap;\n}\n\n.vip-dam-folder-tree .vip-dam-folder-node .vip-dam-folder-count {\n\tflex: 0 0 auto;\n\tcolor: #787c82;\n\tfont-size: 11px;",
+  "source": "\tbackground: #f0f0f1;\n\tborder-radius: 9px;\n\tpadding: 0 6px;"
+ },
+ {
+  "id": "v081",
+  "file": "assets/css/folders.css",
+  "line": 282,
+  "prop": "border-radius",
+  "value": "9px",
+  "part": "9px",
+  "context_before": "\twhite-space: nowrap;\n}\n\n.vip-dam-folder-tree .vip-dam-folder-node .vip-dam-folder-count {\n\tflex: 0 0 auto;\n\tcolor: #787c82;\n\tfont-size: 11px;\n\tbackground: #f0f0f1;",
+  "source": "\tborder-radius: 9px;\n\tpadding: 0 6px;\n}"
+ },
+ {
+  "id": "v082",
+  "file": "assets/css/folders.css",
+  "line": 283,
+  "prop": "padding",
+  "value": "0 6px",
+  "part": "6px",
+  "context_before": "}\n\n.vip-dam-folder-tree .vip-dam-folder-node .vip-dam-folder-count {\n\tflex: 0 0 auto;\n\tcolor: #787c82;\n\tfont-size: 11px;\n\tbackground: #f0f0f1;\n\tborder-radius: 9px;",
+  "source": "\tpadding: 0 6px;\n}\n"
+ },
+ {
+  "id": "v083",
+  "file": "assets/css/folders.css",
+  "line": 291,
+  "prop": "color",
+  "value": "#787c82",
+  "part": "#787c82",
+  "context_before": "\tpadding: 0 6px;\n}\n\n/* Term id, shown only when the toggle is on. Monospace because it is an\n   identifier somebody is about to retype into a WP-CLI command, and the\n   digits lining up is the whole reason to display it. */\n.vip-dam-folder-tree .vip-dam-folder-node .vip-dam-folder-id {\n\tflex: 0 0 auto;",
+  "source": "\tcolor: #787c82;\n\tfont-size: 11px;\n\tfont-family: Consolas, Monaco, monospace;"
+ },
+ {
+  "id": "v084",
+  "file": "assets/css/folders.css",
+  "line": 319,
+  "prop": "color",
+  "value": "#2271b1",
+  "part": "#2271b1",
+  "context_before": "}\n\n/* The mark control is the row's primary affordance while select mode is on,\n   so it is not hidden behind hover the way the management buttons are. Driven\n   off a class on the sidebar rather than :has( [data-act=\"mark\"] ), this rule\n   decides whether a control is visible at all, which is not something to hang\n   on a selector an older engine might not implement. */\n.vip-dam-folder-action[data-act=\"mark\"] {",
+  "source": "\tcolor: #2271b1;\n}\n"
+ },
+ {
+  "id": "v085",
+  "file": "assets/css/folders.css",
+  "line": 340,
+  "prop": "color",
+  "value": "#787c82",
+  "part": "#787c82",
+  "context_before": "\t}\n}\n\n.vip-dam-folder-action {\n\tborder: 0;\n\tpadding: 0;\n\tbackground: transparent;\n\tcursor: pointer;",
+  "source": "\tcolor: #787c82;\n}\n"
+ },
+ {
+  "id": "v086",
+  "file": "assets/css/folders.css",
+  "line": 344,
+  "prop": "color",
+  "value": "#2271b1",
+  "part": "#2271b1",
+  "context_before": "\tborder: 0;\n\tpadding: 0;\n\tbackground: transparent;\n\tcursor: pointer;\n\tcolor: #787c82;\n}\n\n.vip-dam-folder-action:hover {",
+  "source": "\tcolor: #2271b1;\n}\n"
+ },
+ {
+  "id": "v087",
+  "file": "assets/css/folders.css",
+  "line": 388,
+  "prop": "padding",
+  "value": "6px 12px",
+  "part": "6px",
+  "context_before": "\tbox-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);\n}\n\n.vip-dam-folder-menu-item {\n\tdisplay: flex;\n\talign-items: center;\n\tgap: 12px;\n\twidth: 100%;",
+  "source": "\tpadding: 6px 12px;\n\tborder: 0;\n\tbackground: transparent;"
+ },
+ {
+  "id": "v088",
+  "file": "assets/css/folders.css",
+  "line": 393,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": "\talign-items: center;\n\tgap: 12px;\n\twidth: 100%;\n\tpadding: 6px 12px;\n\tborder: 0;\n\tbackground: transparent;\n\ttext-align: left;\n\tcursor: pointer;",
+  "source": "\tcolor: #1d2327;\n\tfont-size: 13px;\n\tline-height: 1.6;"
+ },
+ {
+  "id": "v089",
+  "file": "assets/css/folders.css",
+  "line": 399,
+  "prop": "background",
+  "value": "#f0f0f1",
+  "part": "#f0f0f1",
+  "context_before": "\ttext-align: left;\n\tcursor: pointer;\n\tcolor: #1d2327;\n\tfont-size: 13px;\n\tline-height: 1.6;\n}\n\n.vip-dam-folder-menu-item:hover {",
+  "source": "\tbackground: #f0f0f1;\n}\n"
+ },
+ {
+  "id": "v090",
+  "file": "assets/css/folders.css",
+  "line": 409,
+  "prop": "background",
+  "value": "#f0f6fc",
+  "part": "#f0f6fc",
+  "context_before": "\n/* Same reasoning as the tree's own focus ring: focus inside the menu is\n   always moved programmatically, and :focus-visible alone is not reliably\n   applied to programmatic focus across engines. */\n.vip-dam-folder-menu-item:focus,\n.vip-dam-folder-menu-item:focus-visible {\n\toutline: 2px solid #2271b1;\n\toutline-offset: -2px;",
+  "source": "\tbackground: #f0f6fc;\n}\n"
+ },
+ {
+  "id": "v091",
+  "file": "assets/css/folders.css",
+  "line": 425,
+  "prop": "color",
+  "value": "#787c82",
+  "part": "#787c82",
+  "context_before": "}\n\n.vip-dam-folder-menu-label {\n\tflex: 1 1 auto;\n}\n\n.vip-dam-folder-menu-shortcut {\n\tflex: 0 0 auto;",
+  "source": "\tcolor: #787c82;\n\tfont-size: 11px;\n}"
+ },
+ {
+  "id": "v092",
+  "file": "assets/css/folders.css",
+  "line": 461,
+  "prop": "color",
+  "value": "#2271b1",
+  "part": "#2271b1",
+  "context_before": "   swatch cannot indicate its own selectedness in a list of swatches. */\n.vip-dam-folder-menu-color[aria-checked=\"true\"] {\n\tfont-weight: 600;\n}\n\n.vip-dam-folder-menu-color[aria-checked=\"true\"]::after {\n\tcontent: \"\\2713\";\n\tmargin-left: auto;",
+  "source": "\tcolor: #2271b1;\n}\n"
+ },
+ {
+  "id": "v093",
+  "file": "assets/css/folders.css",
+  "line": 502,
+  "prop": "bottom",
+  "value": "24px",
+  "part": "24px",
+  "context_before": " *\n * Fixed rather than placed in the sidebar because every folder operation\n * re-renders the sidebar, which would destroy the message before it was read.\n * Bottom-left keeps it near the folder tree it refers to and clear of the\n * grid's own bulk-select toolbar at the top.\n */\n.vip-dam-folders-toast {\n\tposition: fixed;",
+  "source": "\tbottom: 24px;\n\tleft: 24px;\n\tz-index: 100000;"
+ },
+ {
+  "id": "v094",
+  "file": "assets/css/folders.css",
+  "line": 503,
+  "prop": "left",
+  "value": "24px",
+  "part": "24px",
+  "context_before": " * Fixed rather than placed in the sidebar because every folder operation\n * re-renders the sidebar, which would destroy the message before it was read.\n * Bottom-left keeps it near the folder tree it refers to and clear of the\n * grid's own bulk-select toolbar at the top.\n */\n.vip-dam-folders-toast {\n\tposition: fixed;\n\tbottom: 24px;",
+  "source": "\tleft: 24px;\n\tz-index: 100000;\n\tmax-width: 320px;"
+ },
+ {
+  "id": "v095",
+  "file": "assets/css/folders.css",
+  "line": 506,
+  "prop": "padding",
+  "value": "10px 14px",
+  "part": "10px",
+  "context_before": " * grid's own bulk-select toolbar at the top.\n */\n.vip-dam-folders-toast {\n\tposition: fixed;\n\tbottom: 24px;\n\tleft: 24px;\n\tz-index: 100000;\n\tmax-width: 320px;",
+  "source": "\tpadding: 10px 14px;\n\tborder-left: 4px solid #2271b1;\n\tborder-radius: 2px;"
+ },
+ {
+  "id": "v096",
+  "file": "assets/css/folders.css",
+  "line": 506,
+  "prop": "padding",
+  "value": "10px 14px",
+  "part": "14px",
+  "context_before": " * grid's own bulk-select toolbar at the top.\n */\n.vip-dam-folders-toast {\n\tposition: fixed;\n\tbottom: 24px;\n\tleft: 24px;\n\tz-index: 100000;\n\tmax-width: 320px;",
+  "source": "\tpadding: 10px 14px;\n\tborder-left: 4px solid #2271b1;\n\tborder-radius: 2px;"
+ },
+ {
+  "id": "v097",
+  "file": "assets/css/folders.css",
+  "line": 510,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": "\tbottom: 24px;\n\tleft: 24px;\n\tz-index: 100000;\n\tmax-width: 320px;\n\tpadding: 10px 14px;\n\tborder-left: 4px solid #2271b1;\n\tborder-radius: 2px;\n\tbackground: #fff;",
+  "source": "\tcolor: #1d2327;\n\tbox-shadow: 0 2px 8px rgba( 0, 0, 0, 0.18 );\n\tfont-size: 13px;"
+ },
+ {
+  "id": "v098",
+  "file": "assets/css/folders.css",
+  "line": 535,
+  "prop": "left",
+  "value": "12px",
+  "part": "12px",
+  "context_before": "\t.vip-dam-folders-toast {\n\t\ttransition: none;\n\t}\n}\n\n/* The admin menu is collapsed/overlaid on small screens; keep clear of it. */\n@media screen and ( max-width: 782px ) {\n\t.vip-dam-folders-toast {",
+  "source": "\t\tleft: 12px;\n\t\tright: 12px;\n\t\tbottom: 12px;"
+ },
+ {
+  "id": "v099",
+  "file": "assets/css/folders.css",
+  "line": 536,
+  "prop": "right",
+  "value": "12px",
+  "part": "12px",
+  "context_before": "\t\ttransition: none;\n\t}\n}\n\n/* The admin menu is collapsed/overlaid on small screens; keep clear of it. */\n@media screen and ( max-width: 782px ) {\n\t.vip-dam-folders-toast {\n\t\tleft: 12px;",
+  "source": "\t\tright: 12px;\n\t\tbottom: 12px;\n\t\tmax-width: none;"
+ },
+ {
+  "id": "v100",
+  "file": "assets/css/folders.css",
+  "line": 537,
+  "prop": "bottom",
+  "value": "12px",
+  "part": "12px",
+  "context_before": "\t}\n}\n\n/* The admin menu is collapsed/overlaid on small screens; keep clear of it. */\n@media screen and ( max-width: 782px ) {\n\t.vip-dam-folders-toast {\n\t\tleft: 12px;\n\t\tright: 12px;",
+  "source": "\t\tbottom: 12px;\n\t\tmax-width: none;\n\t}"
+ },
+ {
+  "id": "v101",
+  "file": "assets/css/media-hub-library.css",
+  "line": 26,
+  "prop": "color",
+  "value": "#50575e",
+  "part": "#50575e",
+  "context_before": ".vip-dam-hub-search {\n\twidth: 100%;\n\tmax-width: 320px;\n}\n\n.vip-dam-hub-status {\n\tmin-height: 1.4em;\n\tmargin-bottom: 8px;",
+  "source": "\tcolor: #50575e;\n}\n"
+ },
+ {
+  "id": "v102",
+  "file": "assets/css/media-hub-library.css",
+  "line": 42,
+  "prop": "padding",
+  "value": "6px",
+  "part": "6px",
+  "context_before": "\tpadding: 0;\n\tlist-style: none;\n}\n\n.vip-dam-hub-item {\n\tcursor: pointer;\n\tborder: 1px solid #dcdcde;\n\tborder-radius: 2px;",
+  "source": "\tpadding: 6px;\n\tbackground: #fff;\n\tdisplay: flex;"
+ },
+ {
+  "id": "v103",
+  "file": "assets/css/media-hub-library.css",
+  "line": 51,
+  "prop": "border-color",
+  "value": "#2271b1",
+  "part": "#2271b1",
+  "context_before": "\tbackground: #fff;\n\tdisplay: flex;\n\tflex-direction: column;\n\tgap: 6px;\n}\n\n.vip-dam-hub-item:hover,\n.vip-dam-hub-item:focus {",
+  "source": "\tborder-color: #2271b1;\n\tbox-shadow: 0 0 0 1px #2271b1;\n\toutline: none;"
+ },
+ {
+  "id": "v104",
+  "file": "assets/css/media-hub-library.css",
+  "line": 60,
+  "prop": "background",
+  "value": "#f0f0f1",
+  "part": "#f0f0f1",
+  "context_before": "\tbox-shadow: 0 0 0 1px #2271b1;\n\toutline: none;\n}\n\n.vip-dam-hub-thumb {\n\tposition: relative;\n\tdisplay: block;\n\taspect-ratio: 1 / 1;",
+  "source": "\tbackground: #f0f0f1;\n\toverflow: hidden;\n}"
+ },
+ {
+  "id": "v105",
+  "file": "assets/css/media-hub-library.css",
+  "line": 80,
+  "prop": "top",
+  "value": "4px",
+  "part": "4px",
+  "context_before": "\tdisplay: block;\n\twidth: 100%;\n\theight: 100%;\n\tbackground: repeating-linear-gradient( 45deg, #f0f0f1, #f0f0f1 8px, #e6e6e8 8px, #e6e6e8 16px );\n}\n\n.vip-dam-hub-badge {\n\tposition: absolute;",
+  "source": "\ttop: 4px;\n\tleft: 4px;\n\tbackground: #b32d2e;"
+ },
+ {
+  "id": "v106",
+  "file": "assets/css/media-hub-library.css",
+  "line": 81,
+  "prop": "left",
+  "value": "4px",
+  "part": "4px",
+  "context_before": "\twidth: 100%;\n\theight: 100%;\n\tbackground: repeating-linear-gradient( 45deg, #f0f0f1, #f0f0f1 8px, #e6e6e8 8px, #e6e6e8 16px );\n}\n\n.vip-dam-hub-badge {\n\tposition: absolute;\n\ttop: 4px;",
+  "source": "\tleft: 4px;\n\tbackground: #b32d2e;\n\tcolor: #fff;"
+ },
+ {
+  "id": "v107",
+  "file": "assets/css/media-hub-library.css",
+  "line": 82,
+  "prop": "background",
+  "value": "#b32d2e",
+  "part": "#b32d2e",
+  "context_before": "\theight: 100%;\n\tbackground: repeating-linear-gradient( 45deg, #f0f0f1, #f0f0f1 8px, #e6e6e8 8px, #e6e6e8 16px );\n}\n\n.vip-dam-hub-badge {\n\tposition: absolute;\n\ttop: 4px;\n\tleft: 4px;",
+  "source": "\tbackground: #b32d2e;\n\tcolor: #fff;\n\tfont-size: 10px;"
+ },
+ {
+  "id": "v108",
+  "file": "assets/css/media-hub-library.css",
+  "line": 83,
+  "prop": "color",
+  "value": "#fff",
+  "part": "#fff",
+  "context_before": "\tbackground: repeating-linear-gradient( 45deg, #f0f0f1, #f0f0f1 8px, #e6e6e8 8px, #e6e6e8 16px );\n}\n\n.vip-dam-hub-badge {\n\tposition: absolute;\n\ttop: 4px;\n\tleft: 4px;\n\tbackground: #b32d2e;",
+  "source": "\tcolor: #fff;\n\tfont-size: 10px;\n\tline-height: 1;"
+ },
+ {
+  "id": "v109",
+  "file": "assets/css/media-hub-library.css",
+  "line": 86,
+  "prop": "padding",
+  "value": "3px 5px",
+  "part": "3px",
+  "context_before": ".vip-dam-hub-badge {\n\tposition: absolute;\n\ttop: 4px;\n\tleft: 4px;\n\tbackground: #b32d2e;\n\tcolor: #fff;\n\tfont-size: 10px;\n\tline-height: 1;",
+  "source": "\tpadding: 3px 5px;\n\tborder-radius: 2px;\n\ttext-transform: uppercase;"
+ },
+ {
+  "id": "v110",
+  "file": "assets/css/media-hub-library.css",
+  "line": 86,
+  "prop": "padding",
+  "value": "3px 5px",
+  "part": "5px",
+  "context_before": ".vip-dam-hub-badge {\n\tposition: absolute;\n\ttop: 4px;\n\tleft: 4px;\n\tbackground: #b32d2e;\n\tcolor: #fff;\n\tfont-size: 10px;\n\tline-height: 1;",
+  "source": "\tpadding: 3px 5px;\n\tborder-radius: 2px;\n\ttext-transform: uppercase;"
+ },
+ {
+  "id": "v111",
+  "file": "assets/css/media-hub-library.css",
+  "line": 95,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": "\tborder-radius: 2px;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.02em;\n}\n\n.vip-dam-hub-title {\n\tfont-size: 12px;\n\tline-height: 1.3;",
+  "source": "\tcolor: #1d2327;\n\toverflow: hidden;\n\ttext-overflow: ellipsis;"
+ },
+ {
+  "id": "v112",
+  "file": "assets/css/media-inline-play.css",
+  "line": 27,
+  "prop": "background",
+  "value": "rgba( 19, 25, 30, 0.65 )",
+  "part": "rgba( 19, 25, 30, 0.65 )",
+  "context_before": "\twidth: 44px;\n\theight: 44px;\n\tdisplay: flex;\n\talign-items: center;\n\tjustify-content: center;\n\tpadding: 0;\n\tborder: none;\n\tborder-radius: 50%;",
+  "source": "\tbackground: rgba( 19, 25, 30, 0.65 );\n\tcursor: pointer;\n\tz-index: 2;"
+ },
+ {
+  "id": "v113",
+  "file": "assets/css/media-inline-play.css",
+  "line": 61,
+  "prop": "background",
+  "value": "rgba( 19, 25, 30, 0.85 )",
+  "part": "rgba( 19, 25, 30, 0.85 )",
+  "context_before": "}\n\n.vip-dam-play-btn:focus {\n\toutline: 2px solid #fff;\n\toutline-offset: 2px;\n}\n\n.vip-dam-play-btn:hover {",
+  "source": "\tbackground: rgba( 19, 25, 30, 0.85 );\n}\n"
+ },
+ {
+  "id": "v114",
+  "file": "assets/css/media-inline-play.css",
+  "line": 70,
+  "prop": "border-width",
+  "value": "8px 0 8px 13px",
+  "part": "13px",
+  "context_before": "}\n\n/* CSS-only play triangle so there is no icon-font dependency. */\n.vip-dam-play-icon {\n\twidth: 0;\n\theight: 0;\n\tmargin-left: 3px;\n\tborder-style: solid;",
+  "source": "\tborder-width: 8px 0 8px 13px;\n\tborder-color: transparent transparent transparent #fff;\n}"
+ },
+ {
+  "id": "v115",
+  "file": "assets/css/media-inline-play.css",
+  "line": 71,
+  "prop": "border-color",
+  "value": "transparent transparent transparent #fff",
+  "part": "#fff",
+  "context_before": "\n/* CSS-only play triangle so there is no icon-font dependency. */\n.vip-dam-play-icon {\n\twidth: 0;\n\theight: 0;\n\tmargin-left: 3px;\n\tborder-style: solid;\n\tborder-width: 8px 0 8px 13px;",
+  "source": "\tborder-color: transparent transparent transparent #fff;\n}\n"
+ },
+ {
+  "id": "v116",
+  "file": "assets/css/media-inline-play.css",
+  "line": 81,
+  "prop": "background",
+  "value": "#000",
+  "part": "#000",
+  "context_before": "\n.vip-dam-inline-media {\n\tposition: absolute;\n\tinset: 0;\n\tz-index: 3;\n\tdisplay: flex;\n\talign-items: center;\n\tjustify-content: center;",
+  "source": "\tbackground: #000;\n}\n"
+ },
+ {
+  "id": "v117",
+  "file": "assets/css/media-inline-play.css",
+  "line": 96,
+  "prop": "top",
+  "value": "2px",
+  "part": "2px",
+  "context_before": "}\n\n.vip-dam-inline-media audio {\n\twidth: 92%;\n}\n\n.vip-dam-inline-close {\n\tposition: absolute;",
+  "source": "\ttop: 2px;\n\tright: 2px;\n\tz-index: 4;"
+ },
+ {
+  "id": "v118",
+  "file": "assets/css/media-inline-play.css",
+  "line": 97,
+  "prop": "right",
+  "value": "2px",
+  "part": "2px",
+  "context_before": "\n.vip-dam-inline-media audio {\n\twidth: 92%;\n}\n\n.vip-dam-inline-close {\n\tposition: absolute;\n\ttop: 2px;",
+  "source": "\tright: 2px;\n\tz-index: 4;\n\twidth: 22px;"
+ },
+ {
+  "id": "v119",
+  "file": "assets/css/media-inline-play.css",
+  "line": 105,
+  "prop": "background",
+  "value": "rgba( 19, 25, 30, 0.75 )",
+  "part": "rgba( 19, 25, 30, 0.75 )",
+  "context_before": "\tright: 2px;\n\tz-index: 4;\n\twidth: 22px;\n\theight: 22px;\n\tpadding: 0;\n\tline-height: 20px;\n\tborder: none;\n\tborder-radius: 50%;",
+  "source": "\tbackground: rgba( 19, 25, 30, 0.75 );\n\tcolor: #fff;\n\tfont-size: 16px;"
+ },
+ {
+  "id": "v120",
+  "file": "assets/css/media-inline-play.css",
+  "line": 106,
+  "prop": "color",
+  "value": "#fff",
+  "part": "#fff",
+  "context_before": "\tz-index: 4;\n\twidth: 22px;\n\theight: 22px;\n\tpadding: 0;\n\tline-height: 20px;\n\tborder: none;\n\tborder-radius: 50%;\n\tbackground: rgba( 19, 25, 30, 0.75 );",
+  "source": "\tcolor: #fff;\n\tfont-size: 16px;\n\tcursor: pointer;"
+ },
+ {
+  "id": "v121",
+  "file": "assets/css/media-inline-play.css",
+  "line": 113,
+  "prop": "background",
+  "value": "rgba( 19, 25, 30, 0.95 )",
+  "part": "rgba( 19, 25, 30, 0.95 )",
+  "context_before": "\tbackground: rgba( 19, 25, 30, 0.75 );\n\tcolor: #fff;\n\tfont-size: 16px;\n\tcursor: pointer;\n}\n\n.vip-dam-inline-close:hover,\n.vip-dam-inline-close:focus {",
+  "source": "\tbackground: rgba( 19, 25, 30, 0.95 );\n}\n"
+ },
+ {
+  "id": "v122",
+  "file": "assets/css/report-page.css",
+  "line": 14,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": "   column so every value column starts at the same x-position, and a\n   right-aligned value column. Scoped with :not(:has(thead)) so the\n   multi-column DATA tables (Growth, Most-used, Takedown log, Stale cleanup),\n   which DO have a <thead>, keep default column sizing and left alignment,   otherwise their body cells did not line up under their headers. */\n.vip-dam-report .widefat.striped:not(:has(thead)) tbody tr td:first-child {\n\twidth: 280px;\n\tvertical-align: top;\n\tfont-weight: 500;",
+  "source": "\tcolor: #1d2327;\n}\n"
+ },
+ {
+  "id": "v123",
+  "file": "assets/css/report-page.css",
+  "line": 19,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\twidth: 280px;\n\tvertical-align: top;\n\tfont-weight: 500;\n\tcolor: #1d2327;\n}\n\n.vip-dam-report .widefat.striped:not(:has(thead)) tbody tr td:last-child {\n\tvertical-align: top;",
+  "source": "\tcolor: #646970;\n\t/* Value column: right-align with tabular figures so digits line up down\n\t   the column and read as scannable numbers. */"
+ },
+ {
+  "id": "v124",
+  "file": "assets/css/report-page.css",
+  "line": 28,
+  "prop": "padding",
+  "value": "0 6px",
+  "part": "6px",
+  "context_before": "\t/* Value column: right-align with tabular figures so digits line up down\n\t   the column and read as scannable numbers. */\n\ttext-align: right;\n\tfont-variant-numeric: tabular-nums;\n}\n\n/* Icon action buttons in the report data tables (stale cleanup). */\n.vip-dam-report .vip-dam-stale-action {",
+  "source": "\tpadding: 0 6px;\n}\n"
+ },
+ {
+  "id": "v125",
+  "file": "assets/css/report-page.css",
+  "line": 69,
+  "prop": "padding",
+  "value": "2px 18px 12px",
+  "part": "2px",
+  "context_before": "\tmax-width: 1000px;\n\tmargin: 12px 0 28px;\n}\n\n.vip-dam-report .vip-dam-stat-card {\n\tbackground: #fff;\n\tborder: 1px solid #e2e4e7;\n\tborder-radius: 8px;",
+  "source": "\tpadding: 2px 18px 12px;\n\tbox-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 );\n}"
+ },
+ {
+  "id": "v126",
+  "file": "assets/css/report-page.css",
+  "line": 69,
+  "prop": "padding",
+  "value": "2px 18px 12px",
+  "part": "18px",
+  "context_before": "\tmax-width: 1000px;\n\tmargin: 12px 0 28px;\n}\n\n.vip-dam-report .vip-dam-stat-card {\n\tbackground: #fff;\n\tborder: 1px solid #e2e4e7;\n\tborder-radius: 8px;",
+  "source": "\tpadding: 2px 18px 12px;\n\tbox-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 );\n}"
+ },
+ {
+  "id": "v127",
+  "file": "assets/css/report-page.css",
+  "line": 81,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": ".vip-dam-report .vip-dam-stat-card h2 {\n\tmargin: 14px 0 4px;\n\tpadding: 0;\n\tfont-size: 12px;\n\tfont-weight: 600;\n\tline-height: 1.4;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.5px;",
+  "source": "\tcolor: #646970;\n}\n"
+ },
+ {
+  "id": "v128",
+  "file": "assets/css/report-page.css",
+  "line": 93,
+  "prop": "padding",
+  "value": "7px 0",
+  "part": "7px",
+  "context_before": ".vip-dam-report .vip-dam-stat-card .widefat.striped tbody tr:nth-child( odd ) {\n\tborder: 0;\n\tbox-shadow: none;\n\tbackground: transparent;\n\tmargin: 0;\n}\n\n.vip-dam-report .vip-dam-stat-card .widefat td {",
+  "source": "\tpadding: 7px 0;\n\tborder: 0;\n}"
+ },
+ {
+  "id": "v129",
+  "file": "assets/css/report-page.css",
+  "line": 105,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": ".vip-dam-report .vip-dam-stat-card .widefat tr:not(:last-child) td {\n\tborder-bottom: 1px solid #f0f0f1;\n}\n\n.vip-dam-report .vip-dam-stat-card .widefat td:last-child {\n\ttext-align: right;\n\tfont-weight: 600;\n\tfont-variant-numeric: tabular-nums;",
+  "source": "\tcolor: #1d2327;\n\twhite-space: nowrap;\n}"
+ },
+ {
+  "id": "v130",
+  "file": "assets/css/report-page.css",
+  "line": 112,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\tfont-variant-numeric: tabular-nums;\n\tcolor: #1d2327;\n\twhite-space: nowrap;\n}\n\n.vip-dam-report .vip-dam-stat-card .vip-dam-reindex-row {\n\tmargin: 10px 0 2px;\n\tfont-size: 12px;",
+  "source": "\tcolor: #646970;\n}\n"
+ },
+ {
+  "id": "v131",
+  "file": "assets/css/report-page.css",
+  "line": 130,
+  "prop": "padding",
+  "value": "10px 14px",
+  "part": "10px",
+  "context_before": "\tgap: 8px;\n}\n\n.vip-dam-report .vip-dam-health-row {\n\tdisplay: grid;\n\tgrid-template-columns: 120px minmax( 160px, max-content ) 1fr;\n\tgap: 14px;\n\talign-items: baseline;",
+  "source": "\tpadding: 10px 14px;\n\tbackground: #fff;\n\tborder: 1px solid #e2e4e7;"
+ },
+ {
+  "id": "v132",
+  "file": "assets/css/report-page.css",
+  "line": 130,
+  "prop": "padding",
+  "value": "10px 14px",
+  "part": "14px",
+  "context_before": "\tgap: 8px;\n}\n\n.vip-dam-report .vip-dam-health-row {\n\tdisplay: grid;\n\tgrid-template-columns: 120px minmax( 160px, max-content ) 1fr;\n\tgap: 14px;\n\talign-items: baseline;",
+  "source": "\tpadding: 10px 14px;\n\tbackground: #fff;\n\tborder: 1px solid #e2e4e7;"
+ },
+ {
+  "id": "v133",
+  "file": "assets/css/report-page.css",
+  "line": 142,
+  "prop": "padding",
+  "value": "3px 10px",
+  "part": "3px",
+  "context_before": "}\n\n.vip-dam-report .vip-dam-health-pill {\n\tjustify-self: start;\n\tfont-size: 11px;\n\tfont-weight: 600;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.4px;",
+  "source": "\tpadding: 3px 10px;\n\tborder-radius: 999px;\n\twhite-space: nowrap;"
+ },
+ {
+  "id": "v134",
+  "file": "assets/css/report-page.css",
+  "line": 142,
+  "prop": "padding",
+  "value": "3px 10px",
+  "part": "10px",
+  "context_before": "}\n\n.vip-dam-report .vip-dam-health-pill {\n\tjustify-self: start;\n\tfont-size: 11px;\n\tfont-weight: 600;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.4px;",
+  "source": "\tpadding: 3px 10px;\n\tborder-radius: 999px;\n\twhite-space: nowrap;"
+ },
+ {
+  "id": "v135",
+  "file": "assets/css/report-page.css",
+  "line": 143,
+  "prop": "border-radius",
+  "value": "999px",
+  "part": "999px",
+  "context_before": "\n.vip-dam-report .vip-dam-health-pill {\n\tjustify-self: start;\n\tfont-size: 11px;\n\tfont-weight: 600;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.4px;\n\tpadding: 3px 10px;",
+  "source": "\tborder-radius: 999px;\n\twhite-space: nowrap;\n}"
+ },
+ {
+  "id": "v136",
+  "file": "assets/css/report-page.css",
+  "line": 147,
+  "prop": "background",
+  "value": "#edf6ee",
+  "part": "#edf6ee",
+  "context_before": "\tfont-weight: 600;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.4px;\n\tpadding: 3px 10px;\n\tborder-radius: 999px;\n\twhite-space: nowrap;\n}\n",
+  "source": ".vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }"
+ },
+ {
+  "id": "v137",
+  "file": "assets/css/report-page.css",
+  "line": 147,
+  "prop": "color",
+  "value": "#0a7227",
+  "part": "#0a7227",
+  "context_before": "\tfont-weight: 600;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.4px;\n\tpadding: 3px 10px;\n\tborder-radius: 999px;\n\twhite-space: nowrap;\n}\n",
+  "source": ".vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }"
+ },
+ {
+  "id": "v138",
+  "file": "assets/css/report-page.css",
+  "line": 148,
+  "prop": "background",
+  "value": "#fbeded",
+  "part": "#fbeded",
+  "context_before": "\ttext-transform: uppercase;\n\tletter-spacing: 0.4px;\n\tpadding: 3px 10px;\n\tborder-radius: 999px;\n\twhite-space: nowrap;\n}\n\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }",
+  "source": ".vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,"
+ },
+ {
+  "id": "v139",
+  "file": "assets/css/report-page.css",
+  "line": 148,
+  "prop": "color",
+  "value": "#8a1f1f",
+  "part": "#8a1f1f",
+  "context_before": "\ttext-transform: uppercase;\n\tletter-spacing: 0.4px;\n\tpadding: 3px 10px;\n\tborder-radius: 999px;\n\twhite-space: nowrap;\n}\n\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }",
+  "source": ".vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,"
+ },
+ {
+  "id": "v140",
+  "file": "assets/css/report-page.css",
+  "line": 149,
+  "prop": "background",
+  "value": "#fbf3e0",
+  "part": "#fbf3e0",
+  "context_before": "\tletter-spacing: 0.4px;\n\tpadding: 3px 10px;\n\tborder-radius: 999px;\n\twhite-space: nowrap;\n}\n\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }",
+  "source": ".vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,\n.vip-dam-report .vip-dam-health-off { background: #f0f0f1; color: #50575e; border: 1px solid #dcdcde; }"
+ },
+ {
+  "id": "v141",
+  "file": "assets/css/report-page.css",
+  "line": 149,
+  "prop": "color",
+  "value": "#8a5a12",
+  "part": "#8a5a12",
+  "context_before": "\tletter-spacing: 0.4px;\n\tpadding: 3px 10px;\n\tborder-radius: 999px;\n\twhite-space: nowrap;\n}\n\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }",
+  "source": ".vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,\n.vip-dam-report .vip-dam-health-off { background: #f0f0f1; color: #50575e; border: 1px solid #dcdcde; }"
+ },
+ {
+  "id": "v142",
+  "file": "assets/css/report-page.css",
+  "line": 151,
+  "prop": "background",
+  "value": "#f0f0f1",
+  "part": "#f0f0f1",
+  "context_before": "\tborder-radius: 999px;\n\twhite-space: nowrap;\n}\n\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,",
+  "source": ".vip-dam-report .vip-dam-health-off { background: #f0f0f1; color: #50575e; border: 1px solid #dcdcde; }\n\n.vip-dam-report .vip-dam-health-name { font-weight: 600; color: #1d2327; }"
+ },
+ {
+  "id": "v143",
+  "file": "assets/css/report-page.css",
+  "line": 151,
+  "prop": "color",
+  "value": "#50575e",
+  "part": "#50575e",
+  "context_before": "\tborder-radius: 999px;\n\twhite-space: nowrap;\n}\n\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,",
+  "source": ".vip-dam-report .vip-dam-health-off { background: #f0f0f1; color: #50575e; border: 1px solid #dcdcde; }\n\n.vip-dam-report .vip-dam-health-name { font-weight: 600; color: #1d2327; }"
+ },
+ {
+  "id": "v144",
+  "file": "assets/css/report-page.css",
+  "line": 153,
+  "prop": "color",
+  "value": "#1d2327",
+  "part": "#1d2327",
+  "context_before": "}\n\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,\n.vip-dam-report .vip-dam-health-off { background: #f0f0f1; color: #50575e; border: 1px solid #dcdcde; }\n",
+  "source": ".vip-dam-report .vip-dam-health-name { font-weight: 600; color: #1d2327; }\n.vip-dam-report .vip-dam-health-detail { color: #646970; font-size: 0.92rem; }\n"
+ },
+ {
+  "id": "v145",
+  "file": "assets/css/report-page.css",
+  "line": 154,
+  "prop": "color",
+  "value": "#646970",
+  "part": "#646970",
+  "context_before": "\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,\n.vip-dam-report .vip-dam-health-off { background: #f0f0f1; color: #50575e; border: 1px solid #dcdcde; }\n\n.vip-dam-report .vip-dam-health-name { font-weight: 600; color: #1d2327; }",
+  "source": ".vip-dam-report .vip-dam-health-detail { color: #646970; font-size: 0.92rem; }\n\n@media ( max-width: 600px ) {"
+ }
+]

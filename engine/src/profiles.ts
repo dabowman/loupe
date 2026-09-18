@@ -79,6 +79,7 @@ interface RawProfile {
 	skills?: unknown;
 	patterns?: unknown;
 	components?: unknown;
+	tokenDescriptions?: unknown;
 }
 
 /**
@@ -117,6 +118,7 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 			if (seen.has(id)) continue;
 			const patterns = asString(raw.patterns);
 			const components = asString(raw.components);
+			const tokenDescriptions = asString(raw.tokenDescriptions);
 			out.push({
 				id,
 				name: asString(raw.name) ?? asString(raw.id) ?? e.name,
@@ -125,6 +127,7 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 				skills: asStrings(raw.skills),
 				patterns: patterns ? under(dir, patterns) : null,
 				components: components ? under(dir, components) : null,
+				tokenDescriptions: tokenDescriptions ? under(dir, tokenDescriptions) : null,
 				dir,
 			});
 			// Claimed only once the entry is on the list. Reserving it above meant a

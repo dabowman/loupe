@@ -206,6 +206,41 @@ without parsing the sentence. The hook never calls it, so the gate stays
 deterministic and offline. It needs `TYPESAFE_API_KEY`, from the environment
 or a `.env` beside the checkout (see `.env.example`).
 
+### Judged values
+
+Most hardcoded values are not exactly a token. A plugin written against the
+wp-admin palette uses `#1d2327` and `#646970`, which WPDS never ships, so the
+exact-match fix above settles almost none of them. `--judge` settles the rest:
+
+```
+assets/css/admin-panels.css:33  color: #1d2327 → var(--wpds-color-foreground-content-neutral) (judged 0.77)
+assets/css/admin-panels.css:85  background: #fcf0f1 → var(--wpds-color-background-surface-error-weak) (judged 0.81)
+assets/css/bulk-edit.css:30  background: rgba(0, 0, 0, 0.55) → deliberate, no token fits (judged 0.99)
+assets/css/report-page.css:70  box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ) → no box-shadow token in the design system
+```
+
+Code does the arithmetic and the model does the reading. The property picks the
+token family (`color` gets foreground tokens, `padding` gets padding tokens), a
+length is narrowed to the scale steps either side of it, and a shorthand is
+settled part by part. Then TypeSafe gets each literal in context along with its
+candidate tokens, each described in the design system's own words. It picks
+the token the rule should have used, or says the value is deliberate: a scrim,
+a pill, a brand colour the system has no token for. A property with no tokens
+at all needs no model.
+
+Then apply it:
+
+```bash
+loupe fix --judge --dry-run   # review what it would write
+loupe fix --judge             # rewrite the settled values, suppress the kept ones
+```
+
+Only picks at 0.5 confidence or above are applied. Settled values are rewritten
+in place. Kept ones get a `wpds-allow tokens/hardcoded-value` directive whose
+reason says a model made the call. Everything else is left for review. On an
+un-remediated WPDS plugin that took `tokens/hardcoded-value` from 183 findings
+to 63. See `engine/README.md` for how it scored.
+
 ### Judged redirects
 
 The same flag reads what a control stands for — a value, a command or a

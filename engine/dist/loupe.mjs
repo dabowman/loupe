@@ -24979,14 +24979,69 @@ function readTokenSources(root2, sources, prefixes) {
   }
   return set;
 }
-function tokensFor(set, prop, value) {
-  const names = set.byValue.get(normalizeValue(value));
-  if (!names?.length) return [];
+function onRole(names, prop) {
   const [, hint, own] = ROLE_HINTS.find(([p]) => p.test(prop)) ?? [];
   if (!hint) return [];
-  const onRole = names.filter((n) => hint.test(n));
-  const preferred = own ? onRole.filter((n) => own.test(n)) : [];
-  return preferred.length ? preferred : onRole;
+  const onRole2 = names.filter((n) => hint.test(n));
+  const preferred = own ? onRole2.filter((n) => own.test(n)) : [];
+  return preferred.length ? preferred : onRole2;
+}
+function tokensFor(set, prop, value) {
+  return onRole(set.byValue.get(normalizeValue(value)) ?? [], prop);
+}
+function familyFor(set, prop) {
+  const all = [...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v]));
+  const keep = new Set(onRole(all.map(([n]) => n), prop));
+  return all.filter(([n]) => keep.has(n));
+}
+function measure(value) {
+  const v = normalizeValue(value);
+  const len = /^(\d*\.?\d+)(px|rem)$/.exec(v);
+  if (len) return { kind: "px", n: Number(len[1]) * (len[2] === "rem" ? 16 : 1) };
+  const time = /^(\d*\.?\d+)(ms|s)$/.exec(v);
+  if (time) return { kind: "ms", n: Number(time[1]) * (time[2] === "s" ? 1e3 : 1) };
+  return /^#[0-9a-f]{3,8}$|^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/.test(v) ? { kind: "color" } : null;
+}
+function candidatesFor(set, prop, part) {
+  const family = familyFor(set, prop);
+  if (!family.length) return null;
+  const v = normalizeValue(part);
+  const exact = family.filter(([, fv]) => fv === v);
+  if (exact.length) return { tier: "exact", options: exact };
+  const kinds = new Set(family.map(([, fv]) => measure(fv)?.kind));
+  const m = measure(v);
+  if (!m) return kinds.has(void 0) && kinds.size === 1 ? { tier: "family", options: family } : null;
+  if (!kinds.has(m.kind)) return null;
+  if (m.kind === "color") return { tier: "family", options: family };
+  const steps = family.flatMap(([n, fv]) => {
+    const fm = measure(fv);
+    return fm && fm.kind === m.kind && "n" in fm ? [[n, fv, fm.n - m.n]] : [];
+  });
+  const below = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
+  const above = Math.min(...steps.map(([, , d]) => d).filter((d) => d > 0));
+  return { tier: "near", options: steps.filter(([, , d]) => d === below || d === above).map(([n, fv]) => [n, fv]) };
+}
+var partsOf2 = (value) => value.trim().match(/(?:[^\s(]+|\([^)]*\))+/g) ?? [];
+var isLiteralPart = (p) => /^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0 || /^#[0-9a-f]+$/i.test(p) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
+var KEEP = "keep";
+function planValue(set, prop, value) {
+  const family = familyFor(set, prop);
+  if (!family.length) return "none";
+  const measurable = family.some(([, fv]) => measure(fv));
+  const parts = measurable ? partsOf2(value) : [value.trim()];
+  const slots = [];
+  for (const [at, part] of parts.entries()) {
+    if (measurable && !isLiteralPart(part)) continue;
+    const [only, ...more] = tokensFor(set, prop, part);
+    if (only !== void 0 && !more.length) {
+      slots.push({ at, part, token: only });
+      continue;
+    }
+    const candidates = candidatesFor(set, prop, part);
+    if (!candidates) return null;
+    slots.push({ at, part, candidates });
+  }
+  return slots.length ? { parts, slots } : null;
 }
 function suggestionFor(set, prop, value) {
   const names = tokensFor(set, prop, value);
@@ -25597,6 +25652,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     );
     const suggest = f.hints.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) })).filter((s) => s.tokens.length);
     if (suggest.length) f.suggest = suggest;
+    if (f.rule === "tokens/hardcoded-value" && f.hints.length === 1) f.decl = f.hints[0];
     delete f.hints;
   }
   if (tokenSet.known.size && config.enabled["tokens/unknown-token"]) {
@@ -25638,6 +25694,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     directives,
     diagnostics,
     blocking: unique.some((f) => f.severity === "error"),
+    tokens: tokenSet,
     // Scoped and suppressed here, where the scope and the comments are: the
     // finding a control becomes is written later, by the judge.
     ...judge && config.enabled["patterns/judged-redirect"] ? {
@@ -25661,8 +25718,9 @@ function tokenFixes(findings) {
     if (f.rule !== "tokens/hardcoded-value" || !CSS_FILE.test(f.file)) continue;
     const only = f.suggest?.length === 1 ? f.suggest[0] : void 0;
     const token = only?.tokens.length === 1 ? only.tokens[0] : void 0;
-    if (!only || token === void 0) continue;
-    out.push({ file: f.file, line: f.line, prop: only.prop, value: only.value, token });
+    if (only && token !== void 0) out.push({ file: f.file, line: f.line, prop: only.prop, value: only.value, to: `var(${token})` });
+    else if (f.decl && f.judged && f.judged.answer !== KEEP)
+      out.push({ file: f.file, line: f.line, prop: f.decl.prop, value: f.decl.value, to: f.judged.answer });
   }
   return out;
 }
@@ -25703,12 +25761,56 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
         skipped.push({ ...fix, why: hits ? `${hits.length} matches on line` : "declaration not on its reported line" });
         continue;
       }
-      lines[i] = line.replace(re, `$1$2var(${fix.token})`);
+      lines[i] = line.replace(re, `$1$2${fix.to}`);
       dirty = true;
       applied.push(fix);
     }
     if (dirty && !dry) writeFileSync(abs, lines.join("\n"));
   }
+  return { applied, skipped };
+}
+function applyKeeps(root2, findings, keyword, { dry = false } = {}) {
+  const onLine = /* @__PURE__ */ new Map();
+  for (const f of findings) {
+    if (f.rule !== "tokens/hardcoded-value") continue;
+    const k = `${f.file}\0${f.line}`;
+    onLine.set(k, [...onLine.get(k) ?? [], f]);
+  }
+  const byFile = /* @__PURE__ */ new Map();
+  const skipped = [];
+  for (const f of findings) {
+    if (f.rule !== "tokens/hardcoded-value" || f.judged?.answer !== KEEP || !f.decl) continue;
+    const kept = { file: f.file, line: f.line, prop: f.decl.prop, value: f.decl.value, reason: f.judged.spans.join(" ") };
+    if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
+    else if (onLine.get(`${f.file}\0${f.line}`)?.some((o) => o.judged?.answer !== KEEP))
+      skipped.push({ ...kept, why: "shares its line with a value that was not kept" });
+    else if (!byFile.get(f.file)?.some((k) => k.line === f.line)) byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
+  }
+  const applied = [];
+  for (const [file, group] of byFile) {
+    const abs = join4(root2, file);
+    let text;
+    try {
+      text = readFileSync3(abs, "utf8");
+    } catch (err) {
+      const why = err instanceof Error ? err.message : String(err);
+      for (const k of group) skipped.push({ ...k, why });
+      continue;
+    }
+    const lines = text.split("\n");
+    for (const k of [...group].sort((a, b) => b.line - a.line)) {
+      const line = lines[k.line - 1];
+      if (line === void 0) {
+        skipped.push({ ...k, why: "line out of range" });
+        continue;
+      }
+      const indent = /^\s*/.exec(line)?.[0] ?? "";
+      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} tokens/hardcoded-value -- ${k.reason} */`);
+      applied.push(k);
+    }
+    if (!dry) writeFileSync(abs, lines.join("\n"));
+  }
+  applied.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
   return { applied, skipped };
 }
 
@@ -25892,6 +25994,116 @@ async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch, lan
       }
     ];
   });
+}
+var KEEP_CRITERION = "None of these. The hardcoded value is a deliberate one-off the design system has no token for \u2014 a brand or illustration colour, an overlay or scrim, a size locked to something outside the system \u2014 and should stay as written.";
+var TIER = {
+  exact: "Several tokens carry exactly this value; they differ in the role they are for.",
+  near: "No token carries exactly this value; these are the steps of the scale either side of it.",
+  family: "No token carries exactly this value; these are all the tokens for this property."
+};
+async function judgeLiterals(items, apiKey, fetchImpl = fetch, about = /* @__PURE__ */ new Map()) {
+  return ask(
+    items,
+    ({ file, context_before, source }) => ({ file, context_before, source }),
+    ({ prop, value, part, candidates }, i) => ({
+      type: "choice",
+      instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use \u2014 or is the value a deliberate choice the system has no token for?`,
+      criteria: {
+        ...Object.fromEntries(candidates.options.map(([n, v]) => [n, about.has(n) ? `${v} \u2014 ${about.get(n) ?? ""}` : v])),
+        [KEEP]: KEEP_CRITERION
+      }
+    }),
+    apiKey,
+    fetchImpl,
+    BATCH.forces
+  );
+}
+function tokenDescriptions(profiles) {
+  const out = /* @__PURE__ */ new Map();
+  for (const p of profiles) {
+    if (!p.tokenDescriptions) continue;
+    try {
+      const raw = JSON.parse(readFileSync4(p.tokenDescriptions, "utf8"));
+      for (const [name, text] of Object.entries(raw)) if (!name.startsWith("$") && typeof text === "string") out.set(name, text);
+    } catch {
+    }
+  }
+  return out;
+}
+var MARKER = / (?:in `[^`]*` )?\((?:inline|css-in-js)\)$/;
+function rewrite(f, what, tail) {
+  const marker = MARKER.exec(f.message)?.[0] ?? "";
+  const body2 = f.message.slice(0, f.message.length - marker.length);
+  const head2 = body2.includes(" \u2192 ") ? body2.slice(0, body2.indexOf(" \u2192 ")) : body2;
+  f.message = `${head2} \u2192 ${what}${tail ? ` ${tail}` : ""}${marker}`;
+}
+async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */ new Map(), fetchImpl = fetch) {
+  const files = /* @__PURE__ */ new Map();
+  const linesOf = (file) => {
+    const cached = files.get(file);
+    if (cached) return cached;
+    const lines = readFileSync4(join5(root2, file), "utf8").split("\n");
+    files.set(file, lines);
+    return lines;
+  };
+  const plans = [];
+  let written = 0;
+  for (const f of findings) {
+    if (f.rule !== "tokens/hardcoded-value" || !f.decl || f.suggest?.length === 1 && f.suggest[0]?.tokens.length === 1) continue;
+    const plan = planValue(set, f.decl.prop, f.decl.value);
+    if (plan === "none") {
+      const why = `no ${f.decl.prop} token in the design system`;
+      rewrite(f, why, "");
+      f.judged = { answer: KEEP, confidence: 1, spans: [why] };
+      written++;
+    } else if (plan) plans.push({ f, ...plan });
+  }
+  const asked = plans.flatMap(
+    ({ f, parts, slots }) => slots.flatMap((slot) => {
+      if (!("candidates" in slot) || !f.decl) return [];
+      const lines = linesOf(f.file);
+      const i = f.line - 1;
+      return [
+        {
+          file: f.file,
+          // Enough before it to reach the selector of an ordinary rule, which
+          // is most of what says what the value is for.
+          context_before: lines.slice(Math.max(0, i - 8), i).join("\n"),
+          source: lines.slice(i, i + 3).join("\n"),
+          prop: f.decl.prop,
+          value: parts.join(" "),
+          part: slot.part,
+          candidates: slot.candidates,
+          slot
+        }
+      ];
+    })
+  );
+  const answers = await judgeLiterals(asked, apiKey, fetchImpl, about);
+  const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
+  for (const { f, parts, slots } of plans) {
+    const got = slots.map((s) => "token" in s ? { choice: s.token, confidence: 1 } : answerOf.get(s));
+    if (got.some((a) => !a || a.confidence < FLOOR)) continue;
+    const confidence2 = Math.min(...got.map((a) => a?.confidence ?? 0));
+    const kept = got.find((a) => a?.choice === KEEP);
+    if (kept) {
+      const why = "deliberate, no token fits";
+      const tail = judgedTail(kept.confidence);
+      rewrite(f, why, tail);
+      f.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+    } else {
+      const out = [...parts];
+      slots.forEach((s, k) => {
+        out[s.at] = `var(${got[k]?.choice ?? ""})`;
+      });
+      const to = out.join(" ");
+      const tail = confidence2 < 1 ? judgedTail(confidence2) : "";
+      rewrite(f, to, tail);
+      f.judged = { answer: to, confidence: confidence2, spans: tail ? [to, tail] : [to] };
+    }
+    written++;
+  }
+  return written;
 }
 
 // src/baseline.ts
@@ -27406,6 +27618,7 @@ function readProfiles(root2) {
       if (seen.has(id)) continue;
       const patterns = asString(raw.patterns);
       const components2 = asString(raw.components);
+      const tokenDescriptions2 = asString(raw.tokenDescriptions);
       out.push({
         id,
         name: asString(raw.name) ?? asString(raw.id) ?? e.name,
@@ -27414,6 +27627,7 @@ function readProfiles(root2) {
         skills: asStrings(raw.skills),
         patterns: patterns ? under(dir, patterns) : null,
         components: components2 ? under(dir, components2) : null,
+        tokenDescriptions: tokenDescriptions2 ? under(dir, tokenDescriptions2) : null,
         dir
       });
       seen.add(id);
@@ -27689,6 +27903,13 @@ function emitBlocking(report) {
 // src/cli.ts
 var EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 var messageOf4 = (err) => err instanceof Error ? err.message : String(err);
+function judgeKey() {
+  try {
+    if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join12(HERE3, "..", "..", ".env"));
+  } catch {
+  }
+  return process.env.TYPESAFE_API_KEY;
+}
 var fail = (msg) => {
   process.stderr.write(red(msg));
 };
@@ -27747,7 +27968,8 @@ var USAGE = `loupe <command> [options]
 
 Commands:
   check                 Analyze the project (default)
-  fix                   Apply the fixes the engine can make without judgement
+  fix                   Apply the fixes the engine can make without judgement;
+                        with --judge, also the ones TypeSafe settles
   baseline              Record current findings as the accepted backlog
   suppressions          List every active suppression directive
   explain <rule>        Print a rule's guidance
@@ -27771,10 +27993,13 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
-                        element needs, and whether a control stands for the
-                        pattern it was built as (patterns/judged-redirect)
-                        (check only; TYPESAFE_API_KEY from the environment or
-                        loupe's own .env)
+                        element needs, whether a control stands for the
+                        pattern it was built as (patterns/judged-redirect), and
+                        which token a hardcoded value should be, or whether it
+                        is deliberate. With fix, rewrites the values it settled
+                        and suppresses the ones it kept; add --dry-run to
+                        review them first. (TYPESAFE_API_KEY from the
+                        environment or loupe's own .env)
   --force               Overwrite an existing config (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
@@ -28129,9 +28354,17 @@ ${green(`Wrote ${target}`)}
 `);
       return EXIT.CANNOT_RUN;
     }
+    const key2 = args.flags.judge ? judgeKey() : void 0;
+    if (args.flags.judge && !key2) {
+      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join12(HERE3, "..", "..", ".env")}
+`);
+      return EXIT.CANNOT_RUN;
+    }
     let toFix;
     try {
       toFix = await analyze(config, { scope: fixScope });
+      if (key2 && toFix.tokens)
+        await judgeValues(root2, toFix.findings, toFix.tokens, key2, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
       fail(`loupe: ${messageOf4(err)}
 `);
@@ -28139,18 +28372,24 @@ ${green(`Wrote ${target}`)}
     }
     const dry = Boolean(args.flags["dry-run"]);
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
+    const kept = key2 ? applyKeeps(root2, toFix.findings, config.suppression.keyword, { dry }) : { applied: [], skipped: [] };
     const verb = dry ? "would fix" : "fixed";
     const decl2 = (f) => oneLine(`${f.prop}: ${f.value}`);
     for (const f of applied)
-      process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2192 ${green(`var(${f.token})`)}
+      process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2192 ${green(f.to)}
 `);
-    for (const f of skipped)
-      process.stdout.write(`${yellow("skip")} ${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2014 ${f.why}
+    const keptDecl = (k) => oneLine(`${k.prop}: ${k.value}`);
+    for (const k of kept.applied)
+      process.stdout.write(`${dim(`${k.file}:${k.line}`)}  ${keptDecl(k)} \u2192 ${green(`${config.suppression.keyword}, ${k.reason}`)}
 `);
-    const left = toFix.findings.length - applied.length;
+    for (const f of [...skipped, ...kept.skipped])
+      process.stdout.write(`${yellow("skip")} ${dim(`${f.file}:${f.line}`)}  ${"to" in f ? decl2(f) : keptDecl(f)} \u2014 ${f.why}
+`);
+    const left = toFix.findings.length - applied.length - kept.applied.length;
+    const nSkipped = skipped.length + kept.skipped.length;
     process.stdout.write(
       `
-loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${skipped.length ? yellow(`, skipped ${skipped.length}`) : ""}. ${left} left for review.
+loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${key2 ? `, ${dry ? "would suppress" : "suppressed"} ${kept.applied.length}` : ""}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ""}. ${left} left for review.
 `
     );
     return EXIT.OK;
@@ -28168,14 +28407,9 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
 `);
     return EXIT.CANNOT_RUN;
   }
-  let judgeKey;
+  const checkKey = args.flags.judge && !isHook ? judgeKey() : void 0;
   if (args.flags.judge && !isHook) {
-    try {
-      if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join12(HERE3, "..", "..", ".env"));
-    } catch {
-    }
-    judgeKey = process.env.TYPESAFE_API_KEY;
-    if (!judgeKey) {
+    if (!checkKey) {
       fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join12(HERE3, "..", "..", ".env")}
 `);
       return EXIT.CANNOT_RUN;
@@ -28193,7 +28427,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
   }
   let result;
   try {
-    result = await analyze(config, { scope, judge: Boolean(judgeKey) });
+    result = await analyze(config, { scope, judge: Boolean(checkKey) });
   } catch (err) {
     if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf4(err)}`);
     fail(`loupe: ${messageOf4(err)}
@@ -28208,13 +28442,15 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
 `);
     result = applyBaseline(result, baseline);
   }
-  if (judgeKey) {
+  if (checkKey) {
     try {
       if (result.controls?.length)
         result.findings.push(
-          ...await judgeRedirects(result.controls, judgeKey, config.severityOf("patterns/judged-redirect"))
+          ...await judgeRedirects(result.controls, checkKey, config.severityOf("patterns/judged-redirect"))
         );
-      await judgeVariants(root2, result.findings, config.componentRegistry, judgeKey);
+      await judgeVariants(root2, result.findings, config.componentRegistry, checkKey);
+      if (result.tokens)
+        await judgeValues(root2, result.findings, result.tokens, checkKey, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
       note(`loupe: --judge skipped \u2014 ${messageOf4(err)}
 `);

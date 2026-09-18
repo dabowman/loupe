@@ -151,18 +151,144 @@ export function readTokenSources(
 	return set;
 }
 
-/**
- * The token(s) that carry `value` for `prop`, most specific first.
- * Empty when nothing matches, or when only off-role tokens do.
- */
-export function tokensFor(set: TokenSet, prop: string, value: string): string[] {
-	const names = set.byValue.get(normalizeValue(value));
-	if (!names?.length) return [];
+/** The names that answer for `prop`: on-role, and the property's own family when the set has one. */
+function onRole(names: readonly string[], prop: string): string[] {
 	const [, hint, own] = ROLE_HINTS.find(([p]) => p.test(prop)) ?? [];
 	if (!hint) return [];
 	const onRole = names.filter((n) => hint.test(n));
 	const preferred = own ? onRole.filter((n) => own.test(n)) : [];
 	return preferred.length ? preferred : onRole;
+}
+
+/**
+ * The token(s) that carry `value` for `prop`, most specific first.
+ * Empty when nothing matches, or when only off-role tokens do.
+ */
+export function tokensFor(set: TokenSet, prop: string, value: string): string[] {
+	return onRole(set.byValue.get(normalizeValue(value)) ?? [], prop);
+}
+
+/** Every on-role token for `prop` that has a literal value, as `[name, value]`, whatever the value. */
+export function familyFor(set: TokenSet, prop: string): [string, string][] {
+	const all = [...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v]));
+	const keep = new Set(onRole(all.map(([n]) => n), prop));
+	return all.filter(([n]) => keep.has(n));
+}
+
+// ── what a literal could be replaced with ───────────────────────────────────
+
+/**
+ * What kind of literal a value is, and where it sits if it is on a scale: a
+ * length in px (a rem is 16), a duration in ms. Negative lengths are not
+ * measured — a token substituted for one flips its sign — and nor is anything
+ * relative to something the stylesheet cannot see (`em`, `%`, `vw`).
+ */
+function measure(value: string): { kind: 'px' | 'ms'; n: number } | { kind: 'color' } | null {
+	const v = normalizeValue(value);
+	const len = /^(\d*\.?\d+)(px|rem)$/.exec(v);
+	if (len) return { kind: 'px', n: Number(len[1]) * (len[2] === 'rem' ? 16 : 1) };
+	const time = /^(\d*\.?\d+)(ms|s)$/.exec(v);
+	if (time) return { kind: 'ms', n: Number(time[1]) * (time[2] === 's' ? 1000 : 1) };
+	return /^#[0-9a-f]{3,8}$|^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/.test(v) ? { kind: 'color' } : null;
+}
+
+/** What a value may be replaced with, and how it was narrowed. */
+export interface Candidates {
+	/**
+	 * `exact`: several on-role tokens carry the value, and only role separates
+	 * them. `near`: none does, and these are the steps of the scale either side
+	 * of it. `family`: every on-role token, because the choice is a design one.
+	 */
+	tier: 'exact' | 'near' | 'family';
+	options: [string, string][];
+}
+
+/**
+ * The tokens a judgement chooses among for one literal part of a value.
+ *
+ * A length or a duration is narrowed here, in code, to the scale steps either
+ * side of it: closeness on a scale is arithmetic, and there is no role left to
+ * choose once the property has picked its family. Anything else — a colour, a
+ * cursor, an easing — gets the whole family, since which one the rule *means*
+ * is the question, and the pink card background that is either a mistake or a
+ * decision is only answerable with every option on the table.
+ *
+ * Colours were narrowed too, once, to the tokens within sight of the value.
+ * `evals/values` scored that lower than offering them all (91% against 95%),
+ * because a light tint's nearest tokens are greys of the wrong role, and the
+ * success wash it should have been is further away than they are.
+ *
+ * Null when the part is not something this family can replace: a token set
+ * with no family for the property, or a literal of another kind (`5%` of a
+ * padding scale, a negative inset).
+ */
+export function candidatesFor(set: TokenSet, prop: string, part: string): Candidates | null {
+	const family = familyFor(set, prop);
+	if (!family.length) return null;
+	const v = normalizeValue(part);
+	const exact = family.filter(([, fv]) => fv === v);
+	if (exact.length) return { tier: 'exact', options: exact };
+	const kinds = new Set(family.map(([, fv]) => measure(fv)?.kind));
+	const m = measure(v);
+	// A family of things the engine cannot measure — cursors, easings, shadows —
+	// is a list of names, and the part has to be the whole value.
+	if (!m) return kinds.has(undefined) && kinds.size === 1 ? { tier: 'family', options: family } : null;
+	if (!kinds.has(m.kind)) return null;
+	if (m.kind === 'color') return { tier: 'family', options: family };
+	// A scale: the step either side. Past the end of it, the end.
+	const steps = family.flatMap(([n, fv]): [string, string, number][] => {
+		const fm = measure(fv);
+		return fm && fm.kind === m.kind && 'n' in fm ? [[n, fv, fm.n - m.n]] : [];
+	});
+	const below = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
+	const above = Math.min(...steps.map(([, , d]) => d).filter((d) => d > 0));
+	return { tier: 'near', options: steps.filter(([, , d]) => d === below || d === above).map(([n, fv]) => [n, fv]) };
+}
+
+/**
+ * A value's parts, split on whitespace outside parentheses, so `padding: 6px
+ * 12px` is two literals and `rgba(0, 0, 0, 0.5)` is one.
+ */
+export const partsOf = (value: string): string[] => value.trim().match(/(?:[^\s(]+|\([^)]*\))+/g) ?? [];
+
+/** A part a token could stand for. Zeros, keywords and `url()` pass through. */
+const isLiteralPart = (p: string): boolean =>
+	(/^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0) || /^#[0-9a-f]+$/i.test(p) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
+
+/** What `check --judge` answers for a value that should stay as written. */
+export const KEEP = 'keep';
+
+/** One literal in a flagged value: settled by a single exact token, or put to a judgement. */
+export type Slot = { at: number; part: string } & ({ token: string } | { candidates: Candidates });
+
+/**
+ * How a flagged value could be rewritten, part by part.
+ *
+ * `'none'` when the set has no token for the property at all: there is nothing
+ * to choose, so the value stays, whatever anyone thinks of it. Null when a part
+ * is a literal no token here can stand for (`5%`, `-4px`, `hsl()`) — rewriting
+ * the rest would leave the finding standing and call it fixed.
+ */
+export function planValue(set: TokenSet, prop: string, value: string): 'none' | { parts: string[]; slots: Slot[] } | null {
+	const family = familyFor(set, prop);
+	if (!family.length) return 'none';
+	// A family the engine can measure takes a value apart; one it cannot —
+	// shadows, easings — is matched whole.
+	const measurable = family.some(([, fv]) => measure(fv));
+	const parts = measurable ? partsOf(value) : [value.trim()];
+	const slots: Slot[] = [];
+	for (const [at, part] of parts.entries()) {
+		if (measurable && !isLiteralPart(part)) continue;
+		const [only, ...more] = tokensFor(set, prop, part);
+		if (only !== undefined && !more.length) {
+			slots.push({ at, part, token: only });
+			continue;
+		}
+		const candidates = candidatesFor(set, prop, part);
+		if (!candidates) return null;
+		slots.push({ at, part, candidates });
+	}
+	return slots.length ? { parts, slots } : null;
 }
 
 /** `→ var(--wpds-border-radius-md)`, or `` when nothing on-role matches. */

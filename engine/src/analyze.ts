@@ -1015,6 +1015,7 @@ for (const f of findings) {
 		.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) }))
 		.filter((s) => s.tokens.length);
 	if (suggest.length) f.suggest = suggest;
+	if (f.rule === 'tokens/hardcoded-value' && f.hints.length === 1) f.decl = f.hints[0];
 	delete f.hints;
 	// `suffix` stays until the message is bounded below, which needs to know
 	// which part of it is the channel marker. Nothing downstream of that sees it.
@@ -1079,6 +1080,7 @@ if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
 		directives,
 		diagnostics,
 		blocking: unique.some((f) => f.severity === 'error'),
+		tokens: tokenSet,
 		// Scoped and suppressed here, where the scope and the comments are: the
 		// finding a control becomes is written later, by the judge.
 		...(judge && config.enabled['patterns/judged-redirect']
