@@ -17,9 +17,10 @@
  * rather than declaring every token unknown.
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import type { Dirent, Stats } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
+import type { Stats } from 'node:fs';
 import { join } from 'node:path';
+import { readDir } from './discover.ts';
 import postcss from 'postcss';
 import type { Root } from 'postcss';
 import type { TokenSet } from './types.ts';
@@ -111,13 +112,7 @@ export function cssFilesUnder(
 	const out: string[] = [];
 	const walk = (dir: string): void => {
 		if (budget.left <= 0) return;
-		let entries: Dirent[];
-		try {
-			entries = readdirSync(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const e of entries) {
+		for (const e of readDir(dir)) {
 			if (budget.left <= 0) return;
 			const full = join(dir, e.name);
 			if (e.isDirectory()) {

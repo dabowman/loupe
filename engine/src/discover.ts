@@ -27,6 +27,32 @@ import type { Discovered, DiscoveredFile, SourceGlobs, SourceKind } from './type
 export const toPosix = (p: string): string => p.split(sep).join('/').split('\\').join('/');
 
 /**
+ * One directory's entries, in an order that does not depend on the machine.
+ *
+ * `readdirSync` hands back whatever order the filesystem holds, and that
+ * differs between filesystems and between runtimes: Node and Bun disagree on
+ * the same directory, which is how the compiled binary came to cite a different
+ * example file than `node` did for the same project. Sorting by byte value
+ * makes a walk's result a property of the tree rather than of whatever read it.
+ *
+ * `readProfiles` already did exactly this for its own walk, and said why:
+ * sorting is what makes "the first one wins" a fact rather than a filesystem
+ * accident. The same is true of every other walk here, so it belongs in one
+ * place rather than in whichever one noticed.
+ *
+ * An unreadable directory yields nothing rather than throwing. Every caller
+ * already treated a failed read that way; carrying the `try` here means none of
+ * them has to say so again.
+ */
+export function readDir(dir: string): Dirent[] {
+	try {
+		return readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+	} catch {
+		return [];
+	}
+}
+
+/**
  * One `git` invocation, one place. Both callers here want the same cwd, the
  * same encoding and the same "stderr is not our business" wiring, and a
  * timeout added to one of two copies is a timeout that does not apply.
@@ -96,12 +122,7 @@ export function discover({
 	// reported zero source files for a project whose own were sitting in the
 	// root — an answer that reads identically to "this project has none".
 	const walk = (dir: string): void => {
-		let entries: Dirent[];
-		try {
-			entries = readdirSync(dir, { withFileTypes: true });
-		} catch {
-			return; // unreadable directory: skip, don't crash the gate
-		}
+		const entries = readDir(dir);
 		const subdirs: string[] = [];
 		for (const e of entries) {
 			if (seen >= budget) {

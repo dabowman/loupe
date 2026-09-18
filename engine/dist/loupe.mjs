@@ -23648,6 +23648,13 @@ import { existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join, relative, resolve, sep } from "node:path";
 var toPosix = (p) => p.split(sep).join("/").split("\\").join("/");
+function readDir(dir) {
+  try {
+    return readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  } catch {
+    return [];
+  }
+}
 var git = (root2, args) => execFileSync("git", [...args], { cwd: root2, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 var KINDS = ["styles", "markup", "references"];
 var HARD_SKIP = /* @__PURE__ */ new Set([".git", "node_modules"]);
@@ -23671,12 +23678,7 @@ function discover({
   let seen = 0;
   const pruneDotDirs = !KINDS.some((kind) => reachesDotDirs(sources[kind] ?? []));
   const walk = (dir) => {
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
+    const entries = readDir(dir);
     const subdirs = [];
     for (const e of entries) {
       if (seen >= budget) {
@@ -24899,7 +24901,7 @@ async function syntaxFor(path) {
 }
 
 // src/tokens.ts
-import { readdirSync as readdirSync2, readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join as join2 } from "node:path";
 var ROLE_HINTS = [
   [/^border-radius|radius$/, /radius/],
@@ -24961,13 +24963,7 @@ function cssFilesUnder(path, budget = { left: 200 }, exts = [".css"]) {
   const out = [];
   const walk = (dir) => {
     if (budget.left <= 0) return;
-    let entries;
-    try {
-      entries = readdirSync2(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
+    for (const e of readDir(dir)) {
       if (budget.left <= 0) return;
       const full = join2(dir, e.name);
       if (e.isDirectory()) {
@@ -25875,7 +25871,7 @@ import { dirname as dirname3, join as join7 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/embedded.ts
-import { existsSync as existsSync2, readFileSync as readFileSync4, readdirSync as readdirSync3 } from "node:fs";
+import { existsSync as existsSync2, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "node:fs";
 import { dirname as dirname2, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27266,7 +27262,7 @@ var presetKey = (spec) => spec.replace(/^loupe\/presets\//, "");
 var PRESET_DIR = join5(dirname2(fileURLToPath(import.meta.url)), "..", "presets");
 var presetNames = () => {
   try {
-    return readdirSync3(PRESET_DIR).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
+    return readdirSync2(PRESET_DIR).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, "")).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
   } catch {
     return Object.keys(EMBEDDED_PRESETS);
   }
@@ -28786,7 +28782,7 @@ ${body(payload, clean, result.diagnostics.parseErrors.length)}
 }
 
 // src/detect.ts
-import { existsSync as existsSync7, readFileSync as readFileSync9, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
 import { join as join11 } from "node:path";
 var readJson = (p) => {
   try {
@@ -28805,13 +28801,7 @@ function manifests(root2, maxDepth = 3, budget = 60) {
     const pkg = join11(dir, "package.json");
     if (existsSync7(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
-    let entries;
-    try {
-      entries = readdirSync4(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
+    for (const e of readDir(dir)) {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
       walk(join11(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
@@ -28832,13 +28822,7 @@ function markerAt(dir, marker) {
 }
 function probeDirs(root2) {
   const out = [{ dir: root2, rel: "" }];
-  let entries = [];
-  try {
-    entries = readdirSync4(root2, { withFileTypes: true });
-  } catch {
-    return out;
-  }
-  for (const e of entries) {
+  for (const e of readDir(root2)) {
     if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
     out.push({ dir: join11(root2, e.name), rel: e.name });
   }
@@ -28911,13 +28895,7 @@ function libraryPrefixes(dirs, candidates) {
   let budget = 600;
   const walk = (dir, depth) => {
     if (depth > 4 || budget <= 0 || !want.size) return;
-    let entries;
-    try {
-      entries = readdirSync4(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
+    for (const e of readDir(dir)) {
       if (budget <= 0 || !want.size) return;
       const full = join11(dir, e.name);
       if (e.isDirectory()) {
@@ -29060,7 +29038,7 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/profiles.ts
-import { existsSync as existsSync8, readFileSync as readFileSync10, readdirSync as readdirSync5 } from "node:fs";
+import { existsSync as existsSync8, readFileSync as readFileSync10 } from "node:fs";
 import { isAbsolute as isAbsolute5, join as join12, resolve as resolve5 } from "node:path";
 var readJson2 = (p) => JSON.parse(readFileSync10(p, "utf8"));
 var under = (dir, rel) => isAbsolute5(rel) ? rel : join12(dir, rel);
@@ -29069,15 +29047,9 @@ var asString = (v) => typeof v === "string" && v !== "" ? v : null;
 var byBytes = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function readProfiles(root2) {
   if (!root2 || !existsSync8(root2)) return [];
-  let entries;
-  try {
-    entries = readdirSync5(root2, { withFileTypes: true });
-  } catch {
-    return [];
-  }
   const out = [];
   const seen = /* @__PURE__ */ new Set();
-  for (const e of [...entries].sort((a, b) => byBytes(a.name, b.name))) {
+  for (const e of readDir(root2)) {
     if (!e.isDirectory()) continue;
     const dir = join12(root2, e.name);
     const manifest = join12(dir, "profile.json");

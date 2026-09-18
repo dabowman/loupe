@@ -12,10 +12,9 @@
  * inferred config run a destructive rule at error severity.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import type { Dirent } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { discover } from './discover.ts';
+import { discover, readDir } from './discover.ts';
 import { presetNames, readPreset } from './embedded.ts';
 import type { AuthoredConfig, SourceGlobs } from './types.ts';
 
@@ -124,13 +123,7 @@ function manifests(root: string, maxDepth = 3, budget = 60): { dir: string; rel:
 		const pkg = join(dir, 'package.json');
 		if (existsSync(pkg)) out.push({ dir, rel });
 		if (depth === maxDepth) return;
-		let entries: Dirent[];
-		try {
-			entries = readdirSync(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const e of entries) {
+		for (const e of readDir(dir)) {
 			if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
 			walk(join(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
 		}
@@ -158,13 +151,7 @@ function markerAt(dir: string, marker: string): boolean {
 /** The root and each immediate subdirectory, which is as deep as file markers look. */
 function probeDirs(root: string): { dir: string; rel: string }[] {
 	const out = [{ dir: root, rel: '' }];
-	let entries: import('node:fs').Dirent[] = [];
-	try {
-		entries = readdirSync(root, { withFileTypes: true });
-	} catch {
-		return out;
-	}
-	for (const e of entries) {
+	for (const e of readDir(root)) {
 		if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
 		out.push({ dir: join(root, e.name), rel: e.name });
 	}
@@ -303,13 +290,7 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 
 	const walk = (dir: string, depth: number): void => {
 		if (depth > 4 || budget <= 0 || !want.size) return;
-		let entries: Dirent[];
-		try {
-			entries = readdirSync(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const e of entries) {
+		for (const e of readDir(dir)) {
 			if (budget <= 0 || !want.size) return;
 			const full = join(dir, e.name);
 			if (e.isDirectory()) {

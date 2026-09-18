@@ -24,8 +24,8 @@
  * nothing to recognize it by — and has to be named with `--profile <id>`.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import type { Dirent } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { readDir } from './discover.ts';
 import { isAbsolute, join, resolve } from 'node:path';
 import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
@@ -89,19 +89,13 @@ interface RawProfile {
  */
 export function readProfiles(root: string | null | undefined): Profile[] {
 	if (!root || !existsSync(root)) return [];
-	let entries: Dirent[];
-	try {
-		entries = readdirSync(root, { withFileTypes: true });
-	} catch {
-		return [];
-	}
 	const out: Profile[] = [];
 	// Sorted, and one profile per id: two directories claiming the same id would
 	// otherwise both be selected, and `--profile <id>` would apply each of them.
 	// Sorting is what makes "the first one wins" a fact rather than a filesystem
 	// accident.
 	const seen = new Set<string>();
-	for (const e of [...entries].sort((a, b) => byBytes(a.name, b.name))) {
+	for (const e of readDir(root)) {
 		if (!e.isDirectory()) continue;
 		const dir = join(root, e.name);
 		const manifest = join(dir, 'profile.json');
