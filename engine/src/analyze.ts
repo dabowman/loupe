@@ -941,13 +941,20 @@ export async function analyze(
 			// someone signed off must not go silent because the reporting moved.
 			if (supp && isSuppressed(supp.byLine, ci.line, rule, [ci.declLine, ci.declLine - 1])) continue;
 			const remedy = entry.supersededBy ? ` → ${entry.supersededBy}` : '';
-			const note = entry.note ? ` (${entry.note})` : '';
+			// The finding anchors at the import and there is one per file, so the
+			// count is what says whether this is a one-line edit or a dozen call
+			// sites — the question an agent otherwise answers by grepping the file.
+			const uses = ci.uses > 1 ? ` ×${ci.uses}` : '';
 			findings.push({
 				rule,
 				severity: config.severityOf(rule),
 				file: ci.file,
 				line: ci.line,
-				message: `${ci.canonical} (${ci.package})${remedy}${note}`,
+				message: `${ci.canonical} (${ci.package})${uses}${remedy}`,
+				// Carried, not concatenated: the finalize pass caps `message`, and a
+				// registry note spliced into it lost its own last clause to that cap
+				// in every format at once.
+				note: entry.note,
 				code: `${rule}:${ci.package}:${ci.canonical}`,
 				rank: RULES[rule].rank,
 			});

@@ -427,4 +427,48 @@ await check('a clean report carries no near-miss noise', async () => {
 	}
 });
 
+// The report could not say anything about what it was not saying: the
+// suppression count sat behind an option no caller ever passed, so a repo with
+// its whole blocking backlog muted by directives printed the same report as one
+// with nothing to mute. An agent that read one told its user the codebase was
+// clean. Every line asserted here replaced a second run of the tool.
+await check('a clean report still says what was scanned and what is silenced', async () => {
+	const { result, config, root } = await run({ 'loupe.config.json': CONFIG, 'src/A.jsx': 'export const A = () => <div />;' });
+	try {
+		const silenced: AnalyzeResult = {
+			...result,
+			directives: [
+				{ file: 'src/A.jsx', line: 1, rules: ['system/override'], reason: 'r' },
+				{ file: 'src/B.jsx', line: 2, rules: ['system/override', 'tokens/hardcoded-value'], reason: 'r' },
+			],
+		};
+		const out = formatAgent(silenced, config);
+		assert(out.startsWith('loupe: clean.'), `the tally is not the first line:\n${out}`);
+		assert(/\d+ file\(s\) scanned\./.test(out), `a clean verdict with no idea what it read:\n${out}`);
+		// Two directives, three rules named between them: the count is directives,
+		// the tallies are what they silence, and they are allowed to disagree.
+		assert(/2 active suppression\(s\) in 2 file\(s\)/.test(out), `the directives went unmentioned:\n${out}`);
+		assert(/system\/override \(2\)/.test(out), `the count did not say what it silences:\n${out}`);
+		assert(!/active suppression/.test(formatAgent(silenced, config, { terse: true })), 'the hook does not want a repo-wide inventory');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A registry note used to be concatenated into `message`, which the finalize
+// pass caps — so `... it wanted Stack, not Grid.` was cut mid-word, in
+// `--format json` as much as in the report, and nothing could recover it. The
+// note is its own field now: the line below is the one format with a budget.
+await check('a registry note keeps its last clause on screen and ships whole in json', () => {
+	const note =
+		'Planned for deprecation per its own Storybook status. Write the grid in CSS; ' +
+		'if this is really a flex row or column it wanted Stack, not Grid.';
+	const noted: AnalyzeResult = { ...result, findings: result.findings.map((f, i) => (i === 0 ? { ...f, note } : f)) };
+	const out = formatAgent(noted, config);
+	assert(/not Grid\.\)/.test(out), `the actionable end of the note was cut:\n${out}`);
+	assert(/\(\d+\) (blocking|advisory) \u2014/.test(out), `a rule group that only says its severity in a glyph:\n${out}`);
+	const shipped = (JSON.parse(formatJson(noted, config)) as { findings: { note?: string }[] }).findings[0]?.note;
+	assert(shipped === note, `json shipped a note the reader cannot act on: ${String(shipped)}`);
+});
+
 finish();

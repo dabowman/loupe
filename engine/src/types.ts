@@ -99,6 +99,18 @@ export interface Finding {
 	 * silently regroups the report. Say which one the grouping means.
 	 */
 	group?: string | undefined;
+	/**
+	 * Registry prose about this component or shape — why it is flagged, in the
+	 * registry's own words rather than the source's.
+	 *
+	 * Its own field because `message` carries a display cap that is applied
+	 * before any format is built. A note concatenated into it spent that cap on
+	 * prose and then lost the end of it — the actionable half — mid-word, in
+	 * `--format json` as much as in the report, where nothing could recover it.
+	 * The agent format composes the two and bounds the result to its one line;
+	 * JSON and SARIF ship this whole.
+	 */
+	note?: string | undefined;
 	rank: number;
 	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
@@ -254,6 +266,16 @@ export interface ComponentImport {
 	 * where a new one should go.
 	 */
 	declLine: number;
+	/**
+	 * How many times the file renders it.
+	 *
+	 * Currency findings anchor at the import, one per file and component, so
+	 * eight of them on one `import {` line read as eight duplicates and say
+	 * nothing about how much work the migration is. The JSX walk already visits
+	 * every opening element and already knows which are design-system ones, so
+	 * the count is a tally kept alongside it rather than a second pass.
+	 */
+	uses: number;
 	/** Attached by the analyzer once it knows which file the scan came from. */
 	file?: string;
 }
@@ -652,6 +674,18 @@ export interface ReportPayload {
 		warn: number;
 		suppressions: number;
 		parseErrors: number;
+		/**
+		 * Files read. Without it, "no `stylesheet/unparsed` findings" and "no
+		 * stylesheets were found" are the same report, and a consumer cannot tell
+		 * a clean scan from one that scanned nothing.
+		 */
+		filesScanned: number;
+		/**
+		 * Findings per file, densest first. The report prints the top few as
+		 * prose; a consumer that wants to know whether findings cluster or spread
+		 * should not have to parse that back out of it.
+		 */
+		byFile: Record<string, number>;
 		/**
 		 * Findings hidden by the baseline. Absent under `--no-baseline`, where the
 		 * question was never asked; 0 where it was asked and nothing was hidden —

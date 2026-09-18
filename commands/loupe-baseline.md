@@ -23,7 +23,9 @@ node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" baseline --profiles "${CLAUDE_
 
 Then tell the user to commit `.loupe-baseline.json`, and note that entries
 key on rule + file + normalized code rather than line number, so reformatting
-will not resurrect the whole file.
+will not resurrect the whole file. Say plainly that every later audit now reports
+new drift only, printing `N baselined finding(s) hidden` under it — the backlog
+is still there, and `--no-baseline` is what shows it.
 
 Suggest burning the backlog down one rule at a time with `/loupe-fix <rule-id>`,
 and deleting the baseline once it is empty.

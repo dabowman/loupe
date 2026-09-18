@@ -166,6 +166,7 @@ td.msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:
 .sev.warn { color: var(--ink-2); }
 .rule { font-size: 12px; color: var(--ink); font-weight: 600; white-space: nowrap; }
 .fix { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+.note { color: var(--ink-muted); }
 .tokens { font-size: 11.5px; color: var(--ink-muted); margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 /* Composite clusters: one card per defect, not one row per member file. */
 .cluster { border: 1px solid var(--hairline); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
@@ -279,6 +280,9 @@ const JS = `
     // with no baseline file both report 0, so a zero tile states nothing.
     if (s.baselined) tiles.push({ k: 'baselined', v: s.baselined });
     tiles.push({ k: 'suppressions', v: s.suppressions });
+    // Next to the unparsed count on purpose: zero unparsed files means nothing
+    // until you know how many were read.
+    tiles.push({ k: 'files scanned', v: s.filesScanned });
     tiles.push({ k: 'files unparsed', v: s.parseErrors, err: s.parseErrors > 0 });
     document.getElementById('kpis').innerHTML = tiles.map(function (t) {
       return '<div class="kpi' + (t.lead ? ' lead' : '') + '"><div class="v' + (t.err ? ' err' : '') + '">' +
@@ -381,6 +385,9 @@ const JS = `
         return '<tr>' +
           '<td class="loc">' + esc(f.file) + ':' + f.line + '</td>' +
           '<td class="msg">' + esc(f.message) +
+            // Whole, not clipped: the page has room the one-line agent format
+            // does not, which is the reason the note is a field of its own.
+            (f.note ? ' <span class="note">(' + esc(f.note) + ')</span>' : '') +
             (tokens.length ? '<div class="tokens">\\u2192 ' + esc(tokens.join(', ')) + '</div>' : '') + '</td>' +
           '</tr>';
       }).join('');

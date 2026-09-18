@@ -29,6 +29,12 @@ reference look absent), and a path becomes `--files <path>`.
 exist. Only exit 2 means the engine could not run, and then there is nothing to
 publish — say what it printed instead.
 
+The output went to a file, so you are holding an exit code and nothing else. Do
+not re-run the check to find out what is in it: the page embeds the exact
+`--format json` payload — totals, per-rule list, every finding with file and
+line — in its `<script type="application/json" id="loupe-data">` block, which is
+where every number steps 3 and 4 ask for comes from.
+
 If `$ARGUMENTS` contains `--local`, stop here. Give the user the file path and
 tell them to open it. Everything below is the publishing half.
 

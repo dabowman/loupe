@@ -24489,6 +24489,8 @@ function systemImports(ast, ds) {
       componentImports.push({
         canonical: c,
         package: node.source.value,
+        uses: 0,
+        // the JSX walk counts them; this pass has only read the imports
         line: spec.loc?.start?.line ?? node.loc?.start?.line ?? 1,
         declLine: node.loc?.start?.line ?? 1
       });
@@ -24548,6 +24550,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
   const tags = cssInJsLocals(ast, ds.cssInJsPackages);
   const cssPropOwner = /* @__PURE__ */ new Map();
   const substituted = /* @__PURE__ */ new Set();
+  const uses = /* @__PURE__ */ new Map();
   for (const node of ast.program.body)
     if (node.type === "ImportDeclaration") for (const sp of node.specifiers) imports.add(sp.local.name);
   const jsxChildElements = (el) => {
@@ -24709,6 +24712,10 @@ function scanMarkup(text, relPath, ds, rules = []) {
     const root2 = tag.split(".")[0] ?? tag;
     const isComponent = /^[A-Z]/.test(root2);
     const isSystem = isComponent && known.has(root2);
+    if (isSystem) {
+      const c = canonicals.get(root2) ?? root2;
+      uses.set(c, (uses.get(c) ?? 0) + 1);
+    }
     const member = tag.includes(".") ? tag.slice(tag.indexOf(".") + 1) : null;
     const emitsTag = member ? (
       // `<UI.Text render={ <h4 /> }>` — the namespace is what was imported,
@@ -24771,7 +24778,19 @@ function scanMarkup(text, relPath, ds, rules = []) {
       });
     }
   });
-  return { bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports, parseError: null };
+  return {
+    bindings,
+    rawEls,
+    inlineStyles,
+    cssInJs,
+    composites,
+    ruleHits,
+    imports,
+    referenced,
+    stems,
+    componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })),
+    parseError: null
+  };
 }
 
 // src/syntax.ts
@@ -25475,13 +25494,17 @@ async function analyze(config, { scope = null } = {}) {
       const supp = suppByFile.get(ci.file);
       if (supp && isSuppressed(supp.byLine, ci.line, rule2, [ci.declLine, ci.declLine - 1])) continue;
       const remedy = entry.supersededBy ? ` \u2192 ${entry.supersededBy}` : "";
-      const note2 = entry.note ? ` (${entry.note})` : "";
+      const uses = ci.uses > 1 ? ` \xD7${ci.uses}` : "";
       findings.push({
         rule: rule2,
         severity: config.severityOf(rule2),
         file: ci.file,
         line: ci.line,
-        message: `${ci.canonical} (${ci.package})${remedy}${note2}`,
+        message: `${ci.canonical} (${ci.package})${uses}${remedy}`,
+        // Carried, not concatenated: the finalize pass caps `message`, and a
+        // registry note spliced into it lost its own last clause to that cap
+        // in every format at once.
+        note: entry.note,
         code: `${rule2}:${ci.package}:${ci.canonical}`,
         rank: RULES[rule2].rank
       });
@@ -26121,6 +26144,7 @@ var SEV_PAINT = {
 // src/report.ts
 import { createHash as createHash2 } from "node:crypto";
 var SEV_MARK = { error: "\u2717", warn: "\u2022" };
+var SEV_WORD = { error: "blocking", warn: "advisory" };
 var COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
 var components = (message) => message.replace(COMPONENT, cyan);
 var titleFor = (config) => (id) => renderTitle(id, config.designSystem, config.suppression.keyword);
@@ -26141,14 +26165,33 @@ function nearMisses(result) {
   }
   return out;
 }
-function formatAgent(result, config, { maxFindings = 0, showSuppressed = false } = {}) {
+var tally = (keys) => {
+  const counts = /* @__PURE__ */ new Map();
+  for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+};
+var TOP = 3;
+function densestLine(findings) {
+  const files = tally(findings.map((f) => f.file));
+  if (files.length < 2) return "";
+  const rest = files.length - TOP;
+  return `Densest: ${files.slice(0, TOP).map(([file, n]) => `${file} (${n})`).join(", ")}${rest > 0 ? `, then ${rest} more file(s)` : ""}.`;
+}
+function suppressionLine(directives) {
+  const rules = tally(directives.flatMap((d) => d.rules));
+  const rest = rules.length - TOP;
+  const files = new Set(directives.map((d) => d.file)).size;
+  return `${directives.length} active suppression(s) in ${files} file(s), silencing ${rules.slice(0, TOP).map(([rule2, n]) => `${rule2} (${n})`).join(", ")}${rest > 0 ? `, +${rest} more rule(s)` : ""} \u2014 run \`loupe suppressions\` to read them.`;
+}
+var withNote = (f) => f.note ? messageLine(f.message, ` (${f.note})`) : f.message;
+function formatAgent(result, config, { maxFindings = 0, terse = false } = {}) {
   const { findings, diagnostics } = result;
   const kw = config.suppression.keyword;
   const title = titleFor(config);
   const lines = [];
-  if (!findings.length) {
-    lines.push(green("loupe: clean."));
-  } else {
+  lines.push(`${formatSummary(result)} ${dim(`${diagnostics.filesScanned} file(s) scanned.`)}`);
+  if (!terse && result.directives.length) lines.push(dim(suppressionLine(result.directives)));
+  if (findings.length) {
     const byRule = /* @__PURE__ */ new Map();
     for (const f of findings) {
       const group = byRule.get(f.rule) ?? [];
@@ -26179,18 +26222,30 @@ function formatAgent(result, config, { maxFindings = 0, showSuppressed = false }
       const sev = group[0]?.severity ?? "warn";
       lines.push("");
       lines.push(
-        `${SEV_PAINT[sev](SEV_MARK[sev] ?? "\u2022")} ${magenta(ruleId)} ${dim(`(${group.length})`)} \u2014 ${title(ruleId)}`
+        `${SEV_PAINT[sev](SEV_MARK[sev] ?? "\u2022")} ${magenta(ruleId)} ${dim(`(${group.length})`)} ${SEV_PAINT[sev](SEV_WORD[sev] ?? "advisory")} \u2014 ${title(ruleId)}`
       );
       const show = group.slice(0, quota.get(ruleId) ?? 0);
       hidden += group.length - show.length;
-      for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${components(f.message)}`);
+      for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${components(withNote(f))}`);
       if (group.length > show.length) lines.push(dim(`    \u2026 ${group.length - show.length} more`));
     }
     if (hidden) {
       lines.push("");
       lines.push(dim(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`));
     }
+    if (!terse) {
+      const dense = densestLine(findings);
+      if (dense) {
+        lines.push("");
+        lines.push(dim(dense));
+      }
+    }
     lines.push("");
+    lines.push(
+      dim(
+        "Next: `loupe fix` applies the unambiguous token substitutions, `loupe explain <ruleId>` says what a rule wants, `--format json` carries every finding whole."
+      )
+    );
     lines.push(dim(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`));
     for (const m of nearMisses(result)) lines.push(yellow(`  ! ${m}`));
   }
@@ -26199,11 +26254,7 @@ function formatAgent(result, config, { maxFindings = 0, showSuppressed = false }
     lines.push(yellow(`! ${diagnostics.parseErrors.length} file(s) could not be parsed and were skipped:`));
     for (const e of diagnostics.parseErrors.slice(0, 5)) lines.push(`    ${dim(e.file)}: ${e.message}`);
   }
-  if (showSuppressed && result.directives.length) {
-    lines.push("");
-    lines.push(dim(`${result.directives.length} active suppression(s).`));
-  }
-  return lines.join("\n").replace(/^\n/, "");
+  return lines.join("\n");
 }
 function formatSummary(result, { prefix = true } = {}) {
   const tag = prefix ? "loupe: " : "";
@@ -26243,6 +26294,8 @@ function reportPayload(result, config) {
       warn: result.findings.filter((f) => f.severity === "warn").length,
       suppressions: result.directives.length,
       parseErrors: result.diagnostics.parseErrors.length,
+      filesScanned: result.diagnostics.filesScanned,
+      byFile: Object.fromEntries(tally(result.findings.map((f) => f.file))),
       // Only when a baseline was applied. Without it, the number the agent
       // format prints has no counterpart here, and a consumer cannot tell a
       // clean repo from one whose whole backlog is accepted.
@@ -26423,6 +26476,7 @@ td.msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:
 .sev.warn { color: var(--ink-2); }
 .rule { font-size: 12px; color: var(--ink); font-weight: 600; white-space: nowrap; }
 .fix { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+.note { color: var(--ink-muted); }
 .tokens { font-size: 11.5px; color: var(--ink-muted); margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 /* Composite clusters: one card per defect, not one row per member file. */
 .cluster { border: 1px solid var(--hairline); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
@@ -26529,6 +26583,9 @@ var JS = `
     // with no baseline file both report 0, so a zero tile states nothing.
     if (s.baselined) tiles.push({ k: 'baselined', v: s.baselined });
     tiles.push({ k: 'suppressions', v: s.suppressions });
+    // Next to the unparsed count on purpose: zero unparsed files means nothing
+    // until you know how many were read.
+    tiles.push({ k: 'files scanned', v: s.filesScanned });
     tiles.push({ k: 'files unparsed', v: s.parseErrors, err: s.parseErrors > 0 });
     document.getElementById('kpis').innerHTML = tiles.map(function (t) {
       return '<div class="kpi' + (t.lead ? ' lead' : '') + '"><div class="v' + (t.err ? ' err' : '') + '">' +
@@ -26631,6 +26688,9 @@ var JS = `
         return '<tr>' +
           '<td class="loc">' + esc(f.file) + ':' + f.line + '</td>' +
           '<td class="msg">' + esc(f.message) +
+            // Whole, not clipped: the page has room the one-line agent format
+            // does not, which is the reason the note is a field of its own.
+            (f.note ? ' <span class="note">(' + esc(f.note) + ')</span>' : '') +
             (tokens.length ? '<div class="tokens">\\u2192 ' + esc(tokens.join(', ')) + '</div>' : '') + '</td>' +
           '</tr>';
       }).join('');
@@ -27618,6 +27678,24 @@ async function main() {
     process.stdout.write(`${magenta(id)}  [${state}]
   ${renderTitle(id, config.designSystem, config.suppression.keyword)}
 `);
+    const flagged = id === "system/locked-component" ? "locked" : id === "system/superseded-component" ? "legacy" : null;
+    if (flagged) {
+      const entries = [...config.componentRegistry.values()];
+      const fires = entries.filter((e) => e.status === flagged && usableReplacement(config.componentRegistry, e.supersededBy));
+      const names = fires.slice(0, 5).map((e) => e.name);
+      const src = (config.profiles?.active ?? []).filter((p) => p.components);
+      process.stdout.write(
+        `  ${dim(
+          `${fires.length} of ${entries.length} entries in the active component registry fire it${names.length ? `: ${names.join(", ")}${fires.length > names.length ? `, +${fires.length - names.length} more` : ""}` : ""}.`
+        )}
+`
+      );
+      if (src.length)
+        process.stdout.write(
+          `  ${dim(`From ${src.map((p) => `${p.id} (${p.components})`).join(", ")} \u2014 each finding carries its entry's note, and \`--format json\` ships that note whole.`)}
+`
+        );
+    }
     return EXIT.OK;
   }
   if (command === "status") {
@@ -27854,7 +27932,8 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
       );
     }
     const report = formatAgent({ ...result, findings: result.findings.filter((f) => f.severity === "error") }, config, {
-      maxFindings: config.hook.maxFindings
+      maxFindings: config.hook.maxFindings,
+      terse: true
     });
     return emitBlocking(`${report}
 

@@ -29,7 +29,9 @@ in a JS channel, is left for the passes below.
 node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --format json --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
-If `$ARGUMENTS` names a rule id or a path, narrow to that. Otherwise work upward
+If `$ARGUMENTS` names a rule id or a path, narrow to that; add `--severity error`
+to cut the run down to what the hook actually blocks on, which is the subset to
+clear first when the backlog is too large for one pass. Otherwise work upward
 through the layers, because lower fixes change what the higher findings say:
 unparsed files, then malformed suppressions, then component overrides, then
 layout, then values, then dead classes. Re-run between stages rather than

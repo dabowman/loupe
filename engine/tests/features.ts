@@ -777,6 +777,22 @@ await check('an experimental component is not flagged — the call is contextual
 	);
 });
 
+// Two things the message could not say before, both of which an agent went and
+// derived by hand: the registry's own prose was concatenated into `message` and
+// lost its last clause to the display cap, and a finding anchored at the import
+// gave no clue whether the migration was one edit or a dozen.
+await check('a currency finding carries the registry note apart, and counts its call sites', async () => {
+	const src = [
+		"import { Grid } from '@wordpress/components';",
+		'export const A = () => (<><Grid /><Grid /></>);',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const f = one(at(r, 'system/superseded-component'), 'expected one Grid finding');
+	assert(/\u00d72/.test(f.message), `the message did not say how many call sites: ${f.message}`);
+	assert(!/Storybook/.test(f.message), `the note is back in the capped field: ${f.message}`);
+	assert(f.note?.endsWith('not Grid.'), `the note lost the half worth acting on: ${String(f.note)}`);
+});
+
 await check('a locked-component finding can be suppressed like any other', async () => {
 	const src = [
 		'/* wpds-allow system/locked-component -- reviewed, migrating later */',

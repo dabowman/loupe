@@ -10,7 +10,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze } from './analyze.ts';
+import { analyze, usableReplacement } from './analyze.ts';
 import { applyTokenFixes } from './autofix.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
@@ -637,6 +637,32 @@ async function main(): Promise<number> {
 			? SEV_PAINT[config.severityOf(id)](config.severityOf(id))
 			: dim('disabled (config does not satisfy its requirements)');
 		process.stdout.write(`${magenta(id)}  [${state}]\n  ${renderTitle(id, config.designSystem, config.suppression.keyword)}\n`);
+		// The two registry-backed rules have nothing of their own to explain: what
+		// they fire on is a list somebody else authored, and a title that says
+		// "a current component now covers this job" without saying whose list
+		// decided that leaves a reader with nothing to check. Name the size, a few
+		// entries to recognise it by, and the file — not the list itself, which
+		// runs to hundreds.
+		const flagged = id === 'system/locked-component' ? 'locked' : id === 'system/superseded-component' ? 'legacy' : null;
+		if (flagged) {
+			const entries = [...config.componentRegistry.values()];
+			// The same filter the rule applies. Counting every `legacy` entry would
+			// overstate it: one whose only replacement is itself locked or
+			// experimental never fires, deliberately.
+			const fires = entries.filter((e) => e.status === flagged && usableReplacement(config.componentRegistry, e.supersededBy));
+			const names = fires.slice(0, 5).map((e) => e.name);
+			const src = (config.profiles?.active ?? []).filter((p) => p.components);
+			process.stdout.write(
+				`  ${dim(
+					`${fires.length} of ${entries.length} entries in the active component registry fire it` +
+						`${names.length ? `: ${names.join(', ')}${fires.length > names.length ? `, +${fires.length - names.length} more` : ''}` : ''}.`
+				)}\n`
+			);
+			if (src.length)
+				process.stdout.write(
+					`  ${dim(`From ${src.map((p) => `${p.id} (${p.components})`).join(', ')} — each finding carries its entry's note, and \`--format json\` ships that note whole.`)}\n`
+				);
+		}
 		return EXIT.OK;
 	}
 
@@ -1009,6 +1035,7 @@ async function main(): Promise<number> {
 		}
 		const report = formatAgent({ ...result, findings: result.findings.filter((f) => f.severity === 'error') }, config, {
 			maxFindings: config.hook.maxFindings,
+			terse: true,
 		});
 		return emitBlocking(`${report}\n\n(attempt ${attempts} of ${max})${ceilingSuffix}`);
 	}

@@ -40,6 +40,12 @@ exist.
   every rule below, and `<profile dir>/authoring.md` carries the token families
   a value has to come from.
 
+When the finding rather than the fix is what needs explaining, `loupe explain
+<ruleId>` prints the rule's guidance and whether it is live in this config — and
+for `system/locked-component` and `system/superseded-component`, which registry
+decided it, how many of its entries fire the rule, and where that file sits. That
+is how you check a suspect entry instead of arguing with it.
+
 ## Work in this order
 
 Fix upward through the layers, because the lower fixes change what the higher
@@ -78,10 +84,14 @@ swapping: some replacements are a straight rename, others change the prop
 surface entirely. Read the target's real props before writing the replacement —
 do not assume the old props carry over.
 
-Only fires when the replacement's own status is `recommended`. A component the
-registry marks `experimental` never generates this finding, because the system
-itself flags it not yet safe to adopt broadly. Seeing one of those names with no
-finding is correct — do not "fix" it preemptively.
+Silent only when *every* component the remedy names is itself `locked` or
+`experimental` — the system's own metadata saying do not reach for this yet, so
+the finding would ask for a migration onto an API nobody should adopt.
+`DropdownMenu` is the shipped case. One usable candidate among several is enough
+to fire it, a remedy that names no component at all still fires, and a name the
+registry has never heard of fires too: the registry records currency, not
+existence. Compound names resolve through their root, so `Menu.Group` inherits
+`Menu`'s status rather than reading as unknown.
 
 A stale registry entry is a real possibility; these files are point-in-time
 snapshots. If the named replacement does not match what the design system's own

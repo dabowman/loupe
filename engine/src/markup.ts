@@ -346,6 +346,7 @@ function systemImports(
 			componentImports.push({
 				canonical: c,
 				package: node.source.value,
+				uses: 0, // the JSX walk counts them; this pass has only read the imports
 				line: spec.loc?.start?.line ?? node.loc?.start?.line ?? 1,
 				declLine: node.loc?.start?.line ?? 1,
 			});
@@ -446,6 +447,9 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 	// node identity — `walkAst` visits these very objects, so nothing has to be
 	// keyed on a source offset.
 	const substituted = new Set<JSXOpeningElement>();
+	// canonical name -> how many elements render it, so a currency finding
+	// anchored at an import can say how many call sites the migration touches.
+	const uses = new Map<string, number>();
 	for (const node of ast.program.body)
 		if (node.type === 'ImportDeclaration') for (const sp of node.specifiers) imports.add(sp.local.name);
 
@@ -657,6 +661,10 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		const root = tag.split('.')[0] ?? tag;
 		const isComponent = /^[A-Z]/.test(root);
 		const isSystem = isComponent && known.has(root);
+		if (isSystem) {
+			const c = canonicals.get(root) ?? root;
+			uses.set(c, (uses.get(c) ?? 0) + 1);
+		}
 
 		// Which carriers can earn the substitution exemption. Not every export of a
 		// design-system package — `@wordpress/components` ships `FormFileUpload`,
@@ -748,5 +756,9 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		}
 	});
 
-	return { bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports, parseError: null };
+	return {
+		bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems,
+		componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })),
+		parseError: null,
+	};
 }

@@ -533,6 +533,16 @@ budget is spent round-robin so one loud rule cannot bury the rest. That is the
 right shape for a hook and the wrong shape for a person deciding what to take
 on.
 
+It opens with the tally — how many findings, how they split between blocking
+and advisory, and how many files were read to reach it — and, when the repo has
+any, one line naming what its suppression directives are silencing. Both exist
+because their absence was answered by running the tool again: a report that
+started on a rule group gave no way to tell a complete one from a truncated
+pipe, `0` unparsed stylesheets means nothing until you know whether any were
+found, and a repo can report clean with its whole blocking backlog muted by
+directives. Each rule group says `blocking` or `advisory` in words next to its
+glyph, and the report closes on where findings cluster and what to run next.
+
 `--format html` writes a self-contained page — no CDN, no fonts fetched, one
 file you can open, commit, or attach to a build:
 
@@ -547,9 +557,9 @@ invisible, since each looks correct read on its own.
 
 It shows the two things a line-per-finding list cannot:
 
-- **Where the drift is.** Findings rolled up by directory, which answers
-  "clustered in a few files or spread across the codebase" — the first question
-  worth asking and the one a flat list buries.
+- **Where the drift is.** Findings rolled up by directory. The text report
+  names its three densest files, which is enough to answer "clustered or
+  spread"; the page shows the whole distribution.
 - **Composites as the N-way relations they are.** `patterns/duplicate-composite`
   and `patterns/unregistered-composite` are the only findings that cannot exist
   in one file. Text prints one line per member file, as though six files each
