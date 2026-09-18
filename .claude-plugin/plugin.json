@@ -2,7 +2,7 @@
   "name": "loupe",
   "displayName": "Loupe",
   "description": "Keeps agent-written UI on its design system. An authoring skill that sets the rules before the first draft, a conformance engine that correlates JSX component bindings with the CSS styling them \u2014 across stylesheets, inline styles and CSS-in-JS \u2014 names the exact token that replaces a hardcoded value, and catches composites rebuilt across files, plus hooks that report drift at write time rather than at review time. Ships profiles for the WordPress Design System and Archer; a third is a directory, not a fork.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": {
     "name": "David Bowman"
   },

@@ -1,6 +1,6 @@
 {
   "name": "@dvdbwmn/loupe",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Design-system conformance checking: correlates markup bindings with the CSS that styles them.",
   "type": "module",
   "bin": {
