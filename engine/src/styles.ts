@@ -127,6 +127,12 @@ export const isLiteralEasing = (v: string): boolean =>
 	/^(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$/i.test(v.trim()) ||
 	/^(cubic-bezier|steps)\(/i.test(v.trim());
 
+export const isMarginProp = (prop: string): boolean => prop === 'margin' || prop.startsWith('margin-');
+
+/** A declaration that makes or tunes a flex (or grid) container. */
+export const isFlexDecl = (prop: string, value: string): boolean =>
+	FLEX_PROPS.has(prop) || (prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value));
+
 /**
  * Classify a margin declaration: `'spacing' | 'negative' | null`.
  *

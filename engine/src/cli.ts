@@ -10,7 +10,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze, usableReplacement } from './analyze.ts';
+import { analyze } from './analyze.ts';
+import { usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes } from './autofix.ts';
 import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';

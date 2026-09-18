@@ -4637,17 +4637,17 @@ var require_lib = __commonJS({
         }
       }
       flowParseAnonFunctionWithoutParens() {
-        const param2 = this.flowParsePrefixType();
+        const param = this.flowParsePrefixType();
         if (!this.state.noAnonFunctionType && this.eat(19)) {
-          const node = this.startNodeAt(param2.loc.start);
-          node.params = [this.reinterpretTypeAsFunctionTypeParam(param2)];
+          const node = this.startNodeAt(param.loc.start);
+          node.params = [this.reinterpretTypeAsFunctionTypeParam(param)];
           node.rest = null;
           node.this = null;
           node.returnType = this.flowParseType();
           node.typeParameters = null;
           return this.finishNode(node, "FunctionTypeAnnotation");
         }
-        return param2;
+        return param;
       }
       flowParseIntersectionType() {
         const node = this.startNode();
@@ -4879,7 +4879,7 @@ var require_lib = __commonJS({
           arrows.forEach((node2) => this.finishArrowValidation(node2));
           return [arrows, []];
         }
-        return partition(arrows, (node2) => node2.params.every((param2) => this.isAssignable(param2, true)));
+        return partition(arrows, (node2) => node2.params.every((param) => this.isAssignable(param, true)));
       }
       finishArrowValidation(node) {
         var _node$extra;
@@ -5145,11 +5145,11 @@ var require_lib = __commonJS({
         super.checkGetterSetterParams(method);
         const params = this.getObjectOrClassMethodParams(method);
         if (params.length > 0) {
-          const param2 = params[0];
-          if (this.isThisParam(param2) && method.kind === "get") {
-            this.raise(FlowErrors.GetterMayNotHaveThisParam, param2);
-          } else if (this.isThisParam(param2)) {
-            this.raise(FlowErrors.SetterMayNotHaveThisParam, param2);
+          const param = params[0];
+          if (this.isThisParam(param) && method.kind === "get") {
+            this.raise(FlowErrors.GetterMayNotHaveThisParam, param);
+          } else if (this.isThisParam(param)) {
+            this.raise(FlowErrors.SetterMayNotHaveThisParam, param);
           }
         }
       }
@@ -5172,26 +5172,26 @@ var require_lib = __commonJS({
         }
         return result;
       }
-      parseFunctionParamType(param2) {
+      parseFunctionParamType(param) {
         if (this.eat(17)) {
-          if (param2.type !== "Identifier") {
-            this.raise(FlowErrors.PatternIsOptional, param2);
+          if (param.type !== "Identifier") {
+            this.raise(FlowErrors.PatternIsOptional, param);
           }
-          if (this.isThisParam(param2)) {
-            this.raise(FlowErrors.ThisParamMayNotBeOptional, param2);
+          if (this.isThisParam(param)) {
+            this.raise(FlowErrors.ThisParamMayNotBeOptional, param);
           }
-          param2.optional = true;
+          param.optional = true;
         }
         if (this.match(14)) {
-          param2.typeAnnotation = this.flowParseTypeAnnotation();
-        } else if (this.isThisParam(param2)) {
-          this.raise(FlowErrors.ThisParamAnnotationRequired, param2);
+          param.typeAnnotation = this.flowParseTypeAnnotation();
+        } else if (this.isThisParam(param)) {
+          this.raise(FlowErrors.ThisParamAnnotationRequired, param);
         }
-        if (this.match(29) && this.isThisParam(param2)) {
-          this.raise(FlowErrors.ThisParamNoDefault, param2);
+        if (this.match(29) && this.isThisParam(param)) {
+          this.raise(FlowErrors.ThisParamNoDefault, param);
         }
-        this.resetEndLocation(param2);
-        return param2;
+        this.resetEndLocation(param);
+        return param;
       }
       parseMaybeDefault(startLoc, left) {
         const node = super.parseMaybeDefault(startLoc, left);
@@ -9265,8 +9265,8 @@ var require_lib = __commonJS({
         const elt = this.parseMaybeDefault(left.loc.start, left);
         return elt;
       }
-      parseFunctionParamType(param2) {
-        return param2;
+      parseFunctionParamType(param) {
+        return param;
       }
       parseMaybeDefault(startLoc, left) {
         startLoc != null ? startLoc : startLoc = this.state.startLoc;
@@ -10971,9 +10971,9 @@ var require_lib = __commonJS({
         return node.type === "TSParameterProperty" && super.isSimpleParameter(node.parameter) || super.isSimpleParameter(node);
       }
       tsDisallowOptionalPattern(node) {
-        for (const param2 of node.params) {
-          if (param2.type !== "Identifier" && param2.optional && !this.state.isAmbientContext) {
-            this.raise(TSErrors.PatternIsOptional, param2);
+        for (const param of node.params) {
+          if (param.type !== "Identifier" && param.optional && !this.state.isAmbientContext) {
+            this.raise(TSErrors.PatternIsOptional, param);
           }
         }
       }
@@ -11672,14 +11672,14 @@ var require_lib = __commonJS({
         }
         return super.parseArrow(node);
       }
-      parseFunctionParamType(param2) {
+      parseFunctionParamType(param) {
         if (this.eat(17)) {
-          param2.optional = true;
+          param.optional = true;
         }
         const type = this.tsTryParseTypeAnnotation();
-        if (type) param2.typeAnnotation = type;
-        this.resetEndLocation(param2);
-        return param2;
+        if (type) param.typeAnnotation = type;
+        this.resetEndLocation(param);
+        return param;
       }
       isAssignable(node, isBinding) {
         switch (node.type) {
@@ -11871,13 +11871,13 @@ var require_lib = __commonJS({
         return hasContextParam ? baseCount + 1 : baseCount;
       }
       parseCatchClauseParam() {
-        const param2 = super.parseCatchClauseParam();
+        const param = super.parseCatchClauseParam();
         const type = this.tsTryParseTypeAnnotation();
         if (type) {
-          param2.typeAnnotation = type;
-          this.resetEndLocation(param2);
+          param.typeAnnotation = type;
+          this.resetEndLocation(param);
         }
-        return param2;
+        return param;
       }
       tsInAmbientContext(cb) {
         const {
@@ -13943,8 +13943,8 @@ var require_lib = __commonJS({
         const formalParameters = {
           type: "FormalParameters"
         };
-        for (const param2 of node.params) {
-          this.checkLVal(param2, formalParameters, 5, checkClashes, strictModeChanged);
+        for (const param of node.params) {
+          this.checkLVal(param, formalParameters, 5, checkClashes, strictModeChanged);
         }
       }
       parseExprList(close, allowEmpty, refExpressionErrors, nodeForExtra) {
@@ -15004,12 +15004,12 @@ var require_lib = __commonJS({
         return this.finishNode(node, "ThrowStatement");
       }
       parseCatchClauseParam() {
-        const param2 = this.parseBindingAtom();
-        this.scope.enter(this.options.annexB && param2.type === "Identifier" ? 8 : 0);
-        this.checkLVal(param2, {
+        const param = this.parseBindingAtom();
+        this.scope.enter(this.options.annexB && param.type === "Identifier" ? 8 : 0);
+        this.checkLVal(param, {
           type: "CatchClause"
         }, 9);
-        return param2;
+        return param;
       }
       parseTryStatement(node) {
         this.next();
@@ -16230,8 +16230,8 @@ var require_lib = __commonJS({
         }
         return this.finishImportSpecifier(specifier, "ImportSpecifier", bindingType);
       }
-      isThisParam(param2) {
-        return param2.type === "Identifier" && param2.name === "this";
+      isThisParam(param) {
+        return param.type === "Identifier" && param.name === "this";
       }
     };
     var Parser = class extends StatementParser {
@@ -24065,6 +24065,8 @@ var isLiteralColor = (v) => /#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla
 var isLiteralLength = (v) => /(^|\s|,)-?\d*\.?\d+(px|rem|em|%|vh|vw|vmin|vmax|pt|ch)\b/.test(v) || /(^|\s)-?\d+(\s|$)/.test(v);
 var isLiteralDuration = (v) => /^-?\d*\.?\d+m?s$/i.test(v.trim());
 var isLiteralEasing = (v) => /^(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$/i.test(v.trim()) || /^(cubic-bezier|steps)\(/i.test(v.trim());
+var isMarginProp = (prop) => prop === "margin" || prop.startsWith("margin-");
+var isFlexDecl = (prop, value) => FLEX_PROPS.has(prop) || prop === "display" && /\b(inline-)?(flex|grid)\b/.test(value);
 function classifyMargin(value) {
   const parts = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!parts.length) return null;
@@ -24268,6 +24270,9 @@ var ruleSpecs = (detector) => {
     (d) => typeof d === "object" && d !== null && typeof d.rule === "string"
   );
 };
+var stringParam = (spec, key2, fallback) => typeof spec[key2] === "string" && spec[key2] ? spec[key2] : fallback;
+var numParam = (spec, key2, fallback) => typeof spec[key2] === "number" ? spec[key2] : fallback;
+var listParam = (spec, key2) => Array.isArray(spec[key2]) ? spec[key2].filter((x) => typeof x === "string") : [];
 function loadPatterns(raw) {
   const rec = raw;
   const list2 = Array.isArray(raw) ? raw : rec?.realizations ?? rec?.patterns ?? [];
@@ -24331,6 +24336,54 @@ function resolveRule(rules, forces) {
     return null;
   }
   return null;
+}
+
+// src/checks/detectors/confirm-pair.ts
+var CONSENT = "^(cancel|delete|remove|discard|reset|confirm|ok|yes|no|continue|proceed|leave|revert)\\b";
+var CONTROLS = "(Control|Field|Picker|Input|Textarea|Editor)$|^(DataForm|Field\\.Root|Fieldset)";
+var confirmPair = (el, spec, ctx) => {
+  if (ctx.canonical !== stringParam(spec, "container", "")) return null;
+  const button = stringParam(spec, "button", "Button");
+  const consent = new RegExp(stringParam(spec, "labels", CONSENT), "i");
+  const controls = new RegExp(stringParam(spec, "controls", CONTROLS));
+  const inside = ctx.elementsIn(el);
+  const isControl = (c) => {
+    const name = ctx.nameOf(c);
+    const sys = ctx.canonicalOf(c);
+    if (sys) return controls.test(sys) || controls.test(name ?? "");
+    return !!name && /^(input|select|textarea)$/.test(name);
+  };
+  if (inside.some(isControl)) return null;
+  const labels = inside.filter((c) => ctx.canonicalOf(c) === button).map(ctx.labelOf);
+  if (labels.length !== 2 || !labels.every((l) => l !== null && consent.test(l))) return null;
+  return `${ctx.canonical} with two consent buttons (${labels.join(" / ")}) and no form control`;
+};
+
+// src/checks/detectors/few-static-options.ts
+var fewStaticOptions = (el, spec, ctx) => {
+  if (!listParam(spec, "components").includes(ctx.canonical)) return null;
+  const prop = stringParam(spec, "prop", "options");
+  const attr = el.openingElement.attributes.find((a) => a.type === "JSXAttribute" && a.name.name === prop);
+  const value = attr?.type === "JSXAttribute" && attr.value?.type === "JSXExpressionContainer" ? attr.value.expression : null;
+  const options = value && value.type !== "JSXEmptyExpression" ? ctx.optionsIn(value) : null;
+  if (!options || options.length < numParam(spec, "min", 2) || options.length > numParam(spec, "max", 5)) return null;
+  if (!options.every((l) => l !== null)) return null;
+  if (options.reduce((n, l) => n + l.length, 0) > numParam(spec, "maxLabelChars", 32)) return null;
+  return `${ctx.canonical} with ${options.length} short static ${prop}`;
+};
+
+// src/checks/detectors/judge.ts
+var MAX_CONTROL_SOURCE = 2e3;
+function judgeControl(el, spec, ctx) {
+  const name = ctx.nameOf(el) ?? "";
+  const component = name.includes(".") ? `${ctx.canonical}${name.slice(name.indexOf("."))}` : ctx.canonical;
+  if (!listParam(spec, "components").includes(component)) return null;
+  const unless = listParam(spec, "unless");
+  const realized = unless.length > 0 && el.openingElement.attributes.some(
+    (a) => a.type === "JSXSpreadAttribute" || a.name.type === "JSXIdentifier" && unless.includes(a.name.name)
+  );
+  if (realized) return null;
+  return { component, enclosing: ctx.enclosingOf(el), source: ctx.sourceOf(el).slice(0, MAX_CONTROL_SOURCE) };
 }
 
 // src/markup.ts
@@ -24535,12 +24588,10 @@ function staticString(node) {
   }
   return null;
 }
-var param = (spec, key2, fallback) => typeof spec[key2] === "string" && spec[key2] ? spec[key2] : fallback;
-var numParam = (spec, key2, fallback) => typeof spec[key2] === "number" ? spec[key2] : fallback;
-var listParam = (spec, key2) => Array.isArray(spec[key2]) ? spec[key2].filter((x) => typeof x === "string") : [];
-var CONSENT = "^(cancel|delete|remove|discard|reset|confirm|ok|yes|no|continue|proceed|leave|revert)\\b";
-var CONTROLS = "(Control|Field|Picker|Input|Textarea|Editor)$|^(DataForm|Field\\.Root|Fieldset)";
-var MAX_CONTROL_SOURCE = 2e3;
+var DETECTORS = /* @__PURE__ */ new Map([
+  ["few-static-options", fewStaticOptions],
+  ["confirm-pair", confirmPair]
+]);
 function componentRanges(program) {
   const out = [];
   walkAst(program, (n) => {
@@ -24557,7 +24608,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
   const rawEls = [];
   const inlineStyles = [];
   const cssInJs = [];
-  const composites = [];
+  const composites2 = [];
   const ruleHits = [];
   const controls = [];
   const imports = /* @__PURE__ */ new Set();
@@ -24571,7 +24622,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
       rawEls,
       inlineStyles,
       cssInJs,
-      composites,
+      composites: composites2,
       ruleHits,
       imports,
       referenced,
@@ -24622,7 +24673,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
       el.loc?.start?.line ?? 1
     );
     if (!tree || nodeCount(tree) < 2) return;
-    composites.push({
+    composites2.push({
       file: relPath,
       line: el.loc?.start?.line ?? 1,
       signature: signatureOf(tree),
@@ -24670,67 +24721,29 @@ function scanMarkup(text, relPath, ds, rules = []) {
     for (const s of scopes) if (s.start <= at && s.end >= (el.end ?? at) && (!best || s.start > best.start)) best = s;
     return best?.name ?? null;
   };
+  const reading = {
+    nameOf: jsxName,
+    canonicalOf,
+    elementsIn: (el) => allElements(el),
+    optionsIn: staticOptions,
+    labelOf: staticLabel,
+    enclosingOf,
+    sourceOf: (el) => text.slice(el.start ?? 0, el.end ?? 0)
+  };
   const readRules = (el) => {
     if (!rules.length) return;
     const canonical = canonicalOf(el);
     if (!canonical) return;
     const line = el.loc?.start?.line ?? 1;
+    const ctx = { ...reading, canonical };
     for (const { patternId, spec } of rules) {
       if (spec.rule === "judge") {
-        const name = jsxName(el) ?? "";
-        const component = name.includes(".") ? `${canonical}${name.slice(name.indexOf("."))}` : canonical;
-        if (!listParam(spec, "components").includes(component)) continue;
-        const unless = listParam(spec, "unless");
-        const realized = unless.length > 0 && el.openingElement.attributes.some(
-          (a) => a.type === "JSXSpreadAttribute" || a.name.type === "JSXIdentifier" && unless.includes(a.name.name)
-        );
-        if (realized) continue;
-        controls.push({
-          file: relPath,
-          line,
-          component,
-          enclosing: enclosingOf(el),
-          source: text.slice(el.start ?? 0, el.end ?? 0).slice(0, MAX_CONTROL_SOURCE),
-          patternId
-        });
-      } else if (spec.rule === "few-static-options") {
-        if (!listParam(spec, "components").includes(canonical)) continue;
-        const prop = param(spec, "prop", "options");
-        const attr = el.openingElement.attributes.find((a) => a.type === "JSXAttribute" && a.name.name === prop);
-        const value = attr?.type === "JSXAttribute" && attr.value?.type === "JSXExpressionContainer" ? attr.value.expression : null;
-        const options = value && value.type !== "JSXEmptyExpression" ? staticOptions(value) : null;
-        if (!options || options.length < numParam(spec, "min", 2) || options.length > numParam(spec, "max", 5))
-          continue;
-        if (!options.every((l) => l !== null)) continue;
-        if (options.reduce((n, l) => n + l.length, 0) > numParam(spec, "maxLabelChars", 32)) continue;
-        ruleHits.push({
-          patternId,
-          rule: spec.rule,
-          line,
-          detail: `${canonical} with ${options.length} short static ${prop}`
-        });
-      } else if (spec.rule === "confirm-pair") {
-        if (canonical !== param(spec, "container", "")) continue;
-        const button = param(spec, "button", "Button");
-        const consent = new RegExp(param(spec, "labels", CONSENT), "i");
-        const controls2 = new RegExp(param(spec, "controls", CONTROLS));
-        const inside = allElements(el);
-        const isControl = (c) => {
-          const name = jsxName(c);
-          const sys = canonicalOf(c);
-          if (sys) return controls2.test(sys) || controls2.test(name ?? "");
-          return !!name && /^(input|select|textarea)$/.test(name);
-        };
-        if (inside.some(isControl)) continue;
-        const labels = inside.filter((c) => canonicalOf(c) === button).map(staticLabel);
-        if (labels.length !== 2 || !labels.every((l) => l !== null && consent.test(l))) continue;
-        ruleHits.push({
-          patternId,
-          rule: spec.rule,
-          line,
-          detail: `${canonical} with two consent buttons (${labels.join(" / ")}) and no form control`
-        });
+        const control = judgeControl(el, spec, ctx);
+        if (control) controls.push({ file: relPath, line, ...control, patternId });
+        continue;
       }
+      const detail = DETECTORS.get(spec.rule)?.(el, spec, ctx);
+      if (detail) ruleHits.push({ patternId, rule: spec.rule, line, detail });
     }
   };
   const readTaggedTemplate = (node) => {
@@ -24852,7 +24865,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
     rawEls,
     inlineStyles,
     cssInJs,
-    composites,
+    composites: composites2,
     ruleHits,
     imports,
     referenced,
@@ -25080,6 +25093,277 @@ function tokenRefsIn(value, prefixes) {
   return out;
 }
 
+// src/checks/css/dead-class.ts
+function deadClasses(declared, {
+  referenced,
+  stems,
+  isProject,
+  isNeverDead
+}) {
+  const isReferenced = (cls) => referenced.has(cls) || isNeverDead(cls) || stems.some((s) => cls.startsWith(s));
+  const seen = /* @__PURE__ */ new Set();
+  return declared.flatMap(({ file, line, cls, scopeLines }) => {
+    const key2 = `${file}\0${cls}`;
+    if (seen.has(key2) || !isProject(cls) || isReferenced(cls)) return [];
+    seen.add(key2);
+    return [{ rule: "css/dead-class", file, line, message: `.${cls}`, code: `.${cls}`, scopeLines }];
+  });
+}
+
+// src/checks/layout/in-css.ts
+var layoutInCss = ({ prop, value }, { boundSystem, isGrid }) => {
+  const decl2 = `${prop}: ${value}`;
+  if (GAP_PROPS.has(prop))
+    return !boundSystem.length && !isGrid ? { rule: "layout/in-css", message: decl2, code: prop } : null;
+  if (!isFlexDecl(prop, value)) return void 0;
+  const gridDisplay = prop === "display" && /\bgrid\b/.test(value);
+  return !boundSystem.length && !isGrid && !gridDisplay ? { rule: "layout/in-css", message: decl2, code: oneLine(decl2) } : null;
+};
+
+// src/checks/layout/margin.ts
+var margin = ({ prop, value }) => {
+  if (!isMarginProp(prop)) return void 0;
+  const kind = classifyMargin(value);
+  const decl2 = `${prop}: ${value}`;
+  if (kind === "negative") return { rule: "layout/negative-margin", message: decl2, code: prop };
+  return kind ? { rule: "layout/margin-on-child", message: decl2, code: prop } : null;
+};
+
+// src/checks/patterns/composites.ts
+function composites({
+  found,
+  hits,
+  registry,
+  importsByFile,
+  enabled: enabled2
+}) {
+  const dupEnabled = enabled2("patterns/duplicate-composite");
+  const newEnabled = enabled2("patterns/unregistered-composite");
+  const supEnabled = enabled2("patterns/superseded-composite");
+  if (!(dupEnabled || newEnabled || supEnabled) || !(found.length || hits.length)) return [];
+  const out = [];
+  const anatomyRoots = registry.flatMap(
+    (p) => p.node && p.canonical && p.canonical === p.node.name.split(".")[0] ? [p.canonical] : []
+  );
+  const bestMatch = (c) => registry.filter((p) => p.node !== null && p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree)).sort((a, b) => b.size - a.size)[0] ?? null;
+  const avoidMatch = (c) => {
+    let best = null;
+    for (const p of registry) {
+      let fit = 0;
+      for (const a of p.avoid) if (matches(a, c.tree)) fit = Math.max(fit, nodeCount(a));
+      if (fit && (!best || fit > best.fit)) best = { pattern: p, fit };
+    }
+    return best?.pattern ?? null;
+  };
+  const byPattern = /* @__PURE__ */ new Map();
+  const bySuperseded = /* @__PURE__ */ new Map();
+  const bySignature = /* @__PURE__ */ new Map();
+  for (const c of found) {
+    const hit = dupEnabled ? bestMatch(c) : null;
+    if (hit) {
+      if (hit.canonical && importsByFile.get(c.file)?.has(hit.canonical)) continue;
+      const perFile2 = byPattern.get(hit.id) ?? /* @__PURE__ */ new Map();
+      byPattern.set(hit.id, perFile2);
+      const prev2 = perFile2.get(c.file);
+      if (!prev2 || c.size > prev2.size) perFile2.set(c.file, { ...c, pattern: hit });
+      continue;
+    }
+    const avoided = supEnabled ? avoidMatch(c) : null;
+    if (avoided) {
+      if (avoided.canonical && importsByFile.get(c.file)?.has(avoided.canonical)) continue;
+      const perFile2 = bySuperseded.get(avoided.id) ?? /* @__PURE__ */ new Map();
+      bySuperseded.set(avoided.id, perFile2);
+      const prev2 = perFile2.get(c.file);
+      if (!prev2 || c.size < prev2.size) perFile2.set(c.file, { ...c, pattern: avoided });
+      continue;
+    }
+    if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
+    if (anatomyRoots.some((root2) => partsOf(root2, c.tree))) continue;
+    const perFile = bySignature.get(c.signature) ?? /* @__PURE__ */ new Map();
+    bySignature.set(c.signature, perFile);
+    const prev = perFile.get(c.file);
+    if (!prev || c.line < prev.line) perFile.set(c.file, c);
+  }
+  const emit = (rule2, c, signature, tail, group) => {
+    out.push({
+      rule: rule2,
+      file: c.file,
+      line: c.line,
+      message: `${signature}${tail}`,
+      suffix: tail,
+      code: c.signature,
+      group
+    });
+  };
+  for (const [id, files] of byPattern) {
+    if (files.size < 2) continue;
+    for (const c of files.values()) {
+      const remedy = c.pattern?.canonical ? `import \`${c.pattern.canonical}\`` : "extract one shared implementation";
+      emit(
+        "patterns/duplicate-composite",
+        c,
+        c.signature,
+        ` \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`,
+        id
+      );
+    }
+  }
+  if (supEnabled)
+    for (const h of hits) {
+      const entry = registry.find((p) => p.id === h.patternId);
+      if (!entry) continue;
+      if (entry.canonical && importsByFile.get(h.file)?.has(entry.canonical)) continue;
+      const remedy = entry.canonical ? `use \`${entry.canonical}\`` : `follow the \`${entry.id}\` pattern`;
+      emit(
+        "patterns/superseded-composite",
+        { file: h.file, line: h.line, signature: `rule:${h.rule}:${h.detail}` },
+        h.detail,
+        ` \u2014 \`${entry.id}\` covers this; ${remedy}`,
+        entry.id
+      );
+    }
+  for (const [id, files] of bySuperseded) {
+    for (const c of files.values()) {
+      const remedy = c.pattern?.canonical ? `use \`${c.pattern.canonical}\`` : `follow the \`${id}\` pattern`;
+      emit("patterns/superseded-composite", c, c.signature, ` \u2014 \`${id}\` covers this; ${remedy}`, id);
+    }
+  }
+  for (const [sig, files] of bySignature) {
+    if (files.size < 3) continue;
+    for (const c of files.values())
+      emit("patterns/unregistered-composite", c, sig, ` \u2014 assembled in ${files.size} files, registered in none`, sig);
+  }
+  return out;
+}
+
+// src/checks/system/currency.ts
+var namedReplacements = (supersededBy) => [...(supersededBy ?? "").matchAll(/([A-Z][\w.]*)\s*\(\s*(@[\w@/.-]+)/g)].map((m) => ({
+  name: String(m[1]),
+  package: String(m[2])
+}));
+function usableReplacement(registry, supersededBy) {
+  const candidates = namedReplacements(supersededBy);
+  if (!candidates.length) return true;
+  return candidates.some((c) => {
+    const entry = registry.get(`${c.package}::${c.name}`) ?? registry.get(`${c.package}::${c.name.split(".")[0]}`);
+    return !entry || entry.status !== "locked" && entry.status !== "experimental";
+  });
+}
+function currency(imports, registry, enabled2) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const ci of imports) {
+    if (ci.file === void 0) continue;
+    const entry = registry.get(`${ci.package}::${ci.canonical}`);
+    if (!entry || entry.status !== "legacy" && entry.status !== "locked") continue;
+    const rule2 = entry.status === "locked" ? "system/locked-component" : "system/superseded-component";
+    if (!enabled2(rule2)) continue;
+    if (!usableReplacement(registry, entry.supersededBy)) continue;
+    const key2 = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
+    if (seen.has(key2)) continue;
+    seen.add(key2);
+    const remedy = entry.supersededBy ? ` \u2192 ${entry.supersededBy}` : "";
+    const uses = ci.uses > 1 ? ` \xD7${ci.uses}` : "";
+    out.push({
+      rule: rule2,
+      file: ci.file,
+      line: ci.line,
+      message: `${ci.canonical} (${ci.package})${uses}${remedy}`,
+      // Carried, not concatenated: the finalize pass caps `message`, and a
+      // registry note spliced into it lost its own last clause to that cap
+      // in every format at once.
+      note: entry.note,
+      code: `${rule2}:${ci.package}:${ci.canonical}`,
+      // The declaration line and the one above it: both were live anchors
+      // when every specifier reported on the declaration, and a directive
+      // someone signed off must not go silent because the reporting moved.
+      scopeLines: [ci.declLine, ci.declLine - 1]
+    });
+  }
+  return out;
+}
+
+// src/checks/system/inline-style.ts
+function inlineStyle(el) {
+  if (!el.isSystem) return null;
+  const shown = el.decls.map((d) => d.prop).slice(0, 3).join(", ");
+  const extra = el.decls.length + el.dynamic - Math.min(el.decls.length, 3);
+  return {
+    rule: "system/inline-style",
+    message: `<${el.tag}> style={{ ${shown || "\u2026"}${extra > 0 ? `, +${extra}` : ""} }}`,
+    code: `<${el.tag}> inline-style`
+  };
+}
+
+// src/checks/system/override.ts
+var systemOverride = ({ prop }, { boundSystem, enabled: enabled2 }) => boundSystem[0] && APPEARANCE_PROPS.has(prop) && enabled2("system/override") ? { rule: "system/override", message: `<${boundSystem[0].tag}> \u2190 ${prop}` } : void 0;
+function libraryOverride(keyClasses, isLibrary, isProject) {
+  const part = keyClasses.find((c) => isLibrary(c) && !isProject(c));
+  return part ? { rule: "system/override", message: `.${part} (library internal)` } : null;
+}
+
+// src/checks/system/raw-element.ts
+function currentAnalog(registry, suggest) {
+  const entries = [...registry.values()].filter((e) => e.name === suggest);
+  if (!entries.length || entries.some((e) => e.status === "recommended")) return `<${suggest}>`;
+  const forwarded = entries.find((e) => e.supersededBy)?.supersededBy;
+  return forwarded ? forwarded : `<${suggest}>`;
+}
+function rawElements(els, {
+  layoutComponents,
+  styledClasses,
+  layoutClasses,
+  registry
+}) {
+  return els.flatMap((el) => {
+    if (el.styledOnly) {
+      const suggestsLayout = String(el.suggest).split("/").some((n) => layoutComponents.includes(n.trim()));
+      const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
+      const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
+      if (suggestsLayout ? !laidOut : !styled) return [];
+    }
+    return [
+      {
+        rule: "system/raw-element",
+        file: el.file,
+        line: el.line,
+        message: `<${el.tag}> \u2192 ${currentAnalog(registry, el.suggest)}`,
+        code: `<${el.tag}>`
+      }
+    ];
+  });
+}
+
+// src/checks/tokens/hardcoded-value.ts
+var hardcodedValue = ({ prop, value }, { options }) => {
+  if (!isHardcodedTokenValue(prop, value, options)) return void 0;
+  const decl2 = `${prop}: ${value}`;
+  return { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hint: { prop, value } };
+};
+
+// src/checks/tokens/unknown-token.ts
+function unknownTokens(refs, known) {
+  if (!known.size) return [];
+  const seen = /* @__PURE__ */ new Set();
+  return refs.flatMap(({ file, line, name, scopeLines }) => {
+    const key2 = `${file}\0${name}`;
+    if (known.has(name) || seen.has(key2)) return [];
+    seen.add(key2);
+    return [{ rule: "tokens/unknown-token", file, line, message: `var(${name})`, code: name, scopeLines }];
+  });
+}
+
+// src/checks/typography/in-css.ts
+var typographyInCss = ({ prop }, { boundText, enabled: enabled2 }) => TYPE_PROPS.has(prop) && boundText[0] && enabled2("typography/in-css") ? { rule: "typography/in-css", message: `${prop} on <${boundText[0].tag}>` } : void 0;
+
+// src/checks/typography/untokenized.ts
+var untokenizedType = ({ prop, value }) => {
+  if (!TYPE_PROPS.has(prop)) return void 0;
+  if (usesToken(value) || isInertValue(value)) return null;
+  const decl2 = `${prop}: ${value}`;
+  return { rule: "typography/untokenized", message: decl2, code: oneLine(decl2), hint: { prop, value } };
+};
+
 // src/analyze.ts
 var messageOf3 = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
 var realPath = (path) => {
@@ -25130,52 +25414,22 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
   }
   return { classes, dirs, unread };
 }
-var namedReplacements = (supersededBy) => [...(supersededBy ?? "").matchAll(/([A-Z][\w.]*)\s*\(\s*(@[\w@/.-]+)/g)].map((m) => ({
-  name: String(m[1]),
-  package: String(m[2])
-}));
-function usableReplacement(registry, supersededBy) {
-  const candidates = namedReplacements(supersededBy);
-  if (!candidates.length) return true;
-  return candidates.some((c) => {
-    const entry = registry.get(`${c.package}::${c.name}`) ?? registry.get(`${c.package}::${c.name.split(".")[0]}`);
-    return !entry || entry.status !== "locked" && entry.status !== "experimental";
-  });
-}
-function currentAnalog(registry, suggest) {
-  const entries = [...registry.values()].filter((e) => e.name === suggest);
-  if (!entries.length || entries.some((e) => e.status === "recommended")) return `<${suggest}>`;
-  const forwarded = entries.find((e) => e.supersededBy)?.supersededBy;
-  return forwarded ? forwarded : `<${suggest}>`;
-}
+var DECLARATIONS = [
+  typographyInCss,
+  systemOverride,
+  margin,
+  untokenizedType,
+  layoutInCss,
+  hardcodedValue
+];
 function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, options = {}, enabled: enabled2 = () => true }) {
-  const isMargin = prop === "margin" || prop.startsWith("margin-");
-  const marginKind = isMargin ? classifyMargin(value) : null;
-  const isFlexish = FLEX_PROPS.has(prop) || prop === "display" && /\b(inline-)?(flex|grid)\b/.test(value);
-  const hardcoded = isHardcodedTokenValue(prop, value, options);
-  const styling = isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
-  const decl2 = `${prop}: ${value}`;
-  let finding = null;
-  if (TYPE_PROPS.has(prop) && boundText[0] && enabled2("typography/in-css")) {
-    finding = { rule: "typography/in-css", message: `${prop} on <${boundText[0].tag}>` };
-  } else if (boundSystem[0] && APPEARANCE_PROPS.has(prop) && enabled2("system/override")) {
-    finding = { rule: "system/override", message: `<${boundSystem[0].tag}> \u2190 ${prop}` };
-  } else if (isMargin) {
-    if (marginKind === "negative") finding = { rule: "layout/negative-margin", message: decl2, code: prop };
-    else if (marginKind) finding = { rule: "layout/margin-on-child", message: decl2, code: prop };
-  } else if (TYPE_PROPS.has(prop)) {
-    if (!usesToken(value) && !isInertValue(value))
-      finding = { rule: "typography/untokenized", message: decl2, code: oneLine(decl2), hint: { prop, value } };
-  } else if (GAP_PROPS.has(prop)) {
-    if (!boundSystem.length && !isGrid) finding = { rule: "layout/in-css", message: decl2, code: prop };
-  } else if (isFlexish) {
-    const gridDisplay = prop === "display" && /\bgrid\b/.test(value);
-    if (!boundSystem.length && !isGrid && !gridDisplay)
-      finding = { rule: "layout/in-css", message: decl2, code: oneLine(decl2) };
-  } else if (hardcoded) {
-    finding = { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hint: { prop, value } };
+  const styling = isMarginProp(prop) || isFlexDecl(prop, value) || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || isHardcodedTokenValue(prop, value, options) || APPEARANCE_PROPS.has(prop);
+  const ctx = { boundSystem, boundText, isGrid, options, enabled: enabled2 };
+  for (const check of DECLARATIONS) {
+    const verdict = check({ prop, value }, ctx);
+    if (verdict !== void 0) return { finding: verdict, styling };
   }
-  return { finding, styling };
+  return { finding: null, styling };
 }
 var COLLAPSE_PER_RULE = /* @__PURE__ */ new Set(["layout/in-css", "typography/untokenized"]);
 function collapsePerRule(pending) {
@@ -25235,7 +25489,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     const abs = join3(realRoot, rel);
     return library.dirs.some((d) => abs === d || abs.startsWith(`${d}${sep2}`));
   };
-  const unknownTokens = [];
+  const tokenRefs = [];
   const findings = [];
   const directives = [];
   const diagnostics = {
@@ -25253,13 +25507,19 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     suppByFile.set(rel, parsed);
     return parsed;
   };
+  const report = ({ scopeLines, rule: rule2, ...f }) => {
+    if (!config.enabled[rule2] || !reports(f.file)) return;
+    const supp = suppByFile.get(f.file);
+    if (supp && isSuppressed(supp.byLine, f.line, rule2, scopeLines)) return;
+    findings.push({ rule: rule2, severity: config.severityOf(rule2), ...f, rank: RULES[rule2].rank });
+  };
   const referenced = /* @__PURE__ */ new Set();
   const stems = /* @__PURE__ */ new Set();
   const bindings = /* @__PURE__ */ new Map();
   const rawEls = [];
   const inlineStyles = [];
   const cssInJs = [];
-  const composites = [];
+  const composites2 = [];
   const patternRules = (config.patterns ?? []).flatMap(
     (p) => p.rules.filter((spec) => judge || spec.rule !== "judge").map((spec) => ({ patternId: p.id, spec }))
   );
@@ -25293,7 +25553,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     rawEls.push(...scanned.rawEls);
     inlineStyles.push(...scanned.inlineStyles);
     cssInJs.push(...scanned.cssInJs);
-    composites.push(...scanned.composites);
+    composites2.push(...scanned.composites);
     for (const h of scanned.ruleHits) ruleHits.push({ ...h, file: rel });
     controls.push(...scanned.controls);
     if (scanned.imports) importsByFile.set(rel, scanned.imports);
@@ -25308,11 +25568,9 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     } catch {
     }
   }
-  const stemList = [...stems];
-  const isReferenced = (cls) => referenced.has(cls) || config.isNeverDead(cls) || stemList.some((s) => cls.startsWith(s));
   const styledClasses = /* @__PURE__ */ new Set();
   const layoutClasses = /* @__PURE__ */ new Set();
-  const seenDead = /* @__PURE__ */ new Set();
+  const declared = [];
   for (const { abs, rel } of files.styles) {
     if (isLibrarySheet(rel)) continue;
     let text;
@@ -25397,23 +25655,24 @@ async function analyze(config, { scope = null, judge = false } = {}) {
         if (styling) touchesStyle = true;
         if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
         for (const name of tokenRefsIn(decl2.value, tokenPrefixes))
-          unknownTokens.push({ file: rel, line, name, scopeLines, supp });
+          tokenRefs.push({ file: rel, line, name, scopeLines });
         if (finding) pending.push({ ...finding, line, scopeLines });
       }
       if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
       if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
-      const external = keyClasses.find((c) => (config.isExternal(c) || library.classes.has(c)) && !config.isProject(c));
-      if (external && touchesStyle && ruleIsLive("system/override"))
-        emit({ rule: "system/override", line: ruleLine, message: `.${external} (library internal)`, scopeLines });
+      const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
+      if (override) emit({ ...override, line: ruleLine, scopeLines });
       else for (const f of collapsePerRule(pending)) emit(f);
-      for (const cls of keyClasses) {
-        const key2 = `${rel}\0${cls}`;
-        if (seenDead.has(key2) || !config.isProject(cls) || isReferenced(cls)) continue;
-        seenDead.add(key2);
-        emit({ rule: "css/dead-class", line: ruleLine, message: `.${cls}`, scopeLines });
-      }
+      for (const cls of keyClasses) declared.push({ file: rel, line: ruleLine, cls, scopeLines });
     });
   }
+  for (const f of deadClasses(declared, {
+    referenced,
+    stems: [...stems],
+    isProject: config.isProject,
+    isNeverDead: config.isNeverDead
+  }))
+    report(f);
   for (const el of inlineStyles) {
     if (!reports(el.file)) continue;
     const supp = suppByFile.get(el.file);
@@ -25432,15 +25691,9 @@ async function analyze(config, { scope = null, judge = false } = {}) {
         suffix
       });
     };
-    if (el.isSystem && ruleIsLive("system/inline-style")) {
-      const shown = el.decls.map((d) => d.prop).slice(0, 3).join(", ");
-      const extra = el.decls.length + el.dynamic - Math.min(el.decls.length, 3);
-      push(
-        "system/inline-style",
-        el.line,
-        `<${el.tag}> style={{ ${shown || "\u2026"}${extra > 0 ? `, +${extra}` : ""} }}`,
-        `<${el.tag}> inline-style`
-      );
+    const whole = ruleIsLive("system/inline-style") ? inlineStyle(el) : null;
+    if (whole) {
+      push(whole.rule, el.line, whole.message, whole.code);
       continue;
     }
     const isGrid = el.decls.some(
@@ -25486,7 +25739,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       for (const d of group.decls) {
         if (supp)
           for (const name of tokenRefsIn(d.value, tokenPrefixes))
-            unknownTokens.push({ file: tpl.file, line: d.line ?? tpl.line, name, scopeLines: [tpl.line], supp });
+            tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, scopeLines: [tpl.line] });
         const { finding } = classifyDeclaration(d, {
           boundSystem: onTarget ? boundSystem : [],
           boundText: onTarget ? boundText : [],
@@ -25514,165 +25767,22 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       }
     }
   }
-  for (const el of rawEls) {
-    if (!config.enabled["system/raw-element"] || !reports(el.file)) continue;
-    const supp = suppByFile.get(el.file);
-    if (supp && isSuppressed(supp.byLine, el.line, "system/raw-element")) continue;
-    if (el.styledOnly) {
-      const suggestsLayout = String(el.suggest).split("/").some((n) => ds.layoutComponents.includes(n.trim()));
-      const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
-      const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
-      if (suggestsLayout ? !laidOut : !styled) continue;
-    }
-    findings.push({
-      rule: "system/raw-element",
-      severity: config.severityOf("system/raw-element"),
-      file: el.file,
-      line: el.line,
-      message: `<${el.tag}> \u2192 ${currentAnalog(config.componentRegistry, el.suggest)}`,
-      code: `<${el.tag}>`,
-      rank: RULES["system/raw-element"].rank
-    });
-  }
-  const dupEnabled = config.enabled["patterns/duplicate-composite"];
-  const newEnabled = config.enabled["patterns/unregistered-composite"];
-  const supEnabled = config.enabled["patterns/superseded-composite"];
-  if ((dupEnabled || newEnabled || supEnabled) && (composites.length || ruleHits.length)) {
-    const registry = config.patterns || [];
-    const anatomyRoots = registry.flatMap(
-      (p) => p.node && p.canonical && p.canonical === p.node.name.split(".")[0] ? [p.canonical] : []
-    );
-    const bestMatch = (c) => registry.filter((p) => p.node !== null && p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree)).sort((a, b) => b.size - a.size)[0] ?? null;
-    const avoidMatch = (c) => {
-      let best = null;
-      for (const p of registry) {
-        let fit = 0;
-        for (const a of p.avoid) if (matches(a, c.tree)) fit = Math.max(fit, nodeCount(a));
-        if (fit && (!best || fit > best.fit)) best = { pattern: p, fit };
-      }
-      return best?.pattern ?? null;
-    };
-    const byPattern = /* @__PURE__ */ new Map();
-    const bySuperseded = /* @__PURE__ */ new Map();
-    const bySignature = /* @__PURE__ */ new Map();
-    for (const c of composites) {
-      const hit = dupEnabled ? bestMatch(c) : null;
-      if (hit) {
-        if (hit.canonical && importsByFile.get(c.file)?.has(hit.canonical)) continue;
-        const perFile2 = byPattern.get(hit.id) ?? /* @__PURE__ */ new Map();
-        byPattern.set(hit.id, perFile2);
-        const prev2 = perFile2.get(c.file);
-        if (!prev2 || c.size > prev2.size) perFile2.set(c.file, { ...c, pattern: hit });
-        continue;
-      }
-      const avoided = supEnabled ? avoidMatch(c) : null;
-      if (avoided) {
-        if (avoided.canonical && importsByFile.get(c.file)?.has(avoided.canonical)) continue;
-        const perFile2 = bySuperseded.get(avoided.id) ?? /* @__PURE__ */ new Map();
-        bySuperseded.set(avoided.id, perFile2);
-        const prev2 = perFile2.get(c.file);
-        if (!prev2 || c.size < prev2.size) perFile2.set(c.file, { ...c, pattern: avoided });
-        continue;
-      }
-      if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
-      if (anatomyRoots.some((root2) => partsOf(root2, c.tree))) continue;
-      const perFile = bySignature.get(c.signature) ?? /* @__PURE__ */ new Map();
-      bySignature.set(c.signature, perFile);
-      const prev = perFile.get(c.file);
-      if (!prev || c.line < prev.line) perFile.set(c.file, c);
-    }
-    const emitComposite = (rule2, c, signature, tail, group) => {
-      if (!reports(c.file)) return;
-      const supp = suppByFile.get(c.file);
-      if (supp && isSuppressed(supp.byLine, c.line, rule2)) return;
-      findings.push({
-        rule: rule2,
-        severity: config.severityOf(rule2),
-        file: c.file,
-        line: c.line,
-        message: `${signature}${tail}`,
-        suffix: tail,
-        code: c.signature,
-        group,
-        rank: RULES[rule2].rank
-      });
-    };
-    for (const [id, files2] of byPattern) {
-      if (files2.size < 2) continue;
-      for (const c of files2.values()) {
-        const remedy = c.pattern?.canonical ? `import \`${c.pattern.canonical}\`` : "extract one shared implementation";
-        emitComposite(
-          "patterns/duplicate-composite",
-          c,
-          c.signature,
-          ` \u2014 rebuilds \`${id}\`, also in ${files2.size - 1} other file(s); ${remedy}`,
-          id
-        );
-      }
-    }
-    if (supEnabled)
-      for (const h of ruleHits) {
-        const entry = registry.find((p) => p.id === h.patternId);
-        if (!entry) continue;
-        if (entry.canonical && importsByFile.get(h.file)?.has(entry.canonical)) continue;
-        const remedy = entry.canonical ? `use \`${entry.canonical}\`` : `follow the \`${entry.id}\` pattern`;
-        emitComposite(
-          "patterns/superseded-composite",
-          { file: h.file, line: h.line, signature: `rule:${h.rule}:${h.detail}` },
-          h.detail,
-          ` \u2014 \`${entry.id}\` covers this; ${remedy}`,
-          entry.id
-        );
-      }
-    for (const [id, files2] of bySuperseded) {
-      for (const c of files2.values()) {
-        const remedy = c.pattern?.canonical ? `use \`${c.pattern.canonical}\`` : `follow the \`${id}\` pattern`;
-        emitComposite("patterns/superseded-composite", c, c.signature, ` \u2014 \`${id}\` covers this; ${remedy}`, id);
-      }
-    }
-    for (const [sig, files2] of bySignature) {
-      if (files2.size < 3) continue;
-      for (const c of files2.values())
-        emitComposite(
-          "patterns/unregistered-composite",
-          c,
-          sig,
-          ` \u2014 assembled in ${files2.size} files, registered in none`,
-          sig
-        );
-    }
-  }
-  if (config.enabled["system/locked-component"] || config.enabled["system/superseded-component"]) {
-    const seen2 = /* @__PURE__ */ new Set();
-    for (const ci of componentImports) {
-      if (ci.file === void 0) continue;
-      const entry = config.componentRegistry.get(`${ci.package}::${ci.canonical}`);
-      if (!entry || entry.status !== "legacy" && entry.status !== "locked") continue;
-      const rule2 = entry.status === "locked" ? "system/locked-component" : "system/superseded-component";
-      if (!config.enabled[rule2] || !reports(ci.file)) continue;
-      if (!usableReplacement(config.componentRegistry, entry.supersededBy)) continue;
-      const key2 = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
-      if (seen2.has(key2)) continue;
-      seen2.add(key2);
-      const supp = suppByFile.get(ci.file);
-      if (supp && isSuppressed(supp.byLine, ci.line, rule2, [ci.declLine, ci.declLine - 1])) continue;
-      const remedy = entry.supersededBy ? ` \u2192 ${entry.supersededBy}` : "";
-      const uses = ci.uses > 1 ? ` \xD7${ci.uses}` : "";
-      findings.push({
-        rule: rule2,
-        severity: config.severityOf(rule2),
-        file: ci.file,
-        line: ci.line,
-        message: `${ci.canonical} (${ci.package})${uses}${remedy}`,
-        // Carried, not concatenated: the finalize pass caps `message`, and a
-        // registry note spliced into it lost its own last clause to that cap
-        // in every format at once.
-        note: entry.note,
-        code: `${rule2}:${ci.package}:${ci.canonical}`,
-        rank: RULES[rule2].rank
-      });
-    }
-  }
+  for (const f of rawElements(rawEls, {
+    layoutComponents: ds.layoutComponents,
+    styledClasses,
+    layoutClasses,
+    registry: config.componentRegistry
+  }))
+    report(f);
+  for (const f of composites({
+    found: composites2,
+    hits: ruleHits,
+    registry: config.patterns ?? [],
+    importsByFile,
+    enabled: ruleIsLive
+  }))
+    report(f);
+  for (const f of currency(componentImports, config.componentRegistry, ruleIsLive)) report(f);
   for (const [file, s] of suppByFile) {
     directives.push(...s.directives);
     if (!config.enabled["suppression/malformed"] || !reports(file)) continue;
@@ -25698,25 +25808,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     if (f.rule === "tokens/hardcoded-value" && f.hints.length === 1) f.decl = f.hints[0];
     delete f.hints;
   }
-  if (tokenSet.known.size && config.enabled["tokens/unknown-token"]) {
-    const seenUnknown = /* @__PURE__ */ new Set();
-    for (const { file, line, name, scopeLines, supp } of unknownTokens) {
-      if (tokenSet.known.has(name) || !reports(file)) continue;
-      const key2 = `${file}\0${name}`;
-      if (seenUnknown.has(key2)) continue;
-      seenUnknown.add(key2);
-      if (isSuppressed(supp.byLine, line, "tokens/unknown-token", scopeLines)) continue;
-      findings.push({
-        rule: "tokens/unknown-token",
-        severity: config.severityOf("tokens/unknown-token"),
-        file,
-        line,
-        message: `var(${name})`,
-        code: name,
-        rank: RULES["tokens/unknown-token"].rank
-      });
-    }
-  }
+  for (const f of unknownTokens(tokenRefs, tokenSet.known)) report(f);
   const seen = /* @__PURE__ */ new Set();
   const unique = findings.filter((f) => {
     const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ""}|${f.message}`;
