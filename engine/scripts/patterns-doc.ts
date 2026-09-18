@@ -40,7 +40,10 @@ interface Abstract {
 	vocabulary: {
 		intents: Record<string, string>;
 		scales: Record<string, string>;
-		forces: Record<string, { values: unknown[]; about: string; judge?: { question: string; criteria: Record<string, string> } }>;
+		forces: Record<
+			string,
+			{ values: unknown[]; about: string; judge?: { question: string; criteria: Record<string, string> } }
+		>;
 		containers?: Record<string, string>;
 	};
 	patterns: {
@@ -151,22 +154,39 @@ function validate(abstract: Abstract, real: Realization): string[] {
 function render(abstract: Abstract, real: Realization, profileId: string): string {
 	const byId = new Map(abstract.patterns.map((p) => [p.id, p]));
 	const out: string[] = [];
-	out.push(OPEN, '', `_Generated from \`patterns/index.json\` and the abstract language by \`engine/scripts/patterns-doc.ts\`. Edit those, then run \`npm run patterns-doc\` in \`engine/\`._`, '');
+	out.push(
+		OPEN,
+		'',
+		`_Generated from \`patterns/index.json\` and the abstract language by \`engine/scripts/patterns-doc.ts\`. Edit those, then run \`npm run patterns-doc\` in \`engine/\`._`,
+		'',
+	);
 
 	// 1. Redirects: the wrong-pattern gate.
-	out.push('### Before choosing a shape', '', 'Most bad choices are the wrong pattern, not the wrong variant. Each row is a force to settle first.', '');
+	out.push(
+		'### Before choosing a shape',
+		'',
+		'Most bad choices are the wrong pattern, not the wrong variant. Each row is a force to settle first.',
+		'',
+	);
 	out.push('| Building | If | Go to | Because |', '| --- | --- | --- | --- |');
 	for (const p of abstract.patterns)
 		for (const r of p.resolve ?? [])
 			if (r.redirect) {
-				const cond = Object.entries(r.when ?? {}).map(([f, v]) => `${f} = ${String(v)}`).join(', ');
+				const cond = Object.entries(r.when ?? {})
+					.map(([f, v]) => `${f} = ${String(v)}`)
+					.join(', ');
 				out.push(`| \`${p.id}\` (${p.intent}) | ${cell(cond)} | \`${r.redirect}\` | ${cell(r.because ?? '')} |`);
 			}
 	out.push('');
 
 	// 2. Reach for: one row per realization, in registry order.
 	out.push('### About to build', '', '| About to build | Reach for | Not this |', '| --- | --- | --- |');
-	const row = (key: string, e: Omit<Entry, 'pattern' | 'parts'>, inheritedImport?: string, inheritedCanonical?: string | null): void => {
+	const row = (
+		key: string,
+		e: Omit<Entry, 'pattern' | 'parts'>,
+		inheritedImport?: string,
+		inheritedCanonical?: string | null,
+	): void => {
 		const { id, variant, part } = keyParts(key);
 		const p = byId.get(id);
 		if (!p) return;
@@ -221,8 +241,13 @@ function render(abstract: Abstract, real: Realization, profileId: string): strin
 	for (const e of real.realizations) realized.add(e.pattern);
 	const missing: string[] = [];
 	for (const p of abstract.patterns)
-		for (const v of Object.keys(p.variants)) if (!realized.has(`${p.id}.${v}`) && !realized.has(p.id)) missing.push(`\`${p.id}.${v}\``);
-	if (missing.length) out.push(`No ${profileId} realization yet: ${missing.join(', ')}. Building one of these is registering one, not inventing a pattern.`, '');
+		for (const v of Object.keys(p.variants))
+			if (!realized.has(`${p.id}.${v}`) && !realized.has(p.id)) missing.push(`\`${p.id}.${v}\``);
+	if (missing.length)
+		out.push(
+			`No ${profileId} realization yet: ${missing.join(', ')}. Building one of these is registering one, not inventing a pattern.`,
+			'',
+		);
 	out.push(CLOSE);
 	return out.join('\n');
 }

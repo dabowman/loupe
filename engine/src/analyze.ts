@@ -22,9 +22,19 @@ import { messageLine, messageParts, oneLine, snippet } from './text.ts';
 import { SUBSTANTIAL, matches, nodeCount, partsOf } from './patterns.ts';
 import { cssFilesUnder, harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
 import {
-	APPEARANCE_PROPS, FLEX_PROPS, GAP_PROPS, TYPE_PROPS,
-	classesIn, classifyMargin, isHardcodedTokenValue, isInertValue, keySelector, ownDecls,
-	resolvedSelectors, ruleIsGrid, usesToken,
+	APPEARANCE_PROPS,
+	FLEX_PROPS,
+	GAP_PROPS,
+	TYPE_PROPS,
+	classesIn,
+	classifyMargin,
+	isHardcodedTokenValue,
+	isInertValue,
+	keySelector,
+	ownDecls,
+	resolvedSelectors,
+	ruleIsGrid,
+	usesToken,
 } from './styles.ts';
 import type {
 	AnalyzeResult,
@@ -143,7 +153,8 @@ async function readLibrary(
 				}
 			});
 		}
-		if (!budget.left) unread.push({ file: toPosix(relative(root, dir)), message: 'read the first 400 stylesheets only' });
+		if (!budget.left)
+			unread.push({ file: toPosix(relative(root, dir)), message: 'read the first 400 stylesheets only' });
 	}
 	return { classes, dirs, unread };
 }
@@ -275,7 +286,8 @@ function classifyDeclaration(
 		if (!boundSystem.length && !isGrid) finding = { rule: 'layout/in-css', message: decl, code: prop };
 	} else if (isFlexish) {
 		const gridDisplay = prop === 'display' && /\bgrid\b/.test(value);
-		if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: 'layout/in-css', message: decl, code: oneLine(decl) };
+		if (!boundSystem.length && !isGrid && !gridDisplay)
+			finding = { rule: 'layout/in-css', message: decl, code: oneLine(decl) };
 	} else if (hardcoded) {
 		finding = { rule: 'tokens/hardcoded-value', message: decl, code: oneLine(decl), hint: { prop, value } };
 	}
@@ -568,7 +580,7 @@ export async function analyze(
 				const line = decl.source?.start?.line ?? ruleLine;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, options: config.optionsOf('tokens/hardcoded-value'), enabled: ruleIsLive }
+					{ boundSystem, boundText, isGrid, options: config.optionsOf('tokens/hardcoded-value'), enabled: ruleIsLive },
 				);
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
@@ -585,9 +597,7 @@ export async function analyze(
 			// A project prefix wins over a library one. `wp-parsely-*` matches the
 			// `wp-` external prefix, and reporting a project's own class as a
 			// library internal sends the agent to fix something it does not own.
-			const external = keyClasses.find(
-				(c) => (config.isExternal(c) || library.classes.has(c)) && !config.isProject(c),
-			);
+			const external = keyClasses.find((c) => (config.isExternal(c) || library.classes.has(c)) && !config.isProject(c));
 			if (external && touchesStyle && ruleIsLive('system/override'))
 				emit({ rule: 'system/override', line: ruleLine, message: `.${external} (library internal)`, scopeLines });
 			else for (const f of collapsePerRule(pending)) emit(f);
@@ -641,19 +651,25 @@ export async function analyze(
 		// the per-declaration ones, the same way a library-internal override
 		// supersedes advice about how to style it.
 		if (el.isSystem && ruleIsLive('system/inline-style')) {
-			const shown = el.decls.map((d) => d.prop).slice(0, 3).join(', ');
+			const shown = el.decls
+				.map((d) => d.prop)
+				.slice(0, 3)
+				.join(', ');
 			const extra = el.decls.length + el.dynamic - Math.min(el.decls.length, 3);
 			push(
 				'system/inline-style',
 				el.line,
 				`<${el.tag}> style={{ ${shown || '\u2026'}${extra > 0 ? `, +${extra}` : ''} }}`,
-				`<${el.tag}> inline-style`
+				`<${el.tag}> inline-style`,
 			);
 			continue;
 		}
 
 		const isGrid = el.decls.some(
-			(d) => (d.prop === 'display' && /\bgrid\b/.test(d.value)) || d.prop.startsWith('grid-template') || d.prop.startsWith('grid-auto')
+			(d) =>
+				(d.prop === 'display' && /\bgrid\b/.test(d.value)) ||
+				d.prop.startsWith('grid-template') ||
+				d.prop.startsWith('grid-auto'),
 		);
 		const pending: PendingFinding[] = [];
 		for (const d of el.decls) {
@@ -663,16 +679,28 @@ export async function analyze(
 				enabled: ruleIsLive,
 			});
 			if (finding)
-				pending.push({ ...finding, line: d.line ?? el.line, code: finding.code ?? finding.message, suffix: ' (inline)' });
+				pending.push({
+					...finding,
+					line: d.line ?? el.line,
+					code: finding.code ?? finding.message,
+					suffix: ' (inline)',
+				});
 		}
 		for (const f of collapsePerRule(pending))
-			push(f.rule, f.line, `${f.message}${f.suffix ?? ''}`, f.code, f.hints ?? (f.hint ? [f.hint] : undefined), f.suffix);
+			push(
+				f.rule,
+				f.line,
+				`${f.message}${f.suffix ?? ''}`,
+				f.code,
+				f.hints ?? (f.hint ? [f.hint] : undefined),
+				f.suffix,
+			);
 	}
 
 	// ── CSS-in-JS template literals ───────────────────────────────────────────
-// The third channel, through the same classifier as the other two. A
-// `styled(Button)` template is the stylesheet pass's "class bound to a
-// design-system component", written somewhere no stylesheet can see.
+	// The third channel, through the same classifier as the other two. A
+	// `styled(Button)` template is the stylesheet pass's "class bound to a
+	// design-system component", written somewhere no stylesheet can see.
 	for (const tpl of cssInJs) {
 		if (!reports(tpl.file)) continue;
 		const supp = suppByFile.get(tpl.file);
@@ -761,9 +789,9 @@ export async function analyze(
 	}
 
 	// ── composite drift ───────────────────────────────────────────────────────
-// The only findings here that cannot exist in one file. A sixth bespoke page
-// header is not a defect anywhere in particular — it is a defect in the set,
-// so the index has to be whole-repo even when the report is scoped to one file.
+	// The only findings here that cannot exist in one file. A sixth bespoke page
+	// header is not a defect anywhere in particular — it is a defect in the set,
+	// so the index has to be whole-repo even when the report is scoped to one file.
 	const dupEnabled = config.enabled['patterns/duplicate-composite'];
 	const newEnabled = config.enabled['patterns/unregistered-composite'];
 	const supEnabled = config.enabled['patterns/superseded-composite'];
@@ -884,7 +912,7 @@ export async function analyze(
 					c,
 					c.signature,
 					` \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`,
-					id
+					id,
 				);
 			}
 		}
@@ -918,7 +946,13 @@ export async function analyze(
 		for (const [sig, files] of bySignature) {
 			if (files.size < 3) continue;
 			for (const c of files.values())
-				emitComposite('patterns/unregistered-composite', c, sig, ` \u2014 assembled in ${files.size} files, registered in none`, sig);
+				emitComposite(
+					'patterns/unregistered-composite',
+					c,
+					sig,
+					` \u2014 assembled in ${files.size} files, registered in none`,
+					sig,
+				);
 		}
 	}
 
@@ -984,64 +1018,64 @@ export async function analyze(
 	}
 
 	// ── the token pass ────────────────────────────────────────────────────────
-// Deferred to here because the token set is only complete once every stylesheet
-// has been read, and a rule that fires against a half-built set reports the
-// design system's own tokens as unknown.
+	// Deferred to here because the token set is only complete once every stylesheet
+	// has been read, and a rule that fires against a half-built set reports the
+	// design system's own tokens as unknown.
 
-// Name the replacement instead of the namespace. A finding that says
-// "13px is hardcoded — use a --wpds-* token" leaves the agent to invent one.
-for (const f of findings) {
-	// An empty array is still working state, and `collapsePerRule` produces one
-	// whenever it merges a group where nothing carried a hint. Dropped here too,
-	// or `"hints": []` rides out into `--format json`.
-	if (!f.hints?.length) {
+	// Name the replacement instead of the namespace. A finding that says
+	// "13px is hardcoded — use a --wpds-* token" leaves the agent to invent one.
+	for (const f of findings) {
+		// An empty array is still working state, and `collapsePerRule` produces one
+		// whenever it merges a group where nothing carried a hint. Dropped here too,
+		// or `"hints": []` rides out into `--format json`.
+		if (!f.hints?.length) {
+			delete f.hints;
+			continue;
+		}
+		// Rebuilt from the hints, so each declaration goes back through `snippet` —
+		// the message the classifier bounded is being replaced, not appended to.
+		// Composed with `messageParts` rather than joined, because this is the one
+		// message that is a list: a collapsed rule carries one remedy per property,
+		// and a line bound that cuts the list mid-token loses the last remedy and
+		// every remedy after it without saying so.
+		f.message = messageParts(
+			f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
+			f.suffix ?? '',
+		);
+		// Keep the match structured as well as rendered. The prose is for a reader;
+		// an unambiguous substitution should not need a model to parse it back out
+		// of a sentence in order to apply it.
+		const suggest = f.hints
+			.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) }))
+			.filter((s) => s.tokens.length);
+		if (suggest.length) f.suggest = suggest;
+		if (f.rule === 'tokens/hardcoded-value' && f.hints.length === 1) f.decl = f.hints[0];
 		delete f.hints;
-		continue;
+		// `suffix` stays until the message is bounded below, which needs to know
+		// which part of it is the channel marker. Nothing downstream of that sees it.
 	}
-	// Rebuilt from the hints, so each declaration goes back through `snippet` —
-	// the message the classifier bounded is being replaced, not appended to.
-	// Composed with `messageParts` rather than joined, because this is the one
-	// message that is a list: a collapsed rule carries one remedy per property,
-	// and a line bound that cuts the list mid-token loses the last remedy and
-	// every remedy after it without saying so.
-	f.message = messageParts(
-		f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
-		f.suffix ?? '',
-	);
-	// Keep the match structured as well as rendered. The prose is for a reader;
-	// an unambiguous substitution should not need a model to parse it back out
-	// of a sentence in order to apply it.
-	const suggest = f.hints
-		.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) }))
-		.filter((s) => s.tokens.length);
-	if (suggest.length) f.suggest = suggest;
-	if (f.rule === 'tokens/hardcoded-value' && f.hints.length === 1) f.decl = f.hints[0];
-	delete f.hints;
-	// `suffix` stays until the message is bounded below, which needs to know
-	// which part of it is the channel marker. Nothing downstream of that sees it.
-}
 
-// An empty token set means nothing was found to check against — not that every
-// token is unknown. Staying silent is the only honest answer there.
-if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
-	const seenUnknown = new Set();
-	for (const { file, line, name, scopeLines, supp } of unknownTokens) {
-		if (tokenSet.known.has(name) || !reports(file)) continue;
-		const key = `${file}\u0000${name}`;
-		if (seenUnknown.has(key)) continue;
-		seenUnknown.add(key);
-		if (isSuppressed(supp.byLine, line, 'tokens/unknown-token', scopeLines)) continue;
-		findings.push({
-			rule: 'tokens/unknown-token',
-			severity: config.severityOf('tokens/unknown-token'),
-			file,
-			line,
-			message: `var(${name})`,
-			code: name,
-			rank: RULES['tokens/unknown-token'].rank,
-		});
+	// An empty token set means nothing was found to check against — not that every
+	// token is unknown. Staying silent is the only honest answer there.
+	if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
+		const seenUnknown = new Set();
+		for (const { file, line, name, scopeLines, supp } of unknownTokens) {
+			if (tokenSet.known.has(name) || !reports(file)) continue;
+			const key = `${file}\u0000${name}`;
+			if (seenUnknown.has(key)) continue;
+			seenUnknown.add(key);
+			if (isSuppressed(supp.byLine, line, 'tokens/unknown-token', scopeLines)) continue;
+			findings.push({
+				rule: 'tokens/unknown-token',
+				severity: config.severityOf('tokens/unknown-token'),
+				file,
+				line,
+				message: `var(${name})`,
+				code: name,
+				rank: RULES['tokens/unknown-token'].rank,
+			});
+		}
 	}
-}
 
 	// Dedupe: nesting and multi-selector rules can legitimately reach the same
 	// declaration twice.

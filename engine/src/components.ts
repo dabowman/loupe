@@ -12,8 +12,7 @@ import type { ComponentEntry } from './types.ts';
 /** The shape a registry entry has before anything has vouched for it. */
 type MaybeEntry = Partial<ComponentEntry> | null | undefined;
 
-const isEntry = (c: MaybeEntry): c is ComponentEntry =>
-	Boolean(c?.name && c?.package && c?.status);
+const isEntry = (c: MaybeEntry): c is ComponentEntry => Boolean(c?.name && c?.package && c?.status);
 
 /** Normalize a registry file or inline array into a `package::name` -> entry map. */
 export function loadComponents(raw: unknown): Map<string, ComponentEntry> {

@@ -206,11 +206,12 @@ function matchPreset(
 		// list it beats a nested one, and `packageDir` names where its
 		// `node_modules` — and therefore the token stylesheet — will be.
 		for (const { rel } of found) {
-			const pkg = (readJson(join(root, rel, 'package.json')) as {
-				dependencies?: Record<string, string>;
-				devDependencies?: Record<string, string>;
-				peerDependencies?: Record<string, string>;
-			} | null) ?? {};
+			const pkg =
+				(readJson(join(root, rel, 'package.json')) as {
+					dependencies?: Record<string, string>;
+					devDependencies?: Record<string, string>;
+					peerDependencies?: Record<string, string>;
+				} | null) ?? {};
 			const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
 			const hit = detect.dependencies.filter((d) => deps[d] !== undefined);
 			const first = hit[0];
@@ -405,10 +406,7 @@ export function detectNamespaces(
 	const others = presetNames()
 		.filter((n) => n !== presetName)
 		.map((n) => resolvePreset(n));
-	const external = [
-		...(base.namespaces?.external ?? []),
-		...others.flatMap((p) => p.namespaces?.external ?? []),
-	];
+	const external = [...(base.namespaces?.external ?? []), ...others.flatMap((p) => p.namespaces?.external ?? [])];
 	const neverDead = [
 		...(base.namespaces?.neverDead ?? []),
 		...others.flatMap((p) => p.namespaces?.neverDead ?? []),
@@ -452,7 +450,7 @@ export function detectNamespaces(
 	// of the project's own CSS and markup mentions it.
 	const vendored = libraryPrefixes(
 		[join(root, 'node_modules'), ...(packageDir ? [join(root, packageDir, 'node_modules')] : [])],
-		candidates.map(([p]) => p)
+		candidates.map(([p]) => p),
 	);
 
 	// Drop prefixes already covered by a shorter accepted one (`wf-card-` under `wf-`).
@@ -477,8 +475,7 @@ export function detectNamespaces(
 		// which is why it can look convincing and still be wrong. It demotes
 		// `high` only: `none` is the different and still-true claim that nothing
 		// was found, and swallowing it printed "(none found) [low confidence]".
-		confidence:
-			accepted.length === 0 ? 'none' : files.truncated ? 'low' : coverage >= 0.5 ? 'high' : 'low',
+		confidence: accepted.length === 0 ? 'none' : files.truncated ? 'low' : coverage >= 0.5 ? 'high' : 'low',
 		sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
 		truncated: files.truncated,
 	};
@@ -497,7 +494,7 @@ export function detectNamespaces(
  */
 export function detectConfig(
 	root: string,
-	{ preset: override, limit = DETECT_ENTRY_BUDGET }: { preset?: string | null; limit?: number } = {}
+	{ preset: override, limit = DETECT_ENTRY_BUDGET }: { preset?: string | null; limit?: number } = {},
 ): DetectedConfig {
 	const { preset: name, reasons, confidence: presetConfidence, packageDir } = detectPreset(root);
 	const ns = detectNamespaces(root, name, packageDir, limit);
@@ -516,8 +513,7 @@ export function detectConfig(
 	// back to naming a namespace instead of a token.
 	if (packageDir) {
 		const sources = resolvePreset(extend).designSystem?.tokenSources ?? [];
-		if (sources.length)
-			config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
+		if (sources.length) config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
 	}
 
 	return {

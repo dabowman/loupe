@@ -44,7 +44,7 @@ const run = <T>(args: string[]): T => {
 				encoding: 'utf8',
 				maxBuffer: 64 * 1024 * 1024,
 				stdio: ['ignore', 'pipe', 'pipe'],
-			})
+			}),
 		) as T;
 	} catch (err) {
 		const e = err as { stdout?: string; stderr?: string } | null;
@@ -107,5 +107,5 @@ if (!stale.length) {
 
 console.log(
 	`\n${directives.length} directive(s) total; ${orphaned.length} with no nearby finding ` +
-		`(working as intended, or covering code that no longer exists).`
+		`(working as intended, or covering code that no longer exists).`,
 );

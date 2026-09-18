@@ -98,7 +98,9 @@ controls.forEach((c, i) => {
 	if (picks.size === 1) stable++;
 	else flips.push(`${c.id} ${[...picks].join('/')} (labelled ${truth(c.id)})`);
 });
-process.stdout.write(`stable across ${times} runs: ${pct(stable, controls.length)}${flips.length ? ` — flipped: ${flips.join(', ')}` : ''}\n`);
+process.stdout.write(
+	`stable across ${times} runs: ${pct(stable, controls.length)}${flips.length ? ` — flipped: ${flips.join(', ')}` : ''}\n`,
+);
 
 // Per class. `destination` is the one that matters: every redirect in the
 // abstract language fires on it, so a false positive sends an agent to the
@@ -118,7 +120,9 @@ for (const cls of CLASSES) {
 		}),
 	);
 	if (tp + fn === 0) continue;
-	process.stdout.write(`${cls.padEnd(13)} ${pct(tp, tp + fp).padStart(9)}  ${pct(tp, tp + fn).padStart(6)}  (tp${tp} fp${fp} fn${fn})\n`);
+	process.stdout.write(
+		`${cls.padEnd(13)} ${pct(tp, tp + fp).padStart(9)}  ${pct(tp, tp + fn).padStart(6)}  (tp${tp} fp${fp} fn${fn})\n`,
+	);
 }
 
 // Calibration: does confidence mean anything? Only useful if a high band is
@@ -185,7 +189,9 @@ for (const cls of ['command', 'destination'] as const) {
 				}),
 			);
 			const label = `${cls} ${name} >= ${bar.toFixed(2)}`;
-			process.stdout.write(`${label.padEnd(25)} ${String(acted).padStart(5)}  ${String(wrong).padStart(5)}  ${pct(acted - wrong, truly).padStart(6)}\n`);
+			process.stdout.write(
+				`${label.padEnd(25)} ${String(acted).padStart(5)}  ${String(wrong).padStart(5)}  ${pct(acted - wrong, truly).padStart(6)}\n`,
+			);
 		}
 }
 

@@ -111,7 +111,8 @@ export async function ask<T>(
 				return batch.map((_, i) => parsed.answers[`e${i}`]);
 			}
 			const transient = res.status === 429 || res.status >= 500;
-			if (!transient || attempt >= RETRIES) throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
+			if (!transient || attempt >= RETRIES)
+				throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
 			// The server's own wait when it names one, in seconds; a date or
 			// nothing falls back to doubling.
 			const after = Number(res.headers.get('retry-after'));
@@ -253,7 +254,12 @@ export async function judgeRedirects(
 		if (!force.judge) continue;
 		const asked = controls.flatMap((c, i) => (tableOf(c).some((r) => r.when && name in r.when) ? [i] : []));
 		if (!asked.length) continue;
-		const answers = await ask(forceQuery(force.judge), asked.map((i) => controls[i] as Control), apiKey, fetchImpl);
+		const answers = await ask(
+			forceQuery(force.judge),
+			asked.map((i) => controls[i] as Control),
+			apiKey,
+			fetchImpl,
+		);
 		asked.forEach((ci, k) => {
 			const a = answers[k];
 			if (!a || a.confidence < REDIRECT_FLOOR) return;
@@ -307,7 +313,8 @@ export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescrip
 		if (!p.tokenDescriptions) continue;
 		try {
 			const raw = JSON.parse(readFileSync(p.tokenDescriptions, 'utf8')) as Record<string, unknown>;
-			for (const [name, text] of Object.entries(raw)) if (!name.startsWith('$') && typeof text === 'string') out.set(name, text);
+			for (const [name, text] of Object.entries(raw))
+				if (!name.startsWith('$') && typeof text === 'string') out.set(name, text);
 		} catch {
 			/* a profile without readable descriptions is asked with names alone */
 		}
@@ -371,7 +378,12 @@ export async function judgeValues(
 	let written = 0;
 	for (const f of findings) {
 		// The single exact token is plain `fix`'s already.
-		if (f.rule !== 'tokens/hardcoded-value' || !f.decl || (f.suggest?.length === 1 && f.suggest[0]?.tokens.length === 1)) continue;
+		if (
+			f.rule !== 'tokens/hardcoded-value' ||
+			!f.decl ||
+			(f.suggest?.length === 1 && f.suggest[0]?.tokens.length === 1)
+		)
+			continue;
 		const plan = planValue(set, f.decl.prop, f.decl.value);
 		if (plan === 'none') {
 			const why = `no ${f.decl.prop} token in the design system`;

@@ -30,12 +30,7 @@ import type {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRESET_DIR = join(HERE, '..', 'presets');
 
-const CONFIG_NAMES = [
-	'loupe.config.mjs',
-	'loupe.config.js',
-	'loupe.config.json',
-	'.louperc.json',
-];
+const CONFIG_NAMES = ['loupe.config.mjs', 'loupe.config.js', 'loupe.config.json', '.louperc.json'];
 
 export const DEFAULTS: MergedConfig = {
 	designSystem: {
@@ -79,8 +74,7 @@ export const DEFAULTS: MergedConfig = {
 	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 120000 },
 };
 
-const isObj = (v: unknown): v is Record<string, unknown> =>
-	Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
 /**
  * Deep merge; arrays replace rather than concatenate so a preset can be overridden.
@@ -91,7 +85,7 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
  * carries do survive at runtime; nothing reads them.
  */
 function merge<T>(base: T, over: unknown): T {
-	if (!isObj(base) || !isObj(over)) return (over === undefined ? base : (over as T));
+	if (!isObj(base) || !isObj(over)) return over === undefined ? base : (over as T);
 	const out: Record<string, unknown> = { ...base };
 	for (const [k, v] of Object.entries(over)) out[k] = isObj(v) && isObj(base[k]) ? merge(base[k], v) : v;
 	return out as T;
@@ -240,9 +234,7 @@ function shippedVocabulary(): { keywords: string[]; blanket: Set<string> } {
 
 /** Compile `has-*` style patterns into anchored regexes. */
 function compilePatterns(patterns: readonly string[] | undefined): RegExp[] {
-	return (patterns ?? []).map(
-		(p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`)
-	);
+	return (patterns ?? []).map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`));
 }
 
 /**
@@ -287,9 +279,10 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	// Rule severities + options. Accepts "warn" | ["warn", {opts}] | "off".
 	// Seeded for every rule first, so the record is complete by construction and
 	// the cast below is describing what the loop guarantees rather than hoping.
-	const rules = Object.fromEntries(
-		RULE_IDS.map((id) => [id, { severity: RULES[id].severity, options: {} }]),
-	) as Record<RuleId, RuleSetting>;
+	const rules = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity, options: {} }])) as Record<
+		RuleId,
+		RuleSetting
+	>;
 	for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
 		const id = canonicalRuleId(rawId);
 		if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
@@ -352,10 +345,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	};
 
 	const enabled = Object.fromEntries(
-		RULE_IDS.map((id) => [
-			id,
-			RULES[id].needs.every((n: Capability) => capability[n]) && rules[id].severity !== 'off',
-		]),
+		RULE_IDS.map((id) => [id, RULES[id].needs.every((n: Capability) => capability[n]) && rules[id].severity !== 'off']),
 	) as Record<RuleId, boolean>;
 
 	// Read aliases: every keyword the shipped presets know, plus any this config
@@ -458,7 +448,11 @@ export function setPatterns(config: Config, patterns: Pattern[] | null | undefin
 		config.designSystem.packages.length > 0;
 	// Every rule reading the registry has to be wired here, not just the first
 	// one: a rule left out looks exactly like "nothing found".
-	for (const rule of ['patterns/duplicate-composite', 'patterns/superseded-composite', 'patterns/judged-redirect'] as const)
+	for (const rule of [
+		'patterns/duplicate-composite',
+		'patterns/superseded-composite',
+		'patterns/judged-redirect',
+	] as const)
 		config.enabled[rule] = hasRegistry && config.severityOf(rule) !== 'off';
 	return config;
 }

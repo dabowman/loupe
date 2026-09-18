@@ -23944,8 +23944,7 @@ function toCssValue(prop, node) {
     case "NumericLiteral":
       return numeric(prop, node.value);
     case "UnaryExpression":
-      if (node.operator === "-" && node.argument?.type === "NumericLiteral")
-        return numeric(prop, -node.argument.value);
+      if (node.operator === "-" && node.argument?.type === "NumericLiteral") return numeric(prop, -node.argument.value);
       return null;
     case "TemplateLiteral":
       return node.expressions.length === 0 ? node.quasis[0]?.value?.cooked ?? null : null;
@@ -24007,14 +24006,7 @@ var RADIUS_PROPS = /* @__PURE__ */ new Set([
   "border-bottom-left-radius",
   "border-bottom-right-radius"
 ]);
-var TYPE_PROPS = /* @__PURE__ */ new Set([
-  "font",
-  "font-size",
-  "font-weight",
-  "font-family",
-  "line-height",
-  "letter-spacing"
-]);
+var TYPE_PROPS = /* @__PURE__ */ new Set(["font", "font-size", "font-weight", "font-family", "line-height", "letter-spacing"]);
 var GAP_PROPS = /* @__PURE__ */ new Set(["gap", "row-gap", "column-gap"]);
 var BORDER_WIDTH_PROPS = /* @__PURE__ */ new Set([
   "border-width",
@@ -24200,7 +24192,8 @@ function parseTemplate(cssText, startLine) {
         if (node.type === "decl") {
           if (node.value.includes("dsh-e")) continue;
           decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
-        } else if (node.type === "atrule") walk(node);
+        } else if (node.type === "atrule")
+          walk(node);
         else if (node.type === "rule") nested.push(node);
       }
     };
@@ -24357,8 +24350,7 @@ function substitutionTargets(expr, out = []) {
     case "ArrowFunctionExpression":
     case "FunctionExpression": {
       if (expr.body.type !== "BlockStatement") return substitutionTargets(expr.body, out);
-      for (const stmt of expr.body.body)
-        if (stmt.type === "ReturnStatement") substitutionTargets(stmt.argument, out);
+      for (const stmt of expr.body.body) if (stmt.type === "ReturnStatement") substitutionTargets(stmt.argument, out);
       break;
     }
     case "ConditionalExpression":
@@ -24571,7 +24563,20 @@ function scanMarkup(text, relPath, ds, rules = []) {
   try {
     ast = (0, import_parser.parse)(text, { sourceType: "unambiguous", errorRecovery: true, plugins: PLUGINS });
   } catch (err) {
-    return { controls, bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports: [], parseError: messageOf2(err) };
+    return {
+      controls,
+      bindings,
+      rawEls,
+      inlineStyles,
+      cssInJs,
+      composites,
+      ruleHits,
+      imports,
+      referenced,
+      stems,
+      componentImports: [],
+      parseError: messageOf2(err)
+    };
   }
   const { known, text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
   const tags = cssInJsLocals(ast, ds.cssInJsPackages);
@@ -24689,10 +24694,16 @@ function scanMarkup(text, relPath, ds, rules = []) {
         const attr = el.openingElement.attributes.find((a) => a.type === "JSXAttribute" && a.name.name === prop);
         const value = attr?.type === "JSXAttribute" && attr.value?.type === "JSXExpressionContainer" ? attr.value.expression : null;
         const options = value && value.type !== "JSXEmptyExpression" ? staticOptions(value) : null;
-        if (!options || options.length < numParam(spec, "min", 2) || options.length > numParam(spec, "max", 5)) continue;
+        if (!options || options.length < numParam(spec, "min", 2) || options.length > numParam(spec, "max", 5))
+          continue;
         if (!options.every((l) => l !== null)) continue;
         if (options.reduce((n, l) => n + l.length, 0) > numParam(spec, "maxLabelChars", 32)) continue;
-        ruleHits.push({ patternId, rule: spec.rule, line, detail: `${canonical} with ${options.length} short static ${prop}` });
+        ruleHits.push({
+          patternId,
+          rule: spec.rule,
+          line,
+          detail: `${canonical} with ${options.length} short static ${prop}`
+        });
       } else if (spec.rule === "confirm-pair") {
         if (canonical !== param(spec, "container", "")) continue;
         const button = param(spec, "button", "Button");
@@ -24993,7 +25004,12 @@ function tokensFor(set, prop, value) {
 }
 function familyFor(set, prop) {
   const all = [...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v]));
-  const keep = new Set(onRole(all.map(([n]) => n), prop));
+  const keep = new Set(
+    onRole(
+      all.map(([n]) => n),
+      prop
+    )
+  );
   return all.filter(([n]) => keep.has(n));
 }
 function measure(value) {
@@ -25110,7 +25126,8 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
         }
       });
     }
-    if (!budget.left) unread.push({ file: toPosix(relative2(root2, dir)), message: "read the first 400 stylesheets only" });
+    if (!budget.left)
+      unread.push({ file: toPosix(relative2(root2, dir)), message: "read the first 400 stylesheets only" });
   }
   return { classes, dirs, unread };
 }
@@ -25154,7 +25171,8 @@ function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = []
     if (!boundSystem.length && !isGrid) finding = { rule: "layout/in-css", message: decl2, code: prop };
   } else if (isFlexish) {
     const gridDisplay = prop === "display" && /\bgrid\b/.test(value);
-    if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: "layout/in-css", message: decl2, code: oneLine(decl2) };
+    if (!boundSystem.length && !isGrid && !gridDisplay)
+      finding = { rule: "layout/in-css", message: decl2, code: oneLine(decl2) };
   } else if (hardcoded) {
     finding = { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hint: { prop, value } };
   }
@@ -25381,9 +25399,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       }
       if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
       if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
-      const external = keyClasses.find(
-        (c) => (config.isExternal(c) || library.classes.has(c)) && !config.isProject(c)
-      );
+      const external = keyClasses.find((c) => (config.isExternal(c) || library.classes.has(c)) && !config.isProject(c));
       if (external && touchesStyle && ruleIsLive("system/override"))
         emit({ rule: "system/override", line: ruleLine, message: `.${external} (library internal)`, scopeLines });
       else for (const f of collapsePerRule(pending)) emit(f);
@@ -25435,10 +25451,22 @@ async function analyze(config, { scope = null, judge = false } = {}) {
         enabled: ruleIsLive
       });
       if (finding)
-        pending.push({ ...finding, line: d.line ?? el.line, code: finding.code ?? finding.message, suffix: " (inline)" });
+        pending.push({
+          ...finding,
+          line: d.line ?? el.line,
+          code: finding.code ?? finding.message,
+          suffix: " (inline)"
+        });
     }
     for (const f of collapsePerRule(pending))
-      push(f.rule, f.line, `${f.message}${f.suffix ?? ""}`, f.code, f.hints ?? (f.hint ? [f.hint] : void 0), f.suffix);
+      push(
+        f.rule,
+        f.line,
+        `${f.message}${f.suffix ?? ""}`,
+        f.code,
+        f.hints ?? (f.hint ? [f.hint] : void 0),
+        f.suffix
+      );
   }
   for (const tpl of cssInJs) {
     if (!reports(tpl.file)) continue;
@@ -25602,7 +25630,13 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     for (const [sig, files2] of bySignature) {
       if (files2.size < 3) continue;
       for (const c of files2.values())
-        emitComposite("patterns/unregistered-composite", c, sig, ` \u2014 assembled in ${files2.size} files, registered in none`, sig);
+        emitComposite(
+          "patterns/unregistered-composite",
+          c,
+          sig,
+          ` \u2014 assembled in ${files2.size} files, registered in none`,
+          sig
+        );
     }
   }
   if (config.enabled["system/locked-component"] || config.enabled["system/superseded-component"]) {
@@ -25724,7 +25758,8 @@ function tokenFixes(findings) {
     if (f.rule !== "tokens/hardcoded-value" || !CSS_FILE.test(f.file)) continue;
     const only = f.suggest?.length === 1 ? f.suggest[0] : void 0;
     const token = only?.tokens.length === 1 ? only.tokens[0] : void 0;
-    if (only && token !== void 0) out.push({ file: f.file, line: f.line, prop: only.prop, value: only.value, to: `var(${token})` });
+    if (only && token !== void 0)
+      out.push({ file: f.file, line: f.line, prop: only.prop, value: only.value, to: `var(${token})` });
     else if (f.decl && f.judged && f.judged.answer !== KEEP)
       out.push({ file: f.file, line: f.line, prop: f.decl.prop, value: f.decl.value, to: f.judged.answer });
   }
@@ -25786,11 +25821,18 @@ function applyKeeps(root2, findings, keyword, { dry = false } = {}) {
   const skipped = [];
   for (const f of findings) {
     if (f.rule !== "tokens/hardcoded-value" || f.judged?.answer !== KEEP || !f.decl) continue;
-    const kept = { file: f.file, line: f.line, prop: f.decl.prop, value: f.decl.value, reason: f.judged.spans.join(" ") };
+    const kept = {
+      file: f.file,
+      line: f.line,
+      prop: f.decl.prop,
+      value: f.decl.value,
+      reason: f.judged.spans.join(" ")
+    };
     if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
     else if (onLine.get(`${f.file}\0${f.line}`)?.some((o) => o.judged?.answer !== KEEP))
       skipped.push({ ...kept, why: "shares its line with a value that was not kept" });
-    else if (!byFile.get(f.file)?.some((k) => k.line === f.line)) byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
+    else if (!byFile.get(f.file)?.some((k) => k.line === f.line))
+      byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
   }
   const applied = [];
   for (const [file, group] of byFile) {
@@ -25935,7 +25977,8 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = query.size) {
         return batch.map((_, i) => parsed.answers[`e${i}`]);
       }
       const transient = res.status === 429 || res.status >= 500;
-      if (!transient || attempt >= RETRIES) throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      if (!transient || attempt >= RETRIES)
+        throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
       const after = Number(res.headers.get("retry-after"));
       await new Promise((r) => setTimeout(r, after > 0 ? after * 1e3 : 500 * 2 ** attempt));
     }
@@ -25996,7 +26039,12 @@ async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch, lan
     if (!force.judge) continue;
     const asked = controls.flatMap((c, i) => tableOf(c).some((r) => r.when && name in r.when) ? [i] : []);
     if (!asked.length) continue;
-    const answers = await ask(forceQuery(force.judge), asked.map((i) => controls[i]), apiKey, fetchImpl);
+    const answers = await ask(
+      forceQuery(force.judge),
+      asked.map((i) => controls[i]),
+      apiKey,
+      fetchImpl
+    );
     asked.forEach((ci, k) => {
       const a = answers[k];
       if (!a || a.confidence < REDIRECT_FLOOR) return;
@@ -26032,7 +26080,8 @@ function tokenDescriptions(profiles) {
     if (!p.tokenDescriptions) continue;
     try {
       const raw = JSON.parse(readFileSync5(p.tokenDescriptions, "utf8"));
-      for (const [name, text] of Object.entries(raw)) if (!name.startsWith("$") && typeof text === "string") out.set(name, text);
+      for (const [name, text] of Object.entries(raw))
+        if (!name.startsWith("$") && typeof text === "string") out.set(name, text);
     } catch {
     }
   }
@@ -26061,7 +26110,8 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
   const plans = [];
   let written = 0;
   for (const f of findings) {
-    if (f.rule !== "tokens/hardcoded-value" || !f.decl || f.suggest?.length === 1 && f.suggest[0]?.tokens.length === 1) continue;
+    if (f.rule !== "tokens/hardcoded-value" || !f.decl || f.suggest?.length === 1 && f.suggest[0]?.tokens.length === 1)
+      continue;
     const plan = planValue(set, f.decl.prop, f.decl.value);
     if (plan === "none") {
       const why = `no ${f.decl.prop} token in the design system`;
@@ -26185,8 +26235,7 @@ function findExistingBaseline(root2, explicit, configured) {
   const byDefaultName = join7(root2, DEFAULT_BASELINE);
   if (byDefaultName !== target && existsSync2(byDefaultName))
     return { path: byDefaultName, found: true, fallback: "default-name" };
-  for (const path of legacyBaselines(root2))
-    if (existsSync2(path)) return { path, found: true, fallback: "legacy" };
+  for (const path of legacyBaselines(root2)) if (existsSync2(path)) return { path, found: true, fallback: "legacy" };
   return { path: target, found: false, fallback: "none" };
 }
 function attemptsPath(root2, create = false) {
@@ -26286,12 +26335,7 @@ function loadComponents(raw) {
 // src/config.ts
 var HERE = dirname4(fileURLToPath2(import.meta.url));
 var PRESET_DIR = join9(HERE, "..", "presets");
-var CONFIG_NAMES = [
-  "loupe.config.mjs",
-  "loupe.config.js",
-  "loupe.config.json",
-  ".louperc.json"
-];
+var CONFIG_NAMES = ["loupe.config.mjs", "loupe.config.js", "loupe.config.json", ".louperc.json"];
 var DEFAULTS = {
   designSystem: {
     // What to call this design system in a finding. Rule guidance that names
@@ -26426,9 +26470,7 @@ function shippedVocabulary() {
   return { keywords: [...keywords], blanket };
 }
 function compilePatterns(patterns) {
-  return (patterns ?? []).map(
-    (p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`)
-  );
+  return (patterns ?? []).map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`));
 }
 function normalize(raw, { root: root2 }) {
   const cfg = merge(DEFAULTS, raw ?? {});
@@ -26455,9 +26497,7 @@ function normalize(raw, { root: root2 }) {
       componentRegistry = /* @__PURE__ */ new Map();
     }
   }
-  const rules = Object.fromEntries(
-    RULE_IDS.map((id) => [id, { severity: RULES[id].severity, options: {} }])
-  );
+  const rules = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity, options: {} }]));
   for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
     const id = canonicalRuleId(rawId);
     if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
@@ -26494,10 +26534,7 @@ function normalize(raw, { root: root2 }) {
     projectNamespace: (cfg.namespaces.project ?? []).length > 0
   };
   const enabled2 = Object.fromEntries(
-    RULE_IDS.map((id) => [
-      id,
-      RULES[id].needs.every((n) => capability[n]) && rules[id].severity !== "off"
-    ])
+    RULE_IDS.map((id) => [id, RULES[id].needs.every((n) => capability[n]) && rules[id].severity !== "off"])
   );
   const shipped = shippedVocabulary();
   const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
@@ -26560,7 +26597,11 @@ function setPatterns(config, patterns) {
   // anyway. The layout/text lists are deliberately not part of this: a
   // headless library has none and still composes.
   config.designSystem.packages.length > 0;
-  for (const rule2 of ["patterns/duplicate-composite", "patterns/superseded-composite", "patterns/judged-redirect"])
+  for (const rule2 of [
+    "patterns/duplicate-composite",
+    "patterns/superseded-composite",
+    "patterns/judged-redirect"
+  ])
     config.enabled[rule2] = hasRegistry && config.severityOf(rule2) !== "off";
   return config;
 }
@@ -26654,7 +26695,9 @@ function nearMisses(result) {
       (d) => d.file === f.file && d.rules.includes(f.rule) && Math.abs(d.line - f.line) <= NEAR
     );
     if (!near) continue;
-    const occupant = result.directives.find((d) => d.file === f.file && d.line === f.line - 1 && !d.rules.includes(f.rule));
+    const occupant = result.directives.find(
+      (d) => d.file === f.file && d.line === f.line - 1 && !d.rules.includes(f.rule)
+    );
     out.push(
       occupant ? `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but line ${f.line - 1} already carries one for \`${occupant.rules.join(", ")}\` \u2014 only the nearest line is read, so name both on it: \`${occupant.rules.join(", ")}, ${f.rule} -- <reason>\`.` : `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but this finding anchors to line ${f.line} \u2014 move it to line ${f.line}, or the line directly above it.`
     );
@@ -26727,7 +26770,9 @@ function formatAgent(result, config, { maxFindings = 0, terse = false } = {}) {
     }
     if (hidden) {
       lines.push("");
-      lines.push(dim(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`));
+      lines.push(
+        dim(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`)
+      );
     }
     if (!terse) {
       const dense = densestLine(findings);
@@ -26742,7 +26787,11 @@ function formatAgent(result, config, { maxFindings = 0, terse = false } = {}) {
         "Next: `loupe fix` applies the unambiguous token substitutions, `loupe explain <ruleId>` says what a rule wants, `--format json` carries every finding whole."
       )
     );
-    lines.push(dim(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`));
+    lines.push(
+      dim(
+        `To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`
+      )
+    );
     for (const m of nearMisses(result)) lines.push(yellow(`  ! ${m}`));
   }
   if (diagnostics.parseErrors.length) {
@@ -27518,10 +27567,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const sources = { ...generic.sources, ...base.sources ?? {} };
   const files = discover({ root: root2, sources, limit });
   const others = presetNames().filter((n) => n !== presetName).map((n) => resolvePreset(n));
-  const external = [
-    ...base.namespaces?.external ?? [],
-    ...others.flatMap((p) => p.namespaces?.external ?? [])
-  ];
+  const external = [...base.namespaces?.external ?? [], ...others.flatMap((p) => p.namespaces?.external ?? [])];
   const neverDead = [
     ...base.namespaces?.neverDead ?? [],
     ...others.flatMap((p) => p.namespaces?.neverDead ?? [])
@@ -27588,8 +27634,7 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
   const config = { extends: extend, namespaces: { project: ns.project } };
   if (packageDir) {
     const sources = resolvePreset(extend).designSystem?.tokenSources ?? [];
-    if (sources.length)
-      config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
+    if (sources.length) config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
   }
   return {
     inferred: true,
@@ -27724,7 +27769,11 @@ function applyRegistries(config, sources, {
   }
   if (sawPatterns) setPatterns2(config, patterns);
   if (sawComponents) setComponentRegistry2(config, components2);
-  const registryRules = ["patterns/duplicate-composite", "patterns/superseded-composite", "patterns/judged-redirect"];
+  const registryRules = [
+    "patterns/duplicate-composite",
+    "patterns/superseded-composite",
+    "patterns/judged-redirect"
+  ];
   const patternsNote = (added) => registryRules.every((rule2) => config.severityOf(rule2) === "off") ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
     // A composite is only ever built from names imported out of
     // `designSystem.packages` (see markup.ts), so with none declared
@@ -27876,15 +27925,12 @@ function resolvedOptions() {
   return { options: fromEnv, source: "none" };
 }
 function pluginName() {
-  const roots = [
-    process.env.CLAUDE_PLUGIN_ROOT,
-    join12(dirname6(fileURLToPath4(import.meta.url)), "..", "..")
-  ].filter((r) => Boolean(r));
+  const roots = [process.env.CLAUDE_PLUGIN_ROOT, join12(dirname6(fileURLToPath4(import.meta.url)), "..", "..")].filter(
+    (r) => Boolean(r)
+  );
   for (const root2 of roots) {
     try {
-      const manifest = JSON.parse(
-        readFileSync10(join12(root2, ".claude-plugin", "plugin.json"), "utf8")
-      );
+      const manifest = JSON.parse(readFileSync10(join12(root2, ".claude-plugin", "plugin.json"), "utf8"));
       return manifest.name ?? null;
     } catch {
     }
@@ -28134,8 +28180,7 @@ async function main() {
     const unconfigured = !args.flags.config && !explicitPreset && !projectConfig;
     if (unconfigured && forced?.preset) {
       if (presetExists(forced.preset)) profilePreset = forced.preset;
-      else if (!isHook)
-        note(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed
+      else if (!isHook) note(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed
 `);
     }
     if (unconfigured) detected = runDetection();
@@ -28198,13 +28243,17 @@ async function main() {
       return EXIT.CANNOT_RUN;
     }
     const state = config.enabled[id] ? SEV_PAINT[config.severityOf(id)](config.severityOf(id)) : dim("disabled (config does not satisfy its requirements)");
-    process.stdout.write(`${magenta(id)}  [${state}]
+    process.stdout.write(
+      `${magenta(id)}  [${state}]
   ${renderTitle(id, config.designSystem, config.suppression.keyword)}
-`);
+`
+    );
     const flagged = id === "system/locked-component" ? "locked" : id === "system/superseded-component" ? "legacy" : null;
     if (flagged) {
       const entries = [...config.componentRegistry.values()];
-      const fires = entries.filter((e) => e.status === flagged && usableReplacement(config.componentRegistry, e.supersededBy));
+      const fires = entries.filter(
+        (e) => e.status === flagged && usableReplacement(config.componentRegistry, e.supersededBy)
+      );
       const names = fires.slice(0, 5).map((e) => e.name);
       const src = (config.profiles?.active ?? []).filter((p) => p.components);
       process.stdout.write(
@@ -28278,10 +28327,7 @@ async function main() {
       lines.push("The gate is silenced for this session: LOUPE_OFF is set in the environment.");
     } else if (config.inferred) {
       lines.push("css/dead-class is held to advisory because the namespaces were inferred, not configured.");
-      if (detected?.truncated)
-        lines.push(
-          `Inference stopped at the ${CEILING}: ${CEILING_WHY}.`
-        );
+      if (detected?.truncated) lines.push(`Inference stopped at the ${CEILING}: ${CEILING_WHY}.`);
       if (!blockingAllowed)
         lines.push(
           'The gate reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.'
@@ -28392,16 +28438,19 @@ ${green(`Wrote ${target}`)}
     const kept = key2 ? applyKeeps(root2, toFix.findings, config.suppression.keyword, { dry }) : { applied: [], skipped: [] };
     const verb = dry ? "would fix" : "fixed";
     const decl2 = (f) => oneLine(`${f.prop}: ${f.value}`);
-    for (const f of applied)
-      process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2192 ${green(f.to)}
+    for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2192 ${green(f.to)}
 `);
     const keptDecl = (k) => oneLine(`${k.prop}: ${k.value}`);
     for (const k of kept.applied)
-      process.stdout.write(`${dim(`${k.file}:${k.line}`)}  ${keptDecl(k)} \u2192 ${green(`${config.suppression.keyword}, ${k.reason}`)}
-`);
+      process.stdout.write(
+        `${dim(`${k.file}:${k.line}`)}  ${keptDecl(k)} \u2192 ${green(`${config.suppression.keyword}, ${k.reason}`)}
+`
+      );
     for (const f of [...skipped, ...kept.skipped])
-      process.stdout.write(`${yellow("skip")} ${dim(`${f.file}:${f.line}`)}  ${"to" in f ? decl2(f) : keptDecl(f)} \u2014 ${f.why}
-`);
+      process.stdout.write(
+        `${yellow("skip")} ${dim(`${f.file}:${f.line}`)}  ${"to" in f ? decl2(f) : keptDecl(f)} \u2014 ${f.why}
+`
+      );
     const left = toFix.findings.length - applied.length - kept.applied.length;
     const nSkipped = skipped.length + kept.skipped.length;
     process.stdout.write(
@@ -28433,8 +28482,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
     }
   }
   const touched = isHook ? payloadFile(payload, root2) : null;
-  if (touched && !isSource(config.sources, touched))
-    return emitClean("loupe: skipped \u2014 not a checked file type.");
+  if (touched && !isSource(config.sources, touched)) return emitClean("loupe: skipped \u2014 not a checked file type.");
   const scope = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
   if (scope !== null && !Array.isArray(scope)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 ${scope.error}`);
@@ -28454,8 +28502,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
   if (!args.flags["no-baseline"]) {
     const { path: bPath, found } = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const baseline = found ? readBaseline(root2, bPath) : null;
-    if (found && !baseline)
-      note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
+    if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
 `);
     result = applyBaseline(result, baseline);
   }
@@ -28472,7 +28519,13 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
     }
     try {
       if (result.tokens && result.findings.some((f) => f.rule === "tokens/hardcoded-value"))
-        await judgeValues(root2, result.findings, result.tokens, checkKey, tokenDescriptions(config.profiles?.active ?? []));
+        await judgeValues(
+          root2,
+          result.findings,
+          result.tokens,
+          checkKey,
+          tokenDescriptions(config.profiles?.active ?? [])
+        );
     } catch (err) {
       note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf4(err)}
 `);

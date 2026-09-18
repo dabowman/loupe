@@ -20,11 +20,7 @@ import type { Severity } from './types.ts';
 // something that is not 0" turns clearing the switch into throwing it.
 const { NO_COLOR, FORCE_COLOR, TERM } = process.env;
 
-let enabled = NO_COLOR
-	? false
-	: FORCE_COLOR
-		? FORCE_COLOR !== '0'
-		: Boolean(process.stdout.isTTY) && TERM !== 'dumb';
+let enabled = NO_COLOR ? false : FORCE_COLOR ? FORCE_COLOR !== '0' : Boolean(process.stdout.isTTY) && TERM !== 'dumb';
 
 /** Hook mode, whose stdout may be a terminal but whose reader never is. */
 export const setColor = (on: boolean): void => {

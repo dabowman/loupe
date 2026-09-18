@@ -37,15 +37,17 @@ export function toNode(spec: unknown): PatternNode | null {
 	if (!Array.isArray(spec) || !spec.length || typeof spec[0] !== 'string') return null;
 	return {
 		...split(spec[0]),
-		children: spec.slice(1).map(toNode).filter((n): n is PatternNode => n !== null),
+		children: spec
+			.slice(1)
+			.map(toNode)
+			.filter((n): n is PatternNode => n !== null),
 	};
 }
 
 export const signatureOf = (node: PatternNode): string =>
 	node.children.length ? `${node.name}(${node.children.map(signatureOf).join(',')})` : node.name;
 
-export const nodeCount = (node: PatternNode): number =>
-	1 + node.children.reduce((n, c) => n + nodeCount(c), 0);
+export const nodeCount = (node: PatternNode): number => 1 + node.children.reduce((n, c) => n + nodeCount(c), 0);
 export const depthOf = (node: PatternNode): number =>
 	node.children.length ? 1 + Math.max(...node.children.map(depthOf)) : 1;
 
@@ -295,7 +297,10 @@ export interface ResolveRule {
  * keeps a partial reading sound — with only `represents` known, the redirects
  * at the top of `choose` decide, and the variant rows under them stay silent.
  */
-export function resolveRule(rules: readonly ResolveRule[], forces: Readonly<Record<string, unknown>>): ResolveRule | null {
+export function resolveRule(
+	rules: readonly ResolveRule[],
+	forces: Readonly<Record<string, unknown>>,
+): ResolveRule | null {
 	for (const r of rules) {
 		if (!r.when) return r;
 		const conds = Object.entries(r.when);

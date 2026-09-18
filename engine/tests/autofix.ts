@@ -96,21 +96,27 @@ await check('two fixes on one line both land', async () => {
 	const out = read('styles/d.css');
 	assert(applied.length === 2, `expected 2 fixes, got ${applied.length}`);
 	assert(
-		out.includes('border-radius: var(--wpds-border-radius-md)') && out.includes('padding: var(--wpds-dimension-space-md)'),
-		`one of the two was lost:\n${out}`
+		out.includes('border-radius: var(--wpds-border-radius-md)') &&
+			out.includes('padding: var(--wpds-dimension-space-md)'),
+		`one of the two was lost:\n${out}`,
 	);
 });
 
 await check('the JS channels are never rewritten as CSS', async () => {
 	const { applied } = await fixture({
-		'src/E.jsx': "export const E = () => <div className=\"wf-e\" style={{ borderRadius: '4px' }} />;",
+		'src/E.jsx': 'export const E = () => <div className="wf-e" style={{ borderRadius: \'4px\' }} />;',
 	});
 	assert(!applied.length, `inline style was rewritten: ${JSON.stringify(applied)}`);
 });
 
 await check('a stale line number skips rather than guesses', async () => {
 	const findings: FixCandidate[] = [
-		{ rule: 'tokens/hardcoded-value', file: 'styles/f.css', line: 99, suggest: [{ prop: 'border-radius', value: '4px', tokens: ['--wpds-border-radius-md'] }] },
+		{
+			rule: 'tokens/hardcoded-value',
+			file: 'styles/f.css',
+			line: 99,
+			suggest: [{ prop: 'border-radius', value: '4px', tokens: ['--wpds-border-radius-md'] }],
+		},
 	];
 	const root = scratch('dsh-fix-');
 	try {
@@ -128,7 +134,12 @@ await check('--dry-run reports without writing', async () => {
 	try {
 		write(root, 'styles/g.css', '.wf-g { border-radius: 4px; }');
 		const findings: FixCandidate[] = [
-			{ rule: 'tokens/hardcoded-value', file: 'styles/g.css', line: 1, suggest: [{ prop: 'border-radius', value: '4px', tokens: ['--wpds-border-radius-md'] }] },
+			{
+				rule: 'tokens/hardcoded-value',
+				file: 'styles/g.css',
+				line: 1,
+				suggest: [{ prop: 'border-radius', value: '4px', tokens: ['--wpds-border-radius-md'] }],
+			},
 		];
 		const { applied } = applyTokenFixes(root, findings, { dry: true });
 		assert(applied.length === 1, 'dry run still reports the fix');
@@ -188,23 +199,41 @@ await check('a flagged value is planned part by part, and what code can settle i
 	const plan = planValue(set, 'padding', '10px 12px');
 	assert(plan && plan !== 'none', `no plan: ${String(plan)}`);
 	const [ten, twelve] = plan.slots;
-	assert(ten && 'candidates' in ten && ten.candidates.tier === 'near' && !ten.candidates.keep, `10px: ${JSON.stringify(ten)}`);
-	assert(ten.candidates.options.map(([n]) => n).join() === '--wpds-dimension-padding-sm,--wpds-dimension-padding-md', 'not the steps either side');
-	assert(twelve && 'token' in twelve && twelve.token === '--wpds-dimension-padding-md', `12px: ${JSON.stringify(twelve)}`);
+	assert(
+		ten && 'candidates' in ten && ten.candidates.tier === 'near' && !ten.candidates.keep,
+		`10px: ${JSON.stringify(ten)}`,
+	);
+	assert(
+		ten.candidates.options.map(([n]) => n).join() === '--wpds-dimension-padding-sm,--wpds-dimension-padding-md',
+		'not the steps either side',
+	);
+	assert(
+		twelve && 'token' in twelve && twelve.token === '--wpds-dimension-padding-md',
+		`12px: ${JSON.stringify(twelve)}`,
+	);
 	// A zero is not a literal to replace, and a shorthand's other words are kept.
 	const zero = planValue(set, 'padding', '6px 0');
 	assert(zero && zero !== 'none' && zero.slots.length === 1 && zero.slots[0]?.at === 0, JSON.stringify(zero));
 	const bg = planValue(set, 'background', '#f0c url(x.png) no-repeat');
 	assert(bg && bg !== 'none' && bg.slots.length === 1 && bg.slots[0]?.part === '#f0c', JSON.stringify(bg));
 	const pink = bg.slots[0];
-	assert(pink && 'candidates' in pink && pink.candidates.tier === 'family' && pink.candidates.options.length === 2, JSON.stringify(pink));
+	assert(
+		pink && 'candidates' in pink && pink.candidates.tier === 'family' && pink.candidates.options.length === 2,
+		JSON.stringify(pink),
+	);
 	// Spacing the scale covers only snaps; past its end, or off spacing, it may stay.
 	const past = planValue(set, 'padding', '48px');
 	const pastSlot = past && past !== 'none' ? past.slots[0] : undefined;
-	assert(pastSlot && 'candidates' in pastSlot && pastSlot.candidates.tier === 'end' && pastSlot.candidates.keep, JSON.stringify(past));
+	assert(
+		pastSlot && 'candidates' in pastSlot && pastSlot.candidates.tier === 'end' && pastSlot.candidates.keep,
+		JSON.stringify(past),
+	);
 	const radius = planValue(set, 'border-radius', '3px');
 	const radiusSlot = radius && radius !== 'none' ? radius.slots[0] : undefined;
-	assert(radiusSlot && 'candidates' in radiusSlot && radiusSlot.candidates.tier === 'near' && radiusSlot.candidates.keep, JSON.stringify(radius));
+	assert(
+		radiusSlot && 'candidates' in radiusSlot && radiusSlot.candidates.tier === 'near' && radiusSlot.candidates.keep,
+		JSON.stringify(radius),
+	);
 	// A token for a negative inset flips its sign, and 5% is not on a px scale.
 	assert(planValue(set, 'top', '-4px') === null, 'a negative inset was planned');
 	assert(planValue(set, 'padding', '5% 8px') === null, 'a half-replaceable value was planned');
@@ -213,11 +242,18 @@ await check('a flagged value is planned part by part, and what code can settle i
 	const cursor = planValue(set, 'cursor', 'default');
 	assert(cursor && cursor !== 'none' && 'candidates' in (cursor.slots[0] ?? {}), 'a cursor is a choice among names');
 	// An offset is spacing, not the size of an icon.
-	const sized = harvestTokenDefs(postcss.parse(`${JUDGE_TOKENS}\n:root { --wpds-dimension-size-4xs: 8px; }`), ['--wpds-'], emptyTokenSet());
+	const sized = harvestTokenDefs(
+		postcss.parse(`${JUDGE_TOKENS}\n:root { --wpds-dimension-size-4xs: 8px; }`),
+		['--wpds-'],
+		emptyTokenSet(),
+	);
 	const top = planValue(sized, 'top', '10px');
 	assert(top && top !== 'none' && 'candidates' in (top.slots[0] ?? {}), JSON.stringify(top));
 	const offered = top.slots[0] && 'candidates' in top.slots[0] ? top.slots[0].candidates.options.map(([n]) => n) : [];
-	assert(offered.length && !offered.some((n) => n.includes('size')), `top was offered a size token: ${offered.join(', ')}`);
+	assert(
+		offered.length && !offered.some((n) => n.includes('size')),
+		`top was offered a size token: ${offered.join(', ')}`,
+	);
 });
 
 // The failure that prompted this: a `tokenSources` path that stopped resolving
@@ -228,7 +264,15 @@ await check('--judge refuses an empty token set rather than calling every value 
 		called = true;
 		return new Response('{}');
 	}) as unknown as typeof fetch;
-	const f = { rule: 'tokens/hardcoded-value', severity: 'warn', rank: 0, file: 'a.css', line: 1, message: 'padding: 10px', decl: { prop: 'padding', value: '10px' } } as const;
+	const f = {
+		rule: 'tokens/hardcoded-value',
+		severity: 'warn',
+		rank: 0,
+		file: 'a.css',
+		line: 1,
+		message: 'padding: 10px',
+		decl: { prop: 'padding', value: '10px' },
+	} as const;
 	const findings: Finding[] = [{ ...f, decl: { ...f.decl } }];
 	let threw = '';
 	try {
@@ -264,7 +308,10 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 		assert(result.tokens, 'analyze did not hand back its token set');
 		const asked: { instructions: string; criteria: Record<string, string> }[] = [];
 		const stub = (async (_url: string, init: { body: string }) => {
-			const questions = JSON.parse(init.body).questions as Record<string, { instructions: string; criteria: Record<string, string> }>;
+			const questions = JSON.parse(init.body).questions as Record<
+				string,
+				{ instructions: string; criteria: Record<string, string> }
+			>;
 			const answers = Object.fromEntries(
 				Object.entries(questions).map(([k, q]) => {
 					asked.push(q);
@@ -290,9 +337,15 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 		const offersKeep = (q: { criteria: Record<string, string> }): boolean => 'keep' in q.criteria;
 		const tenAsk = asked.find((q) => '--wpds-dimension-padding-sm' in q.criteria);
 		assert(tenAsk && !offersKeep(tenAsk), 'in-scale padding was offered keep');
-		assert(asked.filter((q) => q !== tenAsk).every(offersKeep), 'a question off the spacing scale offered no way to keep the value');
+		assert(
+			asked.filter((q) => q !== tenAsk).every(offersKeep),
+			'a question off the spacing scale offered no way to keep the value',
+		);
 		const pinkAsk = asked.find((q) => '--wpds-color-background-surface-neutral' in q.criteria);
-		assert(pinkAsk?.criteria['--wpds-color-background-surface-neutral']?.includes('Surfaces with normal emphasis.'), 'the description was not sent');
+		assert(
+			pinkAsk?.criteria['--wpds-color-background-surface-neutral']?.includes('Surfaces with normal emphasis.'),
+			'the description was not sent',
+		);
 		assert(written === 5, `wrote ${written}, expected 5 (padding, three pinks, box-shadow)`);
 
 		const at = (file: string, line: number, prop: string) => {
@@ -302,12 +355,22 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 		};
 		const padding = at('styles/card.css', 2, 'padding');
 		assert(
-			padding.message === 'padding: 10px 12px → var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md) (judged 0.30)',
+			padding.message ===
+				'padding: 10px 12px → var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md) (judged 0.30)',
 			padding.message,
 		);
-		assert(padding.judged?.spans.every((s) => padding.message.includes(s)), 'a span is not in the message');
-		assert(at('styles/card.css', 3, 'background').message === 'background: #f0c → deliberate, no token fits (judged 0.70)', 'pink not kept');
-		assert(at('styles/card.css', 4, 'box-shadow').message.endsWith('→ no box-shadow token in the design system'), 'box-shadow');
+		assert(
+			padding.judged?.spans.every((s) => padding.message.includes(s)),
+			'a span is not in the message',
+		);
+		assert(
+			at('styles/card.css', 3, 'background').message === 'background: #f0c → deliberate, no token fits (judged 0.70)',
+			'pink not kept',
+		);
+		assert(
+			at('styles/card.css', 4, 'box-shadow').message.endsWith('→ no box-shadow token in the design system'),
+			'box-shadow',
+		);
 		assert(at('styles/card.css', 5, 'border-radius').judged === undefined, 'a sub-floor pick was recorded');
 		// The channel marker stays last.
 		const inline = at('src/A.jsx', 1, 'background');
@@ -325,14 +388,19 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 		const css = readFileSync(join(root, 'styles/card.css'), 'utf8');
 		assert(css.includes('\tpadding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);'), css);
 		assert(
-			css.includes(`\t/* ${config.suppression.keyword} tokens/hardcoded-value -- deliberate, no token fits (judged 0.70) */\n\tbackground: #f0c;`),
+			css.includes(
+				`\t/* ${config.suppression.keyword} tokens/hardcoded-value -- deliberate, no token fits (judged 0.70) */\n\tbackground: #f0c;`,
+			),
 			css,
 		);
 		// The directives parse and mute exactly what they were written for.
 		const after = await analyze(config, { scope: ['styles/card.css'] });
 		const left = after.findings.map((f) => `${f.rule}:${f.line}`);
 		assert(!left.includes('suppression/malformed'), `a directive was malformed: ${left.join(', ')}`);
-		const hard = after.findings.filter((f) => f.rule === 'tokens/hardcoded-value').map((f) => f.decl?.prop).sort();
+		const hard = after.findings
+			.filter((f) => f.rule === 'tokens/hardcoded-value')
+			.map((f) => f.decl?.prop)
+			.sort();
 		assert(hard.join() === 'background,border-radius,border-radius', `left: ${hard.join()}`);
 	} finally {
 		cleanup(root);

@@ -12,36 +12,74 @@ import type { HardcodedOptions, MarginKind } from './types.ts';
 
 /** Token-backed props whose literal values duplicate a design token. */
 export const COLOR_PROPS = new Set([
-	'color', 'background', 'background-color', 'border-color', 'border-top-color',
-	'border-right-color', 'border-bottom-color', 'border-left-color', 'outline-color',
-	'fill', 'stroke', 'box-shadow', 'text-decoration-color', 'caret-color', 'accent-color',
+	'color',
+	'background',
+	'background-color',
+	'border-color',
+	'border-top-color',
+	'border-right-color',
+	'border-bottom-color',
+	'border-left-color',
+	'outline-color',
+	'fill',
+	'stroke',
+	'box-shadow',
+	'text-decoration-color',
+	'caret-color',
+	'accent-color',
 ]);
 export const SPACING_PROPS = new Set([
-	'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
-	'padding-block', 'padding-inline', 'padding-block-start', 'padding-block-end',
-	'padding-inline-start', 'padding-inline-end', 'inset', 'top', 'right', 'bottom', 'left',
+	'padding',
+	'padding-top',
+	'padding-right',
+	'padding-bottom',
+	'padding-left',
+	'padding-block',
+	'padding-inline',
+	'padding-block-start',
+	'padding-block-end',
+	'padding-inline-start',
+	'padding-inline-end',
+	'inset',
+	'top',
+	'right',
+	'bottom',
+	'left',
 ]);
 export const RADIUS_PROPS = new Set([
-	'border-radius', 'border-top-left-radius', 'border-top-right-radius',
-	'border-bottom-left-radius', 'border-bottom-right-radius',
+	'border-radius',
+	'border-top-left-radius',
+	'border-top-right-radius',
+	'border-bottom-left-radius',
+	'border-bottom-right-radius',
 ]);
-export const TYPE_PROPS = new Set([
-	'font', 'font-size', 'font-weight', 'font-family', 'line-height', 'letter-spacing',
-]);
+export const TYPE_PROPS = new Set(['font', 'font-size', 'font-weight', 'font-family', 'line-height', 'letter-spacing']);
 export const GAP_PROPS = new Set(['gap', 'row-gap', 'column-gap']);
 /** Token-backed too: the design system ships a border-width scale. */
 export const BORDER_WIDTH_PROPS = new Set([
-	'border-width', 'border-top-width', 'border-right-width',
-	'border-bottom-width', 'border-left-width', 'outline-width',
+	'border-width',
+	'border-top-width',
+	'border-right-width',
+	'border-bottom-width',
+	'border-left-width',
+	'outline-width',
 ]);
 export const FLEX_PROPS = new Set([
-	'flex-direction', 'align-items', 'justify-content', 'align-content',
-	'justify-items', 'flex-wrap', 'place-items', 'place-content',
+	'flex-direction',
+	'align-items',
+	'justify-content',
+	'align-content',
+	'justify-items',
+	'flex-wrap',
+	'place-items',
+	'place-content',
 ]);
 /** Token-backed: the design system ships duration and easing scales. */
 export const MOTION_PROPS = new Set([
-	'transition-duration', 'animation-duration',
-	'transition-timing-function', 'animation-timing-function',
+	'transition-duration',
+	'animation-duration',
+	'transition-timing-function',
+	'animation-timing-function',
 ]);
 /** Token-backed: the design system ships a cursor scale for interactive controls. */
 export const CURSOR_PROPS = new Set(['cursor']);
@@ -53,18 +91,35 @@ export const CURSOR_PROPS = new Set(['cursor']);
  * flagging them just manufactures suppressions.
  */
 export const APPEARANCE_PROPS = new Set([
-	...COLOR_PROPS, ...RADIUS_PROPS, ...TYPE_PROPS,
-	'border', 'border-top', 'border-right', 'border-bottom', 'border-left',
-	'border-width', 'border-top-width', 'border-right-width', 'border-bottom-width',
-	'border-left-width', 'border-style', 'background-image', 'text-transform',
-	'text-decoration', 'opacity', 'text-shadow', 'filter', 'backdrop-filter',
+	...COLOR_PROPS,
+	...RADIUS_PROPS,
+	...TYPE_PROPS,
+	'border',
+	'border-top',
+	'border-right',
+	'border-bottom',
+	'border-left',
+	'border-width',
+	'border-top-width',
+	'border-right-width',
+	'border-bottom-width',
+	'border-left-width',
+	'border-style',
+	'background-image',
+	'text-transform',
+	'text-decoration',
+	'opacity',
+	'text-shadow',
+	'filter',
+	'backdrop-filter',
 ]);
 
 const KEYWORD = /^(inherit|initial|unset|revert|revert-layer|none|auto|transparent|currentcolor|normal)$/i;
 const ZERO = /^0([a-z%]*)$/i;
 
 export const usesToken = (value: string): boolean => /var\(\s*--/.test(value);
-export const isLiteralColor = (v: string): boolean => /#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|oklch|lab|color)\(/i.test(v);
+export const isLiteralColor = (v: string): boolean =>
+	/#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|oklch|lab|color)\(/i.test(v);
 export const isLiteralLength = (v: string): boolean =>
 	/(^|\s|,)-?\d*\.?\d+(px|rem|em|%|vh|vw|vmin|vmax|pt|ch)\b/.test(v) || /(^|\s)-?\d+(\s|$)/.test(v);
 export const isLiteralDuration = (v: string): boolean => /^-?\d*\.?\d+m?s$/i.test(v.trim());
@@ -115,7 +170,11 @@ export const isInertValue = (value: string): boolean => {
 };
 
 /** A token-backed prop carrying a raw literal instead of a token reference. */
-export function isHardcodedTokenValue(prop: string, value: string, { allowZero = true }: HardcodedOptions = {}): boolean {
+export function isHardcodedTokenValue(
+	prop: string,
+	value: string,
+	{ allowZero = true }: HardcodedOptions = {},
+): boolean {
 	const v = value.trim();
 	if (usesToken(value) || KEYWORD.test(v)) return false;
 	if (allowZero && v.split(/\s+/).every((part) => ZERO.test(part))) return false;
@@ -156,7 +215,7 @@ export function resolvedSelectors(rule: Rule): string[] {
 		p.type === 'rule' ? (p as Rule) : grandparent?.type === 'rule' ? (grandparent as Rule) : null;
 	if (!ancestor) return own;
 	return resolvedSelectors(ancestor).flatMap((base) =>
-		own.map((s) => (s.includes('&') ? s.replace(/&/g, base) : `${base} ${s}`))
+		own.map((s) => (s.includes('&') ? s.replace(/&/g, base) : `${base} ${s}`)),
 	);
 }
 
@@ -165,7 +224,11 @@ export function resolvedSelectors(rule: Rule): string[] {
  * Component bindings must correlate against this, or a descendant rule
  * attributes its declarations to the ancestor's component.
  */
-export const keySelector = (sel: string): string => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() ?? sel;
+export const keySelector = (sel: string): string =>
+	sel
+		.split(/\s*[>+~]\s*|\s+/)
+		.filter(Boolean)
+		.pop() ?? sel;
 
 export const classesIn = (sel: string): string[] =>
 	[...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
@@ -174,7 +237,12 @@ export const classesIn = (sel: string): string[] =>
 export function ruleIsGrid(rule: Container): boolean {
 	for (const d of ownDecls(rule)) {
 		const p = d.prop.toLowerCase();
-		if ((p === 'display' && /\bgrid\b/.test(d.value)) || p === 'grid' || p.startsWith('grid-template') || p.startsWith('grid-auto'))
+		if (
+			(p === 'display' && /\bgrid\b/.test(d.value)) ||
+			p === 'grid' ||
+			p.startsWith('grid-template') ||
+			p.startsWith('grid-auto')
+		)
 			return true;
 	}
 	return false;
