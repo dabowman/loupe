@@ -692,9 +692,9 @@ inside it.
 
 ```yaml
 - run: |
-    curl -fsSL -o loupe "$LOUPE_BINARY_URL"
-    chmod +x loupe
-    ./loupe check --all --format sarif > loupe.sarif
+    curl -fsSL -O https://github.com/dabowman/loupe/releases/latest/download/loupe-linux-x64
+    chmod +x loupe-linux-x64
+    ./loupe-linux-x64 check --all --format sarif > loupe.sarif
 ```
 
 `--judge` still needs `TYPESAFE_API_KEY` from the environment — no key is
@@ -702,11 +702,23 @@ compiled into the binary, and a run without one refuses rather than falling back
 to anything. In CI that is a secret on the job, exactly as it would be for the
 Node path.
 
-Build it with `npm run build:binary -- --target=linux-x64` and publish it; the
-targets cover glibc and musl Linux on both architectures, macOS on both, and
-Windows. Pick the target to match the image: the plain `linux-x64` build links
-against glibc and will not start on Alpine, and the `-musl` build needs
-`libstdc++` there (`apk add libstdc++`), which Alpine does not carry by default.
+Pick the asset to match the image, because this is the one place it bites: the
+plain `linux-x64` build links against glibc and will not start on Alpine at all,
+and `loupe-linux-x64-musl` needs `libstdc++` there (`apk add libstdc++`), which
+Alpine does not carry. Both failures read as a missing file rather than a
+missing libc. Releases cover glibc and musl Linux on both architectures, macOS
+on both, and Windows.
+
+Pin the version rather than tracking `latest` once a green build matters, and
+check what you downloaded — every release carries `SHA256SUMS`:
+
+```yaml
+- run: |
+    base=https://github.com/dabowman/loupe/releases/download/v0.7.0
+    curl -fsSL -O "$base/loupe-linux-x64" -O "$base/SHA256SUMS"
+    sha256sum --ignore-missing -c SHA256SUMS
+    chmod +x loupe-linux-x64
+```
 
 Verified equivalent, not assumed: the Linux binary and macOS Node produce
 byte-identical reports over Gutenberg's 9,822 files.

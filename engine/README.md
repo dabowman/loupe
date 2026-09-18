@@ -747,8 +747,14 @@ npm run build:binary -- --target=linux-x64
 npm run build:binary:all                  # all seven targets
 ```
 
-Output lands in `binaries/`, which is gitignored: these are 60-100 MB each and
-belong on a release, not in the history. Targets are `linux-x64`,
+Output lands in `binaries/`, which is gitignored: these are 60-110 MB each, 674
+MB for the set, and belong on a release rather than in the history.
+`.github/workflows/release.yml` is what puts them there — push a `v*` tag and it
+runs the engine's own gate first (a tag matches no branch, so `ci.yml` does not
+fire on one), checks the tag against `package.json` and against the version the
+built binary reports, proves the glibc build runs and the musl build runs on
+Alpine, writes `SHA256SUMS`, and attaches the lot. Running it by hand from the
+Actions tab builds and verifies without publishing. Targets are `linux-x64`,
 `linux-arm64`, their `-musl` variants, `darwin-x64`, `darwin-arm64` and
 `windows-x64`, and every one of them cross-compiles from any one machine.
 
