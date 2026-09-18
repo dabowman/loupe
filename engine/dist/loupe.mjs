@@ -18425,7 +18425,7 @@ var require_util = __commonJS({
       return path;
     });
     exports.normalize = normalize2;
-    function join13(aRoot, aPath) {
+    function join14(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -18457,7 +18457,7 @@ var require_util = __commonJS({
       }
       return joined;
     }
-    exports.join = join13;
+    exports.join = join14;
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
@@ -18671,7 +18671,7 @@ var require_util = __commonJS({
             parsed.path = parsed.path.substring(0, index2 + 1);
           }
         }
-        sourceURL = join13(urlGenerate(parsed), sourceURL);
+        sourceURL = join14(urlGenerate(parsed), sourceURL);
       }
       return normalize2(sourceURL);
     }
@@ -20111,8 +20111,8 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync9, readFileSync: readFileSync11, realpathSync: realpathSync2 } = __require("fs");
-    var { dirname: dirname8, isAbsolute: isAbsolute8, join: join13, relative: relative5, sep: sep4 } = __require("path");
+    var { existsSync: existsSync9, readFileSync: readFileSync12, realpathSync: realpathSync2 } = __require("fs");
+    var { dirname: dirname8, isAbsolute: isAbsolute8, join: join14, relative: relative5, sep: sep4 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -20193,7 +20193,7 @@ var require_previous_map = __commonJS({
         this.root = dirname8(path);
         if (existsSync9(path)) {
           this.mapFile = path;
-          return readFileSync11(path, "utf-8").toString().trim();
+          return readFileSync12(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join13(dirname8(file), map);
+          if (file) map = join14(dirname8(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -23494,8 +23494,8 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync8, readFileSync as readFileSync10, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute7, join as join12, relative as relative4, resolve as resolve6 } from "node:path";
+import { existsSync as existsSync8, readFileSync as readFileSync11, writeFileSync as writeFileSync4 } from "node:fs";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute7, join as join13, relative as relative4, resolve as resolve6 } from "node:path";
 import { fileURLToPath as fileURLToPath5 } from "node:url";
 
 // src/analyze.ts
@@ -25821,16 +25821,12 @@ function applyKeeps(root2, findings, keyword, { dry = false } = {}) {
 }
 
 // src/judge.ts
-import { readFileSync as readFileSync4 } from "node:fs";
-import { dirname as dirname2, join as join5 } from "node:path";
+import { readFileSync as readFileSync5 } from "node:fs";
+import { dirname as dirname2, join as join6 } from "node:path";
 import { fileURLToPath } from "node:url";
-var ENDPOINT = "https://api.typesafe.ai/v1/systemone";
-var FLOOR = 0.5;
-var CONCURRENCY = 6;
-var RETRIES = 4;
-var BATCH = {
-  // As shipped when this judgement was written.
-  variants: 40,
+
+// src/judge/force.ts
+var forceQuery = (force) => ({
   // Measured, one run over the eval's 100 controls — destination recall is the
   // column that decides it, because every redirect in the abstract language
   // fires on that class:
@@ -25844,18 +25840,89 @@ var BATCH = {
   //
   // Sharing a state with 39 other controls costs nearly a third of the
   // destinations. A control is a few lines, so one request each is cheap; the
-  // pool below is what keeps it quick. Every force is asked this way until its
-  // own eval says otherwise: this table is `represents`, not forces in general.
-  forces: 1
+  // pool in `ask` is what keeps it quick. Every force is asked this way until
+  // its own eval says otherwise: this table is `represents`, not forces in
+  // general.
+  size: 1,
+  element: (c) => ({ file: c.file, component: c.component, enclosing_component: c.enclosing, source: c.source }),
+  question: (_c, i) => ({
+    type: "choice",
+    instructions: `\`elements[${i}].source\` is one interactive control taken from a React user interface. ${force.question}`,
+    criteria: force.criteria
+  })
+});
+
+// src/judge/value.ts
+var KEEP_CRITERION = "None of these. The hardcoded value is a deliberate one-off the design system has no token for \u2014 a brand or illustration colour, an overlay or scrim, a size locked to something outside the system \u2014 and should stay as written.";
+var TIER = {
+  exact: "Several tokens carry exactly this value; they differ in the role they are for.",
+  near: "No token carries exactly this value; these are the steps of the scale either side of it.",
+  end: "No token carries this value, and it is past the end of the scale; this is the nearest step.",
+  family: "No token carries exactly this value; these are all the tokens for this property."
 };
-async function ask(items, elementOf, questionOf, apiKey, fetchImpl, size) {
+var valueQuery = (about) => ({
+  // One per request, as forces are asked, until this has its own batch sweep.
+  size: 1,
+  element: ({ file, context_before, source }) => ({ file, context_before, source }),
+  question: ({ prop, value, part, candidates }, i) => ({
+    type: "choice",
+    instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use${candidates.keep ? " \u2014 or is the value a deliberate choice the system has no token for" : ""}?`,
+    criteria: {
+      ...Object.fromEntries(candidates.options.map(([n, v]) => [n, about.has(n) ? `${v} \u2014 ${about.get(n) ?? ""}` : v])),
+      ...candidates.keep ? { [KEEP]: KEEP_CRITERION } : {}
+    }
+  })
+});
+
+// src/judge/variant.ts
+import { readFileSync as readFileSync4 } from "node:fs";
+import { join as join5 } from "node:path";
+var notKey = (e) => `not_${e.name.toLowerCase()}`;
+var variantQuery = (root2) => ({
+  // One per request, as forces are: `represents` lost a third of its
+  // destinations sharing a state 40 ways, and this has no eval of its own to
+  // say it fares better. Each question needs only its own element, so the
+  // tokens are about the same either way.
+  size: 1,
+  element: ({ f }) => {
+    const lines = readFileSync4(join5(root2, f.file), "utf8").split("\n");
+    const i = f.line - 1;
+    return {
+      file: f.file,
+      // The flagged element opens on the first line of `source`; the lines
+      // before it are its parent, which is often what decides the role.
+      context_before: lines.slice(Math.max(0, i - 5), i).join("\n"),
+      source: lines.slice(i, i + 10).join("\n")
+    };
+  },
+  question: ({ f, target }, i) => ({
+    type: "choice",
+    instructions: `The ${f.code ?? "element"} on the first line of \`elements[${i}].source\` is flagged to be replaced by the design system's ${target.name} component. Which ${target.name} variant matches the role this element plays in its interface?`,
+    // The option name is sent to the model too, so it says what it means:
+    // `none` scored the same elements 0.3 lower than `not_text`. Wording
+    // that forced a decision ("holds no text of its own") cleared the
+    // floor more often and called real text `not_text` doing it.
+    criteria: {
+      ...target.variants,
+      [notKey(target)]: `The element is not a run of content ${target.name} renders \u2014 a wrapper around controls, an icon holder or colour swatch, a layout box \u2014 so no ${target.name} variant applies.`
+    }
+  })
+});
+
+// src/judge.ts
+var ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+var MODEL = "jev-1.13.0";
+var FLOOR = 0.5;
+var CONCURRENCY = 6;
+var RETRIES = 4;
+async function ask(query, items, apiKey, fetchImpl = fetch, size = query.size) {
   const batches = [];
   for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
   const sendBatch = async (batch) => {
     const body2 = JSON.stringify({
-      model: "jev-latest",
-      state: { elements: batch.map(elementOf) },
-      questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, questionOf(item, i)]))
+      model: MODEL,
+      state: { elements: batch.map(query.element) },
+      questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)]))
     });
     for (let attempt = 0; ; attempt++) {
       const res = await fetchImpl(ENDPOINT, {
@@ -25869,7 +25936,8 @@ async function ask(items, elementOf, questionOf, apiKey, fetchImpl, size) {
       }
       const transient = res.status === 429 || res.status >= 500;
       if (!transient || attempt >= RETRIES) throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+      const after = Number(res.headers.get("retry-after"));
+      await new Promise((r) => setTimeout(r, after > 0 ? after * 1e3 : 500 * 2 ** attempt));
     }
   };
   const done = new Array(batches.length);
@@ -25885,7 +25953,6 @@ async function ask(items, elementOf, questionOf, apiKey, fetchImpl, size) {
   return done.flat();
 }
 var judgedTail = (confidence2) => `(judged ${confidence2.toFixed(2)})`;
-var notKey = (e) => `not_${e.name.toLowerCase()}`;
 function targetOf(f, withVariants) {
   if (f.rule !== "system/raw-element") return void 0;
   const analog = f.message.split("\u2192")[1] ?? "";
@@ -25897,35 +25964,7 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
     const target = targetOf(f, withVariants);
     return target ? [{ f, target }] : [];
   });
-  const answers = await ask(
-    jobs,
-    ({ f }) => {
-      const lines = readFileSync4(join5(root2, f.file), "utf8").split("\n");
-      const i = f.line - 1;
-      return {
-        file: f.file,
-        // The flagged element opens on the first line of `source`; the lines
-        // before it are its parent, which is often what decides the role.
-        context_before: lines.slice(Math.max(0, i - 5), i).join("\n"),
-        source: lines.slice(i, i + 10).join("\n")
-      };
-    },
-    ({ f, target }, i) => ({
-      type: "choice",
-      instructions: `The ${f.code ?? "element"} on the first line of \`elements[${i}].source\` is flagged to be replaced by the design system's ${target.name} component. Which ${target.name} variant matches the role this element plays in its interface?`,
-      // The option name is sent to the model too, so it says what it means:
-      // `none` scored the same elements 0.3 lower than `not_text`. Wording
-      // that forced a decision ("holds no text of its own") cleared the
-      // floor more often and called real text `not_text` doing it.
-      criteria: {
-        ...target.variants,
-        [notKey(target)]: `The element is not a run of content ${target.name} renders \u2014 a wrapper around controls, an icon holder or colour swatch, a layout box \u2014 so no ${target.name} variant applies.`
-      }
-    }),
-    apiKey,
-    fetchImpl,
-    BATCH.variants
-  );
+  const answers = await ask(variantQuery(root2), jobs, apiKey, fetchImpl);
   let annotated = 0;
   jobs.forEach(({ f, target }, i) => {
     const a = answers[i];
@@ -25944,22 +25983,8 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
   });
   return annotated;
 }
-var LANGUAGE = join5(dirname2(fileURLToPath(import.meta.url)), "..", "..", "patterns", "index.json");
-var loadLanguage = (path = LANGUAGE) => JSON.parse(readFileSync4(path, "utf8"));
-async function judgeForce(force, controls, apiKey, fetchImpl = fetch, size = BATCH.forces) {
-  return ask(
-    controls,
-    (c) => ({ file: c.file, component: c.component, enclosing_component: c.enclosing, source: c.source }),
-    (_c, i) => ({
-      type: "choice",
-      instructions: `\`elements[${i}].source\` is one interactive control taken from a React user interface. ${force.question}`,
-      criteria: force.criteria
-    }),
-    apiKey,
-    fetchImpl,
-    size
-  );
-}
+var LANGUAGE = join6(dirname2(fileURLToPath(import.meta.url)), "..", "..", "patterns", "index.json");
+var loadLanguage = (path = LANGUAGE) => JSON.parse(readFileSync5(path, "utf8"));
 var REDIRECT_FLOOR = 0.9;
 async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch, language = loadLanguage()) {
   const byId = new Map(language.patterns.map((p) => [p.id, p]));
@@ -25971,7 +25996,7 @@ async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch, lan
     if (!force.judge) continue;
     const asked = controls.flatMap((c, i) => tableOf(c).some((r) => r.when && name in r.when) ? [i] : []);
     if (!asked.length) continue;
-    const answers = await judgeForce(force.judge, asked.map((i) => controls[i]), apiKey, fetchImpl);
+    const answers = await ask(forceQuery(force.judge), asked.map((i) => controls[i]), apiKey, fetchImpl);
     asked.forEach((ci, k) => {
       const a = answers[k];
       if (!a || a.confidence < REDIRECT_FLOOR) return;
@@ -26001,36 +26026,12 @@ async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch, lan
     ];
   });
 }
-var KEEP_CRITERION = "None of these. The hardcoded value is a deliberate one-off the design system has no token for \u2014 a brand or illustration colour, an overlay or scrim, a size locked to something outside the system \u2014 and should stay as written.";
-var TIER = {
-  exact: "Several tokens carry exactly this value; they differ in the role they are for.",
-  near: "No token carries exactly this value; these are the steps of the scale either side of it.",
-  end: "No token carries this value, and it is past the end of the scale; this is the nearest step.",
-  family: "No token carries exactly this value; these are all the tokens for this property."
-};
-async function judgeLiterals(items, apiKey, fetchImpl = fetch, about = /* @__PURE__ */ new Map()) {
-  return ask(
-    items,
-    ({ file, context_before, source }) => ({ file, context_before, source }),
-    ({ prop, value, part, candidates }, i) => ({
-      type: "choice",
-      instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use${candidates.keep ? " \u2014 or is the value a deliberate choice the system has no token for" : ""}?`,
-      criteria: {
-        ...Object.fromEntries(candidates.options.map(([n, v]) => [n, about.has(n) ? `${v} \u2014 ${about.get(n) ?? ""}` : v])),
-        ...candidates.keep ? { [KEEP]: KEEP_CRITERION } : {}
-      }
-    }),
-    apiKey,
-    fetchImpl,
-    BATCH.forces
-  );
-}
 function tokenDescriptions(profiles) {
   const out = /* @__PURE__ */ new Map();
   for (const p of profiles) {
     if (!p.tokenDescriptions) continue;
     try {
-      const raw = JSON.parse(readFileSync4(p.tokenDescriptions, "utf8"));
+      const raw = JSON.parse(readFileSync5(p.tokenDescriptions, "utf8"));
       for (const [name, text] of Object.entries(raw)) if (!name.startsWith("$") && typeof text === "string") out.set(name, text);
     } catch {
     }
@@ -26053,7 +26054,7 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
   const linesOf = (file) => {
     const cached = files.get(file);
     if (cached) return cached;
-    const lines = readFileSync4(join5(root2, file), "utf8").split("\n");
+    const lines = readFileSync5(join6(root2, file), "utf8").split("\n");
     files.set(file, lines);
     return lines;
   };
@@ -26090,7 +26091,7 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
       ];
     })
   );
-  const answers = await judgeLiterals(asked, apiKey, fetchImpl, about);
+  const answers = await ask(valueQuery(about), asked, apiKey, fetchImpl);
   const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
   for (const { f, parts, slots } of plans) {
     const got = slots.map((s) => "token" in s ? { choice: s.token, confidence: 1 } : answerOf.get(s));
@@ -26123,13 +26124,13 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
 }
 
 // src/baseline.ts
-import { existsSync as existsSync3, readFileSync as readFileSync5, writeFileSync as writeFileSync2 } from "node:fs";
-import { dirname as dirname3, isAbsolute as isAbsolute3, join as join7, resolve as resolve3 } from "node:path";
+import { existsSync as existsSync3, readFileSync as readFileSync6, writeFileSync as writeFileSync2 } from "node:fs";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join8, resolve as resolve3 } from "node:path";
 
 // src/paths.ts
 import { createHash } from "node:crypto";
 import { existsSync as existsSync2, mkdirSync } from "node:fs";
-import { isAbsolute as isAbsolute2, join as join6, resolve as resolve2 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join7, resolve as resolve2 } from "node:path";
 var pluginDataDir = () => process.env.CLAUDE_PLUGIN_DATA ?? null;
 var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
 function projectKey(root2) {
@@ -26148,9 +26149,9 @@ function ensureDir(dir) {
 }
 function stateDir(root2, { create = false } = {}) {
   const data = pluginDataDir();
-  const project = join6(root2, ".loupe");
+  const project = join7(root2, ".loupe");
   if (data) {
-    const dir = join6(data, "projects", projectKey(root2));
+    const dir = join7(data, "projects", projectKey(root2));
     if (create) {
       const made2 = ensureDir(dir);
       if (made2) return { dir: made2, scope: "plugin-data" };
@@ -26165,13 +26166,13 @@ function stateDir(root2, { create = false } = {}) {
 var DEFAULT_BASELINE = ".loupe-baseline.json";
 function baselinePath(root2, named) {
   const p = named || DEFAULT_BASELINE;
-  return isAbsolute2(p) ? p : join6(root2, p);
+  return isAbsolute2(p) ? p : join7(root2, p);
 }
 function legacyBaselines(root2) {
   const data = pluginDataDir();
   return [
-    join6(root2, ".loupe", "baseline.json"),
-    ...data ? [join6(data, "projects", projectKey(root2), "baseline.json")] : []
+    join7(root2, ".loupe", "baseline.json"),
+    ...data ? [join7(data, "projects", projectKey(root2), "baseline.json")] : []
   ];
 }
 function findExistingBaseline(root2, explicit, configured) {
@@ -26181,7 +26182,7 @@ function findExistingBaseline(root2, explicit, configured) {
   }
   const target = baselinePath(root2, configured);
   if (existsSync2(target)) return { path: target, found: true, fallback: "none" };
-  const byDefaultName = join6(root2, DEFAULT_BASELINE);
+  const byDefaultName = join7(root2, DEFAULT_BASELINE);
   if (byDefaultName !== target && existsSync2(byDefaultName))
     return { path: byDefaultName, found: true, fallback: "default-name" };
   for (const path of legacyBaselines(root2))
@@ -26190,16 +26191,16 @@ function findExistingBaseline(root2, explicit, configured) {
 }
 function attemptsPath(root2, create = false) {
   const { dir } = stateDir(root2, { create });
-  return dir ? join6(dir, "attempts.json") : null;
+  return dir ? join7(dir, "attempts.json") : null;
 }
 
 // src/baseline.ts
-var resolvePath = (root2, p) => isAbsolute3(p) ? p : join7(root2, p);
+var resolvePath = (root2, p) => isAbsolute3(p) ? p : join8(root2, p);
 function readBaseline(root2, path) {
   const full = resolvePath(root2, path);
   if (!existsSync3(full)) return null;
   try {
-    const parsed = JSON.parse(readFileSync5(full, "utf8"));
+    const parsed = JSON.parse(readFileSync6(full, "utf8"));
     if (!Array.isArray(parsed.entries)) return null;
     const entries = parsed.entries;
     return {
@@ -26254,8 +26255,8 @@ function applyBaseline(result, baseline) {
 }
 
 // src/config.ts
-import { existsSync as existsSync4, readFileSync as readFileSync6, readdirSync as readdirSync3 } from "node:fs";
-import { dirname as dirname4, isAbsolute as isAbsolute4, join as join8, resolve as resolve4 } from "node:path";
+import { existsSync as existsSync4, readFileSync as readFileSync7, readdirSync as readdirSync3 } from "node:fs";
+import { dirname as dirname4, isAbsolute as isAbsolute4, join as join9, resolve as resolve4 } from "node:path";
 import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
 
 // src/registry.ts
@@ -26284,7 +26285,7 @@ function loadComponents(raw) {
 
 // src/config.ts
 var HERE = dirname4(fileURLToPath2(import.meta.url));
-var PRESET_DIR = join8(HERE, "..", "presets");
+var PRESET_DIR = join9(HERE, "..", "presets");
 var CONFIG_NAMES = [
   "loupe.config.mjs",
   "loupe.config.js",
@@ -26343,13 +26344,13 @@ function findConfig(start) {
   let dir = resolve4(start);
   for (; ; ) {
     for (const name of CONFIG_NAMES) {
-      const p = join8(dir, name);
+      const p = join9(dir, name);
       if (existsSync4(p)) return p;
     }
-    const pkg = join8(dir, "package.json");
+    const pkg = join9(dir, "package.json");
     if (existsSync4(pkg)) {
       try {
-        const parsed = JSON.parse(readFileSync6(pkg, "utf8"));
+        const parsed = JSON.parse(readFileSync7(pkg, "utf8"));
         if (isObj(parsed) && parsed["loupe"]) return pkg;
       } catch {
       }
@@ -26361,17 +26362,17 @@ function findConfig(start) {
 }
 async function readConfigFile(path) {
   if (path.endsWith(".json")) {
-    const parsed = JSON.parse(readFileSync6(path, "utf8"));
+    const parsed = JSON.parse(readFileSync7(path, "utf8"));
     return path.endsWith("package.json") ? parsed.loupe : parsed;
   }
   const mod = await import(pathToFileURL(path).href);
   return mod.default ?? mod;
 }
-var presetPath = (spec) => join8(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, "")}.json`);
+var presetPath = (spec) => join9(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, "")}.json`);
 async function resolveExtends(spec, fromDir) {
   const asPreset = presetPath(spec);
   if (existsSync4(asPreset)) return { path: asPreset, dir: PRESET_DIR };
-  const asPath = isAbsolute4(spec) ? spec : join8(fromDir, spec);
+  const asPath = isAbsolute4(spec) ? spec : join9(fromDir, spec);
   if (existsSync4(asPath)) return { path: asPath, dir: dirname4(asPath) };
   throw new Error(`cannot resolve extends: ${spec}`);
 }
@@ -26408,7 +26409,7 @@ function shippedVocabulary() {
     for (const f of readdirSync3(PRESET_DIR)) {
       if (!f.endsWith(".json")) continue;
       try {
-        const raw = JSON.parse(readFileSync6(join8(PRESET_DIR, f), "utf8"));
+        const raw = JSON.parse(readFileSync7(join9(PRESET_DIR, f), "utf8"));
         const supp = isObj(raw) ? raw["suppression"] : void 0;
         if (!isObj(supp)) continue;
         const kw = supp["keyword"];
@@ -26435,9 +26436,9 @@ function normalize(raw, { root: root2 }) {
   let patterns = [];
   if (Array.isArray(cfg.patterns)) patterns = loadPatterns(cfg.patterns);
   else if (typeof cfg.patterns === "string") {
-    const p = isAbsolute4(cfg.patterns) ? cfg.patterns : join8(root2, cfg.patterns);
+    const p = isAbsolute4(cfg.patterns) ? cfg.patterns : join9(root2, cfg.patterns);
     try {
-      const raw2 = JSON.parse(readFileSync6(p, "utf8"));
+      const raw2 = JSON.parse(readFileSync7(p, "utf8"));
       patterns = registryApplies(raw2, ds.packages) ? loadPatterns(raw2) : [];
     } catch {
       patterns = [];
@@ -26446,9 +26447,9 @@ function normalize(raw, { root: root2 }) {
   let componentRegistry = /* @__PURE__ */ new Map();
   if (Array.isArray(cfg.componentRegistry)) componentRegistry = loadComponents(cfg.componentRegistry);
   else if (typeof cfg.componentRegistry === "string") {
-    const p = isAbsolute4(cfg.componentRegistry) ? cfg.componentRegistry : join8(root2, cfg.componentRegistry);
+    const p = isAbsolute4(cfg.componentRegistry) ? cfg.componentRegistry : join9(root2, cfg.componentRegistry);
     try {
-      const raw2 = JSON.parse(readFileSync6(p, "utf8"));
+      const raw2 = JSON.parse(readFileSync7(p, "utf8"));
       componentRegistry = registryApplies(raw2, ds.packages) ? loadComponents(raw2) : /* @__PURE__ */ new Map();
     } catch {
       componentRegistry = /* @__PURE__ */ new Map();
@@ -26583,7 +26584,7 @@ async function loadConfig({
     source = { kind: "file", path: resolve4(configPath) };
   } else if (preset2) {
     if (!presetExists(preset2)) throw new Error(`unknown preset: ${preset2}`);
-    raw = await loadChain(join8(PRESET_DIR, `${preset2}.json`));
+    raw = await loadChain(join9(PRESET_DIR, `${preset2}.json`));
     source = { kind: "preset", name: preset2 };
   } else {
     const found = findConfig(root2);
@@ -26594,7 +26595,7 @@ async function loadConfig({
       raw = await expandExtends(inline, root2);
       source = { kind: inferred ? "inferred" : "inline" };
     } else {
-      raw = await loadChain(join8(PRESET_DIR, "generic.json"));
+      raw = await loadChain(join9(PRESET_DIR, "generic.json"));
       source = { kind: "preset", name: "generic" };
     }
   }
@@ -27318,26 +27319,26 @@ ${body(payload, clean, result.diagnostics.parseErrors.length)}
 }
 
 // src/detect.ts
-import { existsSync as existsSync5, readFileSync as readFileSync7, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
-import { dirname as dirname5, join as join9 } from "node:path";
+import { existsSync as existsSync5, readFileSync as readFileSync8, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
+import { dirname as dirname5, join as join10 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var HERE2 = dirname5(fileURLToPath3(import.meta.url));
-var PRESET_DIR2 = join9(HERE2, "..", "presets");
+var PRESET_DIR2 = join10(HERE2, "..", "presets");
 var readJson = (p) => {
   try {
-    return JSON.parse(readFileSync7(p, "utf8"));
+    return JSON.parse(readFileSync8(p, "utf8"));
   } catch {
     return null;
   }
 };
-var preset = (name) => readJson(join9(PRESET_DIR2, `${name}.json`)) ?? {};
+var preset = (name) => readJson(join10(PRESET_DIR2, `${name}.json`)) ?? {};
 var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", ".git", "vendor", "build", "dist", ".claude"]);
 var DETECT_ENTRY_BUDGET = 5e4;
 function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
   const walk = (dir, rel, depth) => {
     if (depth > maxDepth || out.length >= budget) return;
-    const pkg = join9(dir, "package.json");
+    const pkg = join10(dir, "package.json");
     if (existsSync5(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
     let entries;
@@ -27348,7 +27349,7 @@ function manifests(root2, maxDepth = 3, budget = 60) {
     }
     for (const e of entries) {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walk(join9(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      walk(join10(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(root2, "", 0);
@@ -27363,7 +27364,7 @@ function presetNames() {
 }
 function markerAt(dir, marker) {
   const name = marker.replace(/\/$/, "");
-  const full = join9(dir, name);
+  const full = join10(dir, name);
   if (!existsSync5(full)) return false;
   if (!marker.endsWith("/")) return true;
   try {
@@ -27382,7 +27383,7 @@ function probeDirs(root2) {
   }
   for (const e of entries) {
     if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-    out.push({ dir: join9(root2, e.name), rel: e.name });
+    out.push({ dir: join10(root2, e.name), rel: e.name });
   }
   return out;
 }
@@ -27390,7 +27391,7 @@ var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? det
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson(join9(root2, rel, "package.json")) ?? {};
+      const pkg = readJson(join10(root2, rel, "package.json")) ?? {};
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
       const first = hit[0];
@@ -27461,7 +27462,7 @@ function libraryPrefixes(dirs, candidates) {
     }
     for (const e of entries) {
       if (budget <= 0 || !want.size) return;
-      const full = join9(dir, e.name);
+      const full = join10(dir, e.name);
       if (e.isDirectory()) {
         if (e.name === ".bin" || e.name === "node_modules") continue;
         walk(full, depth + 1);
@@ -27469,7 +27470,7 @@ function libraryPrefixes(dirs, candidates) {
         budget--;
         let text;
         try {
-          text = readFileSync7(full, "utf8");
+          text = readFileSync8(full, "utf8");
         } catch {
           continue;
         }
@@ -27530,7 +27531,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   for (const { abs } of files.styles) {
     let text;
     try {
-      text = readFileSync7(abs, "utf8");
+      text = readFileSync8(abs, "utf8");
     } catch {
       continue;
     }
@@ -27546,14 +27547,14 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync7(abs, "utf8"));
+      markupText.push(readFileSync8(abs, "utf8"));
     } catch {
     }
   }
   const haystack = markupText.join("\n");
   const candidates = [...cssCounts.entries()].filter(([prefix, count]) => count >= 3 && haystack.includes(prefix)).sort((a, b) => b[1] - a[1]);
   const vendored = libraryPrefixes(
-    [join9(root2, "node_modules"), ...packageDir ? [join9(root2, packageDir, "node_modules")] : []],
+    [join10(root2, "node_modules"), ...packageDir ? [join10(root2, packageDir, "node_modules")] : []],
     candidates.map(([p]) => p)
   );
   const accepted = [];
@@ -27606,10 +27607,10 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/profiles.ts
-import { existsSync as existsSync6, readFileSync as readFileSync8, readdirSync as readdirSync5 } from "node:fs";
-import { isAbsolute as isAbsolute5, join as join10, resolve as resolve5 } from "node:path";
-var readJson2 = (p) => JSON.parse(readFileSync8(p, "utf8"));
-var under = (dir, rel) => isAbsolute5(rel) ? rel : join10(dir, rel);
+import { existsSync as existsSync6, readFileSync as readFileSync9, readdirSync as readdirSync5 } from "node:fs";
+import { isAbsolute as isAbsolute5, join as join11, resolve as resolve5 } from "node:path";
+var readJson2 = (p) => JSON.parse(readFileSync9(p, "utf8"));
+var under = (dir, rel) => isAbsolute5(rel) ? rel : join11(dir, rel);
 var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString = (v) => typeof v === "string" && v !== "" ? v : null;
 var byBytes = (a, b) => a < b ? -1 : a > b ? 1 : 0;
@@ -27625,8 +27626,8 @@ function readProfiles(root2) {
   const seen = /* @__PURE__ */ new Set();
   for (const e of [...entries].sort((a, b) => byBytes(a.name, b.name))) {
     if (!e.isDirectory()) continue;
-    const dir = join10(root2, e.name);
-    const manifest = join10(dir, "profile.json");
+    const dir = join11(root2, e.name);
+    const manifest = join11(dir, "profile.json");
     if (!existsSync6(manifest)) continue;
     try {
       const raw = readJson2(manifest);
@@ -27754,8 +27755,8 @@ function applyRegistries(config, sources, {
 }
 
 // src/hook.ts
-import { existsSync as existsSync7, readFileSync as readFileSync9, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute6, join as join11, relative as relative3, sep as sep3 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync10, writeFileSync as writeFileSync3 } from "node:fs";
+import { dirname as dirname6, isAbsolute as isAbsolute6, join as join12, relative as relative3, sep as sep3 } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
@@ -27769,7 +27770,7 @@ function readState(root2) {
   try {
     const p = attemptsPath(root2);
     if (!p) return { sessions: {} };
-    const raw = JSON.parse(readFileSync9(p, "utf8"));
+    const raw = JSON.parse(readFileSync10(p, "utf8"));
     const now = Date.now();
     const sessions = {};
     for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -27812,7 +27813,7 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path ?? payload?.tool_input?.filePath;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute6(raw) ? raw : join11(root2, raw);
+  const abs = isAbsolute6(raw) ? raw : join12(root2, raw);
   const rel = relative3(root2, abs);
   if (!rel || rel.startsWith("..")) return null;
   return rel.split(sep3).join("/");
@@ -27864,7 +27865,7 @@ function resolvedOptions() {
   if (!name) return { options: fromEnv, source: "none" };
   for (const file of ["settings.local.json", "settings.json"]) {
     try {
-      const raw = JSON.parse(readFileSync9(join11(homedir(), ".claude", file), "utf8"));
+      const raw = JSON.parse(readFileSync10(join12(homedir(), ".claude", file), "utf8"));
       const configs = raw.pluginConfigs ?? {};
       const key2 = Object.keys(configs).find((k) => k === name || k.startsWith(`${name}@`));
       const opts = key2 === void 0 ? void 0 : configs[key2]?.options;
@@ -27877,12 +27878,12 @@ function resolvedOptions() {
 function pluginName() {
   const roots = [
     process.env.CLAUDE_PLUGIN_ROOT,
-    join11(dirname6(fileURLToPath4(import.meta.url)), "..", "..")
+    join12(dirname6(fileURLToPath4(import.meta.url)), "..", "..")
   ].filter((r) => Boolean(r));
   for (const root2 of roots) {
     try {
       const manifest = JSON.parse(
-        readFileSync9(join11(root2, ".claude-plugin", "plugin.json"), "utf8")
+        readFileSync10(join12(root2, ".claude-plugin", "plugin.json"), "utf8")
       );
       return manifest.name ?? null;
     } catch {
@@ -27921,7 +27922,7 @@ var EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 var messageOf4 = (err) => err instanceof Error ? err.message : String(err);
 function judgeKey() {
   try {
-    if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join12(HERE3, "..", "..", ".env"));
+    if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join13(HERE3, "..", "..", ".env"));
   } catch {
   }
   return process.env.TYPESAFE_API_KEY;
@@ -27938,7 +27939,7 @@ var HERE3 = dirname7(fileURLToPath5(import.meta.url));
 function versionLine() {
   let version = "unknown";
   try {
-    version = JSON.parse(readFileSync10(join12(HERE3, "..", "package.json"), "utf8")).version ?? version;
+    version = JSON.parse(readFileSync11(join13(HERE3, "..", "package.json"), "utf8")).version ?? version;
   } catch {
   }
   const entry = basename(HERE3) === "src" ? "source" : "bundle";
@@ -28045,7 +28046,7 @@ var needsProject = (command, args, isHook) => {
   if (args.flags.all || args.flags.files) return false;
   return isHook || Boolean(args.flags.changed) && SCOPED_COMMANDS.has(command);
 };
-var looksLikeProject = (root2) => existsSync8(join12(root2, "package.json")) || existsSync8(join12(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
+var looksLikeProject = (root2) => existsSync8(join13(root2, "package.json")) || existsSync8(join13(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
 var CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString("en-US")}-entry ceiling`;
 var CEILING_WHY = "this root is larger than a project, so the namespaces are a guess from the part of it that was read";
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
@@ -28321,7 +28322,7 @@ async function main() {
 `);
       return EXIT.OK;
     }
-    const target = join12(root2, "loupe.config.json");
+    const target = join13(root2, "loupe.config.json");
     if (info.truncated && !args.flags.force) {
       fail(
         "loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. Point --root at the project, or pass --force to write it anyway.\n"
@@ -28372,7 +28373,7 @@ ${green(`Wrote ${target}`)}
     }
     const key2 = args.flags.judge ? judgeKey() : void 0;
     if (args.flags.judge && !key2) {
-      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join12(HERE3, "..", "..", ".env")}
+      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join13(HERE3, "..", "..", ".env")}
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -28426,7 +28427,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
   const checkKey = args.flags.judge && !isHook ? judgeKey() : void 0;
   if (args.flags.judge && !isHook) {
     if (!checkKey) {
-      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join12(HERE3, "..", "..", ".env")}
+      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join13(HERE3, "..", "..", ".env")}
 `);
       return EXIT.CANNOT_RUN;
     }

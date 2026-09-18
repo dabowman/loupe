@@ -15,7 +15,8 @@ import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
-import { judgeForce, judgeRedirects, judgeVariants, loadLanguage } from '../src/judge.ts';
+import { ask, judgeRedirects, judgeVariants, loadLanguage } from '../src/judge.ts';
+import { forceQuery } from '../src/judge/force.ts';
 import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, ComponentEntry, Finding, Pattern, PatternNode, RuleId } from '../src/types.ts';
 
@@ -1066,21 +1067,23 @@ await check('--judge asks only about analogs with variants, and writes only what
 			message: '<h3> \u2192 Text (@wordpress/ui) with variant="heading-*" and render for the semantic element',
 		};
 		const findings = [at(1, 'Text'), at(2, 'Text'), at(3, 'Text'), at(4, 'Stack'), forwarded].map((f): Finding => ({ ...f }));
-		const replies = [
-			{ choice: 'body-sm', confidence: 0.8 },
-			{ choice: 'not_text', confidence: 0.99 },
-			{ choice: 'body-sm', confidence: 0.3 },
-			{ choice: 'heading-lg', confidence: 0.58 },
-		];
-		let asked: Record<string, { criteria: Record<string, string> }> = {};
+		// Keyed by the element's own line: one request per element, in any order.
+		const replies: Record<string, { choice: string; confidence: number }> = {
+			'<p className="description">Help</p>': { choice: 'body-sm', confidence: 0.8 },
+			'<span style={{ background: c }} />': { choice: 'not_text', confidence: 0.99 },
+			'<p>Hi</p>': { choice: 'body-sm', confidence: 0.3 },
+			'<h3>Build</h3>': { choice: 'heading-lg', confidence: 0.58 },
+		};
+		const asked: { criteria: Record<string, string> }[] = [];
 		const stub = (async (_url: string, init: { body: string }) => {
-			asked = JSON.parse(init.body).questions;
-			const answers = Object.fromEntries(Object.keys(asked).map((k, i) => [k, replies[i]]));
+			const body = JSON.parse(init.body);
+			asked.push(...Object.values(body.questions as Record<string, { criteria: Record<string, string> }>));
+			const answers = { e0: replies[body.state.elements[0].source.split('\n')[0]] };
 			return new Response(JSON.stringify({ answers }));
 		}) as unknown as typeof fetch;
 		const n = await judgeVariants(root, findings, registry, 'key', stub);
-		assert(Object.keys(asked).length === 4, `asked about ${Object.keys(asked).length} elements, expected the 4 Text ones`);
-		assert('not_text' in (asked.e0?.criteria ?? {}), 'no no-match option offered');
+		assert(asked.length === 4, `asked about ${asked.length} elements, expected the 4 Text ones`);
+		assert('not_text' in (asked[0]?.criteria ?? {}), 'no no-match option offered');
 		assert(n === 3, `wrote ${n}, expected 3`);
 		// The answer goes into the suggestion, not after it.
 		assert(findings[0]?.message === '<p> \u2192 <Text variant="body-sm"> (judged 0.80)', findings[0]?.message ?? '');
@@ -1109,7 +1112,7 @@ assert(represents, 'patterns/index.json gives `represents` no judge block');
 // The wording is scored live by evals/represents; what is pinned here is the
 // wiring, which is what silently breaks: the batch boundary, the elements[i]
 // reference the instructions depend on, and the order answers come back in.
-await check('judgeForce sends one control per request, and keeps answers in order when batched', async () => {
+await check('the force query sends one control per request, and keeps answers in order when batched', async () => {
 	const controls = Array.from({ length: 41 }, (_, i) => ({
 		file: `src/C${i}.jsx`,
 		component: 'Button',
@@ -1131,7 +1134,7 @@ await check('judgeForce sends one control per request, and keeps answers in orde
 	// The default is one control per request: sharing a state costs a third of
 	// the destinations, which evals/represents measures. A batch default that
 	// drifts back up would pass every other check in here.
-	await judgeForce(represents, controls.slice(0, 3), 'key', stub);
+	await ask(forceQuery(represents), controls.slice(0, 3), 'key', stub);
 	assert(sent.length === 3, `default batched ${3 / sent.length} controls per request, expected 1`);
 	assert(sent[0]?.elements.length === 1, 'default put more than one element in a request');
 	for (const k of ['value', 'command', 'destination', 'none'])
@@ -1139,7 +1142,7 @@ await check('judgeForce sends one control per request, and keeps answers in orde
 
 	// Batched, the pool may finish requests in any order; the answers may not.
 	sent.length = 0;
-	const answers = await judgeForce(represents, controls, 'key', stub, 40);
+	const answers = await ask(forceQuery(represents), controls, 'key', stub, 40);
 	assert(sent.length === 2, `sent ${sent.length} requests for 41 controls at batch 40`);
 	const sizes = sent.map((r) => r.elements.length).sort((a, b) => b - a);
 	assert(sizes[0] === 40 && sizes[1] === 1, `batch sizes were ${sizes.join(',')}, expected 40,1`);
@@ -1151,6 +1154,19 @@ await check('judgeForce sends one control per request, and keeps answers in orde
 	assert(answers[7]?.confidence === 0.07, `answer 7 was ${answers[7]?.confidence}`);
 	// The trailing batch re-indexes from e0; it must still land at 40, not 0.
 	assert(answers[40]?.confidence === 0, `answer 40 was ${answers[40]?.confidence}`);
+});
+
+await check('a 429 waits as long as retry-after says, then asks again', async () => {
+	let calls = 0;
+	const stub = (async () =>
+		++calls === 1
+			? new Response('slow down', { status: 429, headers: { 'retry-after': '0.01' } })
+			: new Response(JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }))) as unknown as typeof fetch;
+	const started = Date.now();
+	const [a] = await ask(forceQuery(represents), [{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }], 'key', stub);
+	assert(calls === 2 && a?.choice === 'command', `${calls} calls, answer ${JSON.stringify(a)}`);
+	// Without the header the first wait is 500ms.
+	assert(Date.now() - started < 400, `waited ${Date.now() - started}ms for a 10ms retry-after`);
 });
 
 await check('resolve runs on known forces, and stops at a row it cannot decide', async () => {

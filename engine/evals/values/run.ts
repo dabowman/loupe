@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Score the hardcoded-value question against 145 hand-labelled literals.
+ * Score the hardcoded-value question, `src/judge/value.ts`, against 145
+ * hand-labelled literals.
  *
  * The literals are every one `check --judge` asks about in
  * `vip-digital-asset-manager`: an un-remediated WPDS plugin whose stylesheets
@@ -26,7 +27,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { judgeLiterals, tokenDescriptions } from '../../src/judge.ts';
+import { MODEL, ask, tokenDescriptions } from '../../src/judge.ts';
+import { valueQuery } from '../../src/judge/value.ts';
 import type { Choice } from '../../src/judge.ts';
 import { KEEP, candidatesFor } from '../../src/tokens.ts';
 import type { Candidates } from '../../src/tokens.ts';
@@ -86,10 +88,11 @@ const about = process.argv.includes('--bare')
 	? new Map<string, string>()
 	: tokenDescriptions([{ tokenDescriptions: join(HERE, '..', '..', '..', 'profiles', 'wpds', 'token-descriptions.json') }]);
 const times = Number(process.argv.find((a, i) => i >= 2 && /^\d+$/.test(a)) ?? 3);
+process.stdout.write(`model: ${MODEL}\n`);
 const runs: (Choice | undefined)[][] = [];
 for (let r = 1; r <= times; r++) {
 	const started = Date.now();
-	const answers = await judgeLiterals(asked, key, fetch, about);
+	const answers = await ask(valueQuery(about), asked, key, fetch);
 	runs.push(answers);
 	const right = asked.filter((it, i) => ok(it.id, answers[i]?.choice)).length;
 	const rightCovered = asked.filter((it, i) => covered(it.id, it.candidates) && ok(it.id, answers[i]?.choice)).length;
@@ -139,6 +142,38 @@ for (const floor of [0.5, 0.7, 0.8, 0.9]) {
 	const n = asked.length * runs.length;
 	process.stdout.write(
 		`${floor.toFixed(2)}  ${pct(acted, n).padStart(5)}  ${pct(right, acted).padStart(5)}  ${String(wrongToken).padStart(11)}  ${String(wrongKeep).padStart(10)}\n`,
+	);
+}
+
+// The same answers gated on probability, as two decisions: keep when P(keep)
+// clears the bar, else the likeliest token when P(any token) does. Confidence
+// falls when the model splits between two tokens either of which would do —
+// `padding-sm` or `padding-md`, neighbouring greys — and the floor above
+// counts that as unsure.
+process.stdout.write('\nsplit  acted  right  wrong-token  wrong-keep\n');
+for (const bar of [0.5, 0.7, 0.8, 0.9]) {
+	let acted = 0;
+	let right = 0;
+	let wrongToken = 0;
+	let wrongKeep = 0;
+	for (const r of runs)
+		asked.forEach((it, i) => {
+			const a = r[i];
+			if (!a) return;
+			const pKeep = a.probabilities?.[KEEP] ?? 0;
+			const token = Object.entries(a.probabilities ?? {})
+				.filter(([k]) => k !== KEEP)
+				.sort(([, x], [, y]) => y - x)[0]?.[0];
+			const pick = !it.candidates.keep ? a.choice : pKeep >= bar ? KEEP : 1 - pKeep >= bar ? token : undefined;
+			if (!pick) return;
+			acted++;
+			if (ok(it.id, pick)) right++;
+			else if (pick === KEEP) wrongKeep++;
+			else wrongToken++;
+		});
+	const n = asked.length * runs.length;
+	process.stdout.write(
+		`${bar.toFixed(2)}  ${pct(acted, n).padStart(5)}  ${pct(right, acted).padStart(5)}  ${String(wrongToken).padStart(11)}  ${String(wrongKeep).padStart(10)}\n`,
 	);
 }
 

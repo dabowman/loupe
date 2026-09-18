@@ -1,50 +1,47 @@
 /**
  * Opt-in model judgement, behind `check --judge`.
  *
- * Two things live here and they are different halves. `ask` is the transport
- * every judgement shares: batch the items, post one request per batch, hand
- * back one answer per item. Everything else is a *question* — what to put in
- * the state and what to ask about it — and stays specific to the thing being
- * judged, because that is the half worth reading and the half an eval scores.
+ * Two halves. Here: `ask`, the transport every judgement shares — batch the
+ * items, post one request per batch, hand back one answer per item — and what
+ * each check does with the answers. In `judge/`, one file per *question*: what
+ * to put in the state and what to ask about it, which is the half worth reading
+ * and the half an eval scores. An eval imports the query it scores and calls
+ * `ask` with it, the same call the check makes. A new judgement is a new file
+ * there and a caller here.
  *
- * `system/raw-element` was the first: `<p> → <Text>` is right about the
- * component and silent about the variant, which is the half an agent has to
- * guess — and on a real plugin it is wrong about the component often enough to
- * matter: a `<span>` that is a colour swatch, a `<p>` that only wraps a button.
- * Neither is decidable from the tag and its classes; both are obvious from
- * reading the element.
+ *   judge/variant.ts   system/raw-element — which variant of the analog
+ *   judge/force.ts     a pattern force, for patterns/judged-redirect
+ *   judge/value.ts     tokens/hardcoded-value — which token, or deliberate
  *
- * Forces are the second. The `resolve` tables in `patterns/index.json` decide
- * on things a signature cannot see — does this control stand for a value, a
- * command or a destination — so most of them never ran. A force the vocabulary
- * says how to ask is read off real JSX here, the table runs in code, and a
- * redirect becomes `patterns/judged-redirect`. `engine/evals/represents` scores
- * the one force wired so far.
- *
- * Neither changes a deterministic verdict. The variant answer is written into
- * the finding's suggestion; the redirect is its own advisory finding, written
- * after the baseline and never by the hook. Both record the answer as data on
- * `Finding.judged`. The gate stays deterministic and offline,
- * and this runs only when asked.
+ * None changes a deterministic verdict. A variant or a token is written into
+ * the finding's suggestion; a redirect is its own advisory finding, written
+ * after the baseline and never by the hook. Each records the answer as data on
+ * `Finding.judged`. The gate stays deterministic and offline, and this runs
+ * only when asked.
  */
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { ForceJudge } from './judge/force.ts';
+import { forceQuery } from './judge/force.ts';
+import { valueQuery } from './judge/value.ts';
+import { notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
 import { KEEP, planValue } from './tokens.ts';
-import type { Candidates, Slot } from './tokens.ts';
+import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, TokenSet } from './types.ts';
 
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
+// A version, not `jev-latest`: the alias moves when a release ships, and every
+// floor in here was measured against the model the evals ran on. Moving to a
+// new one is re-running `evals/` and changing this line in the same commit.
+export const MODEL = 'jev-1.13.0';
 // ponytail: one floor for every outcome. Split it per outcome if an eval shows
 // `none` needs more certainty than a variant pick.
 const FLOOR = 0.5;
-// How many elements share one request. Not one number: the state budget allows
-// 40, but a question's accuracy does not always survive sharing its state with
-// 39 others. `evals/represents/run.ts --batch N` is how these were picked.
 // Requests in flight. One per control needs this to stay quick; 6 held for the
 // whole eval without a 429, and the endpoint answers a single control in ~200ms.
 const CONCURRENCY = 6;
@@ -52,38 +49,34 @@ const CONCURRENCY = 6;
 // lose the other ninety-nine.
 const RETRIES = 4;
 
-const BATCH = {
-	// As shipped when this judgement was written.
-	variants: 40,
-	// Measured, one run over the eval's 100 controls — destination recall is the
-	// column that decides it, because every redirect in the abstract language
-	// fires on that class:
-	//
-	//   batch   all   destination P/R
-	//      40   81%      91% / 69%
-	//      20   90%      96% / 83%
-	//      10   90%     100% / 86%
-	//       4   91%     100% / 90%
-	//       1   93%     100% / 97%
-	//
-	// Sharing a state with 39 other controls costs nearly a third of the
-	// destinations. A control is a few lines, so one request each is cheap; the
-	// pool below is what keeps it quick. Every force is asked this way until its
-	// own eval says otherwise: this table is `represents`, not forces in general.
-	forces: 1,
-};
-
 type Fetch = typeof fetch;
 
 export interface Choice {
 	choice: string;
+	/** How concentrated `probabilities` is, not the chance `choice` is right. */
 	confidence: number;
+	/** Every option's probability, summing to 1. */
+	probabilities: Record<string, number>;
+}
+
+/** One question put to Jev, and everything that is specific to it. */
+export interface Query<T> {
+	/**
+	 * How many items share one request. Not one number: the state budget allows
+	 * 40, but a question's accuracy does not always survive sharing its state
+	 * with 39 others. `evals/represents/run.ts --batch N` is how to pick it.
+	 */
+	size: number;
+	/** What the model reads about one item: `state.elements[i]`. */
+	element: (item: T) => object;
+	/** What it is asked about `elements[index]`. */
+	question: (item: T, index: number) => object;
 }
 
 /**
  * Batch, post, align.
  *
- * `state.elements[i]` is the convention both judgements are written against: the
+ * `state.elements[i]` is the convention every query is written against: the
  * question at index `i` talks about `elements[i]`, so instructions can name the
  * thing they are about and the answers come back in the order the items went in.
  * Every element in a batch is visible to every question in it, which is why a
@@ -91,22 +84,21 @@ export interface Choice {
  *
  * Throws on a failed request; the caller reports it and keeps what it had.
  */
-async function ask<T>(
+export async function ask<T>(
+	query: Query<T>,
 	items: readonly T[],
-	elementOf: (item: T) => object,
-	questionOf: (item: T, index: number) => object,
 	apiKey: string,
-	fetchImpl: Fetch,
-	size: number,
+	fetchImpl: Fetch = fetch,
+	size: number = query.size,
 ): Promise<(Choice | undefined)[]> {
 	const batches: T[][] = [];
 	for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
 
 	const sendBatch = async (batch: readonly T[]): Promise<(Choice | undefined)[]> => {
 		const body = JSON.stringify({
-			model: 'jev-latest',
-			state: { elements: batch.map(elementOf) },
-			questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, questionOf(item, i)])),
+			model: MODEL,
+			state: { elements: batch.map(query.element) },
+			questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)])),
 		});
 		for (let attempt = 0; ; attempt++) {
 			const res = await fetchImpl(ENDPOINT, {
@@ -120,7 +112,10 @@ async function ask<T>(
 			}
 			const transient = res.status === 429 || res.status >= 500;
 			if (!transient || attempt >= RETRIES) throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
-			await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+			// The server's own wait when it names one, in seconds; a date or
+			// nothing falls back to doubling.
+			const after = Number(res.headers.get('retry-after'));
+			await new Promise((r) => setTimeout(r, after > 0 ? after * 1000 : 500 * 2 ** attempt));
 		}
 	};
 
@@ -143,8 +138,6 @@ async function ask<T>(
 const judgedTail = (confidence: number): string => `(judged ${confidence.toFixed(2)})`;
 
 // ── system/raw-element: which variant? ──────────────────────────────────────
-
-const notKey = (e: ComponentEntry): string => `not_${e.name.toLowerCase()}`;
 
 /** The registry entry with variants that a raw-element finding points at, if any. */
 function targetOf(f: Finding, withVariants: readonly ComponentEntry[]): ComponentEntry | undefined {
@@ -175,35 +168,7 @@ export async function judgeVariants(
 		return target ? [{ f, target }] : [];
 	});
 
-	const answers = await ask(
-		jobs,
-		({ f }) => {
-			const lines = readFileSync(join(root, f.file), 'utf8').split('\n');
-			const i = f.line - 1;
-			return {
-				file: f.file,
-				// The flagged element opens on the first line of `source`; the lines
-				// before it are its parent, which is often what decides the role.
-				context_before: lines.slice(Math.max(0, i - 5), i).join('\n'),
-				source: lines.slice(i, i + 10).join('\n'),
-			};
-		},
-		({ f, target }, i) => ({
-			type: 'choice',
-			instructions: `The ${f.code ?? 'element'} on the first line of \`elements[${i}].source\` is flagged to be replaced by the design system's ${target.name} component. Which ${target.name} variant matches the role this element plays in its interface?`,
-			// The option name is sent to the model too, so it says what it means:
-			// `none` scored the same elements 0.3 lower than `not_text`. Wording
-			// that forced a decision ("holds no text of its own") cleared the
-			// floor more often and called real text `not_text` doing it.
-			criteria: {
-				...target.variants,
-				[notKey(target)]: `The element is not a run of content ${target.name} renders — a wrapper around controls, an icon holder or colour swatch, a layout box — so no ${target.name} variant applies.`,
-			},
-		}),
-		apiKey,
-		fetchImpl,
-		BATCH.variants,
-	);
+	const answers = await ask(variantQuery(root), jobs, apiKey, fetchImpl);
 
 	let annotated = 0;
 	jobs.forEach(({ f, target }, i) => {
@@ -230,14 +195,7 @@ export async function judgeVariants(
 	return annotated;
 }
 
-// ── forces: what the abstract language resolves on ──────────────────────────
-
-/** How a force is asked: its `judge` block in `patterns/index.json`. */
-export interface ForceJudge {
-	question: string;
-	/** One per value of the force, plus the no-match option the question needs. */
-	criteria: Record<string, string>;
-}
+// ── patterns/judged-redirect ────────────────────────────────────────────────
 
 export interface Language {
 	vocabulary: { forces: Record<string, { values: unknown[]; about: string; judge?: ForceJudge }> };
@@ -251,44 +209,6 @@ const LANGUAGE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'patt
 
 export const loadLanguage = (path: string = LANGUAGE): Language => JSON.parse(readFileSync(path, 'utf8')) as Language;
 
-/**
- * Read one force off each control. One answer per control, in order.
- *
- * The wording is the force's own, from the vocabulary, so the definition an
- * author reads beside `about` is the one the model is scored on. `represents`
- * was tuned against `evals/represents`: one disambiguating line per value and
- * no more, or the eval scores a cheat sheet; and its no-match stays `none`,
- * against the `not_text` lesson above, because it is rare and the three real
- * classes separate cleanly — `not_a_control` moved nothing and cost two points.
- *
- * The state carries the element and where it came from and nothing else: an
- * ablation over 100 labelled controls scored the enclosing component's source
- * exactly level with leaving it out, at 1.5x the tokens, because the slice
- * usually missed the handler it was there to supply.
- */
-export async function judgeForce(
-	force: ForceJudge,
-	controls: readonly Pick<Control, 'file' | 'component' | 'enclosing' | 'source'>[],
-	apiKey: string,
-	fetchImpl: Fetch = fetch,
-	size: number = BATCH.forces,
-): Promise<(Choice | undefined)[]> {
-	return ask(
-		controls,
-		(c) => ({ file: c.file, component: c.component, enclosing_component: c.enclosing, source: c.source }),
-		(_c, i) => ({
-			type: 'choice',
-			instructions: `\`elements[${i}].source\` is one interactive control taken from a React user interface. ${force.question}`,
-			criteria: force.criteria,
-		}),
-		apiKey,
-		fetchImpl,
-		size,
-	);
-}
-
-// ── patterns/judged-redirect ────────────────────────────────────────────────
-
 // A redirect sends an agent to a different pattern, which is the expensive
 // error, so an answer counts only where the eval found nothing wrong: every
 // `represents` answer at 0.90 or above was right, and under it a third of the
@@ -300,6 +220,10 @@ export async function judgeForce(
 // the eval has no label for, and only 2 were plainly links. The cost of 0.90 is
 // site-foundry's one real case, `onClick={ () => navigate( '#/new' ) }`, at 0.83.
 // Label pagination into the eval before lowering it.
+//
+// The floor is on the pick's confidence. The class's own probability was
+// scored as the gate too, on the same answers, and at 0.90 acts on one more
+// destination and two more commands, one of them wrong: no reason to switch.
 const REDIRECT_FLOOR = 0.9;
 
 /**
@@ -329,7 +253,7 @@ export async function judgeRedirects(
 		if (!force.judge) continue;
 		const asked = controls.flatMap((c, i) => (tableOf(c).some((r) => r.when && name in r.when) ? [i] : []));
 		if (!asked.length) continue;
-		const answers = await judgeForce(force.judge, asked.map((i) => controls[i] as Control), apiKey, fetchImpl);
+		const answers = await ask(forceQuery(force.judge), asked.map((i) => controls[i] as Control), apiKey, fetchImpl);
 		asked.forEach((ci, k) => {
 			const a = answers[k];
 			if (!a || a.confidence < REDIRECT_FLOOR) return;
@@ -365,51 +289,6 @@ export async function judgeRedirects(
 }
 
 // ── tokens/hardcoded-value: which token, or is it deliberate? ───────────────
-
-// The keep option, worded as a decision with examples of one, so that it is
-// chosen for a reason and not as the answer to "none of these is exact".
-const KEEP_CRITERION =
-	'None of these. The hardcoded value is a deliberate one-off the design system has no token for — a brand or illustration colour, an overlay or scrim, a size locked to something outside the system — and should stay as written.';
-
-const TIER: Record<Candidates['tier'], string> = {
-	exact: 'Several tokens carry exactly this value; they differ in the role they are for.',
-	near: 'No token carries exactly this value; these are the steps of the scale either side of it.',
-	end: 'No token carries this value, and it is past the end of the scale; this is the nearest step.',
-	family: 'No token carries exactly this value; these are all the tokens for this property.',
-};
-
-/**
- * Read one hardcoded literal against the tokens it could have been.
- *
- * The candidates arrive already narrowed where arithmetic can narrow them —
- * `candidatesFor` picks the scale steps either side of a length — so what is
- * asked is the half code cannot do: which token this rule *means*, judged by
- * what it styles, and whether the value was a decision at all. The pink card
- * background is the case the keep option is for: it is either a mistake with a
- * system default it should have used, or a choice to suppress and leave alone.
- */
-export async function judgeLiterals(
-	items: readonly { file: string; context_before: string; source: string; prop: string; value: string; part: string; candidates: Candidates }[],
-	apiKey: string,
-	fetchImpl: Fetch = fetch,
-	about: ReadonlyMap<string, string> = new Map(),
-): Promise<(Choice | undefined)[]> {
-	return ask(
-		items,
-		({ file, context_before, source }) => ({ file, context_before, source }),
-		({ prop, value, part, candidates }, i) => ({
-			type: 'choice',
-			instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use${candidates.keep ? ' — or is the value a deliberate choice the system has no token for' : ''}?`,
-			criteria: {
-				...Object.fromEntries(candidates.options.map(([n, v]) => [n, about.has(n) ? `${v} — ${about.get(n) ?? ''}` : v])),
-				...(candidates.keep ? { [KEEP]: KEEP_CRITERION } : {}),
-			},
-		}),
-		apiKey,
-		fetchImpl,
-		BATCH.forces,
-	);
-}
 
 /**
  * What each token is for, in the design system's words: every active
@@ -523,13 +402,17 @@ export async function judgeValues(
 			];
 		}),
 	);
-	const answers = await judgeLiterals(asked, apiKey, fetchImpl, about);
+	const answers = await ask(valueQuery(about), asked, apiKey, fetchImpl);
 	const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
 
 	for (const { f, parts, slots } of plans) {
 		const got = slots.map((s) => ('token' in s ? { choice: s.token, confidence: 1 } : answerOf.get(s)));
-		// The shared floor holds here: on `evals/values` it acts on 57% of the
+		// The shared floor holds here: on `evals/values` it acts on 71% of the
 		// literals with three wrong tokens in three runs, and no wrong keep.
+		// Gating on probability instead — keep on P(keep), else the likeliest
+		// token on P(any token) — was scored on the same answers and is no
+		// better: at 0.90 it acts on 52% with none wrong, which the floor at
+		// 0.70 matches.
 		// Except where keeping was never an answer: spacing the scale covers
 		// snaps whatever the confidence, and a low one there is only 6px sitting
 		// exactly between 4 and 8 — every option is a snap somebody would accept.

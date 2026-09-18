@@ -15,8 +15,8 @@
  * headline number is reported with and without them.
  *
  * The question is the one `check --judge` sends: `represents` as the vocabulary
- * in `patterns/index.json` words it, one control per request. Edit the wording
- * there and this scores the edit.
+ * in `patterns/index.json` words it, framed by `src/judge/force.ts`, one control
+ * per request. Edit the wording in either and this scores the edit.
  *
  *   npx tsx evals/represents/run.ts        # three runs
  *   npx tsx evals/represents/run.ts 1      # one
@@ -26,7 +26,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { judgeForce, loadLanguage } from '../../src/judge.ts';
+import { MODEL, ask, loadLanguage } from '../../src/judge.ts';
+import { forceQuery } from '../../src/judge/force.ts';
 import type { Choice } from '../../src/judge.ts';
 import type { Control } from '../../src/types.ts';
 
@@ -62,10 +63,11 @@ if (!key) {
 const flag = process.argv.indexOf('--batch');
 const size = flag === -1 ? undefined : Number(process.argv[flag + 1]);
 const times = Number(process.argv.find((a, i) => i >= 2 && /^\d+$/.test(a) && i !== flag + 1) ?? 3);
+process.stdout.write(`model: ${MODEL}\n`);
 const runs: (Choice | undefined)[][] = [];
 for (let r = 1; r <= times; r++) {
 	const started = Date.now();
-	const answers = await judgeForce(represents, controls, key, fetch, size);
+	const answers = await ask(forceQuery(represents), controls, key, fetch, size);
 	runs.push(answers);
 	const got = answers.filter((a) => a).length;
 	let ok = 0;
@@ -158,6 +160,33 @@ for (const cls of CLASSES) {
 		return `${ok}/${n}`.padStart(8);
 	};
 	process.stdout.write(`${cls.padEnd(13)} ${cell(true)}      ${cell(false)}\n`);
+}
+
+// The redirect classes gated two ways on the same answers: the pick's
+// confidence, as `judgeRedirects` does, or the class's own probability.
+// Confidence is the shape of the whole distribution, so it also falls when the
+// rest is split between two classes neither of which is this one.
+process.stdout.write('\ngate                      acted  wrong  recall\n');
+for (const cls of ['command', 'destination'] as const) {
+	const truly = controls.filter((c) => truth(c.id) === cls).length * runs.length;
+	for (const [name, acts] of [
+		['confidence', (a: Choice, bar: number) => a.choice === cls && a.confidence >= bar],
+		[`P(${cls})`, (a: Choice, bar: number) => (a.probabilities?.[cls] ?? 0) >= bar],
+	] as const)
+		for (const bar of [0.8, 0.9]) {
+			let acted = 0;
+			let wrong = 0;
+			runs.forEach((answers) =>
+				controls.forEach((c, i) => {
+					const a = answers[i];
+					if (!a || !acts(a, bar)) return;
+					acted++;
+					if (truth(c.id) !== cls) wrong++;
+				}),
+			);
+			const label = `${cls} ${name} >= ${bar.toFixed(2)}`;
+			process.stdout.write(`${label.padEnd(25)} ${String(acted).padStart(5)}  ${String(wrong).padStart(5)}  ${pct(acted - wrong, truly).padStart(6)}\n`);
+		}
 }
 
 // Where it disagreed, so the labels stay auditable: on a real disagreement the

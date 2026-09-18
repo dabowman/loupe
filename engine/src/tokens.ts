@@ -234,6 +234,14 @@ const SPACING = /padding|gap$|^(inset|top|right|bottom|left)$/;
  * because a light tint's nearest tokens are greys of the wrong role, and the
  * success wash it should have been is further away than they are.
  *
+ * Nor are they labelled with how close each looks. Offering every token with
+ * its OKLab distance to the literal ("looks the same", "a close shade", "a
+ * visibly different colour") — the docs' advice for a model that cannot
+ * compare hex — scored 94% against 96% on the colours, and made the keeps
+ * worse (precision 93% to 82%). The misses it was aimed at were never about
+ * distance: most are content against interactive at the same hex, and in the
+ * rest the nearest token is the wrong one.
+ *
  * Null when the part is not something this family can replace: a token set
  * with no family for the property, or a literal of another kind (`5%` of a
  * padding scale, a negative inset).
