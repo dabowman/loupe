@@ -20,9 +20,10 @@
  * only when asked.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { EMBEDDED_LANGUAGE } from './embedded.ts';
 import type { ForceJudge } from './judge/force.ts';
 import { forceQuery } from './judge/force.ts';
 import { valueQuery } from './judge/value.ts';
@@ -208,7 +209,17 @@ export interface Language {
 // all the deterministic rules can check, and every force is beyond one.
 const LANGUAGE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'patterns', 'index.json');
 
-export const loadLanguage = (path: string = LANGUAGE): Language => JSON.parse(readFileSync(path, 'utf8')) as Language;
+/**
+ * A path given explicitly is read and allowed to fail — that is a caller naming
+ * a file it expects to exist. Only the default falls back to the compiled-in
+ * copy, which is the one a binary has, and is also the one a published npm
+ * install has: `patterns/` sits above the package and `files` never shipped it.
+ */
+export const loadLanguage = (path?: string): Language => {
+	if (path !== undefined) return JSON.parse(readFileSync(path, 'utf8')) as Language;
+	if (existsSync(LANGUAGE)) return JSON.parse(readFileSync(LANGUAGE, 'utf8')) as Language;
+	return EMBEDDED_LANGUAGE as Language;
+};
 
 // A redirect sends an agent to a different pattern, which is the expensive
 // error, so an answer counts only where the eval found nothing wrong: every

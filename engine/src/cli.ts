@@ -14,6 +14,7 @@ import { analyze, usableReplacement } from './analyze.ts';
 import { applyKeeps, applyTokenFixes } from './autofix.ts';
 import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
+import { EMBEDDED_VERSION } from './embedded.ts';
 import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
 import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
@@ -54,7 +55,7 @@ const messageOf = (err: unknown): string => (err instanceof Error ? err.message 
  */
 function judgeKey(): string | undefined {
 	try {
-		if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join(HERE, '..', '..', '.env'));
+		if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(ENV_FILE);
 	} catch {
 		/* no .env beside the checkout is the ordinary case */
 	}
@@ -99,6 +100,17 @@ const key = (label: string): string => dim(label);
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
+ * Whether this is a single-file artifact rather than an installed directory.
+ * A binary carries its data compiled in, so it can never see the manifest that
+ * sits beside the engine — which makes that the test, with no dependence on
+ * how any particular compiler spells its synthetic root.
+ */
+const SINGLE_FILE = !existsSync(join(HERE, '..', 'package.json'));
+
+/** A `.env` beside the checkout; for a binary, one in the working directory. */
+const ENV_FILE = SINGLE_FILE ? resolve('.env') : join(HERE, '..', '..', '.env');
+
+/**
  * Which loupe this is: the version, whether it runs from source or the built
  * bundle, and where it lives. Three copies of the plugin can coexist on one
  * machine (a checkout, a dotfiles clone on PATH, the marketplace install the
@@ -107,6 +119,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * find the manifest from either.
  */
 function versionLine(): string {
+	// A compiled binary has no engine directory to look into: `import.meta.url`
+	// resolves inside the executable, so the manifest beside it is the honest
+	// test, and `execPath` is the only location that means anything.
+	if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
 	let version = 'unknown';
 	try {
 		version =
@@ -958,7 +974,7 @@ async function main(): Promise<number> {
 		}
 		const key = args.flags.judge ? judgeKey() : undefined;
 		if (args.flags.judge && !key) {
-			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join(HERE, '..', '..', '.env')}\n`);
+			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		let toFix: AnalyzeResult;
@@ -1026,7 +1042,7 @@ async function main(): Promise<number> {
 	const checkKey = args.flags.judge && !isHook ? judgeKey() : undefined;
 	if (args.flags.judge && !isHook) {
 		if (!checkKey) {
-			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join(HERE, '..', '..', '.env')}\n`);
+			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 	}

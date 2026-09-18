@@ -14,9 +14,9 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { discover } from './discover.ts';
+import { presetNames, readPreset } from './embedded.ts';
 import type { AuthoredConfig, SourceGlobs } from './types.ts';
 
 /** How much a match is worth. Presets name these; nothing else interprets them. */
@@ -70,9 +70,6 @@ export interface DetectedConfig {
 	config: AuthoredConfig;
 }
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const PRESET_DIR = join(HERE, '..', 'presets');
-
 const readJson = (p: string): unknown => {
 	try {
 		return JSON.parse(readFileSync(p, 'utf8'));
@@ -81,7 +78,7 @@ const readJson = (p: string): unknown => {
 	}
 };
 
-const preset = (name: string): PresetFile => (readJson(join(PRESET_DIR, `${name}.json`)) as PresetFile) ?? {};
+const preset = (name: string): PresetFile => (readPreset(name) as PresetFile) ?? {};
 
 /** Directories never worth descending into when looking for a manifest. */
 const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'build', 'dist', '.claude']);
@@ -140,17 +137,6 @@ function manifests(root: string, maxDepth = 3, budget = 60): { dir: string; rel:
 	};
 	walk(root, '', 0);
 	return out;
-}
-
-/** Preset names on disk, so a new design system is a file rather than an edit here. */
-function presetNames(): string[] {
-	try {
-		return readdirSync(PRESET_DIR)
-			.filter((f) => f.endsWith('.json'))
-			.map((f) => f.replace(/\.json$/, ''));
-	} catch {
-		return [];
-	}
 }
 
 /**

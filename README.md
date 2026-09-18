@@ -681,6 +681,36 @@ SARIF results carry a `partialFingerprints` entry derived from the same identity
 the baseline ratchets on: rule, file, and normalized code, deliberately not the
 line number. An edit above a finding moves its line without re-opening its alert.
 
+#### Without Node
+
+The reusable workflow needs neither an npm install nor a published package, but
+it does need Node and a checkout of this repository. Where neither is wanted — a
+CI image that carries no Node, a repository that is not JavaScript, a container
+you would rather keep small — `npm run build:binary` produces a single
+self-contained executable that carries its presets and its pattern language
+inside it.
+
+```yaml
+- run: |
+    curl -fsSL -o loupe "$LOUPE_BINARY_URL"
+    chmod +x loupe
+    ./loupe check --all --format sarif > loupe.sarif
+```
+
+`--judge` still needs `TYPESAFE_API_KEY` from the environment — no key is
+compiled into the binary, and a run without one refuses rather than falling back
+to anything. In CI that is a secret on the job, exactly as it would be for the
+Node path.
+
+Build it with `npm run build:binary -- --target=linux-x64` and publish it; the
+targets cover glibc and musl Linux on both architectures, macOS on both, and
+Windows. Pick the target to match the image: the plain `linux-x64` build links
+against glibc and will not start on Alpine, and the `-musl` build needs
+`libstdc++` there (`apk add libstdc++`), which Alpine does not carry by default.
+
+Verified equivalent, not assumed: the Linux binary and macOS Node produce
+byte-identical reports over Gutenberg's 9,822 files.
+
 ## Remediation
 
 `/loupe-fix` runs `loupe fix` first, so what remains is the work that needs

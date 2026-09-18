@@ -18425,7 +18425,7 @@ var require_util = __commonJS({
       return path;
     });
     exports.normalize = normalize2;
-    function join14(aRoot, aPath) {
+    function join15(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -18457,7 +18457,7 @@ var require_util = __commonJS({
       }
       return joined;
     }
-    exports.join = join14;
+    exports.join = join15;
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
@@ -18671,7 +18671,7 @@ var require_util = __commonJS({
             parsed.path = parsed.path.substring(0, index2 + 1);
           }
         }
-        sourceURL = join14(urlGenerate(parsed), sourceURL);
+        sourceURL = join15(urlGenerate(parsed), sourceURL);
       }
       return normalize2(sourceURL);
     }
@@ -20111,8 +20111,8 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync9, readFileSync: readFileSync12, realpathSync: realpathSync2 } = __require("fs");
-    var { dirname: dirname8, isAbsolute: isAbsolute8, join: join14, relative: relative5, sep: sep4 } = __require("path");
+    var { existsSync: existsSync11, readFileSync: readFileSync13, realpathSync: realpathSync2 } = __require("fs");
+    var { dirname: dirname8, isAbsolute: isAbsolute8, join: join15, relative: relative5, sep: sep4 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -20191,9 +20191,9 @@ var require_previous_map = __commonJS({
           }
         }
         this.root = dirname8(path);
-        if (existsSync9(path)) {
+        if (existsSync11(path)) {
           this.mapFile = path;
-          return readFileSync12(path, "utf-8").toString().trim();
+          return readFileSync13(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join14(dirname8(file), map);
+          if (file) map = join15(dirname8(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -20259,7 +20259,7 @@ var require_input = __commonJS({
     var { nanoid } = require_non_secure();
     var { isAbsolute: isAbsolute8, resolve: resolve7 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
-    var { fileURLToPath: fileURLToPath6, pathToFileURL: pathToFileURL2 } = __require("url");
+    var { fileURLToPath: fileURLToPath5, pathToFileURL: pathToFileURL2 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
     var PreviousMap = require_previous_map();
     var terminalHighlight = require_terminal_highlight();
@@ -20452,8 +20452,8 @@ var require_input = __commonJS({
           url: fromUrl.toString()
         };
         if (fromUrl.protocol === "file:") {
-          if (fileURLToPath6) {
-            result.file = fileURLToPath6(fromUrl);
+          if (fileURLToPath5) {
+            result.file = fileURLToPath5(fromUrl);
           } else {
             throw new Error(`file: protocol is not available in this PostCSS build`);
           }
@@ -23494,9 +23494,9 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync8, readFileSync as readFileSync11, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute7, join as join13, relative as relative4, resolve as resolve6 } from "node:path";
-import { fileURLToPath as fileURLToPath5 } from "node:url";
+import { existsSync as existsSync10, readFileSync as readFileSync12, writeFileSync as writeFileSync4 } from "node:fs";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute7, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/analyze.ts
 import { readFileSync as readFileSync2, realpathSync, statSync as statSync2 } from "node:fs";
@@ -25870,9 +25870,1419 @@ function applyKeeps(root2, findings, keyword, { dry = false } = {}) {
 }
 
 // src/judge.ts
-import { readFileSync as readFileSync5 } from "node:fs";
-import { dirname as dirname2, join as join6 } from "node:path";
+import { existsSync as existsSync3, readFileSync as readFileSync6 } from "node:fs";
+import { dirname as dirname3, join as join7 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+
+// src/embedded.ts
+import { existsSync as existsSync2, readFileSync as readFileSync4, readdirSync as readdirSync3 } from "node:fs";
+import { dirname as dirname2, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// presets/archer.json
+var archer_default = {
+  extends: "generic",
+  detect: {
+    priority: 40,
+    confidence: "high",
+    dependencies: ["@dabowman/archer"]
+  },
+  designSystem: {
+    name: "Archer",
+    packages: ["@dabowman/archer"],
+    tokenPrefixes: [
+      "--color-",
+      "--space-",
+      "--spacing-",
+      "--font-",
+      "--type-styles-",
+      "--radius-",
+      "--border-",
+      "--shadow-",
+      "--size-",
+      "--opacity-",
+      "--duration-",
+      "--delay-",
+      "--easing-",
+      "--transition-",
+      "--z-index-",
+      "--breakpoint-",
+      "--cursor-"
+    ],
+    tokenSources: [
+      "node_modules/@dabowman/archer/dist/tokens.css",
+      "node_modules/@dabowman/archer/dist/tokens.dark.css",
+      "node_modules/@dabowman/archer/dist"
+    ],
+    components: {
+      layout: ["Stack", "Grid", "Center"],
+      text: ["Heading", "Text"]
+    },
+    elementMap: {
+      p: "Text",
+      h1: "Heading",
+      h2: "Heading",
+      h3: "Heading",
+      h4: "Heading",
+      h5: "Heading",
+      h6: "Heading",
+      div: { component: "Stack", styledOnly: true }
+    }
+  },
+  suppression: {
+    keyword: "archer-allow",
+    blanket: ["archer-disable", "ds-disable"]
+  },
+  rules: {
+    "stylesheet/unparsed": "error",
+    "suppression/malformed": "error",
+    "layout/margin-on-child": "error",
+    "system/override": "error",
+    "system/inline-style": "error",
+    "layout/negative-margin": "warn",
+    "layout/in-css": "warn",
+    "typography/in-css": "warn",
+    "typography/untokenized": "warn",
+    "system/raw-element": "warn",
+    "tokens/hardcoded-value": "warn",
+    "tokens/unknown-token": "warn",
+    "css/dead-class": "warn",
+    "patterns/duplicate-composite": "warn",
+    "patterns/superseded-composite": "warn",
+    "patterns/unregistered-composite": "warn"
+  }
+};
+
+// presets/base-ui.json
+var base_ui_default = {
+  extends: "generic",
+  detect: {
+    priority: 30,
+    confidence: "high",
+    dependencies: ["@base-ui/react", "@base-ui-components/react"]
+  },
+  designSystem: {
+    name: "Base UI",
+    packages: ["@base-ui/react", "@base-ui-components/react"],
+    components: { layout: [], text: [] },
+    substitutionProps: ["render"]
+  },
+  rules: {
+    "system/override": "off",
+    "system/inline-style": "off"
+  }
+};
+
+// presets/generic.json
+var generic_default = {
+  designSystem: {
+    packages: [],
+    tokenPrefixes: [],
+    tokenSources: [],
+    cssInJsPackages: ["styled-components", "@emotion/styled", "@emotion/react", "@emotion/css", "@emotion/native"],
+    components: { layout: [], text: [] },
+    elementMap: {}
+  },
+  namespaces: { project: [], external: [], neverDead: [] },
+  sources: {
+    styles: ["**/*.css", "**/*.scss"],
+    markup: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
+    references: ["**/*.php", "**/*.html", "**/*.twig"],
+    ignore: [
+      "**/node_modules/**",
+      "**/build/**",
+      "**/dist/**",
+      "**/vendor/**",
+      "**/.git/**",
+      "**/coverage/**",
+      "**/.next/**",
+      "**/out/**",
+      "**/storybook-static/**",
+      "**/build-style/**",
+      "**/build-module/**",
+      "**/build-types/**",
+      "**/__snapshots__/**",
+      "**/.claude/worktrees/**",
+      "**/*.min.css",
+      "**/*.min.js",
+      "**/*.bundle.js"
+    ]
+  },
+  suppression: { keyword: "ds-allow", blanket: ["ds-disable"] }
+};
+
+// presets/wordpress-block-theme.json
+var wordpress_block_theme_default = {
+  extends: "generic",
+  detect: {
+    priority: 20,
+    confidence: { full: "high", partial: "medium" },
+    files: { all: ["theme.json"], any: ["templates/", "parts/"] }
+  },
+  designSystem: {
+    name: "WordPress",
+    packages: [],
+    tokenPrefixes: ["--wp--preset--", "--wp--style--", "--wp--custom--"],
+    components: { layout: [], text: [] },
+    elementMap: {}
+  },
+  namespaces: {
+    external: ["wp-block-", "wp-elements-", "wp-container-", "is-layout-"],
+    neverDead: [
+      "wp-block-*",
+      "wp-elements-*",
+      "wp-container-*",
+      "is-layout-*",
+      "is-style-*",
+      "has-*",
+      "alignwide",
+      "alignfull",
+      "alignleft",
+      "alignright",
+      "aligncenter",
+      "screen-reader-text",
+      "wp-site-blocks"
+    ]
+  },
+  sources: {
+    styles: ["**/*.css", "**/*.scss", "assets/**/*.css"],
+    markup: [],
+    references: [
+      "**/*.php",
+      "templates/**/*.html",
+      "parts/**/*.html",
+      "patterns/**/*.php",
+      "**/theme.json",
+      "**/block.json",
+      "**/*.html"
+    ]
+  }
+};
+
+// presets/wordpress-components.json
+var wordpress_components_default = {
+  extends: "generic",
+  designSystem: {
+    name: "WordPress",
+    packages: ["@wordpress/components", "@wordpress/ui"],
+    tokenPrefixes: ["--wp-admin-theme-", "--wp-components-"],
+    normalizeExports: "^__(experimental|unstable)",
+    components: {
+      layout: ["Stack", "Flex", "FlexBlock", "FlexItem", "HStack", "VStack", "Grid", "Spacer", "Divider"],
+      text: ["Text", "Heading", "Truncate"]
+    },
+    elementMap: {
+      p: "Text",
+      h1: "Heading",
+      h2: "Heading",
+      h3: "Heading",
+      h4: "Heading",
+      h5: "Heading",
+      h6: "Heading",
+      div: { component: "Stack", styledOnly: true },
+      span: { component: "Text", styledOnly: true }
+    }
+  },
+  namespaces: {
+    external: [
+      "components-",
+      "wp-components-",
+      "wp-block-",
+      "wp-admin-",
+      "wp-core-ui",
+      "block-editor-",
+      "editor-",
+      "interface-",
+      "edit-post-",
+      "edit-site-",
+      "dataviews-",
+      "dashicon"
+    ],
+    neverDead: [
+      "has-*",
+      "is-*",
+      "wp-*",
+      "alignwide",
+      "alignfull",
+      "alignleft",
+      "alignright",
+      "aligncenter",
+      "screen-reader-text"
+    ]
+  },
+  sources: {
+    markup: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs"],
+    references: [
+      "**/*.php",
+      "**/*.html",
+      "**/block.json",
+      "**/theme.json",
+      "**/patterns/**/*.php",
+      "**/patterns/**/*.html"
+    ]
+  }
+};
+
+// presets/wpds.json
+var wpds_default = {
+  extends: "wordpress-components",
+  detect: {
+    priority: 30,
+    confidence: "high",
+    dependencies: [
+      "@wordpress/components",
+      "@wordpress/ui"
+    ]
+  },
+  designSystem: {
+    packages: [
+      "@wordpress/components",
+      "@wordpress/ui",
+      "@wordpress/dataviews",
+      "@wordpress/admin-ui",
+      "@wordpress/global-styles-ui"
+    ],
+    tokenPrefixes: [
+      "--wpds-"
+    ],
+    normalizeExports: "^__(experimental|unstable)",
+    components: {
+      layout: [
+        "Stack",
+        "HStack",
+        "VStack",
+        "Flex",
+        "FlexBlock",
+        "FlexItem",
+        "Grid",
+        "Spacer",
+        "Divider",
+        "__unstableMotion"
+      ],
+      text: [
+        "Text",
+        "Heading",
+        "Truncate"
+      ]
+    },
+    tokenSources: [
+      "node_modules/@wordpress/theme/prebuilt/css/design-tokens.css",
+      "node_modules/@wordpress/theme/build-style",
+      "node_modules/@wordpress/components/build-style"
+    ]
+  },
+  suppression: {
+    keyword: "wpds-allow",
+    blanket: [
+      "wpds-disable",
+      "wpds-allow-file",
+      "ds-disable"
+    ]
+  },
+  rules: {
+    "stylesheet/unparsed": "error",
+    "suppression/malformed": "error",
+    "layout/margin-on-child": "error",
+    "layout/in-css": "error",
+    "typography/in-css": "error",
+    "system/override": "error",
+    "system/inline-style": "error",
+    "layout/negative-margin": "warn",
+    "typography/untokenized": "warn",
+    "system/raw-element": "warn",
+    "tokens/hardcoded-value": "warn",
+    "css/dead-class": "warn",
+    "tokens/unknown-token": "warn",
+    "patterns/duplicate-composite": "warn",
+    "patterns/superseded-composite": "warn",
+    "patterns/unregistered-composite": "warn"
+  }
+};
+
+// ../patterns/index.json
+var patterns_default = {
+  version: 2,
+  scope: "abstract",
+  note: "The pattern language, independent of any design system. Every entry is one recurring user intent at one scale, resolved to a variant by forces. Profiles realize variants and parts in their own patterns/index.json and never add abstract patterns of their own. The schema is deliberately small: only fields the generator (engine/scripts/patterns-doc.ts) reads are here, because unread fields are the ones that grow. `resolve` is an ordered list; the first rule whose every listed force equals the declared value wins. A `redirect` rule that consults an undeclared force asks for it; a `variant` rule that does is skipped. Registration: a new abstract pattern must occupy an (intent, scale) cell nothing else does, or differ from its nearest neighbour on a named force; a new variant must be selected by a `when` no sibling already matches; anything else is a realization and belongs in a profile. See docs/patterns-v2.md.",
+  vocabulary: {
+    intents: {
+      view: "Perceive information the system holds.",
+      choose: "Pick from options the system already knows.",
+      enter: "Supply a value the system does not have.",
+      act: "Invoke a command that changes something.",
+      confirm: "Consent to a consequence before it happens.",
+      navigate: "Move between views, or learn where you are.",
+      report: "Be told what happened, or what state things are in.",
+      group: "See related things as one thing."
+    },
+    scales: {
+      control: "One interaction unit.",
+      composite: "Several units acting as one.",
+      region: "A named area of a screen.",
+      screen: "One whole view.",
+      flow: "A sequence of views."
+    },
+    forces: {
+      represents: {
+        values: [
+          "value",
+          "command",
+          "destination"
+        ],
+        about: "What an option or control stands for. Decides choose vs act vs navigate before anything else does.",
+        judge: {
+          question: "What does that control stand for to the person using it?",
+          criteria: {
+            value: "It picks or sets a value the system already knows about \u2014 an option, a setting, a piece of data. Using it changes what some value is, not where the user is. A select, a checkbox-style menu item, a colour swatch, or a disclosure button whose visible label is the value it will change all count.",
+            command: "It invokes a command that changes something \u2014 save, delete, duplicate, upload, undo, retry, close, or opening a dialog or panel to do one of those. Using it does something rather than going somewhere or setting a value.",
+            destination: "It moves the user to another view, screen, route, record or URL. Using it changes where the user is, however the control happens to be styled \u2014 a button that routes is still a destination.",
+            none: "Not an interactive control at all: static text or a display-only element that happens to use a control component."
+          }
+        }
+      },
+      multiplicity: {
+        values: [
+          "one",
+          "many"
+        ],
+        about: "How many options may be chosen at once."
+      },
+      cardinality: {
+        values: [
+          "few",
+          "some",
+          "many"
+        ],
+        about: "Size of a set: few is 2\u20135, some is 6\u201315, many is more than 15. Used for options, fields, actions and views alike."
+      },
+      set: {
+        values: [
+          "closed",
+          "open"
+        ],
+        about: "Whether the user can supply something the system does not list."
+      },
+      representation: {
+        values: [
+          "named",
+          "rendered"
+        ],
+        about: "Whether a value or option has a visual identity. If it does, show it: a name is a description of the choice, not the choice."
+      },
+      fit: {
+        values: [
+          "row",
+          "overflows"
+        ],
+        about: "Whether the whole set sits on one line at rest."
+      },
+      "value-type": {
+        values: [
+          "text",
+          "number",
+          "length",
+          "color",
+          "boolean",
+          "date",
+          "media",
+          "rich"
+        ],
+        about: "The type of a value the user enters."
+      },
+      optionality: {
+        values: [
+          "required",
+          "optional"
+        ],
+        about: "Optional means unset until the user sets it: it inherits a default and can be reset to it."
+      },
+      binding: {
+        values: [
+          "local",
+          "entity"
+        ],
+        about: "Whether a form's fields are local state or a record the store owns and saves."
+      },
+      context: {
+        values: [
+          "in-place",
+          "overlay",
+          "own-screen"
+        ],
+        about: "Where an interaction happens relative to the thing it concerns."
+      },
+      relation: {
+        values: [
+          "siblings",
+          "parent-child"
+        ],
+        about: "How views relate: peers of one subject, or levels of one hierarchy."
+      },
+      grouped: {
+        values: [
+          true,
+          false
+        ],
+        about: "Whether items fall into named groups that mean something."
+      },
+      prominence: {
+        values: [
+          "primary",
+          "secondary",
+          "destructive"
+        ],
+        about: "How much attention an action deserves. At most one primary per surface."
+      },
+      reversibility: {
+        values: [
+          "reversible",
+          "irreversible"
+        ],
+        about: "Whether the user can undo the action afterwards."
+      },
+      persistence: {
+        values: [
+          "transient",
+          "persistent"
+        ],
+        about: "For messages: goes away on its own, or stays until dealt with."
+      },
+      subject: {
+        values: [
+          "outcome",
+          "empty",
+          "loading",
+          "invalid"
+        ],
+        about: "For messages: what is being reported."
+      },
+      selection: {
+        values: [
+          "none",
+          "one",
+          "many"
+        ],
+        about: "For collections: whether items are selectable, and whether one selection drives something else."
+      },
+      boundary: {
+        values: [
+          "strong",
+          "weak"
+        ],
+        about: "For groups: whether the grouping needs a visible box or just rhythm."
+      }
+    },
+    containers: {
+      note: "Containers are not patterns. A pattern declares `context` and the profile maps the container. The decision that used to live in authoring.md's Modal/Dialog/AlertDialog/Drawer paragraph lives here.",
+      screen: "The whole view.",
+      region: "A persistent area within a screen: main, aside, header.",
+      modal: "Blocks the parent view until dismissed. For a focused, single-decision task the user can scan without scrolling, reachable from more than one entry point.",
+      drawer: "Slides over the parent view and keeps it visible. For editing something already on screen, or a multi-section task a modal would cramp.",
+      popover: "Anchored to its trigger, non-modal, small. For a control that expands in place.",
+      menu: "A popover of items: commands, destinations, or settings scoped to the thing the trigger sits on."
+    }
+  },
+  patterns: [
+    {
+      id: "choose",
+      intent: "choose",
+      scale: "control",
+      problem: "The user picks from a set of options the system already knows.",
+      forces: [
+        "represents",
+        "multiplicity",
+        "cardinality",
+        "set",
+        "representation",
+        "fit"
+      ],
+      parts: [
+        {
+          role: "options",
+          note: "Each option is either its name or its rendering."
+        },
+        {
+          role: "current",
+          note: "The chosen option is visible at rest."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            represents: "command"
+          },
+          redirect: "action-cluster.overflow",
+          because: "A list of things to do is a menu, not a choice of value."
+        },
+        {
+          when: {
+            represents: "destination"
+          },
+          redirect: "navigate-hierarchy#descend",
+          because: "A list of places to go is navigation."
+        },
+        {
+          when: {
+            set: "open"
+          },
+          variant: "combobox"
+        },
+        {
+          when: {
+            representation: "rendered"
+          },
+          variant: "rendered"
+        },
+        {
+          when: {
+            multiplicity: "many",
+            cardinality: "few"
+          },
+          variant: "checklist"
+        },
+        {
+          when: {
+            multiplicity: "many"
+          },
+          variant: "token-list"
+        },
+        {
+          when: {
+            cardinality: "few",
+            fit: "row"
+          },
+          variant: "segmented"
+        },
+        {
+          when: {
+            cardinality: "few"
+          },
+          variant: "radio"
+        },
+        {
+          when: {
+            cardinality: "many"
+          },
+          variant: "combobox"
+        },
+        {
+          default: "select"
+        }
+      ],
+      variants: {
+        segmented: {
+          summary: "All options visible on one row, the active one marked; re-selecting the active one clears it when 'no opinion' is a valid state.",
+          consequences: "Costs width. Buys zero clicks to see the set \u2014 a dropdown for four icons costs a click and a popover to say what four icons say at rest."
+        },
+        radio: {
+          summary: "All options visible as a labelled vertical list.",
+          consequences: "Costs height. Right when the labels are too long for a row."
+        },
+        select: {
+          summary: "The current value is the trigger; the set opens on demand.",
+          consequences: "Costs a click to see the options. Buys space. The default, not the reflex."
+        },
+        combobox: {
+          summary: "Typed filtering over the set; may accept values the set lacks.",
+          consequences: "Justified only when the set is large or open."
+        },
+        rendered: {
+          summary: "The option is its rendering \u2014 a swatch, a word set in its face, a live preview \u2014 laid out as a grid of tiles with the active one marked; the name is secondary, in a tooltip or caption.",
+          consequences: "The only correct answer when options differ visibly. A dropdown of their names describes the choice instead of showing it."
+        },
+        checklist: {
+          summary: "Every option visible with an independent on/off."
+        },
+        "token-list": {
+          summary: "Chosen options shown as removable tokens; unchosen ones found by typing."
+        }
+      }
+    },
+    {
+      id: "enter-value",
+      intent: "enter",
+      scale: "control",
+      problem: "The user supplies a value of a known type that the system cannot list in advance.",
+      forces: [
+        "set",
+        "value-type",
+        "representation",
+        "optionality"
+      ],
+      parts: [
+        {
+          role: "input"
+        },
+        {
+          role: "current",
+          note: "A rendered value type shows the value, not its name."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            set: "closed"
+          },
+          redirect: "choose",
+          because: "A value from a fixed set is a choice."
+        },
+        {
+          when: {
+            "value-type": "length"
+          },
+          variant: "length"
+        },
+        {
+          when: {
+            "value-type": "color"
+          },
+          variant: "color"
+        },
+        {
+          when: {
+            "value-type": "boolean"
+          },
+          variant: "toggle"
+        },
+        {
+          when: {
+            "value-type": "number"
+          },
+          variant: "number"
+        },
+        {
+          when: {
+            "value-type": "media"
+          },
+          variant: "media"
+        },
+        {
+          when: {
+            "value-type": "date"
+          },
+          variant: "date"
+        },
+        {
+          when: {
+            "value-type": "rich"
+          },
+          variant: "rich-text"
+        },
+        {
+          default: "text"
+        }
+      ],
+      variants: {
+        text: {
+          summary: "A single- or multi-line text input."
+        },
+        number: {
+          summary: "A numeric input; a slider beside it when the range is bounded and feel matters more than the exact figure."
+        },
+        length: {
+          summary: "A CSS length: a unit-aware input and a slider under one label, the slider's range derived from the unit.",
+          consequences: "One hardcoded range is wrong for one of the two unit families. A text field holding '16px' is this pattern missing."
+        },
+        color: {
+          summary: "The current color shown as itself; the editor opens on demand; reset appears only while a local value is set.",
+          consequences: "An always-open picker per slot is a wall of pickers. An always-present reset on an inherited value lies about what it would do."
+        },
+        toggle: {
+          summary: "One on/off."
+        },
+        media: {
+          summary: "Pick or upload; the current asset shown as itself."
+        },
+        date: {
+          summary: "A calendar, or a typed date with the format shown."
+        },
+        "rich-text": {
+          summary: "Formatted text."
+        }
+      }
+    },
+    {
+      id: "field",
+      intent: "enter",
+      scale: "composite",
+      problem: "A control needs a label the accessibility tree can find, a description, and somewhere for its validation message.",
+      forces: [
+        "optionality"
+      ],
+      parts: [
+        {
+          role: "label"
+        },
+        {
+          role: "control"
+        },
+        {
+          role: "description"
+        },
+        {
+          role: "error"
+        }
+      ],
+      resolve: [
+        {
+          default: "field"
+        }
+      ],
+      variants: {
+        field: {
+          summary: "Label, control, description and error in the standard arrangement, with the associations wired.",
+          consequences: "A placeholder is not a label. A label beside a control with no association is a picture of a field."
+        }
+      }
+    },
+    {
+      id: "field-group",
+      intent: "enter",
+      scale: "composite",
+      problem: "Several fields belong together under one heading, and some of them may not apply until the user says so.",
+      forces: [
+        "optionality",
+        "cardinality"
+      ],
+      parts: [
+        {
+          role: "heading"
+        },
+        {
+          role: "fields"
+        },
+        {
+          role: "reset",
+          note: "Per field, and for the group."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            optionality: "optional"
+          },
+          variant: "progressive"
+        },
+        {
+          when: {
+            cardinality: "few"
+          },
+          variant: "fieldset"
+        },
+        {
+          default: "collapsible"
+        }
+      ],
+      variants: {
+        fieldset: {
+          summary: "A legend and its fields, all shown."
+        },
+        collapsible: {
+          summary: "A heading that opens to its fields; closed by default when the group is auxiliary."
+        },
+        progressive: {
+          summary: "Only fields that hold a value, or are shown by default, render; each has its own reset and the group has reset-all.",
+          consequences: "Twelve possible controls show as three. Every unconditionally rendered optional control is one the reader has to rule out. A hand-rolled 'Show advanced' toggle hides half of them and resets none."
+        }
+      }
+    },
+    {
+      id: "edit-record",
+      intent: "enter",
+      scale: "region",
+      problem: "The user edits the fields of one thing and the result is saved or discarded.",
+      forces: [
+        "context",
+        "binding",
+        "cardinality"
+      ],
+      parts: [
+        {
+          role: "fields"
+        },
+        {
+          role: "actions",
+          note: "Absent when binding is entity and every edit is saved as it happens."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            binding: "entity"
+          },
+          variant: "data-form"
+        },
+        {
+          when: {
+            context: "overlay",
+            cardinality: "few"
+          },
+          variant: "dialog"
+        },
+        {
+          when: {
+            context: "overlay"
+          },
+          variant: "drawer"
+        },
+        {
+          when: {
+            context: "in-place"
+          },
+          variant: "inspector"
+        },
+        {
+          default: "form-screen"
+        }
+      ],
+      variants: {
+        "data-form": {
+          summary: "Fields declared as data and rendered by the system's form renderer against the record store: no local state, no save button, undo for free.",
+          consequences: "The one form variant whose anti-shape is checkable \u2014 an overlay or card holding bare text controls with a state hook per field."
+        },
+        dialog: {
+          summary: "A modal with the fields and a submit/cancel cluster in the standard place.",
+          consequences: "Right when the task is one decision the user can scan without scrolling."
+        },
+        drawer: {
+          summary: "A side surface for a multi-section edit that keeps the subject visible."
+        },
+        inspector: {
+          summary: "A persistent aside that edits whatever is selected in the main region, with its own header and scroll area."
+        },
+        "form-screen": {
+          summary: "The form is the screen."
+        }
+      }
+    },
+    {
+      id: "action-cluster",
+      intent: "act",
+      scale: "composite",
+      problem: "More than one command applies here and they must read as a set with one obvious default.",
+      forces: [
+        "represents",
+        "cardinality",
+        "grouped",
+        "prominence",
+        "reversibility"
+      ],
+      parts: [
+        {
+          role: "primary",
+          note: "At most one per surface, positioned last."
+        },
+        {
+          role: "secondary"
+        },
+        {
+          role: "overflow",
+          note: "Secondary and destructive commands that do not earn a visible button."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            represents: "destination"
+          },
+          redirect: "navigate-hierarchy",
+          because: "Something that navigates is a link, however it is styled."
+        },
+        {
+          when: {
+            prominence: "destructive"
+          },
+          variant: "overflow",
+          and: "confirm"
+        },
+        {
+          when: {
+            grouped: true
+          },
+          variant: "toolbar"
+        },
+        {
+          when: {
+            cardinality: "some"
+          },
+          variant: "toolbar"
+        },
+        {
+          when: {
+            prominence: "secondary"
+          },
+          variant: "overflow"
+        },
+        {
+          default: "bar"
+        }
+      ],
+      variants: {
+        bar: {
+          summary: "Two or three visible actions, consistently ordered, gap-spaced, primary last.",
+          consequences: "Too small to check by shape; it is the documented default. A div with hand-set margins between the buttons is this pattern missing."
+        },
+        toolbar: {
+          summary: "Grouped commands with one tab stop and arrow-key movement between them.",
+          consequences: "A stack of buttons with a separator looks identical and makes every control a tab stop."
+        },
+        overflow: {
+          summary: "Secondary and destructive commands behind one icon-triggered menu. Items that would do nothing are omitted, not disabled. A destructive item opens confirm and never destroys on its own.",
+          consequences: "Rename and Delete as two visible buttons compete with the one action that matters."
+        }
+      }
+    },
+    {
+      id: "confirm",
+      intent: "confirm",
+      scale: "composite",
+      problem: "An action cannot be undone and the user must consent to it knowingly.",
+      forces: [
+        "reversibility"
+      ],
+      parts: [
+        {
+          role: "title",
+          note: "Names the consequence, not the button."
+        },
+        {
+          role: "description"
+        },
+        {
+          role: "actions",
+          note: "Exactly two: the consequence labelled as its verb, and cancel. Emphasis matches severity."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            reversibility: "reversible"
+          },
+          redirect: "report.toast",
+          because: "Reversible actions get an undo, not a question. A confirm on a reversible action trains the user to click through it."
+        },
+        {
+          default: "confirm"
+        }
+      ],
+      variants: {
+        confirm: {
+          summary: "A modal that blocks until the user chooses; dismissing is cancel.",
+          consequences: "A form dialog also has a title, a description and two buttons, and tree matching cannot tell the two apart. The declaration can."
+        }
+      }
+    },
+    {
+      id: "navigate-hierarchy",
+      intent: "navigate",
+      scale: "flow",
+      problem: "Content is nested deeper than one level, and showing it all at once makes a wall.",
+      forces: [
+        "relation",
+        "representation"
+      ],
+      parts: [
+        {
+          role: "stack",
+          note: "One route per screen, declared flat. The path is the state, so a router can drive it and deep links work."
+        },
+        {
+          role: "descend",
+          note: "A row that names the sub-screen and opens it: one control, one tab stop, one accessible name. A trailing chevron means 'goes deeper'; a trailing value means 'this is the current setting'; never both. When representation is rendered, the row's leading element is the value itself \u2014 five swatches, the family name in its own face \u2014 not a label for it."
+        },
+        {
+          role: "sub-screen-header",
+          note: "Back, title, optional description, state controls on the right. No breadcrumb one level deep."
+        },
+        {
+          role: "leaf",
+          note: "Shows only what is actually set."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            relation: "siblings"
+          },
+          redirect: "switch-view",
+          because: "Tabs are for peers; depth wants navigation."
+        },
+        {
+          default: "drilldown"
+        }
+      ],
+      variants: {
+        drilldown: {
+          summary: "A stack of screens navigated one level at a time; rows descend, headers ascend.",
+          consequences: "Depth beats breadth: twelve settings behind four rows is a menu; twelve on one screen is a wall. A select that swaps which panel renders, and tabs standing in for levels, are both this pattern refused."
+        }
+      }
+    },
+    {
+      id: "switch-view",
+      intent: "navigate",
+      scale: "composite",
+      problem: "One subject has several peer views and only one should show at a time.",
+      forces: [
+        "relation",
+        "cardinality"
+      ],
+      parts: [
+        {
+          role: "list"
+        },
+        {
+          role: "panel",
+          note: "One per tab. A panel may itself hold a navigate-hierarchy; the outer footer stays put."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            relation: "parent-child"
+          },
+          redirect: "navigate-hierarchy",
+          because: "Levels are not peers."
+        },
+        {
+          default: "tabs"
+        }
+      ],
+      variants: {
+        tabs: {
+          summary: "A tab list and one panel per tab, sharing whatever surrounds them.",
+          consequences: "A select that swaps the body is a tab bar that costs a click and hides the alternatives. Several overlays for one task with several sources is this pattern inside one overlay."
+        }
+      }
+    },
+    {
+      id: "browse-collection",
+      intent: "view",
+      scale: "region",
+      problem: "Many items of one kind must be found, compared and acted on.",
+      forces: [
+        "selection",
+        "representation",
+        "grouped",
+        "cardinality"
+      ],
+      parts: [
+        {
+          role: "toolbar",
+          note: "Search, one choose per filter dimension, bulk actions \u2014 one row above the items. Announce the result count when a filter changes."
+        },
+        {
+          role: "items"
+        },
+        {
+          role: "item-actions"
+        },
+        {
+          role: "empty"
+        },
+        {
+          role: "add"
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            representation: "rendered",
+            selection: "one"
+          },
+          redirect: "choose.rendered",
+          because: "A grid of previews where one is picked is a choice, not a browse."
+        },
+        {
+          when: {
+            representation: "rendered"
+          },
+          variant: "gallery"
+        },
+        {
+          when: {
+            selection: "one"
+          },
+          variant: "selectable-list"
+        },
+        {
+          when: {
+            grouped: true
+          },
+          variant: "grouped-list"
+        },
+        {
+          default: "list"
+        }
+      ],
+      variants: {
+        list: {
+          summary: "The system's data view: fields declared as data; sorting, filtering and pagination owned by the view.",
+          consequences: "A hand-built table with its own filter row is this pattern reimplemented. A list long enough to need filtering that offers none is this pattern missing a part."
+        },
+        "selectable-list": {
+          summary: "A listbox where one item is selected and the selection drives a preview elsewhere; one tab stop for the list, arrows within it.",
+          consequences: "A stack of buttons with hand-managed aria-selected has the look and none of the semantics."
+        },
+        gallery: {
+          summary: "Grouped, live-rendered items as the reference \u2014 not screenshots, not names \u2014 with real group semantics; previews are inert.",
+          consequences: "Sections built from headings alone group visually and not semantically."
+        },
+        "grouped-list": {
+          summary: "Items sectioned by an attribute that decides what may be done to them, each section with its own add and overflow, each row descending to its own editor.",
+          consequences: "Editing happens on the item's own screen, not inline in the row. One flat list hides the attribute that governs the actions."
+        }
+      }
+    },
+    {
+      id: "report",
+      intent: "report",
+      scale: "composite",
+      problem: "The system has something to tell the user about what happened or what state things are in.",
+      forces: [
+        "subject",
+        "persistence",
+        "context"
+      ],
+      parts: [
+        {
+          role: "message"
+        },
+        {
+          role: "action",
+          note: "Undo, retry, dismiss, or the action that fills an empty region."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            subject: "empty"
+          },
+          variant: "empty"
+        },
+        {
+          when: {
+            subject: "loading"
+          },
+          variant: "loading"
+        },
+        {
+          when: {
+            subject: "invalid"
+          },
+          variant: "inline"
+        },
+        {
+          when: {
+            persistence: "transient"
+          },
+          variant: "toast"
+        },
+        {
+          default: "notice"
+        }
+      ],
+      variants: {
+        toast: {
+          summary: "Transient, raised from anywhere, queued and dismissed by a manager the app mounts once; carries undo when the action was reversible.",
+          consequences: "A hand-managed array of messages in state, rendered into a fixed stack, is the manager reimplemented."
+        },
+        notice: {
+          summary: "Persistent and region-level, stacked by one container that owns order, spacing and dismissal.",
+          consequences: "Individually placed notices with local margins disagree about spacing and never agree about order."
+        },
+        inline: {
+          summary: "Beside the field it concerns, in the field's own error slot."
+        },
+        empty: {
+          summary: "Why the region is empty and the action that fills it, centred in the space the content would occupy.",
+          consequences: "A bare 'No results' string, or a spinner that never resolves, are both this pattern missing."
+        },
+        loading: {
+          summary: "A placeholder shaped like the content, or a spinner when the shape is unknown."
+        }
+      }
+    },
+    {
+      id: "group",
+      intent: "group",
+      scale: "composite",
+      problem: "Related content and its actions should read as one thing.",
+      forces: [
+        "boundary"
+      ],
+      parts: [
+        {
+          role: "header"
+        },
+        {
+          role: "content"
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            boundary: "strong"
+          },
+          variant: "card"
+        },
+        {
+          default: "section"
+        }
+      ],
+      variants: {
+        card: {
+          summary: "A bounded surface with an optional header, title and actions.",
+          consequences: "A styled div with a border rebuilt per surface disagrees with itself about radius, padding and header rhythm."
+        },
+        section: {
+          summary: "A heading and its content, rhythm from the parent, no box."
+        }
+      }
+    },
+    {
+      id: "screen",
+      intent: "navigate",
+      scale: "screen",
+      problem: "Every view must tell the user where they are and what they can do here before it shows them anything else.",
+      forces: [
+        "context",
+        "relation"
+      ],
+      parts: [
+        {
+          role: "header",
+          note: "Title, optional breadcrumbs or icon, optional description, trailing actions. Rebuilt per screen is the defect."
+        },
+        {
+          role: "main"
+        },
+        {
+          role: "aside"
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            relation: "parent-child"
+          },
+          variant: "sub-screen"
+        },
+        {
+          when: {
+            context: "overlay"
+          },
+          variant: "overlay"
+        },
+        {
+          default: "page"
+        }
+      ],
+      variants: {
+        page: {
+          summary: "A root screen: header, main, optional aside."
+        },
+        "sub-screen": {
+          summary: "A screen below the root of a hierarchy; its header is navigate-hierarchy#sub-screen-header."
+        },
+        overlay: {
+          summary: "A screen hosted in a modal or drawer: the container supplies header and footer, the body may be a switch-view."
+        }
+      }
+    }
+  ]
+};
+
+// package.json
+var package_default = {
+  name: "@dvdbwmn/loupe",
+  version: "0.7.0",
+  description: "Design-system conformance checking: correlates markup bindings with the CSS that styles them.",
+  type: "module",
+  bin: {
+    loupe: "./bin/loupe.mjs"
+  },
+  exports: {
+    "./presets/*": "./presets/*.json"
+  },
+  files: [
+    "bin",
+    "src",
+    "dist",
+    "presets",
+    "README.md"
+  ],
+  engines: {
+    node: ">=18"
+  },
+  scripts: {
+    build: "node build.mjs",
+    "build:check": "node build.mjs --check",
+    "build:binary": "node scripts/build-binary.mjs",
+    "build:binary:all": "node scripts/build-binary.mjs --all",
+    format: "biome format --write .",
+    lint: "biome check .",
+    "lint:fix": "biome check --write .",
+    typecheck: "tsc -p tsconfig.json",
+    "patterns-doc": "tsx scripts/patterns-doc.ts",
+    "patterns-doc:check": "tsx scripts/patterns-doc.ts --check",
+    "eval:represents": "tsx evals/represents/run.ts",
+    "eval:values": "tsx evals/values/run.ts",
+    test: "npm run lint && npm run typecheck && tsx tests/run.ts && tsx tests/detect.ts && tsx tests/regressions.ts && tsx tests/features.ts && tsx tests/autofix.ts && tsx tests/multi-ds.ts && tsx tests/report.ts"
+  },
+  dependencies: {
+    "@babel/parser": "^7.24.0",
+    picomatch: "^4.0.0",
+    postcss: "^8.4.0"
+  },
+  license: "MIT",
+  optionalDependencies: {
+    "postcss-less": "^6.0.0",
+    "postcss-scss": "^4.0.9"
+  },
+  devDependencies: {
+    "@babel/types": "^7.29.8",
+    "@biomejs/biome": "2.5.14",
+    "@types/node": "^22.20.1",
+    "@types/picomatch": "^4.0.3",
+    esbuild: "^0.25.0",
+    tsx: "^4.23.12",
+    typescript: "^5.9.3"
+  }
+};
+
+// src/embedded.ts
+var EMBEDDED_PRESETS = {
+  archer: archer_default,
+  "base-ui": base_ui_default,
+  generic: generic_default,
+  "wordpress-block-theme": wordpress_block_theme_default,
+  "wordpress-components": wordpress_components_default,
+  wpds: wpds_default
+};
+var EMBEDDED_VERSION = package_default.version;
+var EMBEDDED_LANGUAGE = patterns_default;
+var presetKey = (spec) => spec.replace(/^loupe\/presets\//, "");
+var PRESET_DIR = join5(dirname2(fileURLToPath(import.meta.url)), "..", "presets");
+var presetNames = () => {
+  try {
+    return readdirSync3(PRESET_DIR).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
+  } catch {
+    return Object.keys(EMBEDDED_PRESETS);
+  }
+};
+var readPreset = (name) => {
+  const onDisk = join5(PRESET_DIR, `${name}.json`);
+  if (existsSync2(onDisk)) {
+    try {
+      return JSON.parse(readFileSync4(onDisk, "utf8"));
+    } catch {
+      return void 0;
+    }
+  }
+  return EMBEDDED_PRESETS[name];
+};
+var hasPreset = (spec) => existsSync2(join5(PRESET_DIR, `${presetKey(spec)}.json`)) || Boolean(EMBEDDED_PRESETS[presetKey(spec)]);
 
 // src/judge/force.ts
 var forceQuery = (force) => ({
@@ -25924,8 +27334,8 @@ var valueQuery = (about) => ({
 });
 
 // src/judge/variant.ts
-import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join5 } from "node:path";
+import { readFileSync as readFileSync5 } from "node:fs";
+import { join as join6 } from "node:path";
 var notKey = (e) => `not_${e.name.toLowerCase()}`;
 var variantQuery = (root2) => ({
   // One per request, as forces are: `represents` lost a third of its
@@ -25934,7 +27344,7 @@ var variantQuery = (root2) => ({
   // tokens are about the same either way.
   size: 1,
   element: ({ f }) => {
-    const lines = readFileSync4(join5(root2, f.file), "utf8").split("\n");
+    const lines = readFileSync5(join6(root2, f.file), "utf8").split("\n");
     const i = f.line - 1;
     return {
       file: f.file,
@@ -26033,8 +27443,12 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
   });
   return annotated;
 }
-var LANGUAGE = join6(dirname2(fileURLToPath(import.meta.url)), "..", "..", "patterns", "index.json");
-var loadLanguage = (path = LANGUAGE) => JSON.parse(readFileSync5(path, "utf8"));
+var LANGUAGE = join7(dirname3(fileURLToPath2(import.meta.url)), "..", "..", "patterns", "index.json");
+var loadLanguage = (path) => {
+  if (path !== void 0) return JSON.parse(readFileSync6(path, "utf8"));
+  if (existsSync3(LANGUAGE)) return JSON.parse(readFileSync6(LANGUAGE, "utf8"));
+  return EMBEDDED_LANGUAGE;
+};
 var REDIRECT_FLOOR = 0.9;
 async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch, language = loadLanguage()) {
   const byId = new Map(language.patterns.map((p) => [p.id, p]));
@@ -26086,7 +27500,7 @@ function tokenDescriptions(profiles) {
   for (const p of profiles) {
     if (!p.tokenDescriptions) continue;
     try {
-      const raw = JSON.parse(readFileSync5(p.tokenDescriptions, "utf8"));
+      const raw = JSON.parse(readFileSync6(p.tokenDescriptions, "utf8"));
       for (const [name, text] of Object.entries(raw))
         if (!name.startsWith("$") && typeof text === "string") out.set(name, text);
     } catch {
@@ -26110,7 +27524,7 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
   const linesOf = (file) => {
     const cached = files.get(file);
     if (cached) return cached;
-    const lines = readFileSync5(join6(root2, file), "utf8").split("\n");
+    const lines = readFileSync6(join7(root2, file), "utf8").split("\n");
     files.set(file, lines);
     return lines;
   };
@@ -26181,13 +27595,13 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
 }
 
 // src/baseline.ts
-import { existsSync as existsSync3, readFileSync as readFileSync6, writeFileSync as writeFileSync2 } from "node:fs";
-import { dirname as dirname3, isAbsolute as isAbsolute3, join as join8, resolve as resolve3 } from "node:path";
+import { existsSync as existsSync5, readFileSync as readFileSync7, writeFileSync as writeFileSync2 } from "node:fs";
+import { dirname as dirname4, isAbsolute as isAbsolute3, join as join9, resolve as resolve3 } from "node:path";
 
 // src/paths.ts
 import { createHash } from "node:crypto";
-import { existsSync as existsSync2, mkdirSync } from "node:fs";
-import { isAbsolute as isAbsolute2, join as join7, resolve as resolve2 } from "node:path";
+import { existsSync as existsSync4, mkdirSync } from "node:fs";
+import { isAbsolute as isAbsolute2, join as join8, resolve as resolve2 } from "node:path";
 var pluginDataDir = () => process.env.CLAUDE_PLUGIN_DATA ?? null;
 var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
 function projectKey(root2) {
@@ -26206,13 +27620,13 @@ function ensureDir(dir) {
 }
 function stateDir(root2, { create = false } = {}) {
   const data = pluginDataDir();
-  const project = join7(root2, ".loupe");
+  const project = join8(root2, ".loupe");
   if (data) {
-    const dir = join7(data, "projects", projectKey(root2));
+    const dir = join8(data, "projects", projectKey(root2));
     if (create) {
       const made2 = ensureDir(dir);
       if (made2) return { dir: made2, scope: "plugin-data" };
-    } else if (existsSync2(dir) || !existsSync2(project)) {
+    } else if (existsSync4(dir) || !existsSync4(project)) {
       return { dir, scope: "plugin-data" };
     }
   }
@@ -26223,40 +27637,40 @@ function stateDir(root2, { create = false } = {}) {
 var DEFAULT_BASELINE = ".loupe-baseline.json";
 function baselinePath(root2, named) {
   const p = named || DEFAULT_BASELINE;
-  return isAbsolute2(p) ? p : join7(root2, p);
+  return isAbsolute2(p) ? p : join8(root2, p);
 }
 function legacyBaselines(root2) {
   const data = pluginDataDir();
   return [
-    join7(root2, ".loupe", "baseline.json"),
-    ...data ? [join7(data, "projects", projectKey(root2), "baseline.json")] : []
+    join8(root2, ".loupe", "baseline.json"),
+    ...data ? [join8(data, "projects", projectKey(root2), "baseline.json")] : []
   ];
 }
 function findExistingBaseline(root2, explicit, configured) {
   if (explicit) {
     const path = baselinePath(root2, explicit);
-    return { path, found: existsSync2(path), fallback: "none" };
+    return { path, found: existsSync4(path), fallback: "none" };
   }
   const target = baselinePath(root2, configured);
-  if (existsSync2(target)) return { path: target, found: true, fallback: "none" };
-  const byDefaultName = join7(root2, DEFAULT_BASELINE);
-  if (byDefaultName !== target && existsSync2(byDefaultName))
+  if (existsSync4(target)) return { path: target, found: true, fallback: "none" };
+  const byDefaultName = join8(root2, DEFAULT_BASELINE);
+  if (byDefaultName !== target && existsSync4(byDefaultName))
     return { path: byDefaultName, found: true, fallback: "default-name" };
-  for (const path of legacyBaselines(root2)) if (existsSync2(path)) return { path, found: true, fallback: "legacy" };
+  for (const path of legacyBaselines(root2)) if (existsSync4(path)) return { path, found: true, fallback: "legacy" };
   return { path: target, found: false, fallback: "none" };
 }
 function attemptsPath(root2, create = false) {
   const { dir } = stateDir(root2, { create });
-  return dir ? join7(dir, "attempts.json") : null;
+  return dir ? join8(dir, "attempts.json") : null;
 }
 
 // src/baseline.ts
-var resolvePath = (root2, p) => isAbsolute3(p) ? p : join8(root2, p);
+var resolvePath = (root2, p) => isAbsolute3(p) ? p : join9(root2, p);
 function readBaseline(root2, path) {
   const full = resolvePath(root2, path);
-  if (!existsSync3(full)) return null;
+  if (!existsSync5(full)) return null;
   try {
-    const parsed = JSON.parse(readFileSync6(full, "utf8"));
+    const parsed = JSON.parse(readFileSync7(full, "utf8"));
     if (!Array.isArray(parsed.entries)) return null;
     const entries = parsed.entries;
     return {
@@ -26273,7 +27687,7 @@ function readBaseline(root2, path) {
 }
 function writeBaseline(root2, path, result) {
   const full = resolvePath(root2, path);
-  const dir = dirname3(full);
+  const dir = dirname4(full);
   if (dir !== resolve3(root2)) ensureDir(dir);
   const entries = [...new Set(result.findings.map(findingKey))].sort();
   const prior = readBaseline(root2, path);
@@ -26311,9 +27725,9 @@ function applyBaseline(result, baseline) {
 }
 
 // src/config.ts
-import { existsSync as existsSync4, readFileSync as readFileSync7, readdirSync as readdirSync3 } from "node:fs";
-import { dirname as dirname4, isAbsolute as isAbsolute4, join as join9, resolve as resolve4 } from "node:path";
-import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
+import { existsSync as existsSync6, readFileSync as readFileSync8 } from "node:fs";
+import { dirname as dirname5, isAbsolute as isAbsolute4, join as join10, resolve as resolve4 } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // src/registry.ts
 var declaredPackages = (raw) => {
@@ -26340,8 +27754,6 @@ function loadComponents(raw) {
 }
 
 // src/config.ts
-var HERE = dirname4(fileURLToPath2(import.meta.url));
-var PRESET_DIR = join9(HERE, "..", "presets");
 var CONFIG_NAMES = ["loupe.config.mjs", "loupe.config.js", "loupe.config.json", ".louperc.json"];
 var DEFAULTS = {
   designSystem: {
@@ -26395,36 +27807,40 @@ function findConfig(start) {
   let dir = resolve4(start);
   for (; ; ) {
     for (const name of CONFIG_NAMES) {
-      const p = join9(dir, name);
-      if (existsSync4(p)) return p;
+      const p = join10(dir, name);
+      if (existsSync6(p)) return p;
     }
-    const pkg = join9(dir, "package.json");
-    if (existsSync4(pkg)) {
+    const pkg = join10(dir, "package.json");
+    if (existsSync6(pkg)) {
       try {
-        const parsed = JSON.parse(readFileSync7(pkg, "utf8"));
+        const parsed = JSON.parse(readFileSync8(pkg, "utf8"));
         if (isObj(parsed) && parsed.loupe) return pkg;
       } catch {
       }
     }
-    const up = dirname4(dir);
+    const up = dirname5(dir);
     if (up === dir) return null;
     dir = up;
   }
 }
 async function readConfigFile(path) {
+  if (path.startsWith(PRESET_DIR) && !existsSync6(path)) {
+    const embedded = EMBEDDED_PRESETS[presetKey(path.slice(PRESET_DIR.length + 1).replace(/\.json$/, ""))];
+    if (embedded) return embedded;
+  }
   if (path.endsWith(".json")) {
-    const parsed = JSON.parse(readFileSync7(path, "utf8"));
+    const parsed = JSON.parse(readFileSync8(path, "utf8"));
     return path.endsWith("package.json") ? parsed.loupe : parsed;
   }
   const mod = await import(pathToFileURL(path).href);
   return mod.default ?? mod;
 }
-var presetPath = (spec) => join9(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, "")}.json`);
+var presetPath = (spec) => join10(PRESET_DIR, `${spec.replace(/^loupe\/presets\//, "")}.json`);
 async function resolveExtends(spec, fromDir) {
   const asPreset = presetPath(spec);
-  if (existsSync4(asPreset)) return { path: asPreset, dir: PRESET_DIR };
-  const asPath = isAbsolute4(spec) ? spec : join9(fromDir, spec);
-  if (existsSync4(asPath)) return { path: asPath, dir: dirname4(asPath) };
+  if (hasPreset(spec)) return { path: asPreset, dir: PRESET_DIR };
+  const asPath = isAbsolute4(spec) ? spec : join10(fromDir, spec);
+  if (existsSync6(asPath)) return { path: asPath, dir: dirname5(asPath) };
   throw new Error(`cannot resolve extends: ${spec}`);
 }
 async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
@@ -26432,7 +27848,7 @@ async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
   if (seen.has(real)) throw new Error(`circular extends at ${real}`);
   seen.add(real);
   const raw = await readConfigFile(real) ?? {};
-  return expandExtends(raw, dirname4(real), seen);
+  return expandExtends(raw, dirname5(real), seen);
 }
 async function expandExtends(raw, fromDir, seen = /* @__PURE__ */ new Set()) {
   if (!raw?.extends) return raw ?? {};
@@ -26446,21 +27862,16 @@ async function expandExtends(raw, fromDir, seen = /* @__PURE__ */ new Set()) {
   return merge(base, rest);
 }
 function listPresets() {
-  try {
-    return readdirSync3(PRESET_DIR).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, "")).sort((a, b) => a === "generic" ? 1 : b === "generic" ? -1 : a.localeCompare(b));
-  } catch {
-    return ["generic"];
-  }
+  return presetNames().sort((a, b) => a === "generic" ? 1 : b === "generic" ? -1 : a.localeCompare(b));
 }
-var presetExists = (name) => existsSync4(presetPath(name));
+var presetExists = (name) => hasPreset(name);
 function shippedVocabulary() {
   const keywords = /* @__PURE__ */ new Set([DEFAULTS.suppression.keyword]);
   const blanket = new Set(DEFAULTS.suppression.blanket);
   try {
-    for (const f of readdirSync3(PRESET_DIR)) {
-      if (!f.endsWith(".json")) continue;
+    for (const name of presetNames()) {
       try {
-        const raw = JSON.parse(readFileSync7(join9(PRESET_DIR, f), "utf8"));
+        const raw = readPreset(name);
         const supp = isObj(raw) ? raw.suppression : void 0;
         if (!isObj(supp)) continue;
         const kw = supp.keyword;
@@ -26485,9 +27896,9 @@ function normalize(raw, { root: root2 }) {
   let patterns = [];
   if (Array.isArray(cfg.patterns)) patterns = loadPatterns(cfg.patterns);
   else if (typeof cfg.patterns === "string") {
-    const p = isAbsolute4(cfg.patterns) ? cfg.patterns : join9(root2, cfg.patterns);
+    const p = isAbsolute4(cfg.patterns) ? cfg.patterns : join10(root2, cfg.patterns);
     try {
-      const raw2 = JSON.parse(readFileSync7(p, "utf8"));
+      const raw2 = JSON.parse(readFileSync8(p, "utf8"));
       patterns = registryApplies(raw2, ds.packages) ? loadPatterns(raw2) : [];
     } catch {
       patterns = [];
@@ -26496,9 +27907,9 @@ function normalize(raw, { root: root2 }) {
   let componentRegistry = /* @__PURE__ */ new Map();
   if (Array.isArray(cfg.componentRegistry)) componentRegistry = loadComponents(cfg.componentRegistry);
   else if (typeof cfg.componentRegistry === "string") {
-    const p = isAbsolute4(cfg.componentRegistry) ? cfg.componentRegistry : join9(root2, cfg.componentRegistry);
+    const p = isAbsolute4(cfg.componentRegistry) ? cfg.componentRegistry : join10(root2, cfg.componentRegistry);
     try {
-      const raw2 = JSON.parse(readFileSync7(p, "utf8"));
+      const raw2 = JSON.parse(readFileSync8(p, "utf8"));
       componentRegistry = registryApplies(raw2, ds.packages) ? loadComponents(raw2) : /* @__PURE__ */ new Map();
     } catch {
       componentRegistry = /* @__PURE__ */ new Map();
@@ -26632,7 +28043,7 @@ async function loadConfig({
     source = { kind: "file", path: resolve4(configPath) };
   } else if (preset2) {
     if (!presetExists(preset2)) throw new Error(`unknown preset: ${preset2}`);
-    raw = await loadChain(join9(PRESET_DIR, `${preset2}.json`));
+    raw = await loadChain(join10(PRESET_DIR, `${preset2}.json`));
     source = { kind: "preset", name: preset2 };
   } else {
     const found = findConfig(root2);
@@ -26643,7 +28054,7 @@ async function loadConfig({
       raw = await expandExtends(inline, root2);
       source = { kind: inferred ? "inferred" : "inline" };
     } else {
-      raw = await loadChain(join9(PRESET_DIR, "generic.json"));
+      raw = await loadChain(join10(PRESET_DIR, "generic.json"));
       source = { kind: "preset", name: "generic" };
     }
   }
@@ -27375,27 +28786,24 @@ ${body(payload, clean, result.diagnostics.parseErrors.length)}
 }
 
 // src/detect.ts
-import { existsSync as existsSync5, readFileSync as readFileSync8, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
-import { dirname as dirname5, join as join10 } from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
-var HERE2 = dirname5(fileURLToPath3(import.meta.url));
-var PRESET_DIR2 = join10(HERE2, "..", "presets");
+import { existsSync as existsSync7, readFileSync as readFileSync9, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
+import { join as join11 } from "node:path";
 var readJson = (p) => {
   try {
-    return JSON.parse(readFileSync8(p, "utf8"));
+    return JSON.parse(readFileSync9(p, "utf8"));
   } catch {
     return null;
   }
 };
-var preset = (name) => readJson(join10(PRESET_DIR2, `${name}.json`)) ?? {};
+var preset = (name) => readPreset(name) ?? {};
 var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", ".git", "vendor", "build", "dist", ".claude"]);
 var DETECT_ENTRY_BUDGET = 5e4;
 function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
   const walk = (dir, rel, depth) => {
     if (depth > maxDepth || out.length >= budget) return;
-    const pkg = join10(dir, "package.json");
-    if (existsSync5(pkg)) out.push({ dir, rel });
+    const pkg = join11(dir, "package.json");
+    if (existsSync7(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
     let entries;
     try {
@@ -27405,23 +28813,16 @@ function manifests(root2, maxDepth = 3, budget = 60) {
     }
     for (const e of entries) {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walk(join10(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      walk(join11(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(root2, "", 0);
   return out;
 }
-function presetNames() {
-  try {
-    return readdirSync4(PRESET_DIR2).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
-  } catch {
-    return [];
-  }
-}
 function markerAt(dir, marker) {
   const name = marker.replace(/\/$/, "");
-  const full = join10(dir, name);
-  if (!existsSync5(full)) return false;
+  const full = join11(dir, name);
+  if (!existsSync7(full)) return false;
   if (!marker.endsWith("/")) return true;
   try {
     return statSync3(full).isDirectory();
@@ -27439,7 +28840,7 @@ function probeDirs(root2) {
   }
   for (const e of entries) {
     if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-    out.push({ dir: join10(root2, e.name), rel: e.name });
+    out.push({ dir: join11(root2, e.name), rel: e.name });
   }
   return out;
 }
@@ -27447,7 +28848,7 @@ var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? det
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson(join10(root2, rel, "package.json")) ?? {};
+      const pkg = readJson(join11(root2, rel, "package.json")) ?? {};
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
       const first = hit[0];
@@ -27518,7 +28919,7 @@ function libraryPrefixes(dirs, candidates) {
     }
     for (const e of entries) {
       if (budget <= 0 || !want.size) return;
-      const full = join10(dir, e.name);
+      const full = join11(dir, e.name);
       if (e.isDirectory()) {
         if (e.name === ".bin" || e.name === "node_modules") continue;
         walk(full, depth + 1);
@@ -27526,7 +28927,7 @@ function libraryPrefixes(dirs, candidates) {
         budget--;
         let text;
         try {
-          text = readFileSync8(full, "utf8");
+          text = readFileSync9(full, "utf8");
         } catch {
           continue;
         }
@@ -27542,7 +28943,7 @@ function libraryPrefixes(dirs, candidates) {
       }
     }
   };
-  for (const dir of dirs) if (existsSync5(dir)) walk(dir, 0);
+  for (const dir of dirs) if (existsSync7(dir)) walk(dir, 0);
   return found;
 }
 function resolvePreset(name, seen = /* @__PURE__ */ new Set()) {
@@ -27584,7 +28985,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   for (const { abs } of files.styles) {
     let text;
     try {
-      text = readFileSync8(abs, "utf8");
+      text = readFileSync9(abs, "utf8");
     } catch {
       continue;
     }
@@ -27600,14 +29001,14 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync8(abs, "utf8"));
+      markupText.push(readFileSync9(abs, "utf8"));
     } catch {
     }
   }
   const haystack = markupText.join("\n");
   const candidates = [...cssCounts.entries()].filter(([prefix, count]) => count >= 3 && haystack.includes(prefix)).sort((a, b) => b[1] - a[1]);
   const vendored = libraryPrefixes(
-    [join10(root2, "node_modules"), ...packageDir ? [join10(root2, packageDir, "node_modules")] : []],
+    [join11(root2, "node_modules"), ...packageDir ? [join11(root2, packageDir, "node_modules")] : []],
     candidates.map(([p]) => p)
   );
   const accepted = [];
@@ -27659,15 +29060,15 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/profiles.ts
-import { existsSync as existsSync6, readFileSync as readFileSync9, readdirSync as readdirSync5 } from "node:fs";
-import { isAbsolute as isAbsolute5, join as join11, resolve as resolve5 } from "node:path";
-var readJson2 = (p) => JSON.parse(readFileSync9(p, "utf8"));
-var under = (dir, rel) => isAbsolute5(rel) ? rel : join11(dir, rel);
+import { existsSync as existsSync8, readFileSync as readFileSync10, readdirSync as readdirSync5 } from "node:fs";
+import { isAbsolute as isAbsolute5, join as join12, resolve as resolve5 } from "node:path";
+var readJson2 = (p) => JSON.parse(readFileSync10(p, "utf8"));
+var under = (dir, rel) => isAbsolute5(rel) ? rel : join12(dir, rel);
 var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString = (v) => typeof v === "string" && v !== "" ? v : null;
 var byBytes = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function readProfiles(root2) {
-  if (!root2 || !existsSync6(root2)) return [];
+  if (!root2 || !existsSync8(root2)) return [];
   let entries;
   try {
     entries = readdirSync5(root2, { withFileTypes: true });
@@ -27678,9 +29079,9 @@ function readProfiles(root2) {
   const seen = /* @__PURE__ */ new Set();
   for (const e of [...entries].sort((a, b) => byBytes(a.name, b.name))) {
     if (!e.isDirectory()) continue;
-    const dir = join11(root2, e.name);
-    const manifest = join11(dir, "profile.json");
-    if (!existsSync6(manifest)) continue;
+    const dir = join12(root2, e.name);
+    const manifest = join12(dir, "profile.json");
+    if (!existsSync8(manifest)) continue;
     try {
       const raw = readJson2(manifest);
       const id = asString(raw.id) ?? e.name;
@@ -27811,10 +29212,10 @@ function applyRegistries(config, sources, {
 }
 
 // src/hook.ts
-import { existsSync as existsSync7, readFileSync as readFileSync10, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute6, join as join12, relative as relative3, sep as sep3 } from "node:path";
+import { existsSync as existsSync9, readFileSync as readFileSync11, writeFileSync as writeFileSync3 } from "node:fs";
+import { dirname as dirname6, isAbsolute as isAbsolute6, join as join13, relative as relative3, sep as sep3 } from "node:path";
 import { homedir } from "node:os";
-import { fileURLToPath as fileURLToPath4 } from "node:url";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 async function readStdin() {
   if (process.stdin.isTTY) return "";
@@ -27826,7 +29227,7 @@ function readState(root2) {
   try {
     const p = attemptsPath(root2);
     if (!p) return { sessions: {} };
-    const raw = JSON.parse(readFileSync10(p, "utf8"));
+    const raw = JSON.parse(readFileSync11(p, "utf8"));
     const now = Date.now();
     const sessions = {};
     for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -27869,14 +29270,14 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path ?? payload?.tool_input?.filePath;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute6(raw) ? raw : join12(root2, raw);
+  const abs = isAbsolute6(raw) ? raw : join13(root2, raw);
   const rel = relative3(root2, abs);
   if (!rel || rel.startsWith("..")) return null;
   return rel.split(sep3).join("/");
 }
 function hookRoot() {
   const fromEnv = process.env.CLAUDE_PROJECT_DIR;
-  if (fromEnv && existsSync7(fromEnv)) return fromEnv;
+  if (fromEnv && existsSync9(fromEnv)) return fromEnv;
   return process.cwd();
 }
 var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
@@ -27921,7 +29322,7 @@ function resolvedOptions() {
   if (!name) return { options: fromEnv, source: "none" };
   for (const file of ["settings.local.json", "settings.json"]) {
     try {
-      const raw = JSON.parse(readFileSync10(join12(homedir(), ".claude", file), "utf8"));
+      const raw = JSON.parse(readFileSync11(join13(homedir(), ".claude", file), "utf8"));
       const configs = raw.pluginConfigs ?? {};
       const key2 = Object.keys(configs).find((k) => k === name || k.startsWith(`${name}@`));
       const opts = key2 === void 0 ? void 0 : configs[key2]?.options;
@@ -27932,12 +29333,12 @@ function resolvedOptions() {
   return { options: fromEnv, source: "none" };
 }
 function pluginName() {
-  const roots = [process.env.CLAUDE_PLUGIN_ROOT, join12(dirname6(fileURLToPath4(import.meta.url)), "..", "..")].filter(
+  const roots = [process.env.CLAUDE_PLUGIN_ROOT, join13(dirname6(fileURLToPath3(import.meta.url)), "..", "..")].filter(
     (r) => Boolean(r)
   );
   for (const root2 of roots) {
     try {
-      const manifest = JSON.parse(readFileSync10(join12(root2, ".claude-plugin", "plugin.json"), "utf8"));
+      const manifest = JSON.parse(readFileSync11(join13(root2, ".claude-plugin", "plugin.json"), "utf8"));
       return manifest.name ?? null;
     } catch {
     }
@@ -27975,7 +29376,7 @@ var EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 var messageOf4 = (err) => err instanceof Error ? err.message : String(err);
 function judgeKey() {
   try {
-    if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join13(HERE3, "..", "..", ".env"));
+    if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(ENV_FILE);
   } catch {
   }
   return process.env.TYPESAFE_API_KEY;
@@ -27988,15 +29389,18 @@ var note = (msg) => {
 };
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
 var key = (label) => dim(label);
-var HERE3 = dirname7(fileURLToPath5(import.meta.url));
+var HERE = dirname7(fileURLToPath4(import.meta.url));
+var SINGLE_FILE = !existsSync10(join14(HERE, "..", "package.json"));
+var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
 function versionLine() {
+  if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
   let version = "unknown";
   try {
-    version = JSON.parse(readFileSync11(join13(HERE3, "..", "package.json"), "utf8")).version ?? version;
+    version = JSON.parse(readFileSync12(join14(HERE, "..", "package.json"), "utf8")).version ?? version;
   } catch {
   }
-  const entry = basename(HERE3) === "src" ? "source" : "bundle";
-  return `loupe ${version} (${entry}, ${resolve6(HERE3, "..", "..")})`;
+  const entry = basename(HERE) === "src" ? "source" : "bundle";
+  return `loupe ${version} (${entry}, ${resolve6(HERE, "..", "..")})`;
 }
 var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${key(`"${name}"`)}:`);
 var usage = () => USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^ {2}([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
@@ -28099,7 +29503,7 @@ var needsProject = (command, args, isHook) => {
   if (args.flags.all || args.flags.files) return false;
   return isHook || Boolean(args.flags.changed) && SCOPED_COMMANDS.has(command);
 };
-var looksLikeProject = (root2) => existsSync8(join13(root2, "package.json")) || existsSync8(join13(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
+var looksLikeProject = (root2) => existsSync10(join14(root2, "package.json")) || existsSync10(join14(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
 var CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString("en-US")}-entry ceiling`;
 var CEILING_WHY = "this root is larger than a project, so the namespaces are a guess from the part of it that was read";
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
@@ -28150,7 +29554,7 @@ async function main() {
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
   const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
   const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
-  if (!existsSync8(root2)) {
+  if (!existsSync10(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
 `);
@@ -28375,14 +29779,14 @@ async function main() {
 `);
       return EXIT.OK;
     }
-    const target = join13(root2, "loupe.config.json");
+    const target = join14(root2, "loupe.config.json");
     if (info.truncated && !args.flags.force) {
       fail(
         "loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. Point --root at the project, or pass --force to write it anyway.\n"
       );
       return EXIT.CANNOT_RUN;
     }
-    if (existsSync8(target) && !args.flags.force) {
+    if (existsSync10(target) && !args.flags.force) {
       fail(`loupe: ${target} already exists (use --force)
 `);
       return EXIT.CANNOT_RUN;
@@ -28426,7 +29830,7 @@ ${green(`Wrote ${target}`)}
     }
     const key2 = args.flags.judge ? judgeKey() : void 0;
     if (args.flags.judge && !key2) {
-      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join13(HERE3, "..", "..", ".env")}
+      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -28483,7 +29887,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
   const checkKey = args.flags.judge && !isHook ? judgeKey() : void 0;
   if (args.flags.judge && !isHook) {
     if (!checkKey) {
-      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join13(HERE3, "..", "..", ".env")}
+      fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}
 `);
       return EXIT.CANNOT_RUN;
     }

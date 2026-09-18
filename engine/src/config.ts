@@ -6,9 +6,9 @@
  * nothing about WordPress, or about any particular design system.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, isSeverity } from './rules.ts';
 import { loadPatterns } from './patterns.ts';
 import { registryApplies } from './registry.ts';
@@ -26,9 +26,7 @@ import type {
 	RuleId,
 	RuleSetting,
 } from './types.ts';
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const PRESET_DIR = join(HERE, '..', 'presets');
+import { EMBEDDED_PRESETS, PRESET_DIR, hasPreset, presetKey, presetNames, readPreset } from './embedded.ts';
 
 const CONFIG_NAMES = ['loupe.config.mjs', 'loupe.config.js', 'loupe.config.json', '.louperc.json'];
 
@@ -115,6 +113,12 @@ export function findConfig(start: string): string | null {
 }
 
 async function readConfigFile(path: string): Promise<AuthoredConfig | undefined> {
+	// A preset the binary carries rather than reads. Checked before the disk
+	// read so the error below stays about *your* config file, not this one.
+	if (path.startsWith(PRESET_DIR) && !existsSync(path)) {
+		const embedded = EMBEDDED_PRESETS[presetKey(path.slice(PRESET_DIR.length + 1).replace(/\.json$/, ''))];
+		if (embedded) return embedded as AuthoredConfig;
+	}
 	if (path.endsWith('.json')) {
 		const parsed = JSON.parse(readFileSync(path, 'utf8')) as AuthoredConfig & {
 			loupe?: AuthoredConfig;
@@ -138,7 +142,7 @@ const presetPath = (spec: string): string => join(PRESET_DIR, `${spec.replace(/^
 /** Resolve `extends`, which may name a shipped preset or a path. */
 async function resolveExtends(spec: string, fromDir: string): Promise<{ path: string; dir: string }> {
 	const asPreset = presetPath(spec);
-	if (existsSync(asPreset)) return { path: asPreset, dir: PRESET_DIR };
+	if (hasPreset(spec)) return { path: asPreset, dir: PRESET_DIR };
 	const asPath = isAbsolute(spec) ? spec : join(fromDir, spec);
 	if (existsSync(asPath)) return { path: asPath, dir: dirname(asPath) };
 	throw new Error(`cannot resolve extends: ${spec}`);
@@ -177,19 +181,10 @@ async function expandExtends(
 export function listPresets(): string[] {
 	// Read the directory rather than hardcode: a list maintained by hand drifts
 	// the moment someone adds a preset and forgets this line.
-	try {
-		return readdirSync(PRESET_DIR)
-			.filter((f) => f.endsWith('.json'))
-			.map((f) => f.replace(/\.json$/, ''))
-			.sort((a, b) => (a === 'generic' ? 1 : b === 'generic' ? -1 : a.localeCompare(b)));
-	} catch {
-		// An unreadable preset directory is a broken install, not a design system
-		// list to guess at; name only the one the engine falls back to anyway.
-		return ['generic'];
-	}
+	return presetNames().sort((a, b) => (a === 'generic' ? 1 : b === 'generic' ? -1 : a.localeCompare(b)));
 }
 
-export const presetExists = (name: string): boolean => existsSync(presetPath(name));
+export const presetExists = (name: string): boolean => hasPreset(name);
 
 /**
  * The suppression vocabulary of every shipped preset: the keywords each one
@@ -210,10 +205,9 @@ function shippedVocabulary(): { keywords: string[]; blanket: Set<string> } {
 	const keywords = new Set<string>([DEFAULTS.suppression.keyword]);
 	const blanket = new Set<string>(DEFAULTS.suppression.blanket);
 	try {
-		for (const f of readdirSync(PRESET_DIR)) {
-			if (!f.endsWith('.json')) continue;
+		for (const name of presetNames()) {
 			try {
-				const raw: unknown = JSON.parse(readFileSync(join(PRESET_DIR, f), 'utf8'));
+				const raw: unknown = readPreset(name);
 				const supp = isObj(raw) ? raw.suppression : undefined;
 				if (!isObj(supp)) continue;
 				const kw = supp.keyword;
