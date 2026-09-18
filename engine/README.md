@@ -636,12 +636,19 @@ stands down and says so. Bailing out entirely on `stop_hook_active` — the
 obvious loop guard — means the turn that *fixes* a finding is never checked, so
 you never confirm the fix.
 
-Set `LOUPE_OFF=1` in the hook's environment to silence it for a session —
+The hook is off until the project opts in: `LOUPE=on` in its environment,
+which Claude Code supplies from `"env": { "LOUPE": "on" }` in the project's
+`.claude/settings.local.json`. When the environment doesn't set `LOUPE`, the
+engine reads that same key from `.claude/settings.local.json`,
+`.claude/settings.json` and `~/.claude/settings.json`, in that order, so that
+`loupe status` in a terminal agrees with the hook.
+
+Set `LOUPE_OFF=1` in the hook's environment to silence an opted-in hook for a session —
 `LOUPE_OFF=1 claude`. It produces no output at all rather than downgrading to
 advisory, because an advisory finding still reaches the agent and an agent that
 sees a finding starts fixing it. `loupe` run by hand ignores the switch.
 
-It reads the same on/off spelling as every plugin option: `1`, `true`, `yes`,
+Both read the same on/off spelling as every plugin option: `1`, `true`, `yes`,
 `on`, case-insensitively. `LOUPE_OFF=0` is not one of them and leaves the hook
 running — `loupe status` prints a `hook: OFF` line only when the switch actually
 took, so the diagnostic and the gate cannot disagree.

@@ -143,12 +143,46 @@ export function hookRoot(): string {
 export const isOn = (v: string | undefined): boolean => v !== undefined && /^(1|true|yes|on)$/i.test(v);
 
 /**
- * The per-session off switch, asked once.
+ * Whether this project turned the gate on.
+ *
+ * Off by default: a gate that fires in every repo the plugin is installed for
+ * lands findings in sessions that are about something else. A project opts in
+ * where Claude Code keeps per-project, per-person switches —
+ * `.claude/settings.local.json` → `"env": { "LOUPE": "on" }`. Claude Code hands
+ * that to the hook as an environment variable, which a terminal never sees, so
+ * the same files are read when the environment has nothing to say; otherwise
+ * `status` typed by hand reports OFF for a project the hook is gating.
+ */
+function optedIn(root: string): boolean {
+	if (process.env.LOUPE !== undefined) return isOn(process.env.LOUPE);
+	for (const file of [
+		join(root, '.claude', 'settings.local.json'),
+		join(root, '.claude', 'settings.json'),
+		join(homedir(), '.claude', 'settings.json'),
+	]) {
+		try {
+			const v = (JSON.parse(readFileSync(file, 'utf8')) as { env?: Record<string, unknown> }).env?.LOUPE;
+			if (v !== undefined) return isOn(String(v));
+		} catch {
+			/* no settings file */
+		}
+	}
+	return false;
+}
+
+/**
+ * Why the hook says nothing, or null when it runs. Asked once.
  *
  * Both the gate and `status` call this, so a diagnostic that says the hook is
- * silenced is a diagnostic that watched the same value the hook did.
+ * off is a diagnostic that watched the same values the hook did.
  */
-export const hookSilenced = (): boolean => isOn(process.env.LOUPE_OFF);
+export function hookOff(root: string): string | null {
+	// Per-session off switch: `LOUPE_OFF=1 claude` silences an opted-in project.
+	if (isOn(process.env.LOUPE_OFF)) return 'LOUPE_OFF is set for this session';
+	if (!optedIn(root))
+		return 'this project has not opted in; add "env": { "LOUPE": "on" } to .claude/settings.local.json';
+	return null;
+}
 
 const OPTION_KEYS = ['preset', 'project_prefixes', 'blocking', 'max_attempts', 'max_findings'] as const;
 

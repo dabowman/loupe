@@ -53,7 +53,9 @@ function runCli(
 ): { status: number | null; stdout: string; stderr: string } {
 	const home = scratch('dsh-home-');
 	try {
-		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+		// Opted in, and not silenced: the gate is off until a project turns it on.
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, LOUPE: 'on' };
+		delete env.LOUPE_OFF;
 		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
 		// `process.execPath` rather than `'node'`: the suite must run under the
 		// interpreter that started it, not whichever one PATH resolves to.
@@ -134,7 +136,11 @@ const tmpRepo = (files: Record<string, string>): string => {
 const EMPTY_HOME = scratch('dsh-home-');
 
 const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
-	const e: NodeJS.ProcessEnv = { ...process.env, HOME: EMPTY_HOME, ...extra };
+	// The gate is off until a project opts in; every test here is about a gate
+	// that runs, so it is on unless a test says otherwise. `LOUPE: undefined`
+	// leaves it unset.
+	const e: NodeJS.ProcessEnv = { ...process.env, HOME: EMPTY_HOME, LOUPE: 'on', ...extra };
+	if (e.LOUPE === undefined) delete e.LOUPE;
 	if (!('LOUPE_OFF' in extra)) delete e.LOUPE_OFF;
 	if (!('CLAUDE_PLUGIN_DATA' in extra)) delete e.CLAUDE_PLUGIN_DATA;
 	if (!('CLAUDE_PLUGIN_ROOT' in extra)) delete e.CLAUDE_PLUGIN_ROOT;
@@ -410,6 +416,52 @@ await check('baseline reports the findings recorded and the entries they collaps
 	} finally {
 		cleanup(root);
 		cleanup(distinct);
+	}
+});
+
+// Off by default. A gate that fires in every repo the plugin is installed for
+// lands findings in sessions that are about something else, so the hook says
+// nothing until the project turns it on in its own Claude Code settings — and
+// `status`, typed where that setting never reaches the environment, has to
+// read the same file the hook's environment came from.
+await check('the hook is off until the project opts in', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	let session = 0;
+	const hook = (extra: NodeJS.ProcessEnv): number => {
+		try {
+			execFileSync('node', [CLI, 'hook', '--root', root], {
+				encoding: 'utf8',
+				input: JSON.stringify({ session_id: `optin-${++session}`, tool_input: { file_path: 'styles/a.css' } }),
+				env: env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true', ...extra }),
+				stdio: ['pipe', 'pipe', 'pipe'],
+			});
+			return 0;
+		} catch (err) {
+			return execFailure(err).status ?? -1;
+		}
+	};
+	const status = (): string =>
+		execFileSync('node', [CLI, 'status', '--root', root], {
+			encoding: 'utf8',
+			env: env({ LOUPE: undefined, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+	try {
+		assert(hook({ LOUPE: 'on' }) === 2, 'fixture does not block, so silence proves nothing');
+		assert(hook({ LOUPE: undefined }) === 0, 'the hook ran in a project that never opted in');
+		assert(/hook:\s+OFF/.test(status()), 'status did not report the hook off before opt-in');
+
+		writeAll(root, { '.claude/settings.local.json': JSON.stringify({ env: { LOUPE: 'on' } }) });
+		assert(hook({ LOUPE: undefined }) === 2, 'opting in through .claude/settings.local.json did not turn the hook on');
+		assert(!/hook:\s+OFF/.test(status()), 'status reports OFF for an opted-in project');
+		assert(hook({ LOUPE: 'off' }) === 0, 'the environment did not outrank the settings file');
+	} finally {
+		cleanup(root);
 	}
 });
 
@@ -1354,6 +1406,7 @@ await check('the hook stands aside on a non-project root instead of indexing it'
 			out = execFileSync('node', [CLI, 'hook', '--root', root], {
 				encoding: 'utf8',
 				input: '{"session_id":"np","tool_input":{"file_path":"style.css"}}',
+				env: env(),
 			});
 		} catch (err) {
 			const f = execFailure(err);
@@ -1679,6 +1732,7 @@ await check('a block theme with no manifest and no worktree is still gated', () 
 		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
 			input: '{"session_id":"bt","tool_input":{"file_path":"style.css"}}',
+			env: env(),
 		});
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(
@@ -1704,6 +1758,7 @@ await check('a repo git refuses to answer about is still gated', () => {
 		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
 			input: '{"session_id":"dg","tool_input":{"file_path":"style.css"}}',
+			env: env(),
 		});
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(
@@ -1730,6 +1785,7 @@ await check('a composer-only project with no worktree is still gated', () => {
 		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
 			input: '{"session_id":"cj","tool_input":{"file_path":"style.css"}}',
+			env: env(),
 		});
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(!parsed.systemMessage?.includes('not a git worktree'), `the gate stood aside on a PHP project: ${out}`);
@@ -1756,7 +1812,7 @@ await check('a repo subdirectory git refuses to answer about is still gated', ()
 		const out = execFileSync('node', [CLI, 'hook', '--root', join(root, 'packages', 'ui')], {
 			encoding: 'utf8',
 			input: '{"session_id":"sd","tool_input":{"file_path":"style.css"}}',
-			env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` },
+			env: env({ PATH: `${bin}:${process.env.PATH ?? ''}` }),
 		});
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(
@@ -1779,7 +1835,7 @@ await check('a pinned plugin preset does not vouch for a non-project root', () =
 		const out = execFileSync('node', [CLI, 'hook', '--root', root], {
 			encoding: 'utf8',
 			input: '{"session_id":"pp","tool_input":{"file_path":"style.css"}}',
-			env: { ...process.env, CLAUDE_PLUGIN_OPTION_PRESET: 'wpds', CLAUDE_PLUGIN_OPTION_BLOCKING: '1' },
+			env: env({ CLAUDE_PLUGIN_OPTION_PRESET: 'wpds', CLAUDE_PLUGIN_OPTION_BLOCKING: '1' }),
 		});
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(

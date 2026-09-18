@@ -304,7 +304,7 @@ await check('the hook never colours the report it hands back', () => {
 	// plain under it stays plain under anything.
 	const { stdout, stderr } = runColor(
 		['hook'],
-		{ FORCE_COLOR: '1' },
+		{ FORCE_COLOR: '1', LOUPE: 'on' },
 		JSON.stringify({ session_id: 'colour', tool_input: { file_path: 'styles/app.css' } }),
 	);
 	assert(stderr.includes('loupe') || stdout.includes('loupe'), `the hook said nothing at all:\n${stderr}${stdout}`);

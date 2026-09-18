@@ -34,7 +34,7 @@ import {
 	emitBlocking,
 	emitClean,
 	hookRoot,
-	hookSilenced,
+	hookOff,
 	parsePayload,
 	payloadFile,
 	readStdin,
@@ -257,10 +257,13 @@ Options:
                         that governs the cwd, or CLAUDE_PROJECT_DIR under hook)
 
 Environment:
-  LOUPE_OFF=1           Silence the hook for this session; 'loupe' typed by hand
-                        still reports. Start Claude Code as 'LOUPE_OFF=1 claude'.
-                        1/true/yes/on turn it on; anything else — 0 and false
-                        included — leaves the hook running.
+  LOUPE=on              Turn the hook on. It is off until a project opts in:
+                        "env": { "LOUPE": "on" } in .claude/settings.local.json.
+                        'loupe' typed by hand always reports.
+  LOUPE_OFF=1           Silence an opted-in hook for this session. Start Claude
+                        Code as 'LOUPE_OFF=1 claude'.
+                        Both read 1/true/yes/on as on; anything else — 0 and
+                        false included — as not set.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
@@ -442,14 +445,14 @@ async function main(): Promise<number> {
 	// must not turn every large write into a broken pipe.
 	const payload: HookPayload = isHook ? parsePayload(await readStdin()) : {};
 
-	// Per-session off switch: `LOUPE_OFF=1 claude`.
+	// Off unless the project opted in, or silenced for the session.
 	//
 	// Silence, not advisory mode. An advisory finding still lands in the agent's
 	// context, and an agent that sees a finding starts fixing it — which is the
 	// whole complaint. The only way to work on something else is for the gate to
 	// say nothing at all. Deliberately hook-only: `loupe check` typed by hand is
 	// someone asking, and answering "nothing" would be a lie.
-	if (isHook && hookSilenced()) return EXIT.OK;
+	if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
 
 	// The project, not the directory you happen to be standing in.
 	//
@@ -714,7 +717,8 @@ async function main(): Promise<number> {
 		// separately is what let `status` print `hook: OFF` and `Turns are blocked
 		// by: ...` seven lines apart — the same drift `isOn` closed one layer down,
 		// reappearing in the conclusion instead of the predicate.
-		const gateBlocks = blockingAllowed && !hookSilenced();
+		const off = hookOff(root);
+		const gateBlocks = blockingAllowed && !off;
 		const src =
 			config.source.kind === 'file'
 				? config.source.path
@@ -763,7 +767,7 @@ async function main(): Promise<number> {
 			// Asked through the same predicate the gate uses. Reporting on mere
 			// truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
 			// blocking — a diagnostic lying about the one thing it exists to say.
-			...(hookSilenced() ? [yellow('hook:       OFF for this session (LOUPE_OFF is set)')] : []),
+			...(off ? [yellow(`hook:       OFF \u2014 ${off}`)] : []),
 			// Which design system's registries are in play, and — when none are —
 			// which ones were on offer. "No composite findings" and "no composite
 			// registry" look identical in a report; they must not look identical here.
@@ -810,8 +814,8 @@ async function main(): Promise<number> {
 				? `${red('Turns are blocked by:')} ${blockers.map((id) => magenta(id)).join(', ')}`
 				: green('Nothing blocks turns; every finding is advisory.'),
 		);
-		if (hookSilenced()) {
-			lines.push('The gate is silenced for this session: LOUPE_OFF is set in the environment.');
+		if (off) {
+			lines.push(`The gate is off: ${off}.`);
 		} else if (config.inferred) {
 			lines.push('css/dead-class is held to advisory because the namespaces were inferred, not configured.');
 			if (detected?.truncated) lines.push(`Inference stopped at the ${CEILING}: ${CEILING_WHY}.`);

@@ -29,6 +29,16 @@ that report drift on the file just touched, not forty tool calls later).
 /plugin install loupe@loupe
 ```
 
+The hooks are off until a project opts in. In each project you want gated, add
+this to `.claude/settings.local.json` and start a new session:
+
+```json
+{ "env": { "LOUPE": "on" } }
+```
+
+The skills, the commands and `loupe` typed by hand work everywhere without it.
+`loupe status` prints a `hook: OFF` line in a project that hasn't opted in.
+
 Nothing else to run. The engine ships pre-bundled with its dependencies, so a
 fresh install is a working install on any machine with Node 18 or newer — no
 `npm install`, no toolchain, no build step. See
@@ -576,7 +586,15 @@ until the finding is actually fixed, which releases it. Standing down is a
 truce, not an off switch: the next regression in that session is reported
 again.
 
-### Turning it off for a session
+### Turning it on, and off for a session
+
+The hook is off until a project opts in with `"env": { "LOUPE": "on" }` in
+`.claude/settings.local.json` (see [Install](#install)). A gate that runs in
+every repo the plugin is installed for puts findings into sessions that are
+about something else. Claude Code passes that setting to the hook as an
+environment variable, so `LOUPE=on claude` turns it on for one session as well.
+
+To silence a project that has opted in, for one session:
 
 ```bash
 LOUPE_OFF=1 claude
@@ -587,10 +605,10 @@ an advisory finding still lands in the agent's context, and an agent that sees a
 finding starts fixing it, which is usually the thing you were trying to avoid.
 `loupe` typed by hand still reports normally; the switch is only for the hook.
 
-`1`, `true`, `yes` and `on` all turn it on, case-insensitively. Anything else
-leaves the hook running — `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence it,
-they read as a value that isn't "on". `loupe status` prints a `hook: OFF` line
-when the switch has actually taken.
+Both switches take `1`, `true`, `yes` and `on`, case-insensitively. Anything
+else is read as not on, so `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence the
+hook. `loupe status` prints a `hook: OFF` line with the reason whenever the hook
+will say nothing.
 
 ## Reading the report
 
@@ -738,7 +756,8 @@ Configured where you enable the plugin, read by the hook from the environment:
 
 ## Hooks
 
-The plugin ships both. `PostToolUse` scopes to the file just written, which is
+The plugin ships both, and both are off until the project opts in (see
+[Install](#install)). `PostToolUse` scopes to the file just written, which is
 what makes this a write-time gate rather than a review-time one. `Stop` covers
 everything changed in the turn.
 

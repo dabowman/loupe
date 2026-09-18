@@ -29015,7 +29015,27 @@ function hookRoot() {
   return process.cwd();
 }
 var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
-var hookSilenced = () => isOn(process.env.LOUPE_OFF);
+function optedIn(root2) {
+  if (process.env.LOUPE !== void 0) return isOn(process.env.LOUPE);
+  for (const file of [
+    join11(root2, ".claude", "settings.local.json"),
+    join11(root2, ".claude", "settings.json"),
+    join11(homedir(), ".claude", "settings.json")
+  ]) {
+    try {
+      const v = JSON.parse(readFileSync11(file, "utf8")).env?.LOUPE;
+      if (v !== void 0) return isOn(String(v));
+    } catch {
+    }
+  }
+  return false;
+}
+function hookOff(root2) {
+  if (isOn(process.env.LOUPE_OFF)) return "LOUPE_OFF is set for this session";
+  if (!optedIn(root2))
+    return 'this project has not opted in; add "env": { "LOUPE": "on" } to .claude/settings.local.json';
+  return null;
+}
 var OPTION_KEYS = ["preset", "project_prefixes", "blocking", "max_attempts", "max_findings"];
 function resolvedOptions() {
   const fromEnv = coerce(
@@ -29171,10 +29191,13 @@ Options:
                         that governs the cwd, or CLAUDE_PROJECT_DIR under hook)
 
 Environment:
-  LOUPE_OFF=1           Silence the hook for this session; 'loupe' typed by hand
-                        still reports. Start Claude Code as 'LOUPE_OFF=1 claude'.
-                        1/true/yes/on turn it on; anything else \u2014 0 and false
-                        included \u2014 leaves the hook running.
+  LOUPE=on              Turn the hook on. It is off until a project opts in:
+                        "env": { "LOUPE": "on" } in .claude/settings.local.json.
+                        'loupe' typed by hand always reports.
+  LOUPE_OFF=1           Silence an opted-in hook for this session. Start Claude
+                        Code as 'LOUPE_OFF=1 claude'.
+                        Both read 1/true/yes/on as on; anything else \u2014 0 and
+                        false included \u2014 as not set.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
@@ -29232,7 +29255,7 @@ async function main() {
   }
   const isHook = command === "hook";
   const payload = isHook ? parsePayload(await readStdin()) : {};
-  if (isHook && hookSilenced()) return EXIT.OK;
+  if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
   const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
   const root2 = resolve6(explicitRoot ?? (anchor ? dirname6(anchor) : process.cwd()));
@@ -29364,7 +29387,8 @@ async function main() {
     return EXIT.OK;
   }
   if (command === "status") {
-    const gateBlocks = blockingAllowed && !hookSilenced();
+    const off = hookOff(root2);
+    const gateBlocks = blockingAllowed && !off;
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ""}` : config.source.kind;
     const base = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const ds = config.designSystem;
@@ -29385,7 +29409,7 @@ async function main() {
       // Asked through the same predicate the gate uses. Reporting on mere
       // truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
       // blocking — a diagnostic lying about the one thing it exists to say.
-      ...hookSilenced() ? [yellow("hook:       OFF for this session (LOUPE_OFF is set)")] : [],
+      ...off ? [yellow(`hook:       OFF \u2014 ${off}`)] : [],
       // Which design system's registries are in play, and — when none are —
       // which ones were on offer. "No composite findings" and "no composite
       // registry" look identical in a report; they must not look identical here.
@@ -29409,8 +29433,8 @@ async function main() {
       "",
       gateBlocks && blockers.length ? `${red("Turns are blocked by:")} ${blockers.map((id) => magenta(id)).join(", ")}` : green("Nothing blocks turns; every finding is advisory.")
     );
-    if (hookSilenced()) {
-      lines.push("The gate is silenced for this session: LOUPE_OFF is set in the environment.");
+    if (off) {
+      lines.push(`The gate is off: ${off}.`);
     } else if (config.inferred) {
       lines.push("css/dead-class is held to advisory because the namespaces were inferred, not configured.");
       if (detected?.truncated) lines.push(`Inference stopped at the ${CEILING}: ${CEILING_WHY}.`);
