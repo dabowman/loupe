@@ -24,6 +24,7 @@ export type RuleId =
 	| 'patterns/duplicate-composite'
 	| 'patterns/unregistered-composite'
 	| 'patterns/superseded-composite'
+	| 'patterns/judged-redirect'
 	| 'tokens/unknown-token'
 	| 'tokens/hardcoded-value'
 	| 'layout/margin-on-child'
@@ -111,6 +112,15 @@ export interface Finding {
 	 * JSON and SARIF ship this whole.
 	 */
 	note?: string | undefined;
+	/**
+	 * What `check --judge` wrote into this finding. `answer` is the model's pick
+	 * (a variant, a `not_` option, a force value) and `confidence` its
+	 * certainty, as data: a later reader, an autofix that accepts judged answers
+	 * above a floor say, takes them from here rather than parsing the prose.
+	 * `spans` are the parts of `message` the judgement wrote, in the order they
+	 * appear, which the report paints green.
+	 */
+	judged?: { answer: string; confidence: number; spans: string[] } | undefined;
 	rank: number;
 	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
@@ -188,6 +198,12 @@ export interface AnalyzeResult {
 	directives: Directive[];
 	diagnostics: Diagnostics;
 	blocking: boolean;
+	/**
+	 * Controls a `judge` detector named, in files the report covers and not
+	 * suppressed for `patterns/judged-redirect`. Nothing here is a finding until
+	 * `check --judge` asks about it.
+	 */
+	controls?: Control[];
 }
 
 // ── CSS ─────────────────────────────────────────────────────────────────────
@@ -397,7 +413,22 @@ export interface RuleHit {
 	detail: string;
 }
 
+/** An element a `judge` detector named: one control to ask about. */
+export interface Control {
+	file: string;
+	line: number;
+	/** The name the registry uses, alias resolved: `Button`, `Menu.Item`. */
+	component: string;
+	/** The component function the control sits in, when the parse found a name. */
+	enclosing: string | null;
+	/** The JSX element, opening tag to close. */
+	source: string;
+	/** The registry entry whose detector named it. */
+	patternId: string;
+}
+
 export interface ScanResult {
+	controls: Control[];
 	bindings: Binding[];
 	rawEls: RawElement[];
 	inlineStyles: InlineStyleElement[];

@@ -107,8 +107,28 @@ Phase 2, forward, not started:
 - An eval over fixed prompts to measure whether the skill text produces the
   right reach. That is the feedback loop the tool lacks.
 
+## Judged forces
+
+`resolve` was generator-only because nothing could read a force off code. A
+System One model can, for one force so far: `represents`, scored by
+`engine/evals/represents`. So a realization entry may carry a `judge` detector
+naming the elements that are instances of its pattern, the vocabulary gives the
+force a `judge` block (question and per-value criteria, the wording the eval
+scores), and `check --judge` runs the abstract table in code on what it reads. A
+redirect is `patterns/judged-redirect`: advisory, after the baseline, never in
+the hook. A row that needs a force nobody has read stops the walk, so a partial
+reading never answers past a question the table did not reach.
+
+The next force is data plus an eval, not code: a `judge` block on the force, a
+`judge` detector on the entries whose tables consult it, and labelled controls
+for the eval. Label pagination first; it is what `represents` gets wrong on
+Gutenberg.
+
 ## Blind spot
 
-An MVP built from divs and utility classes has no composite tree. The entry
+An MVP built from divs and utility classes has no composite tree. Nor does one
+written with `createElement` (`el( SelectControl, … )`): the scanner reads JSX,
+so vip-digital-asset-manager's controls are invisible to every JSX rule and to
+the judge alike. The entry
 point there is `system/raw-element` and the CSS rules; the conversion is not
 mechanical. The tool finds and counts; it does not fix.

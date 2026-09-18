@@ -12,7 +12,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { fileURLToPath } from 'node:url';
 import { analyze, usableReplacement } from './analyze.ts';
 import { applyTokenFixes } from './autofix.ts';
-import { judgeVariants } from './judge.ts';
+import { judgeRedirects, judgeVariants } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
@@ -209,7 +209,9 @@ Options:
                         path (default: .loupe-baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
-  --judge               Ask TypeSafe which variant a raw-element finding needs
+  --judge               Ask TypeSafe what a parse cannot see: the variant a raw
+                        element needs, and whether a control stands for the
+                        pattern it was built as (patterns/judged-redirect)
                         (check only; TYPESAFE_API_KEY from the environment or
                         loupe's own .env)
   --force               Overwrite an existing config (init)
@@ -775,7 +777,7 @@ async function main(): Promise<number> {
 					? red('BLOCKS')
 					: sev === 'error'
 						? yellow('advisory (would block if enabled)')
-						: yellow('advisory')
+						: yellow(id === 'patterns/judged-redirect' ? 'advisory, --judge only' : 'advisory')
 				: dim(`off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`);
 			lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
 		}
@@ -992,7 +994,7 @@ async function main(): Promise<number> {
 
 	let result: AnalyzeResult | BaselinedResult;
 	try {
-		result = await analyze(config, { scope });
+		result = await analyze(config, { scope, judge: Boolean(judgeKey) });
 	} catch (err) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
 		fail(`loupe: ${messageOf(err)}\n`);
@@ -1021,16 +1023,23 @@ async function main(): Promise<number> {
 			note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
 		result = applyBaseline(result, baseline);
 	}
-	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
 	if (judgeKey) {
-		// Judged after the baseline, so accepted findings cost nothing. A failed
-		// request leaves the findings as the engine wrote them.
+		// Judged after the baseline, so accepted findings cost nothing, and a
+		// judged finding never enters one: its confidence moves between runs, and
+		// a baselined finding that comes and goes is noise in both directions.
+		// Before the severity filter, which has to see the findings this adds.
+		// A failed request leaves the findings as the engine wrote them.
 		try {
+			if (result.controls?.length)
+				result.findings.push(
+					...(await judgeRedirects(result.controls, judgeKey, config.severityOf('patterns/judged-redirect'))),
+				);
 			await judgeVariants(root, result.findings, config.componentRegistry, judgeKey);
 		} catch (err) {
 			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
 		}
 	}
+	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
 
 	if (isHook) {
 		const sessionId = payload.session_id ?? payload.sessionId ?? '';

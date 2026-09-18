@@ -268,7 +268,7 @@ export function applyRegistries(
 	// Every rule the registry feeds, not just the first: with `duplicate-composite`
 	// turned off and `superseded-composite` left on, testing only the first said
 	// "nothing to report here" about a registry that had in fact enabled nothing.
-	const registryRules = ['patterns/duplicate-composite', 'patterns/superseded-composite'] as const;
+	const registryRules = ['patterns/duplicate-composite', 'patterns/superseded-composite', 'patterns/judged-redirect'] as const;
 	const patternsNote = (added: number): string | null =>
 		registryRules.every((rule) => config.severityOf(rule) === 'off')
 			? null

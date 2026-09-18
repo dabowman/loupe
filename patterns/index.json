@@ -27,7 +27,16 @@
           "command",
           "destination"
         ],
-        "about": "What an option or control stands for. Decides choose vs act vs navigate before anything else does."
+        "about": "What an option or control stands for. Decides choose vs act vs navigate before anything else does.",
+        "judge": {
+          "question": "What does that control stand for to the person using it?",
+          "criteria": {
+            "value": "It picks or sets a value the system already knows about — an option, a setting, a piece of data. Using it changes what some value is, not where the user is. A select, a checkbox-style menu item, a colour swatch, or a disclosure button whose visible label is the value it will change all count.",
+            "command": "It invokes a command that changes something — save, delete, duplicate, upload, undo, retry, close, or opening a dialog or panel to do one of those. Using it does something rather than going somewhere or setting a value.",
+            "destination": "It moves the user to another view, screen, route, record or URL. Using it changes where the user is, however the control happens to be styled — a button that routes is still a destination.",
+            "none": "Not an interactive control at all: static text or a display-only element that happens to use a control component."
+          }
+        }
       },
       "multiplicity": {
         "values": [

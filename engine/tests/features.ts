@@ -13,11 +13,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
-import { loadPatterns, matches, toNode } from '../src/patterns.ts';
+import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
-import { judgeRepresents, judgeVariants } from '../src/judge.ts';
+import { judgeForce, judgeRedirects, judgeVariants, loadLanguage } from '../src/judge.ts';
 import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
-import type { AnalyzeResult, ComponentEntry, Pattern, PatternNode, RuleId } from '../src/types.ts';
+import type { AnalyzeResult, ComponentEntry, Finding, Pattern, PatternNode, RuleId } from '../src/types.ts';
 
 /** `toNode` is nullable by contract; a signature written in a test is not. */
 const node = (spec: unknown): PatternNode => {
@@ -35,7 +35,7 @@ const COMPONENT_REGISTRY = join(PROFILE, 'components', 'index.json');
 /** Analyze a throwaway repo. `files` maps relative path to contents. */
 async function run(
 	files: Record<string, string>,
-	{ patterns, components }: { patterns?: Pattern[]; components?: Map<string, ComponentEntry> } = {},
+	{ patterns, components, judge }: { patterns?: Pattern[]; components?: Map<string, ComponentEntry>; judge?: boolean } = {},
 ): Promise<AnalyzeResult> {
 	const root = scratch('dsh-feat-');
 	try {
@@ -43,7 +43,7 @@ async function run(
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		if (patterns) setPatterns(config, patterns);
 		if (components) setComponentRegistry(config, components);
-		return await analyze(config, { scope: null });
+		return await analyze(config, { scope: null, judge: judge ?? false });
 	} finally {
 		cleanup(root);
 	}
@@ -1049,21 +1049,28 @@ await check('a project class never reads as a library internal, even when the sy
 
 // Offline: the stub stands in for TypeSafe and hands back one answer per
 // question it was sent, so the check is on what is asked and what is written.
-await check('--judge asks only about analogs with variants, and appends only what clears the floor', async () => {
+await check('--judge asks only about analogs with variants, and writes only what clears the floor into the suggestion', async () => {
 	const root = scratch('dsh-judge-');
 	try {
-		writeAll(root, { 'src/A.jsx': '<p className="description">Help</p>\n<span style={{ background: c }} />\n<p>Hi</p>\n<div />' });
+		writeAll(root, { 'src/A.jsx': '<p className="description">Help</p>\n<span style={{ background: c }} />\n<p>Hi</p>\n<div />\n<h3>Build</h3>' });
 		const registry = loadComponents([
 			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
 			{ name: 'Stack', package: '@wordpress/ui', status: 'recommended' },
 		]);
 		const at = (line: number, analog: string) =>
 			({ rule: 'system/raw-element', severity: 'warn', rank: 0, file: 'src/A.jsx', line, code: '<p>', message: `<p> \u2192 <${analog}>` }) as const;
-		const findings = [at(1, 'Text'), at(2, 'Text'), at(3, 'Text'), at(4, 'Stack')].map((f) => ({ ...f }));
+		// The analog a legacy `Heading` forwards to names a placeholder to fill.
+		const forwarded = {
+			...at(5, 'Text'),
+			code: '<h3>',
+			message: '<h3> \u2192 Text (@wordpress/ui) with variant="heading-*" and render for the semantic element',
+		};
+		const findings = [at(1, 'Text'), at(2, 'Text'), at(3, 'Text'), at(4, 'Stack'), forwarded].map((f): Finding => ({ ...f }));
 		const replies = [
 			{ choice: 'body-sm', confidence: 0.8 },
 			{ choice: 'not_text', confidence: 0.99 },
 			{ choice: 'body-sm', confidence: 0.3 },
+			{ choice: 'heading-lg', confidence: 0.58 },
 		];
 		let asked: Record<string, { criteria: Record<string, string> }> = {};
 		const stub = (async (_url: string, init: { body: string }) => {
@@ -1072,24 +1079,37 @@ await check('--judge asks only about analogs with variants, and appends only wha
 			return new Response(JSON.stringify({ answers }));
 		}) as unknown as typeof fetch;
 		const n = await judgeVariants(root, findings, registry, 'key', stub);
-		assert(Object.keys(asked).length === 3, `asked about ${Object.keys(asked).length} elements, expected the 3 Text ones`);
+		assert(Object.keys(asked).length === 4, `asked about ${Object.keys(asked).length} elements, expected the 4 Text ones`);
 		assert('not_text' in (asked.e0?.criteria ?? {}), 'no no-match option offered');
-		assert(n === 2, `annotated ${n}, expected 2`);
-		assert(findings[0]?.message.endsWith('judged variant="body-sm" (0.80)'), findings[0]?.message ?? '');
-		assert(findings[1]?.message.includes('judged not Text content (0.99)'), findings[1]?.message ?? '');
+		assert(n === 3, `wrote ${n}, expected 3`);
+		// The answer goes into the suggestion, not after it.
+		assert(findings[0]?.message === '<p> \u2192 <Text variant="body-sm"> (judged 0.80)', findings[0]?.message ?? '');
+		assert(findings[1]?.message === '<p> \u2192 no analog, not Text content (judged 0.99)', findings[1]?.message ?? '');
 		assert(findings[2]?.message === '<p> \u2192 <Text>', `a sub-floor pick was written: ${findings[2]?.message}`);
 		assert(findings[3]?.message === '<p> \u2192 <Stack>', 'a component with no variants was judged');
+		assert(
+			findings[4]?.message === '<h3> \u2192 Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.58)',
+			`the placeholder was not filled: ${findings[4]?.message}`,
+		);
+		// As data too, for whatever acts on a judgement without parsing prose.
+		const j = findings[0]?.judged;
+		assert(j?.answer === 'body-sm' && j.confidence === 0.8, JSON.stringify(j));
+		assert(j.spans.every((s) => findings[0]?.message.includes(s)), `a span is not in the message: ${JSON.stringify(j.spans)}`);
+		assert(findings[2]?.judged === undefined, 'a sub-floor pick was recorded');
 	} finally {
 		cleanup(root);
 	}
 });
 
-// ── --judge: represents ─────────────────────────────────────────────────────
+// ── --judge: forces and redirects ───────────────────────────────────────────
+
+const represents = loadLanguage().vocabulary.forces['represents']?.judge;
+assert(represents, 'patterns/index.json gives `represents` no judge block');
 
 // The wording is scored live by evals/represents; what is pinned here is the
 // wiring, which is what silently breaks: the batch boundary, the elements[i]
 // reference the instructions depend on, and the order answers come back in.
-await check('judgeRepresents sends one control per request, and keeps answers in order when batched', async () => {
+await check('judgeForce sends one control per request, and keeps answers in order when batched', async () => {
 	const controls = Array.from({ length: 41 }, (_, i) => ({
 		file: `src/C${i}.jsx`,
 		component: 'Button',
@@ -1111,7 +1131,7 @@ await check('judgeRepresents sends one control per request, and keeps answers in
 	// The default is one control per request: sharing a state costs a third of
 	// the destinations, which evals/represents measures. A batch default that
 	// drifts back up would pass every other check in here.
-	await judgeRepresents(controls.slice(0, 3), 'key', stub);
+	await judgeForce(represents, controls.slice(0, 3), 'key', stub);
 	assert(sent.length === 3, `default batched ${3 / sent.length} controls per request, expected 1`);
 	assert(sent[0]?.elements.length === 1, 'default put more than one element in a request');
 	for (const k of ['value', 'command', 'destination', 'none'])
@@ -1119,7 +1139,7 @@ await check('judgeRepresents sends one control per request, and keeps answers in
 
 	// Batched, the pool may finish requests in any order; the answers may not.
 	sent.length = 0;
-	const answers = await judgeRepresents(controls, 'key', stub, 40);
+	const answers = await judgeForce(represents, controls, 'key', stub, 40);
 	assert(sent.length === 2, `sent ${sent.length} requests for 41 controls at batch 40`);
 	const sizes = sent.map((r) => r.elements.length).sort((a, b) => b - a);
 	assert(sizes[0] === 40 && sizes[1] === 1, `batch sizes were ${sizes.join(',')}, expected 40,1`);
@@ -1131,6 +1151,73 @@ await check('judgeRepresents sends one control per request, and keeps answers in
 	assert(answers[7]?.confidence === 0.07, `answer 7 was ${answers[7]?.confidence}`);
 	// The trailing batch re-indexes from e0; it must still land at 40, not 0.
 	assert(answers[40]?.confidence === 0, `answer 40 was ${answers[40]?.confidence}`);
+});
+
+await check('resolve runs on known forces, and stops at a row it cannot decide', async () => {
+	const table = [
+		{ when: { represents: 'command' }, redirect: 'menu' },
+		{ when: { represents: 'destination' }, redirect: 'nav' },
+		{ when: { set: 'open' }, variant: 'combobox' },
+		{ when: { multiplicity: 'many', cardinality: 'few' }, variant: 'checklist' },
+		{ default: 'select' },
+	];
+	assert(resolveRule(table, { represents: 'destination' })?.redirect === 'nav', 'a known force decides its row');
+	// `value` rules out both redirects, then `set` is unknown: the combobox row
+	// might have matched, so nothing below it may answer.
+	assert(resolveRule(table, { represents: 'value' }) === null, 'answered past a row it could not decide');
+	assert(resolveRule(table, {}) === null, 'nothing known decides nothing');
+	// One known force contradicting a row skips it, whatever else it asks.
+	assert(resolveRule(table, { represents: 'value', set: 'closed', cardinality: 'many' })?.default === 'select', 'a contradicted row was not skipped');
+});
+
+// The shipped WPDS realization carries the detectors, so this is the real
+// wiring: which elements are asked, which are not, and what one becomes.
+await check('--judge turns a destination read off a Button into judged-redirect, and asks only what it must', async () => {
+	const file = [
+		"import { Button, SelectControl } from '@wordpress/components';",
+		'export function Screen() {',
+		'	return (<>',
+		'		<Button onClick={ () => history.navigate( \'/pages\' ) }>Pages</Button>',
+		'		<Button href="/wp-admin">Admin</Button>',
+		'		<Button render={ <Link href="/wp-admin" /> }>Admin</Button>',
+		'		<Button { ...linkProps }>Revisions</Button>',
+		'		<Button onClick={ save }>Save</Button>',
+		'		<SelectControl label="Size" options={ sizes } onChange={ setSize } />',
+		'	</>);',
+		'}',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': file }, { patterns: registry, judge: true });
+	const controls = r.controls ?? [];
+	// `href`, or a `render` that swaps the element, already realizes the
+	// redirect's target, and a spread might carry either: none is asked.
+	assert(controls.length === 3, `collected ${controls.map((c) => c.line).join(',')}, expected lines 4, 8 and 9`);
+	assert(controls.every((c) => c.enclosing === 'Screen'), `enclosing ${controls.map((c) => c.enclosing).join(',')}`);
+	assert(controls[0]?.source.startsWith('<Button onClick') && controls[0]?.source.endsWith('</Button>'), controls[0]?.source ?? '');
+
+	// Under the floor is unknown, not a finding: a destination at 0.83 here is
+	// the pagination band Gutenberg showed, and a command at 0.85 on a select
+	// would fire the menu redirect on a third-wrong guess.
+	const replies: Record<string, { choice: string; confidence: number }> = {
+		Pages: { choice: 'destination', confidence: 0.97 },
+		Save: { choice: 'destination', confidence: 0.83 },
+		Size: { choice: 'command', confidence: 0.85 },
+	};
+	const stub = (async (_url: string, init: { body: string }) => {
+		const body = JSON.parse(init.body);
+		const src: string = body.state.elements[0].source;
+		const key = Object.keys(replies).find((k) => src.includes(k)) ?? '';
+		return new Response(JSON.stringify({ answers: { e0: replies[key] } }));
+	}) as unknown as typeof fetch;
+	const found = await judgeRedirects(controls, 'key', 'warn', stub);
+	const f = one(found, 'one redirect');
+	assert(f.rule === 'patterns/judged-redirect' && f.line === 4, `${f.rule} at ${f.line}`);
+	assert(f.message === '<Button> (represents: destination) \u2192 `navigate-hierarchy` (judged 0.97)', f.message);
+	assert(f.judged?.answer === 'destination' && f.judged.confidence === 0.97, JSON.stringify(f.judged));
+	assert(Boolean(f.note), 'the redirect\'s `because` was dropped');
+
+	// Off unless asked: a plain check and the hook never collect a control.
+	const plain = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': file }, { patterns: registry });
+	assert(plain.controls === undefined, 'collected controls without --judge');
 });
 
 finish();

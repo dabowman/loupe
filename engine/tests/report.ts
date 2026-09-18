@@ -20,6 +20,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
+import { setColor } from '../src/color.ts';
 import { loadConfig } from '../src/config.ts';
 import { formatAgent, formatJson, formatSarif, reportPayload } from '../src/report.ts';
 import { formatHtml } from '../src/report-html.ts';
@@ -469,6 +470,28 @@ await check('a registry note keeps its last clause on screen and ships whole in 
 	assert(/\(\d+\) (blocking|advisory) \u2014/.test(out), `a rule group that only says its severity in a glyph:\n${out}`);
 	const shipped = (JSON.parse(formatJson(noted, config)) as { findings: { note?: string }[] }).findings[0]?.note;
 	assert(shipped === note, `json shipped a note the reader cannot act on: ${String(shipped)}`);
+});
+
+// A reading is not a parse, and the report says which is which at a glance —
+// without nesting a colour, which would end the green at the component name.
+await check('what --judge wrote is painted green, and nothing else on the line is', () => {
+	const judged = { answer: 'body-sm', confidence: 0.84, spans: ['variant="body-sm"', '(judged 0.84)'] };
+	const withJudge: AnalyzeResult = {
+		...result,
+		findings: result.findings.map((f, i) =>
+			i === 0 ? { ...f, message: '<p> \u2192 <Text variant="body-sm"> (judged 0.84)', note: undefined, judged } : f,
+		),
+	};
+	setColor(true);
+	try {
+		const out = formatAgent(withJudge, config);
+		for (const span of judged.spans)
+			assert(out.includes(`\u001B[32m${span}\u001B[0m`), `"${span}" was not painted on its own:\n${out}`);
+		assert(out.includes('<p> \u2192 \u001B[36m<Text\u001B[0m '), `the component the variant belongs to lost its colour:\n${out}`);
+		assert((out.match(/\u001B\[32m/g) ?? []).length === 2, 'a parse-only finding was painted as judged');
+	} finally {
+		setColor(false);
+	}
 });
 
 // `@wordpress/theme` moved its stylesheet out of `src/`, the preset kept

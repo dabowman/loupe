@@ -75,7 +75,7 @@ signature to look checkable:
 | --- | --- |
 | `signature` | Tree containment against `signature`. Four nodes or more. |
 | `import` | Nothing beyond the canonical import; the entry exists to name the remedy and to fill the table. |
-| A rule object | An AST rule the engine ships, parameterised here: `few-static-options` reads a select's option count and label width; `confirm-pair` reads a modal's button labels and looks for form controls. Either reports `patterns/superseded-composite` on the file that made the choice. |
+| A rule object | An AST rule the engine ships, parameterised here: `few-static-options` reads a select's option count and label width; `confirm-pair` reads a modal's button labels and looks for form controls. Either reports `patterns/superseded-composite` on the file that made the choice. `judge` names the elements that are instances of the entry's pattern, for `check --judge` to read a force off and run the abstract `resolve` table on; a redirect reports `patterns/judged-redirect`. |
 | `declared` | Documentation only, until a declaration tag exists. |
 
 A registry written before this format existed, keyed by `id`, still loads.
@@ -135,13 +135,14 @@ pattern.
 `[name, ...children]` form. It is `instead_of` promoted from prose to a check,
 and it obeys the same four-node floor.
 
-The three rules this drives:
+The rules this drives:
 
 | | |
 | --- | --- |
 | `patterns/duplicate-composite` | A registered pattern reassembled by hand in two or more files |
 | `patterns/superseded-composite` | A shape a pattern exists to replace, or a rule detector's hit — reported against the one file that built it, because a wrong choice is a defect where it is made |
 | `patterns/unregistered-composite` | The same shape in three or more files, in no registry — two is a coincidence, three is house style |
+| `patterns/judged-redirect` | `--judge` only: a model read what a control stands for, and its pattern's `resolve` redirects that reading — a button that navigates, a select of commands |
 
 A project's own registry is merged over the profile's, winning on key.
 

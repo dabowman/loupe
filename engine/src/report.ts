@@ -39,7 +39,7 @@ const SEV_WORD: Partial<Record<Severity, string>> = { error: 'blocking', warn: '
  * only where a signature puts them — against a bracket, a comma or an arrow, or
  * at the end — so a stray capitalised word in a CSS value is left alone.
  */
-const COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
+const COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|<[A-Z][A-Za-z0-9]*(?=\s)|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
 
 /**
  * The same message with those names painted \u2014 at print time, never at capture.
@@ -50,6 +50,25 @@ const COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2
  * back live the first time someone ran the tool in a terminal.
  */
 const components = (message: string): string => message.replace(COMPONENT, cyan);
+
+/**
+ * A finding's line, with what `--judge` wrote in green and the rest through
+ * `components`. Each span is its own fragment rather than a colour over the
+ * line: the names beside it carry their own, and a nested pair would end the
+ * green at the first one. A span the line bound elided is simply not painted.
+ */
+const painted = (f: Finding): string => {
+	const line = withNote(f);
+	let out = '';
+	let at = 0;
+	for (const span of f.judged?.spans ?? []) {
+		const i = line.indexOf(span, at);
+		if (i < 0) continue;
+		out += `${components(line.slice(at, i))}${green(span)}`;
+		at = i + span.length;
+	}
+	return out + components(line.slice(at));
+};
 
 /**
  * A rule title with its {placeholders} resolved.
@@ -254,7 +273,7 @@ export function formatAgent(
 			// Location dimmed, message plain: the location is what an editor
 			// consumes and the message is what a reader does, and the pair sits on
 			// one line with nothing else to tell them apart.
-			for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${components(withNote(f))}`);
+			for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${painted(f)}`);
 			if (group.length > show.length) lines.push(dim(`    \u2026 ${group.length - show.length} more`));
 		}
 		if (hidden) {

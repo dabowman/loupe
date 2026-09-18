@@ -14,9 +14,9 @@
  * flagged ambiguous are ones a careful reader could defend either way, and the
  * headline number is reported with and without them.
  *
- * Judged batched, because that is how `judgeRepresents` sends it: 40 controls
- * share one state, so every control in a batch is visible to every question in
- * it. Scoring the unbatched form would be scoring something we do not ship.
+ * The question is the one `check --judge` sends: `represents` as the vocabulary
+ * in `patterns/index.json` words it, one control per request. Edit the wording
+ * there and this scores the edit.
  *
  *   npx tsx evals/represents/run.ts        # three runs
  *   npx tsx evals/represents/run.ts 1      # one
@@ -26,16 +26,20 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { judgeRepresents } from '../../src/judge.ts';
-import type { Choice, Control, Represents } from '../../src/judge.ts';
+import { judgeForce, loadLanguage } from '../../src/judge.ts';
+import type { Choice } from '../../src/judge.ts';
+import type { Control } from '../../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLASSES = ['value', 'command', 'destination', 'none'] as const;
+type Represents = (typeof CLASSES)[number];
 
-interface Row extends Control {
+interface Row extends Pick<Control, 'file' | 'line' | 'component' | 'enclosing' | 'source'> {
 	id: string;
-	line: number;
 }
+
+const represents = loadLanguage().vocabulary.forces['represents']?.judge;
+if (!represents) throw new Error('patterns/index.json gives `represents` no judge block');
 
 const controls = JSON.parse(readFileSync(join(HERE, 'controls.json'), 'utf8')) as Row[];
 const labels = JSON.parse(readFileSync(join(HERE, 'labels.json'), 'utf8')) as Record<string, [Represents, 0 | 1]>;
@@ -61,7 +65,7 @@ const times = Number(process.argv.find((a, i) => i >= 2 && /^\d+$/.test(a) && i 
 const runs: (Choice | undefined)[][] = [];
 for (let r = 1; r <= times; r++) {
 	const started = Date.now();
-	const answers = size === undefined ? await judgeRepresents(controls, key) : await judgeRepresents(controls, key, fetch, size);
+	const answers = await judgeForce(represents, controls, key, fetch, size);
 	runs.push(answers);
 	const got = answers.filter((a) => a).length;
 	let ok = 0;
@@ -134,6 +138,26 @@ for (const [name, lo, hi] of [
 		}),
 	);
 	process.stdout.write(`${name.padEnd(17)} ${String(n).padStart(5)}  ${pct(ok, n).padStart(7)}\n`);
+}
+
+// The same bands per picked class. A redirect acts on one class, so its floor
+// is that class's precision under the floor, not the whole question's.
+process.stdout.write('\npicked as       >=0.90 right   <0.90 right\n');
+for (const cls of CLASSES) {
+	const cell = (hi: boolean): string => {
+		let n = 0;
+		let ok = 0;
+		runs.forEach((answers) =>
+			controls.forEach((c, i) => {
+				const a = answers[i];
+				if (a?.choice !== cls || a.confidence >= 0.9 !== hi) return;
+				n++;
+				if (truth(c.id) === cls) ok++;
+			}),
+		);
+		return `${ok}/${n}`.padStart(8);
+	};
+	process.stdout.write(`${cls.padEnd(13)} ${cell(true)}      ${cell(false)}\n`);
 }
 
 // Where it disagreed, so the labels stay auditable: on a real disagreement the

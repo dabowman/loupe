@@ -39,6 +39,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `tokens/unknown-token` | A `var()` naming no token any known source defines |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the file that built it |
+| `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere |
 | `patterns/unregistered-composite` | The same composite in 3+ files, registered in none |
 | `tokens/hardcoded-value` | A literal colour/length where a design token exists |
 | `layout/margin-on-child` | Margin, which belongs on the parent's `gap` |
@@ -413,21 +414,50 @@ This covers the `system/raw-element` findings whose analog has `variants` in
 the component registry: `Text (@wordpress/ui)` in the WPDS profile. It sends
 each element's source and parent lines to TypeSafe in one request per 40
 elements, and asks which variant fits, or `not_<name>` when the element is not
-that component's content. A pick at 0.5 confidence or above is appended to the
-message; anything below leaves the finding alone. Verdicts, severities and the
+that component's content. A pick at 0.5 confidence or above is written into
+the suggestion — `<p> → <Text variant="body-sm"> (judged 0.80)`, a
+`variant="heading-*"` placeholder filled, or `no analog, not Text content` in
+place of a wrong analog — and recorded as `judged: { answer, confidence, spans }`
+on the finding, the spans being what the agent format paints green. Anything
+below leaves the finding alone. Verdicts, severities and the
 baseline identity (`code`) are untouched. The key comes from
 `TYPESAFE_API_KEY` in the environment, or from the `.env` two directories above
 the engine entry point, which is the repo root of a checkout. A failed request
 prints a note and the report goes out unjudged.
 
-### represents
+### Judged redirects
 
-The second judgement answers a question rather than annotating a finding, and
-nothing in the CLI calls it yet. `judgeRepresents` reads the abstract pattern
-language's first force off a JSX control — does it stand for a `value`, a
-`command`, a `destination`, or `none` — so the `resolve` tables in
-`patterns/index.json` have an input where the AST has nothing to offer. What
-exists is the question and the eval that scores it.
+The abstract pattern language decides between patterns on *forces*, things a
+signature cannot see: does this control stand for a `value`, a `command` or a
+`destination`? Most of its `resolve` rows consult one, so without a reading
+they never run. `--judge` supplies the reading and runs the table in code.
+
+A realization entry names the elements that are instances of its pattern with a
+`judge` detector — in WPDS, `Button` for `action-cluster.bar`, `Menu.Item` and
+`MenuItem` for `action-cluster.overflow`, `ToolbarButton` for the toolbar, and
+`SelectControl` for `choose.select`. Each is asked about every force its
+pattern's `resolve` consults that the vocabulary gives a `judge` block (only
+`represents`, so far), one control per request, six in flight. An answer under
+0.90 confidence stays unknown. `resolveRule` walks the table on what is known,
+stopping at the first row it cannot decide, and a redirect is reported as
+`patterns/judged-redirect` with the row's `because` as its note:
+
+```
+widgets/site-preview/render.tsx:116  <Button> (represents: destination) → `navigate-hierarchy` (judged 1.00)
+```
+
+An element with a prop from the detector's `unless` (`href`, `render`) already
+realizes the target and is not asked; neither is one with a spread, which might
+carry it. The finding is `warn`, written after the baseline so it never enters
+one, and the hook never runs it. Without `--judge` the scanner never sees the
+detector.
+
+On Gutenberg that is 734 controls in about 20 seconds and 13 findings: six that
+navigate by `window.location`, a router call or a menu item and should be links
+or `Navigator` parts, five editor-internal navigations and back buttons where
+the reading is right and a link is not always possible, and two pagination
+buttons. Pagination is the known gap: the eval has no label for it, and it is
+why the floor is not lower.
 
 ```bash
 npm run eval:represents                          # three runs
@@ -437,18 +467,18 @@ npx tsx evals/represents/run.ts 1 --batch 10     # sweep the batch size
 `evals/represents` carries 100 controls lifted from
 `gutenberg/packages/{editor,edit-site}` and `site-foundry/src`, hand-labelled,
 13 of them flagged ambiguous because a careful reader could defend either
-answer. At the shipped defaults it scores 93–94% against a 54% majority-class
-baseline and repeats itself on 99% of controls, with `destination` at 100%
-precision and 97% recall — the class that decides things, since every redirect
-in the abstract language fires on it. It is deliberately outside `npm test`: it
-costs tokens, needs a key, and a model may drift in ways a build should not fail
-on. `tests/features.ts` pins the wiring offline.
+answer. It asks the question exactly as `--judge` does, from the vocabulary's
+wording, so an edit to `patterns/index.json` is an edit the eval scores. It
+scores 93–94% against a 54% majority-class baseline and repeats itself on 99%
+of controls, with `destination` at 100% precision and 97% recall; every answer
+at 0.90 or above was right. It is deliberately outside `npm test`: it costs
+tokens, needs a key, and a model may drift in ways a build should not fail on.
+`tests/features.ts` pins the wiring offline.
 
 Batch size is per judgement and was measured rather than chosen. At 40 controls
 to a request this question scores 81% and finds 69% of the destinations, because
 every control in a batch shares one state with the other 39; alone it scores 93%
-and finds 97%. So `represents` sends one control per request, six in flight,
-which puts 100 controls at about three seconds.
+and finds 97%.
 
 ## Baseline
 
@@ -567,7 +597,7 @@ const { findings, blocking, directives } = analyze(config, { scope: null });
 | `designSystem.styleSources` | Paths (file or directory) holding the design system's own stylesheets (`.css`, `.scss`, `.less`). Every class they define is a library internal: a project rule whose key selector is one of them reports `system/override (library internal)`, the way a `namespaces.external` prefix does. This is how an unprefixed system (`.field-label`, `.toast-viewport`) is recognised, since no JSX binds the classes a component renders itself. The sheets are not checked as project code, a `namespaces.project` prefix still wins, and custom properties set on a project class (a slot rebind) are not an override. Missing paths are skipped. |
 | `designSystem.cssInJsPackages` | Packages whose tagged templates are CSS. Defaults cover styled-components and emotion. |
 | `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element` when the carrier is a `components.text` or `components.layout` name; nothing nested inside it is, and a genuine render callback on any other component is not. Defaults to `render`, `as`, `component`; `[]` exempts nothing. A list replaces the default rather than extending it. |
-| `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. |
+| `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. A `judge` detector (`components`, `unless`) names elements for `check --judge` to ask about, and reports `patterns/judged-redirect`. |
 | `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
 `scope` filters what is *reported*. The index is always built repo-wide —

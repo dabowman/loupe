@@ -55,6 +55,8 @@ export const cyan = paint('36');
  *   cyan     a design-system component, or a CLI option
  *   dim      a location, a label, or anything the eye should skip
  *   red/yellow/green  severity, and whether a run is in trouble
+ *   green    inside a finding, what a model judged (`check --judge`) rather
+ *            than what the parse found
  *
  * Three surfaces name rules and two name components, and a reader who has
  * learned the colour in the report has learned it in `status` and `explain`.

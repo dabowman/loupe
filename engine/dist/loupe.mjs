@@ -20112,7 +20112,7 @@ var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
     var { existsSync: existsSync9, readFileSync: readFileSync11, realpathSync: realpathSync2 } = __require("fs");
-    var { dirname: dirname7, isAbsolute: isAbsolute8, join: join13, relative: relative5, sep: sep4 } = __require("path");
+    var { dirname: dirname8, isAbsolute: isAbsolute8, join: join13, relative: relative5, sep: sep4 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -20139,7 +20139,7 @@ var require_previous_map = __commonJS({
         if (!this.mapFile && opts.from) {
           this.mapFile = opts.from;
         }
-        if (this.mapFile) this.root = dirname7(this.mapFile);
+        if (this.mapFile) this.root = dirname8(this.mapFile);
         if (text) this.text = text;
       }
       consumer() {
@@ -20185,12 +20185,12 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative5(realPath2(dirname7(cssFile)), realPath2(path));
+          let rel = relative5(realPath2(dirname8(cssFile)), realPath2(path));
           if (rel === ".." || rel.startsWith(".." + sep4) || isAbsolute8(rel)) {
             return void 0;
           }
         }
-        this.root = dirname7(path);
+        this.root = dirname8(path);
         if (existsSync9(path)) {
           this.mapFile = path;
           return readFileSync11(path, "utf-8").toString().trim();
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join13(dirname7(file), map);
+          if (file) map = join13(dirname8(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -20259,7 +20259,7 @@ var require_input = __commonJS({
     var { nanoid } = require_non_secure();
     var { isAbsolute: isAbsolute8, resolve: resolve7 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
-    var { fileURLToPath: fileURLToPath5, pathToFileURL: pathToFileURL2 } = __require("url");
+    var { fileURLToPath: fileURLToPath6, pathToFileURL: pathToFileURL2 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
     var PreviousMap = require_previous_map();
     var terminalHighlight = require_terminal_highlight();
@@ -20452,8 +20452,8 @@ var require_input = __commonJS({
           url: fromUrl.toString()
         };
         if (fromUrl.protocol === "file:") {
-          if (fileURLToPath5) {
-            result.file = fileURLToPath5(fromUrl);
+          if (fileURLToPath6) {
+            result.file = fileURLToPath6(fromUrl);
           } else {
             throw new Error(`file: protocol is not available in this PostCSS build`);
           }
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname7, relative: relative5, resolve: resolve7, sep: sep4 } = __require("path");
+    var { dirname: dirname8, relative: relative5, resolve: resolve7, sep: sep4 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL2 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname7 && resolve7 && relative5 && sep4);
+    var pathAvailable = Boolean(dirname8 && resolve7 && relative5 && sep4);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20767,7 +20767,7 @@ var require_map_generator = __commonJS({
       applyPrevMaps() {
         for (let prev of this.previous()) {
           let from = this.toUrl(this.path(prev.file));
-          let root2 = prev.root || dirname7(prev.file);
+          let root2 = prev.root || dirname8(prev.file);
           let map;
           if (this.mapOpts.sourcesContent === false) {
             map = new SourceMapConsumer(prev.text);
@@ -20962,9 +20962,9 @@ var require_map_generator = __commonJS({
         if (/^\w+:\/\//.test(file)) return file;
         let cached = this.memoizedPaths.get(file);
         if (cached) return cached;
-        let from = this.opts.to ? dirname7(this.opts.to) : ".";
+        let from = this.opts.to ? dirname8(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname7(resolve7(from, this.mapOpts.annotation));
+          from = dirname8(resolve7(from, this.mapOpts.annotation));
         }
         let path = relative5(from, file);
         this.memoizedPaths.set(file, path);
@@ -23495,8 +23495,8 @@ var require_lib2 = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync8, readFileSync as readFileSync10, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname6, isAbsolute as isAbsolute7, join as join12, relative as relative4, resolve as resolve6 } from "node:path";
-import { fileURLToPath as fileURLToPath4 } from "node:url";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute7, join as join12, relative as relative4, resolve as resolve6 } from "node:path";
+import { fileURLToPath as fileURLToPath5 } from "node:url";
 
 // src/analyze.ts
 import { readFileSync as readFileSync2, realpathSync, statSync as statSync2 } from "node:fs";
@@ -23545,6 +23545,12 @@ var RULES = {
     rank: 16,
     needs: ["patternRegistry"],
     title: "a sanctioned composition already covers this \u2014 see the finding for which pattern replaces the shape that was built"
+  },
+  "patterns/judged-redirect": {
+    severity: "warn",
+    rank: 3,
+    needs: ["patternRegistry"],
+    title: "judged, advisory \u2014 a model read what this control stands for, and the pattern it was built as redirects that reading elsewhere; confirm before changing it"
   },
   "patterns/unregistered-composite": {
     severity: "warn",
@@ -24321,6 +24327,16 @@ function systemChildren(el, isSystemName, childrenOf, nameOf, packageOf) {
   return out.filter((n) => n !== null);
 }
 var SUBSTANTIAL = { minNodes: 4, minDepth: 2 };
+function resolveRule(rules, forces) {
+  for (const r of rules) {
+    if (!r.when) return r;
+    const conds = Object.entries(r.when);
+    if (conds.some(([f, v]) => f in forces && forces[f] !== v)) continue;
+    if (conds.every(([f, v]) => forces[f] === v)) return r;
+    return null;
+  }
+  return null;
+}
 
 // src/markup.ts
 var PLUGINS = ["jsx", "typescript", "decorators-legacy", "classProperties", "importAttributes"];
@@ -24530,6 +24546,16 @@ var numParam = (spec, key2, fallback) => typeof spec[key2] === "number" ? spec[k
 var listParam = (spec, key2) => Array.isArray(spec[key2]) ? spec[key2].filter((x) => typeof x === "string") : [];
 var CONSENT = "^(cancel|delete|remove|discard|reset|confirm|ok|yes|no|continue|proceed|leave|revert)\\b";
 var CONTROLS = "(Control|Field|Picker|Input|Textarea|Editor)$|^(DataForm|Field\\.Root|Fieldset)";
+var MAX_CONTROL_SOURCE = 2e3;
+function componentRanges(program) {
+  const out = [];
+  walkAst(program, (n) => {
+    const [name, body2] = n.type === "FunctionDeclaration" || n.type === "ClassDeclaration" ? [n.id?.name, n] : n.type === "VariableDeclarator" && n.id.type === "Identifier" ? [n.id.name, n.init] : [void 0, null];
+    if (name && /^[A-Z]/.test(name) && typeof body2?.start === "number" && typeof body2.end === "number")
+      out.push({ start: body2.start, end: body2.end, name });
+  });
+  return out;
+}
 function scanMarkup(text, relPath, ds, rules = []) {
   const referenced = harvestTokens(text);
   const stems = harvestStems(text);
@@ -24539,12 +24565,13 @@ function scanMarkup(text, relPath, ds, rules = []) {
   const cssInJs = [];
   const composites = [];
   const ruleHits = [];
+  const controls = [];
   const imports = /* @__PURE__ */ new Set();
   let ast;
   try {
     ast = (0, import_parser.parse)(text, { sourceType: "unambiguous", errorRecovery: true, plugins: PLUGINS });
   } catch (err) {
-    return { bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports: [], parseError: messageOf2(err) };
+    return { controls, bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports: [], parseError: messageOf2(err) };
   }
   const { known, text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
   const tags = cssInJsLocals(ast, ds.cssInJsPackages);
@@ -24625,13 +24652,38 @@ function scanMarkup(text, relPath, ds, rules = []) {
       return label?.type === "ObjectProperty" ? staticString(label.value) : null;
     });
   }
+  let scopes = null;
+  const enclosingOf = (el) => {
+    scopes ??= componentRanges(ast.program);
+    const at = el.start ?? 0;
+    let best = null;
+    for (const s of scopes) if (s.start <= at && s.end >= (el.end ?? at) && (!best || s.start > best.start)) best = s;
+    return best?.name ?? null;
+  };
   const readRules = (el) => {
     if (!rules.length) return;
     const canonical = canonicalOf(el);
     if (!canonical) return;
     const line = el.loc?.start?.line ?? 1;
     for (const { patternId, spec } of rules) {
-      if (spec.rule === "few-static-options") {
+      if (spec.rule === "judge") {
+        const name = jsxName(el) ?? "";
+        const component = name.includes(".") ? `${canonical}${name.slice(name.indexOf("."))}` : canonical;
+        if (!listParam(spec, "components").includes(component)) continue;
+        const unless = listParam(spec, "unless");
+        const realized = unless.length > 0 && el.openingElement.attributes.some(
+          (a) => a.type === "JSXSpreadAttribute" || a.name.type === "JSXIdentifier" && unless.includes(a.name.name)
+        );
+        if (realized) continue;
+        controls.push({
+          file: relPath,
+          line,
+          component,
+          enclosing: enclosingOf(el),
+          source: text.slice(el.start ?? 0, el.end ?? 0).slice(0, MAX_CONTROL_SOURCE),
+          patternId
+        });
+      } else if (spec.rule === "few-static-options") {
         if (!listParam(spec, "components").includes(canonical)) continue;
         const prop = param(spec, "prop", "options");
         const attr = el.openingElement.attributes.find((a) => a.type === "JSXAttribute" && a.name.name === prop);
@@ -24645,12 +24697,12 @@ function scanMarkup(text, relPath, ds, rules = []) {
         if (canonical !== param(spec, "container", "")) continue;
         const button = param(spec, "button", "Button");
         const consent = new RegExp(param(spec, "labels", CONSENT), "i");
-        const controls = new RegExp(param(spec, "controls", CONTROLS));
+        const controls2 = new RegExp(param(spec, "controls", CONTROLS));
         const inside = allElements(el);
         const isControl = (c) => {
           const name = jsxName(c);
           const sys = canonicalOf(c);
-          if (sys) return controls.test(sys) || controls.test(name ?? "");
+          if (sys) return controls2.test(sys) || controls2.test(name ?? "");
           return !!name && /^(input|select|textarea)$/.test(name);
         };
         if (inside.some(isControl)) continue;
@@ -24779,6 +24831,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
     }
   });
   return {
+    controls,
     bindings,
     rawEls,
     inlineStyles,
@@ -25083,7 +25136,7 @@ function collapsePerRule(pending) {
   }
   return out;
 }
-async function analyze(config, { scope = null } = {}) {
+async function analyze(config, { scope = null, judge = false } = {}) {
   const ds = config.designSystem;
   const ruleIsLive = (rule2) => config.enabled[rule2];
   const parseSuppressions = makeSuppressionParser(config.suppression);
@@ -25130,8 +25183,9 @@ async function analyze(config, { scope = null } = {}) {
   const cssInJs = [];
   const composites = [];
   const patternRules = (config.patterns ?? []).flatMap(
-    (p) => p.rules.map((spec) => ({ patternId: p.id, spec }))
+    (p) => p.rules.filter((spec) => judge || spec.rule !== "judge").map((spec) => ({ patternId: p.id, spec }))
   );
+  const controls = [];
   const ruleHits = [];
   const importsByFile = /* @__PURE__ */ new Map();
   const componentImports = [];
@@ -25159,6 +25213,7 @@ async function analyze(config, { scope = null } = {}) {
     cssInJs.push(...scanned.cssInJs);
     composites.push(...scanned.composites);
     for (const h of scanned.ruleHits) ruleHits.push({ ...h, file: rel });
+    controls.push(...scanned.controls);
     if (scanned.imports) importsByFile.set(rel, scanned.imports);
     for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
     suppressionsFor(rel, text);
@@ -25582,7 +25637,15 @@ async function analyze(config, { scope = null } = {}) {
     findings: unique,
     directives,
     diagnostics,
-    blocking: unique.some((f) => f.severity === "error")
+    blocking: unique.some((f) => f.severity === "error"),
+    // Scoped and suppressed here, where the scope and the comments are: the
+    // finding a control becomes is written later, by the judge.
+    ...judge && config.enabled["patterns/judged-redirect"] ? {
+      controls: controls.filter((c) => {
+        const supp = suppByFile.get(c.file);
+        return reports(c.file) && !(supp && isSuppressed(supp.byLine, c.line, "patterns/judged-redirect"));
+      })
+    } : {}
   };
 }
 var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.message))}`;
@@ -25651,7 +25714,8 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
 
 // src/judge.ts
 import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join5 } from "node:path";
+import { dirname as dirname2, join as join5 } from "node:path";
+import { fileURLToPath } from "node:url";
 var ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 var FLOOR = 0.5;
 var CONCURRENCY = 6;
@@ -25672,8 +25736,9 @@ var BATCH = {
   //
   // Sharing a state with 39 other controls costs nearly a third of the
   // destinations. A control is a few lines, so one request each is cheap; the
-  // pool below is what keeps it quick.
-  represents: 1
+  // pool below is what keeps it quick. Every force is asked this way until its
+  // own eval says otherwise: this table is `represents`, not forces in general.
+  forces: 1
 };
 async function ask(items, elementOf, questionOf, apiKey, fetchImpl, size) {
   const batches = [];
@@ -25711,6 +25776,7 @@ async function ask(items, elementOf, questionOf, apiKey, fetchImpl, size) {
   );
   return done.flat();
 }
+var judgedTail = (confidence2) => `(judged ${confidence2.toFixed(2)})`;
 var notKey = (e) => `not_${e.name.toLowerCase()}`;
 function targetOf(f, withVariants) {
   if (f.rule !== "system/raw-element") return void 0;
@@ -25756,16 +25822,81 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
   jobs.forEach(({ f, target }, i) => {
     const a = answers[i];
     if (!a || a.confidence < FLOOR) return;
-    const c = a.confidence.toFixed(2);
-    f.message += a.choice === notKey(target) ? ` \u2014 judged not ${target.name} content (${c}); the analog likely does not apply` : ` \u2014 judged variant="${a.choice}" (${c})`;
+    const arrow = f.message.indexOf(" \u2192 ");
+    const element = f.message.slice(0, arrow);
+    const analog = f.message.slice(arrow + 3);
+    const tag = `<${target.name}>`;
+    const not = a.choice === notKey(target);
+    const span = not ? `no analog, not ${target.name} content` : `variant="${a.choice}"`;
+    const suggestion = not ? span : /variant="[^"]*"/.test(analog) ? analog.replace(/variant="[^"]*"/, span) : analog.includes(tag) ? analog.replace(tag, `<${target.name} ${span}>`) : `${analog} with ${span}`;
+    const tail = judgedTail(a.confidence);
+    f.message = `${element} \u2192 ${suggestion} ${tail}`;
+    f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
     annotated++;
   });
   return annotated;
 }
+var LANGUAGE = join5(dirname2(fileURLToPath(import.meta.url)), "..", "..", "patterns", "index.json");
+var loadLanguage = (path = LANGUAGE) => JSON.parse(readFileSync4(path, "utf8"));
+async function judgeForce(force, controls, apiKey, fetchImpl = fetch, size = BATCH.forces) {
+  return ask(
+    controls,
+    (c) => ({ file: c.file, component: c.component, enclosing_component: c.enclosing, source: c.source }),
+    (_c, i) => ({
+      type: "choice",
+      instructions: `\`elements[${i}].source\` is one interactive control taken from a React user interface. ${force.question}`,
+      criteria: force.criteria
+    }),
+    apiKey,
+    fetchImpl,
+    size
+  );
+}
+var REDIRECT_FLOOR = 0.9;
+async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch, language = loadLanguage()) {
+  const byId = new Map(language.patterns.map((p) => [p.id, p]));
+  const abstractOf = (patternId) => patternId.split("#", 1)[0]?.split(".", 1)[0] ?? patternId;
+  const tableOf = (c) => byId.get(abstractOf(c.patternId))?.resolve ?? [];
+  const known = controls.map(() => ({}));
+  const sure = controls.map(() => ({}));
+  for (const [name, force] of Object.entries(language.vocabulary.forces)) {
+    if (!force.judge) continue;
+    const asked = controls.flatMap((c, i) => tableOf(c).some((r) => r.when && name in r.when) ? [i] : []);
+    if (!asked.length) continue;
+    const answers = await judgeForce(force.judge, asked.map((i) => controls[i]), apiKey, fetchImpl);
+    asked.forEach((ci, k) => {
+      const a = answers[k];
+      if (!a || a.confidence < REDIRECT_FLOOR) return;
+      known[ci][name] = a.choice;
+      sure[ci][name] = a.confidence;
+    });
+  }
+  return controls.flatMap((c, i) => {
+    const r = resolveRule(tableOf(c), known[i] ?? {});
+    if (!r?.redirect) return [];
+    const when = Object.entries(r.when ?? {});
+    const reading = `(${when.map(([f, v]) => `${f}: ${String(v)}`).join(", ")})`;
+    const confidence2 = Math.min(...when.map(([f]) => sure[i]?.[f] ?? 0));
+    const tail = judgedTail(confidence2);
+    return [
+      {
+        rule: "patterns/judged-redirect",
+        severity,
+        rank: RULES["patterns/judged-redirect"].rank,
+        file: c.file,
+        line: c.line,
+        message: `<${c.component}> ${reading} \u2192 \`${r.redirect}\` ${tail}`,
+        note: r.because,
+        code: `<${c.component}>`,
+        judged: { answer: when.map(([, v]) => String(v)).join(", "), confidence: confidence2, spans: [reading, tail] }
+      }
+    ];
+  });
+}
 
 // src/baseline.ts
 import { existsSync as existsSync3, readFileSync as readFileSync5, writeFileSync as writeFileSync2 } from "node:fs";
-import { dirname as dirname2, isAbsolute as isAbsolute3, join as join7, resolve as resolve3 } from "node:path";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join7, resolve as resolve3 } from "node:path";
 
 // src/paths.ts
 import { createHash } from "node:crypto";
@@ -25857,7 +25988,7 @@ function readBaseline(root2, path) {
 }
 function writeBaseline(root2, path, result) {
   const full = resolvePath(root2, path);
-  const dir = dirname2(full);
+  const dir = dirname3(full);
   if (dir !== resolve3(root2)) ensureDir(dir);
   const entries = [...new Set(result.findings.map(findingKey))].sort();
   const prior = readBaseline(root2, path);
@@ -25896,8 +26027,8 @@ function applyBaseline(result, baseline) {
 
 // src/config.ts
 import { existsSync as existsSync4, readFileSync as readFileSync6, readdirSync as readdirSync3 } from "node:fs";
-import { dirname as dirname3, isAbsolute as isAbsolute4, join as join8, resolve as resolve4 } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { dirname as dirname4, isAbsolute as isAbsolute4, join as join8, resolve as resolve4 } from "node:path";
+import { fileURLToPath as fileURLToPath2, pathToFileURL } from "node:url";
 
 // src/registry.ts
 var declaredPackages = (raw) => {
@@ -25924,7 +26055,7 @@ function loadComponents(raw) {
 }
 
 // src/config.ts
-var HERE = dirname3(fileURLToPath(import.meta.url));
+var HERE = dirname4(fileURLToPath2(import.meta.url));
 var PRESET_DIR = join8(HERE, "..", "presets");
 var CONFIG_NAMES = [
   "loupe.config.mjs",
@@ -25995,7 +26126,7 @@ function findConfig(start) {
       } catch {
       }
     }
-    const up = dirname3(dir);
+    const up = dirname4(dir);
     if (up === dir) return null;
     dir = up;
   }
@@ -26013,7 +26144,7 @@ async function resolveExtends(spec, fromDir) {
   const asPreset = presetPath(spec);
   if (existsSync4(asPreset)) return { path: asPreset, dir: PRESET_DIR };
   const asPath = isAbsolute4(spec) ? spec : join8(fromDir, spec);
-  if (existsSync4(asPath)) return { path: asPath, dir: dirname3(asPath) };
+  if (existsSync4(asPath)) return { path: asPath, dir: dirname4(asPath) };
   throw new Error(`cannot resolve extends: ${spec}`);
 }
 async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
@@ -26021,7 +26152,7 @@ async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
   if (seen.has(real)) throw new Error(`circular extends at ${real}`);
   seen.add(real);
   const raw = await readConfigFile(real) ?? {};
-  return expandExtends(raw, dirname3(real), seen);
+  return expandExtends(raw, dirname4(real), seen);
 }
 async function expandExtends(raw, fromDir, seen = /* @__PURE__ */ new Set()) {
   if (!raw?.extends) return raw ?? {};
@@ -26200,7 +26331,7 @@ function setPatterns(config, patterns) {
   // anyway. The layout/text lists are deliberately not part of this: a
   // headless library has none and still composes.
   config.designSystem.packages.length > 0;
-  for (const rule2 of ["patterns/duplicate-composite", "patterns/superseded-composite"])
+  for (const rule2 of ["patterns/duplicate-composite", "patterns/superseded-composite", "patterns/judged-redirect"])
     config.enabled[rule2] = hasRegistry && config.severityOf(rule2) !== "off";
   return config;
 }
@@ -26269,8 +26400,20 @@ var SEV_PAINT = {
 import { createHash as createHash2 } from "node:crypto";
 var SEV_MARK = { error: "\u2717", warn: "\u2022" };
 var SEV_WORD = { error: "blocking", warn: "advisory" };
-var COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
+var COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|<[A-Z][A-Za-z0-9]*(?=\s)|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
 var components = (message) => message.replace(COMPONENT, cyan);
+var painted = (f) => {
+  const line = withNote(f);
+  let out = "";
+  let at = 0;
+  for (const span of f.judged?.spans ?? []) {
+    const i = line.indexOf(span, at);
+    if (i < 0) continue;
+    out += `${components(line.slice(at, i))}${green(span)}`;
+    at = i + span.length;
+  }
+  return out + components(line.slice(at));
+};
 var titleFor = (config) => (id) => renderTitle(id, config.designSystem, config.suppression.keyword);
 var NEAR = 5;
 var MAX_NEAR_MISSES = 5;
@@ -26350,7 +26493,7 @@ function formatAgent(result, config, { maxFindings = 0, terse = false } = {}) {
       );
       const show = group.slice(0, quota.get(ruleId) ?? 0);
       hidden += group.length - show.length;
-      for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${components(withNote(f))}`);
+      for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${painted(f)}`);
       if (group.length > show.length) lines.push(dim(`    \u2026 ${group.length - show.length} more`));
     }
     if (hidden) {
@@ -26948,9 +27091,9 @@ ${body(payload, clean, result.diagnostics.parseErrors.length)}
 
 // src/detect.ts
 import { existsSync as existsSync5, readFileSync as readFileSync7, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
-import { dirname as dirname4, join as join9 } from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-var HERE2 = dirname4(fileURLToPath2(import.meta.url));
+import { dirname as dirname5, join as join9 } from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
+var HERE2 = dirname5(fileURLToPath3(import.meta.url));
 var PRESET_DIR2 = join9(HERE2, "..", "presets");
 var readJson = (p) => {
   try {
@@ -27350,7 +27493,7 @@ function applyRegistries(config, sources, {
   }
   if (sawPatterns) setPatterns2(config, patterns);
   if (sawComponents) setComponentRegistry2(config, components2);
-  const registryRules = ["patterns/duplicate-composite", "patterns/superseded-composite"];
+  const registryRules = ["patterns/duplicate-composite", "patterns/superseded-composite", "patterns/judged-redirect"];
   const patternsNote = (added) => registryRules.every((rule2) => config.severityOf(rule2) === "off") ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
     // A composite is only ever built from names imported out of
     // `designSystem.packages` (see markup.ts), so with none declared
@@ -27382,9 +27525,9 @@ function applyRegistries(config, sources, {
 
 // src/hook.ts
 import { existsSync as existsSync7, readFileSync as readFileSync9, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname5, isAbsolute as isAbsolute6, join as join11, relative as relative3, sep as sep3 } from "node:path";
+import { dirname as dirname6, isAbsolute as isAbsolute6, join as join11, relative as relative3, sep as sep3 } from "node:path";
 import { homedir } from "node:os";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 async function readStdin() {
   if (process.stdin.isTTY) return "";
@@ -27504,7 +27647,7 @@ function resolvedOptions() {
 function pluginName() {
   const roots = [
     process.env.CLAUDE_PLUGIN_ROOT,
-    join11(dirname5(fileURLToPath3(import.meta.url)), "..", "..")
+    join11(dirname6(fileURLToPath4(import.meta.url)), "..", "..")
   ].filter((r) => Boolean(r));
   for (const root2 of roots) {
     try {
@@ -27554,7 +27697,7 @@ var note = (msg) => {
 };
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
 var key = (label) => dim(label);
-var HERE3 = dirname6(fileURLToPath4(import.meta.url));
+var HERE3 = dirname7(fileURLToPath5(import.meta.url));
 function versionLine() {
   let version = "unknown";
   try {
@@ -27627,7 +27770,9 @@ Options:
                         path (default: .loupe-baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
-  --judge               Ask TypeSafe which variant a raw-element finding needs
+  --judge               Ask TypeSafe what a parse cannot see: the variant a raw
+                        element needs, and whether a control stands for the
+                        pattern it was built as (patterns/judged-redirect)
                         (check only; TYPESAFE_API_KEY from the environment or
                         loupe's own .env)
   --force               Overwrite an existing config (init)
@@ -27709,7 +27854,7 @@ async function main() {
   if (isHook && hookSilenced()) return EXIT.OK;
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
   const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
-  const root2 = resolve6(explicitRoot ?? (anchor ? dirname6(anchor) : process.cwd()));
+  const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
   if (!existsSync8(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
@@ -27879,7 +28024,7 @@ async function main() {
     for (const id of RULE_IDS) {
       const def = RULES[id];
       const sev = config.severityOf(id);
-      const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red("BLOCKS") : sev === "error" ? yellow("advisory (would block if enabled)") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
+      const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red("BLOCKS") : sev === "error" ? yellow("advisory (would block if enabled)") : yellow(id === "patterns/judged-redirect" ? "advisory, --judge only" : "advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
       lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
     }
     const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
@@ -28048,7 +28193,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
   }
   let result;
   try {
-    result = await analyze(config, { scope });
+    result = await analyze(config, { scope, judge: Boolean(judgeKey) });
   } catch (err) {
     if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf4(err)}`);
     fail(`loupe: ${messageOf4(err)}
@@ -28063,15 +28208,19 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
 `);
     result = applyBaseline(result, baseline);
   }
-  if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   if (judgeKey) {
     try {
+      if (result.controls?.length)
+        result.findings.push(
+          ...await judgeRedirects(result.controls, judgeKey, config.severityOf("patterns/judged-redirect"))
+        );
       await judgeVariants(root2, result.findings, config.componentRegistry, judgeKey);
     } catch (err) {
       note(`loupe: --judge skipped \u2014 ${messageOf4(err)}
 `);
     }
   }
+  if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   if (isHook) {
     const sessionId = payload.session_id ?? payload.sessionId ?? "";
     if (!result.blocking) {

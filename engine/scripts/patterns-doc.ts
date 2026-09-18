@@ -40,7 +40,7 @@ interface Abstract {
 	vocabulary: {
 		intents: Record<string, string>;
 		scales: Record<string, string>;
-		forces: Record<string, { values: unknown[]; about: string }>;
+		forces: Record<string, { values: unknown[]; about: string; judge?: { question: string; criteria: Record<string, string> } }>;
 		containers?: Record<string, string>;
 	};
 	patterns: {
@@ -95,6 +95,12 @@ function validate(abstract: Abstract, real: Realization): string[] {
 		if (part && !(p.parts ?? []).some((x) => x.role === part)) return false;
 		return true;
 	};
+	// A force `check --judge` asks about has to define every value it can
+	// answer with: an option missing from the criteria is one the model cannot
+	// pick, and the redirect that needs it never fires.
+	for (const [name, f] of Object.entries(forces))
+		for (const v of f.judge ? f.values : [])
+			if (!f.judge?.criteria[String(v)]) errors.push(`force "${name}": judge gives value "${String(v)}" no criterion`);
 	for (const p of abstract.patterns) {
 		if (!intents[p.intent]) errors.push(`${p.id}: intent "${p.intent}" is not in the vocabulary`);
 		if (!scales[p.scale]) errors.push(`${p.id}: scale "${p.scale}" is not in the vocabulary`);

@@ -134,6 +134,7 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in more than one file | warn |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the one file that built it | warn |
 | `patterns/unregistered-composite` | The same composite built in three or more files, registered in none | warn |
+| `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere | warn |
 
 Rules disable themselves when the config cannot support them — a block theme
 with no component layer leaves the component rules inert rather than firing on
@@ -192,14 +193,34 @@ only wraps a button. `loupe check --judge` sends those elements to
 the element is not text at all:
 
 ```
-src/components/build-summary.tsx:142  <p> → <Text> — judged variant="body-sm" (0.82)
-src/components/brand-picker.tsx:101  <span> → <Text> — judged not Text content (1.00); the analog likely does not apply
+src/components/build-summary.tsx:142  <p> → <Text variant="body-sm"> (judged 0.80)
+src/components/build-summary.tsx:131  <h3> → Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.66)
+src/components/brand-picker.tsx:101  <span> → no analog, not Text content (judged 1.00)
 ```
 
-Below 0.5 confidence the finding is left as it was. The judgment is appended
-and never changes a verdict. The hook never calls it, so the gate stays
+The answer is written into the suggestion, confidence last, and what the model
+supplied is green in a terminal. Below 0.5 confidence the finding is left as it
+was, and no judgement changes a verdict. `--format json` carries the answer as
+data, `judged: { answer, confidence, spans }`, so a tool can act on a judgement
+without parsing the sentence. The hook never calls it, so the gate stays
 deterministic and offline. It needs `TYPESAFE_API_KEY`, from the environment
 or a `.env` beside the checkout (see `.env.example`).
+
+### Judged redirects
+
+The same flag reads what a control stands for — a value, a command or a
+destination — off every `Button`, menu item, toolbar button and `SelectControl`
+the profile names, and runs the pattern language's `resolve` table on the
+answer. A button that navigates is a link however it is styled, so:
+
+```
+widgets/site-preview/render.tsx:116  <Button> (represents: destination) → `navigate-hierarchy` (judged 1.00)
+```
+
+That is `patterns/judged-redirect`, reported only at 0.90 confidence or above,
+advisory, never baselined and never run by the hook. A control that already
+carries `href` is not asked. See `engine/README.md` for how it decides and how
+it scored.
 
 ### Composites
 

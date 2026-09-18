@@ -14,18 +14,27 @@
  * Neither is decidable from the tag and its classes; both are obvious from
  * reading the element.
  *
- * `represents` is the second, and it is not wired to a rule. It reads the
- * abstract pattern language's first force — does this control stand for a
- * value, a command or a destination — off real JSX, so the `resolve` tables in
- * `patterns/index.json` have an input. `engine/evals/represents` scores it.
+ * Forces are the second. The `resolve` tables in `patterns/index.json` decide
+ * on things a signature cannot see — does this control stand for a value, a
+ * command or a destination — so most of them never ran. A force the vocabulary
+ * says how to ask is read off real JSX here, the table runs in code, and a
+ * redirect becomes `patterns/judged-redirect`. `engine/evals/represents` scores
+ * the one force wired so far.
  *
- * An answer is appended to a message and never changes a verdict: the gate
- * stays deterministic and offline, and this runs only when asked.
+ * Neither changes a deterministic verdict. The variant answer is written into
+ * the finding's suggestion; the redirect is its own advisory finding, written
+ * after the baseline and never by the hook. Both record the answer as data on
+ * `Finding.judged`. The gate stays deterministic and offline,
+ * and this runs only when asked.
  */
 
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import type { ComponentEntry, Finding } from './types.ts';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveRule } from './patterns.ts';
+import type { ResolveRule } from './patterns.ts';
+import { RULES } from './rules.ts';
+import type { ComponentEntry, Control, Finding, Severity } from './types.ts';
 
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 // ponytail: one floor for every outcome. Split it per outcome if an eval shows
@@ -57,8 +66,9 @@ const BATCH = {
 	//
 	// Sharing a state with 39 other controls costs nearly a third of the
 	// destinations. A control is a few lines, so one request each is cheap; the
-	// pool below is what keeps it quick.
-	represents: 1,
+	// pool below is what keeps it quick. Every force is asked this way until its
+	// own eval says otherwise: this table is `represents`, not forces in general.
+	forces: 1,
 };
 
 type Fetch = typeof fetch;
@@ -127,6 +137,9 @@ async function ask<T>(
 	return done.flat();
 }
 
+/** How every judged message ends: the certainty behind what it now says. */
+const judgedTail = (confidence: number): string => `(judged ${confidence.toFixed(2)})`;
+
 // ── system/raw-element: which variant? ──────────────────────────────────────
 
 const notKey = (e: ComponentEntry): string => `not_${e.name.toLowerCase()}`;
@@ -139,7 +152,13 @@ function targetOf(f: Finding, withVariants: readonly ComponentEntry[]): Componen
 }
 
 /**
- * Annotate each judgeable finding in place. Returns how many were annotated.
+ * Write each answer into its finding's suggestion, in place. Returns how many
+ * were written.
+ *
+ * The answer goes where the reader would have had to put it: `<p> → <Text>`
+ * becomes `<p> → <Text variant="body-sm"> (judged 0.81)`, and a suggestion that
+ * already names a placeholder, `variant="heading-*"`, has it filled. A
+ * `not_` answer replaces the suggestion, since the analog was the wrong call.
  */
 export async function judgeVariants(
 	root: string,
@@ -188,74 +207,157 @@ export async function judgeVariants(
 	jobs.forEach(({ f, target }, i) => {
 		const a = answers[i];
 		if (!a || a.confidence < FLOOR) return;
-		const c = a.confidence.toFixed(2);
-		f.message +=
-			a.choice === notKey(target)
-				? ` — judged not ${target.name} content (${c}); the analog likely does not apply`
-				: ` — judged variant="${a.choice}" (${c})`;
+		const arrow = f.message.indexOf(' → ');
+		const element = f.message.slice(0, arrow);
+		const analog = f.message.slice(arrow + 3);
+		const tag = `<${target.name}>`;
+		const not = a.choice === notKey(target);
+		const span = not ? `no analog, not ${target.name} content` : `variant="${a.choice}"`;
+		const suggestion = not
+			? span
+			: /variant="[^"]*"/.test(analog)
+				? analog.replace(/variant="[^"]*"/, span)
+				: analog.includes(tag)
+					? analog.replace(tag, `<${target.name} ${span}>`)
+					: `${analog} with ${span}`;
+		const tail = judgedTail(a.confidence);
+		f.message = `${element} → ${suggestion} ${tail}`;
+		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
 		annotated++;
 	});
 	return annotated;
 }
 
-// ── represents: value, command or destination? ──────────────────────────────
+// ── forces: what the abstract language resolves on ──────────────────────────
 
-/** The abstract language's first force. `patterns/index.json` resolves on it. */
-export type Represents = 'value' | 'command' | 'destination' | 'none';
-
-/** One control to ask about. `source` is the JSX element, opening tag to close. */
-export interface Control {
-	file: string;
-	component: string;
-	/** The component function the control sits in, when the parse found a name. */
-	enclosing: string | null;
-	source: string;
+/** How a force is asked: its `judge` block in `patterns/index.json`. */
+export interface ForceJudge {
+	question: string;
+	/** One per value of the force, plus the no-match option the question needs. */
+	criteria: Record<string, string>;
 }
 
-/**
- * Wording tracks the force's own definition in `patterns/index.json` — "what an
- * option or control stands for", deciding choose vs act vs navigate — plus one
- * disambiguating line each. Any more and the eval scores a cheat sheet.
- *
- * The no-match option stays `none` here, against the `not_text` lesson above:
- * that judgement's no-match competes with real variants on most elements, so
- * the name had to force a decision. This one is rare and the three real classes
- * separate cleanly — renaming it to `not_a_control` moved nothing but cost two
- * points on the others.
- */
-export const REPRESENTS_CRITERIA: Record<Represents, string> = {
-	value: 'It picks or sets a value the system already knows about — an option, a setting, a piece of data. Using it changes what some value is, not where the user is. A select, a checkbox-style menu item, a colour swatch, or a disclosure button whose visible label is the value it will change all count.',
-	command:
-		'It invokes a command that changes something — save, delete, duplicate, upload, undo, retry, close, or opening a dialog or panel to do one of those. Using it does something rather than going somewhere or setting a value.',
-	destination:
-		'It moves the user to another view, screen, route, record or URL. Using it changes where the user is, however the control happens to be styled — a button that routes is still a destination.',
-	none: 'Not an interactive control at all: static text or a display-only element that happens to use a control component.',
-};
+export interface Language {
+	vocabulary: { forces: Record<string, { values: unknown[]; about: string; judge?: ForceJudge }> };
+	patterns: { id: string; resolve?: ResolveRule[] }[];
+}
+
+// The abstract language sits at the checkout's root beside the profiles that
+// realize it, and nothing but the judge reads it at runtime: a signature is
+// all the deterministic rules can check, and every force is beyond one.
+const LANGUAGE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'patterns', 'index.json');
+
+export const loadLanguage = (path: string = LANGUAGE): Language => JSON.parse(readFileSync(path, 'utf8')) as Language;
 
 /**
- * Read `represents` off each control. One answer per control, in order.
+ * Read one force off each control. One answer per control, in order.
+ *
+ * The wording is the force's own, from the vocabulary, so the definition an
+ * author reads beside `about` is the one the model is scored on. `represents`
+ * was tuned against `evals/represents`: one disambiguating line per value and
+ * no more, or the eval scores a cheat sheet; and its no-match stays `none`,
+ * against the `not_text` lesson above, because it is rare and the three real
+ * classes separate cleanly — `not_a_control` moved nothing and cost two points.
  *
  * The state carries the element and where it came from and nothing else: an
  * ablation over 100 labelled controls scored the enclosing component's source
  * exactly level with leaving it out, at 1.5x the tokens, because the slice
  * usually missed the handler it was there to supply.
  */
-export async function judgeRepresents(
-	controls: readonly Control[],
+export async function judgeForce(
+	force: ForceJudge,
+	controls: readonly Pick<Control, 'file' | 'component' | 'enclosing' | 'source'>[],
 	apiKey: string,
 	fetchImpl: Fetch = fetch,
-	size: number = BATCH.represents,
+	size: number = BATCH.forces,
 ): Promise<(Choice | undefined)[]> {
 	return ask(
 		controls,
 		(c) => ({ file: c.file, component: c.component, enclosing_component: c.enclosing, source: c.source }),
 		(_c, i) => ({
 			type: 'choice',
-			instructions: `\`elements[${i}].source\` is one interactive control taken from a React user interface. What does that control stand for to the person using it?`,
-			criteria: REPRESENTS_CRITERIA,
+			instructions: `\`elements[${i}].source\` is one interactive control taken from a React user interface. ${force.question}`,
+			criteria: force.criteria,
 		}),
 		apiKey,
 		fetchImpl,
 		size,
 	);
+}
+
+// ── patterns/judged-redirect ────────────────────────────────────────────────
+
+// A redirect sends an agent to a different pattern, which is the expensive
+// error, so an answer counts only where the eval found nothing wrong: every
+// `represents` answer at 0.90 or above was right, and under it a third of the
+// `command` picks were not.
+//
+// One floor for every value, though the eval argues for less on `destination`:
+// 27 of 27 picks under 0.90 were right. Gutenberg says otherwise. Of its 19
+// destination picks between 0.5 and 0.9, 11 were pagination buttons, a control
+// the eval has no label for, and only 2 were plainly links. The cost of 0.90 is
+// site-foundry's one real case, `onClick={ () => navigate( '#/new' ) }`, at 0.83.
+// Label pagination into the eval before lowering it.
+const REDIRECT_FLOOR = 0.9;
+
+/**
+ * The findings the abstract language's redirects produce on these controls.
+ *
+ * Each control is an instance of the pattern its registry entry realizes. The
+ * forces that pattern's `resolve` table consults are asked — only those the
+ * vocabulary says how to ask — and an answer under the floor stays unknown.
+ * `resolveRule` then runs the table on what is known, and a redirect is the
+ * finding. A variant pick is not: the realization already chose a variant,
+ * and a different one is a finding this does not write yet.
+ */
+export async function judgeRedirects(
+	controls: readonly Control[],
+	apiKey: string,
+	severity: Severity,
+	fetchImpl: Fetch = fetch,
+	language: Language = loadLanguage(),
+): Promise<Finding[]> {
+	const byId = new Map(language.patterns.map((p) => [p.id, p]));
+	const abstractOf = (patternId: string): string => patternId.split('#', 1)[0]?.split('.', 1)[0] ?? patternId;
+	const tableOf = (c: Control): ResolveRule[] => byId.get(abstractOf(c.patternId))?.resolve ?? [];
+
+	const known = controls.map((): Record<string, string> => ({}));
+	const sure = controls.map((): Record<string, number> => ({}));
+	for (const [name, force] of Object.entries(language.vocabulary.forces)) {
+		if (!force.judge) continue;
+		const asked = controls.flatMap((c, i) => (tableOf(c).some((r) => r.when && name in r.when) ? [i] : []));
+		if (!asked.length) continue;
+		const answers = await judgeForce(force.judge, asked.map((i) => controls[i] as Control), apiKey, fetchImpl);
+		asked.forEach((ci, k) => {
+			const a = answers[k];
+			if (!a || a.confidence < REDIRECT_FLOOR) return;
+			(known[ci] as Record<string, string>)[name] = a.choice;
+			(sure[ci] as Record<string, number>)[name] = a.confidence;
+		});
+	}
+
+	// `<Button> (represents: destination) \u2192 \`navigate-hierarchy\` (judged 0.97)`:
+	// what it was read as, where that sends it, and the least certain reading
+	// the redirect rests on.
+	return controls.flatMap((c, i): Finding[] => {
+		const r = resolveRule(tableOf(c), known[i] ?? {});
+		if (!r?.redirect) return [];
+		const when = Object.entries(r.when ?? {});
+		const reading = `(${when.map(([f, v]) => `${f}: ${String(v)}`).join(', ')})`;
+		const confidence = Math.min(...when.map(([f]) => sure[i]?.[f] ?? 0));
+		const tail = judgedTail(confidence);
+		return [
+			{
+				rule: 'patterns/judged-redirect',
+				severity,
+				rank: RULES['patterns/judged-redirect'].rank,
+				file: c.file,
+				line: c.line,
+				message: `<${c.component}> ${reading} \u2192 \`${r.redirect}\` ${tail}`,
+				note: r.because,
+				code: `<${c.component}>`,
+				judged: { answer: when.map(([, v]) => String(v)).join(', '), confidence, spans: [reading, tail] },
+			},
+		];
+	});
 }

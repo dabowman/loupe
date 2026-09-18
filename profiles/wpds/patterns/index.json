@@ -19,7 +19,8 @@
   "rules": {
     "few-static-options": "Shipped. A component in `components` whose `prop` is a static array literal (inline, or a same-file `const`) of `min`..`max` entries whose labels total at most `maxLabelChars` characters — the length stands in for the `fit: row` force, and a label the source does not state leaves the width unknown, which is not a finding. Reports the entry that carries it.",
     "confirm-pair": "Shipped. A `container` whose only `button`s are exactly two with consent labels (`labels` regex, `__()`-wrapped or literal) and no form control (`controls` regex) inside. Reports the entry that carries it.",
-    "button-that-navigates": "Specified. A Button whose onClick calls navigate(), history.push() or assigns window.location → the action-cluster destination redirect (Link).",
+    "judge": "Shipped, behind `check --judge` only. Each element named in `components` is an instance of this entry's pattern. The forces that pattern's abstract `resolve` consults, where the vocabulary gives the force a `judge` block, are asked of TypeSafe one element at a time; `resolve` then runs in code, and a redirect reports `patterns/judged-redirect` (advisory, never in the hook or the baseline). An element carrying a prop in `unless` already realizes the target and is not asked, and neither is one with a spread, which might carry it.",
+    "button-that-navigates": "Specified. A Button whose onClick calls navigate(), history.push() or assigns window.location → the action-cluster destination redirect (Link). `judge` on action-cluster.bar reads the same thing from any handler; this deterministic form would let the hook see it.",
     "unconditional-optional-controls": "Specified. A PanelBody rendering more than about six controls with no hasValue/onDeselect → field-group.progressive (ToolsPanel).",
     "hand-managed-selection": "Specified. A run of Buttons each setting aria-selected or aria-pressed from state → browse-collection.selectable-list or choose.segmented by whether the values are records or options."
   },
@@ -87,7 +88,7 @@
       "pattern": "choose.select",
       "import": "@wordpress/components",
       "canonical": "SelectControl",
-      "detector": "import",
+      "detector": ["import", { "rule": "judge", "components": ["SelectControl"] }],
       "note": "Select (@wordpress/ui) is the eventual replacement; experimental. The trigger represents the current value — if it would represent a command, this is action-cluster.overflow (Menu); if a destination, navigate-hierarchy#descend."
     },
     {
@@ -308,7 +309,7 @@
     },
     {
       "pattern": "action-cluster.bar",
-      "detector": "declared",
+      "detector": ["declared", { "rule": "judge", "components": ["Button"], "unless": ["href", "render"] }],
       "instead_of": [
         "div.actions with hand-set margins",
         "Buttons spaced with margin-right"
@@ -320,7 +321,7 @@
       "import": "@wordpress/components",
       "canonical": "Toolbar",
       "verify": true,
-      "detector": "signature",
+      "detector": ["signature", { "rule": "judge", "components": ["ToolbarButton"], "unless": ["href", "render"] }],
       "signature": [
         "Toolbar",
         [
@@ -347,7 +348,7 @@
       "pattern": "action-cluster.overflow",
       "import": "@wordpress/ui",
       "canonical": "Menu",
-      "detector": "signature",
+      "detector": ["signature", { "rule": "judge", "components": ["Menu.Item", "MenuItem"], "unless": ["href", "render"] }],
       "signature": [
         "Menu",
         "Menu.TriggerButton",

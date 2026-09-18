@@ -61,6 +61,12 @@ export const RULES = {
 		needs: ['patternRegistry'],
 		title: 'a sanctioned composition already covers this \u2014 see the finding for which pattern replaces the shape that was built',
 	},
+	'patterns/judged-redirect': {
+		severity: 'warn',
+		rank: 3,
+		needs: ['patternRegistry'],
+		title: 'judged, advisory \u2014 a model read what this control stands for, and the pattern it was built as redirects that reading elsewhere; confirm before changing it',
+	},
 	'patterns/unregistered-composite': {
 		severity: 'warn',
 		rank: 14,

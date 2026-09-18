@@ -458,7 +458,7 @@ export function setPatterns(config: Config, patterns: Pattern[] | null | undefin
 		config.designSystem.packages.length > 0;
 	// Every rule reading the registry has to be wired here, not just the first
 	// one: a rule left out looks exactly like "nothing found".
-	for (const rule of ['patterns/duplicate-composite', 'patterns/superseded-composite'] as const)
+	for (const rule of ['patterns/duplicate-composite', 'patterns/superseded-composite', 'patterns/judged-redirect'] as const)
 		config.enabled[rule] = hasRegistry && config.severityOf(rule) !== 'off';
 	return config;
 }

@@ -35,6 +35,7 @@ import type {
 	ComponentImport,
 	Composite,
 	Config,
+	Control,
 	CssInJsTemplate,
 	Decl,
 	Diagnostics,
@@ -340,7 +341,9 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 
 export async function analyze(
 	config: Config,
-	{ scope = null }: { scope?: readonly string[] | null } = {},
+	// `judge` collects the controls a `judge` detector names, for `check --judge`
+	// to ask about. Off, the scanner never sees those detectors.
+	{ scope = null, judge = false }: { scope?: readonly string[] | null; judge?: boolean } = {},
 ): Promise<AnalyzeResult> {
 	const ds = config.designSystem;
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
@@ -414,8 +417,9 @@ export async function analyze(
 	// wrong choice the composite matcher cannot see: one control, under the
 	// four-node floor.
 	const patternRules: PatternRule[] = (config.patterns ?? []).flatMap((p) =>
-		p.rules.map((spec) => ({ patternId: p.id, spec })),
+		p.rules.filter((spec) => judge || spec.rule !== 'judge').map((spec) => ({ patternId: p.id, spec })),
 	);
+	const controls: Control[] = [];
 	const ruleHits: (RuleHit & { file: string })[] = [];
 	const importsByFile = new Map<string, Set<string>>();
 	const componentImports: ComponentImport[] = [];
@@ -444,6 +448,7 @@ export async function analyze(
 		cssInJs.push(...scanned.cssInJs);
 		composites.push(...scanned.composites);
 		for (const h of scanned.ruleHits) ruleHits.push({ ...h, file: rel });
+		controls.push(...scanned.controls);
 		if (scanned.imports) importsByFile.set(rel, scanned.imports);
 		for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
 		suppressionsFor(rel, text);
@@ -1074,6 +1079,16 @@ if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
 		directives,
 		diagnostics,
 		blocking: unique.some((f) => f.severity === 'error'),
+		// Scoped and suppressed here, where the scope and the comments are: the
+		// finding a control becomes is written later, by the judge.
+		...(judge && config.enabled['patterns/judged-redirect']
+			? {
+					controls: controls.filter((c) => {
+						const supp = suppByFile.get(c.file);
+						return reports(c.file) && !(supp && isSuppressed(supp.byLine, c.line, 'patterns/judged-redirect'));
+					}),
+				}
+			: {}),
 	};
 }
 

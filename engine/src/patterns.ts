@@ -274,3 +274,34 @@ function systemChildren<E extends object>(
  * registry entry is documentation for a person, not a check.
  */
 export const SUBSTANTIAL = { minNodes: 4, minDepth: 2 };
+
+/** One row of an abstract pattern's `resolve` table, as `patterns/index.json` writes it. */
+export interface ResolveRule {
+	when?: Record<string, unknown>;
+	variant?: string;
+	redirect?: string;
+	because?: string;
+	default?: string;
+}
+
+/**
+ * Run a `resolve` table on the forces that are known, in order, first match.
+ *
+ * Known means read with enough certainty to act on; an unknown force is left
+ * out of `forces`, not guessed. A row one known force contradicts is skipped,
+ * whatever else it asks. A row that needs a force nobody knows stops the walk
+ * and returns null: it might have matched, so any row below it answering
+ * instead would be answering a question the table never reached. That is what
+ * keeps a partial reading sound — with only `represents` known, the redirects
+ * at the top of `choose` decide, and the variant rows under them stay silent.
+ */
+export function resolveRule(rules: readonly ResolveRule[], forces: Readonly<Record<string, unknown>>): ResolveRule | null {
+	for (const r of rules) {
+		if (!r.when) return r;
+		const conds = Object.entries(r.when);
+		if (conds.some(([f, v]) => f in forces && forces[f] !== v)) continue;
+		if (conds.every(([f, v]) => forces[f] === v)) return r;
+		return null;
+	}
+	return null;
+}

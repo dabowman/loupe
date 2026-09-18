@@ -25,6 +25,7 @@ import type {
 	Binding,
 	ComponentImport,
 	Composite,
+	Control,
 	CssInJsTemplate,
 	Decl,
 	DesignSystem,
@@ -415,6 +416,26 @@ const CONSENT = '^(cancel|delete|remove|discard|reset|confirm|ok|yes|no|continue
 // input. A system component named like one, or a raw input element.
 const CONTROLS = '(Control|Field|Picker|Input|Textarea|Editor)$|^(DataForm|Field\\.Root|Fieldset)';
 
+// A control is a few lines. The cap is for the one that wraps a whole panel,
+// which would spend a request's tokens on markup the question is not about.
+const MAX_CONTROL_SOURCE = 2000;
+
+/** Named, capitalised scopes: the components a control can sit in. */
+function componentRanges(program: Node): { start: number; end: number; name: string }[] {
+	const out: { start: number; end: number; name: string }[] = [];
+	walkAst(program, (n) => {
+		const [name, body]: [string | undefined, Node | null | undefined] =
+			n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration'
+				? [n.id?.name, n]
+				: n.type === 'VariableDeclarator' && n.id.type === 'Identifier'
+					? [n.id.name, n.init]
+					: [undefined, null];
+		if (name && /^[A-Z]/.test(name) && typeof body?.start === 'number' && typeof body.end === 'number')
+			out.push({ start: body.start, end: body.end, name });
+	});
+	return out;
+}
+
 export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rules: readonly PatternRule[] = []): ScanResult {
 	const referenced = harvestTokens(text);
 	const stems = harvestStems(text);
@@ -424,6 +445,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 	const cssInJs: CssInJsTemplate[] = [];
 	const composites: Composite[] = [];
 	const ruleHits: RuleHit[] = [];
+	const controls: Control[] = [];
 	const imports = new Set<string>();
 
 	let ast;
@@ -431,7 +453,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return { bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports: [], parseError: messageOf(err) };
+		return { controls, bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports: [], parseError: messageOf(err) };
 	}
 
 	const { known, text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
@@ -561,13 +583,49 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		});
 	}
 
+	// Built on the first control a `judge` rule names, so a file with none, and
+	// every run without `--judge`, never walks for it.
+	let scopes: { start: number; end: number; name: string }[] | null = null;
+	const enclosingOf = (el: JSXElement): string | null => {
+		scopes ??= componentRanges(ast.program);
+		const at = el.start ?? 0;
+		let best: { start: number; name: string } | null = null;
+		for (const s of scopes) if (s.start <= at && s.end >= (el.end ?? at) && (!best || s.start > best.start)) best = s;
+		return best?.name ?? null;
+	};
+
 	const readRules = (el: JSXElement): void => {
 		if (!rules.length) return;
 		const canonical = canonicalOf(el);
 		if (!canonical) return;
 		const line = el.loc?.start?.line ?? 1;
 		for (const { patternId, spec } of rules) {
-			if (spec.rule === 'few-static-options') {
+			if (spec.rule === 'judge') {
+				// `Menu.Item` is the registry's name for it; the file binds `Menu`,
+				// maybe under an alias, and the member is written as-is.
+				const name = jsxName(el) ?? '';
+				const component = name.includes('.') ? `${canonical}${name.slice(name.indexOf('.'))}` : canonical;
+				if (!listParam(spec, 'components').includes(component)) continue;
+				// A spread could carry any of `unless` — Gutenberg's revisions button
+				// spreads an `href` in one branch — so it is enough to not ask.
+				const unless = listParam(spec, 'unless');
+				const realized =
+					unless.length > 0 &&
+					el.openingElement.attributes.some(
+						(a) =>
+							a.type === 'JSXSpreadAttribute' ||
+							(a.name.type === 'JSXIdentifier' && unless.includes(a.name.name)),
+					);
+				if (realized) continue;
+				controls.push({
+					file: relPath,
+					line,
+					component,
+					enclosing: enclosingOf(el),
+					source: text.slice(el.start ?? 0, el.end ?? 0).slice(0, MAX_CONTROL_SOURCE),
+					patternId,
+				});
+			} else if (spec.rule === 'few-static-options') {
 				if (!listParam(spec, 'components').includes(canonical)) continue;
 				const prop = param(spec, 'prop', 'options');
 				const attr = el.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === prop);
@@ -757,7 +815,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 	});
 
 	return {
-		bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems,
+		controls, bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems,
 		componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })),
 		parseError: null,
 	};
