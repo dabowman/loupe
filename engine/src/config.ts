@@ -103,7 +103,7 @@ export function findConfig(start: string): string | null {
 		if (existsSync(pkg)) {
 			try {
 				const parsed: unknown = JSON.parse(readFileSync(pkg, 'utf8'));
-				if (isObj(parsed) && parsed['loupe']) return pkg;
+				if (isObj(parsed) && parsed.loupe) return pkg;
 			} catch {
 				/* unreadable package.json is not our problem here */
 			}
@@ -214,11 +214,11 @@ function shippedVocabulary(): { keywords: string[]; blanket: Set<string> } {
 			if (!f.endsWith('.json')) continue;
 			try {
 				const raw: unknown = JSON.parse(readFileSync(join(PRESET_DIR, f), 'utf8'));
-				const supp = isObj(raw) ? raw['suppression'] : undefined;
+				const supp = isObj(raw) ? raw.suppression : undefined;
 				if (!isObj(supp)) continue;
-				const kw = supp['keyword'];
+				const kw = supp.keyword;
 				if (typeof kw === 'string' && kw) keywords.add(kw);
-				const bl = supp['blanket'];
+				const bl = supp.blanket;
 				if (Array.isArray(bl)) for (const b of bl) if (typeof b === 'string' && b) blanket.add(b);
 			} catch {
 				// A preset that will not parse fails loudly when something extends it;

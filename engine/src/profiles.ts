@@ -25,6 +25,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
@@ -88,7 +89,7 @@ interface RawProfile {
  */
 export function readProfiles(root: string | null | undefined): Profile[] {
 	if (!root || !existsSync(root)) return [];
-	let entries;
+	let entries: Dirent[];
 	try {
 		entries = readdirSync(root, { withFileTypes: true });
 	} catch {

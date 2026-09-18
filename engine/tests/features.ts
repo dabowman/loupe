@@ -1224,7 +1224,7 @@ await check(
 
 // ── --judge: forces and redirects ───────────────────────────────────────────
 
-const represents = loadLanguage().vocabulary.forces['represents']?.judge;
+const represents = loadLanguage().vocabulary.forces.represents?.judge;
 assert(represents, 'patterns/index.json gives `represents` no judge block');
 
 // The wording is scored live by evals/represents; what is pinned here is the

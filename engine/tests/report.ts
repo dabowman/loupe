@@ -350,7 +350,7 @@ await check('rules, config keys and help wear their own colours', () => {
 	assert(/\u001B\[1mcheck/.test(help), `a command went unpainted:\n${help}`);
 	// The text is also what `--help | grep` reads, and a pipe is not a terminal.
 	const piped = runColor(['--help'], { NO_COLOR: '1' }).stdout;
-	assert(!ESC.test(piped) && /^  --changed /m.test(piped), `piped help is not plain:\n${piped}`);
+	assert(!ESC.test(piped) && /^ {2}--changed /m.test(piped), `piped help is not plain:\n${piped}`);
 });
 
 await check('component names are painted, and only at print time', () => {

@@ -12,6 +12,7 @@
  */
 
 import { readFileSync, realpathSync, statSync } from 'node:fs';
+import type { Root } from 'postcss';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
 import { discover, toPosix } from './discover.ts';
@@ -132,7 +133,7 @@ async function readLibrary(
 				unread.push({ file: shown, message: `needs \`npm i -D ${syntax.missing}\` to be read` });
 				continue;
 			}
-			let sheet;
+			let sheet: Root;
 			try {
 				sheet = syntax.parse(readFileSync(file, 'utf8'), { from: file });
 			} catch (err) {
@@ -438,7 +439,7 @@ export async function analyze(
 
 	for (const { abs, rel } of files.markup) {
 		if (tooBig(abs)) continue;
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch {
@@ -447,8 +448,12 @@ export async function analyze(
 		diagnostics.filesScanned++;
 		const scanned = scanMarkup(text, rel, ds, patternRules);
 		if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
-		scanned.referenced.forEach((t) => referenced.add(t));
-		scanned.stems.forEach((s) => stems.add(s));
+		scanned.referenced.forEach((t) => {
+			referenced.add(t);
+		});
+		scanned.stems.forEach((s) => {
+			stems.add(s);
+		});
 		for (const b of scanned.bindings) {
 			if (b.cls === undefined) continue;
 			const group = bindings.get(b.cls) ?? [];
@@ -487,7 +492,7 @@ export async function analyze(
 
 	for (const { abs, rel } of files.styles) {
 		if (isLibrarySheet(rel)) continue; // the design system's own sheet, not the project's
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch {
@@ -522,7 +527,7 @@ export async function analyze(
 			continue;
 		}
 
-		let root;
+		let root: Root;
 		try {
 			root = syntax.parse(text, { from: abs });
 		} catch (err) {

@@ -23636,7 +23636,7 @@ var isRuleId = (id) => Object.hasOwn(RULES, id);
 var SEVERITIES = /* @__PURE__ */ new Set(["error", "warn", "off"]);
 var isSeverity = (v) => typeof v === "string" && SEVERITIES.has(v);
 function renderTitle(ruleId, ds, keyword) {
-  const list2 = (arr, fallback) => arr && arr.length ? arr.slice(0, 2).map((c) => `<${c}>`).join("/") : fallback;
+  const list2 = (arr, fallback) => arr?.length ? arr.slice(0, 2).map((c) => `<${c}>`).join("/") : fallback;
   const prefixes = ds.tokenPrefixes ?? [];
   const namespace = prefixes.length === 1 && prefixes[0] ? `${prefixes[0]}*` : "design-system";
   return RULES[ruleId].title.replace("{layout}", list2(ds.layoutComponents, "a layout primitive")).replace("{text}", list2(ds.textComponents, "a text component")).replace(/\{tokenPrefix\}/g, namespace).replace("{system}", ds.name || "the design system").replace("{kw}", keyword);
@@ -23877,7 +23877,7 @@ function makeSuppressionParser({
 function isSuppressed(byLine, line, ruleId, scopeLines = []) {
   for (const L of [line, line - 1, ...scopeLines]) {
     const s = byLine.get(L);
-    if (s && s.has(ruleId)) return true;
+    if (s?.has(ruleId)) return true;
   }
   return false;
 }
@@ -24281,8 +24281,8 @@ function loadPatterns(raw) {
     const own = id ?? (shapes[0] ? signatureOf(shapes[0]) : null);
     if (own) {
       const nodes = shapes.length ? shapes : [null];
-      nodes.forEach(
-        (node, i) => out.push({
+      nodes.forEach((node, i) => {
+        out.push({
           id: own,
           summary,
           canonical,
@@ -24290,8 +24290,8 @@ function loadPatterns(raw) {
           size: node ? nodeCount(node) : 0,
           avoid: i === 0 ? avoid : [],
           rules: i === 0 ? rules : []
-        })
-      );
+        });
+      });
     }
     const parts = p?.parts;
     if (own && parts && typeof parts === "object")
@@ -24408,10 +24408,10 @@ function stringsIn(node, out = []) {
     return out;
   }
   const rec = node;
-  if (rec["type"] === "StringLiteral") {
-    if (typeof rec["value"] === "string") out.push(rec["value"]);
-  } else if (rec["type"] === "TemplateElement") {
-    const v = rec["value"];
+  if (rec.type === "StringLiteral") {
+    if (typeof rec.value === "string") out.push(rec.value);
+  } else if (rec.type === "TemplateElement") {
+    const v = rec.value;
     out.push(v?.cooked ?? v?.raw ?? "");
   }
   for (const key2 of Object.keys(rec)) {
@@ -24467,7 +24467,7 @@ function walkAst(node, visit) {
     return;
   }
   const rec = node;
-  if (typeof rec["type"] === "string") visit(node);
+  if (typeof rec.type === "string") visit(node);
   for (const key2 of Object.keys(rec)) {
     if (key2 === "loc" || key2 === "start" || key2 === "end" || key2 === "leadingComments" || key2 === "trailingComments")
       continue;
@@ -24589,9 +24589,12 @@ function scanMarkup(text, relPath, ds, rules = []) {
     const out = [];
     const dig = (n) => {
       if (!n || typeof n !== "object") return;
-      if (Array.isArray(n)) return n.forEach(dig);
+      if (Array.isArray(n)) {
+        n.forEach(dig);
+        return;
+      }
       const rec = n;
-      if (rec["type"] === "JSXElement") return void out.push(n);
+      if (rec.type === "JSXElement") return void out.push(n);
       for (const k of Object.keys(rec)) if (k !== "loc" && k !== "start" && k !== "end") dig(rec[k]);
     };
     for (const c of el.children ?? []) dig(c);
@@ -24650,7 +24653,7 @@ function scanMarkup(text, relPath, ds, rules = []) {
     if (v.type !== "ArrayExpression") return null;
     if (v.elements.some((x) => !x || x.type === "SpreadElement")) return null;
     return v.elements.map((x) => {
-      if (!x || x.type !== "ObjectExpression") return null;
+      if (x?.type !== "ObjectExpression") return null;
       const label = x.properties.find(
         (pr) => pr.type === "ObjectProperty" && !pr.computed && pr.key.type === "Identifier" && pr.key.name === "label"
       );
@@ -25279,8 +25282,12 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     diagnostics.filesScanned++;
     const scanned = scanMarkup(text, rel, ds, patternRules);
     if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
-    scanned.referenced.forEach((t) => referenced.add(t));
-    scanned.stems.forEach((s) => stems.add(s));
+    scanned.referenced.forEach((t) => {
+      referenced.add(t);
+    });
+    scanned.stems.forEach((s) => {
+      stems.add(s);
+    });
     for (const b of scanned.bindings) {
       if (b.cls === void 0) continue;
       const group = bindings.get(b.cls) ?? [];
@@ -26395,7 +26402,7 @@ function findConfig(start) {
     if (existsSync4(pkg)) {
       try {
         const parsed = JSON.parse(readFileSync7(pkg, "utf8"));
-        if (isObj(parsed) && parsed["loupe"]) return pkg;
+        if (isObj(parsed) && parsed.loupe) return pkg;
       } catch {
       }
     }
@@ -26454,11 +26461,11 @@ function shippedVocabulary() {
       if (!f.endsWith(".json")) continue;
       try {
         const raw = JSON.parse(readFileSync7(join9(PRESET_DIR, f), "utf8"));
-        const supp = isObj(raw) ? raw["suppression"] : void 0;
+        const supp = isObj(raw) ? raw.suppression : void 0;
         if (!isObj(supp)) continue;
-        const kw = supp["keyword"];
+        const kw = supp.keyword;
         if (typeof kw === "string" && kw) keywords.add(kw);
-        const bl = supp["blanket"];
+        const bl = supp.blanket;
         if (Array.isArray(bl)) {
           for (const b of bl) if (typeof b === "string" && b) blanket.add(b);
         }
@@ -27946,11 +27953,11 @@ function coerce(opts) {
     return t === void 0 ? void 0 : t.split(/[,\s]+/).filter(Boolean);
   };
   return {
-    preset: str(opts["preset"]),
-    projectPrefixes: list2(opts["project_prefixes"]),
-    blocking: opts["blocking"] === void 0 ? void 0 : isOn(String(opts["blocking"])),
-    maxAttempts: num(opts["max_attempts"]),
-    maxFindings: num(opts["max_findings"])
+    preset: str(opts.preset),
+    projectPrefixes: list2(opts.project_prefixes),
+    blocking: opts.blocking === void 0 ? void 0 : isOn(String(opts.blocking)),
+    maxAttempts: num(opts.max_attempts),
+    maxFindings: num(opts.max_findings)
   };
 }
 function emitClean(message) {
@@ -27992,7 +27999,7 @@ function versionLine() {
   return `loupe ${version} (${entry}, ${resolve6(HERE3, "..", "..")})`;
 }
 var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${key(`"${name}"`)}:`);
-var usage = () => USAGE.replace(/^  (--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^  ([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
+var usage = () => USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^ {2}([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
 var VALUE_FLAGS = [
   "format",
   "config",

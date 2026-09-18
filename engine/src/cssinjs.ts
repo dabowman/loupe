@@ -17,7 +17,7 @@
  */
 
 import postcss from 'postcss';
-import type { Container, Rule } from 'postcss';
+import type { Container, Root, Rule } from 'postcss';
 import type { File, ImportDeclaration, TemplateLiteral } from '@babel/types';
 import type { CssInJsLocals, Decl, TemplateGroup } from './types.ts';
 
@@ -105,7 +105,7 @@ const GRID_DECL = (p: string, v: string): boolean =>
  *
  */
 export function parseTemplate(cssText: string, startLine: number): { groups: TemplateGroup[]; error: string | null } {
-	let root;
+	let root: Root;
 	try {
 		root = postcss.parse(`.dsh-root{${cssText}\n}`, { from: undefined });
 	} catch (err) {

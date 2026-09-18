@@ -18,6 +18,7 @@
  */
 
 import { existsSync, readdirSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import picomatch from 'picomatch';
@@ -95,7 +96,7 @@ export function discover({
 	// reported zero source files for a project whose own were sitting in the
 	// root — an answer that reads identically to "this project has none".
 	const walk = (dir: string): void => {
-		let entries;
+		let entries: Dirent[];
 		try {
 			entries = readdirSync(dir, { withFileTypes: true });
 		} catch {

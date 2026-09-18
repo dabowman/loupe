@@ -13,6 +13,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { discover } from './discover.ts';
@@ -126,7 +127,7 @@ function manifests(root: string, maxDepth = 3, budget = 60): { dir: string; rel:
 		const pkg = join(dir, 'package.json');
 		if (existsSync(pkg)) out.push({ dir, rel });
 		if (depth === maxDepth) return;
-		let entries;
+		let entries: Dirent[];
 		try {
 			entries = readdirSync(dir, { withFileTypes: true });
 		} catch {
@@ -316,7 +317,7 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 
 	const walk = (dir: string, depth: number): void => {
 		if (depth > 4 || budget <= 0 || !want.size) return;
-		let entries;
+		let entries: Dirent[];
 		try {
 			entries = readdirSync(dir, { withFileTypes: true });
 		} catch {
@@ -330,7 +331,7 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 				walk(full, depth + 1);
 			} else if (e.name.endsWith('.css') && !e.name.endsWith('.min.css')) {
 				budget--;
-				let text;
+				let text: string;
 				try {
 					text = readFileSync(full, 'utf8');
 				} catch {
@@ -416,7 +417,7 @@ export function detectNamespaces(
 
 	const cssCounts = new Map<string, number>();
 	for (const { abs } of files.styles) {
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch {

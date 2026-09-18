@@ -135,9 +135,9 @@ const EMPTY_HOME = scratch('dsh-home-');
 
 const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
 	const e: NodeJS.ProcessEnv = { ...process.env, HOME: EMPTY_HOME, ...extra };
-	if (!('LOUPE_OFF' in extra)) delete e['LOUPE_OFF'];
-	if (!('CLAUDE_PLUGIN_DATA' in extra)) delete e['CLAUDE_PLUGIN_DATA'];
-	if (!('CLAUDE_PLUGIN_ROOT' in extra)) delete e['CLAUDE_PLUGIN_ROOT'];
+	if (!('LOUPE_OFF' in extra)) delete e.LOUPE_OFF;
+	if (!('CLAUDE_PLUGIN_DATA' in extra)) delete e.CLAUDE_PLUGIN_DATA;
+	if (!('CLAUDE_PLUGIN_ROOT' in extra)) delete e.CLAUDE_PLUGIN_ROOT;
 	for (const k of Object.keys(e)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_') && !(k in extra)) delete e[k];
 	return e;
 };
@@ -1812,7 +1812,7 @@ await check('a repo subdirectory git refuses to answer about is still gated', ()
 		const out = execFileSync('node', [CLI, 'hook', '--root', join(root, 'packages', 'ui')], {
 			encoding: 'utf8',
 			input: '{"session_id":"sd","tool_input":{"file_path":"style.css"}}',
-			env: { ...process.env, PATH: `${bin}:${process.env['PATH'] ?? ''}` },
+			env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` },
 		});
 		const parsed = JSON.parse(out) as { systemMessage?: string };
 		assert(

@@ -18,6 +18,7 @@
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import type { Dirent, Stats } from 'node:fs';
 import { join } from 'node:path';
 import postcss from 'postcss';
 import type { Root } from 'postcss';
@@ -100,7 +101,7 @@ export function cssFilesUnder(
 	exts: readonly string[] = ['.css'],
 ): string[] {
 	const wanted = (name: string): boolean => exts.some((e) => name.endsWith(e));
-	let st;
+	let st: Stats;
 	try {
 		st = statSync(path);
 	} catch {
@@ -110,7 +111,7 @@ export function cssFilesUnder(
 	const out: string[] = [];
 	const walk = (dir: string): void => {
 		if (budget.left <= 0) return;
-		let entries;
+		let entries: Dirent[];
 		try {
 			entries = readdirSync(dir, { withFileTypes: true });
 		} catch {

@@ -204,7 +204,7 @@ export function loadPatterns(raw: unknown): Pattern[] {
 			// loads — it is checked by its canonical import, by a rule, or not at
 			// all — because the file that names it may need it as a remedy.
 			const nodes: (PatternNode | null)[] = shapes.length ? shapes : [null];
-			nodes.forEach((node, i) =>
+			nodes.forEach((node, i) => {
 				out.push({
 					id: own,
 					summary,
@@ -213,8 +213,8 @@ export function loadPatterns(raw: unknown): Pattern[] {
 					size: node ? nodeCount(node) : 0,
 					avoid: i === 0 ? avoid : [],
 					rules: i === 0 ? rules : [],
-				}),
-			);
+				});
+			});
 		}
 		const parts = p?.parts;
 		if (own && parts && typeof parts === 'object')

@@ -73,7 +73,7 @@ export function applyTokenFixes(
 	const skipped: SkippedFix[] = [];
 	for (const [file, group] of byFile) {
 		const abs = join(root, file);
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch (err) {
@@ -158,7 +158,7 @@ export function applyKeeps(
 	const applied: KeptValue[] = [];
 	for (const [file, group] of byFile) {
 		const abs = join(root, file);
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch (err) {

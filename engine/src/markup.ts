@@ -15,7 +15,7 @@
  */
 
 import { parse as babelParse } from '@babel/parser';
-import type { ParserPlugin } from '@babel/parser';
+import type { ParseResult, ParserPlugin } from '@babel/parser';
 import type {
 	Expression,
 	File,
@@ -195,10 +195,10 @@ function stringsIn(node: unknown, out: string[] = []): string[] {
 		return out;
 	}
 	const rec = node as Record<string, unknown>;
-	if (rec['type'] === 'StringLiteral') {
-		if (typeof rec['value'] === 'string') out.push(rec['value']);
-	} else if (rec['type'] === 'TemplateElement') {
-		const v = rec['value'] as { cooked?: string; raw?: string } | undefined;
+	if (rec.type === 'StringLiteral') {
+		if (typeof rec.value === 'string') out.push(rec.value);
+	} else if (rec.type === 'TemplateElement') {
+		const v = rec.value as { cooked?: string; raw?: string } | undefined;
 		out.push(v?.cooked ?? v?.raw ?? '');
 	}
 	for (const key of Object.keys(rec)) {
@@ -287,7 +287,7 @@ function walkAst(node: unknown, visit: (n: Node) => void): void {
 		return;
 	}
 	const rec = node as Record<string, unknown>;
-	if (typeof rec['type'] === 'string') visit(node as Node);
+	if (typeof rec.type === 'string') visit(node as Node);
 	for (const key of Object.keys(rec)) {
 		if (key === 'loc' || key === 'start' || key === 'end' || key === 'leadingComments' || key === 'trailingComments')
 			continue;
@@ -462,7 +462,7 @@ export function scanMarkup(
 	const controls: Control[] = [];
 	const imports = new Set<string>();
 
-	let ast;
+	let ast: ParseResult<File>;
 	try {
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
@@ -518,9 +518,12 @@ export function scanMarkup(
 		const out: JSXElement[] = [];
 		const dig = (n: unknown): void => {
 			if (!n || typeof n !== 'object') return;
-			if (Array.isArray(n)) return n.forEach(dig);
+			if (Array.isArray(n)) {
+				n.forEach(dig);
+				return;
+			}
 			const rec = n as Record<string, unknown>;
-			if (rec['type'] === 'JSXElement') return void out.push(n as JSXElement);
+			if (rec.type === 'JSXElement') return void out.push(n as JSXElement);
 			for (const k of Object.keys(rec)) if (k !== 'loc' && k !== 'start' && k !== 'end') dig(rec[k]);
 		};
 		for (const c of el.children ?? []) dig(c);
@@ -599,7 +602,7 @@ export function scanMarkup(
 		// A spread could hold anything; one is enough to make the count unknown.
 		if (v.elements.some((x) => !x || x.type === 'SpreadElement')) return null;
 		return v.elements.map((x) => {
-			if (!x || x.type !== 'ObjectExpression') return null;
+			if (x?.type !== 'ObjectExpression') return null;
 			const label = x.properties.find(
 				(pr) => pr.type === 'ObjectProperty' && !pr.computed && pr.key.type === 'Identifier' && pr.key.name === 'label',
 			);

@@ -271,11 +271,11 @@ function coerce(opts: Record<string, unknown>): PluginOptions {
 		return t === undefined ? undefined : t.split(/[,\s]+/).filter(Boolean);
 	};
 	return {
-		preset: str(opts['preset']),
-		projectPrefixes: list(opts['project_prefixes']),
-		blocking: opts['blocking'] === undefined ? undefined : isOn(String(opts['blocking'])),
-		maxAttempts: num(opts['max_attempts']),
-		maxFindings: num(opts['max_findings']),
+		preset: str(opts.preset),
+		projectPrefixes: list(opts.project_prefixes),
+		blocking: opts.blocking === undefined ? undefined : isOn(String(opts.blocking)),
+		maxAttempts: num(opts.max_attempts),
+		maxFindings: num(opts.max_findings),
 	};
 }
 

@@ -182,12 +182,10 @@ function suppressionLine(directives: readonly Directive[]): string {
 	const rules = tally(directives.flatMap((d) => d.rules));
 	const rest = rules.length - TOP;
 	const files = new Set(directives.map((d) => d.file)).size;
-	return (
-		`${directives.length} active suppression(s) in ${files} file(s), silencing ${rules
-			.slice(0, TOP)
-			.map(([rule, n]) => `${rule} (${n})`)
-			.join(', ')}${rest > 0 ? `, +${rest} more rule(s)` : ''}` + ' — run `loupe suppressions` to read them.'
-	);
+	return `${directives.length} active suppression(s) in ${files} file(s), silencing ${rules
+		.slice(0, TOP)
+		.map(([rule, n]) => `${rule} (${n})`)
+		.join(', ')}${rest > 0 ? `, +${rest} more rule(s)` : ''} — run \`loupe suppressions\` to read them.`;
 }
 
 /**

@@ -178,7 +178,7 @@ export const isSeverity = (v: unknown): v is Severity => typeof v === 'string' &
  */
 export function renderTitle(ruleId: RuleId, ds: DesignSystem, keyword: string): string {
 	const list = (arr: readonly string[] | undefined, fallback: string): string =>
-		arr && arr.length
+		arr?.length
 			? arr
 					.slice(0, 2)
 					.map((c) => `<${c}>`)

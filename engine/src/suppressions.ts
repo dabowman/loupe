@@ -204,7 +204,7 @@ export function isSuppressed(
 ): boolean {
 	for (const L of [line, line - 1, ...scopeLines]) {
 		const s = byLine.get(L);
-		if (s && s.has(ruleId)) return true;
+		if (s?.has(ruleId)) return true;
 	}
 	return false;
 }

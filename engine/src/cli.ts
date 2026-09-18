@@ -131,8 +131,8 @@ const jsonKeys = (json: string): string => json.replace(/"([^"\\]+)":/g, (_m, na
  * indented line — so a reworded description cannot accidentally light up.
  */
 const usage = (): string =>
-	USAGE.replace(/^  (--[a-z-]+)/gm, (_m, flag: string) => `  ${cyan(flag)}`)
-		.replace(/^  ([a-z]+)\b/gm, (_m, cmd: string) => `  ${bold(cmd)}`)
+	USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag: string) => `  ${cyan(flag)}`)
+		.replace(/^ {2}([a-z]+)\b/gm, (_m, cmd: string) => `  ${bold(cmd)}`)
 		.replace(/^(Commands|Options|Environment):$/gm, (_m, head: string) => `${bold(`${head}:`)}`);
 
 /**
