@@ -24907,7 +24907,9 @@ var ROLE_HINTS = [
   // one: `padding: 8px` is `padding-sm`, not `gap-sm` or `size-4xs`.
   [/padding/, /dimension|spac|padding|gap/, /padding/],
   [/gap$/, /dimension|spac|padding|gap/, /gap/],
-  [/^inset$|^top$|^right$|^bottom$|^left$/, /dimension|spac|padding|gap/],
+  // Position is spacing: an offset from an edge. `dimension` alone would admit
+  // the sizes (icons, buttons) and surface widths a system also ships under it.
+  [/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
   [/^cursor$/, /cursor/],
   [/^transition-duration$|^animation-duration$/, /motion-duration/],
   [/^transition-timing-function$|^animation-timing-function$/, /motion-easing/]
@@ -25002,24 +25004,28 @@ function measure(value) {
   if (time) return { kind: "ms", n: Number(time[1]) * (time[2] === "s" ? 1e3 : 1) };
   return /^#[0-9a-f]{3,8}$|^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/.test(v) ? { kind: "color" } : null;
 }
+var SPACING = /padding|gap$|^(inset|top|right|bottom|left)$/;
 function candidatesFor(set, prop, part) {
   const family = familyFor(set, prop);
   if (!family.length) return null;
   const v = normalizeValue(part);
+  const spacing = SPACING.test(prop);
   const exact = family.filter(([, fv]) => fv === v);
-  if (exact.length) return { tier: "exact", options: exact };
+  if (exact.length) return { tier: "exact", options: exact, keep: !spacing };
   const kinds = new Set(family.map(([, fv]) => measure(fv)?.kind));
   const m = measure(v);
-  if (!m) return kinds.has(void 0) && kinds.size === 1 ? { tier: "family", options: family } : null;
+  if (!m) return kinds.has(void 0) && kinds.size === 1 ? { tier: "family", options: family, keep: true } : null;
   if (!kinds.has(m.kind)) return null;
-  if (m.kind === "color") return { tier: "family", options: family };
+  if (m.kind === "color") return { tier: "family", options: family, keep: true };
   const steps = family.flatMap(([n, fv]) => {
     const fm = measure(fv);
     return fm && fm.kind === m.kind && "n" in fm ? [[n, fv, fm.n - m.n]] : [];
   });
   const below = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
   const above = Math.min(...steps.map(([, , d]) => d).filter((d) => d > 0));
-  return { tier: "near", options: steps.filter(([, , d]) => d === below || d === above).map(([n, fv]) => [n, fv]) };
+  const options = steps.filter(([, , d]) => d === below || d === above).map(([n, fv]) => [n, fv]);
+  const inside = Number.isFinite(below) && Number.isFinite(above);
+  return inside ? { tier: "near", options, keep: !spacing } : { tier: "end", options, keep: true };
 }
 var partsOf2 = (value) => value.trim().match(/(?:[^\s(]+|\([^)]*\))+/g) ?? [];
 var isLiteralPart = (p) => /^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0 || /^#[0-9a-f]+$/i.test(p) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
@@ -25999,6 +26005,7 @@ var KEEP_CRITERION = "None of these. The hardcoded value is a deliberate one-off
 var TIER = {
   exact: "Several tokens carry exactly this value; they differ in the role they are for.",
   near: "No token carries exactly this value; these are the steps of the scale either side of it.",
+  end: "No token carries this value, and it is past the end of the scale; this is the nearest step.",
   family: "No token carries exactly this value; these are all the tokens for this property."
 };
 async function judgeLiterals(items, apiKey, fetchImpl = fetch, about = /* @__PURE__ */ new Map()) {
@@ -26007,10 +26014,10 @@ async function judgeLiterals(items, apiKey, fetchImpl = fetch, about = /* @__PUR
     ({ file, context_before, source }) => ({ file, context_before, source }),
     ({ prop, value, part, candidates }, i) => ({
       type: "choice",
-      instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use \u2014 or is the value a deliberate choice the system has no token for?`,
+      instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use${candidates.keep ? " \u2014 or is the value a deliberate choice the system has no token for" : ""}?`,
       criteria: {
         ...Object.fromEntries(candidates.options.map(([n, v]) => [n, about.has(n) ? `${v} \u2014 ${about.get(n) ?? ""}` : v])),
-        [KEEP]: KEEP_CRITERION
+        ...candidates.keep ? { [KEEP]: KEEP_CRITERION } : {}
       }
     }),
     apiKey,
@@ -26038,6 +26045,10 @@ function rewrite(f, what, tail) {
   f.message = `${head2} \u2192 ${what}${tail ? ` ${tail}` : ""}${marker}`;
 }
 async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */ new Map(), fetchImpl = fetch) {
+  if (!set.known.size)
+    throw new Error(
+      "no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships"
+    );
   const files = /* @__PURE__ */ new Map();
   const linesOf = (file) => {
     const cached = files.get(file);
@@ -26083,7 +26094,12 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
   const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
   for (const { f, parts, slots } of plans) {
     const got = slots.map((s) => "token" in s ? { choice: s.token, confidence: 1 } : answerOf.get(s));
-    if (got.some((a) => !a || a.confidence < FLOOR)) continue;
+    const unsure = (k) => {
+      const a = got[k];
+      const s = slots[k];
+      return !a || a.confidence < FLOOR && !(s && "candidates" in s && !s.candidates.keep);
+    };
+    if (slots.some((_, k) => unsure(k))) continue;
     const confidence2 = Math.min(...got.map((a) => a?.confidence ?? 0));
     const kept = got.find((a) => a?.choice === KEEP);
     if (kept) {
@@ -28363,7 +28379,7 @@ ${green(`Wrote ${target}`)}
     let toFix;
     try {
       toFix = await analyze(config, { scope: fixScope });
-      if (key2 && toFix.tokens)
+      if (key2 && toFix.tokens && toFix.findings.some((f) => f.rule === "tokens/hardcoded-value"))
         await judgeValues(root2, toFix.findings, toFix.tokens, key2, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
       fail(`loupe: ${messageOf4(err)}
@@ -28449,10 +28465,15 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
           ...await judgeRedirects(result.controls, checkKey, config.severityOf("patterns/judged-redirect"))
         );
       await judgeVariants(root2, result.findings, config.componentRegistry, checkKey);
-      if (result.tokens)
-        await judgeValues(root2, result.findings, result.tokens, checkKey, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
       note(`loupe: --judge skipped \u2014 ${messageOf4(err)}
+`);
+    }
+    try {
+      if (result.tokens && result.findings.some((f) => f.rule === "tokens/hardcoded-value"))
+        await judgeValues(root2, result.findings, result.tokens, checkKey, tokenDescriptions(config.profiles?.active ?? []));
+    } catch (err) {
+      note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf4(err)}
 `);
     }
   }

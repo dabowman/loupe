@@ -374,6 +374,7 @@ const KEEP_CRITERION =
 const TIER: Record<Candidates['tier'], string> = {
 	exact: 'Several tokens carry exactly this value; they differ in the role they are for.',
 	near: 'No token carries exactly this value; these are the steps of the scale either side of it.',
+	end: 'No token carries this value, and it is past the end of the scale; this is the nearest step.',
 	family: 'No token carries exactly this value; these are all the tokens for this property.',
 };
 
@@ -398,10 +399,10 @@ export async function judgeLiterals(
 		({ file, context_before, source }) => ({ file, context_before, source }),
 		({ prop, value, part, candidates }, i) => ({
 			type: 'choice',
-			instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use — or is the value a deliberate choice the system has no token for?`,
+			instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use${candidates.keep ? ' — or is the value a deliberate choice the system has no token for' : ''}?`,
 			criteria: {
 				...Object.fromEntries(candidates.options.map(([n, v]) => [n, about.has(n) ? `${v} — ${about.get(n) ?? ''}` : v])),
-				[KEEP]: KEEP_CRITERION,
+				...(candidates.keep ? { [KEEP]: KEEP_CRITERION } : {}),
 			},
 		}),
 		apiKey,
@@ -468,6 +469,15 @@ export async function judgeValues(
 	about: ReadonlyMap<string, string> = new Map(),
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
+	// With nothing read, every property's family is empty, and "no padding
+	// token in the design system" would be said of every value and suppressed
+	// by `fix --judge` as fact. An empty set proves nothing about the system.
+	// ponytail: a set read only partly passes this; a per-family check is the
+	// upgrade if a token source that half-resolves turns up.
+	if (!set.known.size)
+		throw new Error(
+			'no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships',
+		);
 	const files = new Map<string, string[]>();
 	const linesOf = (file: string): string[] => {
 		const cached = files.get(file);
@@ -518,9 +528,17 @@ export async function judgeValues(
 
 	for (const { f, parts, slots } of plans) {
 		const got = slots.map((s) => ('token' in s ? { choice: s.token, confidence: 1 } : answerOf.get(s)));
-		// The shared floor holds here: on `evals/values` it acts on 60% of the
-		// literals and is right on 99%, and no keep it let through was wrong.
-		if (got.some((a) => !a || a.confidence < FLOOR)) continue;
+		// The shared floor holds here: on `evals/values` it acts on 57% of the
+		// literals with three wrong tokens in three runs, and no wrong keep.
+		// Except where keeping was never an answer: spacing the scale covers
+		// snaps whatever the confidence, and a low one there is only 6px sitting
+		// exactly between 4 and 8 — every option is a snap somebody would accept.
+		const unsure = (k: number): boolean => {
+			const a = got[k];
+			const s = slots[k];
+			return !a || (a.confidence < FLOOR && !(s && 'candidates' in s && !s.candidates.keep));
+		};
+		if (slots.some((_, k) => unsure(k))) continue;
 		const confidence = Math.min(...got.map((a) => a?.confidence ?? 0));
 		const kept = got.find((a) => a?.choice === KEEP);
 		if (kept) {

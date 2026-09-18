@@ -942,7 +942,7 @@ async function main(): Promise<number> {
 		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
-			if (key && toFix.tokens)
+			if (key && toFix.tokens && toFix.findings.some((f) => f.rule === 'tokens/hardcoded-value'))
 				await judgeValues(root, toFix.findings, toFix.tokens, key, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
 			fail(`loupe: ${messageOf(err)}\n`);
@@ -1061,10 +1061,15 @@ async function main(): Promise<number> {
 					...(await judgeRedirects(result.controls, checkKey, config.severityOf('patterns/judged-redirect'))),
 				);
 			await judgeVariants(root, result.findings, config.componentRegistry, checkKey);
-			if (result.tokens)
-				await judgeValues(root, result.findings, result.tokens, checkKey, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
 			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
+		}
+		// Its own note: the judgements above stand when this one cannot run.
+		try {
+			if (result.tokens && result.findings.some((f) => f.rule === 'tokens/hardcoded-value'))
+				await judgeValues(root, result.findings, result.tokens, checkKey, tokenDescriptions(config.profiles?.active ?? []));
+		} catch (err) {
+			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
 		}
 	}
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);

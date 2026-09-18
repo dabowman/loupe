@@ -50,7 +50,9 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	// one: `padding: 8px` is `padding-sm`, not `gap-sm` or `size-4xs`.
 	[/padding/, /dimension|spac|padding|gap/, /padding/],
 	[/gap$/, /dimension|spac|padding|gap/, /gap/],
-	[/^inset$|^top$|^right$|^bottom$|^left$/, /dimension|spac|padding|gap/],
+	// Position is spacing: an offset from an edge. `dimension` alone would admit
+	// the sizes (icons, buttons) and surface widths a system also ships under it.
+	[/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
 	[/^cursor$/, /cursor/],
 	[/^transition-duration$|^animation-duration$/, /motion-duration/],
 	[/^transition-timing-function$|^animation-timing-function$/, /motion-easing/],
@@ -197,18 +199,32 @@ export interface Candidates {
 	/**
 	 * `exact`: several on-role tokens carry the value, and only role separates
 	 * them. `near`: none does, and these are the steps of the scale either side
-	 * of it. `family`: every on-role token, because the choice is a design one.
+	 * of it. `end`: the value is past the first or last step, which is offered.
+	 * `family`: every on-role token, because the choice is a design one.
 	 */
-	tier: 'exact' | 'near' | 'family';
+	tier: 'exact' | 'near' | 'end' | 'family';
 	options: [string, string][];
+	/** Whether "leave it as written" is an answer, or only a token is. */
+	keep: boolean;
 }
+
+/**
+ * Spacing: padding, gap, and position, which is an offset from an edge.
+ *
+ * A spacing value the scale covers is snapped, never kept: the scale is how
+ * the system spaces things, and "6px is deliberate" is the judgement that lets
+ * a one-off survive every pass. Past the end of the scale it may still be kept
+ * — 48px of page padding snapped to a 32px top step is a different layout.
+ */
+const SPACING = /padding|gap$|^(inset|top|right|bottom|left)$/;
 
 /**
  * The tokens a judgement chooses among for one literal part of a value.
  *
  * A length or a duration is narrowed here, in code, to the scale steps either
  * side of it: closeness on a scale is arithmetic, and there is no role left to
- * choose once the property has picked its family. Anything else — a colour, a
+ * choose once the property has picked its family. Whether it may also be kept
+ * is decided here too — see {@link SPACING}. Anything else — a colour, a
  * cursor, an easing — gets the whole family, since which one the rule *means*
  * is the question, and the pink card background that is either a mistake or a
  * decision is only answerable with every option on the table.
@@ -226,15 +242,16 @@ export function candidatesFor(set: TokenSet, prop: string, part: string): Candid
 	const family = familyFor(set, prop);
 	if (!family.length) return null;
 	const v = normalizeValue(part);
+	const spacing = SPACING.test(prop);
 	const exact = family.filter(([, fv]) => fv === v);
-	if (exact.length) return { tier: 'exact', options: exact };
+	if (exact.length) return { tier: 'exact', options: exact, keep: !spacing };
 	const kinds = new Set(family.map(([, fv]) => measure(fv)?.kind));
 	const m = measure(v);
 	// A family of things the engine cannot measure — cursors, easings, shadows —
 	// is a list of names, and the part has to be the whole value.
-	if (!m) return kinds.has(undefined) && kinds.size === 1 ? { tier: 'family', options: family } : null;
+	if (!m) return kinds.has(undefined) && kinds.size === 1 ? { tier: 'family', options: family, keep: true } : null;
 	if (!kinds.has(m.kind)) return null;
-	if (m.kind === 'color') return { tier: 'family', options: family };
+	if (m.kind === 'color') return { tier: 'family', options: family, keep: true };
 	// A scale: the step either side. Past the end of it, the end.
 	const steps = family.flatMap(([n, fv]): [string, string, number][] => {
 		const fm = measure(fv);
@@ -242,7 +259,9 @@ export function candidatesFor(set: TokenSet, prop: string, part: string): Candid
 	});
 	const below = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
 	const above = Math.min(...steps.map(([, , d]) => d).filter((d) => d > 0));
-	return { tier: 'near', options: steps.filter(([, , d]) => d === below || d === above).map(([n, fv]) => [n, fv]) };
+	const options = steps.filter(([, , d]) => d === below || d === above).map(([n, fv]): [string, string] => [n, fv]);
+	const inside = Number.isFinite(below) && Number.isFinite(above);
+	return inside ? { tier: 'near', options, keep: !spacing } : { tier: 'end', options, keep: true };
 }
 
 /**

@@ -438,23 +438,34 @@ options from the property's on-role family (the same role table the exact match
 uses):
 
 - **exact**: several on-role tokens carry the value, so only role separates
-  them (`top: 24px`: padding, gap or size).
+  them (`top: 24px`: padding or gap).
 - **near**: a length or duration, narrowed to the scale steps either side of
-  it (`10px` of padding: `padding-sm` or `padding-md`). Past the end of the
-  scale, the end.
+  it (`10px` of padding: `padding-sm` or `padding-md`).
+- **end**: a length or duration past the first or last step, which is
+  offered alone (`48px` of padding: `padding-3xl`, 32px).
 - **family**: anything else, colours included, gets every on-role token.
 
-A negative length, a `%` or an `hsl()` on a px or colour family is a literal no
-token can stand for. That value is not asked about, since rewriting the rest
-would leave the finding standing. A property whose family is empty
+Every candidate list also offers `keep`, except for spacing (padding, gap and
+position) in the `exact` and `near` tiers. A spacing value the scale covers
+only snaps, and the model just picks which step. That pick is applied whatever
+its confidence, because 6px sits exactly between 4 and 8 and either is a snap
+someone would accept. Past the end of the scale spacing may still be kept:
+48px of page padding snapped to 32px is a different layout.
+
+An empty token set is refused outright rather than read as "no token for
+anything". Every family would come back empty, and `fix --judge` would
+suppress every value as tokenless, so `check --judge` leaves values unjudged
+and says so, and `fix --judge` stops. A negative length, a `%` or an `hsl()` on
+a px or colour family is a literal no token can stand for. That value is not
+asked about, since rewriting the rest would leave the finding standing. A property whose family is empty
 (`box-shadow` in WPDS) is settled without a model, as kept.
 
 Each open part is one request, six in flight. The state is the file, the eight
 lines before the declaration and the three from it. The options are the
-candidate tokens plus `keep`, each token described by the active profile's
-`tokenDescriptions` (for WPDS, the `$description` of every token in
-`@wordpress/theme`'s DTCG sources). A value settles only if every part clears
-0.5. A part judged `keep` keeps the whole declaration, because a
+candidate tokens, each described by the active profile's `tokenDescriptions`
+(for WPDS, the `$description` of every token in `@wordpress/theme`'s DTCG
+sources), plus `keep` where it is allowed. A value settles only if every part
+clears 0.5, apart from the in-scale spacing picks above. A part judged `keep` keeps the whole declaration, because a
 half-tokenized value is still a finding. The result is written into the finding
 (`padding: 6px 12px → var(…-sm) var(…-md) (judged 0.60)`, or
 `deliberate, no token fits`) and recorded on `judged`. For values, `answer` is
@@ -483,9 +494,10 @@ npx tsx evals/values/run.ts --bare     # without the token descriptions
 `vip-digital-asset-manager`, an un-remediated WPDS plugin written against the
 wp-admin palette. Each one is hand-labelled with every answer a careful reader
 would accept: `10px` of padding is `sm` or `md`, a scrim is `keep`. It scores
-95% on each of three runs, and 95% of its answers repeat run to run. At the
-0.5 floor it acts on 60% of the literals and is right on 99% of them: two wrong
-tokens, and not one wrong keep, across three runs. Two measurements shaped the
+97% on each of three runs, and 97% of its answers repeat run to run. As
+`fix --judge` applies it (at the 0.5 floor, plus the in-scale spacing picks)
+it acts on 70% of the literals: one wrong token, and not one wrong keep, across
+three runs. Three measurements shaped the
 design:
 
 - **Descriptions.** Without them it scores 85% and makes 16 wrong token picks
@@ -495,6 +507,10 @@ design:
 - **Colours get the whole family.** Narrowing them to the perceptually nearest
   tokens scored 91%. A light tint's nearest tokens are greys of the wrong role,
   and the success wash `#edf6ee` should have been is further away than they are.
+- **Position is spacing.** `top`, `right`, `bottom`, `left` and `inset` are
+  offered padding and gap tokens only, not the `size-*` ones for icons and
+  buttons. Offering the sizes had the model put `size-5xs` on `top: 4px`, and
+  took the score from 97% to 95%.
 
 Applied to that plugin, `fix --judge` took `tokens/hardcoded-value` from 183
 findings to 63, with 16 suppressions and no other finding moved. What is left

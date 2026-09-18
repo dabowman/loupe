@@ -235,8 +235,10 @@ loupe fix --judge --dry-run   # review what it would write
 loupe fix --judge             # rewrite the settled values, suppress the kept ones
 ```
 
-Only picks at 0.5 confidence or above are applied. Settled values are rewritten
-in place. Kept ones get a `wpds-allow tokens/hardcoded-value` directive whose
+Only picks at 0.5 confidence or above are applied. The exception is spacing
+(padding, gap, `top`/`left`/…) that falls between two steps of the scale:
+it always snaps to one of them, and is never judged deliberate. Settled values
+are rewritten in place. Kept ones get a `wpds-allow tokens/hardcoded-value` directive whose
 reason says a model made the call. Everything else is left for review. On an
 un-remediated WPDS plugin that took `tokens/hardcoded-value` from 183 findings
 to 63. See `engine/README.md` for how it scored.

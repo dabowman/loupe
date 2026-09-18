@@ -61,7 +61,7 @@ if (asked.length !== items.length) process.stderr.write(`eval: ${items.length - 
 
 const ok = (id: string, pick: string | undefined): boolean => pick !== undefined && (labels[id] ?? []).includes(pick);
 const covered = (id: string, c: Candidates): boolean =>
-	(labels[id] ?? []).some((l) => l === KEEP || c.options.some(([n]) => n === l));
+	(labels[id] ?? []).some((l) => (l === KEEP ? c.keep : c.options.some(([n]) => n === l)));
 const pct = (a: number, b: number): string => (b ? `${((a / b) * 100).toFixed(0)}%` : '—');
 const short = (t: string | undefined): string => (t ?? '—').replace(/^--wpds-(color-)?/, '');
 
@@ -106,7 +106,7 @@ process.stdout.write(`stable across ${times} runs: ${pct(asked.length - flips.le
 // By tier: whether narrowing to the close tokens helps, and where the model
 // earns its keep — the `family` tier is the design judgement.
 process.stdout.write('\ntier     items  right  coverable\n');
-for (const tier of ['exact', 'near', 'family'] as const) {
+for (const tier of ['exact', 'near', 'end', 'family'] as const) {
 	const idx = asked.flatMap((it, i) => (it.candidates.tier === tier ? [i] : []));
 	let right = 0;
 	for (const r of runs) for (const i of idx) if (ok(asked[i]?.id ?? '', r[i]?.choice)) right++;
@@ -119,7 +119,8 @@ for (const tier of ['exact', 'near', 'family'] as const) {
 
 // The two ways to be wrong cost differently. A wrong token changes the design;
 // a wrong keep suppresses a mistake for good. Scored as `fix --judge` would
-// act: only picks at or above the floor count.
+// act: picks at or above the floor, and every pick where keeping was never an
+// answer (spacing inside its scale), which it applies whatever the confidence.
 process.stdout.write('\nfloor  acted  right  wrong-token  wrong-keep\n');
 for (const floor of [0.5, 0.7, 0.8, 0.9]) {
 	let acted = 0;
@@ -129,7 +130,7 @@ for (const floor of [0.5, 0.7, 0.8, 0.9]) {
 	for (const r of runs)
 		asked.forEach((it, i) => {
 			const a = r[i];
-			if (!a || a.confidence < floor) return;
+			if (!a || (a.confidence < floor && it.candidates.keep)) return;
 			acted++;
 			if (ok(it.id, a.choice)) right++;
 			else if (a.choice === KEEP) wrongKeep++;

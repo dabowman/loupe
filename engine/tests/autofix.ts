@@ -188,7 +188,7 @@ await check('a flagged value is planned part by part, and what code can settle i
 	const plan = planValue(set, 'padding', '10px 12px');
 	assert(plan && plan !== 'none', `no plan: ${String(plan)}`);
 	const [ten, twelve] = plan.slots;
-	assert(ten && 'candidates' in ten && ten.candidates.tier === 'near', `10px: ${JSON.stringify(ten)}`);
+	assert(ten && 'candidates' in ten && ten.candidates.tier === 'near' && !ten.candidates.keep, `10px: ${JSON.stringify(ten)}`);
 	assert(ten.candidates.options.map(([n]) => n).join() === '--wpds-dimension-padding-sm,--wpds-dimension-padding-md', 'not the steps either side');
 	assert(twelve && 'token' in twelve && twelve.token === '--wpds-dimension-padding-md', `12px: ${JSON.stringify(twelve)}`);
 	// A zero is not a literal to replace, and a shorthand's other words are kept.
@@ -198,6 +198,13 @@ await check('a flagged value is planned part by part, and what code can settle i
 	assert(bg && bg !== 'none' && bg.slots.length === 1 && bg.slots[0]?.part === '#f0c', JSON.stringify(bg));
 	const pink = bg.slots[0];
 	assert(pink && 'candidates' in pink && pink.candidates.tier === 'family' && pink.candidates.options.length === 2, JSON.stringify(pink));
+	// Spacing the scale covers only snaps; past its end, or off spacing, it may stay.
+	const past = planValue(set, 'padding', '48px');
+	const pastSlot = past && past !== 'none' ? past.slots[0] : undefined;
+	assert(pastSlot && 'candidates' in pastSlot && pastSlot.candidates.tier === 'end' && pastSlot.candidates.keep, JSON.stringify(past));
+	const radius = planValue(set, 'border-radius', '3px');
+	const radiusSlot = radius && radius !== 'none' ? radius.slots[0] : undefined;
+	assert(radiusSlot && 'candidates' in radiusSlot && radiusSlot.candidates.tier === 'near' && radiusSlot.candidates.keep, JSON.stringify(radius));
 	// A token for a negative inset flips its sign, and 5% is not on a px scale.
 	assert(planValue(set, 'top', '-4px') === null, 'a negative inset was planned');
 	assert(planValue(set, 'padding', '5% 8px') === null, 'a half-replaceable value was planned');
@@ -205,6 +212,32 @@ await check('a flagged value is planned part by part, and what code can settle i
 	assert(planValue(set, 'box-shadow', '0 1px 2px #000') === 'none', 'box-shadow has no family here');
 	const cursor = planValue(set, 'cursor', 'default');
 	assert(cursor && cursor !== 'none' && 'candidates' in (cursor.slots[0] ?? {}), 'a cursor is a choice among names');
+	// An offset is spacing, not the size of an icon.
+	const sized = harvestTokenDefs(postcss.parse(`${JUDGE_TOKENS}\n:root { --wpds-dimension-size-4xs: 8px; }`), ['--wpds-'], emptyTokenSet());
+	const top = planValue(sized, 'top', '10px');
+	assert(top && top !== 'none' && 'candidates' in (top.slots[0] ?? {}), JSON.stringify(top));
+	const offered = top.slots[0] && 'candidates' in top.slots[0] ? top.slots[0].candidates.options.map(([n]) => n) : [];
+	assert(offered.length && !offered.some((n) => n.includes('size')), `top was offered a size token: ${offered.join(', ')}`);
+});
+
+// The failure that prompted this: a `tokenSources` path that stopped resolving
+// left every family empty, and every value read as having no token at all.
+await check('--judge refuses an empty token set rather than calling every value tokenless', async () => {
+	let called = false;
+	const stub = (async () => {
+		called = true;
+		return new Response('{}');
+	}) as unknown as typeof fetch;
+	const f = { rule: 'tokens/hardcoded-value', severity: 'warn', rank: 0, file: 'a.css', line: 1, message: 'padding: 10px', decl: { prop: 'padding', value: '10px' } } as const;
+	const findings: Finding[] = [{ ...f, decl: { ...f.decl } }];
+	let threw = '';
+	try {
+		await judgeValues('/nonexistent', findings, emptyTokenSet(), 'key', new Map(), stub);
+	} catch (err) {
+		threw = err instanceof Error ? err.message : String(err);
+	}
+	assert(/no design tokens were read/.test(threw), `did not refuse: ${threw || 'no throw'}`);
+	assert(!called && findings[0]?.judged === undefined && findings[0]?.message === 'padding: 10px', 'judged anyway');
 });
 
 // Offline: the stub answers by what each question offers, so the check is on
@@ -236,8 +269,9 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 				Object.entries(questions).map(([k, q]) => {
 					asked.push(q);
 					const offers = Object.keys(q.criteria);
+					// Under the floor, and applied anyway: in-scale spacing only snaps.
 					const pick = offers.includes('--wpds-dimension-padding-sm')
-						? { choice: '--wpds-dimension-padding-sm', confidence: 0.8 }
+						? { choice: '--wpds-dimension-padding-sm', confidence: 0.3 }
 						: offers.includes('--wpds-border-radius-md')
 							? { choice: '--wpds-border-radius-md', confidence: 0.3 }
 							: { choice: 'keep', confidence: 0.7 };
@@ -252,7 +286,11 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 		// 10px, the card's pink, both radii, the row's pink and the inline pink:
 		// 12px was exact and box-shadow has no family, so neither is a question.
 		assert(asked.length === 6, `asked ${asked.length} questions, expected 6`);
-		assert(asked.every((q) => 'keep' in q.criteria), 'a question offered no way to keep the value');
+		// 10px of padding sits inside the scale, so it can only snap.
+		const offersKeep = (q: { criteria: Record<string, string> }): boolean => 'keep' in q.criteria;
+		const tenAsk = asked.find((q) => '--wpds-dimension-padding-sm' in q.criteria);
+		assert(tenAsk && !offersKeep(tenAsk), 'in-scale padding was offered keep');
+		assert(asked.filter((q) => q !== tenAsk).every(offersKeep), 'a question off the spacing scale offered no way to keep the value');
 		const pinkAsk = asked.find((q) => '--wpds-color-background-surface-neutral' in q.criteria);
 		assert(pinkAsk?.criteria['--wpds-color-background-surface-neutral']?.includes('Surfaces with normal emphasis.'), 'the description was not sent');
 		assert(written === 5, `wrote ${written}, expected 5 (padding, three pinks, box-shadow)`);
@@ -264,7 +302,7 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 		};
 		const padding = at('styles/card.css', 2, 'padding');
 		assert(
-			padding.message === 'padding: 10px 12px → var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md) (judged 0.80)',
+			padding.message === 'padding: 10px 12px → var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md) (judged 0.30)',
 			padding.message,
 		);
 		assert(padding.judged?.spans.every((s) => padding.message.includes(s)), 'a span is not in the message');
