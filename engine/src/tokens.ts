@@ -30,7 +30,7 @@ import type { TokenSet } from './types.ts';
  * naming the wrong one is worse advice than naming none: the agent applies it,
  * the value is right, and the semantics are quietly wrong forever.
  */
-const ROLE_HINTS: readonly (readonly [RegExp, RegExp])[] = [
+const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	[/^border-radius|radius$/, /radius/],
 	[/^border(-(top|right|bottom|left))?-width$|^border-width$/, /border-width/],
 	// Colour roles are split finer than the rest: suggesting a background token
@@ -46,7 +46,11 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp])[] = [
 	[/^line-height$/, /line-height/],
 	[/^letter-spacing$/, /letter-spacing/],
 	[/^font-family$|^font$/, /font-family/],
-	[/padding|^gap$|gap$|^inset$|^top$|^right$|^bottom$|^left$/, /dimension|spac|padding|gap/],
+	// The third entry is the property's own family, preferred when the set has
+	// one: `padding: 8px` is `padding-sm`, not `gap-sm` or `size-4xs`.
+	[/padding/, /dimension|spac|padding|gap/, /padding/],
+	[/gap$/, /dimension|spac|padding|gap/, /gap/],
+	[/^inset$|^top$|^right$|^bottom$|^left$/, /dimension|spac|padding|gap/],
 	[/^cursor$/, /cursor/],
 	[/^transition-duration$|^animation-duration$/, /motion-duration/],
 	[/^transition-timing-function$|^animation-timing-function$/, /motion-easing/],
@@ -68,6 +72,10 @@ export function harvestTokenDefs(root: Root, prefixes: readonly string[], into: 
 	root.walkDecls((decl) => {
 		const name = decl.prop;
 		if (!name.startsWith('--') || !prefixes.some((p) => name.startsWith(p))) return;
+		// A token's value is its first definition. Later ones are modes —
+		// `[data-wpds-corner-radius="moderate"]` makes `radius-md` 12px — and
+		// indexing them offers `12px` as "md or xl" when the default md is 4px.
+		if (into.known.has(name)) return;
 		into.known.add(name);
 		const v = normalizeValue(decl.value);
 		// A token defined as another token tells us nothing about literal values.
@@ -150,10 +158,11 @@ export function readTokenSources(
 export function tokensFor(set: TokenSet, prop: string, value: string): string[] {
 	const names = set.byValue.get(normalizeValue(value));
 	if (!names?.length) return [];
-	const hint = ROLE_HINTS.find(([p]) => p.test(prop))?.[1];
+	const [, hint, own] = ROLE_HINTS.find(([p]) => p.test(prop)) ?? [];
 	if (!hint) return [];
 	const onRole = names.filter((n) => hint.test(n));
-	return onRole.length ? onRole : [];
+	const preferred = own ? onRole.filter((n) => own.test(n)) : [];
+	return preferred.length ? preferred : onRole;
 }
 
 /** `→ var(--wpds-border-radius-md)`, or `` when nothing on-role matches. */

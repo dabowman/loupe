@@ -82,6 +82,22 @@ await check('an off-role token is never offered', async () => {
 	assert(!f.message.includes('var('), `offered a background token for a foreground: ${f.message}`);
 });
 
+// Both were ambiguities `fix` had to skip, and neither was a real choice.
+await check("a property's own token family wins, and a mode's value is not the token's", async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
+		'tokens.css':
+			':root { --wpds-dimension-padding-sm: 8px; --wpds-dimension-gap-sm: 8px; --wpds-dimension-size-4xs: 8px;\n' +
+			'--wpds-border-radius-md: 4px; --wpds-border-radius-xl: 12px; }\n' +
+			'[data-wpds-corner-radius="moderate"] { --wpds-border-radius-md: 12px; }',
+		'styles/a.css': '.acme-card { padding: 8px; border-radius: 12px; }',
+		'src/A.jsx': 'export const A = () => <div className="acme-card" />;',
+	});
+	const tokens = at(r, 'tokens/hardcoded-value').map((f) => f.suggest?.[0]?.tokens.join(' | '));
+	assert(tokens.includes('--wpds-dimension-padding-sm'), `padding not narrowed to its family: ${tokens}`);
+	assert(tokens.includes('--wpds-border-radius-xl'), `a mode override made radius ambiguous: ${tokens}`);
+});
+
 await check('unknown-token stays silent when no token set was found', async () => {
 	const r = await run({
 		'loupe.config.json': CONFIG(),

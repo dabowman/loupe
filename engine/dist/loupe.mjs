@@ -24850,7 +24850,11 @@ var ROLE_HINTS = [
   [/^line-height$/, /line-height/],
   [/^letter-spacing$/, /letter-spacing/],
   [/^font-family$|^font$/, /font-family/],
-  [/padding|^gap$|gap$|^inset$|^top$|^right$|^bottom$|^left$/, /dimension|spac|padding|gap/],
+  // The third entry is the property's own family, preferred when the set has
+  // one: `padding: 8px` is `padding-sm`, not `gap-sm` or `size-4xs`.
+  [/padding/, /dimension|spac|padding|gap/, /padding/],
+  [/gap$/, /dimension|spac|padding|gap/, /gap/],
+  [/^inset$|^top$|^right$|^bottom$|^left$/, /dimension|spac|padding|gap/],
   [/^cursor$/, /cursor/],
   [/^transition-duration$|^animation-duration$/, /motion-duration/],
   [/^transition-timing-function$|^animation-timing-function$/, /motion-easing/]
@@ -24866,6 +24870,7 @@ function harvestTokenDefs(root2, prefixes, into) {
   root2.walkDecls((decl2) => {
     const name = decl2.prop;
     if (!name.startsWith("--") || !prefixes.some((p) => name.startsWith(p))) return;
+    if (into.known.has(name)) return;
     into.known.add(name);
     const v = normalizeValue(decl2.value);
     if (!v || v.includes("var(")) return;
@@ -24924,10 +24929,11 @@ function readTokenSources(root2, sources, prefixes) {
 function tokensFor(set, prop, value) {
   const names = set.byValue.get(normalizeValue(value));
   if (!names?.length) return [];
-  const hint = ROLE_HINTS.find(([p]) => p.test(prop))?.[1];
+  const [, hint, own] = ROLE_HINTS.find(([p]) => p.test(prop)) ?? [];
   if (!hint) return [];
   const onRole = names.filter((n) => hint.test(n));
-  return onRole.length ? onRole : [];
+  const preferred = own ? onRole.filter((n) => own.test(n)) : [];
+  return preferred.length ? preferred : onRole;
 }
 function suggestionFor(set, prop, value) {
   const names = tokensFor(set, prop, value);
