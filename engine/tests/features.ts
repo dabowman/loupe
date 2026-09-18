@@ -15,7 +15,7 @@ import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
-import { judgeVariants } from '../src/judge.ts';
+import { judgeRepresents, judgeVariants } from '../src/judge.ts';
 import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, ComponentEntry, Pattern, PatternNode, RuleId } from '../src/types.ts';
 
@@ -1082,6 +1082,55 @@ await check('--judge asks only about analogs with variants, and appends only wha
 	} finally {
 		cleanup(root);
 	}
+});
+
+// ── --judge: represents ─────────────────────────────────────────────────────
+
+// The wording is scored live by evals/represents; what is pinned here is the
+// wiring, which is what silently breaks: the batch boundary, the elements[i]
+// reference the instructions depend on, and the order answers come back in.
+await check('judgeRepresents sends one control per request, and keeps answers in order when batched', async () => {
+	const controls = Array.from({ length: 41 }, (_, i) => ({
+		file: `src/C${i}.jsx`,
+		component: 'Button',
+		enclosing: 'Screen',
+		source: `<Button onClick={ go${i} }>Go ${i}</Button>`,
+	}));
+	type Sent = { elements: { file: string }[]; questions: Record<string, { instructions: string; criteria: Record<string, string> }> };
+	const sent: Sent[] = [];
+	const stub = (async (_url: string, init: { body: string }) => {
+		const body = JSON.parse(init.body);
+		sent.push({ elements: body.state.elements, questions: body.questions });
+		// Answer with the question's own index, so a misplaced result is visible.
+		const answers = Object.fromEntries(
+			Object.keys(body.questions).map((k) => [k, { choice: 'command', confidence: Number(`0.${k.slice(1).padStart(2, '0')}`) }]),
+		);
+		return new Response(JSON.stringify({ answers }));
+	}) as unknown as typeof fetch;
+
+	// The default is one control per request: sharing a state costs a third of
+	// the destinations, which evals/represents measures. A batch default that
+	// drifts back up would pass every other check in here.
+	await judgeRepresents(controls.slice(0, 3), 'key', stub);
+	assert(sent.length === 3, `default batched ${3 / sent.length} controls per request, expected 1`);
+	assert(sent[0]?.elements.length === 1, 'default put more than one element in a request');
+	for (const k of ['value', 'command', 'destination', 'none'])
+		assert(k in (sent[0]?.questions.e0?.criteria ?? {}), `criteria missing "${k}"`);
+
+	// Batched, the pool may finish requests in any order; the answers may not.
+	sent.length = 0;
+	const answers = await judgeRepresents(controls, 'key', stub, 40);
+	assert(sent.length === 2, `sent ${sent.length} requests for 41 controls at batch 40`);
+	const sizes = sent.map((r) => r.elements.length).sort((a, b) => b - a);
+	assert(sizes[0] === 40 && sizes[1] === 1, `batch sizes were ${sizes.join(',')}, expected 40,1`);
+	// Each question must name its own element, or every answer is about element 0.
+	const full = sent.find((r) => r.elements.length === 40);
+	assert(full?.questions.e0?.instructions.includes('elements[0].source'), full?.questions.e0?.instructions ?? 'no e0');
+	assert(full?.questions.e7?.instructions.includes('elements[7].source'), full?.questions.e7?.instructions ?? 'no e7');
+	assert(answers.length === 41, `got ${answers.length} answers for 41 controls`);
+	assert(answers[7]?.confidence === 0.07, `answer 7 was ${answers[7]?.confidence}`);
+	// The trailing batch re-indexes from e0; it must still land at 40, not 0.
+	assert(answers[40]?.confidence === 0, `answer 40 was ${answers[40]?.confidence}`);
 });
 
 finish();

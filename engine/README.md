@@ -420,6 +420,36 @@ baseline identity (`code`) are untouched. The key comes from
 the engine entry point, which is the repo root of a checkout. A failed request
 prints a note and the report goes out unjudged.
 
+### represents
+
+The second judgement answers a question rather than annotating a finding, and
+nothing in the CLI calls it yet. `judgeRepresents` reads the abstract pattern
+language's first force off a JSX control — does it stand for a `value`, a
+`command`, a `destination`, or `none` — so the `resolve` tables in
+`patterns/index.json` have an input where the AST has nothing to offer. What
+exists is the question and the eval that scores it.
+
+```bash
+npm run eval:represents                          # three runs
+npx tsx evals/represents/run.ts 1 --batch 10     # sweep the batch size
+```
+
+`evals/represents` carries 100 controls lifted from
+`gutenberg/packages/{editor,edit-site}` and `site-foundry/src`, hand-labelled,
+13 of them flagged ambiguous because a careful reader could defend either
+answer. At the shipped defaults it scores 93–94% against a 54% majority-class
+baseline and repeats itself on 99% of controls, with `destination` at 100%
+precision and 97% recall — the class that decides things, since every redirect
+in the abstract language fires on it. It is deliberately outside `npm test`: it
+costs tokens, needs a key, and a model may drift in ways a build should not fail
+on. `tests/features.ts` pins the wiring offline.
+
+Batch size is per judgement and was measured rather than chosen. At 40 controls
+to a request this question scores 81% and finds 69% of the destinations, because
+every control in a batch shares one state with the other 39; alone it scores 93%
+and finds 97%. So `represents` sends one control per request, six in flight,
+which puts 100 controls at about three seconds.
+
 ## Baseline
 
 The first run on an existing codebase is the adoption blocker. Record the

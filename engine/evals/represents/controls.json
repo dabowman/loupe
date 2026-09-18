@@ -1,0 +1,802 @@
+[
+ {
+  "id": "c004",
+  "file": "gutenberg/packages/editor/src/components/post-actions/index.js",
+  "line": 94,
+  "component": "Menu.Item",
+  "enclosing": "DropdownMenuItemTrigger",
+  "source": "<Menu.Item onClick={ onClick }>\n\t\t\t<Menu.ItemLabel>{ label }</Menu.ItemLabel>\n\t\t</Menu.Item>"
+ },
+ {
+  "id": "c006",
+  "file": "gutenberg/packages/editor/src/components/post-author/select.js",
+  "line": 17,
+  "component": "SelectControl",
+  "enclosing": "PostAuthorSelect",
+  "source": "<SelectControl\n\t\t\tclassName=\"post-author-selector\"\n\t\t\tlabel={ __( 'Author' ) }\n\t\t\toptions={ authorOptions }\n\t\t\tonChange={ setAuthorId }\n\t\t\tvalue={ authorId }\n\t\t\thideLabelFromVision\n\t\t/>"
+ },
+ {
+  "id": "c007",
+  "file": "gutenberg/packages/editor/src/components/post-preview-button/index.js",
+  "line": 252,
+  "component": "MenuItem",
+  "enclosing": "PostPreviewMenuItem",
+  "source": "<MenuItem icon={ external } { ...previewProps }>\n\t\t\t{ __( 'Preview in new tab' ) }\n\t\t</MenuItem>"
+ },
+ {
+  "id": "c013",
+  "file": "gutenberg/packages/editor/src/components/global-styles/menu.js",
+  "line": 61,
+  "component": "MenuItem",
+  "enclosing": "GlobalStylesActionMenu",
+  "source": "<MenuItem onClick={ loadCustomCSS }>\n\t\t\t\t\t\t\t\t{ __( 'Additional CSS' ) }\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c014",
+  "file": "gutenberg/packages/editor/src/components/global-styles/menu.js",
+  "line": 66,
+  "component": "MenuItem",
+  "enclosing": "GlobalStylesActionMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\ttoggle(\n\t\t\t\t\t\t\t\t\t\t'core/edit-site',\n\t\t\t\t\t\t\t\t\t\t'welcomeGuideStyles'\n\t\t\t\t\t\t\t\t\t);\n\t\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Welcome Guide' ) }\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c016",
+  "file": "gutenberg/packages/editor/src/components/global-styles/menu.js",
+  "line": 80,
+  "component": "MenuItem",
+  "enclosing": "GlobalStylesActionMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\tonReset();\n\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\tdisabled={ ! canReset }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Reset styles' ) }\n\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c019",
+  "file": "gutenberg/packages/editor/src/components/more-menu/index.js",
+  "line": 117,
+  "component": "MenuItem",
+  "enclosing": "MoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\tonClick={ () =>\n\t\t\t\t\t\t\t\t\topenModal( 'editor/keyboard-shortcut-help' )\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\tshortcut={ displayShortcut.access( 'h' ) }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Keyboard shortcuts' ) }\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c020",
+  "file": "gutenberg/packages/editor/src/components/more-menu/index.js",
+  "line": 126,
+  "component": "MenuItem",
+  "enclosing": "MoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\ticon={ external }\n\t\t\t\t\t\t\t\thref={ __(\n\t\t\t\t\t\t\t\t\t'https://wordpress.org/documentation/article/wordpress-block-editor/'\n\t\t\t\t\t\t\t\t) }\n\t\t\t\t\t\t\t\ttarget=\"_blank\"\n\t\t\t\t\t\t\t\trel=\"noopener\"\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Help' ) }\n\t\t\t\t\t\t\t\t<VisuallyHidden render={ <span /> }>\n\t\t\t\t\t\t\t\t\t{\n\t\t\t\t\t\t\t\t\t\t/* translators: accessibility text */\n\t\t\t\t\t\t\t\t\t\t__( '(opens in a new tab)' )\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t</VisuallyHidden>\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c022",
+  "file": "gutenberg/packages/editor/src/components/more-menu/index.js",
+  "line": 147,
+  "component": "MenuItem",
+  "enclosing": "MoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\tonClick={ () =>\n\t\t\t\t\t\t\t\t\topenModal( 'editor/preferences' )\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Preferences' ) }\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c023",
+  "file": "gutenberg/packages/editor/src/components/more-menu/copy-content-menu-item.js",
+  "line": 25,
+  "component": "MenuItem",
+  "enclosing": "CopyContentMenuItem",
+  "source": "<MenuItem ref={ ref }>{ __( 'Copy all blocks' ) }</MenuItem>"
+ },
+ {
+  "id": "c045",
+  "file": "gutenberg/packages/editor/src/components/template-part-menu-items/convert-to-regular.js",
+  "line": 72,
+  "component": "MenuItem",
+  "enclosing": "ConvertToRegularBlocks",
+  "source": "<MenuItem onClick={ () => setShowConfirmDialog( true ) }>\n\t\t\t\t{ __( 'Detach' ) }\n\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c046",
+  "file": "gutenberg/packages/editor/src/components/template-part-menu-items/convert-to-template-part.js",
+  "line": 50,
+  "component": "MenuItem",
+  "enclosing": "ConvertToTemplatePart",
+  "source": "<MenuItem\n\t\t\t\ticon={ symbolFilled }\n\t\t\t\tonClick={ () => {\n\t\t\t\t\tsetIsModalOpen( true );\n\t\t\t\t} }\n\t\t\t\taria-expanded={ isModalOpen }\n\t\t\t\taria-haspopup=\"dialog\"\n\t\t\t>\n\t\t\t\t{ __( 'Create template part' ) }\n\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c050",
+  "file": "gutenberg/packages/editor/src/components/site-export/index.js",
+  "line": 84,
+  "component": "MenuItem",
+  "enclosing": "SiteExport",
+  "source": "<MenuItem\n\t\t\trole=\"menuitem\"\n\t\t\ticon={ download }\n\t\t\tonClick={ handleExport }\n\t\t\tinfo={ __(\n\t\t\t\t'Download your theme with updated templates and styles.'\n\t\t\t) }\n\t\t>\n\t\t\t{ _x( 'Export', 'site exporter menu item' ) }\n\t\t</MenuItem>"
+ },
+ {
+  "id": "c059",
+  "file": "gutenberg/packages/editor/src/components/preview-dropdown/index.js",
+  "line": 202,
+  "component": "MenuItem",
+  "enclosing": "PreviewDropdown",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\ticon={ isResponsiveEditing ? check : undefined }\n\t\t\t\t\t\t\t\tisSelected={ isResponsiveEditing }\n\t\t\t\t\t\t\t\trole=\"menuitemcheckbox\"\n\t\t\t\t\t\t\t\tonClick={ handleResponsiveEditingChange }\n\t\t\t\t\t\t\t\tinfo={ __(\n\t\t\t\t\t\t\t\t\t'Style changes apply only to the selected viewport.'\n\t\t\t\t\t\t\t\t) }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Responsive styles' ) }\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c061",
+  "file": "gutenberg/packages/editor/src/components/preview-dropdown/index.js",
+  "line": 217,
+  "component": "MenuItem",
+  "enclosing": "PreviewDropdown",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\thref={ homeUrl }\n\t\t\t\t\t\t\t\ttarget=\"_blank\"\n\t\t\t\t\t\t\t\ticon={ external }\n\t\t\t\t\t\t\t\tonClick={ onClose }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'View site' ) }\n\t\t\t\t\t\t\t\t<VisuallyHidden render={ <span /> }>\n\t\t\t\t\t\t\t\t\t{\n\t\t\t\t\t\t\t\t\t\t/* translators: accessibility text */\n\t\t\t\t\t\t\t\t\t\t__( '(opens in a new tab)' )\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t</VisuallyHidden>\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c063",
+  "file": "gutenberg/packages/editor/src/components/preview-dropdown/index.js",
+  "line": 235,
+  "component": "MenuItem",
+  "enclosing": "PreviewDropdown",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\ticon={ ! isTemplateHidden ? check : undefined }\n\t\t\t\t\t\t\t\tisSelected={ ! isTemplateHidden }\n\t\t\t\t\t\t\t\trole=\"menuitemcheckbox\"\n\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\tconst newRenderingMode = isTemplateHidden\n\t\t\t\t\t\t\t\t\t\t? 'template-locked'\n\t\t\t\t\t\t\t\t\t\t: 'post-only';\n\t\t\t\t\t\t\t\t\tsetRenderingMode( newRenderingMode );\n\t\t\t\t\t\t\t\t\tsetDefaultRenderingMode( newRenderingMode );\n\t\t\t\t\t\t\t\t\tresetZoomLevel();\n\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Show template' ) }\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c070",
+  "file": "gutenberg/packages/editor/src/components/collab-sidebar/note-indicator-toolbar.js",
+  "line": 102,
+  "component": "ToolbarButton",
+  "enclosing": "NoteAvatarIndicator",
+  "source": "<ToolbarButton\n\t\t\t\tclassName=\"editor-note-indicator\"\n\t\t\t\tlabel={ __( 'View notes' ) }\n\t\t\t\tonClick={ () => onClick() }\n\t\t\t\tshowTooltip\n\t\t\t>\n\t\t\t\t<ThreadParticipants participants={ threadParticipants } />\n\t\t\t</ToolbarButton>"
+ },
+ {
+  "id": "c071",
+  "file": "gutenberg/packages/editor/src/components/collab-sidebar/add-note-menu-item.js",
+  "line": 47,
+  "component": "MenuItem",
+  "enclosing": "NoteMenuItem",
+  "source": "<MenuItem\n\t\t\tonClick={ onClick }\n\t\t\taria-haspopup=\"dialog\"\n\t\t\tdisabled={ isDisabled }\n\t\t\tinfo={ infoText }\n\t\t\tshortcut={ shortcut }\n\t\t>\n\t\t\t{ __( 'Add note' ) }\n\t\t</MenuItem>"
+ },
+ {
+  "id": "c076",
+  "file": "gutenberg/packages/editor/src/components/collab-sidebar/note.js",
+  "line": 40,
+  "component": "Menu.Item",
+  "enclosing": "NoteActionsMenu",
+  "source": "<Menu.Item key={ item.id } onClick={ item.onClick }>\n\t\t\t\t\t\t<Menu.ItemLabel>{ item.title }</Menu.ItemLabel>\n\t\t\t\t\t</Menu.Item>"
+ },
+ {
+  "id": "c087",
+  "file": "gutenberg/packages/editor/src/components/post-template/block-theme.js",
+  "line": 128,
+  "component": "MenuItem",
+  "enclosing": "BlockThemeControl",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\t\tonClick={ async () => {\n\t\t\t\t\t\t\t\t\t\tonNavigateToEntityRecord( {\n\t\t\t\t\t\t\t\t\t\t\tpostId: template.id,\n\t\t\t\t\t\t\t\t\t\t\tpostType: 'wp_template',\n\t\t\t\t\t\t\t\t\t\t} );\n\t\t\t\t\t\t\t\t\t\t// When editing a global template,\n\t\t\t\t\t\t\t\t\t\t// activate the auto-draft. This is not\n\t\t\t\t\t\t\t\t\t\t// immediately live (we're not saving\n\t\t\t\t\t\t\t\t\t\t// site options), and when nothing is\n\t\t\t\t\t\t\t\t\t\t// saved, the setting will be ignored.\n\t\t\t\t\t\t\t\t\t\t// In the future, we should make the\n\t\t\t\t\t\t\t\t\t\t// duplication explicit, so there\n\t\t\t\t\t\t\t\t\t\t// wouldn't be an \"edit\" button for\n\t\t\t\t\t\t\t\t\t\t// static theme templates.\n\t\t\t\t\t\t\t\t\t\tif (\n\t\t\t\t\t\t\t\t\t\t\t! hasSpecificTemplate &&\n\t\t\t\t\t\t\t\t\t\t\twindow?.__experimentalTemplateActivate\n\t\t\t\t\t\t\t\t\t\t) {\n\t\t\t\t\t\t\t\t\t\t\tconst activeTemplates =\n\t\t\t\t\t\t\t\t\t\t\t\tawait getEntityRecord(\n\t\t\t\t\t\t\t\t\t\t\t\t\t'root',\n\t\t\t\t\t\t\t\t\t\t\t\t\t'site'\n\t\t\t\t\t\t\t\t\t\t\t\t).active_templates;\n\t\t\t\t\t\t\t\t\t\t\tif (\n\t\t\t\t\t\t\t\t\t\t\t\tactiveTemplates[\n\t\t\t\t\t\t\t\t\t\t\t\t\ttemplate.slug\n\t\t\t\t\t\t\t\t\t\t\t\t] !== template.id\n\t\t\t\t\t\t\t\t\t\t\t) {\n\t\t\t\t\t\t\t\t\t\t\t\teditEntityRecord(\n\t\t\t\t\t\t\t\t\t\t\t\t\t'root',\n\t\t\t\t\t\t\t\t\t\t\t\t\t'site',\n\t\t\t\t\t\t\t\t\t\t\t\t\tundefined,\n\t\t\t\t\t\t\t\t\t\t\t\t\t{\n\t\t\t\t\t\t\t\t\t\t\t\t\t\tactive_templates: {\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t...activeTemplates,\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t[ template.slug ]:\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\ttemplate.id,\n\t\t\t\t\n/* …truncated */"
+ },
+ {
+  "id": "c089",
+  "file": "gutenberg/packages/editor/src/components/post-template/block-theme.js",
+  "line": 184,
+  "component": "MenuItem",
+  "enclosing": "BlockThemeControl",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\ticon={ ! isTemplateHidden ? check : undefined }\n\t\t\t\t\t\t\t\tisSelected={ ! isTemplateHidden }\n\t\t\t\t\t\t\t\trole=\"menuitemcheckbox\"\n\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\tconst newRenderingMode = isTemplateHidden\n\t\t\t\t\t\t\t\t\t\t? 'template-locked'\n\t\t\t\t\t\t\t\t\t\t: 'post-only';\n\t\t\t\t\t\t\t\t\tsetRenderingMode( newRenderingMode );\n\t\t\t\t\t\t\t\t\tsetDefaultRenderingMode( newRenderingMode );\n\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Show template' ) }\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c090",
+  "file": "gutenberg/packages/editor/src/components/post-template/reset-default-template.js",
+  "line": 21,
+  "component": "MenuItem",
+  "enclosing": "ResetDefaultTemplate",
+  "source": "<MenuItem\n\t\t\tonClick={ () => {\n\t\t\t\teditEntityRecord(\n\t\t\t\t\t'postType',\n\t\t\t\t\tpostType,\n\t\t\t\t\tpostId,\n\t\t\t\t\t{ template: '' },\n\t\t\t\t\t{ undoIgnore: true }\n\t\t\t\t);\n\t\t\t\tonClick();\n\t\t\t} }\n\t\t>\n\t\t\t{ __( 'Use default template' ) }\n\t\t</MenuItem>"
+ },
+ {
+  "id": "c091",
+  "file": "gutenberg/packages/editor/src/components/post-template/swap-template-button.js",
+  "line": 48,
+  "component": "MenuItem",
+  "enclosing": "SwapTemplateButton",
+  "source": "<MenuItem\n\t\t\t\tdisabled={ ! availableTemplates?.length }\n\t\t\t\taccessibleWhenDisabled\n\t\t\t\tonClick={ () => setShowModal( true ) }\n\t\t\t>\n\t\t\t\t{ __( 'Change template' ) }\n\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c093",
+  "file": "gutenberg/packages/editor/src/components/post-template/classic-theme.js",
+  "line": 154,
+  "component": "SelectControl",
+  "enclosing": "PostTemplateDropdownContent",
+  "source": "<SelectControl\n\t\t\t\t\thideLabelFromVision\n\t\t\t\t\tlabel={ __( 'Template' ) }\n\t\t\t\t\tvalue={ selectedOption?.value ?? '' }\n\t\t\t\t\toptions={ options }\n\t\t\t\t\tonChange={ ( slug ) =>\n\t\t\t\t\t\teditPost( { template: slug || '' } )\n\t\t\t\t\t}\n\t\t\t\t/>"
+ },
+ {
+  "id": "c097",
+  "file": "gutenberg/packages/editor/src/components/post-template/create-new-template.js",
+  "line": 28,
+  "component": "MenuItem",
+  "enclosing": "CreateNewTemplate",
+  "source": "<MenuItem\n\t\t\t\tonClick={ () => {\n\t\t\t\t\tsetIsCreateModalOpen( true );\n\t\t\t\t} }\n\t\t\t>\n\t\t\t\t{ __( 'Create new template' ) }\n\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c100",
+  "file": "gutenberg/packages/editor/src/components/block-settings-menu/plugin-block-settings-menu-item.js",
+  "line": 92,
+  "component": "MenuItem",
+  "enclosing": "PluginBlockSettingsMenuItem",
+  "source": "<MenuItem\n\t\t\t\t\tonClick={ compose( onClick, onClose ) }\n\t\t\t\t\ticon={ icon }\n\t\t\t\t\tlabel={ small ? label : undefined }\n\t\t\t\t\trole={ role }\n\t\t\t\t>\n\t\t\t\t\t{ ! small && label }\n\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c114",
+  "file": "gutenberg/packages/editor/src/components/document-tools/index.js",
+  "line": 102,
+  "component": "ToolbarButton",
+  "enclosing": "DocumentTools",
+  "source": "<ToolbarButton\n\t\t\t\t\t\tref={ inserterSidebarToggleRef }\n\t\t\t\t\t\tclassName=\"editor-document-tools__inserter-toggle\"\n\t\t\t\t\t\tvariant=\"primary\"\n\t\t\t\t\t\tisPressed={ isInserterOpened }\n\t\t\t\t\t\tonMouseDown={ preventDefault }\n\t\t\t\t\t\tonClick={ toggleInserter }\n\t\t\t\t\t\tdisabled={ disableBlockTools }\n\t\t\t\t\t\ticon={ plus }\n\t\t\t\t\t\tlabel={ showIconLabels ? shortLabel : longLabel }\n\t\t\t\t\t\tshowTooltip={ ! showIconLabels }\n\t\t\t\t\t\taria-expanded={ isInserterOpened }\n\t\t\t\t\t/>"
+ },
+ {
+  "id": "c115",
+  "file": "gutenberg/packages/editor/src/components/document-tools/index.js",
+  "line": 131,
+  "component": "ToolbarButton",
+  "enclosing": "DocumentTools",
+  "source": "<ToolbarButton\n\t\t\t\t\t\t\t\tclassName=\"editor-document-tools__document-overview-toggle\"\n\t\t\t\t\t\t\t\ticon={ listView }\n\t\t\t\t\t\t\t\tdisabled={ disableBlockTools }\n\t\t\t\t\t\t\t\tisPressed={ isListViewOpen }\n\t\t\t\t\t\t\t\t/* translators: button label text should, if possible, be under 16 characters. */\n\t\t\t\t\t\t\t\tlabel={ __( 'Document Overview' ) }\n\t\t\t\t\t\t\t\tonClick={ toggleListView }\n\t\t\t\t\t\t\t\tshortcut={ listViewShortcut }\n\t\t\t\t\t\t\t\tshowTooltip={ ! showIconLabels }\n\t\t\t\t\t\t\t\tvariant={\n\t\t\t\t\t\t\t\t\tshowIconLabels ? 'tertiary' : undefined\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\taria-expanded={ isListViewOpen }\n\t\t\t\t\t\t\t\tref={ listViewToggleRef }\n\t\t\t\t\t\t\t/>"
+ },
+ {
+  "id": "c124",
+  "file": "gutenberg/packages/editor/src/hooks/navigation-link-view-button.js",
+  "line": 61,
+  "component": "ToolbarButton",
+  "enclosing": "NavigationViewButton",
+  "source": "<ToolbarButton\n\t\t\t\t\tname=\"view\"\n\t\t\t\t\ttitle={ __( 'View' ) }\n\t\t\t\t\tonClick={ onViewPage }\n\t\t\t\t>\n\t\t\t\t\t{ __( 'View' ) }\n\t\t\t\t</ToolbarButton>"
+ },
+ {
+  "id": "c125",
+  "file": "gutenberg/packages/editor/src/hooks/template-part-navigation-edit-button.js",
+  "line": 102,
+  "component": "ToolbarButton",
+  "enclosing": "TemplatePartNavigationEditButton",
+  "source": "<ToolbarButton\n\t\t\t\t\tlabel={ __( 'Edit navigation' ) }\n\t\t\t\t\tonClick={ onEditNavigation }\n\t\t\t\t>\n\t\t\t\t\t{ __( 'Edit navigation' ) }\n\t\t\t\t</ToolbarButton>"
+ },
+ {
+  "id": "c129",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menu/more-menu.js",
+  "line": 42,
+  "component": "MenuItem",
+  "enclosing": "ScreenNavigationMoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\topenRenameModal();\n\t\t\t\t\t\t\t\t// Close the dropdown after opening the modal.\n\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Rename' ) }\n\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c130",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menu/more-menu.js",
+  "line": 51,
+  "component": "MenuItem",
+  "enclosing": "ScreenNavigationMoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\thistory.navigate(\n\t\t\t\t\t\t\t\t\t`/wp_navigation/${ menuId }?canvas=edit`\n\t\t\t\t\t\t\t\t);\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Edit' ) }\n\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c131",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menu/more-menu.js",
+  "line": 60,
+  "component": "MenuItem",
+  "enclosing": "ScreenNavigationMoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\tonDuplicate();\n\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Duplicate' ) }\n\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c132",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menu/more-menu.js",
+  "line": 68,
+  "component": "MenuItem",
+  "enclosing": "ScreenNavigationMoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\tisDestructive\n\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\topenDeleteConfirmDialog();\n\n\t\t\t\t\t\t\t\t// Close the dropdown after opening the modal.\n\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Delete' ) }\n\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c138",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-dataviews/index.js",
+  "line": 59,
+  "component": "SidebarNavigationItem",
+  "enclosing": "DataViewsSidebarContent",
+  "source": "<SidebarNavigationItem\n\t\t\t\t\t\t\tkey={ view.slug }\n\t\t\t\t\t\t\ticon={ icon }\n\t\t\t\t\t\t\tto={ addQueryArgs( path, {\n\t\t\t\t\t\t\t\tactiveView: slug,\n\t\t\t\t\t\t\t} ) }\n\t\t\t\t\t\t\taria-current={ isActive ? 'true' : undefined }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ view.title }\n\t\t\t\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c139",
+  "file": "gutenberg/packages/edit-site/src/components/more-menu/welcome-guide-menu-item.js",
+  "line": 10,
+  "component": "MenuItem",
+  "enclosing": "WelcomeGuideMenuItem",
+  "source": "<MenuItem onClick={ () => toggle( 'core/edit-site', 'welcomeGuide' ) }>\n\t\t\t{ __( 'Welcome Guide' ) }\n\t\t</MenuItem>"
+ },
+ {
+  "id": "c142",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-details-footer/index.js",
+  "line": 46,
+  "component": "SidebarNavigationItem",
+  "enclosing": "SidebarNavigationScreenDetailsFooter",
+  "source": "<SidebarNavigationItem\n\t\t\t\ticon={ backup }\n\t\t\t\t{ ...hrefProps }\n\t\t\t\t{ ...otherProps }\n\t\t\t>\n\t\t\t\t{ sprintf(\n\t\t\t\t\t/* translators: %d: Number of Styles revisions. */\n\t\t\t\t\t_n( '%d Revision', '%d Revisions', revisionsCount ),\n\t\t\t\t\trevisionsCount\n\t\t\t\t) }\n\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c145",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-main/index.js",
+  "line": 19,
+  "component": "SidebarNavigationItem",
+  "enclosing": "MainSidebarNavigationContent",
+  "source": "<SidebarNavigationItem\n\t\t\t\tto=\"/identity\"\n\t\t\t\tuid=\"identity-navigation-item\"\n\t\t\t\ticon={ siteLogo }\n\t\t\t\tactiveOnRouteName=\"identity\"\n\t\t\t\tisHidden={ ! isBlockBasedTheme }\n\t\t\t>\n\t\t\t\t{ _x( 'Identity', 'site identity' ) }\n\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c146",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-main/index.js",
+  "line": 28,
+  "component": "SidebarNavigationItem",
+  "enclosing": "MainSidebarNavigationContent",
+  "source": "<SidebarNavigationItem\n\t\t\t\tto={ isBlockBasedTheme ? '/styles' : '/stylebook' }\n\t\t\t\tuid={\n\t\t\t\t\tisBlockBasedTheme\n\t\t\t\t\t\t? 'global-styles-navigation-item'\n\t\t\t\t\t\t: 'stylebook-navigation-item'\n\t\t\t\t}\n\t\t\t\ticon={ styles }\n\t\t\t\tactiveOnRouteName={ isBlockBasedTheme ? 'styles' : undefined }\n\t\t\t\twithChevron={ ! isBlockBasedTheme }\n\t\t\t>\n\t\t\t\t{ __( 'Styles' ) }\n\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c147",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-main/index.js",
+  "line": 41,
+  "component": "SidebarNavigationItem",
+  "enclosing": "MainSidebarNavigationContent",
+  "source": "<SidebarNavigationItem\n\t\t\t\tuid=\"page-navigation-item\"\n\t\t\t\tto=\"/page\"\n\t\t\t\twithChevron\n\t\t\t\ticon={ page }\n\t\t\t\tisHidden={ ! isBlockBasedTheme }\n\t\t\t>\n\t\t\t\t{ __( 'Pages' ) }\n\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c148",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-main/index.js",
+  "line": 50,
+  "component": "SidebarNavigationItem",
+  "enclosing": "MainSidebarNavigationContent",
+  "source": "<SidebarNavigationItem\n\t\t\t\tuid=\"navigation-navigation-item\"\n\t\t\t\tto=\"/navigation\"\n\t\t\t\twithChevron\n\t\t\t\ticon={ navigation }\n\t\t\t\tisHidden={ ! isBlockBasedTheme }\n\t\t\t>\n\t\t\t\t{ __( 'Navigation' ) }\n\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c149",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-main/index.js",
+  "line": 59,
+  "component": "SidebarNavigationItem",
+  "enclosing": "MainSidebarNavigationContent",
+  "source": "<SidebarNavigationItem\n\t\t\t\tuid=\"patterns-navigation-item\"\n\t\t\t\tto=\"/pattern\"\n\t\t\t\twithChevron\n\t\t\t\ticon={ symbol }\n\t\t\t>\n\t\t\t\t{ __( 'Patterns' ) }\n\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c150",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-main/index.js",
+  "line": 67,
+  "component": "SidebarNavigationItem",
+  "enclosing": "MainSidebarNavigationContent",
+  "source": "<SidebarNavigationItem\n\t\t\t\tuid=\"template-navigation-item\"\n\t\t\t\tto=\"/template\"\n\t\t\t\twithChevron\n\t\t\t\ticon={ layout }\n\t\t\t\tisHidden={ ! isBlockBasedTheme }\n\t\t\t>\n\t\t\t\t{ __( 'Templates' ) }\n\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c152",
+  "file": "gutenberg/packages/edit-site/src/components/page-patterns/delete-category-menu-item.js",
+  "line": 75,
+  "component": "MenuItem",
+  "enclosing": "DeleteCategoryMenuItem",
+  "source": "<MenuItem isDestructive onClick={ () => setIsModalOpen( true ) }>\n\t\t\t\t{ __( 'Delete' ) }\n\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c153",
+  "file": "gutenberg/packages/edit-site/src/components/page-patterns/rename-category-menu-item.js",
+  "line": 15,
+  "component": "MenuItem",
+  "enclosing": "RenameCategoryMenuItem",
+  "source": "<MenuItem onClick={ () => setIsModalOpen( true ) }>\n\t\t\t\t{ __( 'Rename' ) }\n\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c155",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-item/index.js",
+  "line": 55,
+  "component": "Item",
+  "enclosing": "SidebarNavigationItemContent",
+  "source": "<Item\n\t\t\tclassName={ clsx(\n\t\t\t\t'edit-site-sidebar-navigation-item',\n\t\t\t\t{ 'with-suffix': ! withChevron && suffix },\n\t\t\t\tclassName\n\t\t\t) }\n\t\t\tid={ uid }\n\t\t\tonClick={ handleClick }\n\t\t\thref={ to ? linkProps.href : undefined }\n\t\t\taria-current={ isActive ? true : undefined }\n\t\t\t{ ...props }\n\t\t>\n\t\t\t<Stack direction=\"row\" align=\"center\" justify=\"start\" gap=\"sm\">\n\t\t\t\t{ icon && (\n\t\t\t\t\t<Icon\n\t\t\t\t\t\tstyle={ { fill: 'currentcolor' } }\n\t\t\t\t\t\ticon={ icon }\n\t\t\t\t\t\tsize={ 24 }\n\t\t\t\t\t/>\n\t\t\t\t) }\n\t\t\t\t<FlexBlock>{ children }</FlexBlock>\n\t\t\t\t{ withChevron && (\n\t\t\t\t\t<Icon\n\t\t\t\t\t\ticon={ isRTL() ? chevronLeftSmall : chevronRightSmall }\n\t\t\t\t\t\tclassName=\"edit-site-sidebar-navigation-item__drilldown-indicator\"\n\t\t\t\t\t\tsize={ 24 }\n\t\t\t\t\t/>\n\t\t\t\t) }\n\t\t\t\t{ ! withChevron && suffix }\n\t\t\t</Stack>\n\t\t</Item>"
+ },
+ {
+  "id": "c158",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-patterns/index.js",
+  "line": 135,
+  "component": "Item",
+  "enclosing": "SidebarNavigationScreenPatterns",
+  "source": "<Item>{ __( 'No items found' ) }</Item>"
+ },
+ {
+  "id": "c159",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-patterns/category-item.js",
+  "line": 20,
+  "component": "SidebarNavigationItem",
+  "enclosing": "CategoryItem",
+  "source": "<SidebarNavigationItem\n\t\t\ticon={ icon }\n\t\t\tsuffix={ <span>{ count }</span> }\n\t\t\taria-current={ isActive ? 'true' : undefined }\n\t\t\tto={ `/pattern?${ queryArgs.join( '&' ) }` }\n\t\t>\n\t\t\t{ label }\n\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c173",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menus/index.js",
+  "line": 152,
+  "component": "SidebarNavigationItem",
+  "enclosing": "NavMenuItem",
+  "source": "<SidebarNavigationItem\n\t\t\tto={ `/wp_navigation/${ postId }` }\n\t\t\t{ ...props }\n\t\t/>"
+ },
+ {
+  "id": "c175",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menus/leaf-more-menu.js",
+  "line": 82,
+  "component": "MenuItem",
+  "enclosing": "LeafMoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\ticon={ chevronUp }\n\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\tmoveBlocksUp( [ clientId ], rootClientId );\n\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Move up' ) }\n\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c176",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menus/leaf-more-menu.js",
+  "line": 91,
+  "component": "MenuItem",
+  "enclosing": "LeafMoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\ticon={ chevronDown }\n\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\tmoveBlocksDown( [ clientId ], rootClientId );\n\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Move down' ) }\n\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c177",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menus/leaf-more-menu.js",
+  "line": 101,
+  "component": "MenuItem",
+  "enclosing": "LeafMoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\tonGoToPage();\n\t\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ goToLabel }\n\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c179",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menus/leaf-more-menu.js",
+  "line": 112,
+  "component": "MenuItem",
+  "enclosing": "LeafMoreMenu",
+  "source": "<MenuItem\n\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\tremoveBlocks( [ clientId ], false );\n\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ removeLabel }\n\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c181",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-templates-browse/content.js",
+  "line": 20,
+  "component": "SidebarNavigationItem",
+  "enclosing": "TemplateDataviewItem",
+  "source": "<SidebarNavigationItem\n\t\t\tto={ addQueryArgs( '/template', { activeView: text } ) }\n\t\t\ticon={ icon }\n\t\t\taria-current={ isActive }\n\t\t>\n\t\t\t{ text }\n\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c183",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-templates-browse/content.js",
+  "line": 56,
+  "component": "SidebarNavigationItem",
+  "enclosing": "DataviewsTemplatesSidebarContent",
+  "source": "<SidebarNavigationItem\n\t\t\t\tto=\"/template\"\n\t\t\t\ticon={ published }\n\t\t\t\taria-current={ activeView === 'active' }\n\t\t\t>\n\t\t\t\t{ __( 'Active templates' ) }\n\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c184",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-templates-browse/content.js",
+  "line": 63,
+  "component": "SidebarNavigationItem",
+  "enclosing": "DataviewsTemplatesSidebarContent",
+  "source": "<SidebarNavigationItem\n\t\t\t\tto={ addQueryArgs( '/template', { activeView: 'user' } ) }\n\t\t\t\ticon={ commentAuthorAvatar }\n\t\t\t\taria-current={ activeView === 'user' }\n\t\t\t>\n\t\t\t\t{\n\t\t\t\t\t// Let's avoid calling them \"custom templates\" to avoid\n\t\t\t\t\t// confusion. \"Created\" is closest to meaning database\n\t\t\t\t\t// templates, created by users.\n\t\t\t\t\t// https://developer.wordpress.org/themes/classic-themes/templates/page-template-files/#creating-custom-page-templates-for-global-use\n\t\t\t\t\t__( 'Created templates' )\n\t\t\t\t}\n\t\t\t</SidebarNavigationItem>"
+ },
+ {
+  "id": "c187",
+  "file": "site-foundry/src/admin-ui/global-styles/custom-token-groups.js",
+  "line": 97,
+  "component": "SelectControl",
+  "enclosing": "FontWeightControl",
+  "source": "<SelectControl\n\t\t\t__next40pxDefaultSize\n\t\t\t__nextHasNoMarginBottom\n\t\t\tlabel={ __( 'Weight', 'site-foundry' ) }\n\t\t\tvalue={ value ?? '400' }\n\t\t\toptions={ WEIGHT_OPTIONS }\n\t\t\tonChange={ onChange }\n\t\t/>"
+ },
+ {
+  "id": "c190",
+  "file": "site-foundry/src/admin-ui/global-styles/size-presets.js",
+  "line": 132,
+  "component": "MenuItem",
+  "enclosing": "PresetGroup",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t\t\t\t\t\ttoggleReset();\n\t\t\t\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t\t\t\t{ labels.reset }\n\t\t\t\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c193",
+  "file": "site-foundry/src/admin-ui/global-styles/import-tokens.js",
+  "line": 259,
+  "component": "SelectControl",
+  "enclosing": "ScreenImportTokens",
+  "source": "<SelectControl\n\t\t\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\t\t\t__nextHasNoMarginBottom\n\t\t\t\t\t\t\t\t\tlabel={ group.key }\n\t\t\t\t\t\t\t\t\thelp={\n\t\t\t\t\t\t\t\t\t\tsprintf(\n\t\t\t\t\t\t\t\t\t\t\t/* translators: 1: number of tokens, 2: token types */\n\t\t\t\t\t\t\t\t\t\t\t_n(\n\t\t\t\t\t\t\t\t\t\t\t\t'%1$d token · %2$s',\n\t\t\t\t\t\t\t\t\t\t\t\t'%1$d tokens · %2$s',\n\t\t\t\t\t\t\t\t\t\t\t\tgroup.tokens.length,\n\t\t\t\t\t\t\t\t\t\t\t\t'site-foundry'\n\t\t\t\t\t\t\t\t\t\t\t),\n\t\t\t\t\t\t\t\t\t\t\tgroup.tokens.length,\n\t\t\t\t\t\t\t\t\t\t\tgroup.types.join( ', ' ) ||\n\t\t\t\t\t\t\t\t\t\t\t\t__( 'untyped', 'site-foundry' )\n\t\t\t\t\t\t\t\t\t\t) +\n\t\t\t\t\t\t\t\t\t\t( PRESET_TARGETS[\n\t\t\t\t\t\t\t\t\t\t\tassignments[ group.key ]\n\t\t\t\t\t\t\t\t\t\t]?.convention\n\t\t\t\t\t\t\t\t\t\t\t? ' · ' +\n\t\t\t\t\t\t\t\t\t\t\t  __(\n\t\t\t\t\t\t\t\t\t\t\t\t\t'slugs normalize to the WordPress scale; token names become display names',\n\t\t\t\t\t\t\t\t\t\t\t\t\t'site-foundry'\n\t\t\t\t\t\t\t\t\t\t\t  )\n\t\t\t\t\t\t\t\t\t\t\t: '' )\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\tvalue={ assignments[ group.key ] }\n\t\t\t\t\t\t\t\t\toptions={ targetOptions( group ) }\n\t\t\t\t\t\t\t\t\tonChange={ ( target ) =>\n\t\t\t\t\t\t\t\t\t\tsetAssignments( {\n\t\t\t\t\t\t\t\t\t\t\t...assignments,\n\t\t\t\t\t\t\t\t\t\t\t[ group.key ]: target,\n\t\t\t\t\t\t\t\t\t\t} )\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t/>"
+ },
+ {
+  "id": "c202",
+  "file": "site-foundry/src/admin-ui/global-styles/preset-value-control.js",
+  "line": 148,
+  "component": "ToggleGroupControlOption",
+  "enclosing": "PresetValueControl",
+  "source": "<ToggleGroupControlOption\n\t\t\t\t\t\t\t\tkey={ token.cssVar }\n\t\t\t\t\t\t\t\tvalue={ token.cssVar }\n\t\t\t\t\t\t\t\tlabel={ aliasTokenName( token.cssVar ) }\n\t\t\t\t\t\t\t/>"
+ },
+ {
+  "id": "c207",
+  "file": "site-foundry/src/admin-ui/global-styles/detail-header.js",
+  "line": 57,
+  "component": "MenuItem",
+  "enclosing": "DetailHeader",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t\t\t\t\tonRename();\n\t\t\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t\t\t{ __( 'Rename', 'site-foundry' ) }\n\t\t\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c208",
+  "file": "site-foundry/src/admin-ui/global-styles/detail-header.js",
+  "line": 65,
+  "component": "MenuItem",
+  "enclosing": "DetailHeader",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\t\t\tisDestructive\n\t\t\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t\t\t\t\tonDelete();\n\t\t\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t\t\t{ __( 'Delete', 'site-foundry' ) }\n\t\t\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c226",
+  "file": "site-foundry/src/admin-ui/screens/brands.js",
+  "line": 381,
+  "component": "MenuItem",
+  "enclosing": "BrandsScreen",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tsetDefault(\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tstored\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t);\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t{ __(\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t'Set as default',\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t'site-foundry'\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t) }\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c227",
+  "file": "site-foundry/src/admin-ui/screens/brands.js",
+  "line": 395,
+  "component": "MenuItem",
+  "enclosing": "BrandsScreen",
+  "source": "<MenuItem\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tisDestructive\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tsetPendingDelete(\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\tstored\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t);\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t{ __(\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t'Delete',\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t'site-foundry'\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t) }\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t</MenuItem>"
+ },
+ {
+  "id": "c031",
+  "file": "gutenberg/packages/editor/src/components/post-publish-panel/index.js",
+  "line": 144,
+  "component": "Button",
+  "enclosing": "PostPublishPanel",
+  "source": "<Button\n\t\t\t\t\t\t\t\tref={ cancelButtonRef }\n\t\t\t\t\t\t\t\taccessibleWhenDisabled\n\t\t\t\t\t\t\t\tdisabled={ isSavingNonPostEntityChanges }\n\t\t\t\t\t\t\t\tonClick={ onClose }\n\t\t\t\t\t\t\t\tvariant=\"secondary\"\n\t\t\t\t\t\t\t\tsize=\"compact\"\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Cancel' ) }\n\t\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c085",
+  "file": "gutenberg/packages/editor/src/components/sync-connection-error-modal/index.tsx",
+  "line": 242,
+  "component": "Button",
+  "enclosing": "SyncConnectionErrorModal",
+  "source": "<Button\n\t\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\t\taccessibleWhenDisabled\n\t\t\t\t\t\t\t\taria-disabled={ isRetrying }\n\t\t\t\t\t\t\t\tdisabled={ isRetrying }\n\t\t\t\t\t\t\t\tisBusy={ isRetrying }\n\t\t\t\t\t\t\t\tvariant=\"primary\"\n\t\t\t\t\t\t\t\tonClick={ manualRetry }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Retry' ) }\n\t\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c162",
+  "file": "gutenberg/packages/edit-site/src/components/add-new-template/index.js",
+  "line": 94,
+  "component": "Button",
+  "enclosing": "TemplateListItem",
+  "source": "<Button\n\t\t\t__next40pxDefaultSize\n\t\t\tclassName={ className }\n\t\t\tonClick={ onClick }\n\t\t\tlabel={ description }\n\t\t\tshowTooltip={ !! description }\n\t\t>\n\t\t\t<Flex\n\t\t\t\tas=\"span\"\n\t\t\t\tspacing={ 2 }\n\t\t\t\talign=\"center\"\n\t\t\t\tjustify=\"center\"\n\t\t\t\tstyle={ { width: '100%' } }\n\t\t\t\tdirection={ direction }\n\t\t\t>\n\t\t\t\t<div className=\"edit-site-add-new-template__template-icon\">\n\t\t\t\t\t<WCIcon icon={ icon } />\n\t\t\t\t</div>\n\t\t\t\t<VStack\n\t\t\t\t\tclassName=\"edit-site-add-new-template__template-name\"\n\t\t\t\t\talignment=\"center\"\n\t\t\t\t\tspacing={ 0 }\n\t\t\t\t>\n\t\t\t\t\t<WCText\n\t\t\t\t\t\talign=\"center\"\n\t\t\t\t\t\tweight=\"var(--wpds-typography-font-weight-emphasis)\"\n\t\t\t\t\t\tlineHeight={ 1.53846153846 } // 20px\n\t\t\t\t\t>\n\t\t\t\t\t\t{ title }\n\t\t\t\t\t</WCText>\n\t\t\t\t\t{ children }\n\t\t\t\t</VStack>\n\t\t\t</Flex>\n\t\t</Button>"
+ },
+ {
+  "id": "c120",
+  "file": "gutenberg/packages/editor/src/components/post-format/index.js",
+  "line": 95,
+  "component": "Button",
+  "enclosing": "PostFormat",
+  "source": "<Button\n\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\tvariant=\"link\"\n\t\t\t\t\t\t\tonClick={ () =>\n\t\t\t\t\t\t\t\tonUpdatePostFormat( suggestion.id )\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ sprintf(\n\t\t\t\t\t\t\t\t/* translators: %s: post format */\n\t\t\t\t\t\t\t\t__( 'Apply suggested format: %s' ),\n\t\t\t\t\t\t\t\tsuggestion.caption\n\t\t\t\t\t\t\t) }\n\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c110",
+  "file": "gutenberg/packages/editor/src/components/editor-history/redo.js",
+  "line": 20,
+  "component": "Button",
+  "enclosing": "EditorHistoryRedo",
+  "source": "<Button\n\t\t\t__next40pxDefaultSize\n\t\t\t{ ...props }\n\t\t\tref={ ref }\n\t\t\ticon={ ! isRTL() ? redoIcon : undoIcon }\n\t\t\t/* translators: button label text should, if possible, be under 16 characters. */\n\t\t\tlabel={ __( 'Redo' ) }\n\t\t\tshortcut={ shortcut }\n\t\t\t// If there are no redo levels we don't want to actually disable this\n\t\t\t// button, because it will remove focus for keyboard users.\n\t\t\t// See: https://github.com/WordPress/gutenberg/issues/3486\n\t\t\taria-disabled={ ! hasRedo }\n\t\t\tonClick={ hasRedo ? redo : undefined }\n\t\t\tclassName=\"editor-history__redo\"\n\t\t/>"
+ },
+ {
+  "id": "c103",
+  "file": "gutenberg/packages/editor/src/components/post-taxonomies/most-used-terms.js",
+  "line": 57,
+  "component": "Button",
+  "enclosing": "MostUsedTerms",
+  "source": "<Button\n\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\tvariant=\"link\"\n\t\t\t\t\t\t\tonClick={ () => onSelect( term ) }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ term.name }\n\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c220",
+  "file": "site-foundry/src/admin-ui/screens/blueprints-list.js",
+  "line": 339,
+  "component": "Button",
+  "enclosing": "BlueprintsList",
+  "source": "<Button\n\t\t\t\t\t\tvariant=\"primary\"\n\t\t\t\t\t\tonClick={ () => navigate( '#/new' ) }\n\t\t\t\t\t>\n\t\t\t\t\t\t{ __( 'Add New', 'site-foundry' ) }\n\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c113",
+  "file": "gutenberg/packages/editor/src/components/post-url/panel.js",
+  "line": 84,
+  "component": "Button",
+  "enclosing": "PostURLToggle",
+  "source": "<Button\n\t\t\tsize=\"compact\"\n\t\t\tclassName=\"editor-post-url__panel-toggle\"\n\t\t\tvariant=\"tertiary\"\n\t\t\taria-expanded={ isOpen }\n\t\t\taria-label={\n\t\t\t\t// translators: %s: Current post link.\n\t\t\t\tsprintf( __( 'Change link: %s' ), decodedSlug )\n\t\t\t}\n\t\t\tonClick={ onClick }\n\t\t>\n\t\t\t<>{ decodedSlug }</>\n\t\t</Button>"
+ },
+ {
+  "id": "c188",
+  "file": "site-foundry/src/admin-ui/global-styles/size-presets.js",
+  "line": 117,
+  "component": "Button",
+  "enclosing": "PresetGroup",
+  "source": "<Button\n\t\t\t\t\t\t\t\tlabel={ labels.add }\n\t\t\t\t\t\t\t\ticon={ plus }\n\t\t\t\t\t\t\t\tsize=\"small\"\n\t\t\t\t\t\t\t\tonClick={ onAdd }\n\t\t\t\t\t\t\t/>"
+ },
+ {
+  "id": "c224",
+  "file": "site-foundry/src/admin-ui/screens/brands.js",
+  "line": 353,
+  "component": "Button",
+  "enclosing": "BrandsScreen",
+  "source": "<Button\n\t\t\t\t\t\t\t\t\t\t\tvariant=\"primary\"\n\t\t\t\t\t\t\t\t\t\t\tisBusy={ saving }\n\t\t\t\t\t\t\t\t\t\t\tdisabled={ saving }\n\t\t\t\t\t\t\t\t\t\t\tonClick={ save }\n\t\t\t\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t\t\t\t{ draft.id\n\t\t\t\t\t\t\t\t\t\t\t\t? __( 'Save', 'site-foundry' )\n\t\t\t\t\t\t\t\t\t\t\t\t: __(\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t'Create',\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t'site-foundry'\n\t\t\t\t\t\t\t\t\t\t\t\t  ) }\n\t\t\t\t\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c200",
+  "file": "site-foundry/src/admin-ui/global-styles/preset-value-control.js",
+  "line": 111,
+  "component": "Button",
+  "enclosing": "PresetValueControl",
+  "source": "<Button\n\t\t\t\t\t\tsize=\"small\"\n\t\t\t\t\t\ticon={ settings }\n\t\t\t\t\t\tlabel={ __( 'Custom size', 'site-foundry' ) }\n\t\t\t\t\t\tisPressed={ CUSTOM === mode }\n\t\t\t\t\t\tonClick={ () => toggleMode( CUSTOM ) }\n\t\t\t\t\t/>"
+ },
+ {
+  "id": "c055",
+  "file": "gutenberg/packages/editor/src/components/template-actions-panel/classic-theme-content.js",
+  "line": 142,
+  "component": "Button",
+  "enclosing": "ClassicThemeContent",
+  "source": "<Button\n\t\t\t\t\t\t\t\tclassName=\"editor-template-actions-panel__action\"\n\t\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\t\tvariant=\"secondary\"\n\t\t\t\t\t\t\t\tonClick={ () => setIsCreateModalOpen( true ) }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ ! templateId\n\t\t\t\t\t\t\t\t\t? __( 'Create block template' )\n\t\t\t\t\t\t\t\t\t: __( 'Create new' ) }\n\t\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c094",
+  "file": "gutenberg/packages/editor/src/components/post-template/classic-theme.js",
+  "line": 166,
+  "component": "Button",
+  "enclosing": "PostTemplateDropdownContent",
+  "source": "<Button\n\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\tvariant=\"link\"\n\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\tonNavigateToEntityRecord( {\n\t\t\t\t\t\t\t\tpostId: currentTemplateId,\n\t\t\t\t\t\t\t\tpostType: 'wp_template',\n\t\t\t\t\t\t\t} );\n\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\tcreateSuccessNotice(\n\t\t\t\t\t\t\t\t__(\n\t\t\t\t\t\t\t\t\t'Editing template. Changes made here affect all posts and pages that use the template.'\n\t\t\t\t\t\t\t\t),\n\t\t\t\t\t\t\t\t{\n\t\t\t\t\t\t\t\t\ttype: 'snackbar',\n\t\t\t\t\t\t\t\t\tactions: [\n\t\t\t\t\t\t\t\t\t\t{\n\t\t\t\t\t\t\t\t\t\t\tlabel: __( 'Go back' ),\n\t\t\t\t\t\t\t\t\t\t\tonClick: () =>\n\t\t\t\t\t\t\t\t\t\t\t\tgetEditorSettings().onNavigateToPreviousEntityRecord(),\n\t\t\t\t\t\t\t\t\t\t},\n\t\t\t\t\t\t\t\t\t],\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t);\n\t\t\t\t\t\t} }\n\t\t\t\t\t>\n\t\t\t\t\t\t{ __( 'Edit template' ) }\n\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c002",
+  "file": "gutenberg/packages/editor/src/components/post-actions/set-as-posts-page.js",
+  "line": 97,
+  "component": "Button",
+  "enclosing": "SetAsPostsPageModal",
+  "source": "<Button\n\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\tvariant=\"primary\"\n\t\t\t\t\t\ttype=\"submit\"\n\t\t\t\t\t\tdisabled={ isSaving }\n\t\t\t\t\t\taccessibleWhenDisabled\n\t\t\t\t\t>\n\t\t\t\t\t\t{ modalButtonLabel }\n\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c084",
+  "file": "gutenberg/packages/editor/src/components/sync-connection-error-modal/index.tsx",
+  "line": 234,
+  "component": "Button",
+  "enclosing": "SyncConnectionErrorModal",
+  "source": "<Button\n\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\tref={ copyButtonRef }\n\t\t\t\t\t\t\tvariant={ manualRetry ? 'secondary' : 'primary' }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Copy Post Content' ) }\n\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c056",
+  "file": "gutenberg/packages/editor/src/components/template-actions-panel/block-theme-content.js",
+  "line": 179,
+  "component": "Button",
+  "enclosing": "TemplateActionsPanelContent",
+  "source": "<Button\n\t\t\t\t\t\t\t\tclassName=\"editor-template-actions-panel__action\"\n\t\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\t\tvariant=\"secondary\"\n\t\t\t\t\t\t\t\tonClick={ () => setIsCreateModalOpen( true ) }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Create new' ) }\n\t\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c111",
+  "file": "gutenberg/packages/editor/src/components/editor-history/undo.js",
+  "line": 16,
+  "component": "Button",
+  "enclosing": "EditorHistoryUndo",
+  "source": "<Button\n\t\t\t__next40pxDefaultSize\n\t\t\t{ ...props }\n\t\t\tref={ ref }\n\t\t\ticon={ ! isRTL() ? undoIcon : redoIcon }\n\t\t\t/* translators: button label text should, if possible, be under 16 characters. */\n\t\t\tlabel={ __( 'Undo' ) }\n\t\t\tshortcut={ displayShortcut.primary( 'z' ) }\n\t\t\t// If there are no undo levels we don't want to actually disable this\n\t\t\t// button, because it will remove focus for keyboard users.\n\t\t\t// See: https://github.com/WordPress/gutenberg/issues/3486\n\t\t\taria-disabled={ ! hasUndo }\n\t\t\tonClick={ hasUndo ? undo : undefined }\n\t\t\tclassName=\"editor-history__undo\"\n\t\t/>"
+ },
+ {
+  "id": "c214",
+  "file": "site-foundry/src/admin-ui/global-styles/brand-name.js",
+  "line": 23,
+  "component": "Button",
+  "enclosing": "BrandName",
+  "source": "<Button\n\t\t\t\t\tclassName=\"sf-brand-name\"\n\t\t\t\t\tonClick={ onToggle }\n\t\t\t\t\taria-expanded={ isOpen }\n\t\t\t\t\tlabel={ __( 'Rename brand', 'site-foundry' ) }\n\t\t\t\t\tshowTooltip\n\t\t\t\t>\n\t\t\t\t\t{ name || __( 'Untitled brand', 'site-foundry' ) }\n\t\t\t\t</Button>"
+ },
+ {
+  "id": "c034",
+  "file": "gutenberg/packages/editor/src/components/post-publish-panel/postpublish.js",
+  "line": 167,
+  "component": "Button",
+  "enclosing": "PostPublishPanelPostpublish",
+  "source": "<Button\n\t\t\t\t\t\tvariant={ isScheduled ? 'primary' : 'secondary' }\n\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\thref={ addLink }\n\t\t\t\t\t>\n\t\t\t\t\t\t{ addNewPostLabel }\n\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c166",
+  "file": "gutenberg/packages/edit-site/src/components/add-new-template/add-custom-template-modal-content.js",
+  "line": 282,
+  "component": "Button",
+  "enclosing": "AddCustomTemplateModalContent",
+  "source": "<Button\n\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\tvariant=\"tertiary\"\n\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t// If general template exists, go directly back to main screen\n\t\t\t\t\t\t\t\t// instead of showing the choice screen\n\t\t\t\t\t\t\t\tif ( entityForSuggestions.hasGeneralTemplate ) {\n\t\t\t\t\t\t\t\t\tonBack();\n\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\tsetShowSearchEntities( false );\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Back' ) }\n\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c127",
+  "file": "gutenberg/packages/edit-site/src/components/sidebar-navigation-screen-navigation-menu/rename-modal.js",
+  "line": 45,
+  "component": "Button",
+  "enclosing": "RenameModal",
+  "source": "<Button\n\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\taccessibleWhenDisabled\n\t\t\t\t\t\t\tdisabled={ ! isEditedMenuTitleValid }\n\t\t\t\t\t\t\tvariant=\"primary\"\n\t\t\t\t\t\t\ttype=\"submit\"\n\t\t\t\t\t\t\tonClick={ ( e ) => {\n\t\t\t\t\t\t\t\te.preventDefault();\n\n\t\t\t\t\t\t\t\tif ( ! isEditedMenuTitleValid ) {\n\t\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\tonSave( { title: editedMenuTitle } );\n\n\t\t\t\t\t\t\t\t// Immediate close avoids ability to hit save multiple times.\n\t\t\t\t\t\t\t\tonClose();\n\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ __( 'Save' ) }\n\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c029",
+  "file": "gutenberg/packages/editor/src/components/post-publish-panel/maybe-post-format-panel.js",
+  "line": 20,
+  "component": "Button",
+  "enclosing": "PostFormatSuggestion",
+  "source": "<Button\n\t\t__next40pxDefaultSize\n\t\tvariant=\"link\"\n\t\tonClick={ () => onUpdatePostFormat( suggestedPostFormat ) }\n\t>\n\t\t{ suggestionText }\n\t</Button>"
+ },
+ {
+  "id": "c185",
+  "file": "gutenberg/packages/edit-site/src/components/editor/index.js",
+  "line": 207,
+  "component": "Button",
+  "enclosing": "EditSiteEditor",
+  "source": "<Button\n\t\t\t\t\t\t\t\t\t\tsize=\"compact\"\n\t\t\t\t\t\t\t\t\t\tlabel={ __( 'Open Navigation' ) }\n\t\t\t\t\t\t\t\t\t\tshowTooltip={ ! showIconLabels }\n\t\t\t\t\t\t\t\t\t\ttooltipPosition=\"middle right\"\n\t\t\t\t\t\t\t\t\t\tonClick={ () => {\n\t\t\t\t\t\t\t\t\t\t\tresetZoomLevel();\n\t\t\t\t\t\t\t\t\t\t\tsetCurrentRevisionId( null );\n\t\t\t\t\t\t\t\t\t\t\thistory.navigate(\n\t\t\t\t\t\t\t\t\t\t\t\tgetNavigationPath(\n\t\t\t\t\t\t\t\t\t\t\t\t\tlocation,\n\t\t\t\t\t\t\t\t\t\t\t\t\tpostWithTemplate\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t? context.postType\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t: postType\n\t\t\t\t\t\t\t\t\t\t\t\t),\n\t\t\t\t\t\t\t\t\t\t\t\t{\n\t\t\t\t\t\t\t\t\t\t\t\t\ttransition:\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t'canvas-mode-view-transition',\n\t\t\t\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\t\t\t);\n\t\t\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t\t\t\ticon={\n\t\t\t\t\t\t\t\t\t\t\tisRTL() ? chevronRight : chevronLeft\n\t\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\t/>"
+ },
+ {
+  "id": "c066",
+  "file": "gutenberg/packages/editor/src/components/post-discussion/panel.js",
+  "line": 70,
+  "component": "Button",
+  "enclosing": "PostDiscussionToggle",
+  "source": "<Button\n\t\t\tsize=\"compact\"\n\t\t\tclassName=\"editor-post-discussion__panel-toggle\"\n\t\t\tvariant=\"tertiary\"\n\t\t\taria-label={ __( 'Change discussion options' ) }\n\t\t\taria-expanded={ isOpen }\n\t\t\tonClick={ onClick }\n\t\t>\n\t\t\t{ label }\n\t\t</Button>"
+ },
+ {
+  "id": "c119",
+  "file": "gutenberg/packages/editor/src/components/page-attributes/parent.js",
+  "line": 216,
+  "component": "Button",
+  "enclosing": "PostParentToggle",
+  "source": "<Button\n\t\t\tsize=\"compact\"\n\t\t\tclassName=\"editor-post-parent__panel-toggle\"\n\t\t\tvariant=\"tertiary\"\n\t\t\taria-expanded={ isOpen }\n\t\t\taria-label={\n\t\t\t\t// translators: %s: Current post parent.\n\t\t\t\tsprintf( __( 'Change parent: %s' ), parentTitle )\n\t\t\t}\n\t\t\tonClick={ onClick }\n\t\t>\n\t\t\t{ parentTitle }\n\t\t</Button>"
+ },
+ {
+  "id": "c044",
+  "file": "gutenberg/packages/editor/src/components/post-revisions-preview/revisions-header.js",
+  "line": 95,
+  "component": "Button",
+  "enclosing": "RevisionsHeader",
+  "source": "<Button\n\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\taccessibleWhenDisabled\n\t\t\t\t\t\tvariant=\"primary\"\n\t\t\t\t\t\tsize=\"compact\"\n\t\t\t\t\t\tclassName=\"editor-revisions-header__restore-button\"\n\t\t\t\t\t\tdisabled={ ! canRestore }\n\t\t\t\t\t\tonClick={ handleRestore }\n\t\t\t\t\t>\n\t\t\t\t\t\t{ __( 'Restore' ) }\n\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c011",
+  "file": "gutenberg/packages/editor/src/components/styles-canvas/index.js",
+  "line": 108,
+  "component": "Button",
+  "enclosing": "StylesCanvas",
+  "source": "<Button\n\t\t\t\t\t\tsize=\"compact\"\n\t\t\t\t\t\tclassName=\"editor-styles-canvas__close-button\"\n\t\t\t\t\t\ticon={ closeSmall }\n\t\t\t\t\t\tlabel={ __( 'Close' ) }\n\t\t\t\t\t\tonClick={ onCloseCanvas }\n\t\t\t\t\t/>"
+ },
+ {
+  "id": "c032",
+  "file": "gutenberg/packages/editor/src/components/post-publish-panel/postpublish.js",
+  "line": 66,
+  "component": "Button",
+  "enclosing": "CopyButton",
+  "source": "<Button __next40pxDefaultSize variant=\"secondary\" ref={ ref }>\n\t\t\t{ showCopyConfirmation ? __( 'Copied!' ) : __( 'Copy' ) }\n\t\t</Button>"
+ },
+ {
+  "id": "c216",
+  "file": "site-foundry/src/admin-ui/global-styles/rename-dialog.js",
+  "line": 91,
+  "component": "Button",
+  "enclosing": "RenameDialog",
+  "source": "<Button\n\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\tvariant=\"primary\"\n\t\t\t\t\t\t\ttype=\"submit\"\n\t\t\t\t\t\t\tdisabled={ isConfirmDisabled }\n\t\t\t\t\t\t>\n\t\t\t\t\t\t\t{ confirmLabel ?? __( 'Save', 'site-foundry' ) }\n\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c028",
+  "file": "gutenberg/packages/editor/src/components/post-publish-panel/maybe-upload-media.js",
+  "line": 246,
+  "component": "Button",
+  "enclosing": "MaybeUploadMediaPanel",
+  "source": "<Button\n\t\t\t\t\t\tsize=\"compact\"\n\t\t\t\t\t\tvariant=\"primary\"\n\t\t\t\t\t\tonClick={ uploadImages }\n\t\t\t\t\t>\n\t\t\t\t\t\t{ _x( 'Upload', 'verb' ) }\n\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c082",
+  "file": "gutenberg/packages/editor/src/components/post-switch-to-draft-button/index.js",
+  "line": 54,
+  "component": "Button",
+  "enclosing": "PostSwitchToDraftButton",
+  "source": "<Button\n\t\t\t\t__next40pxDefaultSize\n\t\t\t\tclassName=\"editor-post-switch-to-draft\"\n\t\t\t\tonClick={ () => {\n\t\t\t\t\tif ( ! isDisabled ) {\n\t\t\t\t\t\tsetShowConfirmDialog( true );\n\t\t\t\t\t}\n\t\t\t\t} }\n\t\t\t\taria-disabled={ isDisabled }\n\t\t\t\tvariant=\"secondary\"\n\t\t\t\tstyle={ { flexGrow: '1', justifyContent: 'center' } }\n\t\t\t>\n\t\t\t\t{ __( 'Switch to draft' ) }\n\t\t\t</Button>"
+ },
+ {
+  "id": "c201",
+  "file": "site-foundry/src/admin-ui/global-styles/preset-value-control.js",
+  "line": 118,
+  "component": "Button",
+  "enclosing": "PresetValueControl",
+  "source": "<Button\n\t\t\t\t\t\tsize=\"small\"\n\t\t\t\t\t\ticon={ code }\n\t\t\t\t\t\tlabel={ __( 'CSS expression', 'site-foundry' ) }\n\t\t\t\t\t\tisPressed={ EXPRESSION === mode }\n\t\t\t\t\t\tonClick={ () => toggleMode( EXPRESSION ) }\n\t\t\t\t\t/>"
+ },
+ {
+  "id": "c108",
+  "file": "gutenberg/packages/editor/src/components/post-locked-modal/index.js",
+  "line": 310,
+  "component": "Button",
+  "enclosing": "PostLockedModal",
+  "source": "<Button\n\t\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\t\tvariant=\"tertiary\"\n\t\t\t\t\t\t\t\thref={ unlockUrl }\n\t\t\t\t\t\t\t>\n\t\t\t\t\t\t\t\t{ __( 'Take over' ) }\n\t\t\t\t\t\t\t</Button>"
+ },
+ {
+  "id": "c074",
+  "file": "gutenberg/packages/editor/src/components/collab-sidebar/note-thread.js",
+  "line": 332,
+  "component": "Button",
+  "enclosing": "NoteThread",
+  "source": "<Button\n\t\t\t\t\tclassName=\"editor-collab-sidebar-panel__skip-to-block\"\n\t\t\t\t\tvariant=\"secondary\"\n\t\t\t\t\tsize=\"compact\"\n\t\t\t\t\tonClick={ ( event ) => {\n\t\t\t\t\t\tevent.stopPropagation();\n\t\t\t\t\t\trelatedBlockElement?.focus();\n\t\t\t\t\t} }\n\t\t\t\t>\n\t\t\t\t\t{ __( 'Back to block' ) }\n\t\t\t\t</Button>"
+ },
+ {
+  "id": "c209",
+  "file": "site-foundry/src/admin-ui/global-styles/semantic-palette.js",
+  "line": 156,
+  "component": "Button",
+  "enclosing": "RampSwatchPicker",
+  "source": "<Button\n\t\t\t\t\t\t\t\t\t__next40pxDefaultSize\n\t\t\t\t\t\t\t\t\tclassName=\"components-circular-option-picker__option\"\n\t\t\t\t\t\t\t\t\tstyle={ {\n\t\t\t\t\t\t\t\t\t\tbackgroundColor: swatch.color,\n\t\t\t\t\t\t\t\t\t\tcolor: swatch.color,\n\t\t\t\t\t\t\t\t\t} }\n\t\t\t\t\t\t\t\t\taria-pressed={ isSelected }\n\t\t\t\t\t\t\t\t\tlabel={ swatch.name }\n\t\t\t\t\t\t\t\t\tonClick={ () => onChange( swatch.cssVar ) }\n\t\t\t\t\t\t\t\t/>"
+ },
+ {
+  "id": "c211",
+  "file": "site-foundry/src/admin-ui/global-styles/semantic-palette.js",
+  "line": 282,
+  "component": "Button",
+  "enclosing": "ScreenSemanticPalette",
+  "source": "<Button\n\t\t\t\t\t\t\t\t\t\t\t\t\tlabel={ __(\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t'Add color',\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t'site-foundry'\n\t\t\t\t\t\t\t\t\t\t\t\t\t) }\n\t\t\t\t\t\t\t\t\t\t\t\t\ticon={ plus }\n\t\t\t\t\t\t\t\t\t\t\t\t\tsize=\"small\"\n\t\t\t\t\t\t\t\t\t\t\t\t\tdisabled={\n\t\t\t\t\t\t\t\t\t\t\t\t\t\t! swatches.length\n\t\t\t\t\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\t\t\t\t\tonClick={ add }\n\t\t\t\t\t\t\t\t\t\t\t\t/>"
+ }
+]

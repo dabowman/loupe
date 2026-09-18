@@ -25654,7 +25654,63 @@ import { readFileSync as readFileSync4 } from "node:fs";
 import { join as join5 } from "node:path";
 var ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 var FLOOR = 0.5;
-var BATCH = 40;
+var CONCURRENCY = 6;
+var RETRIES = 4;
+var BATCH = {
+  // As shipped when this judgement was written.
+  variants: 40,
+  // Measured, one run over the eval's 100 controls — destination recall is the
+  // column that decides it, because every redirect in the abstract language
+  // fires on that class:
+  //
+  //   batch   all   destination P/R
+  //      40   81%      91% / 69%
+  //      20   90%      96% / 83%
+  //      10   90%     100% / 86%
+  //       4   91%     100% / 90%
+  //       1   93%     100% / 97%
+  //
+  // Sharing a state with 39 other controls costs nearly a third of the
+  // destinations. A control is a few lines, so one request each is cheap; the
+  // pool below is what keeps it quick.
+  represents: 1
+};
+async function ask(items, elementOf, questionOf, apiKey, fetchImpl, size) {
+  const batches = [];
+  for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
+  const sendBatch = async (batch) => {
+    const body2 = JSON.stringify({
+      model: "jev-latest",
+      state: { elements: batch.map(elementOf) },
+      questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, questionOf(item, i)]))
+    });
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetchImpl(ENDPOINT, {
+        method: "POST",
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: body2
+      });
+      if (res.ok) {
+        const parsed = await res.json();
+        return batch.map((_, i) => parsed.answers[`e${i}`]);
+      }
+      const transient = res.status === 429 || res.status >= 500;
+      if (!transient || attempt >= RETRIES) throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+    }
+  };
+  const done = new Array(batches.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, batches.length) }, async () => {
+      while (next < batches.length) {
+        const at = next++;
+        done[at] = await sendBatch(batches[at] ?? []);
+      }
+    })
+  );
+  return done.flat();
+}
 var notKey = (e) => `not_${e.name.toLowerCase()}`;
 function targetOf(f, withVariants) {
   if (f.rule !== "system/raw-element") return void 0;
@@ -25667,10 +25723,9 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
     const target = targetOf(f, withVariants);
     return target ? [{ f, target }] : [];
   });
-  const answers = [];
-  for (let at = 0; at < jobs.length; at += BATCH) {
-    const batch = jobs.slice(at, at + BATCH);
-    const elements = batch.map(({ f }) => {
+  const answers = await ask(
+    jobs,
+    ({ f }) => {
       const lines = readFileSync4(join5(root2, f.file), "utf8").split("\n");
       const i = f.line - 1;
       return {
@@ -25680,33 +25735,23 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
         context_before: lines.slice(Math.max(0, i - 5), i).join("\n"),
         source: lines.slice(i, i + 10).join("\n")
       };
-    });
-    const questions = Object.fromEntries(
-      batch.map(({ f, target }, i) => [
-        `e${i}`,
-        {
-          type: "choice",
-          instructions: `The ${f.code ?? "element"} on the first line of \`elements[${i}].source\` is flagged to be replaced by the design system's ${target.name} component. Which ${target.name} variant matches the role this element plays in its interface?`,
-          // The option name is sent to the model too, so it says what it means:
-          // `none` scored the same elements 0.3 lower than `not_text`. Wording
-          // that forced a decision ("holds no text of its own") cleared the
-          // floor more often and called real text `not_text` doing it.
-          criteria: {
-            ...target.variants,
-            [notKey(target)]: `The element is not a run of content ${target.name} renders \u2014 a wrapper around controls, an icon holder or colour swatch, a layout box \u2014 so no ${target.name} variant applies.`
-          }
-        }
-      ])
-    );
-    const res = await fetchImpl(ENDPOINT, {
-      method: "POST",
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: "jev-latest", state: { elements }, questions })
-    });
-    if (!res.ok) throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const body2 = await res.json();
-    batch.forEach((_, i) => answers.push(body2.answers[`e${i}`]));
-  }
+    },
+    ({ f, target }, i) => ({
+      type: "choice",
+      instructions: `The ${f.code ?? "element"} on the first line of \`elements[${i}].source\` is flagged to be replaced by the design system's ${target.name} component. Which ${target.name} variant matches the role this element plays in its interface?`,
+      // The option name is sent to the model too, so it says what it means:
+      // `none` scored the same elements 0.3 lower than `not_text`. Wording
+      // that forced a decision ("holds no text of its own") cleared the
+      // floor more often and called real text `not_text` doing it.
+      criteria: {
+        ...target.variants,
+        [notKey(target)]: `The element is not a run of content ${target.name} renders \u2014 a wrapper around controls, an icon holder or colour swatch, a layout box \u2014 so no ${target.name} variant applies.`
+      }
+    }),
+    apiKey,
+    fetchImpl,
+    BATCH.variants
+  );
   let annotated = 0;
   jobs.forEach(({ f, target }, i) => {
     const a = answers[i];

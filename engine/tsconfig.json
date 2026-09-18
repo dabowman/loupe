@@ -32,7 +32,7 @@
 		"isolatedModules": true,
 		"skipLibCheck": true
 	},
-	"include": ["src/**/*.ts", "tests/*.ts", "bin/*.mjs", "build.mjs", "audit-suppressions.ts"],
+	"include": ["src/**/*.ts", "tests/*.ts", "evals/**/*.ts", "bin/*.mjs", "build.mjs", "audit-suppressions.ts"],
 	// Fixtures are deliberately non-conforming sample code — the checker's input,
 	// not the checker.
 	"exclude": ["tests/fixtures", "node_modules", "dist"]
