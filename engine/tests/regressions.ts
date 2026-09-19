@@ -1940,4 +1940,59 @@ await check('a superseded rule that is off does not delete the finding it supers
 	}
 });
 
+// util.parseArgs keeps an undeclared switch's `=false` as the string 'false',
+// which is truthy: `init --force=false` overwrote the config it was told to keep.
+await check('a switch spelled `=false` is off', () => {
+	const root = scratch('loupe-false-');
+	try {
+		const own = `${JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } })}\n`;
+		writeAll(root, {
+			'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '*' } }),
+			'loupe.config.json': own,
+		});
+		const { status } = runCli(['init', '--root', root, '--force=false']);
+		assert(status === 2, `init --force=false exited ${status}`);
+		assert(readFileSync(join(root, 'loupe.config.json'), 'utf8') === own, 'the config was overwritten');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Two regressions of the checks/ split, both where a finding went missing
+// rather than wrong: one bad elementMap entry took the whole run down, and an
+// inline style on `<UI.Card.Header>` was never read.
+await check('an elementMap entry with no component, and a three-level tag, are still checked', async () => {
+	const root = scratch('loupe-elements-');
+	writeAll(root, {
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', designSystem: { elementMap: { p: { styledOnly: true } } } }),
+		'src/A.jsx': [
+			"import * as UI from '@wordpress/components';",
+			'export const A = () => (',
+			'\t<>',
+			'\t\t<p className="intro" style={{ marginTop: 8 }} />',
+			"\t\t<UI.Card.Header style={{ color: '#123456' }} />",
+			'\t</>',
+			');',
+		].join('\n'),
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const { findings } = await analyze(config, { scope: null });
+		// An inline registry is the config itself: a malformed one is a config
+		// error, not a registry quietly left empty with its rules switched off.
+		writeAll(root, { 'bad.config.json': JSON.stringify({ extends: 'wpds', patterns: ['page-header'] }) });
+		const bad = await loadConfig({ root, configPath: join(root, 'bad.config.json') }).then(
+			() => 'loaded',
+			(err: unknown) => (err instanceof Error ? err.message : String(err)),
+		);
+		assert(bad !== 'loaded', 'a malformed inline registry loaded as an empty one');
+		assert(
+			findings.some((f) => f.line === 5 && f.rule === 'tokens/hardcoded-value'),
+			`the member tag's inline style was not read: ${findings.map((f) => `${f.rule}:${f.line}`).join(', ')}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();

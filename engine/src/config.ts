@@ -372,10 +372,11 @@ function readRegistry<T>(
 	load: (raw: unknown) => T,
 	empty: T,
 ): T {
-	if (!Array.isArray(spec) && typeof spec !== 'string') return empty;
+	// Inline, it is the config itself, and a malformed one is a config error.
+	if (Array.isArray(spec)) return load(spec);
+	if (typeof spec !== 'string') return empty;
 	try {
-		const raw: unknown =
-			typeof spec === 'string' ? JSON.parse(readFileSync(isAbsolute(spec) ? spec : join(root, spec), 'utf8')) : spec;
+		const raw: unknown = JSON.parse(readFileSync(isAbsolute(spec) ? spec : join(root, spec), 'utf8'));
 		return registryApplies(raw, packages) ? load(raw) : empty;
 	} catch {
 		return empty;

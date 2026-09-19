@@ -474,9 +474,10 @@ lines before the declaration and the three from it. The options are the
 candidate tokens, each described by the active profile's `tokenDescriptions`
 (for WPDS, the `$description` of every token in `@wordpress/theme`'s DTCG
 sources), plus `keep` where it is allowed. A value settles only if every part
-clears 0.5, apart from the in-scale spacing picks above. A part judged `keep` keeps the whole declaration, because a
-half-tokenized value is still a finding. The result is written into the finding
-(`padding: 6px 12px → var(…-sm) var(…-md) (judged 0.60)`, or
+clears 0.5, apart from the in-scale spacing picks above. A value judged `keep` in
+every part is kept; one that mixes `keep` with a token is left for review, since
+a `var()` anywhere in it would exempt the kept literal. The result is written
+into the finding (`padding: 6px 12px → var(…-sm) var(…-md) (judged 0.60)`, or
 `deliberate, no token fits`) and recorded on `judged`. For values, `answer` is
 the replacement text or `keep`.
 
@@ -610,6 +611,7 @@ directory) are not: re-run `loupe baseline` to record one in the project.
 ```jsonc
 // .claude/settings.local.json
 {
+  "env": { "LOUPE": "on" },
   "hooks": {
     "Stop": [
       { "hooks": [{ "type": "command", "command": "node /abs/path/to/engine/bin/loupe.mjs hook" }] }

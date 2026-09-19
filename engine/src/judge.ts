@@ -127,7 +127,14 @@ export async function ask<T>(
 		Array.from({ length: Math.min(CONCURRENCY, batches.length) }, async () => {
 			while (next < batches.length) {
 				const at = next++;
-				done[at] = await sendBatch(batches[at] ?? []);
+				try {
+					done[at] = await sendBatch(batches[at] ?? []);
+				} catch (err) {
+					// One failure fails the whole ask: stop the other workers rather
+					// than pay for answers that are about to be thrown away.
+					next = batches.length;
+					throw err;
+				}
 			}
 		}),
 	);
@@ -335,10 +342,9 @@ function rewrite(f: Finding, what: string, tail: string): void {
  * written.
  *
  * A value is asked about part by part, and settles only when every part does:
- * `padding: 10px 12px` becomes two tokens or nothing, and a part judged
- * deliberate keeps the whole declaration, since a half-tokenized value is
- * still a finding. Where the set has no token for the property at all there
- * is nothing to ask, and the answer is written without a model.
+ * `padding: 10px 12px` becomes two tokens or nothing, and it is kept only when
+ * every part is judged deliberate. Where the set has no token for the property
+ * at all there is nothing to ask, and the answer is written without a model.
  *
  * `judged` carries the replacement value (or {@link KEEP}) so `fix --judge`
  * applies what this wrote, not a second reading of it.
@@ -420,6 +426,10 @@ export async function judgeValues(
 		if (slots.some((_, k) => unsure(k))) continue;
 		const confidence = Math.min(...got.map((a) => a?.confidence ?? 0));
 		const kept = got.find((a) => a?.choice === KEEP);
+		// A keep beside a part that settled on a token is half an answer: keeping
+		// the whole declaration would suppress the part that has a token, and
+		// rewriting the rest would exempt the kept literal. Left for review.
+		if (kept && got.some((a) => a?.choice !== KEEP)) continue;
 		if (kept) {
 			const why = 'deliberate, no token fits';
 			const tail = judgedTail(kept.confidence);

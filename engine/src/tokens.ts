@@ -34,7 +34,7 @@ import type { TokenSet } from './types.ts';
  */
 const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	[/^border-radius|radius$/, /radius/],
-	[/^border(-(top|right|bottom|left))?-width$|^border-width$/, /border-width/],
+	[/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
 	// Colour roles are split finer than the rest: suggesting a background token
 	// for a `color` gives the right pixels and the wrong meaning, which survives
 	// review precisely because it looks correct.
@@ -56,8 +56,10 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	// the sizes (icons, buttons) and surface widths a system also ships under it.
 	[/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
 	[/^cursor$/, /cursor/],
-	[/^transition-duration$|^animation-duration$/, /motion-duration/],
-	[/^transition-timing-function$|^animation-timing-function$/, /motion-easing/],
+	// By role word, not by one system's spelling: WPDS writes `motion-duration-*`,
+	// Archer `duration-*`.
+	[/^transition-duration$|^animation-duration$/, /duration/],
+	[/^transition-timing-function$|^animation-timing-function$/, /easing/],
 ];
 
 /** Comparable form of a CSS value: case, spacing, shorthand hex, `!important`. */
@@ -270,6 +272,11 @@ export function candidatesFor(set: TokenSet, prop: string, part: string): Candid
 		const fm = measure(fv);
 		return fm && fm.kind === m.kind && 'n' in fm ? [[n, fv, fm.n - m.n]] : [];
 	});
+	// The same length in another unit — `1rem` against a `16px` step — is the
+	// exact match the string comparison above cannot see, and it sits on neither
+	// side of itself.
+	const same = steps.filter(([, , d]) => Math.abs(d) < 1e-6).map(([n, fv]): [string, string] => [n, fv]);
+	if (same.length) return { tier: 'exact', options: same, keep: !spacing };
 	const below = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
 	const above = Math.min(...steps.map(([, , d]) => d).filter((d) => d > 0));
 	const options = steps.filter(([, , d]) => d === below || d === above).map(([n, fv]): [string, string] => [n, fv]);
@@ -279,9 +286,26 @@ export function candidatesFor(set: TokenSet, prop: string, part: string): Candid
 
 /**
  * A value's parts, split on whitespace outside parentheses, so `padding: 6px
- * 12px` is two literals and `rgba(0, 0, 0, 0.5)` is one.
+ * 12px` is two literals and `rgba(0, 0, 0, 0.5)` is one — nested ones too:
+ * `rgb(calc(255 * 0.5) 0 0)` is one part, not three that rebuild into `…0 0)`.
  */
-const partsOf = (value: string): string[] => value.trim().match(/(?:[^\s(]+|\([^)]*\))+/g) ?? [];
+function partsOf(value: string): string[] {
+	const out: string[] = [];
+	let part = '';
+	let depth = 0;
+	for (const ch of value.trim()) {
+		if (!depth && /\s/.test(ch)) {
+			if (part) out.push(part);
+			part = '';
+			continue;
+		}
+		if (ch === '(') depth++;
+		else if (ch === ')') depth = Math.max(0, depth - 1);
+		part += ch;
+	}
+	if (part) out.push(part);
+	return out;
+}
 
 /** A part a token could stand for. Zeros, keywords and `url()` pass through. */
 const isLiteralPart = (p: string): boolean =>
@@ -309,13 +333,18 @@ export function planValue(
 	value: string,
 ): 'none' | { parts: string[]; slots: Slot[] } | null {
 	const family = familyFor(set, prop);
-	if (!family.length) return 'none';
+	// A token defined as another token has no literal to offer, but it is still a
+	// token for this property: "none" would be a false statement about the system.
+	if (!family.length) return onRole([...set.known], prop).length ? null : 'none';
 	// A family the engine can measure takes a value apart; one it cannot —
 	// shadows, easings — is matched whole.
 	const measurable = family.some(([, fv]) => measure(fv));
 	const parts = measurable ? partsOf(value) : [value.trim()];
 	const slots: Slot[] = [];
 	for (const [at, part] of parts.entries()) {
+		// `calc(10px + 2px)` holds literals no token replaces, and rewriting the
+		// rest to `var()` would exempt the whole value from the rule.
+		if (measurable && /^(calc|min|max|clamp)\(/i.test(part)) return null;
 		if (measurable && !isLiteralPart(part)) continue;
 		const [only, ...more] = tokensFor(set, prop, part);
 		if (only !== undefined && !more.length) {
@@ -324,7 +353,9 @@ export function planValue(
 		}
 		const candidates = candidatesFor(set, prop, part);
 		if (!candidates) return null;
-		slots.push({ at, part, candidates });
+		// One token equal to it in another unit is as settled as one written the same.
+		const [one, ...others] = candidates.tier === 'exact' ? candidates.options : [];
+		slots.push(one && !others.length ? { at, part, token: one[0] } : { at, part, candidates });
 	}
 	return slots.length ? { parts, slots } : null;
 }

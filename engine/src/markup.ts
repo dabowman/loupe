@@ -640,7 +640,9 @@ export function scanMarkup(
 			readRules(node);
 		}
 		if (node.type !== 'JSXOpeningElement') return;
-		const tag = jsxName(node);
+		// `<UI.Card.Header>` has no name jsxName will vouch for, but its inline
+		// style is still an inline style: read it as the plain element `?.Header`.
+		const tag = jsxName(node) ?? (node.name.type === 'JSXMemberExpression' ? `?.${node.name.property.name}` : null);
 		if (!tag) return;
 		const line = node.loc?.start?.line ?? 1;
 

@@ -407,4 +407,106 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 	}
 });
 
+// Each of these once wrote CSS that was wrong in a way no report would show.
+await check('a value is planned by what it measures, and a part is only what its parentheses close', () => {
+	const set = harvestTokenDefs(
+		postcss.parse(
+			`${JUDGE_TOKENS}\n:root { --wpds-border-width-focus: 2px; --wpds-color-foreground-content-neutral: var(--x); }`,
+		),
+		['--wpds-'],
+		emptyTokenSet(),
+	);
+	// 0.75rem is 12px: the exact token, not the steps either side of it.
+	const rem = planValue(set, 'padding', '0.75rem');
+	assert(rem && rem !== 'none' && rem.slots[0] && 'token' in rem.slots[0], JSON.stringify(rem));
+	assert(rem.slots[0].token === '--wpds-dimension-padding-md', JSON.stringify(rem));
+	// One part, not `rgb(calc(255 * 0.5)` and a stray `0)`.
+	const nested = planValue(set, 'background', 'rgb(calc(255 * 0.5) 0 0)');
+	assert(nested && nested !== 'none' && nested.parts.length === 1, JSON.stringify(nested));
+	// The literal inside calc() has no token, and a var() beside it would hide it.
+	assert(planValue(set, 'padding', 'calc(10px + 2px) 8px') === null, 'a calc() part was passed over');
+	// A focus ring's width is a border width, and a token that is an alias is still a token.
+	assert(planValue(set, 'outline-width', '2px') !== 'none', 'outline-width read as having no token');
+	assert(planValue(set, 'color', '#111') === null, 'an alias-only role read as having no token');
+});
+
+await check('a keep beside a part that settled on a token leaves the value for review', async () => {
+	const root = scratch('dsh-halfkeep-');
+	try {
+		write(root, 'a.css', '.wf-a {\n\tpadding: 6px 48px;\n}\n');
+		const stub = (async (_url: string, init: { body: string }) => {
+			const questions = JSON.parse(init.body).questions as Record<string, { criteria: Record<string, string> }>;
+			const answers = Object.fromEntries(
+				Object.entries(questions).map(([k, q]) => [
+					k,
+					{ choice: 'keep' in q.criteria ? 'keep' : Object.keys(q.criteria)[0], confidence: 0.9 },
+				]),
+			);
+			return new Response(JSON.stringify({ answers }));
+		}) as unknown as typeof fetch;
+		const finding: Finding = {
+			rule: 'tokens/hardcoded-value',
+			severity: 'warn',
+			rank: 0,
+			file: 'a.css',
+			line: 2,
+			message: 'padding: 6px 48px',
+			decl: { prop: 'padding', value: '6px 48px' },
+		};
+		// 6px has to snap and 48px, past the scale, may stay: keeping the whole
+		// declaration would suppress the 6px along with it.
+		const written = await judgeValues(root, [finding], judgeSet(), 'key', new Map(), stub);
+		assert(written === 0 && finding.judged === undefined, `settled a half answer: ${JSON.stringify(finding.judged)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check(
+	"a kept value is not suppressed from its rule's opening line or under someone else's directive, and keeps the line ending",
+	() => {
+		const root = scratch('dsh-keeps-');
+		try {
+			writeAll(root, {
+				'styles/open.css': '.wf-a { background: #f0c;\n\tcolor: #0cf;\n}\n',
+				'styles/crlf.css': '.wf-b {\r\n\tbackground: #f0c;\r\n}\r\n',
+				'styles/taken.css':
+					'.wf-c {\n\t/* ds-allow layout/margin-on-child -- legacy grid */\n\tmargin-bottom: 16px; background: #f0c;\n}\n',
+			});
+			const keep = (file: string, line: number): FixCandidate => ({
+				rule: 'tokens/hardcoded-value',
+				file,
+				line,
+				decl: { prop: 'background', value: '#f0c' },
+				judged: { answer: 'keep', confidence: 0.9, spans: ['deliberate, no token fits'] },
+			});
+			const { applied, skipped } = applyKeeps(
+				root,
+				[keep('styles/open.css', 1), keep('styles/crlf.css', 2), keep('styles/taken.css', 3)],
+				'ds-allow',
+				{ directives: [{ file: 'styles/taken.css', line: 2 }] },
+			);
+			assert(skipped.map((k) => k.file).join() === 'styles/open.css,styles/taken.css', JSON.stringify(skipped));
+			// Pushed a line up, the margin directive would no longer reach its line.
+			assert(
+				!readFileSync(join(root, 'styles/taken.css'), 'utf8').includes('tokens/hardcoded-value'),
+				'a directive was displaced',
+			);
+			assert(applied.length === 1, JSON.stringify(applied));
+			assert(
+				readFileSync(join(root, 'styles/open.css'), 'utf8') === '.wf-a { background: #f0c;\n\tcolor: #0cf;\n}\n',
+				'the opening line was suppressed',
+			);
+			const crlf = readFileSync(join(root, 'styles/crlf.css'), 'utf8');
+			assert(
+				crlf ===
+					'.wf-b {\r\n\t/* ds-allow tokens/hardcoded-value -- deliberate, no token fits */\r\n\tbackground: #f0c;\r\n}\r\n',
+				JSON.stringify(crlf),
+			);
+		} finally {
+			cleanup(root);
+		}
+	},
+);
+
 finish();

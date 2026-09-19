@@ -54,7 +54,11 @@ export function rawElements(
 		// bordered `<div>` into an `<HStack>` — the largest single source of
 		// findings in a real repo, and wrong nearly every time.
 		if (el.styledOnly) {
-			const suggestsLayout = el.suggest.split('/').some((n) => layoutComponents.includes(n.trim()));
+			// `String`: an elementMap entry authored as `{ styledOnly: true }` has no
+			// `component`, and one bad entry must not take the whole run down.
+			const suggestsLayout = String(el.suggest)
+				.split('/')
+				.some((n) => layoutComponents.includes(n.trim()));
 			const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
 			const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
 			if (suggestsLayout ? !laidOut : !styled) return [];

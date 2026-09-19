@@ -16,9 +16,10 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { byBytes } from './discover.ts';
 import { KEEP } from './tokens.ts';
 import { escapeRe } from './text.ts';
-import type { FixCandidate, KeptValue, SkippedFix, SkippedKeep, TokenFix } from './types.ts';
+import type { Directive, FixCandidate, KeptValue, SkippedFix, SkippedKeep, TokenFix } from './types.ts';
 
 /**
  * Stylesheet channels only.
@@ -27,7 +28,7 @@ import type { FixCandidate, KeptValue, SkippedFix, SkippedKeep, TokenFix } from 
  * templates, where the surrounding syntax is JS and a CSS-shaped substitution
  * would write a syntax error with a clean report.
  */
-const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
+export const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 
 /**
  * The findings that carry one property, one value, and one rewrite for it: a
@@ -119,16 +120,19 @@ export function applyTokenFixes(
  *
  * A directive mutes its whole next line, so one is written only where every
  * hardcoded value on that line was kept: muting a line that also carries a
- * value nobody settled would hide it along with the one that was. The
- * reason is what the judgement said, so the comment records that a model made
- * the call, not a person.
+ * value nobody settled would hide it along with the one that was. Nor above a
+ * rule's opening line, where a directive covers the whole rule, nor between an
+ * existing directive and the line it is for. The reason is
+ * what the judgement said, so the comment records that a model made the call,
+ * not a person.
  */
 export function applyKeeps(
 	root: string,
 	findings: readonly FixCandidate[],
 	keyword: string,
-	{ dry = false }: { dry?: boolean } = {},
+	{ dry = false, directives = [] }: { dry?: boolean; directives?: readonly Pick<Directive, 'file' | 'line'>[] } = {},
 ): { applied: KeptValue[]; skipped: SkippedKeep[] } {
+	const taken = new Set(directives.map((d) => `${d.file}\u0000${d.line}`));
 	const onLine = new Map<string, FixCandidate[]>();
 	for (const f of findings) {
 		if (f.rule !== 'tokens/hardcoded-value') continue;
@@ -149,9 +153,7 @@ export function applyKeeps(
 		if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: 'not a stylesheet' });
 		else if (onLine.get(`${f.file}\u0000${f.line}`)?.some((o) => o.judged?.answer !== KEEP))
 			skipped.push({ ...kept, why: 'shares its line with a value that was not kept' });
-		// One directive per line, however many values on it were kept.
-		else if (!byFile.get(f.file)?.some((k) => k.line === f.line))
-			byFile.set(f.file, [...(byFile.get(f.file) ?? []), kept]);
+		else byFile.set(f.file, [...(byFile.get(f.file) ?? []), kept]);
 	}
 
 	const applied: KeptValue[] = [];
@@ -166,19 +168,40 @@ export function applyKeeps(
 			continue;
 		}
 		const lines = text.split('\n');
+		let last = 0;
 		// Bottom up, so an inserted line never moves one still to come.
 		for (const k of [...group].sort((a, b) => b.line - a.line)) {
+			// One directive per line, however many values on it were kept.
+			if (k.line === last) {
+				applied.push(k);
+				continue;
+			}
 			const line = lines[k.line - 1];
 			if (line === undefined) {
 				skipped.push({ ...k, why: 'line out of range' });
 				continue;
 			}
-			const indent = /^\s*/.exec(line)?.[0] ?? '';
-			lines.splice(k.line - 1, 0, `${indent}/* ${keyword} tokens/hardcoded-value -- ${k.reason} */`);
+			// Only the nearest line above is read: a directive already there for
+			// this line would be pushed off it, and what it names would come back.
+			if (taken.has(`${file}\u0000${k.line - 1}`)) {
+				skipped.push({ ...k, why: 'the line above already carries a directive — add the rule to it by hand' });
+				continue;
+			}
+			// A brace that opens a rule, not Sass's `#{…}` interpolation.
+			if (/(?:^|[^#])\{/.test(line)) {
+				skipped.push({ ...k, why: "on the rule's opening line, where a directive would mute the whole rule" });
+				continue;
+			}
+			// Spaces and tabs only: `\s` would copy a byte-order mark onto the
+			// directive. And the line's own ending, so a CRLF file stays one.
+			const indent = /^[ \t]*/.exec(line)?.[0] ?? '';
+			const eol = line.endsWith('\r') ? '\r' : '';
+			lines.splice(k.line - 1, 0, `${indent}/* ${keyword} tokens/hardcoded-value -- ${k.reason} */${eol}`);
 			applied.push(k);
+			last = k.line;
 		}
-		if (!dry) writeFileSync(abs, lines.join('\n'));
+		if (last && !dry) writeFileSync(abs, lines.join('\n'));
 	}
-	applied.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+	applied.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
 	return { applied, skipped };
 }

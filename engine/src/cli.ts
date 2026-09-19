@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
 import { analyze } from './analyze.ts';
 import { usableReplacement } from './checks/system/currency.ts';
-import { applyKeeps, applyTokenFixes } from './autofix.ts';
+import { CSS_FILE, applyKeeps, applyTokenFixes } from './autofix.ts';
 import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
@@ -203,6 +203,10 @@ function parseArgs(args: string[]): Args {
 	});
 	// A value flag given no value parses as `true`; treat it as not given.
 	for (const f of VALUE_FLAGS) if (typeof values[f] !== 'string') delete values[f];
+	// A switch is undeclared, so `--judge=false` arrives as the string 'false',
+	// which is truthy: it would turn judging on. `=false` means off.
+	for (const [k, v] of Object.entries(values))
+		if (typeof v === 'string' && !(VALUE_FLAGS as readonly string[]).includes(k)) values[k] = v !== 'false';
 	return { _: positionals, flags: values as Flags };
 }
 
@@ -798,16 +802,22 @@ async function main(): Promise<number> {
 			// Coloured by what it does, not by the rule's configured severity —
 			// same reason the words are: an error-severity rule under a gate that
 			// cannot block is advisory, and painting it red says otherwise.
+			// The hook never judges, so this one cannot stop a turn at any severity.
+			const judgeOnly = id === 'patterns/judged-redirect';
 			const verdict = config.enabled[id]
-				? sev === 'error' && gateBlocks
+				? sev === 'error' && gateBlocks && !judgeOnly
 					? red('BLOCKS')
-					: sev === 'error'
-						? yellow('advisory (would block if enabled)')
-						: yellow(id === 'patterns/judged-redirect' ? 'advisory, --judge only' : 'advisory')
+					: judgeOnly
+						? yellow(`${sev === 'error' ? 'error' : 'advisory'}, --judge only`)
+						: sev === 'error'
+							? yellow('advisory (would block if enabled)')
+							: yellow('advisory')
 				: dim(`off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`);
 			lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
 		}
-		const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
+		const blockers = RULE_IDS.filter(
+			(id) => config.enabled[id] && config.severityOf(id) === 'error' && id !== 'patterns/judged-redirect',
+		);
 		lines.push(
 			'',
 			gateBlocks && blockers.length
@@ -949,8 +959,10 @@ async function main(): Promise<number> {
 		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
-			if (apiKey && toFix.tokens && toFix.findings.some((f) => f.rule === 'tokens/hardcoded-value'))
-				await judgeValues(root, toFix.findings, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
+			// Only what `fix` can write: an answer about a JSX value is paid for and dropped.
+			const judgeable = toFix.findings.filter((f) => f.rule === 'tokens/hardcoded-value' && CSS_FILE.test(f.file));
+			if (apiKey && toFix.tokens && judgeable.length)
+				await judgeValues(root, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
 			fail(`loupe: ${messageOf(err)}\n`);
 			return EXIT.CANNOT_RUN;
@@ -960,7 +972,7 @@ async function main(): Promise<number> {
 		// After the rewrites, which never move a line, and bottom up within a file,
 		// because a directive is a line of its own.
 		const kept = apiKey
-			? applyKeeps(root, toFix.findings, config.suppression.keyword, { dry })
+			? applyKeeps(root, toFix.findings, config.suppression.keyword, { dry, directives: toFix.directives })
 			: { applied: [], skipped: [] };
 		const verb = dry ? 'would fix' : 'fixed';
 		// The value is held raw — it is what the substitution matches against —
@@ -1046,17 +1058,18 @@ async function main(): Promise<number> {
 		if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
 		result = applyBaseline(result, baseline);
 	}
+	// Before the judgements: a finding the filter drops is not worth a paid question.
+	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
 	if (apiKey) {
 		// Judged after the baseline, so accepted findings cost nothing, and a
 		// judged finding never enters one: its confidence moves between runs, and
 		// a baselined finding that comes and goes is noise in both directions.
-		// Before the severity filter, which has to see the findings this adds.
 		// A failed request leaves the findings as the engine wrote them.
 		try {
-			if (result.controls?.length)
-				result.findings.push(
-					...(await judgeRedirects(result.controls, apiKey, config.severityOf('patterns/judged-redirect'))),
-				);
+			// The same filter, for the findings this adds.
+			const redirectSeverity = config.severityOf('patterns/judged-redirect');
+			if (result.controls?.length && (args.flags.severity !== 'error' || redirectSeverity === 'error'))
+				result.findings.push(...(await judgeRedirects(result.controls, apiKey, redirectSeverity)));
 			await judgeVariants(root, result.findings, config.componentRegistry, apiKey);
 		} catch (err) {
 			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
@@ -1074,8 +1087,10 @@ async function main(): Promise<number> {
 		} catch (err) {
 			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
 		}
+		// Computed before the redirects above existed: one configured to `error`
+		// has to be able to fail the run it is reported in.
+		result.blocking = result.findings.some((f) => f.severity === 'error');
 	}
-	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
 
 	if (isHook) {
 		const sessionId = payload.session_id ?? '';

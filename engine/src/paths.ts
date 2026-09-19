@@ -5,7 +5,8 @@
  *
  * The hook's retry counter is ephemera about one session, and running as a
  * plugin means writing nothing into the project. It expires after six hours
- * anyway, so it goes in the OS temp directory, keyed by project path.
+ * anyway, so it goes in the plugin's data directory, or a temp directory of
+ * this user's own, keyed by project path.
  *
  * The baseline is the opposite: a statement about *this repo* — which findings
  * it has agreed to live with — so it lives beside the code, always, and can be
@@ -41,8 +42,20 @@ export function ensureDir(dir: string): string | null {
 	}
 }
 
-/** The hook's retry counter. Writers create the directory. */
-export const attemptsPath = (root: string): string => join(tmpdir(), 'loupe', projectKey(root), 'attempts.json');
+/**
+ * The hook's retry counter. Writers create the directory.
+ *
+ * Per user, never shared: on Linux `tmpdir()` is the one `/tmp`, where a
+ * `loupe/` another user made first is not writable, so every count would be
+ * lost and the gate would block at attempt 1 forever. Claude Code gives the
+ * plugin a data directory of its own; the temp directory is for runs outside it.
+ */
+export const attemptsPath = (root: string): string =>
+	join(
+		process.env.CLAUDE_PLUGIN_DATA || join(tmpdir(), `loupe-${process.getuid?.() ?? 'user'}`),
+		projectKey(root),
+		'attempts.json',
+	);
 
 /** Where a baseline goes when nothing names one. Overridable via config `baseline`. */
 export const DEFAULT_BASELINE = '.loupe-baseline.json';

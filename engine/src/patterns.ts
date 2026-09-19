@@ -71,7 +71,8 @@ function descendants(tree: PatternNode, out: PatternNode[] = []): PatternNode[] 
  * using the pattern. Only pattern nodes carry alternations; a tree built from
  * real code is always one name.
  */
-const nameMatches = (spec: string, actual: string): boolean => spec.split('|').includes(actual);
+const nameMatches = (spec: string, actual: string): boolean =>
+	spec === actual || (spec.includes('|') && spec.split('|').includes(actual));
 
 /**
  * Does `pattern` occur within `tree`?

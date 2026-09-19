@@ -696,13 +696,17 @@ it does need Node and a checkout of this repository. Where neither is wanted —
 CI image that carries no Node, a repository that is not JavaScript, a container
 you would rather keep small — `npm run build:binary` produces a single
 self-contained executable that carries its presets and its pattern language
-inside it.
+inside it. It does not carry the design-system profiles — the component and
+pattern registries that `system/locked-component`, `system/superseded-component`
+and the composite rules read — so pass them with `--profiles`: without them
+those rules are off, and the report is silently clean of them.
 
 ```yaml
 - run: |
     curl -fsSL -O https://github.com/dabowman/loupe/releases/latest/download/loupe-linux-x64
     chmod +x loupe-linux-x64
-    ./loupe-linux-x64 check --all --format sarif > loupe.sarif
+    git clone --depth 1 https://github.com/dabowman/loupe .loupe
+    ./loupe-linux-x64 check --all --format sarif --profiles .loupe/profiles > loupe.sarif
 ```
 
 `--judge` still needs `TYPESAFE_API_KEY` from the environment — no key is

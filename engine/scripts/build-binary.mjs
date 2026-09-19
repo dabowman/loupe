@@ -91,9 +91,23 @@ mkdirSync(OUT_DIR, { recursive: true });
 
 for (const name of chosen) {
 	const outfile = join(OUT_DIR, `loupe-${name}${name.startsWith('windows') ? '.exe' : ''}`);
+	// A compiled Bun executable reads the working directory's bunfig.toml at
+	// startup and runs its `preload` scripts, and this binary is run inside
+	// repositories it is checking — somebody else's CI. That would be the
+	// scanned repo executing code with the job's environment, so it is off.
+	// (The .env autoload stays on: it is how the binary finds a `--judge` key,
+	// since Bun has no `process.loadEnvFile`.)
 	execFileSync(
 		'bun',
-		['build', '--compile', `--target=${TARGETS[name]}`, join(ENGINE, 'src', 'cli.ts'), '--outfile', outfile],
+		[
+			'build',
+			'--compile',
+			'--no-compile-autoload-bunfig',
+			`--target=${TARGETS[name]}`,
+			join(ENGINE, 'src', 'cli.ts'),
+			'--outfile',
+			outfile,
+		],
 		{ stdio: ['ignore', 'ignore', 'inherit'], cwd: ENGINE },
 	);
 	process.stdout.write(`${`loupe-${name}`.padEnd(22)} ${(statSync(outfile).size / 1048576).toFixed(0).padStart(4)} MB\n`);

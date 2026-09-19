@@ -31,15 +31,18 @@ import wpds from '../presets/wpds.json' with { type: 'json' };
 import patternLanguage from '../../patterns/index.json' with { type: 'json' };
 import manifest from '../package.json' with { type: 'json' };
 
-/** Preset name -> its parsed JSON, keyed as the files are named. */
-export const EMBEDDED_PRESETS: Readonly<Record<string, unknown>> = {
+/**
+ * Preset name -> its parsed JSON, keyed as the files are named. No prototype:
+ * it is indexed with whatever `--preset` says, and `constructor` is not a preset.
+ */
+export const EMBEDDED_PRESETS: Readonly<Record<string, unknown>> = Object.assign(Object.create(null), {
 	archer,
 	'base-ui': baseUi,
 	generic,
 	'wordpress-block-theme': wordpressBlockTheme,
 	'wordpress-components': wordpressComponents,
 	wpds,
-};
+});
 
 /** The version, for the artifact that cannot read its own manifest off disk. */
 export const EMBEDDED_VERSION: string = manifest.version;

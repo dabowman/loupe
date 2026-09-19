@@ -109,7 +109,7 @@ jobs:
       # `gh` is preinstalled on the runner, so this needs no third-party action
       # to hold a token for it.
       - name: attach to the release
-        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+        if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || inputs.publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -120,7 +120,10 @@ jobs:
             tag="build-$(git rev-parse --short HEAD)"
             pre=--prerelease
           fi
+          # --target: a tag that does not exist yet is otherwise made at the
+          # default branch's head, not at the commit these binaries came from.
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" \
+            --target "$GITHUB_SHA" \
             --title "$tag" \
             --generate-notes ${pre:-}
           gh release upload "$tag" binaries/loupe-* binaries/SHA256SUMS --clobber
@@ -129,7 +132,7 @@ jobs:
       # twice, and for a tag the release is already the place they live — this
       # is here so a hand-run build has somewhere to leave them.
       - uses: actions/upload-artifact@v4
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        if: ${{ !((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || inputs.publish) }}
         with:
           name: loupe-binaries
           path: engine/binaries/

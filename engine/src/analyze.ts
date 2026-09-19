@@ -566,6 +566,9 @@ export async function analyze(
 	// something to look right immediately — so tightening the CSS gate quietly
 	// makes the unchecked path the attractive one.
 	for (const el of inlineStyles) {
+		// `report` would drop it anyway; skipping first keeps a scoped hook run
+		// from classifying every inline style in the repo on every edit.
+		if (!reports(el.file)) continue;
 		const scopeLines = [el.line, el.line - 1];
 		const whole = ruleIsLive('system/inline-style') ? inlineStyle(el) : null;
 		if (whole) {
@@ -644,7 +647,7 @@ export async function analyze(
 	}
 
 	// ── the checks that read the whole index ─────────────────────────────────
-	for (const f of rawElements(rawEls, {
+	for (const f of rawElements(ruleIsLive('system/raw-element') ? rawEls.filter((el) => reports(el.file)) : [], {
 		layoutComponents: ds.layoutComponents,
 		styledClasses,
 		layoutClasses,

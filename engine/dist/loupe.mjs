@@ -24234,7 +24234,7 @@ function descendants(tree, out = []) {
   }
   return out;
 }
-var nameMatches = (spec, actual) => spec.split("|").includes(actual);
+var nameMatches = (spec, actual) => spec === actual || spec.includes("|") && spec.split("|").includes(actual);
 function matches(pattern, tree) {
   if (!nameMatches(pattern.name, tree.name)) return false;
   if (pattern.pkg && tree.pkg && pattern.pkg !== tree.pkg) return false;
@@ -24741,7 +24741,7 @@ function scanMarkup(text2, relPath, ds, rules = []) {
       readRules(node);
     }
     if (node.type !== "JSXOpeningElement") return;
-    const tag = jsxName(node);
+    const tag = jsxName(node) ?? (node.name.type === "JSXMemberExpression" ? `?.${node.name.property.name}` : null);
     if (!tag) return;
     const line = node.loc?.start?.line ?? 1;
     const root2 = tag.split(".")[0] ?? tag;
@@ -24859,7 +24859,7 @@ import { readFileSync, statSync } from "node:fs";
 import { join as join2 } from "node:path";
 var ROLE_HINTS = [
   [/^border-radius|radius$/, /radius/],
-  [/^border(-(top|right|bottom|left))?-width$|^border-width$/, /border-width/],
+  [/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
   // Colour roles are split finer than the rest: suggesting a background token
   // for a `color` gives the right pixels and the wrong meaning, which survives
   // review precisely because it looks correct.
@@ -24881,8 +24881,10 @@ var ROLE_HINTS = [
   // the sizes (icons, buttons) and surface widths a system also ships under it.
   [/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
   [/^cursor$/, /cursor/],
-  [/^transition-duration$|^animation-duration$/, /motion-duration/],
-  [/^transition-timing-function$|^animation-timing-function$/, /motion-easing/]
+  // By role word, not by one system's spelling: WPDS writes `motion-duration-*`,
+  // Archer `duration-*`.
+  [/^transition-duration$|^animation-duration$/, /duration/],
+  [/^transition-timing-function$|^animation-timing-function$/, /easing/]
 ];
 function normalizeValue(value) {
   let v = String(value).trim().toLowerCase().replace(/\s*!important\s*$/, "").replace(/\s+/g, " ");
@@ -24990,22 +24992,41 @@ function candidatesFor(set, prop, part) {
     const fm = measure(fv);
     return fm && fm.kind === m.kind && "n" in fm ? [[n, fv, fm.n - m.n]] : [];
   });
+  const same = steps.filter(([, , d]) => Math.abs(d) < 1e-6).map(([n, fv]) => [n, fv]);
+  if (same.length) return { tier: "exact", options: same, keep: !spacing };
   const below = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
   const above = Math.min(...steps.map(([, , d]) => d).filter((d) => d > 0));
   const options = steps.filter(([, , d]) => d === below || d === above).map(([n, fv]) => [n, fv]);
   const inside = Number.isFinite(below) && Number.isFinite(above);
   return inside ? { tier: "near", options, keep: !spacing } : { tier: "end", options, keep: true };
 }
-var partsOf2 = (value) => value.trim().match(/(?:[^\s(]+|\([^)]*\))+/g) ?? [];
+function partsOf2(value) {
+  const out = [];
+  let part = "";
+  let depth = 0;
+  for (const ch of value.trim()) {
+    if (!depth && /\s/.test(ch)) {
+      if (part) out.push(part);
+      part = "";
+      continue;
+    }
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    part += ch;
+  }
+  if (part) out.push(part);
+  return out;
+}
 var isLiteralPart = (p) => /^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0 || /^#[0-9a-f]+$/i.test(p) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
 var KEEP = "keep";
 function planValue(set, prop, value) {
   const family = familyFor(set, prop);
-  if (!family.length) return "none";
+  if (!family.length) return onRole([...set.known], prop).length ? null : "none";
   const measurable = family.some(([, fv]) => measure(fv));
   const parts = measurable ? partsOf2(value) : [value.trim()];
   const slots = [];
   for (const [at, part] of parts.entries()) {
+    if (measurable && /^(calc|min|max|clamp)\(/i.test(part)) return null;
     if (measurable && !isLiteralPart(part)) continue;
     const [only, ...more] = tokensFor(set, prop, part);
     if (only !== void 0 && !more.length) {
@@ -25014,7 +25035,8 @@ function planValue(set, prop, value) {
     }
     const candidates = candidatesFor(set, prop, part);
     if (!candidates) return null;
-    slots.push({ at, part, candidates });
+    const [one, ...others] = candidates.tier === "exact" ? candidates.options : [];
+    slots.push(one && !others.length ? { at, part, token: one[0] } : { at, part, candidates });
   }
   return slots.length ? { parts, slots } : null;
 }
@@ -25257,7 +25279,7 @@ function rawElements(els, {
 }) {
   return els.flatMap((el) => {
     if (el.styledOnly) {
-      const suggestsLayout = el.suggest.split("/").some((n) => layoutComponents.includes(n.trim()));
+      const suggestsLayout = String(el.suggest).split("/").some((n) => layoutComponents.includes(n.trim()));
       const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
       const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
       if (suggestsLayout ? !laidOut : !styled) return [];
@@ -25588,6 +25610,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
   }))
     report(f);
   for (const el of inlineStyles) {
+    if (!reports(el.file)) continue;
     const scopeLines = [el.line, el.line - 1];
     const whole = ruleIsLive("system/inline-style") ? inlineStyle(el) : null;
     if (whole) {
@@ -25645,7 +25668,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
         });
     }
   }
-  for (const f of rawElements(rawEls, {
+  for (const f of rawElements(ruleIsLive("system/raw-element") ? rawEls.filter((el) => reports(el.file)) : [], {
     layoutComponents: ds.layoutComponents,
     styledClasses,
     layoutClasses,
@@ -25782,7 +25805,8 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
   }
   return { applied, skipped };
 }
-function applyKeeps(root2, findings, keyword, { dry = false } = {}) {
+function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } = {}) {
+  const taken = new Set(directives.map((d) => `${d.file}\0${d.line}`));
   const onLine = /* @__PURE__ */ new Map();
   for (const f of findings) {
     if (f.rule !== "tokens/hardcoded-value") continue;
@@ -25803,8 +25827,7 @@ function applyKeeps(root2, findings, keyword, { dry = false } = {}) {
     if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
     else if (onLine.get(`${f.file}\0${f.line}`)?.some((o) => o.judged?.answer !== KEEP))
       skipped.push({ ...kept, why: "shares its line with a value that was not kept" });
-    else if (!byFile.get(f.file)?.some((k) => k.line === f.line))
-      byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
+    else byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
   }
   const applied = [];
   for (const [file, group] of byFile) {
@@ -25818,19 +25841,34 @@ function applyKeeps(root2, findings, keyword, { dry = false } = {}) {
       continue;
     }
     const lines = text2.split("\n");
+    let last = 0;
     for (const k of [...group].sort((a, b) => b.line - a.line)) {
+      if (k.line === last) {
+        applied.push(k);
+        continue;
+      }
       const line = lines[k.line - 1];
       if (line === void 0) {
         skipped.push({ ...k, why: "line out of range" });
         continue;
       }
-      const indent = /^\s*/.exec(line)?.[0] ?? "";
-      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} tokens/hardcoded-value -- ${k.reason} */`);
+      if (taken.has(`${file}\0${k.line - 1}`)) {
+        skipped.push({ ...k, why: "the line above already carries a directive \u2014 add the rule to it by hand" });
+        continue;
+      }
+      if (/(?:^|[^#])\{/.test(line)) {
+        skipped.push({ ...k, why: "on the rule's opening line, where a directive would mute the whole rule" });
+        continue;
+      }
+      const indent = /^[ \t]*/.exec(line)?.[0] ?? "";
+      const eol = line.endsWith("\r") ? "\r" : "";
+      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} tokens/hardcoded-value -- ${k.reason} */${eol}`);
       applied.push(k);
+      last = k.line;
     }
-    if (!dry) writeFileSync(abs, lines.join("\n"));
+    if (last && !dry) writeFileSync(abs, lines.join("\n"));
   }
-  applied.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  applied.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
   return { applied, skipped };
 }
 
@@ -27200,14 +27238,14 @@ var package_default = {
 };
 
 // src/embedded.ts
-var EMBEDDED_PRESETS = {
+var EMBEDDED_PRESETS = Object.assign(/* @__PURE__ */ Object.create(null), {
   archer: archer_default,
   "base-ui": base_ui_default,
   generic: generic_default,
   "wordpress-block-theme": wordpress_block_theme_default,
   "wordpress-components": wordpress_components_default,
   wpds: wpds_default
-};
+});
 var EMBEDDED_VERSION = package_default.version;
 var EMBEDDED_LANGUAGE = patterns_default;
 var presetKey = (spec) => spec.replace(/^loupe\/presets\//, "");
@@ -27330,7 +27368,12 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
     Array.from({ length: Math.min(CONCURRENCY, batches.length) }, async () => {
       while (next < batches.length) {
         const at = next++;
-        done[at] = await sendBatch(batches[at] ?? []);
+        try {
+          done[at] = await sendBatch(batches[at] ?? []);
+        } catch (err) {
+          next = batches.length;
+          throw err;
+        }
       }
     })
   );
@@ -27482,6 +27525,7 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
     if (slots.some((_, k) => unsure(k))) continue;
     const confidence2 = Math.min(...got.map((a) => a?.confidence ?? 0));
     const kept = got.find((a) => a?.choice === KEEP);
+    if (kept && got.some((a) => a?.choice !== KEEP)) continue;
     if (kept) {
       const why = "deliberate, no token fits";
       const tail = judgedTail(kept.confidence);
@@ -27526,7 +27570,11 @@ function ensureDir(dir) {
     return null;
   }
 }
-var attemptsPath = (root2) => join7(tmpdir(), "loupe", projectKey(root2), "attempts.json");
+var attemptsPath = (root2) => join7(
+  process.env.CLAUDE_PLUGIN_DATA || join7(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`),
+  projectKey(root2),
+  "attempts.json"
+);
 var DEFAULT_BASELINE = ".loupe-baseline.json";
 function baselinePath(root2, named) {
   const p = named || DEFAULT_BASELINE;
@@ -27839,9 +27887,10 @@ function normalize(raw, { root: root2 }) {
   return { ...config, enabled: enabledRules(config) };
 }
 function readRegistry(spec, root2, packages, load, empty) {
-  if (!Array.isArray(spec) && typeof spec !== "string") return empty;
+  if (Array.isArray(spec)) return load(spec);
+  if (typeof spec !== "string") return empty;
   try {
-    const raw = typeof spec === "string" ? JSON.parse(readFileSync8(isAbsolute3(spec) ? spec : join8(root2, spec), "utf8")) : spec;
+    const raw = JSON.parse(readFileSync8(isAbsolute3(spec) ? spec : join8(root2, spec), "utf8"));
     return registryApplies(raw, packages) ? load(raw) : empty;
   } catch {
     return empty;
@@ -29138,6 +29187,8 @@ function parseArgs(args) {
     strict: false
   });
   for (const f of VALUE_FLAGS) if (typeof values[f] !== "string") delete values[f];
+  for (const [k, v] of Object.entries(values))
+    if (typeof v === "string" && !VALUE_FLAGS.includes(k)) values[k] = v !== "false";
   return { _: positionals, flags: values };
 }
 var USAGE = `loupe <command> [options]
@@ -29425,10 +29476,13 @@ async function main() {
     for (const id of RULE_IDS) {
       const def = RULES[id];
       const sev = config.severityOf(id);
-      const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red("BLOCKS") : sev === "error" ? yellow("advisory (would block if enabled)") : yellow(id === "patterns/judged-redirect" ? "advisory, --judge only" : "advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
+      const judgeOnly = id === "patterns/judged-redirect";
+      const verdict = config.enabled[id] ? sev === "error" && gateBlocks && !judgeOnly ? red("BLOCKS") : judgeOnly ? yellow(`${sev === "error" ? "error" : "advisory"}, --judge only`) : sev === "error" ? yellow("advisory (would block if enabled)") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
       lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
     }
-    const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
+    const blockers = RULE_IDS.filter(
+      (id) => config.enabled[id] && config.severityOf(id) === "error" && id !== "patterns/judged-redirect"
+    );
     lines.push(
       "",
       gateBlocks && blockers.length ? `${red("Turns are blocked by:")} ${blockers.map((id) => magenta(id)).join(", ")}` : green("Nothing blocks turns; every finding is advisory.")
@@ -29536,8 +29590,9 @@ ${green(`Wrote ${target}`)}
     let toFix;
     try {
       toFix = await analyze(config, { scope: fixScope });
-      if (apiKey && toFix.tokens && toFix.findings.some((f) => f.rule === "tokens/hardcoded-value"))
-        await judgeValues(root2, toFix.findings, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
+      const judgeable = toFix.findings.filter((f) => f.rule === "tokens/hardcoded-value" && CSS_FILE.test(f.file));
+      if (apiKey && toFix.tokens && judgeable.length)
+        await judgeValues(root2, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
       fail(`loupe: ${messageOf2(err)}
 `);
@@ -29545,7 +29600,7 @@ ${green(`Wrote ${target}`)}
     }
     const dry = Boolean(args.flags["dry-run"]);
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
-    const kept = apiKey ? applyKeeps(root2, toFix.findings, config.suppression.keyword, { dry }) : { applied: [], skipped: [] };
+    const kept = apiKey ? applyKeeps(root2, toFix.findings, config.suppression.keyword, { dry, directives: toFix.directives }) : { applied: [], skipped: [] };
     const verb = dry ? "would fix" : "fixed";
     const decl2 = (f) => oneLine(`${f.prop}: ${f.value}`);
     for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2192 ${green(f.to)}
@@ -29605,12 +29660,12 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
 `);
     result = applyBaseline(result, baseline);
   }
+  if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   if (apiKey) {
     try {
-      if (result.controls?.length)
-        result.findings.push(
-          ...await judgeRedirects(result.controls, apiKey, config.severityOf("patterns/judged-redirect"))
-        );
+      const redirectSeverity = config.severityOf("patterns/judged-redirect");
+      if (result.controls?.length && (args.flags.severity !== "error" || redirectSeverity === "error"))
+        result.findings.push(...await judgeRedirects(result.controls, apiKey, redirectSeverity));
       await judgeVariants(root2, result.findings, config.componentRegistry, apiKey);
     } catch (err) {
       note(`loupe: --judge skipped \u2014 ${messageOf2(err)}
@@ -29629,8 +29684,8 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
       note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf2(err)}
 `);
     }
+    result.blocking = result.findings.some((f) => f.severity === "error");
   }
-  if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   if (isHook) {
     const sessionId = payload.session_id ?? "";
     if (!result.blocking) {
