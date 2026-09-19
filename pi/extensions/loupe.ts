@@ -15,6 +15,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { execFile } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,26 +33,28 @@ function loupe(...args: string[]): string {
 }
 
 /**
- * Run the engine on a set of files and return { blocking, output }.
- * Uses --format agent so the output is suitable for feeding back to the LLM.
+ * Run the engine the way Claude Code's hooks do, so the project opt-in,
+ * LOUPE_OFF, advisory demotion and the retry stand-down all apply here too.
+ * The payload goes on stdin, which pi.exec cannot write — hence execFile.
+ * Exit 2 is blocking, with the agent's report on stderr; anything else is quiet.
  */
-async function runCheck(
-	pi: ExtensionAPI,
-	files: string[],
+function runHook(
 	cwd: string,
+	payload: { session_id: string; tool_input?: { file_path: string } },
+	files: string[],
 	signal?: AbortSignal,
 ): Promise<{ blocking: boolean; output: string }> {
-	const scope = files.length > 0 ? ["--files", files.join(",")] : ["--changed"];
-	const result = await pi.exec(
-		"node",
-		[ENGINE, "check", ...scope, "--format", "agent", "--profiles", PROFILES],
-		{ cwd, signal, timeout: 60_000 },
-	);
-	return {
-		// 1 is blocking findings; 2 is the engine failing to run.
-		blocking: result.code === 1,
-		output: (result.stdout + result.stderr).trim(),
-	};
+	const scope = files.length > 0 ? ["--files", files.join(",")] : [];
+	return new Promise((done) => {
+		const child = execFile(
+			"node",
+			[ENGINE, "hook", "--root", cwd, ...scope, "--profiles", PROFILES],
+			{ cwd, signal, timeout: 60_000 },
+			(err, _stdout, stderr) => done({ blocking: err?.code === 2, output: stderr.trim() }),
+		);
+		child.stdin?.on("error", () => {}); // a child that failed to start has no reader
+		child.stdin?.end(JSON.stringify(payload));
+	});
 }
 
 export default function (pi: ExtensionAPI) {
@@ -71,13 +74,21 @@ export default function (pi: ExtensionAPI) {
 
 		const filePath = event.input?.path;
 		if (typeof filePath !== "string" || !filePath) return;
+		// The tool's path is relative to the session's cwd; the engine reads a
+		// relative --files entry against the project root, which can be above it.
+		const abs = resolve(ctx.cwd, filePath);
 
 		// Track for the Stop-hook equivalent at agent_end.
-		touched.add(filePath);
+		touched.add(abs);
 
 		if (!UI_FILE.test(filePath)) return;
 
-		const { blocking, output } = await runCheck(pi, [filePath], ctx.cwd, ctx.signal);
+		const { blocking, output } = await runHook(
+			ctx.cwd,
+			{ session_id: ctx.sessionManager.getSessionId(), tool_input: { file_path: abs } },
+			[],
+			ctx.signal,
+		);
 
 		if (!output) return;
 
@@ -101,7 +112,12 @@ export default function (pi: ExtensionAPI) {
 		const files = [...touched].filter((f) => UI_FILE.test(f));
 		if (files.length === 0) return;
 
-		const { blocking, output } = await runCheck(pi, files, ctx.cwd, ctx.signal);
+		const { blocking, output } = await runHook(
+			ctx.cwd,
+			{ session_id: ctx.sessionManager.getSessionId() },
+			files,
+			ctx.signal,
+		);
 
 		if (output && blocking) {
 			// Inject a message so the LLM sees the findings on its next turn.
