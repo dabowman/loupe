@@ -6,6 +6,39 @@
  * about the component often enough to matter: a `<span>` that is a colour
  * swatch, a `<p>` that only wraps a button. Neither is decidable from the tag
  * and its classes; both are obvious from reading the element.
+ *
+ * What one `<p>` sends, whole — the request body `ask` posts, with six of the
+ * nine Text variants elided:
+ *
+ *   {
+ *     "model": "jev-1.13.0",
+ *     "state": {
+ *       "elements": [
+ *         {
+ *           "file": "src/AssetCard.jsx",
+ *           "context_before": "\treturn (\n\t\t<Card className=\"vip-dam-card\">\n\t\t\t<CardBody>\n\t\t\t\t<img src={ asset.thumbnail } alt=\"\" className=\"vip-dam-card__thumb\" />\n\t\t\t\t<h3 className=\"vip-dam-card__title\">{ asset.title }</h3>",
+ *           "source": "\t\t\t\t<p className=\"vip-dam-card__meta\">\n\t\t\t\t\t{ asset.mimeType } · { formatBytes( asset.size ) }\n\t\t\t\t</p>\n\t\t\t\t<Button variant=\"secondary\" onClick={ onOpen }>\n\t\t\t\t\tOpen\n\t\t\t\t</Button>\n\t\t\t</CardBody>\n\t\t</Card>\n\t);\n}"
+ *         }
+ *       ]
+ *     },
+ *     "questions": {
+ *       "e0": {
+ *         "type": "choice",
+ *         "instructions": "The <p> on the first line of `elements[0].source` is flagged to be replaced by the design system's Text component. Which Text variant matches the role this element plays in its interface?",
+ *         "criteria": {
+ *           "heading-2xl": "Page title. 32px, semibold. One per screen, at the top.",
+ *           "heading-lg": "Section or card title. 15px, semibold.",
+ *           "body-md": "Default body text: paragraphs, labels, values. 13px, regular.",
+ *           "body-sm": "Secondary text: help text, descriptions, captions, metadata, muted notes. 12px, regular.",
+ *           "not_text": "The element is not a run of content Text renders — a wrapper around controls, an icon holder or colour swatch, a layout box — so no Text variant applies."
+ *         }
+ *       }
+ *     }
+ *   }
+ *
+ * The answer comes back as `{ choice: "body-sm", confidence: 0.81, probabilities: {…} }`,
+ * and above the floor `judgeVariants` writes it into the finding:
+ * `<p> → <Text variant="body-sm"> (judged 0.81)`.
  */
 
 import { readFileSync } from 'node:fs';

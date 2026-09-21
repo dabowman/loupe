@@ -7,6 +7,16 @@
  * entries never fire: WPDS itself flags those not-yet-safe to recommend, so the
  * call is contextual, not mechanical, and belongs in the authoring skill, not a
  * blocking check.
+ *
+ * Logic, per component import:
+ *   the registry has no entry for `package::name`             → clean
+ *   its status is neither `legacy` nor `locked`               → clean
+ *   the rule that status maps to is off                       → clean
+ *   `supersededBy` names candidates and every one of them is
+ *   itself `locked` or `experimental`                         → clean
+ *   already reported for this file, component and package     → skipped
+ *   status `locked`                                           → system/locked-component
+ *   status `legacy`                                           → system/superseded-component
  */
 
 import type { Candidate } from '../../analyze.ts';

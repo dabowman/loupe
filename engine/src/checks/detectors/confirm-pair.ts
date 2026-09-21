@@ -3,6 +3,17 @@
  * consent labels and no form control inside — the modal that should have been
  * a confirm dialog. A hit reports the registry entry that carries the
  * detector, as `patterns/superseded-composite`.
+ *
+ * Logic, per JSX element:
+ *   the element is not the entry's `container` component   → no hit
+ *   some descendant takes input — a design-system component
+ *   named *Control/Field/Picker/Input/Textarea/Editor, a
+ *   DataForm/Field.Root/Fieldset, or a raw input, select
+ *   or textarea                                            → no hit, it is a form
+ *   its `button` descendants are not exactly two           → no hit
+ *   either label is unreadable from the source, or does not
+ *   start with a consent word                              → no hit
+ *   otherwise                                              → hit, naming both labels
  */
 
 import type { JSXElement } from '@babel/types';

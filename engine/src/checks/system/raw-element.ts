@@ -5,6 +5,18 @@
  * and whether an inline style styles or lays it out; the stylesheet walk
  * records which classes style something and which lay something out. This is
  * what is decided from those.
+ *
+ * Logic, per element the element map names:
+ *   the mapping is not `styledOnly`                         → system/raw-element
+ *   `styledOnly`, and the analog is a layout primitive:
+ *     nothing lays the element out — no inline layout,
+ *     no class some stylesheet lays out with                → clean
+ *   `styledOnly`, and the analog is anything else:
+ *     nothing styles the element — no inline style,
+ *     no class some stylesheet styles                       → clean
+ *   otherwise                                               → system/raw-element, naming
+ *                                                             the analog the registry
+ *                                                             still recommends
  */
 
 import type { Candidate } from '../../analyze.ts';

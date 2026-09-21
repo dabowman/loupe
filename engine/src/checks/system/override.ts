@@ -12,6 +12,13 @@
  * — a class the design system's stylesheets style, or one carrying an
  * external prefix. "Stop styling this" replaces every per-declaration remedy
  * inside the rule, so it is one finding in their place.
+ *
+ * Logic, per declaration:
+ *   the key class is bound to no design-system component  → not ours, next check
+ *   not one of `APPEARANCE_PROPS` — colour, border, radius,
+ *   type, opacity, filter                                 → not ours, next check
+ *   this rule is off                                      → not ours, next check
+ *   otherwise                                             → system/override
  */
 
 import type { DeclarationCheck } from '../../analyze.ts';
@@ -29,6 +36,11 @@ export const systemOverride: DeclarationCheck = ({ prop }, { boundSystem, enable
  * A project prefix wins over a library one. `wp-parsely-*` matches the `wp-`
  * external prefix, and reporting a project's own class as a library internal
  * sends the agent to fix something it does not own.
+ *
+ * Logic, per CSS rule that styles anything at all:
+ *   the first key class the library styles or that carries an external
+ *   prefix, and that the project's own namespace does not claim  → system/override
+ *   no key class is one of those                                 → clean
  */
 export function libraryOverride(
 	keyClasses: readonly string[],

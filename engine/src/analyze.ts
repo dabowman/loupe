@@ -451,6 +451,14 @@ export async function analyze(
 	const layoutClasses = new Set<string>(); // classes whose CSS lays something out — feeds the same rule for div/span
 	const declared: DeclaredClass[] = []; // every key class a stylesheet rule declares — feeds css/dead-class
 
+	// `stylesheet/unparsed`, per stylesheet the discovery pass found:
+	//   the design system's own sheet                     → skipped, not the project's
+	//   unreadable from disk                              → skipped silently
+	//   larger than MAX_BYTES                             → stylesheet/unparsed, generated
+	//   its syntax needs a plugin the project has not
+	//   installed (`postcss-scss`, `postcss-less`)        → stylesheet/unparsed
+	//   postcss throws parsing it                         → stylesheet/unparsed
+	//   otherwise                                         → walked, and its rules checked
 	for (const { abs, rel } of files.styles) {
 		if (isLibrarySheet(rel)) continue; // the design system's own sheet, not the project's
 		let text: string;

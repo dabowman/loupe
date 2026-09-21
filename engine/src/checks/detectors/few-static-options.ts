@@ -3,6 +3,15 @@
  * array of `min`..`max` entries whose labels total at most `maxLabelChars` —
  * the select that should have been a segmented control. A hit reports the
  * registry entry that carries the detector, as `patterns/superseded-composite`.
+ *
+ * Logic, per JSX element:
+ *   the component is not in the entry's `components`         → no hit
+ *   its `prop` is missing, or is not a literal array the
+ *   source states in full                                    → no hit
+ *   the array holds fewer than `min` or more than `max`      → no hit
+ *   some option's label is not a plain string in the source  → no hit, the width is unknown
+ *   the labels together run past `maxLabelChars`             → no hit, it will not fit a row
+ *   otherwise                                                → hit, naming the count
  */
 
 import type { Detector } from '../../markup.ts';

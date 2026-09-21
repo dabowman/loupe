@@ -7,6 +7,14 @@
  * file. The reference index over-collects on purpose (see `markup.ts`): a
  * false "referenced" costs one missed finding, and a false "dead" tells an
  * agent to delete live CSS.
+ *
+ * Logic, per class a stylesheet rule declares in its key selector:
+ *   already reported for this file                        → skipped
+ *   not in a namespace the project owns                   → clean
+ *   some markup or reference file mentions the name       → clean
+ *   the profile lists the name as never-dead              → clean
+ *   the name starts with a stem built at runtime (`is-`)  → clean
+ *   otherwise                                             → css/dead-class
  */
 
 import type { Candidate } from '../../analyze.ts';

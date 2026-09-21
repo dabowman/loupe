@@ -4,6 +4,13 @@
  *
  * It supersedes the ordinary verdict on the declaration — `font-size: 13px`
  * is otherwise `typography/untokenized` — so it steps aside when it is off.
+ *
+ * Logic, per declaration:
+ *   not `font`, `font-size`, `font-weight`, `font-family`,
+ *   `line-height` or `letter-spacing`             → not ours, next check
+ *   the key class is bound to no text component   → not ours, next check
+ *   this rule is off                              → not ours, next check
+ *   otherwise                                     → typography/in-css
  */
 
 import type { DeclarationCheck } from '../../analyze.ts';

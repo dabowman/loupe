@@ -9,6 +9,29 @@
  * The only findings that cannot exist in one file. A sixth bespoke page header
  * is not a defect anywhere in particular — it is a defect in the set, so the
  * index is whole-repo even when the report is scoped to one file.
+ *
+ * Logic. First every composite the scanner read, repo-wide, is sorted into a bucket:
+ *   it matches a registered pattern — largest match wins, four nodes or more:
+ *     the file already imports its `canonical`  → using it, not rebuilding it; skipped
+ *     otherwise                                 → bucket it under the pattern id,
+ *                                                 keeping the largest per file
+ *   else it matches some pattern's `avoid` tree — most specific anti-shape wins:
+ *     the file already imports its `canonical`  → deliberate; skipped
+ *     otherwise                                 → bucket it under the pattern id,
+ *                                                 keeping the smallest per file
+ *   else it is substantial — 4+ nodes, 2+ deep — and is not merely the parts of a
+ *   component whose anatomy the registry declares:
+ *                                               → bucket it under its own signature,
+ *                                                 keeping the earliest line per file
+ *   else                                        → clean
+ *
+ * Then each bucket is counted:
+ *   a pattern bucket spanning two files or more  → patterns/duplicate-composite, in each
+ *   an avoid bucket, at any file count           → patterns/superseded-composite
+ *   a detector hit whose registry entry the file
+ *   does not already import                      → patterns/superseded-composite
+ *   a signature bucket spanning three files
+ *   or more                                      → patterns/unregistered-composite, in each
  */
 
 import type { Candidate } from '../../analyze.ts';

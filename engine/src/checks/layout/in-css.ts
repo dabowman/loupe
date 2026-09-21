@@ -6,6 +6,15 @@
  * already on a layout primitive) and on a grid, neither of which converts to a
  * flex primitive. The analyzer collapses this rule's findings to one per CSS
  * rule, since `display: flex` and its three companions are one decision.
+ *
+ * Logic, per declaration:
+ *   `gap`, `row-gap` or `column-gap`:
+ *     the key class is bound to a component, or the rule is a grid → clean
+ *     otherwise                                                    → layout/in-css
+ *   not a flex declaration — a flex property, or `display` naming
+ *   flex or grid                                                   → not ours, next check
+ *   bound to a component, a grid rule, or a `display` naming grid  → clean, claimed
+ *   otherwise                                                      → layout/in-css
  */
 
 import type { DeclarationCheck } from '../../analyze.ts';

@@ -125,6 +125,23 @@ export function makeSuppressionParser({
 	// The cheap whole-line filter — everything that could reach either gate.
 	const anyHead = [...heads, ...blanket];
 
+	/**
+	 * Logic, per line of the file:
+	 *   the line contains no keyword at all                → prose, skipped cheaply
+	 *   a keyword is not the first thing on it, once the
+	 *   comment opener is stripped                         → prose, skipped
+	 *   `<kw> <ruleIds> -- <reason>`, the reason being
+	 *   something other than the comment terminator        → a directive: it mutes those
+	 *                                                        rules on this line and on
+	 *                                                        every line its comment spans
+	 *   the line opens with the configured keyword or one
+	 *   of the blanket forms, in any shape                 → suppression/malformed
+	 *   it has a directive's shape — a keyword, optionally
+	 *   rule ids, then a separator or the end of the
+	 *   comment — but `strict` rejected it                 → suppression/malformed
+	 *   otherwise, a sentence that merely opens with a
+	 *   read alias                                         → prose, and mutes nothing
+	 */
 	return function scan(text: string, relPath: string): Suppressions {
 		const byLine = new Map<number, Set<string>>();
 		const directives: Directive[] = [];

@@ -4,6 +4,15 @@
  * (`judge.ts`, `judge/force.ts`). Not a finding by itself: only a redirect the
  * answers resolve to is, as `patterns/judged-redirect`. The scanner runs it
  * only under `--judge`.
+ *
+ * Logic, per JSX element:
+ *   its canonical name, member and all (`Menu.Item`), is not in the entry's
+ *   `components`                                          → not a control
+ *   it carries an attribute the entry's `unless` names,
+ *   or any spread, which could carry one                  → not a control
+ *   otherwise                                             → collect it: the component
+ *                                                           name, the enclosing
+ *                                                           component and its source
  */
 
 import type { DetectorContext } from '../../markup.ts';

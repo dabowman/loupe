@@ -5,9 +5,10 @@
  * items, post one request per batch, hand back one answer per item — and what
  * each check does with the answers. In `judge/`, one file per *question*: what
  * to put in the state and what to ask about it, which is the half worth reading
- * and the half an eval scores. An eval imports the query it scores and calls
- * `ask` with it, the same call the check makes. A new judgement is a new file
- * there and a caller here.
+ * and the half an eval scores — each one carries a whole example of the request
+ * it posts. An eval imports the query it scores and calls `ask` with it, the
+ * same call the check makes. A new judgement is a new file there and a caller
+ * here.
  *
  *   judge/variant.ts   system/raw-element — which variant of the analog
  *   judge/force.ts     a pattern force, for patterns/judged-redirect

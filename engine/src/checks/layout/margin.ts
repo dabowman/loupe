@@ -6,6 +6,13 @@
  * check for both: every margin is claimed here, and zero and `auto` pass, a
  * reset and a centering trick, neither of which has a gap remedy to point at.
  * `classifyMargin` has the cases.
+ *
+ * Logic, per declaration:
+ *   not `margin` or `margin-*`                       → not ours, next check
+ *   some part is negative (a `--var` name is not)    → layout/negative-margin
+ *   some part is `auto`                              → clean, claimed
+ *   every part is `0` or a CSS-wide keyword          → clean, claimed
+ *   otherwise                                        → layout/margin-on-child
  */
 
 import type { DeclarationCheck } from '../../analyze.ts';

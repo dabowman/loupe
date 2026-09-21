@@ -5,6 +5,13 @@
  * the attribute supersedes the per-declaration ones — the same way a
  * library-internal override supersedes advice about how to style it. On any
  * other element the declarations go through the ordinary checks.
+ *
+ * Logic, per element carrying a `style` attribute:
+ *   the element is not a design-system component  → clean; its declarations go
+ *                                                   through the ordinary chain
+ *   otherwise                                     → system/inline-style, naming the
+ *                                                   first three properties and how
+ *                                                   many more there are
  */
 
 import type { ClassifiedFinding, InlineStyleElement } from '../../types.ts';
