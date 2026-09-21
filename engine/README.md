@@ -39,6 +39,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `tokens/unknown-token` | A `var()` naming no token any known source defines |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the file that built it |
+| `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere |
 | `patterns/unregistered-composite` | The same composite in 3+ files, registered in none |
 | `tokens/hardcoded-value` | A literal colour/length where a design token exists |
 | `layout/margin-on-child` | Margin, which belongs on the parent's `gap` |
@@ -194,14 +195,14 @@ error-severity findings, so CI behaviour does not depend on this.
 
   "rules": {
     "css/dead-class": "error",
-    "layout/margin-on-child": "off",
-    "tokens/hardcoded-value": ["warn", { "allowZero": true }]
+    "layout/margin-on-child": "off"
   }
 }
 ```
 
-Full surface, with defaults, in `presets/generic.json`. The design-system block
-is what makes a preset:
+Defaults are `DEFAULTS` in `src/config.ts`; `presets/generic.json` adds the
+ignore globs and CSS-in-JS packages every shipped preset inherits. The
+design-system block is what makes a preset:
 
 ```jsonc
 {
@@ -340,7 +341,7 @@ it, and the registries describing its components and composites:
 ```
 profiles/
   acme/
-    profile.json       { id, name, packages, preset, patterns, components }
+    profile.json       { id, name, packages, preset, patterns, components, tokenDescriptions }
     patterns/index.json
     components/index.json
     authoring.md       read by the plugin's skills, not by this engine
@@ -386,7 +387,7 @@ rather than looking like a registry that found nothing.
 ## Fixing
 
 ```bash
-loupe fix   # apply; --dry-run to preview
+loupe fix   # apply; --dry-run to preview; --judge for the values below
 ```
 
 Applies only `tokens/hardcoded-value` findings the engine already resolved to
@@ -413,12 +414,172 @@ This covers the `system/raw-element` findings whose analog has `variants` in
 the component registry: `Text (@wordpress/ui)` in the WPDS profile. It sends
 each element's source and parent lines to TypeSafe in one request per 40
 elements, and asks which variant fits, or `not_<name>` when the element is not
-that component's content. A pick at 0.5 confidence or above is appended to the
-message; anything below leaves the finding alone. Verdicts, severities and the
+that component's content. A pick at 0.5 confidence or above is written into
+the suggestion — `<p> → <Text variant="body-sm"> (judged 0.80)`, a
+`variant="heading-*"` placeholder filled, or `no analog, not Text content` in
+place of a wrong analog — and recorded as `judged: { answer, confidence, spans }`
+on the finding, the spans being what the agent format paints green. Anything
+below leaves the finding alone. Verdicts, severities and the
 baseline identity (`code`) are untouched. The key comes from
 `TYPESAFE_API_KEY` in the environment, or from the `.env` two directories above
-the engine entry point, which is the repo root of a checkout. A failed request
-prints a note and the report goes out unjudged.
+the engine entry point, which is the repo root of a checkout — and from the
+working directory for a compiled binary, which has no checkout above it. A
+failed request prints a note and the report goes out unjudged.
+
+The key is always the caller's own. None is compiled into any artifact, and
+that is checked rather than assumed: a canary value placed in the checkout's
+`.env`, exported into the build environment, or dropped as a `.env` beside the
+build leaves `dist/loupe.mjs` and every binary clean, and a binary run without a
+key refuses `--judge` and says where to put one. The value is read through
+`process.env` at runtime and neither compiler substitutes it — which is why
+`scripts/build-binary.mjs` must never grow a `--define` for it.
+
+### Judged values
+
+`tokens/hardcoded-value` suggests a token only when exactly one on-role token
+carries the value. `--judge` settles the rest, and `fix --judge` applies what
+it settled.
+
+`planValue` splits a flagged value into parts (on whitespace outside
+parentheses), skips zeros and keywords, and settles each literal part a single
+exact token carries. For each remaining part, `candidatesFor` builds the
+options from the property's on-role family (the same role table the exact match
+uses):
+
+- **exact**: several on-role tokens carry the value, so only role separates
+  them (`top: 24px`: padding or gap).
+- **near**: a length or duration, narrowed to the scale steps either side of
+  it (`10px` of padding: `padding-sm` or `padding-md`).
+- **end**: a length or duration past the first or last step, which is
+  offered alone (`48px` of padding: `padding-3xl`, 32px).
+- **family**: anything else, colours included, gets every on-role token.
+
+Every candidate list also offers `keep`, except for spacing (padding, gap and
+position) in the `exact` and `near` tiers. A spacing value the scale covers
+only snaps, and the model just picks which step. That pick is applied whatever
+its confidence, because 6px sits exactly between 4 and 8 and either is a snap
+someone would accept. Past the end of the scale spacing may still be kept:
+48px of page padding snapped to 32px is a different layout.
+
+An empty token set is refused outright rather than read as "no token for
+anything". Every family would come back empty, and `fix --judge` would
+suppress every value as tokenless, so `check --judge` leaves values unjudged
+and says so, and `fix --judge` stops. A negative length, a `%` or an `hsl()` on
+a px or colour family is a literal no token can stand for. That value is not
+asked about, since rewriting the rest would leave the finding standing. A property whose family is empty
+(`box-shadow` in WPDS) is settled without a model, as kept.
+
+Each open part is one request, six in flight. The state is the file, the eight
+lines before the declaration and the three from it. The options are the
+candidate tokens, each described by the active profile's `tokenDescriptions`
+(for WPDS, the `$description` of every token in `@wordpress/theme`'s DTCG
+sources), plus `keep` where it is allowed. A value settles only if every part
+clears 0.5, apart from the in-scale spacing picks above. A value judged `keep` in
+every part is kept; one that mixes `keep` with a token is left for review, since
+a `var()` anywhere in it would exempt the kept literal. The result is written
+into the finding (`padding: 6px 12px → var(…-sm) var(…-md) (judged 0.60)`, or
+`deliberate, no token fits`) and recorded on `judged`. For values, `answer` is
+the replacement text or `keep`.
+
+`fix --judge` applies those answers in stylesheets only. A replacement goes
+through the same line-exact substitution as `fix`. A kept value gets a
+directive on its own line above the declaration, with the judgement as its
+reason:
+
+```css
+	/* wpds-allow tokens/hardcoded-value -- deliberate, no token fits (judged 0.98) */
+	background: rgba(0, 0, 0, 0.55);
+```
+
+A directive mutes its whole next line. So one is written only where every
+hardcoded value on that line was kept, and otherwise the value is reported as
+skipped.
+
+```bash
+npm run eval:values                     # three runs
+node evals/values/run.ts --bare         # without the token descriptions
+```
+
+`evals/values` carries all 145 literals `--judge` asks about in
+`vip-digital-asset-manager`, an un-remediated WPDS plugin written against the
+wp-admin palette. Each one is hand-labelled with every answer a careful reader
+would accept: `10px` of padding is `sm` or `md`, a scrim is `keep`. It scores
+97% on each of three runs, and 97% of its answers repeat run to run. As
+`fix --judge` applies it (at the 0.5 floor, plus the in-scale spacing picks)
+it acts on 70% of the literals: one wrong token, and not one wrong keep, across
+three runs. Three measurements shaped the
+design:
+
+- **Descriptions.** Without them it scores 85% and makes 16 wrong token picks
+  at the floor. The name says `track`; the description says "eg. scrollbar
+  track", which is what stops a `#f0f0f1` badge becoming one because its value
+  is a digit away.
+- **Colours get the whole family.** Narrowing them to the perceptually nearest
+  tokens scored 91%. A light tint's nearest tokens are greys of the wrong role,
+  and the success wash `#edf6ee` should have been is further away than they are.
+- **Position is spacing.** `top`, `right`, `bottom`, `left` and `inset` are
+  offered padding and gap tokens only, not the `size-*` ones for icons and
+  buttons. Offering the sizes had the model put `size-5xs` on `top: 4px`, and
+  took the score from 97% to 95%.
+
+Applied to that plugin, `fix --judge` took `tokens/hardcoded-value` from 183
+findings to 63, with 16 suppressions and no other finding moved. What is left
+is mostly the coin-flips: `10px` between 8 and 12, `3px` between 2 and 4.
+
+### Judged redirects
+
+The abstract pattern language decides between patterns on *forces*, things a
+signature cannot see: does this control stand for a `value`, a `command` or a
+`destination`? Most of its `resolve` rows consult one, so without a reading
+they never run. `--judge` supplies the reading and runs the table in code.
+
+A realization entry names the elements that are instances of its pattern with a
+`judge` detector — in WPDS, `Button` for `action-cluster.bar`, `Menu.Item` and
+`MenuItem` for `action-cluster.overflow`, `ToolbarButton` for the toolbar, and
+`SelectControl` for `choose.select`. Each is asked about every force its
+pattern's `resolve` consults that the vocabulary gives a `judge` block (only
+`represents`, so far), one control per request, six in flight. An answer under
+0.90 confidence stays unknown. `resolveRule` walks the table on what is known,
+stopping at the first row it cannot decide, and a redirect is reported as
+`patterns/judged-redirect` with the row's `because` as its note:
+
+```
+widgets/site-preview/render.tsx:116  <Button> (represents: destination) → `navigate-hierarchy` (judged 1.00)
+```
+
+An element with a prop from the detector's `unless` (`href`, `render`) already
+realizes the target and is not asked; neither is one with a spread, which might
+carry it. The finding is `warn`, written after the baseline so it never enters
+one, and the hook never runs it. Without `--judge` the scanner never sees the
+detector.
+
+On Gutenberg that is 734 controls in about 20 seconds and 13 findings: six that
+navigate by `window.location`, a router call or a menu item and should be links
+or `Navigator` parts, five editor-internal navigations and back buttons where
+the reading is right and a link is not always possible, and two pagination
+buttons. Pagination is the known gap: the eval has no label for it, and it is
+why the floor is not lower.
+
+```bash
+npm run eval:represents                          # three runs
+node evals/represents/run.ts 1 --batch 10         # sweep the batch size
+```
+
+`evals/represents` carries 100 controls lifted from
+`gutenberg/packages/{editor,edit-site}` and `site-foundry/src`, hand-labelled,
+13 of them flagged ambiguous because a careful reader could defend either
+answer. It asks the question exactly as `--judge` does, from the vocabulary's
+wording, so an edit to `patterns/index.json` is an edit the eval scores. It
+scores 93–94% against a 54% majority-class baseline and repeats itself on 99%
+of controls, with `destination` at 100% precision and 97% recall; every answer
+at 0.90 or above was right. It is deliberately outside `npm test`: it costs
+tokens, needs a key, and a model may drift in ways a build should not fail on.
+`tests/features.ts` pins the wiring offline.
+
+Batch size is per judgement and was measured rather than chosen. At 40 controls
+to a request this question scores 81% and finds 69% of the destinations, because
+every control in a batch shares one state with the other 39; alone it scores 93%
+and finds 97%.
 
 ## Baseline
 
@@ -441,19 +602,16 @@ a gate that blocks on findings it was told to accept. Set `baseline` in the
 config, or pass `--baseline <path>`, to put it elsewhere. `loupe status` prints
 the path in use, and says so when that path is a fallback.
 
-Baselines written by earlier versions are still read: a committed
-`.loupe-baseline.json` the config has since pointed away from, then
-`.loupe/baseline.json`, then the plugin data directory. Re-run `loupe baseline`
-to move one into place — the plugin-data fallback is reachable only where
-`CLAUDE_PLUGIN_DATA` is set, so until you do, a 0.1.0 backlog recorded inside
-Claude Code is honored by the hook and invisible to `loupe check` in a
-terminal.
+A committed `.loupe-baseline.json` the config has since pointed away from is
+still read. 0.1.x baseline locations (`.loupe/baseline.json`, the plugin data
+directory) are not: re-run `loupe baseline` to record one in the project.
 
 ## Claude Code hook
 
 ```jsonc
 // .claude/settings.local.json
 {
+  "env": { "LOUPE": "on" },
   "hooks": {
     "Stop": [
       { "hooks": [{ "type": "command", "command": "node /abs/path/to/engine/bin/loupe.mjs hook" }] }
@@ -480,12 +638,19 @@ stands down and says so. Bailing out entirely on `stop_hook_active` — the
 obvious loop guard — means the turn that *fixes* a finding is never checked, so
 you never confirm the fix.
 
-Set `LOUPE_OFF=1` in the hook's environment to silence it for a session —
+The hook is off until the project opts in: `LOUPE=on` in its environment,
+which Claude Code supplies from `"env": { "LOUPE": "on" }` in the project's
+`.claude/settings.local.json`. When the environment doesn't set `LOUPE`, the
+engine reads that same key from `.claude/settings.local.json`,
+`.claude/settings.json` and `~/.claude/settings.json`, in that order, so that
+`loupe status` in a terminal agrees with the hook.
+
+Set `LOUPE_OFF=1` in the hook's environment to silence an opted-in hook for a session —
 `LOUPE_OFF=1 claude`. It produces no output at all rather than downgrading to
 advisory, because an advisory finding still reaches the agent and an agent that
 sees a finding starts fixing it. `loupe` run by hand ignores the switch.
 
-It reads the same on/off spelling as every plugin option: `1`, `true`, `yes`,
+Both read the same on/off spelling as every plugin option: `1`, `true`, `yes`,
 `on`, case-insensitively. `LOUPE_OFF=0` is not one of them and leaves the hook
 running — `loupe status` prints a `hook: OFF` line only when the switch actually
 took, so the diagnostic and the gate cannot disagree.
@@ -537,7 +702,7 @@ const { findings, blocking, directives } = analyze(config, { scope: null });
 | `designSystem.styleSources` | Paths (file or directory) holding the design system's own stylesheets (`.css`, `.scss`, `.less`). Every class they define is a library internal: a project rule whose key selector is one of them reports `system/override (library internal)`, the way a `namespaces.external` prefix does. This is how an unprefixed system (`.field-label`, `.toast-viewport`) is recognised, since no JSX binds the classes a component renders itself. The sheets are not checked as project code, a `namespaces.project` prefix still wins, and custom properties set on a project class (a slot rebind) are not an override. Missing paths are skipped. |
 | `designSystem.cssInJsPackages` | Packages whose tagged templates are CSS. Defaults cover styled-components and emotion. |
 | `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element` when the carrier is a `components.text` or `components.layout` name; nothing nested inside it is, and a genuine render callback on any other component is not. Defaults to `render`, `as`, `component`; `[]` exempts nothing. A list replaces the default rather than extending it. |
-| `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. |
+| `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. A `judge` detector (`components`, `unless`) names elements for `check --judge` to ask about, and reports `patterns/judged-redirect`. |
 | `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
 `scope` filters what is *reported*. The index is always built repo-wide —
@@ -574,6 +739,44 @@ npm run typecheck    # tsc, no emit
 npm run build        # rebuild dist/loupe.mjs, and commit it
 npm run build:check  # fail if dist/ no longer matches src/
 ```
+
+### Binary
+
+A third artifact, for hosts that have no Node and should not be made to grow
+one. `npm run build:binary` compiles the engine into one self-contained
+executable; Bun does the compiling and is needed only to build, never to run.
+
+```bash
+npm run build:binary                      # this machine
+npm run build:binary -- --target=linux-x64
+npm run build:binary:all                  # all seven targets
+```
+
+Output lands in `binaries/`, which is gitignored: these are 60-110 MB each, 674
+MB for the set, and belong on a release rather than in the history.
+`.github/workflows/release.yml` is what puts them there — push a `v*` tag and it
+runs the engine's own gate first (a tag matches no branch, so `ci.yml` does not
+fire on one), checks the tag against `package.json` and against the version the
+built binary reports, proves the glibc build runs and the musl build runs on
+Alpine, writes `SHA256SUMS`, and attaches the lot. Running it by hand from the
+Actions tab builds and verifies without publishing. Targets are `linux-x64`,
+`linux-arm64`, their `-musl` variants, `darwin-x64`, `darwin-arm64` and
+`windows-x64`, and every one of them cross-compiles from any one machine.
+
+The data the engine ships — the presets, and the pattern language `--judge`
+reads — is imported rather than read from disk, so it is inside whichever
+artifact the bundler produced. Disk still wins wherever a `presets/` directory
+exists, so an ordinary install behaves exactly as it did and a preset dropped in
+by hand still takes effect. A side effect worth knowing: `patterns/index.json`
+sits above the package and `files` never shipped it, so `--judge` from a
+published npm install used to fail; embedding it fixes that too.
+
+Two things the compiled binary does not inherit from a directory install. It
+reports its own path from `execPath` rather than from `import.meta.url`, which
+inside an executable resolves to a synthetic root — `loupe version` says
+`binary` where it would otherwise say `source` or `bundle`. And `--judge` looks
+for a `.env` in the working directory rather than beside a checkout that is not
+there; in CI the key comes from the environment anyway.
 
 ### Types
 

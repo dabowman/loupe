@@ -29,6 +29,16 @@ that report drift on the file just touched, not forty tool calls later).
 /plugin install loupe@loupe
 ```
 
+The hooks are off until a project opts in. In each project you want gated, add
+this to `.claude/settings.local.json` and start a new session:
+
+```json
+{ "env": { "LOUPE": "on" } }
+```
+
+The skills, the commands and `loupe` typed by hand work everywhere without it.
+`loupe status` prints a `hook: OFF` line in a project that hasn't opted in.
+
 Nothing else to run. The engine ships pre-bundled with its dependencies, so a
 fresh install is a working install on any machine with Node 18 or newer — no
 `npm install`, no toolchain, no build step. See
@@ -102,8 +112,7 @@ It runs against the project you are in — the directory holding the
 project is and read the same baseline. Pass `--root` when you mean the
 subdirectory itself. It needs nothing added to that project: the engine carries its own dependencies, so there is no config file to
 commit and nothing to install. Nothing appears unless you run the thing that
-writes it: `loupe baseline` records `.loupe-baseline.json`, a hook run outside a
-plugin keeps its retry counter in `.loupe/`, and `loupe fix` rewrites the
+writes it: `loupe baseline` records `.loupe-baseline.json`, and `loupe fix` rewrites the
 stylesheets whose findings it can settle without judgment. It also passes the
 shipped pattern and component registries unless you name your own with
 `--patterns`/`--components`.
@@ -134,6 +143,7 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in more than one file | warn |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the one file that built it | warn |
 | `patterns/unregistered-composite` | The same composite built in three or more files, registered in none | warn |
+| `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere | warn |
 
 Rules disable themselves when the config cannot support them — a block theme
 with no component layer leaves the component rules inert rather than firing on
@@ -192,14 +202,71 @@ only wraps a button. `loupe check --judge` sends those elements to
 the element is not text at all:
 
 ```
-src/components/build-summary.tsx:142  <p> → <Text> — judged variant="body-sm" (0.82)
-src/components/brand-picker.tsx:101  <span> → <Text> — judged not Text content (1.00); the analog likely does not apply
+src/components/build-summary.tsx:142  <p> → <Text variant="body-sm"> (judged 0.80)
+src/components/build-summary.tsx:131  <h3> → Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.66)
+src/components/brand-picker.tsx:101  <span> → no analog, not Text content (judged 1.00)
 ```
 
-Below 0.5 confidence the finding is left as it was. The judgment is appended
-and never changes a verdict. The hook never calls it, so the gate stays
+The answer is written into the suggestion, confidence last, and what the model
+supplied is green in a terminal. Below 0.5 confidence the finding is left as it
+was, and no judgement changes a verdict. `--format json` carries the answer as
+data, `judged: { answer, confidence, spans }`, so a tool can act on a judgement
+without parsing the sentence. The hook never calls it, so the gate stays
 deterministic and offline. It needs `TYPESAFE_API_KEY`, from the environment
 or a `.env` beside the checkout (see `.env.example`).
+
+### Judged values
+
+Most hardcoded values are not exactly a token. A plugin written against the
+wp-admin palette uses `#1d2327` and `#646970`, which WPDS never ships, so the
+exact-match fix above settles almost none of them. `--judge` settles the rest:
+
+```
+assets/css/admin-panels.css:33  color: #1d2327 → var(--wpds-color-foreground-content-neutral) (judged 0.77)
+assets/css/admin-panels.css:85  background: #fcf0f1 → var(--wpds-color-background-surface-error-weak) (judged 0.81)
+assets/css/bulk-edit.css:30  background: rgba(0, 0, 0, 0.55) → deliberate, no token fits (judged 0.99)
+assets/css/report-page.css:70  box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ) → no box-shadow token in the design system
+```
+
+Code does the arithmetic and the model does the reading. The property picks the
+token family (`color` gets foreground tokens, `padding` gets padding tokens), a
+length is narrowed to the scale steps either side of it, and a shorthand is
+settled part by part. Then TypeSafe gets each literal in context along with its
+candidate tokens, each described in the design system's own words. It picks
+the token the rule should have used, or says the value is deliberate: a scrim,
+a pill, a brand colour the system has no token for. A property with no tokens
+at all needs no model.
+
+Then apply it:
+
+```bash
+loupe fix --judge --dry-run   # review what it would write
+loupe fix --judge             # rewrite the settled values, suppress the kept ones
+```
+
+Only picks at 0.5 confidence or above are applied. The exception is spacing
+(padding, gap, `top`/`left`/…) that falls between two steps of the scale:
+it always snaps to one of them, and is never judged deliberate. Settled values
+are rewritten in place. Kept ones get a `wpds-allow tokens/hardcoded-value` directive whose
+reason says a model made the call. Everything else is left for review. On an
+un-remediated WPDS plugin that took `tokens/hardcoded-value` from 183 findings
+to 63. See `engine/README.md` for how it scored.
+
+### Judged redirects
+
+The same flag reads what a control stands for — a value, a command or a
+destination — off every `Button`, menu item, toolbar button and `SelectControl`
+the profile names, and runs the pattern language's `resolve` table on the
+answer. A button that navigates is a link however it is styled, so:
+
+```
+widgets/site-preview/render.tsx:116  <Button> (represents: destination) → `navigate-hierarchy` (judged 1.00)
+```
+
+That is `patterns/judged-redirect`, reported only at 0.90 confidence or above,
+advisory, never baselined and never run by the hook. A control that already
+carries `href` is not asked. See `engine/README.md` for how it decides and how
+it scored.
 
 ### Composites
 
@@ -297,8 +364,7 @@ and applies a profile only to a project importing its packages.
   "preset": "wpds",
   "packages": ["@wordpress/components", "@wordpress/ui"],
   "patterns": "./patterns/index.json",
-  "components": "./components/index.json",
-  "skills": ["loupe-authoring", "loupe-patterns", "loupe-remediation"]
+  "components": "./components/index.json"
 }
 ```
 
@@ -500,20 +566,12 @@ The baseline is written to `.loupe-baseline.json` in the project and is meant to
 be committed: it is a statement about this repo, and the CLI and the hook are
 different processes that have to read the same file. Set `baseline` in the
 config, or pass `--baseline <path>`, to move it. The hook's retry counter is the
-one piece of state that does not live in the project — under a plugin it goes to
-the plugin's data directory keyed by project, and only when there is no such
-directory (plain `npx`, CI) does it fall back to `.loupe/` in the repo.
-`status` prints both locations.
+one piece of state that does not live in the project: it goes in the OS temp
+directory, keyed by project, and expires after six hours.
 
-Two older locations are still read, and `status` says which one answered.
-
-A baseline recorded by 0.1.x sits in one of those state directories. `status`
-marks it as a 0.1.x location — run `loupe baseline` once to record it in the
-project, because the plugin-data copy is only visible to a process that has
-`CLAUDE_PLUGIN_DATA` set, which a terminal does not.
-
-The other case is a committed `.loupe-baseline.json` in a project whose config
-has since pointed `baseline` somewhere that does not exist yet. That file is
+One fallback is read, and `status` says when it answered: a committed
+`.loupe-baseline.json` in a project whose config has since pointed `baseline`
+somewhere that does not exist yet. That file is
 already in the project, so there is nothing to move: `status` names it as the
 default-name file and says which configured path is missing. Without this
 fallback, a config change and the file move landing in separate commits would
@@ -528,7 +586,15 @@ until the finding is actually fixed, which releases it. Standing down is a
 truce, not an off switch: the next regression in that session is reported
 again.
 
-### Turning it off for a session
+### Turning it on, and off for a session
+
+The hook is off until a project opts in with `"env": { "LOUPE": "on" }` in
+`.claude/settings.local.json` (see [Install](#install)). A gate that runs in
+every repo the plugin is installed for puts findings into sessions that are
+about something else. Claude Code passes that setting to the hook as an
+environment variable, so `LOUPE=on claude` turns it on for one session as well.
+
+To silence a project that has opted in, for one session:
 
 ```bash
 LOUPE_OFF=1 claude
@@ -539,10 +605,10 @@ an advisory finding still lands in the agent's context, and an agent that sees a
 finding starts fixing it, which is usually the thing you were trying to avoid.
 `loupe` typed by hand still reports normally; the switch is only for the hook.
 
-`1`, `true`, `yes` and `on` all turn it on, case-insensitively. Anything else
-leaves the hook running — `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence it,
-they read as a value that isn't "on". `loupe status` prints a `hook: OFF` line
-when the switch has actually taken.
+Both switches take `1`, `true`, `yes` and `on`, case-insensitively. Anything
+else is read as not on, so `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence the
+hook. `loupe status` prints a `hook: OFF` line with the reason whenever the hook
+will say nothing.
 
 ## Reading the report
 
@@ -623,6 +689,52 @@ SARIF results carry a `partialFingerprints` entry derived from the same identity
 the baseline ratchets on: rule, file, and normalized code, deliberately not the
 line number. An edit above a finding moves its line without re-opening its alert.
 
+#### Without Node
+
+The reusable workflow needs neither an npm install nor a published package, but
+it does need Node and a checkout of this repository. Where neither is wanted — a
+CI image that carries no Node, a repository that is not JavaScript, a container
+you would rather keep small — `npm run build:binary` produces a single
+self-contained executable that carries its presets and its pattern language
+inside it. It does not carry the design-system profiles — the component and
+pattern registries that `system/locked-component`, `system/superseded-component`
+and the composite rules read — so pass them with `--profiles`: without them
+those rules are off, and the report is silently clean of them.
+
+```yaml
+- run: |
+    curl -fsSL -O https://github.com/dabowman/loupe/releases/latest/download/loupe-linux-x64
+    chmod +x loupe-linux-x64
+    git clone --depth 1 https://github.com/dabowman/loupe .loupe
+    ./loupe-linux-x64 check --all --format sarif --profiles .loupe/profiles > loupe.sarif
+```
+
+`--judge` still needs `TYPESAFE_API_KEY` from the environment — no key is
+compiled into the binary, and a run without one refuses rather than falling back
+to anything. In CI that is a secret on the job, exactly as it would be for the
+Node path.
+
+Pick the asset to match the image, because this is the one place it bites: the
+plain `linux-x64` build links against glibc and will not start on Alpine at all,
+and `loupe-linux-x64-musl` needs `libstdc++` there (`apk add libstdc++`), which
+Alpine does not carry. Both failures read as a missing file rather than a
+missing libc. Releases cover glibc and musl Linux on both architectures, macOS
+on both, and Windows.
+
+Pin the version rather than tracking `latest` once a green build matters, and
+check what you downloaded — every release carries `SHA256SUMS`:
+
+```yaml
+- run: |
+    base=https://github.com/dabowman/loupe/releases/download/v0.7.0
+    curl -fsSL -O "$base/loupe-linux-x64" -O "$base/SHA256SUMS"
+    sha256sum --ignore-missing -c SHA256SUMS
+    chmod +x loupe-linux-x64
+```
+
+Verified equivalent, not assumed: the Linux binary and macOS Node produce
+byte-identical reports over Gutenberg's 9,822 files.
+
 ## Remediation
 
 `/loupe-fix` runs `loupe fix` first, so what remains is the work that needs
@@ -648,7 +760,8 @@ Configured where you enable the plugin, read by the hook from the environment:
 
 ## Hooks
 
-The plugin ships both. `PostToolUse` scopes to the file just written, which is
+The plugin ships both, and both are off until the project opts in (see
+[Install](#install)). `PostToolUse` scopes to the file just written, which is
 what makes this a write-time gate rather than a review-time one. `Stop` covers
 everything changed in the turn.
 
@@ -735,8 +848,8 @@ Two things keep the artifact from becoming a second source of truth:
   it is a checkout someone is editing, and pinning that to a bundle would mean
   edits to `src/` silently doing nothing until a rebuild. That is a gate
   reporting yesterday's verdict on today's code — the exact failure this engine
-  exists to refuse. (`tsx` is what lets that file import a `.ts` entry point at
-  all; absent it, the bundle.)
+  exists to refuse. (Running `.ts` directly needs Node 22.18+; on an older
+  Node, the bundle.)
 - `npm run build:check` re-bundles and compares. It is what CI runs, and it is
   the only thing standing between a `src/` change and a marketplace install
   still serving the version before it, because the staleness is invisible on the

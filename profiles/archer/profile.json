@@ -4,6 +4,5 @@
   "preset": "archer",
   "packages": ["@dabowman/archer"],
   "patterns": "./patterns/index.json",
-  "components": "./components/index.json",
-  "skills": ["loupe-authoring", "loupe-patterns", "loupe-remediation"]
+  "components": "./components/index.json"
 }

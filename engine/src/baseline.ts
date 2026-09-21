@@ -12,12 +12,10 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { findingKey } from './analyze.ts';
 import { ensureDir } from './paths.ts';
 import type { AnalyzeResult, Baseline, BaselineFile, BaselinedResult } from './types.ts';
-
-const resolvePath = (root: string, p: string): string => (isAbsolute(p) ? p : join(root, p));
 
 /**
  * Read a baseline, or null if there isn't one *or* it can't be parsed.
@@ -29,11 +27,10 @@ const resolvePath = (root: string, p: string): string => (isAbsolute(p) ? p : jo
  * on with the gate blocking on all of them, which is the precise symptom the
  * baseline was pinned to the project to stop producing.
  */
-export function readBaseline(root: string, path: string): Baseline | null {
-	const full = resolvePath(root, path);
-	if (!existsSync(full)) return null;
+export function readBaseline(path: string): Baseline | null {
+	if (!existsSync(path)) return null;
 	try {
-		const parsed = JSON.parse(readFileSync(full, 'utf8')) as Partial<BaselineFile>;
+		const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<BaselineFile>;
 		// A file whose `entries` is missing or not an array is as unreadable as one
 		// that doesn't parse: both mean "we cannot tell you what was accepted".
 		// Defaulting it to `[]` instead said "nothing was accepted", which reads to
@@ -42,15 +39,7 @@ export function readBaseline(root: string, path: string): Baseline | null {
 		// never fired. `jq` rewriting the file without `.entries` is enough to get
 		// here, and valid JSON is the case least likely to be suspected.
 		if (!Array.isArray(parsed.entries)) return null;
-		const entries = parsed.entries;
-		return {
-			version: parsed.version ?? 1,
-			createdAt: parsed.createdAt ?? '',
-			count: parsed.count ?? entries.length,
-			findings: parsed.findings ?? entries.length,
-			entries,
-			set: new Set(entries),
-		};
+		return { createdAt: parsed.createdAt ?? '', entries: parsed.entries, set: new Set(parsed.entries) };
 	} catch {
 		return null;
 	}
@@ -68,10 +57,9 @@ export function readBaseline(root: string, path: string): Baseline | null {
  */
 export function writeBaseline(
 	root: string,
-	path: string,
+	full: string,
 	result: AnalyzeResult,
 ): { path: string; findings: number; entries: number } {
-	const full = resolvePath(root, path);
 	// A *configured* baseline may name a directory that doesn't exist yet — the
 	// default one sits in the project root, which the caller already proved
 	// exists, so don't mkdir it. `ensureDir` rather than a bare `mkdirSync`
@@ -86,7 +74,7 @@ export function writeBaseline(
 	// from itself, so two branches that each re-baselined conflicted on line 3
 	// with identical entry lists, and a conflict-markered baseline is unreadable.
 	// The timestamp records when the backlog was taken, not when the command was.
-	const prior = readBaseline(root, path);
+	const prior = readBaseline(full);
 	const unchanged =
 		prior !== null && prior.entries.length === entries.length && prior.entries.every((e, i) => e === entries[i]);
 	// Both numbers, for the same reason the CLI prints both: `count` is entries,

@@ -6,34 +6,16 @@
  * grouped in `report.ts`, keyed in `baseline.ts` and rewritten in `autofix.ts`.
  * A shape that four modules read is not owned by any of them.
  *
- * The rule ids and capability names are written out as unions rather than
- * derived from `RULES`, so a typo in a rule id is an error at the place it was
- * typed rather than a silently-absent lookup somewhere downstream.
+ * Rule ids are the keys of `RULES`, so a typo in one is an error at the place
+ * it was typed rather than a silently-absent lookup somewhere downstream.
  */
 
 import type { Rule as PostcssRule } from 'postcss';
+import type { RULES } from './rules.ts';
 
 // ── rules ───────────────────────────────────────────────────────────────────
 
-export type RuleId =
-	| 'suppression/malformed'
-	| 'stylesheet/unparsed'
-	| 'css/dead-class'
-	| 'system/locked-component'
-	| 'system/superseded-component'
-	| 'patterns/duplicate-composite'
-	| 'patterns/unregistered-composite'
-	| 'patterns/superseded-composite'
-	| 'tokens/unknown-token'
-	| 'tokens/hardcoded-value'
-	| 'layout/margin-on-child'
-	| 'layout/negative-margin'
-	| 'layout/in-css'
-	| 'typography/untokenized'
-	| 'system/override'
-	| 'system/inline-style'
-	| 'system/raw-element'
-	| 'typography/in-css';
+export type RuleId = keyof typeof RULES;
 
 export type Severity = 'error' | 'warn' | 'off';
 
@@ -111,10 +93,25 @@ export interface Finding {
 	 * JSON and SARIF ship this whole.
 	 */
 	note?: string | undefined;
+	/**
+	 * What `check --judge` wrote into this finding. `answer` is the model's pick
+	 * (a variant, a `not_` option, a force value) and `confidence` its
+	 * certainty, as data: a later reader, an autofix that accepts judged answers
+	 * above a floor say, takes them from here rather than parsing the prose.
+	 * `spans` are the parts of `message` the judgement wrote, in the order they
+	 * appear, which the report paints green.
+	 */
+	judged?: { answer: string; confidence: number; spans: string[] } | undefined;
 	rank: number;
 	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
 	suggest?: Suggestion[] | undefined;
+	/**
+	 * The declaration `tokens/hardcoded-value` flagged, as written. `suggest`
+	 * only exists where a token matched exactly; this is what a judgement acts
+	 * on where none did, without reading it back out of `message`.
+	 */
+	decl?: Hint | undefined;
 }
 
 /**
@@ -125,7 +122,7 @@ export interface ClassifiedFinding {
 	rule: RuleId;
 	message: string;
 	code?: string | undefined;
-	hint?: Hint | undefined;
+	hints?: Hint[] | undefined;
 }
 
 /**
@@ -134,7 +131,6 @@ export interface ClassifiedFinding {
  */
 export interface PendingFinding extends ClassifiedFinding {
 	line: number;
-	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
 	scopeLines?: number[] | undefined;
 }
@@ -188,6 +184,14 @@ export interface AnalyzeResult {
 	directives: Directive[];
 	diagnostics: Diagnostics;
 	blocking: boolean;
+	/**
+	 * Controls a `judge` detector named, in files the report covers and not
+	 * suppressed for `patterns/judged-redirect`. Nothing here is a finding until
+	 * `check --judge` asks about it.
+	 */
+	controls?: Control[];
+	/** The token set the run read, which `--judge` chooses from. */
+	tokens?: TokenSet;
 }
 
 // ── CSS ─────────────────────────────────────────────────────────────────────
@@ -205,18 +209,13 @@ export interface ClassifyContext {
 	boundSystem?: readonly Binding[];
 	boundText?: readonly Binding[];
 	isGrid?: boolean;
-	options?: HardcodedOptions;
 	/**
 	 * Whether a rule is live in this run. Two branches of the classifier
 	 * *supersede* the ordinary verdict rather than adding to it, so a
 	 * superseding rule that is off has to step aside and let the ordinary one
 	 * through — otherwise turning it off deletes the other finding too.
 	 */
-	enabled?: (rule: RuleId) => boolean;
-}
-
-export interface HardcodedOptions {
-	allowZero?: boolean;
+	enabled: (rule: RuleId) => boolean;
 }
 
 export type { PostcssRule };
@@ -238,7 +237,6 @@ export interface Binding {
 	tag: string | null;
 	isSystem: boolean;
 	isText?: boolean;
-	isLayout?: boolean;
 	file?: string;
 	line?: number;
 }
@@ -258,7 +256,6 @@ export interface InlineStyleElement {
 	tag: string;
 	isSystem: boolean;
 	isText: boolean;
-	isLayout: boolean;
 	decls: Decl[];
 	dynamic: number;
 	file: string;
@@ -310,7 +307,6 @@ export interface TemplateGroup {
 	isGrid: boolean;
 	/** Do these declarations style the tagged component itself, or a descendant? */
 	onTarget: boolean;
-	line: number;
 }
 
 export interface CssInJsTemplate {
@@ -319,7 +315,6 @@ export interface CssInJsTemplate {
 	target: string | null;
 	isSystem: boolean;
 	isText: boolean;
-	isLayout: boolean;
 	groups: TemplateGroup[];
 	error: string | null;
 }
@@ -397,7 +392,22 @@ export interface RuleHit {
 	detail: string;
 }
 
+/** An element a `judge` detector named: one control to ask about. */
+export interface Control {
+	file: string;
+	line: number;
+	/** The name the registry uses, alias resolved: `Button`, `Menu.Item`. */
+	component: string;
+	/** The component function the control sits in, when the parse found a name. */
+	enclosing: string | null;
+	/** The JSX element, opening tag to close. */
+	source: string;
+	/** The registry entry whose detector named it. */
+	patternId: string;
+}
+
 export interface ScanResult {
+	controls: Control[];
 	bindings: Binding[];
 	rawEls: RawElement[];
 	inlineStyles: InlineStyleElement[];
@@ -482,7 +492,7 @@ export interface MergedConfig {
 	namespaces: { project: string[]; external: string[]; neverDead: string[] };
 	sources: SourceGlobs;
 	suppression: SuppressionConfig;
-	rules: Record<string, Severity | [Severity, HardcodedOptions]>;
+	rules: Record<string, Severity>;
 	patterns: string | unknown[] | null;
 	componentRegistry: string | unknown[] | null;
 	baseline: string;
@@ -501,7 +511,7 @@ export interface AuthoredConfig {
 	namespaces?: Partial<MergedConfig['namespaces']>;
 	sources?: Partial<SourceGlobs>;
 	suppression?: Partial<SuppressionConfig>;
-	rules?: Record<string, Severity | [Severity, HardcodedOptions]>;
+	rules?: Record<string, Severity>;
 	patterns?: string | unknown[] | null;
 	componentRegistry?: string | unknown[] | null;
 	baseline?: string;
@@ -527,7 +537,6 @@ export interface DesignSystem {
 
 export interface RuleSetting {
 	severity: Severity;
-	options: HardcodedOptions;
 }
 
 /** One design system, as a directory: what it is, and what describes it. */
@@ -536,9 +545,10 @@ export interface Profile {
 	name: string;
 	preset: string | null;
 	packages: string[];
-	skills: string[];
 	patterns: string | null;
 	components: string | null;
+	/** `{ token: description }`, the design system's own words for what each token is for. */
+	tokenDescriptions: string | null;
 	dir: string;
 }
 
@@ -598,7 +608,6 @@ export interface Config {
 	rules: Record<RuleId, RuleSetting>;
 	enabled: Record<RuleId, boolean>;
 	severityOf: (id: RuleId) => Severity;
-	optionsOf: (id: RuleId) => HardcodedOptions;
 	isProject: (cls: string) => boolean;
 	isExternal: (cls: string) => boolean;
 	isNeverDead: (cls: string) => boolean;
@@ -629,8 +638,6 @@ export type Discovered = Record<SourceKind, DiscoveredFile[]> & { truncated: boo
 
 // ── state ───────────────────────────────────────────────────────────────────
 
-export type StateScope = 'plugin-data' | 'project' | 'none';
-
 /** A baseline as written to disk. */
 export interface BaselineFile {
 	version: number;
@@ -646,7 +653,7 @@ export interface BaselineFile {
 }
 
 /** A baseline once read, with its entries indexed for lookup. */
-export interface Baseline extends BaselineFile {
+export interface Baseline extends Pick<BaselineFile, 'createdAt' | 'entries'> {
 	set: Set<string>;
 }
 
@@ -725,17 +732,31 @@ export interface ReportPayload {
  * nothing else, and asking for a whole finding would mean a caller with a
  * candidate in hand had to invent a severity and a rank to be allowed to ask.
  */
-export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest'>;
+export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest' | 'decl' | 'judged'>;
 
-/** One unambiguous substitution: this property, this value, this token. */
+/** One substitution: this property, this value, rewritten `to` this. */
 export interface TokenFix {
 	file: string;
 	line: number;
 	prop: string;
 	value: string;
-	token: string;
+	/** `var(--token)`, or one per part for a shorthand the judge settled. */
+	to: string;
 }
 
 export interface SkippedFix extends TokenFix {
+	why: string;
+}
+
+/** A value `fix --judge` suppressed rather than rewrote, and the reason it wrote down. */
+export interface KeptValue {
+	file: string;
+	line: number;
+	prop: string;
+	value: string;
+	reason: string;
+}
+
+export interface SkippedKeep extends KeptValue {
 	why: string;
 }

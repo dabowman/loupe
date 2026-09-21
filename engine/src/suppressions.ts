@@ -30,11 +30,10 @@
  */
 
 import { canonicalRuleId } from './rules.ts';
-import { head, oneLine } from './text.ts';
+import { escapeRe, head, oneLine } from './text.ts';
 import type { Directive, MalformedDirective, SuppressionConfig, Suppressions } from './types.ts';
 
 const ID = '(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)';
-const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Leading whitespace, jsdoc asterisks, then an optional comment opener. The
 // JSX opener admits a space before the comment (`{ /* … */ }`): WordPress's
@@ -95,7 +94,10 @@ export function makeSuppressionParser({
 	// term is not already followed by mandatory whitespace — which is the
 	// malformed gate below, not `strict`.
 	const alternation = (terms: readonly string[]): string =>
-		[...new Set(terms)].sort((a, b) => b.length - a.length).map(esc).join('|');
+		[...new Set(terms)]
+			.sort((a, b) => b.length - a.length)
+			.map(escapeRe)
+			.join('|');
 	const keywordHead = `(${alternation(heads)})(?![\\w-])`;
 	const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
 	// The reason may not be the comment terminator itself: `<kw> <ids> -- */`
@@ -201,7 +203,7 @@ export function isSuppressed(
 ): boolean {
 	for (const L of [line, line - 1, ...scopeLines]) {
 		const s = byLine.get(L);
-		if (s && s.has(ruleId)) return true;
+		if (s?.has(ruleId)) return true;
 	}
 	return false;
 }

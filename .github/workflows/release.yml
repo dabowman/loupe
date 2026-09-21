@@ -1,0 +1,139 @@
+# Builds the compiled engine for every target and attaches it to a release.
+#
+# These are the artifact for hosts that have no Node and should not be made to
+# grow one — somebody else's CI, a pre-commit hook in a repo that is not
+# JavaScript, a designer who wants the checker and not a dev environment. They
+# are 60-100 MB each, so they live on a release and never in the history;
+# `engine/binaries/` is gitignored precisely so this is the only way they ship.
+#
+# This carries its own gate rather than trusting the branch build. `ci.yml`
+# triggers on `branches: ['**']`, which does not match a tag, so pushing v1.2.3
+# runs nothing — a release built from an untested commit is exactly the failure
+# this is here to prevent.
+#
+# Bun cross-compiles every target from one runner, so this is one job rather
+# than a matrix of five. Bun is a build-time tool only: nothing in the binary it
+# produces depends on Bun being installed anywhere.
+#
+# No credential is ever compiled in. The engine reads TYPESAFE_API_KEY at
+# runtime, and this workflow deliberately puts no secret in the environment —
+# there is nothing here for a build to capture, and `--judge` stays the caller's
+# own key. Do not add one.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Attach the binaries to a release. Off means build and verify only, which is what you want to test this workflow.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      # Creating the release and uploading to it. Nothing else needs writing.
+      contents: write
+    defaults:
+      run:
+        working-directory: engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: npm ci
+
+      # The gate a tag push would otherwise skip entirely.
+      - name: the engine passes its own checks
+        run: npm test
+
+      - name: the committed bundle matches src/
+        run: npm run build:check
+
+      # A tag saying v0.8.0 over binaries that report 0.7.0 is a trap that only
+      # shows up in a bug report months later. The binary compiles in this same
+      # package.json version, so checking it here covers the binaries too.
+      - name: the tag matches the engine version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          pkg="$(node -p "require('./package.json').version")"
+          [ "$tag" = "$pkg" ] || {
+            echo "tag v$tag does not match engine version $pkg"
+            exit 1
+          }
+
+      - name: build every target
+        run: npm run build:binary:all
+
+      # Compiling is not running, and the whole point of the compiled-in presets
+      # is that they are reachable. x64 glibc is what this runner can execute
+      # natively, so it gets the full check rather than a version string.
+      - name: the glibc binary runs, and finds its own data
+        run: |
+          ./binaries/loupe-linux-x64 version
+          test "$(./binaries/loupe-linux-x64 presets | wc -l)" -gt 0
+          ./binaries/loupe-linux-x64 check --all --preset generic --format sarif > /tmp/self.sarif || status=$?
+          # 0 clean, 1 blocking findings — both mean it ran. 2 means it could not.
+          [ "${status:-0}" -le 1 ] || { echo "the binary could not run (exit $status)"; exit 1; }
+          grep -q '"$schema"' /tmp/self.sarif
+
+      # musl is a different libc, not a flag: the glibc build does not start on
+      # Alpine at all, and the musl build needs libstdc++, which Alpine does not
+      # carry. Both facts are documented, and both are worth proving before a
+      # release rather than in somebody's pipeline.
+      - name: the musl binary runs on Alpine
+        run: |
+          docker run --rm -v "$PWD/binaries:/b:ro" alpine:3 sh -c \
+            'apk add --no-cache libstdc++ >/dev/null && /b/loupe-linux-x64-musl version'
+
+      - name: checksums
+        run: |
+          cd binaries
+          sha256sum loupe-* > SHA256SUMS
+          cat SHA256SUMS
+
+      # `gh` is preinstalled on the runner, so this needs no third-party action
+      # to hold a token for it.
+      - name: attach to the release
+        if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          # A hand-run build is not a version. It gets a release so the binaries
+          # have somewhere to live, marked prerelease so it never reads as one.
+          if [ "$tag" = "$GITHUB_REF" ]; then
+            tag="build-$(git rev-parse --short HEAD)"
+            pre=--prerelease
+          fi
+          # --target: a tag that does not exist yet is otherwise made at the
+          # default branch's head, not at the commit these binaries came from.
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" \
+            --target "$GITHUB_SHA" \
+            --title "$tag" \
+            --generate-notes ${pre:-}
+          gh release upload "$tag" binaries/loupe-* binaries/SHA256SUMS --clobber
+
+      # Only when they did not go to a release. 674 MB is not worth storing
+      # twice, and for a tag the release is already the place they live — this
+      # is here so a hand-run build has somewhere to leave them.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || inputs.publish) }}
+        with:
+          name: loupe-binaries
+          path: engine/binaries/
+          retention-days: 7

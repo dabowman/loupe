@@ -7,10 +7,7 @@
   },
   "designSystem": {
     "name": "WordPress",
-    "packages": [],
-    "tokenPrefixes": ["--wp--preset--", "--wp--style--", "--wp--custom--"],
-    "components": { "layout": [], "text": [] },
-    "elementMap": {}
+    "tokenPrefixes": ["--wp--preset--", "--wp--style--", "--wp--custom--"]
   },
   "namespaces": {
     "external": ["wp-block-", "wp-elements-", "wp-container-", "is-layout-"],

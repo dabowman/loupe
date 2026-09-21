@@ -23,6 +23,20 @@ Add `--dry-run` first if the repo has uncommitted work. This only substitutes
 values the engine matched unambiguously; anything with two candidate tokens, or
 in a JS channel, is left for the passes below.
 
+If `TYPESAFE_API_KEY` is set (in the environment or loupe's `.env`), offer the
+judged pass for the hardcoded values no single token matches: the near-misses,
+the ambiguous ones, and the values that are either a mistake or a deliberate
+choice. Review it first, and show the user the list:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --judge --dry-run --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
+```
+
+Each line is either a rewrite to a token or a `keep` that becomes a suppression.
+Apply it only after the user agrees, with the same command minus `--dry-run`.
+`--profiles` is what supplies the token descriptions the judgement is scored
+with. Whatever stays under the confidence floor is left for the passes below.
+
 ## 2. Get the current state
 
 ```bash

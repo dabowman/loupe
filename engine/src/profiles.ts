@@ -24,11 +24,13 @@
  * nothing to recognize it by — and has to be named with `--profile <id>`.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { byBytes, readDir } from './discover.ts';
 import { isAbsolute, join, resolve } from 'node:path';
 import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
-import { registryApplies, registryPackages } from './registry.ts';
+import { setComponentRegistry, setPatterns } from './config.ts';
+import { declaredPackages, registryApplies } from './registry.ts';
 import type { ComponentEntry, Config, Pattern, Profile, RegistryNote, SkippedRegistry } from './types.ts';
 
 export type { Profile, RegistryNote, SkippedRegistry };
@@ -59,26 +61,15 @@ const asStrings = (v: unknown): string[] =>
 /** A field that has to be a usable string, or nothing. Nothing else is coerced. */
 const asString = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 
-/**
- * Byte order, not collation.
- *
- * `localeCompare` answers a different question on a different machine — it
- * folds case, and treats `-` as ignorable at the primary level — so `acme/`
- * versus `Acme/` can resolve one way under a full-ICU Node and another under a
- * different `LANG`. Which of two directories claiming one id wins has to be a
- * property of the input, not of the host.
- */
-const byBytes = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-
 /** A `profile.json` as authored — every field optional, nothing vouched for. */
 interface RawProfile {
 	id?: unknown;
 	name?: unknown;
 	preset?: unknown;
 	packages?: unknown;
-	skills?: unknown;
 	patterns?: unknown;
 	components?: unknown;
+	tokenDescriptions?: unknown;
 }
 
 /**
@@ -87,19 +78,13 @@ interface RawProfile {
  */
 export function readProfiles(root: string | null | undefined): Profile[] {
 	if (!root || !existsSync(root)) return [];
-	let entries;
-	try {
-		entries = readdirSync(root, { withFileTypes: true });
-	} catch {
-		return [];
-	}
 	const out: Profile[] = [];
 	// Sorted, and one profile per id: two directories claiming the same id would
 	// otherwise both be selected, and `--profile <id>` would apply each of them.
 	// Sorting is what makes "the first one wins" a fact rather than a filesystem
 	// accident.
 	const seen = new Set<string>();
-	for (const e of [...entries].sort((a, b) => byBytes(a.name, b.name))) {
+	for (const e of readDir(root)) {
 		if (!e.isDirectory()) continue;
 		const dir = join(root, e.name);
 		const manifest = join(dir, 'profile.json');
@@ -117,14 +102,15 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 			if (seen.has(id)) continue;
 			const patterns = asString(raw.patterns);
 			const components = asString(raw.components);
+			const tokenDescriptions = asString(raw.tokenDescriptions);
 			out.push({
 				id,
 				name: asString(raw.name) ?? asString(raw.id) ?? e.name,
 				preset: asString(raw.preset),
 				packages: asStrings(raw.packages),
-				skills: asStrings(raw.skills),
 				patterns: patterns ? under(dir, patterns) : null,
 				components: components ? under(dir, components) : null,
+				tokenDescriptions: tokenDescriptions ? under(dir, tokenDescriptions) : null,
 				dir,
 			});
 			// Claimed only once the entry is on the list. Reserving it above meant a
@@ -168,18 +154,10 @@ export function selectProfiles(
  * means that one, not the shipped generic. Returns what was applied and what
  * was skipped, so the CLI can say why a registry it was handed did nothing —
  * a registry silently ignored looks exactly like a registry with no findings.
- *
  */
 export function applyRegistries(
 	config: Config,
 	sources: readonly RegistrySource[],
-	{
-		setPatterns,
-		setComponentRegistry,
-	}: {
-		setPatterns: (config: Config, patterns: Pattern[]) => Config;
-		setComponentRegistry: (config: Config, registry: Map<string, ComponentEntry>) => Config;
-	},
 ): { applied: string[]; skipped: SkippedRegistry[]; notes: RegistryNote[]; errors: string[] } {
 	const applied: string[] = [];
 	const skipped: SkippedRegistry[] = [];
@@ -193,56 +171,39 @@ export function applyRegistries(
 
 	let patterns: Pattern[] = config.patterns ?? [];
 	const components = new Map<string, ComponentEntry>(config.componentRegistry ?? []);
-	let sawPatterns = false;
-	let sawComponents = false;
+	// Each merge keeps what is already there and returns how many entries it added.
+	const add = {
+		patterns: (raw: unknown): number => {
+			const own = new Set(patterns.map((p) => p.id));
+			const fresh = loadPatterns(raw).filter((p) => !own.has(p.id));
+			patterns = [...patterns, ...fresh];
+			return fresh.length;
+		},
+		components: (raw: unknown): number => {
+			const before = components.size;
+			for (const [key, entry] of loadComponents(raw)) if (!components.has(key)) components.set(key, entry);
+			return components.size - before;
+		},
+	};
+	const saw = { patterns: false, components: false };
 
 	for (const src of sources) {
 		let used = false;
-		if (src.patterns) {
+		for (const kind of ['patterns', 'components'] as const) {
+			const path = src[kind];
+			if (!path) continue;
 			try {
-				const raw = readJson(resolve(src.patterns));
+				const raw = readJson(resolve(path));
 				const inScope = registryApplies(raw, config.designSystem.packages);
-				if (src.forced || inScope) {
-					const own = new Set(patterns.map((p) => p.id));
-					const fresh = loadPatterns(raw).filter((p) => !own.has(p.id));
-					patterns = [...patterns, ...fresh];
-					sawPatterns = true;
-					used = true;
-					if (src.forced)
-						forced.push({
-							label: src.label,
-							kind: 'patterns',
-							added: fresh.length,
-							offScope: inScope ? [] : registryPackages(raw),
-						});
-				} else {
-					skipped.push({ label: src.label, kind: 'patterns', packages: registryPackages(raw) });
+				if (!src.forced && !inScope) {
+					skipped.push({ label: src.label, kind, packages: declaredPackages(raw) });
+					continue;
 				}
+				const added = add[kind](raw);
+				saw[kind] = used = true;
+				if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
 			} catch (err) {
-				errors.push(`could not read ${src.label} patterns — ${err instanceof Error ? err.message : String(err)}`);
-			}
-		}
-		if (src.components) {
-			try {
-				const raw = readJson(resolve(src.components));
-				const inScope = registryApplies(raw, config.designSystem.packages);
-				if (src.forced || inScope) {
-					const before = components.size;
-					for (const [key, entry] of loadComponents(raw)) if (!components.has(key)) components.set(key, entry);
-					sawComponents = true;
-					used = true;
-					if (src.forced)
-						forced.push({
-							label: src.label,
-							kind: 'components',
-							added: components.size - before,
-							offScope: inScope ? [] : registryPackages(raw),
-						});
-				} else {
-					skipped.push({ label: src.label, kind: 'components', packages: registryPackages(raw) });
-				}
-			} catch (err) {
-				errors.push(`could not read ${src.label} components — ${err instanceof Error ? err.message : String(err)}`);
+				errors.push(`could not read ${src.label} ${kind} — ${err instanceof Error ? err.message : String(err)}`);
 			}
 		}
 		if (used) applied.push(src.label);
@@ -251,8 +212,8 @@ export function applyRegistries(
 	// Only reattach what actually changed: the setters recompute rule
 	// availability, and reattaching an untouched registry is a no-op that reads
 	// like one that did something.
-	if (sawPatterns) setPatterns(config, patterns);
-	if (sawComponents) setComponentRegistry(config, components);
+	if (saw.patterns) setPatterns(config, patterns);
+	if (saw.components) setComponentRegistry(config, components);
 
 	// Merging a registry by fiat is not the same as its rules coming on: a
 	// composite signature still needs a component layer to match against, and a
@@ -268,7 +229,11 @@ export function applyRegistries(
 	// Every rule the registry feeds, not just the first: with `duplicate-composite`
 	// turned off and `superseded-composite` left on, testing only the first said
 	// "nothing to report here" about a registry that had in fact enabled nothing.
-	const registryRules = ['patterns/duplicate-composite', 'patterns/superseded-composite'] as const;
+	const registryRules = [
+		'patterns/duplicate-composite',
+		'patterns/superseded-composite',
+		'patterns/judged-redirect',
+	] as const;
 	const patternsNote = (added: number): string | null =>
 		registryRules.every((rule) => config.severityOf(rule) === 'off')
 			? null

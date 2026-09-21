@@ -114,7 +114,7 @@ A pattern declares where it happens; the profile picks the container.
 
 ### Checked by rule
 
-Below the four-node floor the engine runs `few-static-options`, `confirm-pair`.
+Below the four-node floor the engine runs `few-static-options`, `confirm-pair`, `judge`.
 Specified but not shipped: `button-that-navigates`, `unconditional-optional-controls`, `hand-managed-selection`.
 
 No wpds realization yet: `choose.checklist`, `enter-value.text`, `enter-value.number`, `enter-value.date`, `enter-value.rich-text`, `edit-record.form-screen`, `report.inline`. Building one of these is registering one, not inventing a pattern.

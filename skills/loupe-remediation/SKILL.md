@@ -1,7 +1,7 @@
 ---
 name: loupe-remediation
 description: >-
-  Load when fixing design-system conformance findings — output from `loupe`, the `/loupe-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/negative-margin`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `patterns/duplicate-composite`, `patterns/superseded-composite`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Works on whatever design system the project is on — WordPress Design System, Archer, or one declared in the project's own config — reading the system-specific half of each remedy from the active profile. Carries the order to fix in, the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the loupe findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `loupe-authoring` for the underlying rules.
+  Load when fixing design-system conformance findings — output from `loupe`, the `/loupe-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/negative-margin`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `patterns/duplicate-composite`, `patterns/superseded-composite`, `patterns/judged-redirect`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Works on whatever design system the project is on — WordPress Design System, Archer, or one declared in the project's own config — reading the system-specific half of each remedy from the active profile. Carries the order to fix in, the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the loupe findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `loupe-authoring` for the underlying rules.
 compatibility: "Any React-family design system Loupe can be configured for. Needs the plugin's engine (node >=18)."
 ---
 
@@ -182,10 +182,21 @@ prose, and third-party render props are legitimately raw — suppress those with
 that as the reason, or exclude the path in config, which is better because it
 scales.
 
+A suggestion ending `(judged 0.80)` came from `check --judge`: a model read the
+element and filled in what the tag alone could not say — the variant in
+`<Text variant="body-sm">`, or `no analog, not Text content` when the element
+is a swatch or a wrapper rather than text. Use the variant; it is the half you
+would otherwise guess. Treat `no analog` as the reason to suppress rather than
+convert, and say what the element actually is.
+
 ### `tokens/hardcoded-value`
 
 When the finding names a token, it read that from the design system's own
-definitions. Use it.
+definitions. Use it. A token ending `(judged 0.xx)` came from `check --judge`,
+which picked it by what the rule styles among the tokens near the value. It is
+usually right but check it against the role. `deliberate, no token fits
+(judged …)` means the model read the value as a decision: suppress it with
+what it actually is (a scrim, a pill, a brand colour), not with the judgement.
 
 When it names none, the engine found no token on-role for that value. Do not
 substitute one that merely matches: a token is chosen by what the value is
@@ -246,6 +257,22 @@ come with the sanctioned component.
 If this file is the one legitimate exception, suppress it with that reason. Do
 not reshape the markup to dodge the match; that keeps the wrong composition and
 loses the record of why.
+
+### `patterns/judged-redirect`
+
+Only `check --judge` writes this, and it is a model's reading, not a parse:
+confirm it before changing anything. The finding says what the control was read
+as and where that sends it,
+``<Button> (represents: destination) → `navigate-hierarchy` (judged 0.97)``;
+the note is the pattern language's reason. Read the handler. A `Button` whose
+`onClick` sets `window.location` or calls a router is a link — give it `href`
+(or `render` a link) so it opens in a new tab and reads as navigation. A
+`SelectControl` whose `onChange` runs a command is a menu.
+
+When the reading is right and the remedy is impossible — editor state that no
+URL can express — suppress it with that reason. When the reading is wrong,
+suppress it and say what the control actually does; a wrong reading is worth
+reporting against the eval, not working around in the markup.
 
 ### `patterns/unregistered-composite`
 

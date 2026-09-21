@@ -17,8 +17,10 @@
  */
 
 import postcss from 'postcss';
-import type { Container, Rule } from 'postcss';
+import type { Container, Root, Rule } from 'postcss';
 import type { File, ImportDeclaration, TemplateLiteral } from '@babel/types';
+import { isGridDecl } from './styles.ts';
+import { messageOf } from './text.ts';
 import type { CssInJsLocals, Decl, TemplateGroup } from './types.ts';
 
 /**
@@ -29,19 +31,14 @@ import type { CssInJsLocals, Decl, TemplateGroup } from './types.ts';
  * (`import { 'a-b' as x }`), so the three specifier kinds need telling apart
  * rather than a chain of optional reads that silently yields undefined.
  */
-const importedName = (spec: ImportDeclaration['specifiers'][number]): string => {
+export const importedName = (spec: ImportDeclaration['specifiers'][number]): string => {
 	if (spec.type !== 'ImportSpecifier') return 'default';
 	return spec.imported.type === 'Identifier' ? spec.imported.name : spec.imported.value;
 };
 
-/** Packages whose tagged templates are CSS. Config can extend this. */
-export const DEFAULT_CSS_IN_JS_PACKAGES = [
-	'styled-components',
-	'@emotion/styled',
-	'@emotion/react',
-	'@emotion/css',
-	'@emotion/native',
-];
+/** Is `src` one of `packages`, or a subpath of one? */
+export const fromPackage = (packages: readonly string[], src: string): boolean =>
+	packages.some((p) => src === p || src.startsWith(`${p}/`));
 
 /**
  * Local names bound to a CSS-in-JS tag.
@@ -55,10 +52,9 @@ export function cssInJsLocals(ast: File, packages: readonly string[] | undefined
 	const styled = new Set<string>();
 	const bare = new Set<string>();
 	if (!packages?.length) return { styled, bare, any: false };
-	const fromPackage = (src: string): boolean => packages.some((p) => src === p || src.startsWith(`${p}/`));
 
 	for (const node of ast.program.body) {
-		if (node.type !== 'ImportDeclaration' || !fromPackage(node.source.value)) continue;
+		if (node.type !== 'ImportDeclaration' || !fromPackage(packages, node.source.value)) continue;
 		for (const spec of node.specifiers) {
 			const local = spec.local.name;
 			const imported = importedName(spec);
@@ -93,9 +89,6 @@ export function templateText(quasi: TemplateLiteral): string {
 	return out;
 }
 
-const GRID_DECL = (p: string, v: string): boolean =>
-	(p === 'display' && /\bgrid\b/.test(v)) || p === 'grid' || p.startsWith('grid-template') || p.startsWith('grid-auto');
-
 /**
  * Declaration groups in a template, each with the selector that owns it.
  *
@@ -104,11 +97,8 @@ const GRID_DECL = (p: string, v: string): boolean =>
  * without a newline so every line number still maps straight back to source.
  *
  */
-export function parseTemplate(
-	cssText: string,
-	startLine: number,
-): { groups: TemplateGroup[]; error: string | null } {
-	let root;
+export function parseTemplate(cssText: string, startLine: number): { groups: TemplateGroup[]; error: string | null } {
+	let root: Root;
 	try {
 		root = postcss.parse(`.dsh-root{${cssText}\n}`, { from: undefined });
 	} catch (err) {
@@ -128,21 +118,14 @@ export function parseTemplate(
 					// property whose value we cannot see is noise, not a finding.
 					if (node.value.includes('dsh-e')) continue;
 					decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
-				}
-				else if (node.type === 'atrule') walk(node); // @media keeps the enclosing selector
+				} else if (node.type === 'atrule')
+					walk(node); // @media keeps the enclosing selector
 				else if (node.type === 'rule') nested.push(node);
 			}
 		};
 		walk(rule);
-		const first = decls[0];
-		if (first)
-			groups.push({
-				selector,
-				decls,
-				isGrid: decls.some((d) => GRID_DECL(d.prop, d.value)),
-				onTarget,
-				line: first.line ?? startLine,
-			});
+		if (decls.length)
+			groups.push({ selector, decls, isGrid: decls.some((d) => isGridDecl(d.prop, d.value)), onTarget });
 		for (const child of nested) {
 			const sel = child.selectors.join(', ');
 			// `&:hover` on a styled(Button) is still that Button; a descendant
@@ -155,7 +138,3 @@ export function parseTemplate(
 	if (top) collect(top, null, true);
 	return { groups, error: null };
 }
-
-/** First line of an unknown throw. A parser can reject anything, including non-Errors. */
-const messageOf = (err: unknown): string =>
-	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';

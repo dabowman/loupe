@@ -20,7 +20,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
-import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
+import { loadConfig } from '../src/config.ts';
 import { matches, toNode } from '../src/patterns.ts';
 import { registryApplies } from '../src/registry.ts';
 import { renderTitle } from '../src/rules.ts';
@@ -73,8 +73,7 @@ const configFor = (pkg: string): string =>
 /** Analyze `root`, attaching `patternsPath` the way the CLI would. */
 async function analyzeWith(root: string, patternsPath?: string | null): Promise<AnalyzeResult> {
 	const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-	if (patternsPath)
-		applyRegistries(config, [{ label: 'test', patterns: patternsPath }], { setPatterns, setComponentRegistry });
+	if (patternsPath) applyRegistries(config, [{ label: 'test', patterns: patternsPath }]);
 	return analyze(config, { scope: null });
 }
 
@@ -122,15 +121,27 @@ await check('a registry naming no packages still applies anywhere', () => {
 
 await check('a package-qualified node matches only that package', () => {
 	const pattern = node(['@wordpress/components::Stack', '@wordpress/components::Button']);
-	const wp = { name: 'Stack', pkg: '@wordpress/components', children: [{ name: 'Button', pkg: '@wordpress/components', children: [] }] };
-	const chakra = { name: 'Stack', pkg: '@chakra-ui/react', children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }] };
+	const wp = {
+		name: 'Stack',
+		pkg: '@wordpress/components',
+		children: [{ name: 'Button', pkg: '@wordpress/components', children: [] }],
+	};
+	const chakra = {
+		name: 'Stack',
+		pkg: '@chakra-ui/react',
+		children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }],
+	};
 	assert(matches(pattern, wp), 'should match its own package');
 	assert(!matches(pattern, chakra), 'must not match another package');
 });
 
 await check('an unqualified node still matches any package', () => {
 	const pattern = node(['Stack', 'Button']);
-	const chakra = { name: 'Stack', pkg: '@chakra-ui/react', children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }] };
+	const chakra = {
+		name: 'Stack',
+		pkg: '@chakra-ui/react',
+		children: [{ name: 'Button', pkg: '@chakra-ui/react', children: [] }],
+	};
 	const unknown = { name: 'Stack', pkg: null, children: [{ name: 'Button', pkg: null, children: [] }] };
 	assert(matches(pattern, chakra), 'bare names are the default and must stay permissive');
 	// An import the scanner could not resolve is not evidence of a mismatch.
@@ -151,7 +162,7 @@ await check('a preset dropped into presets/ is detected without touching the eng
 			extends: 'generic',
 			detect: { priority: 40, confidence: 'high', dependencies: ['@zz/design-system'] },
 			designSystem: { name: 'ZZ', packages: ['@zz/design-system'], components: { layout: ['Row'], text: ['Copy'] } },
-		})
+		}),
 	);
 	const root = repo({ 'package.json': JSON.stringify({ dependencies: { '@zz/design-system': '^1.0.0' } }) });
 	try {
@@ -330,13 +341,13 @@ await check('a profile is selected by what the project imports', () => {
 });
 
 await check('a skipped registry is reported, not silently dropped', async () => {
-	const root = repo({ 'loupe.config.json': configFor('@chakra-ui/react'), 'registry.json': registryFile(['@wordpress/components']) });
+	const root = repo({
+		'loupe.config.json': configFor('@chakra-ui/react'),
+		'registry.json': registryFile(['@wordpress/components']),
+	});
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(config, [{ label: 'profile wpds', patterns: join(root, 'registry.json') }], {
-			setPatterns,
-			setComponentRegistry,
-		});
+		const out = applyRegistries(config, [{ label: 'profile wpds', patterns: join(root, 'registry.json') }]);
 		assert(out.applied.length === 0, 'nothing should have applied');
 		const skip = one(out.skipped, 'the skip must be reported');
 		assert(skip.packages.includes('@wordpress/components'), 'the report should name the scope');
@@ -355,11 +366,9 @@ await check('a profile named outright applies its registries anyway', async () =
 	});
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(
-			config,
-			[{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true }],
-			{ setPatterns, setComponentRegistry },
-		);
+		const out = applyRegistries(config, [
+			{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true },
+		]);
 		assert(!out.skipped.length, 'a forced registry must not be re-gated on scope');
 		assert(out.applied.length === 1, `expected the registry applied, got ${out.applied.length}`);
 		assert(config.enabled['patterns/duplicate-composite'], 'the rule the registry exists to enable stayed off');
@@ -394,11 +403,9 @@ await check('a forced registry that enables nothing says so', async () => {
 	});
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(
-			config,
-			[{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true }],
-			{ setPatterns, setComponentRegistry },
-		);
+		const out = applyRegistries(config, [
+			{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true },
+		]);
 		assert(!out.skipped.length && out.applied.length === 1, 'the forced registry should still merge');
 		const note = one(out.notes, 'a merge that changed nothing must be reported');
 		// Named precisely: a merged component *registry* never feeds
@@ -426,11 +433,9 @@ await check('a forced registry the project already covers is not reported as fin
 	});
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(
-			config,
-			[{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true }],
-			{ setPatterns, setComponentRegistry },
-		);
+		const out = applyRegistries(config, [
+			{ label: 'profile wpds', patterns: join(root, 'registry.json'), forced: true },
+		]);
 		assert(config.enabled['patterns/duplicate-composite'], 'the project’s own registry should still enable the rule');
 		const note = one(out.notes, 'a forced registry that added nothing must be reported');
 		assert(/added no patterns/.test(note.note), `the note should say it added nothing: ${note.note}`);
@@ -443,10 +448,7 @@ await check('an unreadable registry is an error, not a crash', async () => {
 	const root = repo({ 'loupe.config.json': configFor('@acme/ui') });
 	try {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const out = applyRegistries(config, [{ label: 'profile gone', patterns: join(root, 'missing.json') }], {
-			setPatterns,
-			setComponentRegistry,
-		});
+		const out = applyRegistries(config, [{ label: 'profile gone', patterns: join(root, 'missing.json') }]);
 		assert(out.errors.length === 1, 'the failure should be reported');
 		assert(config.enabled['patterns/duplicate-composite'] === false, 'the rule stays off rather than half-configured');
 	} finally {
@@ -607,7 +609,9 @@ export const ${name} = () => (
 	const sig = ['Dlg', 'DlgTrigger', ['DlgPopup', 'DlgTitle']];
 	const withCanonical = repo({
 		...files,
-		'registry.json': JSON.stringify({ patterns: [{ id: 'dlg', summary: 'anatomy', canonical: 'Dlg', signature: sig }] }),
+		'registry.json': JSON.stringify({
+			patterns: [{ id: 'dlg', summary: 'anatomy', canonical: 'Dlg', signature: sig }],
+		}),
 	});
 	const without = repo({
 		...files,
@@ -638,7 +642,9 @@ export const ${name} = () => (
 // they come in. The negative half keeps the fix from passing by silencing the
 // rule, and `Tableau` is there because "starts with Table" is not "is a part".
 await check('a registered component’s own parts, cut below its root, are not a composite', async () => {
-	const file = (name: string): string => `import { TableHead, TableRow, TableHeaderCell, TableCell, Tableau, TableauItem } from '@acme/ui';
+	const file = (
+		name: string,
+	): string => `import { TableHead, TableRow, TableHeaderCell, TableCell, Tableau, TableauItem } from '@acme/ui';
 export const ${name}Head = () => (
   <TableHead><TableRow><TableHeaderCell /><TableHeaderCell /><TableHeaderCell /></TableRow></TableHead>
 );
@@ -669,6 +675,23 @@ export const ${name}Board = () => (
 			shapes.has('Tableau(TableauItem,TableauItem,TableauItem)'),
 			`a different component that shares a prefix still reports: ${[...shapes]}`,
 		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Rule options were removed. A config still written in that form has to say
+// so, not report `bad severity for x: warn,[object Object]`.
+await check('a rule in the removed [severity, options] form fails with the fix', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ rules: { 'tokens/hardcoded-value': ['warn', { allowZero: true }] } }),
+	});
+	try {
+		const err = await loadConfig({ root, configPath: join(root, 'loupe.config.json') }).then(
+			() => null,
+			(e: unknown) => e,
+		);
+		assert(err instanceof Error && /no longer supported.*"warn"/.test(err.message), `got ${String(err)}`);
 	} finally {
 		cleanup(root);
 	}

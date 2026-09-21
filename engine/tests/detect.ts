@@ -31,7 +31,11 @@ const CASES: Case[] = [
 			write(r, 'package.json', JSON.stringify({ devDependencies: { '@wordpress/components': '^28.0.0' } }));
 			for (let i = 0; i < 4; i++) {
 				write(r, `src/B${i}.jsx`, `export const B${i} = () => <div className="acme-panel acme-panel--${i}" />;`);
-				write(r, `css/b${i}.css`, `.acme-panel { gap: 8px; }\n.acme-panel--${i} { color: #111; }\n.components-button { color: #222; }`);
+				write(
+					r,
+					`css/b${i}.css`,
+					`.acme-panel { gap: 8px; }\n.acme-panel--${i} { color: #111; }\n.components-button { color: #222; }`,
+				);
 			}
 		},
 		expect: { preset: 'wpds', project: ['acme-'] },
@@ -42,7 +46,11 @@ const CASES: Case[] = [
 			write(r, 'theme.json', '{"version":3}');
 			write(r, 'templates/index.html', '<div class="wp-block-group ridge-hero has-text-color"></div>');
 			write(r, 'parts/header.html', '<div class="ridge-nav ridge-nav__inner"></div>');
-			write(r, 'style.css', '.ridge-hero{display:flex}\n.ridge-nav{gap:8px}\n.ridge-nav__inner{margin:4px}\n.wp-block-group{color:#000}');
+			write(
+				r,
+				'style.css',
+				'.ridge-hero{display:flex}\n.ridge-nav{gap:8px}\n.ridge-nav__inner{margin:4px}\n.wp-block-group{color:#000}',
+			);
 		},
 		expect: { preset: 'wordpress-block-theme', project: ['ridge-'] },
 	},
@@ -62,7 +70,11 @@ const CASES: Case[] = [
 		files: (r: string) => {
 			write(r, 'package.json', '{}');
 			write(r, 'src/A.jsx', 'export const A = () => <div className="live-a live-b live-c" />;');
-			write(r, 'styles/a.css', '.live-a{color:#111}\n.live-b{color:#222}\n.live-c{color:#333}\n.ghost-a{color:#444}\n.ghost-b{color:#555}\n.ghost-c{color:#666}');
+			write(
+				r,
+				'styles/a.css',
+				'.live-a{color:#111}\n.live-b{color:#222}\n.live-c{color:#333}\n.ghost-a{color:#444}\n.ghost-b{color:#555}\n.ghost-c{color:#666}',
+			);
 		},
 		expect: { preset: 'generic', project: ['live-'] },
 	},
@@ -71,7 +83,11 @@ const CASES: Case[] = [
 		files: (r: string) => {
 			write(r, 'package.json', '{}');
 			write(r, 'src/A.jsx', 'export const A = () => <div className="components-button" />;');
-			write(r, 'styles/a.css', '.components-button{color:#111}\n.wp-block-group{color:#222}\n.has-text-color{color:#333}');
+			write(
+				r,
+				'styles/a.css',
+				'.components-button{color:#111}\n.wp-block-group{color:#222}\n.has-text-color{color:#333}',
+			);
 		},
 		expect: { preset: 'generic', project: [] },
 	},
@@ -99,10 +115,22 @@ const CASES: Case[] = [
 		files: (r: string) => {
 			write(r, 'package.json', '{}');
 			for (let i = 0; i < 4; i++) {
-				write(r, `src/A${i}.jsx`, `export const A${i} = () => <div className="own-box own-b${i} rbc-event rbc-e${i}" />;`);
-				write(r, `styles/a${i}.css`, `.own-box{color:#111}\n.own-b${i}{color:#222}\n.rbc-event{color:#333}\n.rbc-e${i}{color:#444}`);
+				write(
+					r,
+					`src/A${i}.jsx`,
+					`export const A${i} = () => <div className="own-box own-b${i} rbc-event rbc-e${i}" />;`,
+				);
+				write(
+					r,
+					`styles/a${i}.css`,
+					`.own-box{color:#111}\n.own-b${i}{color:#222}\n.rbc-event{color:#333}\n.rbc-e${i}{color:#444}`,
+				);
 			}
-			write(r, 'node_modules/react-big-calendar/lib/css/react-big-calendar.css', '.rbc-event{padding:2px}\n.rbc-calendar{display:flex}');
+			write(
+				r,
+				'node_modules/react-big-calendar/lib/css/react-big-calendar.css',
+				'.rbc-event{padding:2px}\n.rbc-calendar{display:flex}',
+			);
 		},
 		expect: { preset: 'generic', project: ['own-'] },
 	},
@@ -125,9 +153,14 @@ for (const c of CASES) {
 			fail();
 			console.log(`FAIL ${c.name}`);
 			if (!okPreset) console.log(`  preset: want ${c.expect.preset}, got ${got.preset}`);
-			if (!okNs) console.log(`  namespaces: want ${JSON.stringify(c.expect.project)}, got ${JSON.stringify(got.namespaces.project)}`);
-			if (!okDir) console.log(`  packageDir: want ${JSON.stringify(c.expect.packageDir)}, got ${JSON.stringify(got.packageDir)}`);
-			if (!okTokens) console.log(`  tokenSources: want all under ${c.expect.tokenSourcesUnder}, got ${JSON.stringify(sources)}`);
+			if (!okNs)
+				console.log(
+					`  namespaces: want ${JSON.stringify(c.expect.project)}, got ${JSON.stringify(got.namespaces.project)}`,
+				);
+			if (!okDir)
+				console.log(`  packageDir: want ${JSON.stringify(c.expect.packageDir)}, got ${JSON.stringify(got.packageDir)}`);
+			if (!okTokens)
+				console.log(`  tokenSources: want all under ${c.expect.tokenSourcesUnder}, got ${JSON.stringify(sources)}`);
 		}
 	} finally {
 		cleanup(root);
@@ -239,11 +272,11 @@ await check('a truncated inference is never high confidence', () => {
 		assert(bounded.truncated, 'inference that stopped at the ceiling has to say so');
 		assert(
 			bounded.namespaces.project.includes('own-'),
-			`the root's own files are read before the tree below them: ${JSON.stringify(bounded.namespaces)}`
+			`the root's own files are read before the tree below them: ${JSON.stringify(bounded.namespaces)}`,
 		);
 		assert(
 			bounded.namespaceConfidence === 'low',
-			`a guess from part of a tree cannot be high confidence — got ${bounded.namespaceConfidence}`
+			`a guess from part of a tree cannot be high confidence — got ${bounded.namespaceConfidence}`,
 		);
 		// The preset is read off manifests and top-level markers, not the walk,
 		// so it is exactly as good as it ever was.
@@ -266,7 +299,7 @@ await check('a truncated walk that found nothing still answers none', () => {
 		assert(bounded.truncated, 'a 40-file tree has to trip a ceiling of 3');
 		assert(
 			bounded.namespaceConfidence === 'none',
-			`nothing was found, so the confidence is none — got ${bounded.namespaceConfidence}`
+			`nothing was found, so the confidence is none — got ${bounded.namespaceConfidence}`,
 		);
 	} finally {
 		cleanup(root);

@@ -7,37 +7,61 @@
  *   2  could not run (bad usage, not a git worktree, config error)
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze, usableReplacement } from './analyze.ts';
-import { applyTokenFixes } from './autofix.ts';
-import { judgeVariants } from './judge.ts';
+import { parseArgs as parseArgv } from 'node:util';
+import { analyze } from './analyze.ts';
+import { usableReplacement } from './checks/system/currency.ts';
+import { CSS_FILE, applyKeeps, applyTokenFixes } from './autofix.ts';
+import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
-import { findConfig, listPresets, loadConfig, presetExists, setComponentRegistry, setPatterns } from './config.ts';
+import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
+import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
 import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
-import { RULES, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
-import { formatAgent, formatJson, formatSarif, formatSummary } from './report.ts';
+import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
+import { formatAgent, formatSarif, formatSummary, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
 import { oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
 import type { RegistrySource } from './profiles.ts';
-import { baselinePath, findExistingBaseline, isPluginContext, stateDir } from './paths.ts';
-import { RULE_IDS } from './rules.ts';
+import { baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
 import {
-	bumpAttempts, clearAttempts, emitBlocking, emitClean, hookRoot, hookSilenced,
-	parsePayload, payloadFile, readStdin, resolvedOptions,
+	bumpAttempts,
+	clearAttempts,
+	emitBlocking,
+	emitClean,
+	hookRoot,
+	hookOff,
+	parsePayload,
+	payloadFile,
+	readStdin,
+	resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
-import type { AnalyzeResult, BaselinedResult, Config, TokenFix } from './types.ts';
+import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 
 /** First line of an unknown throw. Anything can be thrown; only Errors carry a message. */
 const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * The TypeSafe key, from the environment or loupe's own `.env`, or undefined.
+ * `--judge` is the one network call in the engine, so its callers check this
+ * before the walk, and the hook never asks.
+ */
+function judgeKey(): string | undefined {
+	try {
+		if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(ENV_FILE);
+	} catch {
+		/* no .env beside the checkout is the ordinary case */
+	}
+	return process.env.TYPESAFE_API_KEY;
+}
 
 /**
  * The two things stderr carries, told apart by colour as well as by wording.
@@ -64,17 +88,18 @@ const note = (msg: string): void => {
 const confidence = (level: string): string =>
 	(level === 'high' ? green : level === 'none' ? red : yellow)(`[${level} confidence]`);
 
-/**
- * A key: a `status` label, or a property in the config `detect` prints.
- *
- * Both are the same thing to a reader — the name of a setting, next to what it
- * resolved to — so they wear one colour and the value beside them keeps the
- * page's default. Dim rather than bright: the label column is the part you
- * already know, and the value is what you came to read.
- */
-const key = (label: string): string => dim(label);
-
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Whether this is a single-file artifact rather than an installed directory.
+ * A binary carries its data compiled in, so it can never see the manifest that
+ * sits beside the engine — which makes that the test, with no dependence on
+ * how any particular compiler spells its synthetic root.
+ */
+const SINGLE_FILE = !existsSync(join(HERE, '..', 'package.json'));
+
+/** A `.env` beside the checkout; for a binary, one in the working directory. */
+const ENV_FILE = SINGLE_FILE ? resolve('.env') : join(HERE, '..', '..', '.env');
 
 /**
  * Which loupe this is: the version, whether it runs from source or the built
@@ -85,18 +110,15 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * find the manifest from either.
  */
 function versionLine(): string {
-	let version = 'unknown';
-	try {
-		version = (JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')) as { version?: string }).version ?? version;
-	} catch {
-		/* a manifest that cannot be read leaves the version unknown, not the command broken */
-	}
+	// A compiled binary has no engine directory: `execPath` is the only location
+	// that means anything.
+	if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
 	const entry = basename(HERE) === 'src' ? 'source' : 'bundle';
-	return `loupe ${version} (${entry}, ${resolve(HERE, '..', '..')})`;
+	return `loupe ${EMBEDDED_VERSION} (${entry}, ${resolve(HERE, '..', '..')})`;
 }
 
 /** The keys inside a printed JSON config, painted without reserialising it. */
-const jsonKeys = (json: string): string => json.replace(/"([^"\\]+)":/g, (_m, name: string) => `${key(`"${name}"`)}:`);
+const jsonKeys = (json: string): string => json.replace(/"([^"\\]+)":/g, (_m, name: string) => `${dim(`"${name}"`)}:`);
 
 /**
  * {@link USAGE}, painted at the print site.
@@ -108,8 +130,8 @@ const jsonKeys = (json: string): string => json.replace(/"([^"\\]+)":/g, (_m, na
  * indented line — so a reworded description cannot accidentally light up.
  */
 const usage = (): string =>
-	USAGE.replace(/^  (--[a-z-]+)/gm, (_m, flag: string) => `  ${cyan(flag)}`)
-		.replace(/^  ([a-z]+)\b/gm, (_m, cmd: string) => `  ${bold(cmd)}`)
+	USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag: string) => `  ${cyan(flag)}`)
+		.replace(/^ {2}([a-z]+)\b/gm, (_m, cmd: string) => `  ${bold(cmd)}`)
 		.replace(/^(Commands|Options|Environment):$/gm, (_m, head: string) => `${bold(`${head}:`)}`);
 
 /**
@@ -119,8 +141,18 @@ const usage = (): string =>
  * consumes the next argv entry, and {@link Flags} decides what type comes back.
  */
 const VALUE_FLAGS = [
-	'format', 'config', 'root', 'preset', 'files', 'max-findings',
-	'severity', 'baseline', 'patterns', 'components', 'profiles', 'profile',
+	'format',
+	'config',
+	'root',
+	'preset',
+	'files',
+	'max-findings',
+	'severity',
+	'baseline',
+	'patterns',
+	'components',
+	'profiles',
+	'profile',
 ] as const;
 
 type ValueFlag = (typeof VALUE_FLAGS)[number];
@@ -162,31 +194,28 @@ interface Args {
 	flags: Flags;
 }
 
-const isValueFlag = (key: string): key is ValueFlag => (VALUE_FLAGS as readonly string[]).includes(key);
-
-function parseArgs(argv: readonly string[]): Args {
-	const positional: string[] = [];
-	const flags: Record<string, string | boolean | undefined> = {};
-	for (let i = 0; i < argv.length; i++) {
-		const a = argv[i];
-		if (a === undefined) continue;
-		if (!a.startsWith('--')) {
-			positional.push(a);
-			continue;
-		}
-		const [key, inline] = a.slice(2).split(/=(.*)/s);
-		if (key === undefined) continue;
-		if (isValueFlag(key)) flags[key] = inline ?? argv[++i];
-		else flags[key] = inline === undefined ? true : inline !== 'false';
-	}
-	return { _: positional, flags: flags as Flags };
+function parseArgs(args: string[]): Args {
+	const { values, positionals } = parseArgv({
+		args,
+		options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: 'string' }])),
+		allowPositionals: true,
+		strict: false,
+	});
+	// A value flag given no value parses as `true`; treat it as not given.
+	for (const f of VALUE_FLAGS) if (typeof values[f] !== 'string') delete values[f];
+	// A switch is undeclared, so `--judge=false` arrives as the string 'false',
+	// which is truthy: it would turn judging on. `=false` means off.
+	for (const [k, v] of Object.entries(values))
+		if (typeof v === 'string' && !(VALUE_FLAGS as readonly string[]).includes(k)) values[k] = v !== 'false';
+	return { _: positionals, flags: values as Flags };
 }
 
 const USAGE = `loupe <command> [options]
 
 Commands:
   check                 Analyze the project (default)
-  fix                   Apply the fixes the engine can make without judgement
+  fix                   Apply the fixes the engine can make without judgement;
+                        with --judge, also the ones TypeSafe settles
   baseline              Record current findings as the accepted backlog
   suppressions          List every active suppression directive
   explain <rule>        Print a rule's guidance
@@ -209,9 +238,14 @@ Options:
                         path (default: .loupe-baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
   --dry-run             Report what 'fix' would change without writing
-  --judge               Ask TypeSafe which variant a raw-element finding needs
-                        (check only; TYPESAFE_API_KEY from the environment or
-                        loupe's own .env)
+  --judge               Ask TypeSafe what a parse cannot see: the variant a raw
+                        element needs, whether a control stands for the
+                        pattern it was built as (patterns/judged-redirect), and
+                        which token a hardcoded value should be, or whether it
+                        is deliberate. With fix, rewrites the values it settled
+                        and suppresses the ones it kept; add --dry-run to
+                        review them first. (TYPESAFE_API_KEY from the
+                        environment or loupe's own .env)
   --force               Overwrite an existing config (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
@@ -227,10 +261,13 @@ Options:
                         that governs the cwd, or CLAUDE_PROJECT_DIR under hook)
 
 Environment:
-  LOUPE_OFF=1           Silence the hook for this session; 'loupe' typed by hand
-                        still reports. Start Claude Code as 'LOUPE_OFF=1 claude'.
-                        1/true/yes/on turn it on; anything else — 0 and false
-                        included — leaves the hook running.
+  LOUPE=on              Turn the hook on. It is off until a project opts in:
+                        "env": { "LOUPE": "on" } in .claude/settings.local.json.
+                        'loupe' typed by hand always reports.
+  LOUPE_OFF=1           Silence an opted-in hook for this session. Start Claude
+                        Code as 'LOUPE_OFF=1 claude'.
+                        Both read 1/true/yes/on as on; anything else — 0 and
+                        false included — as not set.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
@@ -348,14 +385,16 @@ function resolveScope(
 	if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(' ')}` };
 	if (args.flags.all) return null;
 	if (args.flags.files)
-		return args.flags.files
-			.split(',')
-			.map((f) => f.trim())
-			.filter(Boolean)
-			// Findings are keyed repo-relative, so an absolute path matched nothing
-			// and the run reported clean — the worst answer a gate can give.
-			.map((f) => toPosix(isAbsolute(f) ? relative(config.root, resolve(f)) : f))
-			.filter((f) => f && !f.startsWith('..'));
+		return (
+			args.flags.files
+				.split(',')
+				.map((f) => f.trim())
+				.filter(Boolean)
+				// Findings are keyed repo-relative, so an absolute path matched nothing
+				// and the run reported clean — the worst answer a gate can give.
+				.map((f) => toPosix(isAbsolute(f) ? relative(config.root, resolve(f)) : f))
+				.filter((f) => f && !f.startsWith('..'))
+		);
 	if (args.flags.changed || defaultChanged) {
 		const changed = changedFiles(config.root);
 		if (changed === null) return { error: NOT_A_WORKTREE };
@@ -410,14 +449,14 @@ async function main(): Promise<number> {
 	// must not turn every large write into a broken pipe.
 	const payload: HookPayload = isHook ? parsePayload(await readStdin()) : {};
 
-	// Per-session off switch: `LOUPE_OFF=1 claude`.
+	// Off unless the project opted in, or silenced for the session.
 	//
 	// Silence, not advisory mode. An advisory finding still lands in the agent's
 	// context, and an agent that sees a finding starts fixing it — which is the
 	// whole complaint. The only way to work on something else is for the gate to
 	// say nothing at all. Deliberately hook-only: `loupe check` typed by hand is
 	// someone asking, and answering "nothing" would be a lie.
-	if (isHook && hookSilenced()) return EXIT.OK;
+	if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
 
 	// The project, not the directory you happen to be standing in.
 	//
@@ -457,7 +496,7 @@ async function main(): Promise<number> {
 		note(
 			`loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve(args.flags.profiles) : 'any profiles directory (--profiles was not given)'}${
 				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
-			}\n`
+			}\n`,
 		);
 
 	let config: Config;
@@ -529,12 +568,11 @@ async function main(): Promise<number> {
 		// merged its registries into a config that knew none of its components
 		// and left every severity at the generic default.
 		if (unconfigured && forced?.preset) {
-			if (presetExists(forced.preset)) profilePreset = forced.preset;
+			if (hasPreset(forced.preset)) profilePreset = forced.preset;
 			// A profile naming a preset this install does not carry is a broken
 			// profile, not a broken project: its registries still apply, so name
 			// what was ignored rather than failing the run over it.
-			else if (!isHook)
-				note(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed\n`);
+			else if (!isHook) note(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed\n`);
 		}
 		// Override the preset inference chose, not the run it produced. The
 		// namespaces are a reading of *this* project and hold whoever picked the
@@ -584,7 +622,7 @@ async function main(): Promise<number> {
 			components: args.flags.components ?? null,
 		});
 
-	const registries = applyRegistries(config, sources, { setPatterns, setComponentRegistry });
+	const registries = applyRegistries(config, sources);
 	config.profiles = { available: profiles, active, ...registries };
 	if (!isHook) {
 		for (const err of registries.errors) fail(`loupe: ${err}\n`);
@@ -594,7 +632,7 @@ async function main(): Promise<number> {
 			note(
 				`loupe: ${s.label} ${s.kind} registry skipped \u2014 scoped to ${s.packages.join(', ')}, and this config declares ${
 					config.designSystem.packages.length ? config.designSystem.packages.join(', ') : 'no design-system packages'
-				}\n`
+				}\n`,
 			);
 		// And the same for one merged past the scope check that still did not do
 		// what merging it was for: `--profile` forcing a registry in does not make
@@ -641,31 +679,36 @@ async function main(): Promise<number> {
 		const state = config.enabled[id]
 			? SEV_PAINT[config.severityOf(id)](config.severityOf(id))
 			: dim('disabled (config does not satisfy its requirements)');
-		process.stdout.write(`${magenta(id)}  [${state}]\n  ${renderTitle(id, config.designSystem, config.suppression.keyword)}\n`);
+		process.stdout.write(
+			`${magenta(id)}  [${state}]\n  ${renderTitle(id, config.designSystem, config.suppression.keyword)}\n`,
+		);
 		// The two registry-backed rules have nothing of their own to explain: what
 		// they fire on is a list somebody else authored, and a title that says
 		// "a current component now covers this job" without saying whose list
 		// decided that leaves a reader with nothing to check. Name the size, a few
 		// entries to recognise it by, and the file — not the list itself, which
 		// runs to hundreds.
-		const flagged = id === 'system/locked-component' ? 'locked' : id === 'system/superseded-component' ? 'legacy' : null;
+		const flagged =
+			id === 'system/locked-component' ? 'locked' : id === 'system/superseded-component' ? 'legacy' : null;
 		if (flagged) {
 			const entries = [...config.componentRegistry.values()];
 			// The same filter the rule applies. Counting every `legacy` entry would
 			// overstate it: one whose only replacement is itself locked or
 			// experimental never fires, deliberately.
-			const fires = entries.filter((e) => e.status === flagged && usableReplacement(config.componentRegistry, e.supersededBy));
+			const fires = entries.filter(
+				(e) => e.status === flagged && usableReplacement(config.componentRegistry, e.supersededBy),
+			);
 			const names = fires.slice(0, 5).map((e) => e.name);
 			const src = (config.profiles?.active ?? []).filter((p) => p.components);
 			process.stdout.write(
 				`  ${dim(
 					`${fires.length} of ${entries.length} entries in the active component registry fire it` +
-						`${names.length ? `: ${names.join(', ')}${fires.length > names.length ? `, +${fires.length - names.length} more` : ''}` : ''}.`
-				)}\n`
+						`${names.length ? `: ${names.join(', ')}${fires.length > names.length ? `, +${fires.length - names.length} more` : ''}` : ''}.`,
+				)}\n`,
 			);
 			if (src.length)
 				process.stdout.write(
-					`  ${dim(`From ${src.map((p) => `${p.id} (${p.components})`).join(', ')} — each finding carries its entry's note, and \`--format json\` ships that note whole.`)}\n`
+					`  ${dim(`From ${src.map((p) => `${p.id} (${p.components})`).join(', ')} — each finding carries its entry's note, and \`--format json\` ships that note whole.`)}\n`,
 				);
 		}
 		return EXIT.OK;
@@ -678,7 +721,8 @@ async function main(): Promise<number> {
 		// separately is what let `status` print `hook: OFF` and `Turns are blocked
 		// by: ...` seven lines apart — the same drift `isOn` closed one layer down,
 		// reappearing in the conclusion instead of the predicate.
-		const gateBlocks = blockingAllowed && !hookSilenced();
+		const off = hookOff(root);
+		const gateBlocks = blockingAllowed && !off;
 		const src =
 			config.source.kind === 'file'
 				? config.source.path
@@ -687,10 +731,6 @@ async function main(): Promise<number> {
 					: config.source.kind === 'inferred'
 						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
-		const state = stateDir(root);
-		// Report the baseline separately from the retry state. They resolve
-		// differently now, and the whole reason they do is that one line covering
-		// both let a baseline sit in a file the hook was never reading.
 		const base = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
 		// What design system this run thinks it is checking, in the terms the
 		// rules are written against. The rules roster below says which checks are
@@ -702,44 +742,36 @@ async function main(): Promise<number> {
 		const ds = config.designSystem;
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
 		const lines = [
-			`${key('version:    ')}${versionLine()}`,
-			`${key('config:     ')}${src}`,
-			`${key('system:     ')}${ds.name || '(unnamed)'}`,
-			`${key('packages:   ')}${orNone(ds.packages)}`,
-			`${key('layout:     ')}${orNone(ds.layoutComponents)}`,
-			`${key('text:       ')}${orNone(ds.textComponents)}`,
-			`${key('tokens:     ')}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(', ') : '(none \u2014 token rules inactive)'}`,
-			`${key('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
-			`${key('suppress:   ')}${config.suppression.keyword} <ruleId> -- <reason>`,
-			// A legacy hit has to say so. `loupe baseline` writes the canonical path,
-			// so an unmarked legacy path here is `status` and `baseline` naming
-			// different files with nothing on hand to reconcile them — the exact
-			// shape of the bug that pinned the baseline to the project in the first
-			// place.
-			`${key('baseline:   ')}${base.path}${
-				base.found && readBaseline(root, base.path) === null
+			`${dim('version:    ')}${versionLine()}`,
+			`${dim('config:     ')}${src}`,
+			`${dim('system:     ')}${ds.name || '(unnamed)'}`,
+			`${dim('packages:   ')}${orNone(ds.packages)}`,
+			`${dim('layout:     ')}${orNone(ds.layoutComponents)}`,
+			`${dim('text:       ')}${orNone(ds.textComponents)}`,
+			`${dim('tokens:     ')}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(', ') : '(none \u2014 token rules inactive)'}`,
+			`${dim('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
+			`${dim('suppress:   ')}${config.suppression.keyword} <ruleId> -- <reason>`,
+			`${dim('baseline:   ')}${base.path}${
+				base.found && readBaseline(base.path) === null
 					? '  (unreadable \u2014 every finding in it is live again)'
-					: base.fallback === 'legacy'
-						? "  (0.1.x location — run 'loupe baseline' to record it in the project)"
-						: base.fallback === 'default-name'
-							? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)`
-							: base.found
-								? ''
-								: '  (none recorded yet)'
+					: base.fallback === 'default-name'
+						? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)`
+						: base.found
+							? ''
+							: '  (none recorded yet)'
 			}`,
-			`${key('state:      ')}${state.dir}${state.scope === 'plugin-data' ? '  (retry counter only, outside your repo)' : ''}`,
-			`${key('options:    ')}${
+			`${dim('options:    ')}${
 				optionsSource === 'environment'
 					? 'from the plugin environment (hook context)'
 					: optionsSource === 'settings'
 						? 'from ~/.claude settings'
 						: 'none found — plugin defaults apply'
 			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
-			`${key('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
+			`${dim('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
 			// Asked through the same predicate the gate uses. Reporting on mere
 			// truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
 			// blocking — a diagnostic lying about the one thing it exists to say.
-			...(hookSilenced() ? [yellow('hook:       OFF for this session (LOUPE_OFF is set)')] : []),
+			...(off ? [yellow(`hook:       OFF \u2014 ${off}`)] : []),
 			// Which design system's registries are in play, and — when none are —
 			// which ones were on offer. "No composite findings" and "no composite
 			// registry" look identical in a report; they must not look identical here.
@@ -748,7 +780,7 @@ async function main(): Promise<number> {
 			// it are written for no design system in particular. Told only "archer",
 			// a skill has to guess where that lives \u2014 and guesses wrong the moment
 			// the profiles root is a project's own rather than the plugin's.
-			`${key('profile:    ')}${
+			`${dim('profile:    ')}${
 				config.profiles?.active?.length
 					? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(', ')
 					: config.profiles?.available?.length
@@ -770,33 +802,36 @@ async function main(): Promise<number> {
 			// Coloured by what it does, not by the rule's configured severity —
 			// same reason the words are: an error-severity rule under a gate that
 			// cannot block is advisory, and painting it red says otherwise.
+			// The hook never judges, so this one cannot stop a turn at any severity.
+			const judgeOnly = id === 'patterns/judged-redirect';
 			const verdict = config.enabled[id]
-				? sev === 'error' && gateBlocks
+				? sev === 'error' && gateBlocks && !judgeOnly
 					? red('BLOCKS')
-					: sev === 'error'
-						? yellow('advisory (would block if enabled)')
-						: yellow('advisory')
+					: judgeOnly
+						? yellow(`${sev === 'error' ? 'error' : 'advisory'}, --judge only`)
+						: sev === 'error'
+							? yellow('advisory (would block if enabled)')
+							: yellow('advisory')
 				: dim(`off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`);
 			lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
 		}
-		const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
+		const blockers = RULE_IDS.filter(
+			(id) => config.enabled[id] && config.severityOf(id) === 'error' && id !== 'patterns/judged-redirect',
+		);
 		lines.push(
 			'',
 			gateBlocks && blockers.length
 				? `${red('Turns are blocked by:')} ${blockers.map((id) => magenta(id)).join(', ')}`
-				: green('Nothing blocks turns; every finding is advisory.')
+				: green('Nothing blocks turns; every finding is advisory.'),
 		);
-		if (hookSilenced()) {
-			lines.push('The gate is silenced for this session: LOUPE_OFF is set in the environment.');
+		if (off) {
+			lines.push(`The gate is off: ${off}.`);
 		} else if (config.inferred) {
 			lines.push('css/dead-class is held to advisory because the namespaces were inferred, not configured.');
-			if (detected?.truncated)
-				lines.push(
-					`Inference stopped at the ${CEILING}: ${CEILING_WHY}.`
-				);
+			if (detected?.truncated) lines.push(`Inference stopped at the ${CEILING}: ${CEILING_WHY}.`);
 			if (!blockingAllowed)
 				lines.push(
-					'The gate reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.'
+					'The gate reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.',
 				);
 		} else if (!blockingAllowed) {
 			lines.push('The gate reports only: "Block turns on findings" is off in the plugin settings.');
@@ -815,7 +850,7 @@ async function main(): Promise<number> {
 			return EXIT.OK;
 		}
 		const lines = [
-			`${key('preset:     ')}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
+			`${dim('preset:     ')}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
 			dim(`            ${info.presetReasons.join('; ')}`),
 			// What inference concluded still gets reported; it is just no longer
 			// what the run uses. `init` writes the config below verbatim, so the
@@ -824,11 +859,11 @@ async function main(): Promise<number> {
 			...(profilePreset
 				? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`]
 				: []),
-			`${key('namespaces: ')}${info.namespaces.project.join(', ') || '(none found)'}  ${confidence(info.namespaceConfidence)}`,
+			`${dim('namespaces: ')}${info.namespaces.project.join(', ') || '(none found)'}  ${confidence(info.namespaceConfidence)}`,
 			dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
 			dim(
 				`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` +
-					(info.truncated ? `  (stopped at the ${CEILING})` : '')
+					(info.truncated ? `  (stopped at the ${CEILING})` : ''),
 			),
 		];
 		if (command === 'detect') {
@@ -849,7 +884,7 @@ async function main(): Promise<number> {
 			// to do about it, so the two lines do not read as one repeated twice.
 			fail(
 				'loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. ' +
-					'Point --root at the project, or pass --force to write it anyway.\n'
+					'Point --root at the project, or pass --force to write it anyway.\n',
 			);
 			return EXIT.CANNOT_RUN;
 		}
@@ -862,9 +897,8 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
-	// Writes to the canonical project path, never to wherever a legacy baseline
-	// happens to sit: a backlog recorded here has to be visible to the hook, and
-	// the hook is a different process with a different environment.
+	// Writes to the project path: a backlog recorded here has to be visible to
+	// the hook, which is a different process with a different environment.
 	if (command === 'baseline') {
 		const result = await analyze(config, { scope: null });
 		// `||`, not `??`: an empty `--baseline=` is not a path. `findExistingBaseline`
@@ -898,9 +932,17 @@ async function main(): Promise<number> {
 				process.stdout.write(
 					`${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(','))}  ${d.reason}${
 						d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ''
-					}\n`
+					}\n`,
 				);
 		return EXIT.OK;
+	}
+
+	// The one network call in the engine, so the key is checked before the walk
+	// and the hook never makes it.
+	const apiKey = args.flags.judge && !isHook ? judgeKey() : undefined;
+	if (args.flags.judge && !isHook && !apiKey) {
+		fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}\n`);
+		return EXIT.CANNOT_RUN;
 	}
 
 	// ── fix ───────────────────────────────────────────────────────────────────
@@ -917,12 +959,21 @@ async function main(): Promise<number> {
 		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
+			// Only what `fix` can write: an answer about a JSX value is paid for and dropped.
+			const judgeable = toFix.findings.filter((f) => f.rule === 'tokens/hardcoded-value' && CSS_FILE.test(f.file));
+			if (apiKey && toFix.tokens && judgeable.length)
+				await judgeValues(root, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
 			fail(`loupe: ${messageOf(err)}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		const dry = Boolean(args.flags['dry-run']);
 		const { applied, skipped } = applyTokenFixes(root, toFix.findings, { dry });
+		// After the rewrites, which never move a line, and bottom up within a file,
+		// because a directive is a line of its own.
+		const kept = apiKey
+			? applyKeeps(root, toFix.findings, config.suppression.keyword, { dry, directives: toFix.directives })
+			: { applied: [], skipped: [] };
 		const verb = dry ? 'would fix' : 'fixed';
 		// The value is held raw — it is what the substitution matches against —
 		// so this is the one place the flattening belongs at the print site
@@ -933,16 +984,20 @@ async function main(): Promise<number> {
 		// names a value the reader now has to find and edit by hand, and the
 		// applied line is the preview `--dry-run` exists to give — and an elided
 		// value is one neither of them can be matched against.
-		const decl = (f: TokenFix): string => oneLine(`${f.prop}: ${f.value}`);
-		for (const f of applied)
-			process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2192 ${green(`var(${f.token})`)}\n`);
-		for (const f of skipped)
+		const decl = (f: { prop: string; value: string }): string => oneLine(`${f.prop}: ${f.value}`);
+		for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2192 ${green(f.to)}\n`);
+		for (const k of kept.applied)
+			process.stdout.write(
+				`${dim(`${k.file}:${k.line}`)}  ${decl(k)} \u2192 ${green(`${config.suppression.keyword}, ${k.reason}`)}\n`,
+			);
+		for (const f of [...skipped, ...kept.skipped])
 			process.stdout.write(`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2014 ${f.why}\n`);
-		const left = toFix.findings.length - applied.length;
+		const left = toFix.findings.length - applied.length - kept.applied.length;
+		const nSkipped = skipped.length + kept.skipped.length;
 		process.stdout.write(
 			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${
-				skipped.length ? yellow(`, skipped ${skipped.length}`) : ''
-			}. ${left} left for review.\n`
+				apiKey ? `, ${dry ? 'would suppress' : 'suppressed'} ${kept.applied.length}` : ''
+			}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ''}. ${left} left for review.\n`,
 		);
 		return EXIT.OK;
 	}
@@ -960,29 +1015,12 @@ async function main(): Promise<number> {
 		fail(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(', ')}\n`);
 		return EXIT.CANNOT_RUN;
 	}
-	// The one network call in the engine, so the key is checked before the walk
-	// and the hook never makes it.
-	let judgeKey: string | undefined;
-	if (args.flags.judge && !isHook) {
-		try {
-			if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(join(HERE, '..', '..', '.env'));
-		} catch {
-			/* no .env beside the checkout is the ordinary case */
-		}
-		judgeKey = process.env.TYPESAFE_API_KEY;
-		if (!judgeKey) {
-			fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${join(HERE, '..', '..', '.env')}\n`);
-			return EXIT.CANNOT_RUN;
-		}
-	}
-
 	// ── check / hook ──────────────────────────────────────────────────────────
 	// A PostToolUse payload names the file just written; scope to it so drift is
 	// reported at write time. Stop payloads carry no file and fall through to
 	// the changed-file scope.
 	const touched = isHook ? payloadFile(payload, root) : null;
-	if (touched && !isSource(config.sources, touched))
-		return emitClean('loupe: skipped \u2014 not a checked file type.');
+	if (touched && !isSource(config.sources, touched)) return emitClean('loupe: skipped \u2014 not a checked file type.');
 	const scope: ScopeResult = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
 	if (scope !== null && !Array.isArray(scope)) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${scope.error}`);
@@ -992,7 +1030,7 @@ async function main(): Promise<number> {
 
 	let result: AnalyzeResult | BaselinedResult;
 	try {
-		result = await analyze(config, { scope });
+		result = await analyze(config, { scope, judge: Boolean(apiKey) });
 	} catch (err) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
 		fail(`loupe: ${messageOf(err)}\n`);
@@ -1004,7 +1042,7 @@ async function main(): Promise<number> {
 		// runs on every write, so don't pay a second stat inside `readBaseline`
 		// just to be told the same thing.
 		const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
-		const baseline = found ? readBaseline(root, bPath) : null;
+		const baseline = found ? readBaseline(bPath) : null;
 		// A file that is present and unparseable is not the same as no file, and
 		// treating it as one puts the whole backlog back with the gate blocking on
 		// all of it — silently, which is how this class of bug stays unfound.
@@ -1017,23 +1055,45 @@ async function main(): Promise<number> {
 		// nobody asked it to fix. `emitBlocking` already writes the report to
 		// stderr and Claude Code feeds that back on exit 2, so the line is carried
 		// by a channel that already exists.
-		if (found && !baseline)
-			note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
+		if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
 		result = applyBaseline(result, baseline);
 	}
+	// Before the judgements: a finding the filter drops is not worth a paid question.
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
-	if (judgeKey) {
-		// Judged after the baseline, so accepted findings cost nothing. A failed
-		// request leaves the findings as the engine wrote them.
+	if (apiKey) {
+		// Judged after the baseline, so accepted findings cost nothing, and a
+		// judged finding never enters one: its confidence moves between runs, and
+		// a baselined finding that comes and goes is noise in both directions.
+		// A failed request leaves the findings as the engine wrote them.
 		try {
-			await judgeVariants(root, result.findings, config.componentRegistry, judgeKey);
+			// The same filter, for the findings this adds.
+			const redirectSeverity = config.severityOf('patterns/judged-redirect');
+			if (result.controls?.length && (args.flags.severity !== 'error' || redirectSeverity === 'error'))
+				result.findings.push(...(await judgeRedirects(result.controls, apiKey, redirectSeverity)));
+			await judgeVariants(root, result.findings, config.componentRegistry, apiKey);
 		} catch (err) {
 			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
 		}
+		// Its own note: the judgements above stand when this one cannot run.
+		try {
+			if (result.tokens && result.findings.some((f) => f.rule === 'tokens/hardcoded-value'))
+				await judgeValues(
+					root,
+					result.findings,
+					result.tokens,
+					apiKey,
+					tokenDescriptions(config.profiles?.active ?? []),
+				);
+		} catch (err) {
+			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
+		}
+		// Computed before the redirects above existed: one configured to `error`
+		// has to be able to fail the run it is reported in.
+		result.blocking = result.findings.some((f) => f.severity === 'error');
 	}
 
 	if (isHook) {
-		const sessionId = payload.session_id ?? payload.sessionId ?? '';
+		const sessionId = payload.session_id ?? '';
 		if (!result.blocking) {
 			clearAttempts(root, touched ? `${sessionId}\u0000${touched}` : sessionId);
 			return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
@@ -1059,7 +1119,7 @@ async function main(): Promise<number> {
 			return emitClean(
 				attempts === max + 1
 					? `loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}${ceilingSuffix}`
-					: `${formatSummary(result)}${ceilingSuffix}`
+					: `${formatSummary(result)}${ceilingSuffix}`,
 			);
 		}
 		const report = formatAgent({ ...result, findings: result.findings.filter((f) => f.severity === 'error') }, config, {
@@ -1070,7 +1130,7 @@ async function main(): Promise<number> {
 	}
 
 	const maxFindings = Number(args.flags['max-findings'] ?? 0) || 0;
-	if (format === 'json') process.stdout.write(`${formatJson(result, config)}\n`);
+	if (format === 'json') process.stdout.write(`${JSON.stringify(reportPayload(result, config), null, 2)}\n`);
 	else if (format === 'sarif') process.stdout.write(`${formatSarif(result, config)}\n`);
 	// Already newline-terminated, and large: it is the one format most likely to
 	// be redirected, which is what the process.exitCode note below is about.

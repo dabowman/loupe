@@ -86,9 +86,3 @@ export async function syntaxFor(path: string): Promise<SyntaxResolution> {
 	cache.set(pkg, resolved);
 	return resolved;
 }
-
-/** Extensions that need a custom syntax, for the config-doctor path. */
-export const syntaxPackages = (): Record<string, string> => ({ ...SYNTAX_PACKAGES });
-
-/** Test seam: forget resolution results between runs. */
-export const resetSyntaxCache = (): void => cache.clear();

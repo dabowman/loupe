@@ -19,13 +19,47 @@ import type { Node, ObjectProperty } from '@babel/types';
  * a perfectly ordinary weight as a hardcoded length.
  */
 const UNITLESS = new Set([
-	'animation-iteration-count', 'aspect-ratio', 'border-image-outset', 'border-image-slice',
-	'border-image-width', 'box-flex', 'box-flex-group', 'box-ordinal-group', 'column-count',
-	'columns', 'flex', 'flex-grow', 'flex-positive', 'flex-shrink', 'flex-negative', 'flex-order',
-	'font-weight', 'grid-area', 'grid-row', 'grid-row-end', 'grid-row-start', 'grid-column',
-	'grid-column-end', 'grid-column-start', 'line-clamp', 'line-height', 'opacity', 'order',
-	'orphans', 'scale', 'tab-size', 'widows', 'z-index', 'zoom', 'fill-opacity', 'flood-opacity',
-	'stop-opacity', 'stroke-dasharray', 'stroke-dashoffset', 'stroke-miterlimit', 'stroke-opacity',
+	'animation-iteration-count',
+	'aspect-ratio',
+	'border-image-outset',
+	'border-image-slice',
+	'border-image-width',
+	'box-flex',
+	'box-flex-group',
+	'box-ordinal-group',
+	'column-count',
+	'columns',
+	'flex',
+	'flex-grow',
+	'flex-positive',
+	'flex-shrink',
+	'flex-negative',
+	'flex-order',
+	'font-weight',
+	'grid-area',
+	'grid-row',
+	'grid-row-end',
+	'grid-row-start',
+	'grid-column',
+	'grid-column-end',
+	'grid-column-start',
+	'line-clamp',
+	'line-height',
+	'opacity',
+	'order',
+	'orphans',
+	'scale',
+	'tab-size',
+	'widows',
+	'z-index',
+	'zoom',
+	'fill-opacity',
+	'flood-opacity',
+	'stop-opacity',
+	'stroke-dasharray',
+	'stroke-dashoffset',
+	'stroke-miterlimit',
+	'stroke-opacity',
 	'stroke-width',
 ]);
 
@@ -55,8 +89,7 @@ export function toCssValue(prop: string, node: Node | null | undefined): string 
 		case 'NumericLiteral':
 			return numeric(prop, node.value);
 		case 'UnaryExpression':
-			if (node.operator === '-' && node.argument?.type === 'NumericLiteral')
-				return numeric(prop, -node.argument.value);
+			if (node.operator === '-' && node.argument?.type === 'NumericLiteral') return numeric(prop, -node.argument.value);
 			return null;
 		case 'TemplateLiteral':
 			// Only a template with no interpolation is knowable.

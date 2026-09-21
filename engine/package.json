@@ -22,10 +22,17 @@
   "scripts": {
     "build": "node build.mjs",
     "build:check": "node build.mjs --check",
+    "build:binary": "node scripts/build-binary.mjs",
+    "build:binary:all": "node scripts/build-binary.mjs --all",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
     "typecheck": "tsc -p tsconfig.json",
-    "patterns-doc": "tsx scripts/patterns-doc.ts",
-    "patterns-doc:check": "tsx scripts/patterns-doc.ts --check",
-    "test": "npm run typecheck && tsx tests/run.ts && tsx tests/detect.ts && tsx tests/regressions.ts && tsx tests/features.ts && tsx tests/autofix.ts && tsx tests/multi-ds.ts && tsx tests/report.ts"
+    "patterns-doc": "node scripts/patterns-doc.ts",
+    "patterns-doc:check": "node scripts/patterns-doc.ts --check",
+    "eval:represents": "node evals/represents/run.ts",
+    "eval:values": "node evals/values/run.ts",
+    "test": "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts"
   },
   "dependencies": {
     "@babel/parser": "^7.24.0",
@@ -39,10 +46,10 @@
   },
   "devDependencies": {
     "@babel/types": "^7.29.8",
+    "@biomejs/biome": "2.5.14",
     "@types/node": "^22.20.1",
     "@types/picomatch": "^4.0.3",
     "esbuild": "^0.25.0",
-    "tsx": "^4.23.12",
     "typescript": "^5.9.3"
   }
 }

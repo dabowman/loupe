@@ -12,11 +12,12 @@
  * inferred config run a destructive rule at error severity.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { discover } from './discover.ts';
-import type { AuthoredConfig, SourceGlobs } from './types.ts';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { DEFAULTS, compilePatterns, merge } from './config.ts';
+import { byBytes, discover, readDir } from './discover.ts';
+import { presetKey, presetNames, readPreset } from './embedded.ts';
+import type { AuthoredConfig } from './types.ts';
 
 /** How much a match is worth. Presets name these; nothing else interprets them. */
 export type Confidence = 'high' | 'low' | 'none' | (string & {});
@@ -36,7 +37,7 @@ interface PresetFile extends AuthoredConfig {
 }
 
 /** Which preset fits, and the evidence for saying so. */
-export interface PresetMatch {
+interface PresetMatch {
 	preset: string;
 	reasons: string[];
 	confidence: Confidence;
@@ -44,7 +45,7 @@ export interface PresetMatch {
 	packageDir: string;
 }
 
-export interface NamespaceDetection {
+interface NamespaceDetection {
 	project: string[];
 	coverage: number;
 	confidence: Confidence;
@@ -69,9 +70,6 @@ export interface DetectedConfig {
 	config: AuthoredConfig;
 }
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const PRESET_DIR = join(HERE, '..', 'presets');
-
 const readJson = (p: string): unknown => {
 	try {
 		return JSON.parse(readFileSync(p, 'utf8'));
@@ -80,7 +78,7 @@ const readJson = (p: string): unknown => {
 	}
 };
 
-const preset = (name: string): PresetFile => (readJson(join(PRESET_DIR, `${name}.json`)) as PresetFile) ?? {};
+const preset = (name: string): PresetFile => (readPreset(name) as PresetFile) ?? {};
 
 /** Directories never worth descending into when looking for a manifest. */
 const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'build', 'dist', '.claude']);
@@ -126,30 +124,13 @@ function manifests(root: string, maxDepth = 3, budget = 60): { dir: string; rel:
 		const pkg = join(dir, 'package.json');
 		if (existsSync(pkg)) out.push({ dir, rel });
 		if (depth === maxDepth) return;
-		let entries;
-		try {
-			entries = readdirSync(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const e of entries) {
+		for (const e of readDir(dir)) {
 			if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
 			walk(join(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
 		}
 	};
 	walk(root, '', 0);
 	return out;
-}
-
-/** Preset names on disk, so a new design system is a file rather than an edit here. */
-function presetNames(): string[] {
-	try {
-		return readdirSync(PRESET_DIR)
-			.filter((f) => f.endsWith('.json'))
-			.map((f) => f.replace(/\.json$/, ''));
-	} catch {
-		return [];
-	}
 }
 
 /**
@@ -171,13 +152,7 @@ function markerAt(dir: string, marker: string): boolean {
 /** The root and each immediate subdirectory, which is as deep as file markers look. */
 function probeDirs(root: string): { dir: string; rel: string }[] {
 	const out = [{ dir: root, rel: '' }];
-	let entries: import('node:fs').Dirent[] = [];
-	try {
-		entries = readdirSync(root, { withFileTypes: true });
-	} catch {
-		return out;
-	}
-	for (const e of entries) {
+	for (const e of readDir(root)) {
 		if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
 		out.push({ dir: join(root, e.name), rel: e.name });
 	}
@@ -206,11 +181,12 @@ function matchPreset(
 		// list it beats a nested one, and `packageDir` names where its
 		// `node_modules` — and therefore the token stylesheet — will be.
 		for (const { rel } of found) {
-			const pkg = (readJson(join(root, rel, 'package.json')) as {
-				dependencies?: Record<string, string>;
-				devDependencies?: Record<string, string>;
-				peerDependencies?: Record<string, string>;
-			} | null) ?? {};
+			const pkg =
+				(readJson(join(root, rel, 'package.json')) as {
+					dependencies?: Record<string, string>;
+					devDependencies?: Record<string, string>;
+					peerDependencies?: Record<string, string>;
+				} | null) ?? {};
 			const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
 			const hit = detect.dependencies.filter((d) => deps[d] !== undefined);
 			const first = hit[0];
@@ -274,7 +250,7 @@ export function detectPreset(root: string): PresetMatch {
 	const candidates = presetNames()
 		.map((name) => ({ name, detect: preset(name).detect }))
 		.filter((c): c is { name: string; detect: DetectBlock } => c.detect !== undefined)
-		.sort((a, b) => (b.detect.priority ?? 0) - (a.detect.priority ?? 0) || a.name.localeCompare(b.name));
+		.sort((a, b) => (b.detect.priority ?? 0) - (a.detect.priority ?? 0) || byBytes(a.name, b.name));
 
 	for (const { name, detect } of candidates) {
 		const hit = matchPreset(name, detect, root, found);
@@ -291,6 +267,12 @@ export function detectPreset(root: string): PresetMatch {
 }
 
 const CLASS_RE = /\.(-?[_a-zA-Z][\w-]*)/g;
+
+/** A class's namespace — everything up to and including its first `-` — or null when it has none. */
+const prefixOf = (cls: string | undefined): string | null => {
+	const i = cls?.indexOf('-') ?? -1;
+	return cls && i >= 1 ? cls.slice(0, i + 1) : null;
+};
 
 /**
  * Which of these prefixes are defined by an installed dependency?
@@ -315,13 +297,7 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 
 	const walk = (dir: string, depth: number): void => {
 		if (depth > 4 || budget <= 0 || !want.size) return;
-		let entries;
-		try {
-			entries = readdirSync(dir, { withFileTypes: true });
-		} catch {
-			return;
-		}
-		for (const e of entries) {
+		for (const e of readDir(dir)) {
 			if (budget <= 0 || !want.size) return;
 			const full = join(dir, e.name);
 			if (e.isDirectory()) {
@@ -329,7 +305,7 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 				walk(full, depth + 1);
 			} else if (e.name.endsWith('.css') && !e.name.endsWith('.min.css')) {
 				budget--;
-				let text;
+				let text: string;
 				try {
 					text = readFileSync(full, 'utf8');
 				} catch {
@@ -337,12 +313,8 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 				}
 				if (text.length > 2_000_000) continue;
 				for (const m of text.matchAll(CLASS_RE)) {
-					const cls = m[1];
-					if (cls === undefined) continue;
-					const i = cls.indexOf('-');
-					if (i < 1) continue;
-					const prefix = cls.slice(0, i + 1);
-					if (want.delete(prefix)) found.add(prefix);
+					const prefix = prefixOf(m[1]);
+					if (prefix && want.delete(prefix)) found.add(prefix);
 				}
 			}
 		}
@@ -352,29 +324,14 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 	return found;
 }
 
-/** Resolve a preset's `extends` chain far enough to read namespaces and sources. */
+/** Resolve a shipped preset's `extends` chain, merged the way `loadConfig` merges it. */
 function resolvePreset(name: string, seen = new Set<string>()): PresetFile {
 	if (seen.has(name)) return {};
 	seen.add(name);
-	const raw = preset(name);
-	if (!raw.extends) return raw;
-	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
-	let base: PresetFile = {};
-	for (const spec of specs) {
-		const parent = resolvePreset(String(spec).replace(/^loupe\/presets\//, ''), seen);
-		base = {
-			...base,
-			...parent,
-			namespaces: { ...(base.namespaces ?? {}), ...(parent.namespaces ?? {}) },
-			sources: { ...(base.sources ?? {}), ...(parent.sources ?? {}) },
-		};
-	}
-	return {
-		...base,
-		...raw,
-		namespaces: { ...(base.namespaces ?? {}), ...(raw.namespaces ?? {}) },
-		sources: { ...(base.sources ?? {}), ...(raw.sources ?? {}) },
-	};
+	const { extends: parents, ...raw } = preset(name);
+	const specs = parents === undefined ? [] : Array.isArray(parents) ? parents : [parents];
+	const base = specs.reduce<PresetFile>((acc, spec) => merge(acc, resolvePreset(presetKey(spec), seen)), {});
+	return merge(base, raw);
 }
 
 /**
@@ -385,7 +342,7 @@ function resolvePreset(name: string, seen = new Set<string>()): PresetFile {
  * on CSS evidence alone would let the dead-class rule bootstrap its own false
  * positives.
  */
-export function detectNamespaces(
+function detectNamespaces(
 	root: string,
 	presetName: string,
 	packageDir = '',
@@ -393,8 +350,7 @@ export function detectNamespaces(
 	limit: number,
 ): NamespaceDetection {
 	const base = resolvePreset(presetName);
-	const generic = resolvePreset('generic');
-	const sources = { ...generic.sources, ...(base.sources ?? {}) } as SourceGlobs;
+	const sources = merge(DEFAULTS.sources, base.sources);
 	const files = discover({ root, sources, limit });
 
 	// Library prefixes from *every* shipped preset, not just the detected one, so
@@ -405,20 +361,17 @@ export function detectNamespaces(
 	const others = presetNames()
 		.filter((n) => n !== presetName)
 		.map((n) => resolvePreset(n));
-	const external = [
-		...(base.namespaces?.external ?? []),
-		...others.flatMap((p) => p.namespaces?.external ?? []),
-	];
-	const neverDead = [
+	const external = [...(base.namespaces?.external ?? []), ...others.flatMap((p) => p.namespaces?.external ?? [])];
+	const neverDead = compilePatterns([
 		...(base.namespaces?.neverDead ?? []),
 		...others.flatMap((p) => p.namespaces?.neverDead ?? []),
-	].map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`));
+	]);
 	const isExcluded = (cls: string): boolean =>
 		external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
 
 	const cssCounts = new Map<string, number>();
 	for (const { abs } of files.styles) {
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch {
@@ -426,10 +379,8 @@ export function detectNamespaces(
 		}
 		for (const m of text.matchAll(CLASS_RE)) {
 			const cls = m[1];
-			if (cls === undefined || isExcluded(cls)) continue;
-			const idx = cls.indexOf('-');
-			if (idx < 1) continue;
-			const prefix = cls.slice(0, idx + 1);
+			const prefix = prefixOf(cls);
+			if (cls === undefined || !prefix || isExcluded(cls)) continue;
 			cssCounts.set(prefix, (cssCounts.get(prefix) ?? 0) + 1);
 		}
 	}
@@ -452,7 +403,7 @@ export function detectNamespaces(
 	// of the project's own CSS and markup mentions it.
 	const vendored = libraryPrefixes(
 		[join(root, 'node_modules'), ...(packageDir ? [join(root, packageDir, 'node_modules')] : [])],
-		candidates.map(([p]) => p)
+		candidates.map(([p]) => p),
 	);
 
 	// Drop prefixes already covered by a shorter accepted one (`wf-card-` under `wf-`).
@@ -477,8 +428,7 @@ export function detectNamespaces(
 		// which is why it can look convincing and still be wrong. It demotes
 		// `high` only: `none` is the different and still-true claim that nothing
 		// was found, and swallowing it printed "(none found) [low confidence]".
-		confidence:
-			accepted.length === 0 ? 'none' : files.truncated ? 'low' : coverage >= 0.5 ? 'high' : 'low',
+		confidence: accepted.length === 0 ? 'none' : files.truncated ? 'low' : coverage >= 0.5 ? 'high' : 'low',
 		sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
 		truncated: files.truncated,
 	};
@@ -497,7 +447,7 @@ export function detectNamespaces(
  */
 export function detectConfig(
 	root: string,
-	{ preset: override, limit = DETECT_ENTRY_BUDGET }: { preset?: string | null; limit?: number } = {}
+	{ preset: override, limit = DETECT_ENTRY_BUDGET }: { preset?: string | null; limit?: number } = {},
 ): DetectedConfig {
 	const { preset: name, reasons, confidence: presetConfidence, packageDir } = detectPreset(root);
 	const ns = detectNamespaces(root, name, packageDir, limit);
@@ -516,8 +466,7 @@ export function detectConfig(
 	// back to naming a namespace instead of a token.
 	if (packageDir) {
 		const sources = resolvePreset(extend).designSystem?.tokenSources ?? [];
-		if (sources.length)
-			config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
+		if (sources.length) config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };
 	}
 
 	return {

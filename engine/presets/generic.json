@@ -1,16 +1,8 @@
 {
   "designSystem": {
-    "packages": [],
-    "tokenPrefixes": [],
-    "tokenSources": [],
-    "cssInJsPackages": ["styled-components", "@emotion/styled", "@emotion/react", "@emotion/css", "@emotion/native"],
-    "components": { "layout": [], "text": [] },
-    "elementMap": {}
+    "cssInJsPackages": ["styled-components", "@emotion/styled", "@emotion/react", "@emotion/css", "@emotion/native"]
   },
-  "namespaces": { "project": [], "external": [], "neverDead": [] },
   "sources": {
-    "styles": ["**/*.css", "**/*.scss"],
-    "markup": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
     "references": ["**/*.php", "**/*.html", "**/*.twig"],
     "ignore": [
       "**/node_modules/**", "**/build/**", "**/dist/**", "**/vendor/**", "**/.git/**",
@@ -19,6 +11,5 @@
       "**/__snapshots__/**", "**/.claude/worktrees/**", "**/*.min.css", "**/*.min.js",
       "**/*.bundle.js"
     ]
-  },
-  "suppression": { "keyword": "ds-allow", "blanket": ["ds-disable"] }
+  }
 }

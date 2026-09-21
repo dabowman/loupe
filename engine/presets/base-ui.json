@@ -8,7 +8,6 @@
   "designSystem": {
     "name": "Base UI",
     "packages": ["@base-ui/react", "@base-ui-components/react"],
-    "components": { "layout": [], "text": [] },
     "substitutionProps": ["render"]
   },
   "rules": {

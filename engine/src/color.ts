@@ -20,11 +20,7 @@ import type { Severity } from './types.ts';
 // something that is not 0" turns clearing the switch into throwing it.
 const { NO_COLOR, FORCE_COLOR, TERM } = process.env;
 
-let enabled = NO_COLOR
-	? false
-	: FORCE_COLOR
-		? FORCE_COLOR !== '0'
-		: Boolean(process.stdout.isTTY) && TERM !== 'dumb';
+let enabled = NO_COLOR ? false : FORCE_COLOR ? FORCE_COLOR !== '0' : Boolean(process.stdout.isTTY) && TERM !== 'dumb';
 
 /** Hook mode, whose stdout may be a terminal but whose reader never is. */
 export const setColor = (on: boolean): void => {
@@ -55,6 +51,8 @@ export const cyan = paint('36');
  *   cyan     a design-system component, or a CLI option
  *   dim      a location, a label, or anything the eye should skip
  *   red/yellow/green  severity, and whether a run is in trouble
+ *   green    inside a finding, what a model judged (`check --judge`) rather
+ *            than what the parse found
  *
  * Three surfaces name rules and two name components, and a reader who has
  * learned the colour in the report has learned it in `status` and `explain`.

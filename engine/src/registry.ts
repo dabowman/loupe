@@ -17,7 +17,8 @@
 /** A registry file's optional scoping field. An inline array declares nothing. */
 type ScopedRegistry = { packages?: unknown } | null | undefined;
 
-const declaredPackages = (raw: unknown): string[] => {
+/** The `packages` a registry declares, for scoping and for reporting why it was skipped. */
+export const declaredPackages = (raw: unknown): string[] => {
 	const packages = (raw as ScopedRegistry)?.packages;
 	return Array.isArray(packages) ? packages.filter((p): p is string => typeof p === 'string' && p !== '') : [];
 };
@@ -33,6 +34,3 @@ export function registryApplies(raw: unknown, dsPackages: readonly string[] | un
 	// registry has nothing it could legitimately match.
 	return (dsPackages ?? []).some((p) => declared.includes(p));
 }
-
-/** The `packages` a registry declares, for reporting why it was skipped. */
-export const registryPackages = (raw: unknown): string[] => declaredPackages(raw);

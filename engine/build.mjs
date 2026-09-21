@@ -54,10 +54,6 @@ const result = await build({
 	target: 'node18',
 	write: false,
 	banner: { js: `#!/usr/bin/env node\n${banner}` },
-	// Preset JSON is read from disk at runtime, not imported, so it stays
-	// alongside the bundle rather than inside it — `loupe presets` lists what is
-	// in that directory, and a preset you can read is a preset you can copy.
-	external: ['postcss-sass', 'postcss-styl'],
 	logOverride: {
 		// `import(pkg)` in syntax.ts is deliberately unresolvable: the two
 		// syntaxes not shipped as deps are left for the host to provide.

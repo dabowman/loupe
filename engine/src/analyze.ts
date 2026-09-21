@@ -9,41 +9,91 @@
  * Scoping note: the index is ALWAYS built repo-wide, and `scope` only filters
  * what gets *reported*. Building the index from changed files alone would make
  * every unchanged reference look absent and every class look dead.
+ *
+ * What lives here is the machinery: build the index, walk the three channels a
+ * declaration can arrive by, scope and suppress, then name tokens, dedupe and
+ * bound. What each rule decides lives in `checks/`, one file per rule, or per
+ * family of rules that share one pass; a new rule is a new file there and a
+ * call here. The catalog — severity, rank, title — stays in `rules.ts`, where
+ * the ranks can be read against each other.
+ *
+ *   per declaration, first to claim it decides (`DECLARATIONS`):
+ *     checks/typography/in-css.ts       typography/in-css
+ *     checks/system/override.ts         system/override, and its whole-rule form
+ *     checks/layout/margin.ts           layout/margin-on-child, layout/negative-margin
+ *     checks/typography/untokenized.ts  typography/untokenized
+ *     checks/layout/in-css.ts           layout/in-css
+ *     checks/tokens/hardcoded-value.ts  tokens/hardcoded-value
+ *   per element or rule:
+ *     checks/system/inline-style.ts     system/inline-style
+ *     checks/system/raw-element.ts      system/raw-element
+ *     checks/css/dead-class.ts          css/dead-class
+ *   over the whole index:
+ *     checks/patterns/composites.ts     patterns/duplicate-, superseded-, unregistered-composite
+ *     checks/system/currency.ts         system/locked-component, system/superseded-component
+ *     checks/tokens/unknown-token.ts    tokens/unknown-token
+ *   run by the scanner, per JSX element (`markup.ts`):
+ *     checks/detectors/*.ts             the pattern registry's detectors
+ *
+ * `stylesheet/unparsed` and `suppression/malformed` are the machinery reporting
+ * on itself, and stay here; `patterns/judged-redirect` is `judge.ts`.
  */
 
 import { readFileSync, realpathSync, statSync } from 'node:fs';
+import type { Root } from 'postcss';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
 import { discover, toPosix } from './discover.ts';
 import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
-import { scanMarkup, harvestTokens, isLayoutDecl } from './markup.ts';
+import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
-import { messageLine, messageParts, oneLine, snippet } from './text.ts';
-import { SUBSTANTIAL, matches, nodeCount, partsOf } from './patterns.ts';
+import { messageLine, messageOf, messageParts, oneLine, snippet } from './text.ts';
 import { cssFilesUnder, harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
 import {
-	APPEARANCE_PROPS, FLEX_PROPS, GAP_PROPS, TYPE_PROPS,
-	classesIn, classifyMargin, isHardcodedTokenValue, isInertValue, keySelector, ownDecls,
-	resolvedSelectors, ruleIsGrid, usesToken,
+	APPEARANCE_PROPS,
+	GAP_PROPS,
+	TYPE_PROPS,
+	classesIn,
+	isFlexDecl,
+	isGridDecl,
+	isHardcodedTokenValue,
+	isLayoutDecl,
+	isMarginProp,
+	keySelector,
+	ownDecls,
+	resolvedSelectors,
+	ruleIsGrid,
 } from './styles.ts';
+import { deadClasses } from './checks/css/dead-class.ts';
+import type { DeclaredClass } from './checks/css/dead-class.ts';
+import { layoutInCss } from './checks/layout/in-css.ts';
+import { margin } from './checks/layout/margin.ts';
+import { composites as compositeFindings } from './checks/patterns/composites.ts';
+import { currency } from './checks/system/currency.ts';
+import { inlineStyle } from './checks/system/inline-style.ts';
+import { libraryOverride, systemOverride } from './checks/system/override.ts';
+import { rawElements } from './checks/system/raw-element.ts';
+import { hardcodedValue } from './checks/tokens/hardcoded-value.ts';
+import { unknownTokens as unknownTokenFindings } from './checks/tokens/unknown-token.ts';
+import type { TokenRef } from './checks/tokens/unknown-token.ts';
+import { typographyInCss } from './checks/typography/in-css.ts';
+import { untokenizedType } from './checks/typography/untokenized.ts';
 import type {
 	AnalyzeResult,
 	Binding,
 	ClassifiedFinding,
 	ClassifyContext,
-	ComponentEntry,
 	ComponentImport,
 	Composite,
 	Config,
+	Control,
 	CssInJsTemplate,
 	Decl,
 	Diagnostics,
 	Directive,
 	Finding,
-	Hint,
 	InlineStyleElement,
 	ParseError,
-	Pattern,
 	PatternRule,
 	PendingFinding,
 	RawElement,
@@ -52,10 +102,6 @@ import type {
 	Suppressions,
 	TokenSet,
 } from './types.ts';
-
-/** First line of an unknown throw — a parser may reject with anything. */
-const messageOf = (err: unknown): string =>
-	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
 
 /** A path resolved through symlinks and case, or null when nothing is there. */
 const realPath = (path: string): string | null => {
@@ -121,7 +167,7 @@ async function readLibrary(
 				unread.push({ file: shown, message: `needs \`npm i -D ${syntax.missing}\` to be read` });
 				continue;
 			}
-			let sheet;
+			let sheet: Root;
 			try {
 				sheet = syntax.parse(readFileSync(file, 'utf8'), { from: file });
 			} catch (err) {
@@ -142,149 +188,81 @@ async function readLibrary(
 				}
 			});
 		}
-		if (!budget.left) unread.push({ file: toPosix(relative(root, dir)), message: 'read the first 400 stylesheets only' });
+		if (!budget.left)
+			unread.push({ file: toPosix(relative(root, dir)), message: 'read the first 400 stylesheets only' });
 	}
 	return { classes, dirs, unread };
 }
 
 /**
- * Every `Name (@package)` a `supersededBy` string names.
- *
- * The field is prose — `Stack (@wordpress/ui, direction="row")`, or a sentence
- * naming two candidates and when each applies — so the components in it are
- * read off rather than parsed. A string that names none ("CSS grid or absolute
- * positioning") yields nothing, which is the honest answer: the remedy there is
- * hand-written, not an import swap.
+ * A finding as a check hands it back: everything but the severity and rank,
+ * which config and the catalog supply, plus any lines besides its own that a
+ * suppression for it may sit on.
  */
-const namedReplacements = (supersededBy: string | undefined): { name: string; package: string }[] =>
-	[...(supersededBy ?? '').matchAll(/([A-Z][\w.]*)\s*\(\s*(@[\w@/.-]+)/g)].map((m) => ({
-		name: String(m[1]),
-		package: String(m[2]),
-	}));
+export type Candidate = Omit<Finding, 'severity' | 'rank'> & { scopeLines?: readonly number[] | undefined };
 
 /**
- * Whether a superseded entry's replacement is one the registry would recommend.
+ * One rule's verdict on one CSS declaration, whichever channel it came from.
  *
- * True when the string names no component at all (the remedy is prose, and the
- * finding is still worth making) or when at least one named candidate is not
- * itself `locked` or `experimental`. False only when every candidate is one the
- * design system's own metadata says not to reach for yet — `DropdownMenu` is
- * the shipped case: `Menu (@wordpress/components)` is core-only and
- * `Menu (@wordpress/ui)` is in flux, so the finding asks for a migration onto
- * an API nobody should adopt, and the only answer available to whoever gets it
- * is a suppression restating what the registry already records.
- *
- * This is the same judgement `experimental` status already earns on the *import*
- * side, applied to the replacement rather than the thing being replaced.
+ * `undefined` leaves the declaration to the next check. `null` claims it and
+ * passes it: `margin: 0` is the margin check's, and nothing after it may call
+ * it a hardcoded value. A finding claims it and fails it.
  */
-export function usableReplacement(
-	registry: ReadonlyMap<string, ComponentEntry>,
-	supersededBy: string | undefined,
-): boolean {
-	const candidates = namedReplacements(supersededBy);
-	if (!candidates.length) return true;
-	// Unknown to the registry is not a reason to stay silent: the registry
-	// records currency, not existence, and a name it has never heard of is far
-	// likelier to be a real component than a retracted one.
-	return candidates.some((c) => {
-		// `Menu.Group` is not its own entry — a compound component's currency is
-		// its root's, and the registry keys the root. Without this the dotted
-		// subcomponents of a locked component read as unknown, so `MenuGroup` and
-		// `MenuItem` went on demanding a migration their parent was spared.
-		const entry = registry.get(`${c.package}::${c.name}`) ?? registry.get(`${c.package}::${c.name.split('.')[0]}`);
-		return !entry || (entry.status !== 'locked' && entry.status !== 'experimental');
-	});
-}
+export type DeclarationCheck = (decl: Decl, ctx: Required<ClassifyContext>) => ClassifiedFinding | null | undefined;
 
 /**
- * The element map's analog, forwarded if the registry has since superseded it.
- *
- * The map is keyed by tag and names a bare component; the registry is keyed by
- * package and knows currency. Nothing reconciled them, so on a two-package
- * system the two rules contradicted each other: `system/raw-element` said
- * `<h3> → <Heading>`, and doing that earned a `system/superseded-component`
- * saying `Heading` is legacy. An agent that follows the first finding
- * manufactures the second, which is a loop a weaker model can run forever.
- *
- * Only forwards when *every* package carrying the name is stale, so a component
- * that is legacy in one package and recommended in another (WPDS has several)
- * keeps the bare name and lets the import rule speak to the package.
+ * In order, most specific first. The first two supersede the verdict the
+ * declaration would otherwise get, and only when their rule is live — see
+ * `ClassifyContext.enabled`.
  */
-function currentAnalog(registry: ReadonlyMap<string, ComponentEntry>, suggest: string): string {
-	const entries = [...registry.values()].filter((e) => e.name === suggest);
-	if (!entries.length || entries.some((e) => e.status === 'recommended')) return `<${suggest}>`;
-	const forwarded = entries.find((e) => e.supersededBy)?.supersededBy;
-	return forwarded ? forwarded : `<${suggest}>`;
-}
+const DECLARATIONS: readonly DeclarationCheck[] = [
+	typographyInCss,
+	systemOverride,
+	margin,
+	untokenizedType,
+	layoutInCss,
+	hardcodedValue,
+];
 
 /**
  * Which rule, if any, a single declaration violates.
  *
- * Shared by the stylesheet walk and the JSX inline-style walk. `margin-bottom:
- * 16px` in a stylesheet and `style={{ marginBottom: 16 }}` in JSX are the same
- * mistake with the same remedy, so they must not be able to drift into
- * different verdicts — which is exactly what happens when the chain is written
- * out twice.
+ * Shared by the stylesheet walk, the JSX inline-style walk and CSS-in-JS.
+ * `margin-bottom: 16px` in a stylesheet and `style={{ marginBottom: 16 }}` in
+ * JSX are the same mistake with the same remedy, so they must not be able to
+ * drift into different verdicts — which is exactly what happens when the chain
+ * is written out twice.
  *
  * At most ONE finding per declaration, most specific first. Emitting both the
  * precise remedy and the generic one doubles the report and leaves the agent to
  * guess which to act on.
  *
  * `styling` reports whether the declaration counts as styling the element at
- * all, which feeds the raw-element and dead-class logic.
+ * all, which feeds the raw-element and library-override logic.
  */
 function classifyDeclaration(
 	{ prop, value }: Decl,
-	{ boundSystem = [], boundText = [], isGrid = false, options = {}, enabled = () => true }: ClassifyContext,
+	{ boundSystem = [], boundText = [], isGrid = false, enabled }: ClassifyContext,
 ): { finding: ClassifiedFinding | null; styling: boolean } {
-	const isMargin = prop === 'margin' || prop.startsWith('margin-');
-	const marginKind = isMargin ? classifyMargin(value) : null;
-	const isFlexish = FLEX_PROPS.has(prop) || (prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value));
-	const hardcoded = isHardcodedTokenValue(prop, value, options);
 	const styling =
-		isMargin || isFlexish || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || hardcoded || APPEARANCE_PROPS.has(prop);
-
-	// The declaration as written. Where the rule has no coarser identity to key
-	// on, `code` carries the whole of it — only the printed message is bounded.
-	const decl = `${prop}: ${value}`;
-
-	// The two superseding branches are conditional on their own rule being live.
-	// Both replace the ordinary verdict rather than adding to it, so when one is
-	// off — a headless library, where a class on a component is how you are meant
-	// to style it — the declaration has to fall through to the verdict it would
-	// have had. Emitting a finding nobody will print deleted the `background:
-	// #fff` beside it as well.
-	let finding: ClassifiedFinding | null = null;
-	if (TYPE_PROPS.has(prop) && boundText[0] && enabled('typography/in-css')) {
-		finding = { rule: 'typography/in-css', message: `${prop} on <${boundText[0].tag}>` };
-	} else if (boundSystem[0] && APPEARANCE_PROPS.has(prop) && enabled('system/override')) {
-		finding = { rule: 'system/override', message: `<${boundSystem[0].tag}> \u2190 ${prop}` };
-	} else if (isMargin) {
-		// Zero and `auto` classify as null: a reset and a centering trick,
-		// neither of which has a gap remedy to point at.
-		if (marginKind === 'negative') finding = { rule: 'layout/negative-margin', message: decl, code: prop };
-		else if (marginKind) finding = { rule: 'layout/margin-on-child', message: decl, code: prop };
-	} else if (TYPE_PROPS.has(prop)) {
-		if (!usesToken(value) && !isInertValue(value))
-			finding = { rule: 'typography/untokenized', message: decl, code: oneLine(decl), hint: { prop, value } };
-	} else if (GAP_PROPS.has(prop)) {
-		// Skipped on a component-bound class (component-internal flex, or a class
-		// already on a layout primitive) and on a grid, neither of which is
-		// convertible to a flex primitive.
-		if (!boundSystem.length && !isGrid) finding = { rule: 'layout/in-css', message: decl, code: prop };
-	} else if (isFlexish) {
-		const gridDisplay = prop === 'display' && /\bgrid\b/.test(value);
-		if (!boundSystem.length && !isGrid && !gridDisplay) finding = { rule: 'layout/in-css', message: decl, code: oneLine(decl) };
-	} else if (hardcoded) {
-		finding = { rule: 'tokens/hardcoded-value', message: decl, code: oneLine(decl), hint: { prop, value } };
+		isMarginProp(prop) ||
+		isFlexDecl(prop, value) ||
+		GAP_PROPS.has(prop) ||
+		TYPE_PROPS.has(prop) ||
+		isHardcodedTokenValue(prop, value) ||
+		APPEARANCE_PROPS.has(prop);
+	const ctx = { boundSystem, boundText, isGrid, enabled };
+	// Deliberately unbounded. `message` is what the dedupe tells two findings
+	// apart by, and on the rules whose `code` is only the property (`margin-*`,
+	// `gap`) it is the ONLY thing that tells them apart — so a cap applied at
+	// capture folds two distinct declarations on one line into one finding and
+	// drops a real violation. The line is bounded once, at the end of
+	// `analyze`, after the dedupe has run.
+	for (const check of DECLARATIONS) {
+		const verdict = check({ prop, value }, ctx);
+		if (verdict !== undefined) return { finding: verdict, styling };
 	}
-	// Deliberately unbounded here. `message` is what the dedupe below tells two
-	// findings apart by, and on the rules whose `code` is only the property
-	// (`margin-*`, `gap`) it is the ONLY thing that tells them apart — so a cap
-	// applied at capture folds two distinct declarations on one line into one
-	// finding and drops a real violation. The line is bounded once, at the end
-	// of `analyze`, after the dedupe has run.
-	return { finding, styling };
+	return { finding: null, styling };
 }
 
 /**
@@ -323,15 +301,13 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 		const props = [...new Set(group.map((f) => (f.message.split(':')[0] ?? f.message).trim()))];
 		out.push({
 			...first,
-			rule,
 			// Bounded per contributor, so one long value cannot spend the whole
 			// line and crowd the others out of a message that is several of them.
 			// Safe to bound here where it is not at capture: a collapsed finding
 			// always carries its own `code` below, so identity does not fall back
 			// to this string.
 			message: group.map((f) => snippet(f.message)).join('; '),
-			hints: group.flatMap((f) => f.hints ?? (f.hint ? [f.hint] : [])),
-			suffix: first.suffix,
+			hints: group.flatMap((f) => f.hints ?? []),
 			code: `${rule}:${props.sort().join(',')}`,
 		});
 	}
@@ -340,7 +316,9 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 
 export async function analyze(
 	config: Config,
-	{ scope = null }: { scope?: readonly string[] | null } = {},
+	// `judge` collects the controls a `judge` detector names, for `check --judge`
+	// to ask about. Off, the scanner never sees those detectors.
+	{ scope = null, judge = false }: { scope?: readonly string[] | null; judge?: boolean } = {},
 ): Promise<AnalyzeResult> {
 	const ds = config.designSystem;
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
@@ -374,13 +352,7 @@ export async function analyze(
 		return library.dirs.some((d) => abs === d || abs.startsWith(`${d}${sep}`));
 	};
 	/** Resolved after the walk: an empty token set proves nothing. */
-	const unknownTokens: {
-		file: string;
-		line: number;
-		name: string;
-		scopeLines: number[];
-		supp: Suppressions;
-	}[] = [];
+	const tokenRefs: TokenRef[] = [];
 
 	const findings: Finding[] = [];
 	const directives: Directive[] = [];
@@ -401,6 +373,19 @@ export async function analyze(
 		return parsed;
 	};
 
+	/**
+	 * Complete a check's finding and keep it — unless its rule is off, its file
+	 * is out of scope, or a directive on its line, the line above, or one of
+	 * its `scopeLines` suppresses it.
+	 */
+	const report = ({ scopeLines, rule, file, line, message, ...f }: Candidate): void => {
+		if (!config.enabled[rule] || !reports(file)) return;
+		const supp = suppByFile.get(file);
+		if (supp && isSuppressed(supp.byLine, line, rule, scopeLines)) return;
+		// Keys in one order whichever channel built the candidate, so `--format json` reads alike.
+		findings.push({ rule, severity: config.severityOf(rule), file, line, message, ...f, rank: RULES[rule].rank });
+	};
+
 	// ── index markup, repo-wide ───────────────────────────────────────────────
 	const referenced = new Set<string>();
 	const stems = new Set<string>();
@@ -414,15 +399,16 @@ export async function analyze(
 	// wrong choice the composite matcher cannot see: one control, under the
 	// four-node floor.
 	const patternRules: PatternRule[] = (config.patterns ?? []).flatMap((p) =>
-		p.rules.map((spec) => ({ patternId: p.id, spec })),
+		p.rules.filter((spec) => judge || spec.rule !== 'judge').map((spec) => ({ patternId: p.id, spec })),
 	);
+	const controls: Control[] = [];
 	const ruleHits: (RuleHit & { file: string })[] = [];
 	const importsByFile = new Map<string, Set<string>>();
 	const componentImports: ComponentImport[] = [];
 
 	for (const { abs, rel } of files.markup) {
 		if (tooBig(abs)) continue;
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch {
@@ -431,8 +417,8 @@ export async function analyze(
 		diagnostics.filesScanned++;
 		const scanned = scanMarkup(text, rel, ds, patternRules);
 		if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
-		scanned.referenced.forEach((t) => referenced.add(t));
-		scanned.stems.forEach((s) => stems.add(s));
+		for (const t of scanned.referenced) referenced.add(t);
+		for (const t of scanned.stems) stems.add(t);
 		for (const b of scanned.bindings) {
 			if (b.cls === undefined) continue;
 			const group = bindings.get(b.cls) ?? [];
@@ -444,6 +430,7 @@ export async function analyze(
 		cssInJs.push(...scanned.cssInJs);
 		composites.push(...scanned.composites);
 		for (const h of scanned.ruleHits) ruleHits.push({ ...h, file: rel });
+		controls.push(...scanned.controls);
 		if (scanned.imports) importsByFile.set(rel, scanned.imports);
 		for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
 		suppressionsFor(rel, text);
@@ -459,25 +446,21 @@ export async function analyze(
 		}
 	}
 
-	const stemList = [...stems];
-	const isReferenced = (cls: string): boolean =>
-		referenced.has(cls) || config.isNeverDead(cls) || stemList.some((s) => cls.startsWith(s));
-
 	// ── walk CSS ──────────────────────────────────────────────────────────────
 	const styledClasses = new Set<string>(); // classes CSS actually styles — feeds system/raw-element
 	const layoutClasses = new Set<string>(); // classes whose CSS lays something out — feeds the same rule for div/span
-	const seenDead = new Set<string>(); // `${file}\u0000${class}` — report each once per file
+	const declared: DeclaredClass[] = []; // every key class a stylesheet rule declares — feeds css/dead-class
 
 	for (const { abs, rel } of files.styles) {
 		if (isLibrarySheet(rel)) continue; // the design system's own sheet, not the project's
-		let text;
+		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch {
 			continue;
 		}
 		diagnostics.filesScanned++;
-		const supp = suppressionsFor(rel, text);
+		suppressionsFor(rel, text); // cached for `report`
 		// A stylesheet we cannot read is a hole in coverage, not a diagnostic:
 		// it reports as a finding so a clean run always means "checked and clean".
 		const unparsed = (message: string): void => {
@@ -505,7 +488,7 @@ export async function analyze(
 			continue;
 		}
 
-		let root;
+		let root: Root;
 		try {
 			root = syntax.parse(text, { from: abs });
 		} catch (err) {
@@ -513,26 +496,7 @@ export async function analyze(
 			continue;
 		}
 
-		const emit = ({ rule, line, message, code, scopeLines = [], hint, hints, suffix }: PendingFinding): void => {
-			if (!config.enabled[rule] || !reports(rel)) return;
-			if (isSuppressed(supp.byLine, line, rule, scopeLines)) return;
-			findings.push({
-				rule,
-				severity: config.severityOf(rule),
-				file: rel,
-				line,
-				message,
-				code: code ?? message,
-				rank: RULES[rule].rank,
-				hints: hints || (hint ? [hint] : undefined),
-				// Forwarded rather than blanked. Nothing in this channel sets one
-				// today, but `collapsePerRule` carries `suffix` through on purpose
-				// and it is now what keeps a message tail out of the line bound —
-				// so dropping it here would silently disarm that for whichever rule
-				// reaches for it first.
-				suffix,
-			});
-		};
+		const emit = (f: PendingFinding): void => report({ ...f, file: rel, code: f.code ?? f.message });
 
 		harvestTokenDefs(root, tokenPrefixes, tokenSet);
 
@@ -563,40 +527,38 @@ export async function analyze(
 				const line = decl.source?.start?.line ?? ruleLine;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, options: config.optionsOf('tokens/hardcoded-value'), enabled: ruleIsLive }
+					{ boundSystem, boundText, isGrid, enabled: ruleIsLive },
 				);
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
 				for (const name of tokenRefsIn(decl.value, tokenPrefixes))
-					unknownTokens.push({ file: rel, line, name, scopeLines, supp });
+					tokenRefs.push({ file: rel, line, name, scopeLines });
 				if (finding) pending.push({ ...finding, line, scopeLines });
 			}
 
 			if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
 			if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
 
-			// Reaching into a third-party component's internals. One per rule, and
-			// it replaces the per-declaration findings rather than adding to them.
-			// A project prefix wins over a library one. `wp-parsely-*` matches the
-			// `wp-` external prefix, and reporting a project's own class as a
-			// library internal sends the agent to fix something it does not own.
-			const external = keyClasses.find(
-				(c) => (config.isExternal(c) || library.classes.has(c)) && !config.isProject(c),
-			);
-			if (external && touchesStyle && ruleIsLive('system/override'))
-				emit({ rule: 'system/override', line: ruleLine, message: `.${external} (library internal)`, scopeLines });
+			// Reaching into a third-party component's internals replaces the
+			// per-declaration findings rather than adding to them.
+			const override =
+				touchesStyle && ruleIsLive('system/override')
+					? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject)
+					: null;
+			if (override) emit({ ...override, line: ruleLine, scopeLines });
 			else for (const f of collapsePerRule(pending)) emit(f);
 
-			// Dead class: only namespaces we own, and only the classes this rule
-			// actually declares (ancestors belong to their own rule).
-			for (const cls of keyClasses) {
-				const key = `${rel}\u0000${cls}`;
-				if (seenDead.has(key) || !config.isProject(cls) || isReferenced(cls)) continue;
-				seenDead.add(key);
-				emit({ rule: 'css/dead-class', line: ruleLine, message: `.${cls}`, scopeLines });
-			}
+			for (const cls of keyClasses) declared.push({ file: rel, line: ruleLine, cls, scopeLines });
 		});
 	}
+
+	for (const f of deadClasses(declared, {
+		referenced,
+		stems: [...stems],
+		isProject: config.isProject,
+		isNeverDead: config.isNeverDead,
+	}))
+		report(f);
 
 	// ── inline styles ─────────────────────────────────────────────────────────
 	// Same rules, other channel. A stylesheet-only checker leaves `style={{ … }}`
@@ -604,70 +566,36 @@ export async function analyze(
 	// something to look right immediately — so tightening the CSS gate quietly
 	// makes the unchecked path the attractive one.
 	for (const el of inlineStyles) {
+		// `report` would drop it anyway; skipping first keeps a scoped hook run
+		// from classifying every inline style in the repo on every edit.
 		if (!reports(el.file)) continue;
-		const supp = suppByFile.get(el.file);
-		const muted = (rule: RuleId, line: number): boolean =>
-			supp !== undefined && isSuppressed(supp.byLine, line, rule, [el.line, el.line - 1]);
-
-		const push = (
-			rule: RuleId,
-			line: number,
-			message: string,
-			code?: string,
-			hints?: Hint[],
-			suffix?: string,
-		): void => {
-			if (!config.enabled[rule] || muted(rule, line)) return;
-			findings.push({
-				rule,
-				severity: config.severityOf(rule),
-				file: el.file,
-				line,
-				message,
-				code: code ?? message,
-				rank: RULES[rule].rank,
-				hints,
-				suffix,
-			});
-		};
-
-		// On a design-system component the remedy is "use the props", not
-		// "tokenize that value" — so one finding for the attribute supersedes
-		// the per-declaration ones, the same way a library-internal override
-		// supersedes advice about how to style it.
-		if (el.isSystem && ruleIsLive('system/inline-style')) {
-			const shown = el.decls.map((d) => d.prop).slice(0, 3).join(', ');
-			const extra = el.decls.length + el.dynamic - Math.min(el.decls.length, 3);
-			push(
-				'system/inline-style',
-				el.line,
-				`<${el.tag}> style={{ ${shown || '\u2026'}${extra > 0 ? `, +${extra}` : ''} }}`,
-				`<${el.tag}> inline-style`
-			);
+		const scopeLines = [el.line, el.line - 1];
+		const whole = ruleIsLive('system/inline-style') ? inlineStyle(el) : null;
+		if (whole) {
+			report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
 			continue;
 		}
 
-		const isGrid = el.decls.some(
-			(d) => (d.prop === 'display' && /\bgrid\b/.test(d.value)) || d.prop.startsWith('grid-template') || d.prop.startsWith('grid-auto')
-		);
+		const isGrid = el.decls.some((d) => isGridDecl(d.prop, d.value));
 		const pending: PendingFinding[] = [];
 		for (const d of el.decls) {
-			const { finding } = classifyDeclaration(d, {
-				isGrid,
-				options: config.optionsOf('tokens/hardcoded-value'),
-				enabled: ruleIsLive,
-			});
+			const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
 			if (finding)
-				pending.push({ ...finding, line: d.line ?? el.line, code: finding.code ?? finding.message, suffix: ' (inline)' });
+				pending.push({
+					...finding,
+					line: d.line ?? el.line,
+					code: finding.code ?? finding.message,
+					suffix: ' (inline)',
+				});
 		}
 		for (const f of collapsePerRule(pending))
-			push(f.rule, f.line, `${f.message}${f.suffix ?? ''}`, f.code, f.hints ?? (f.hint ? [f.hint] : undefined), f.suffix);
+			report({ ...f, file: el.file, message: `${f.message}${f.suffix ?? ''}`, code: f.code ?? f.message, scopeLines });
 	}
 
 	// ── CSS-in-JS template literals ───────────────────────────────────────────
-// The third channel, through the same classifier as the other two. A
-// `styled(Button)` template is the stylesheet pass's "class bound to a
-// design-system component", written somewhere no stylesheet can see.
+	// The third channel, through the same classifier as the other two. A
+	// `styled(Button)` template is the stylesheet pass's "class bound to a
+	// design-system component", written somewhere no stylesheet can see.
 	for (const tpl of cssInJs) {
 		if (!reports(tpl.file)) continue;
 		const supp = suppByFile.get(tpl.file);
@@ -688,12 +616,11 @@ export async function analyze(
 			for (const d of group.decls) {
 				if (supp)
 					for (const name of tokenRefsIn(d.value, tokenPrefixes))
-						unknownTokens.push({ file: tpl.file, line: d.line ?? tpl.line, name, scopeLines: [tpl.line], supp });
+						tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, scopeLines: [tpl.line] });
 				const { finding } = classifyDeclaration(d, {
 					boundSystem: onTarget ? boundSystem : [],
 					boundText: onTarget ? boundText : [],
 					isGrid: group.isGrid,
-					options: config.optionsOf('tokens/hardcoded-value'),
 					enabled: ruleIsLive,
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
@@ -707,263 +634,35 @@ export async function analyze(
 			// `analyze` is where it gets shortened, from the front, so the part
 			// that distinguishes two sibling selectors is the part that survives.
 			const where = group.selector ? ` in \`${group.selector}\`` : '';
-			for (const f of collapsePerRule(pending)) {
-				if (!config.enabled[f.rule]) continue;
-				if (supp && isSuppressed(supp.byLine, f.line, f.rule, [tpl.line, tpl.line - 1])) continue;
-				findings.push({
-					rule: f.rule,
-					severity: config.severityOf(f.rule),
+			for (const f of collapsePerRule(pending))
+				report({
+					...f,
 					file: tpl.file,
-					line: f.line,
 					message: `${f.message}${where} (css-in-js)`,
-					suffix: `${where} (css-in-js)`,
 					code: `css-in-js:${f.code ?? f.message}`,
-					rank: RULES[f.rule].rank,
-					hints: f.hints ?? (f.hint ? [f.hint] : undefined),
+					suffix: `${where} (css-in-js)`,
+					scopeLines: [tpl.line, tpl.line - 1],
 				});
-			}
 		}
 	}
 
-	// ── raw elements with a design-system analog ──────────────────────────────
-	for (const el of rawEls) {
-		if (!config.enabled['system/raw-element'] || !reports(el.file)) continue;
-		const supp = suppByFile.get(el.file);
-		if (supp && isSuppressed(supp.byLine, el.line, 'system/raw-element')) continue;
-		// A `styledOnly` mapping only earns its suggestion when the element is doing
-		// what the suggested component is for. `<span>` → `<Text>` needs styling of
-		// any kind; `<div>` → a layout primitive needs the div to actually lay
-		// something out. Accepting any styling for both told agents to turn every
-		// bordered `<div>` into an `<HStack>` — the largest single source of
-		// findings in a real repo, and wrong nearly every time.
-		if (el.styledOnly) {
-			const suggestsLayout = String(el.suggest)
-				.split('/')
-				.some((n) => ds.layoutComponents.includes(n.trim()));
-			const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
-			const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
-			if (suggestsLayout ? !laidOut : !styled) continue;
-		}
-		findings.push({
-			rule: 'system/raw-element',
-			severity: config.severityOf('system/raw-element'),
-			file: el.file,
-			line: el.line,
-			message: `<${el.tag}> \u2192 ${currentAnalog(config.componentRegistry, el.suggest)}`,
-			code: `<${el.tag}>`,
-			rank: RULES['system/raw-element'].rank,
-		});
-	}
-
-	// ── composite drift ───────────────────────────────────────────────────────
-// The only findings here that cannot exist in one file. A sixth bespoke page
-// header is not a defect anywhere in particular — it is a defect in the set,
-// so the index has to be whole-repo even when the report is scoped to one file.
-	const dupEnabled = config.enabled['patterns/duplicate-composite'];
-	const newEnabled = config.enabled['patterns/unregistered-composite'];
-	const supEnabled = config.enabled['patterns/superseded-composite'];
-	if ((dupEnabled || newEnabled || supEnabled) && (composites.length || ruleHits.length)) {
-		const registry = config.patterns || [];
-		// Components whose anatomy the registry declares: an entry whose
-		// `canonical` is the root of its own signature.
-		const anatomyRoots = registry.flatMap((p) =>
-			p.node && p.canonical && p.canonical === p.node.name.split('.')[0] ? [p.canonical] : [],
-		);
-
-		// Largest match wins: a page header contains an action bar, and reporting
-		// both says the same thing twice at two levels of the same tree.
-		const bestMatch = (c: Composite): Pattern | null =>
-			registry
-				.filter((p) => p.node !== null && p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree))
-				.sort((a, b) => b.size - a.size)[0] ?? null;
-
-		// The shape a pattern exists to replace. Unlike the two rules below this
-		// one, it is a per-file defect and not a set-level one: the file in hand
-		// built the clunky version, and that is already worth saying once.
-		//
-		// Ties go to the most specific anti-shape that matched, not to the largest
-		// replacement: a pattern's own `size` says nothing about how well its
-		// anti-shape fit, and ranking by it means the smallest entry in the
-		// registry can never win a tie it deserves.
-		const avoidMatch = (c: Composite): Pattern | null => {
-			let best: { pattern: Pattern; fit: number } | null = null;
-			for (const p of registry) {
-				let fit = 0;
-				for (const a of p.avoid) if (matches(a, c.tree)) fit = Math.max(fit, nodeCount(a));
-				if (fit && (!best || fit > best.fit)) best = { pattern: p, fit };
-			}
-			return best?.pattern ?? null;
-		};
-
-		const byPattern = new Map<string, Map<string, Composite>>(); // pattern id -> file -> best instance
-		const bySuperseded = new Map<string, Map<string, Composite>>(); // pattern id -> file -> first instance
-		const bySignature = new Map<string, Map<string, Composite>>(); // signature -> file -> best instance
-		for (const c of composites) {
-			const hit = dupEnabled ? bestMatch(c) : null;
-			if (hit) {
-				// A file that already imports the shared implementation is using the
-				// pattern, not rebuilding it.
-				if (hit.canonical && importsByFile.get(c.file)?.has(hit.canonical)) continue;
-				const perFile = byPattern.get(hit.id) ?? new Map<string, Composite>();
-				byPattern.set(hit.id, perFile);
-				const prev = perFile.get(c.file);
-				if (!prev || c.size > prev.size) perFile.set(c.file, { ...c, pattern: hit });
-				continue;
-			}
-			const avoided = supEnabled ? avoidMatch(c) : null;
-			if (avoided) {
-				// Already importing the answer means the anti-shape sitting beside it
-				// is deliberate, not a rebuild waiting to happen.
-				if (avoided.canonical && importsByFile.get(c.file)?.has(avoided.canonical)) continue;
-				const perFile = bySuperseded.get(avoided.id) ?? new Map<string, Composite>();
-				bySuperseded.set(avoided.id, perFile);
-				// Smallest wins, the opposite of `duplicate-composite`. Containment
-				// means an outer wrapper matches whatever its children match, and
-				// the whole form's tree is a worse answer to "where" than the one
-				// field that should have been a Field.
-				const prev = perFile.get(c.file);
-				if (!prev || c.size < prev.size) perFile.set(c.file, { ...c, pattern: avoided });
-				continue;
-			}
-			if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
-			// An anatomy entry matches from the component's root down, but a file
-			// that renders only a row or a popup cuts the same anatomy lower —
-			// `TableRow(TableCell,TableCell,TableCell)` is a Table's parts, not a
-			// composition anyone chose. Only a tree of nothing *but* parts: a
-			// `DialogPopup` holding a form is still the form.
-			if (anatomyRoots.some((root) => partsOf(root, c.tree))) continue;
-			const perFile = bySignature.get(c.signature) ?? new Map<string, Composite>();
-			bySignature.set(c.signature, perFile);
-			const prev = perFile.get(c.file);
-			if (!prev || c.line < prev.line) perFile.set(c.file, c);
-		}
-
-		// These two rules lead with a signature and close with the remedy, and a
-		// signature is as big as the tree it describes — a five-column card runs
-		// past the line bound on its own. The remedy goes in `tail`, which that
-		// bound is built to spare: eliding the shape still names the file count
-		// and what to do about it, where eliding the end left neither.
-		const emitComposite = (
-			rule: RuleId,
-			c: Pick<Composite, 'file' | 'line' | 'signature'>,
-			signature: string,
-			tail: string,
-			group: string,
-		): void => {
-			if (!reports(c.file)) return;
-			const supp = suppByFile.get(c.file);
-			if (supp && isSuppressed(supp.byLine, c.line, rule)) return;
-			findings.push({
-				rule,
-				severity: config.severityOf(rule),
-				file: c.file,
-				line: c.line,
-				message: `${signature}${tail}`,
-				suffix: tail,
-				code: c.signature,
-				group,
-				rank: RULES[rule].rank,
-			});
-		};
-
-		// Two files is already a pattern being rebuilt; one is just the first use.
-		for (const [id, files] of byPattern) {
-			if (files.size < 2) continue;
-			for (const c of files.values()) {
-				// With no canonical implementation recorded there is nothing to import
-				// yet, and telling an agent to import it would send it looking for a
-				// module that does not exist.
-				const remedy = c.pattern?.canonical ? `import \`${c.pattern.canonical}\`` : 'extract one shared implementation';
-				emitComposite(
-					'patterns/duplicate-composite',
-					c,
-					c.signature,
-					` \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`,
-					id
-				);
-			}
-		}
-		// One file is enough: this is a wrong choice made here, not a duplication
-		// that only exists across the set.
-		// A rule hit is the same finding from below the floor: the file in hand
-		// made the choice the entry exists to replace. The canonical import means
-		// the choice was deliberate, exactly as it does for a matched anti-shape.
-		if (supEnabled)
-			for (const h of ruleHits) {
-				const entry = registry.find((p) => p.id === h.patternId);
-				if (!entry) continue;
-				if (entry.canonical && importsByFile.get(h.file)?.has(entry.canonical)) continue;
-				const remedy = entry.canonical ? `use \`${entry.canonical}\`` : `follow the \`${entry.id}\` pattern`;
-				emitComposite(
-					'patterns/superseded-composite',
-					{ file: h.file, line: h.line, signature: `rule:${h.rule}:${h.detail}` },
-					h.detail,
-					` \u2014 \`${entry.id}\` covers this; ${remedy}`,
-					entry.id,
-				);
-			}
-		for (const [id, files] of bySuperseded) {
-			for (const c of files.values()) {
-				const remedy = c.pattern?.canonical ? `use \`${c.pattern.canonical}\`` : `follow the \`${id}\` pattern`;
-				emitComposite('patterns/superseded-composite', c, c.signature, ` \u2014 \`${id}\` covers this; ${remedy}`, id);
-			}
-		}
-		// Three for an unregistered shape: nothing says the second one was wrong,
-		// but a third means it is the house style and belongs in the registry.
-		for (const [sig, files] of bySignature) {
-			if (files.size < 3) continue;
-			for (const c of files.values())
-				emitComposite('patterns/unregistered-composite', c, sig, ` \u2014 assembled in ${files.size} files, registered in none`, sig);
-		}
-	}
-
-	// ── component currency ────────────────────────────────────────────────────
-	// Whether the import itself — independent of any CSS — is still the
-	// current best-practice choice. `experimental`-status entries never fire
-	// here: WPDS itself flags those not-yet-safe to recommend, so the call is
-	// contextual, not mechanical, and belongs in the authoring skill, not a
-	// blocking check.
-	if (config.enabled['system/locked-component'] || config.enabled['system/superseded-component']) {
-		const seen = new Set<string>(); // one finding per file+component+package, not per usage
-		for (const ci of componentImports) {
-			if (ci.file === undefined) continue;
-			const entry = config.componentRegistry.get(`${ci.package}::${ci.canonical}`);
-			if (!entry || (entry.status !== 'legacy' && entry.status !== 'locked')) continue;
-			const rule = entry.status === 'locked' ? 'system/locked-component' : 'system/superseded-component';
-			if (!config.enabled[rule] || !reports(ci.file)) continue;
-			// A replacement the registry itself will not recommend is not a
-			// replacement. Firing anyway asks for a migration onto a private or
-			// in-flux API, and the only honest answer an agent can give is a
-			// suppression restating what the registry already knows.
-			if (!usableReplacement(config.componentRegistry, entry.supersededBy)) continue;
-			const key = `${ci.file} ${rule} ${ci.canonical} ${ci.package}`;
-			if (seen.has(key)) continue;
-			seen.add(key);
-			const supp = suppByFile.get(ci.file);
-			// The declaration line and the one above it: both were live anchors
-			// when every specifier reported on the declaration, and a directive
-			// someone signed off must not go silent because the reporting moved.
-			if (supp && isSuppressed(supp.byLine, ci.line, rule, [ci.declLine, ci.declLine - 1])) continue;
-			const remedy = entry.supersededBy ? ` → ${entry.supersededBy}` : '';
-			// The finding anchors at the import and there is one per file, so the
-			// count is what says whether this is a one-line edit or a dozen call
-			// sites — the question an agent otherwise answers by grepping the file.
-			const uses = ci.uses > 1 ? ` ×${ci.uses}` : '';
-			findings.push({
-				rule,
-				severity: config.severityOf(rule),
-				file: ci.file,
-				line: ci.line,
-				message: `${ci.canonical} (${ci.package})${uses}${remedy}`,
-				// Carried, not concatenated: the finalize pass caps `message`, and a
-				// registry note spliced into it lost its own last clause to that cap
-				// in every format at once.
-				note: entry.note,
-				code: `${rule}:${ci.package}:${ci.canonical}`,
-				rank: RULES[rule].rank,
-			});
-		}
-	}
+	// ── the checks that read the whole index ─────────────────────────────────
+	for (const f of rawElements(ruleIsLive('system/raw-element') ? rawEls.filter((el) => reports(el.file)) : [], {
+		layoutComponents: ds.layoutComponents,
+		styledClasses,
+		layoutClasses,
+		registry: config.componentRegistry,
+	}))
+		report(f);
+	for (const f of compositeFindings({
+		found: composites,
+		hits: ruleHits,
+		registry: config.patterns ?? [],
+		importsByFile,
+		enabled: ruleIsLive,
+	}))
+		report(f);
+	for (const f of currency(componentImports, config.componentRegistry, ruleIsLive)) report(f);
 
 	// ── malformed suppressions ────────────────────────────────────────────────
 	for (const [file, s] of suppByFile) {
@@ -979,63 +678,44 @@ export async function analyze(
 	}
 
 	// ── the token pass ────────────────────────────────────────────────────────
-// Deferred to here because the token set is only complete once every stylesheet
-// has been read, and a rule that fires against a half-built set reports the
-// design system's own tokens as unknown.
+	// Deferred to here because the token set is only complete once every stylesheet
+	// has been read, and a rule that fires against a half-built set reports the
+	// design system's own tokens as unknown.
 
-// Name the replacement instead of the namespace. A finding that says
-// "13px is hardcoded — use a --wpds-* token" leaves the agent to invent one.
-for (const f of findings) {
-	// An empty array is still working state, and `collapsePerRule` produces one
-	// whenever it merges a group where nothing carried a hint. Dropped here too,
-	// or `"hints": []` rides out into `--format json`.
-	if (!f.hints?.length) {
+	// Name the replacement instead of the namespace. A finding that says
+	// "13px is hardcoded — use a --wpds-* token" leaves the agent to invent one.
+	for (const f of findings) {
+		// An empty array is still working state, and `collapsePerRule` produces one
+		// whenever it merges a group where nothing carried a hint. Dropped here too,
+		// or `"hints": []` rides out into `--format json`.
+		if (!f.hints?.length) {
+			delete f.hints;
+			continue;
+		}
+		// Rebuilt from the hints, so each declaration goes back through `snippet` —
+		// the message the classifier bounded is being replaced, not appended to.
+		// Composed with `messageParts` rather than joined, because this is the one
+		// message that is a list: a collapsed rule carries one remedy per property,
+		// and a line bound that cuts the list mid-token loses the last remedy and
+		// every remedy after it without saying so.
+		f.message = messageParts(
+			f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
+			f.suffix ?? '',
+		);
+		// Keep the match structured as well as rendered. The prose is for a reader;
+		// an unambiguous substitution should not need a model to parse it back out
+		// of a sentence in order to apply it.
+		const suggest = f.hints
+			.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) }))
+			.filter((s) => s.tokens.length);
+		if (suggest.length) f.suggest = suggest;
+		if (f.rule === 'tokens/hardcoded-value' && f.hints.length === 1) f.decl = f.hints[0];
 		delete f.hints;
-		continue;
+		// `suffix` stays until the message is bounded below, which needs to know
+		// which part of it is the channel marker. Nothing downstream of that sees it.
 	}
-	// Rebuilt from the hints, so each declaration goes back through `snippet` —
-	// the message the classifier bounded is being replaced, not appended to.
-	// Composed with `messageParts` rather than joined, because this is the one
-	// message that is a list: a collapsed rule carries one remedy per property,
-	// and a line bound that cuts the list mid-token loses the last remedy and
-	// every remedy after it without saying so.
-	f.message = messageParts(
-		f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
-		f.suffix ?? '',
-	);
-	// Keep the match structured as well as rendered. The prose is for a reader;
-	// an unambiguous substitution should not need a model to parse it back out
-	// of a sentence in order to apply it.
-	const suggest = f.hints
-		.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) }))
-		.filter((s) => s.tokens.length);
-	if (suggest.length) f.suggest = suggest;
-	delete f.hints;
-	// `suffix` stays until the message is bounded below, which needs to know
-	// which part of it is the channel marker. Nothing downstream of that sees it.
-}
 
-// An empty token set means nothing was found to check against — not that every
-// token is unknown. Staying silent is the only honest answer there.
-if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
-	const seenUnknown = new Set();
-	for (const { file, line, name, scopeLines, supp } of unknownTokens) {
-		if (tokenSet.known.has(name) || !reports(file)) continue;
-		const key = `${file}\u0000${name}`;
-		if (seenUnknown.has(key)) continue;
-		seenUnknown.add(key);
-		if (isSuppressed(supp.byLine, line, 'tokens/unknown-token', scopeLines)) continue;
-		findings.push({
-			rule: 'tokens/unknown-token',
-			severity: config.severityOf('tokens/unknown-token'),
-			file,
-			line,
-			message: `var(${name})`,
-			code: name,
-			rank: RULES['tokens/unknown-token'].rank,
-		});
-	}
-}
+	for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
 
 	// Dedupe: nesting and multi-selector rules can legitimately reach the same
 	// declaration twice.
@@ -1074,6 +754,17 @@ if (tokenSet.known.size && config.enabled['tokens/unknown-token']) {
 		directives,
 		diagnostics,
 		blocking: unique.some((f) => f.severity === 'error'),
+		tokens: tokenSet,
+		// Scoped and suppressed here, where the scope and the comments are: the
+		// finding a control becomes is written later, by the judge.
+		...(judge && config.enabled['patterns/judged-redirect']
+			? {
+					controls: controls.filter((c) => {
+						const supp = suppByFile.get(c.file);
+						return reports(c.file) && !(supp && isSuppressed(supp.byLine, c.line, 'patterns/judged-redirect'));
+					}),
+				}
+			: {}),
 	};
 }
 

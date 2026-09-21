@@ -37,15 +37,17 @@ export function toNode(spec: unknown): PatternNode | null {
 	if (!Array.isArray(spec) || !spec.length || typeof spec[0] !== 'string') return null;
 	return {
 		...split(spec[0]),
-		children: spec.slice(1).map(toNode).filter((n): n is PatternNode => n !== null),
+		children: spec
+			.slice(1)
+			.map(toNode)
+			.filter((n): n is PatternNode => n !== null),
 	};
 }
 
 export const signatureOf = (node: PatternNode): string =>
 	node.children.length ? `${node.name}(${node.children.map(signatureOf).join(',')})` : node.name;
 
-export const nodeCount = (node: PatternNode): number =>
-	1 + node.children.reduce((n, c) => n + nodeCount(c), 0);
+export const nodeCount = (node: PatternNode): number => 1 + node.children.reduce((n, c) => n + nodeCount(c), 0);
 export const depthOf = (node: PatternNode): number =>
 	node.children.length ? 1 + Math.max(...node.children.map(depthOf)) : 1;
 
@@ -57,6 +59,20 @@ function descendants(tree: PatternNode, out: PatternNode[] = []): PatternNode[] 
 	}
 	return out;
 }
+
+/**
+ * `"Stack"` matches `Stack`; `"Stack|VStack|HStack"` matches any of the three.
+ *
+ * One shape often has more than one spelling — `ToggleGroupControlOption` and
+ * `ToggleGroupControlOptionIcon` are the same segmented control, and the same
+ * modal footer is written with `Stack` in new code and `VStack` in old. Without
+ * this, each spelling needs its own registry entry, and the ones nobody wrote
+ * come back as `unregistered-composite` noise against code that is in fact
+ * using the pattern. Only pattern nodes carry alternations; a tree built from
+ * real code is always one name.
+ */
+const nameMatches = (spec: string, actual: string): boolean =>
+	spec === actual || (spec.includes('|') && spec.split('|').includes(actual));
 
 /**
  * Does `pattern` occur within `tree`?
@@ -73,20 +89,6 @@ function descendants(tree: PatternNode, out: PatternNode[] = []): PatternNode[] 
  * child first; a registered pattern is a handful of nodes, so the cases where
  * greedy loses to a smarter assignment do not arise in practice.
  */
-/**
- * `"Stack"` matches `Stack`; `"Stack|VStack|HStack"` matches any of the three.
- *
- * One shape often has more than one spelling — `ToggleGroupControlOption` and
- * `ToggleGroupControlOptionIcon` are the same segmented control, and the same
- * modal footer is written with `Stack` in new code and `VStack` in old. Without
- * this, each spelling needs its own registry entry, and the ones nobody wrote
- * come back as `unregistered-composite` noise against code that is in fact
- * using the pattern. Only pattern nodes carry alternations; a tree built from
- * real code is always one name.
- */
-const nameMatches = (spec: string, actual: string): boolean =>
-	spec === actual || (spec.includes('|') && spec.split('|').includes(actual));
-
 export function matches(pattern: PatternNode, tree: PatternNode): boolean {
 	if (!nameMatches(pattern.name, tree.name)) return false;
 	// Only when both sides know: an unqualified pattern node matches any package,
@@ -163,6 +165,14 @@ const ruleSpecs = (detector: unknown): RuleSpec[] => {
 	);
 };
 
+/** A detector's parameter that has to be a non-empty string, or the default. */
+export const stringParam = (spec: RuleSpec, key: string, fallback: string): string =>
+	typeof spec[key] === 'string' && spec[key] ? (spec[key] as string) : fallback;
+export const numParam = (spec: RuleSpec, key: string, fallback: number): number =>
+	typeof spec[key] === 'number' ? (spec[key] as number) : fallback;
+export const listParam = (spec: RuleSpec, key: string): string[] =>
+	Array.isArray(spec[key]) ? (spec[key] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+
 /** Normalize a registry file or inline array into matchable patterns. */
 export function loadPatterns(raw: unknown): Pattern[] {
 	const rec = raw as { patterns?: RawPattern[]; realizations?: RawPattern[] } | null;
@@ -202,7 +212,7 @@ export function loadPatterns(raw: unknown): Pattern[] {
 			// loads — it is checked by its canonical import, by a rule, or not at
 			// all — because the file that names it may need it as a remedy.
 			const nodes: (PatternNode | null)[] = shapes.length ? shapes : [null];
-			nodes.forEach((node, i) =>
+			nodes.forEach((node, i) => {
 				out.push({
 					id: own,
 					summary,
@@ -211,8 +221,8 @@ export function loadPatterns(raw: unknown): Pattern[] {
 					size: node ? nodeCount(node) : 0,
 					avoid: i === 0 ? avoid : [],
 					rules: i === 0 ? rules : [],
-				}),
-			);
+				});
+			});
 		}
 		const parts = p?.parts;
 		if (own && parts && typeof parts === 'object')
@@ -274,3 +284,37 @@ function systemChildren<E extends object>(
  * registry entry is documentation for a person, not a check.
  */
 export const SUBSTANTIAL = { minNodes: 4, minDepth: 2 };
+
+/** One row of an abstract pattern's `resolve` table, as `patterns/index.json` writes it. */
+export interface ResolveRule {
+	when?: Record<string, unknown>;
+	variant?: string;
+	redirect?: string;
+	because?: string;
+	default?: string;
+}
+
+/**
+ * Run a `resolve` table on the forces that are known, in order, first match.
+ *
+ * Known means read with enough certainty to act on; an unknown force is left
+ * out of `forces`, not guessed. A row one known force contradicts is skipped,
+ * whatever else it asks. A row that needs a force nobody knows stops the walk
+ * and returns null: it might have matched, so any row below it answering
+ * instead would be answering a question the table never reached. That is what
+ * keeps a partial reading sound — with only `represents` known, the redirects
+ * at the top of `choose` decide, and the variant rows under them stay silent.
+ */
+export function resolveRule(
+	rules: readonly ResolveRule[],
+	forces: Readonly<Record<string, unknown>>,
+): ResolveRule | null {
+	for (const r of rules) {
+		if (!r.when) return r;
+		const conds = Object.entries(r.when);
+		if (conds.some(([f, v]) => f in forces && forces[f] !== v)) continue;
+		if (conds.every(([f, v]) => forces[f] === v)) return r;
+		return null;
+	}
+	return null;
+}

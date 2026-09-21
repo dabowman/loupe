@@ -41,7 +41,8 @@ export const RULES = {
 		severity: 'error',
 		rank: 24,
 		needs: ['componentRegistry'],
-		title: 'private API — {system} does not recommend using this outside its own core; it can break without notice on any update',
+		title:
+			'private API — {system} does not recommend using this outside its own core; it can break without notice on any update',
 	},
 	'system/superseded-component': {
 		severity: 'warn',
@@ -59,7 +60,15 @@ export const RULES = {
 		severity: 'warn',
 		rank: 16,
 		needs: ['patternRegistry'],
-		title: 'a sanctioned composition already covers this \u2014 see the finding for which pattern replaces the shape that was built',
+		title:
+			'a sanctioned composition already covers this \u2014 see the finding for which pattern replaces the shape that was built',
+	},
+	'patterns/judged-redirect': {
+		severity: 'warn',
+		rank: 3,
+		needs: ['patternRegistry'],
+		title:
+			'judged, advisory \u2014 a model read what this control stands for, and the pattern it was built as redirects that reading elsewhere; confirm before changing it',
 	},
 	'patterns/unregistered-composite': {
 		severity: 'warn',
@@ -71,7 +80,8 @@ export const RULES = {
 		severity: 'warn',
 		rank: 22,
 		needs: ['tokenPrefixes'],
-		title: 'unknown token — no {tokenPrefix} token by this name is defined; check the spelling against the design system',
+		title:
+			'unknown token — no {tokenPrefix} token by this name is defined; check the spelling against the design system',
 	},
 	'tokens/hardcoded-value': {
 		severity: 'warn',
@@ -127,7 +137,7 @@ export const RULES = {
 		needs: ['textComponents'],
 		title: 'text component typed in CSS — use its style/size prop instead',
 	},
-} satisfies Record<RuleId, RuleDef>;
+} satisfies Record<string, RuleDef>;
 
 /** Every rule id, once, in declaration order — `Object.keys` loses the union. */
 export const RULE_IDS = Object.keys(RULES) as RuleId[];
@@ -156,11 +166,10 @@ export const canonicalRuleId = (id: string): string => ALIASES[id as keyof typeo
 /** Narrow an arbitrary string to a rule the engine actually has. */
 export const isRuleId = (id: string): id is RuleId => Object.hasOwn(RULES, id);
 
-export const SEVERITIES: ReadonlySet<string> = new Set<Severity>(['error', 'warn', 'off']);
+const SEVERITIES: ReadonlySet<string> = new Set<Severity>(['error', 'warn', 'off']);
 
 /** Narrow an arbitrary string to a severity. */
-export const isSeverity = (v: unknown): v is Severity =>
-	typeof v === 'string' && SEVERITIES.has(v);
+export const isSeverity = (v: unknown): v is Severity => typeof v === 'string' && SEVERITIES.has(v);
 
 /**
  * Interpolate {placeholders} in a rule title from the resolved design system, so
@@ -169,7 +178,12 @@ export const isSeverity = (v: unknown): v is Severity =>
  */
 export function renderTitle(ruleId: RuleId, ds: DesignSystem, keyword: string): string {
 	const list = (arr: readonly string[] | undefined, fallback: string): string =>
-		arr && arr.length ? arr.slice(0, 2).map((c) => `<${c}>`).join('/') : fallback;
+		arr?.length
+			? arr
+					.slice(0, 2)
+					.map((c) => `<${c}>`)
+					.join('/')
+			: fallback;
 	// One prefix is the namespace; several are families within one namespace, and
 	// naming the first of them is not a shorter way of saying that — it is a
 	// different, wrong statement. A system whose tokens are `--color-*`,

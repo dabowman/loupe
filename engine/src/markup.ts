@@ -15,16 +15,29 @@
  */
 
 import { parse as babelParse } from '@babel/parser';
-import type { ParserPlugin } from '@babel/parser';
-import type { Expression, File, JSXAttribute, JSXElement, JSXOpeningElement, Node, TaggedTemplateExpression } from '@babel/types';
+import type { ParseResult, ParserPlugin } from '@babel/parser';
+import type {
+	Expression,
+	File,
+	JSXAttribute,
+	JSXElement,
+	JSXOpeningElement,
+	Node,
+	TaggedTemplateExpression,
+} from '@babel/types';
 import { keyName, toCssProp, toCssValue } from './inline.ts';
-import { FLEX_PROPS, GAP_PROPS } from './styles.ts';
-import { cssInJsLocals, parseTemplate, templateText } from './cssinjs.ts';
+import { isLayoutDecl } from './styles.ts';
+import { messageOf } from './text.ts';
+import { cssInJsLocals, fromPackage, importedName, parseTemplate, templateText } from './cssinjs.ts';
 import { depthOf, nodeCount, signatureOf, systemTree } from './patterns.ts';
+import { confirmPair } from './checks/detectors/confirm-pair.ts';
+import { fewStaticOptions } from './checks/detectors/few-static-options.ts';
+import { judgeControl } from './checks/detectors/judge.ts';
 import type {
 	Binding,
 	ComponentImport,
 	Composite,
+	Control,
 	CssInJsTemplate,
 	Decl,
 	DesignSystem,
@@ -77,7 +90,9 @@ const identifierOf = (t: Expression): string | undefined => (t.type === 'Identif
  * markup the author wrote and React renders as markup, so it stays subject to
  * every rule.
  */
-function substitutionTargets(expr: Node | null | undefined, out: JSXElement[] = []): JSXElement[] {
+function substitutionTargets(node: Node | null | undefined, out: JSXElement[] = []): JSXElement[] {
+	// A type assertion is not a different value: `render={ ( <h4 /> ) as ReactElement }`.
+	const expr = node && unwrapTs(node);
 	switch (expr?.type) {
 		case 'JSXElement':
 			out.push(expr);
@@ -91,8 +106,7 @@ function substitutionTargets(expr: Node | null | undefined, out: JSXElement[] = 
 			// callback takes the moment it touches its props, and missing it
 			// reproduces the unsatisfiable finding this exemption exists to end.
 			if (expr.body.type !== 'BlockStatement') return substitutionTargets(expr.body, out);
-			for (const stmt of expr.body.body)
-				if (stmt.type === 'ReturnStatement') substitutionTargets(stmt.argument, out);
+			for (const stmt of expr.body.body) if (stmt.type === 'ReturnStatement') substitutionTargets(stmt.argument, out);
 			break;
 		}
 		case 'ConditionalExpression':
@@ -106,16 +120,6 @@ function substitutionTargets(expr: Node | null | undefined, out: JSXElement[] = 
 			// reporting the guarded element — the same tag, in the same prop.
 			substitutionTargets(expr.left, out);
 			substitutionTargets(expr.right, out);
-			break;
-		// A type assertion is not a different value. `.tsx` is a first-class input
-		// here, and `render={ ( <h4 /> ) as ReactElement }` is what a narrower prop
-		// type makes an author write; the wrapper says nothing about which element
-		// the prop receives.
-		case 'TSAsExpression':
-		case 'TSSatisfiesExpression':
-		case 'TSNonNullExpression':
-		case 'TSTypeAssertion':
-			substitutionTargets(expr.expression, out);
 			break;
 		// `render={ <h4 /> }`. JSX also allows the braces to be dropped entirely
 		// (`render=<h4 />`), which arrives as the element itself and is caught by
@@ -135,12 +139,7 @@ const canonicalName = (name: string, normalize: RegExp | null): string =>
 	normalize ? name.replace(normalize, '') : name;
 
 /** `Set.has` for a name that may not exist. */
-const held = (set: ReadonlySet<string>, name: string | undefined): boolean =>
-	name !== undefined && set.has(name);
-
-/** First line of an unknown throw — a parser may reject with anything. */
-const messageOf = (err: unknown): string =>
-	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
+const held = (set: ReadonlySet<string>, name: string | undefined): boolean => name !== undefined && set.has(name);
 
 /** Every identifier-like token in the source. See note (2) above. */
 export function harvestTokens(text: string, into: Set<string> = new Set()): Set<string> {
@@ -172,33 +171,6 @@ export function harvestStems(text: string, into: Set<string> = new Set()): Set<s
 /** [A-Za-z0-9_-] */
 function isWordChar(c: number): boolean {
 	return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95 || c === 45;
-}
-
-/**
- * Every string literal anywhere below a node.
- *
- * Genuinely untyped by design: this runs over whatever a `className` expression
- * turns out to be — a conditional, a `clsx()` call, a template — so it reads
- * shapes rather than node types, and says so in its signature.
- */
-function stringsIn(node: unknown, out: string[] = []): string[] {
-	if (!node || typeof node !== 'object') return out;
-	if (Array.isArray(node)) {
-		for (const n of node) stringsIn(n, out);
-		return out;
-	}
-	const rec = node as Record<string, unknown>;
-	if (rec['type'] === 'StringLiteral') {
-		if (typeof rec['value'] === 'string') out.push(rec['value']);
-	} else if (rec['type'] === 'TemplateElement') {
-		const v = rec['value'] as { cooked?: string; raw?: string } | undefined;
-		out.push(v?.cooked ?? v?.raw ?? '');
-	}
-	for (const key of Object.keys(rec)) {
-		if (key === 'loc' || key === 'type' || key === 'start' || key === 'end') continue;
-		stringsIn(rec[key], out);
-	}
-	return out;
 }
 
 const CLASS_TOKEN = /^[a-z_][\w-]*$/i;
@@ -257,22 +229,6 @@ function readStyleAttr(value: JSXAttribute['value']): {
 	return { decls, dynamic, present: true };
 }
 
-/**
- * Does this declaration lay anything out?
- *
- * `<div>` maps to a layout primitive, so the suggestion is only true when the
- * div is actually laying something out. A `<div className="acme-card">` whose
- * class sets a border and a colour has no layout primitive analog, and telling
- * an agent to make it an `HStack` is wrong advice at scale — it was the single
- * largest source of findings in a real repo.
- */
-export const isLayoutDecl = ({ prop, value }: Decl): boolean =>
-	FLEX_PROPS.has(prop) ||
-	GAP_PROPS.has(prop) ||
-	(prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value)) ||
-	prop.startsWith('grid-template') ||
-	prop.startsWith('grid-auto');
-
 function walkAst(node: unknown, visit: (n: Node) => void): void {
 	if (!node || typeof node !== 'object') return;
 	if (Array.isArray(node)) {
@@ -280,7 +236,7 @@ function walkAst(node: unknown, visit: (n: Node) => void): void {
 		return;
 	}
 	const rec = node as Record<string, unknown>;
-	if (typeof rec['type'] === 'string') visit(node as Node);
+	if (typeof rec.type === 'string') visit(node as Node);
 	for (const key of Object.keys(rec)) {
 		if (key === 'loc' || key === 'start' || key === 'end' || key === 'leadingComments' || key === 'trailingComments')
 			continue;
@@ -298,14 +254,12 @@ function systemImports(
 	ast: File,
 	ds: DesignSystem,
 ): {
-	known: Set<string>;
 	text: Set<string>;
 	layout: Set<string>;
 	componentImports: ComponentImport[];
 	packages: Map<string, string>;
 	canonicals: Map<string, string>;
 } {
-	const known = new Set<string>();
 	// local name -> canonical name, so a rule written against `SelectControl`
 	// finds it under whatever alias the file bound.
 	const canonicals = new Map<string, string>();
@@ -319,20 +273,12 @@ function systemImports(
 	// *whose* `Stack` this is. Names are the one thing design systems share.
 	const packages = new Map<string, string>();
 	const canonical = (name: string): string => canonicalName(name, ds.normalizeExports);
-	const fromPackage = (src: string): boolean => ds.packages.some((p) => src === p || src.startsWith(`${p}/`));
 
 	for (const node of ast.program.body) {
-		if (node.type !== 'ImportDeclaration' || !fromPackage(node.source.value)) continue;
+		if (node.type !== 'ImportDeclaration' || !fromPackage(ds.packages, node.source.value)) continue;
 		for (const spec of node.specifiers) {
 			const local = spec.local.name;
-			const imported =
-				spec.type === 'ImportSpecifier'
-					? spec.imported.type === 'Identifier'
-						? spec.imported.name
-						: spec.imported.value
-					: local;
-			const c = canonical(imported);
-			known.add(local);
+			const c = canonical(spec.type === 'ImportSpecifier' ? importedName(spec) : local);
 			canonicals.set(local, c);
 			if (ds.textComponents.includes(c)) text.add(local);
 			if (ds.layoutComponents.includes(c)) layout.add(local);
@@ -352,12 +298,15 @@ function systemImports(
 			});
 		}
 	}
-	return { known, text, layout, componentImports, packages, canonicals };
+	return { text, layout, componentImports, packages, canonicals };
 }
 
 /** An expression with any type assertion peeled off; the value is the same. */
 const unwrapTs = (e: Node): Node =>
-	e.type === 'TSAsExpression' || e.type === 'TSSatisfiesExpression' || e.type === 'TSNonNullExpression' || e.type === 'TSTypeAssertion'
+	e.type === 'TSAsExpression' ||
+	e.type === 'TSSatisfiesExpression' ||
+	e.type === 'TSNonNullExpression' ||
+	e.type === 'TSTypeAssertion'
 		? unwrapTs(e.expression)
 		: e;
 
@@ -398,24 +347,61 @@ function staticString(node: Node): string | null {
 	return null;
 }
 
-/** A rule parameter that has to be a string, or the default. */
-const param = (spec: RuleSpec, key: string, fallback: string): string =>
-	typeof spec[key] === 'string' && spec[key] ? (spec[key] as string) : fallback;
-const numParam = (spec: RuleSpec, key: string, fallback: number): number =>
-	typeof spec[key] === 'number' ? (spec[key] as number) : fallback;
-const listParam = (spec: RuleSpec, key: string): string[] =>
-	Array.isArray(spec[key]) ? (spec[key] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
+/** What a registry detector can read about the element it runs on, and around it. */
+export interface DetectorContext {
+	/** The registry's name for the element's component, alias resolved. */
+	canonical: string;
+	/** Any element's name as written: `Menu.Item`, `div`. */
+	nameOf(el: JSXElement): string | null;
+	/** Any element's registry name, or null for anything not from the design system. */
+	canonicalOf(el: JSXElement): string | null;
+	/** Every JSX element below `el`, through containers and callbacks alike. */
+	elementsIn(el: JSXElement): JSXElement[];
+	/** A static option array, each entry reduced to its label; null when it is not static. */
+	optionsIn(e: Node): (string | null)[] | null;
+	/** The text `el` renders as its label, when the source states it. */
+	labelOf(el: JSXElement): string | null;
+	/** The component function `el` sits in, when the parse found a name. */
+	enclosingOf(el: JSXElement): string | null;
+	/** `el` as written, opening tag to close. */
+	sourceOf(el: JSXElement): string;
+}
 
-// Labels a button carries when it is asking for consent rather than input.
-// Matched at the start, so 'Delete permanently' and 'Yes, delete' both count;
-// 'Close' is left out because a pair of Cancel and Close is a notice, not a
-// question.
-const CONSENT = '^(cancel|delete|remove|discard|reset|confirm|ok|yes|no|continue|proceed|leave|revert)\\b';
-// What makes a modal a form rather than a question: any control that takes
-// input. A system component named like one, or a raw input element.
-const CONTROLS = '(Control|Field|Picker|Input|Textarea|Editor)$|^(DataForm|Field\\.Root|Fieldset)';
+/**
+ * A registry detector: the finding's detail — `SelectControl with 4 short
+ * static options` — when `el` makes the choice the entry exists to replace,
+ * else null. Each lives in `checks/detectors/`, parameterised by the `spec`
+ * the registry writes for it.
+ */
+export type Detector = (el: JSXElement, spec: RuleSpec, ctx: DetectorContext) => string | null;
 
-export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rules: readonly PatternRule[] = []): ScanResult {
+const DETECTORS = new Map<string, Detector>([
+	['few-static-options', fewStaticOptions],
+	['confirm-pair', confirmPair],
+]);
+
+/** Named, capitalised scopes: the components a control can sit in. */
+function componentRanges(program: Node): { start: number; end: number; name: string }[] {
+	const out: { start: number; end: number; name: string }[] = [];
+	walkAst(program, (n) => {
+		const [name, body]: [string | undefined, Node | null | undefined] =
+			n.type === 'FunctionDeclaration' || n.type === 'ClassDeclaration'
+				? [n.id?.name, n]
+				: n.type === 'VariableDeclarator' && n.id.type === 'Identifier'
+					? [n.id.name, n.init]
+					: [undefined, null];
+		if (name && /^[A-Z]/.test(name) && typeof body?.start === 'number' && typeof body.end === 'number')
+			out.push({ start: body.start, end: body.end, name });
+	});
+	return out;
+}
+
+export function scanMarkup(
+	text: string,
+	relPath: string,
+	ds: DesignSystem,
+	rules: readonly PatternRule[] = [],
+): ScanResult {
 	const referenced = harvestTokens(text);
 	const stems = harvestStems(text);
 	const bindings: Binding[] = [];
@@ -424,24 +410,36 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 	const cssInJs: CssInJsTemplate[] = [];
 	const composites: Composite[] = [];
 	const ruleHits: RuleHit[] = [];
+	const controls: Control[] = [];
 	const imports = new Set<string>();
+	const result: ScanResult = {
+		controls,
+		bindings,
+		rawEls,
+		inlineStyles,
+		cssInJs,
+		composites,
+		ruleHits,
+		imports,
+		referenced,
+		stems,
+		componentImports: [],
+		parseError: null,
+	};
 
-	let ast;
+	let ast: ParseResult<File>;
 	try {
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return { bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems, componentImports: [], parseError: messageOf(err) };
+		return { ...result, parseError: messageOf(err) };
 	}
 
-	const { known, text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
+	const { text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
 	const tags = cssInJsLocals(ast, ds.cssInJsPackages);
 	// `<Button css={css`…`}>` binds a template to an element the walk sees
 	// first, so the owner is recorded before the template is reached.
-	const cssPropOwner = new Map<
-		number,
-		{ target: string; isSystem: boolean; isText: boolean; isLayout: boolean }
-	>();
+	const cssPropOwner = new Map<number, { target: string; isSystem: boolean; isText: boolean }>();
 	// Opening elements handed to a substitution prop. Recorded while the carrying
 	// element's attributes are read, which the walk reaches first, and held by
 	// node identity — `walkAst` visits these very objects, so nothing has to be
@@ -454,27 +452,30 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		if (node.type === 'ImportDeclaration') for (const sp of node.specifiers) imports.add(sp.local.name);
 
 	/**
- * A CSS-in-JS tagged template, resolved to the thing it styles.
- *
- * `styled(Button)` styles a design-system component, so its declarations get
- * that component's binding and the "use the props" remedy — the same verdict
- * the stylesheet pass reaches for a class bound to the same component.
- */
+	 * A CSS-in-JS tagged template, resolved to the thing it styles.
+	 *
+	 * `styled(Button)` styles a design-system component, so its declarations get
+	 * that component's binding and the "use the props" remedy — the same verdict
+	 * the stylesheet pass reaches for a class bound to the same component.
+	 */
 	/**
- * Direct design-system children of a JSX element.
- *
- * Descends through anything that is not itself an element — expression
- * containers, fragments, conditionals — because `{items.map((i) => <Button />)}`
- * is a child in every sense that matters here, and stopping at the container
- * would make a mapped list look empty.
- */
+	 * Direct design-system children of a JSX element.
+	 *
+	 * Descends through anything that is not itself an element — expression
+	 * containers, fragments, conditionals — because `{items.map((i) => <Button />)}`
+	 * is a child in every sense that matters here, and stopping at the container
+	 * would make a mapped list look empty.
+	 */
 	const jsxChildElements = (el: JSXElement): JSXElement[] => {
 		const out: JSXElement[] = [];
 		const dig = (n: unknown): void => {
 			if (!n || typeof n !== 'object') return;
-			if (Array.isArray(n)) return n.forEach(dig);
+			if (Array.isArray(n)) {
+				n.forEach(dig);
+				return;
+			}
 			const rec = n as Record<string, unknown>;
-			if (rec['type'] === 'JSXElement') return void out.push(n as JSXElement);
+			if (rec.type === 'JSXElement') return void out.push(n as JSXElement);
 			for (const k of Object.keys(rec)) if (k !== 'loc' && k !== 'start' && k !== 'end') dig(rec[k]);
 		};
 		for (const c of el.children ?? []) dig(c);
@@ -485,8 +486,8 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 	// composite tree even though only `Card` is ever imported — keep the full
 	// dotted name so they don't collapse into one indistinguishable node, but
 	// test import membership against the object half.
-	const jsxName = (el: JSXElement): string | null => {
-		const n = el.openingElement.name;
+	const jsxName = (el: JSXElement | JSXOpeningElement): string | null => {
+		const n = ('openingElement' in el ? el.openingElement : el).name;
 		if (n.type === 'JSXIdentifier') return n.name;
 		if (n.type === 'JSXMemberExpression')
 			return n.object.type === 'JSXIdentifier' ? `${n.object.name}.${n.property.name}` : null;
@@ -496,10 +497,10 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 
 	const readComposite = (el: JSXElement): void => {
 		const name = jsxName(el);
-		if (!name || !known.has(baseOf(name))) return;
+		if (!name || !canonicals.has(baseOf(name))) return;
 		const tree = systemTree(
 			el,
-			(n) => known.has(baseOf(n)),
+			(n) => canonicals.has(baseOf(n)),
 			jsxChildElements,
 			jsxName,
 			(n) => packages.get(baseOf(n)) ?? null,
@@ -553,7 +554,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		// A spread could hold anything; one is enough to make the count unknown.
 		if (v.elements.some((x) => !x || x.type === 'SpreadElement')) return null;
 		return v.elements.map((x) => {
-			if (!x || x.type !== 'ObjectExpression') return null;
+			if (x?.type !== 'ObjectExpression') return null;
 			const label = x.properties.find(
 				(pr) => pr.type === 'ObjectProperty' && !pr.computed && pr.key.type === 'Identifier' && pr.key.name === 'label',
 			);
@@ -561,48 +562,40 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		});
 	}
 
+	// Built on the first control a `judge` rule names, so a file with none, and
+	// every run without `--judge`, never walks for it.
+	let scopes: { start: number; end: number; name: string }[] | null = null;
+	const enclosingOf = (el: JSXElement): string | null => {
+		scopes ??= componentRanges(ast.program);
+		const at = el.start ?? 0;
+		let best: { start: number; name: string } | null = null;
+		for (const s of scopes) if (s.start <= at && s.end >= (el.end ?? at) && (!best || s.start > best.start)) best = s;
+		return best?.name ?? null;
+	};
+
+	const reading: Omit<DetectorContext, 'canonical'> = {
+		nameOf: jsxName,
+		canonicalOf,
+		elementsIn: (el) => allElements(el),
+		optionsIn: staticOptions,
+		labelOf: staticLabel,
+		enclosingOf,
+		sourceOf: (el) => text.slice(el.start ?? 0, el.end ?? 0),
+	};
 	const readRules = (el: JSXElement): void => {
 		if (!rules.length) return;
 		const canonical = canonicalOf(el);
 		if (!canonical) return;
 		const line = el.loc?.start?.line ?? 1;
+		const ctx = { ...reading, canonical };
 		for (const { patternId, spec } of rules) {
-			if (spec.rule === 'few-static-options') {
-				if (!listParam(spec, 'components').includes(canonical)) continue;
-				const prop = param(spec, 'prop', 'options');
-				const attr = el.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === prop);
-				const value = attr?.type === 'JSXAttribute' && attr.value?.type === 'JSXExpressionContainer' ? attr.value.expression : null;
-				const options = value && value.type !== 'JSXEmptyExpression' ? staticOptions(value) : null;
-				if (!options || options.length < numParam(spec, 'min', 2) || options.length > numParam(spec, 'max', 5)) continue;
-				// Few is not enough: the segmented control needs the set to sit on one
-				// row, and five "Uppercase Roman numerals" do not. Total label length
-				// stands in for that force; a label the source does not state leaves
-				// the width unknown, and an unknown width is not a finding.
-				if (!options.every((l): l is string => l !== null)) continue;
-				if (options.reduce((n, l) => n + l.length, 0) > numParam(spec, 'maxLabelChars', 32)) continue;
-				ruleHits.push({ patternId, rule: spec.rule, line, detail: `${canonical} with ${options.length} short static ${prop}` });
-			} else if (spec.rule === 'confirm-pair') {
-				if (canonical !== param(spec, 'container', '')) continue;
-				const button = param(spec, 'button', 'Button');
-				const consent = new RegExp(param(spec, 'labels', CONSENT), 'i');
-				const controls = new RegExp(param(spec, 'controls', CONTROLS));
-				const inside = allElements(el);
-				const isControl = (c: JSXElement): boolean => {
-					const name = jsxName(c);
-					const sys = canonicalOf(c);
-					if (sys) return controls.test(sys) || controls.test(name ?? '');
-					return !!name && /^(input|select|textarea)$/.test(name);
-				};
-				if (inside.some(isControl)) continue;
-				const labels = inside.filter((c) => canonicalOf(c) === button).map(staticLabel);
-				if (labels.length !== 2 || !labels.every((l) => l !== null && consent.test(l))) continue;
-				ruleHits.push({
-					patternId,
-					rule: spec.rule,
-					line,
-					detail: `${canonical} with two consent buttons (${labels.join(' / ')}) and no form control`,
-				});
+			if (spec.rule === 'judge') {
+				const control = judgeControl(el, spec, ctx);
+				if (control) controls.push({ file: relPath, line, ...control, patternId });
+				continue;
 			}
+			const detail = DETECTORS.get(spec.rule)?.(el, spec, ctx);
+			if (detail) ruleHits.push({ patternId, rule: spec.rule, line, detail });
 		}
 	};
 
@@ -620,7 +613,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 			target = memberProperty(t) ?? null; // styled.div
 		} else if (held(tags.styled, calleeOf(t))) {
 			target = firstArgOf(t) ?? null; // styled(Button)
-			isSystem = Boolean(target && known.has(target));
+			isSystem = Boolean(target && canonicals.has(target));
 		} else if (held(tags.bare, identifierOf(t))) {
 			target = null; // css`…`, createGlobalStyle`…`
 		} else {
@@ -635,7 +628,6 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 			target,
 			isSystem,
 			isText: isSystem && target !== null && textLike.has(target),
-			isLayout: isSystem && target !== null && layout.has(target),
 			groups,
 			error,
 		});
@@ -648,19 +640,15 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 			readRules(node);
 		}
 		if (node.type !== 'JSXOpeningElement') return;
-		const name = node.name;
-		const tag =
-			name.type === 'JSXIdentifier'
-				? name.name
-				: name.type === 'JSXMemberExpression'
-					? `${name.object.type === 'JSXIdentifier' ? name.object.name : '?'}.${name.property.name}`
-					: null;
+		// `<UI.Card.Header>` has no name jsxName will vouch for, but its inline
+		// style is still an inline style: read it as the plain element `?.Header`.
+		const tag = jsxName(node) ?? (node.name.type === 'JSXMemberExpression' ? `?.${node.name.property.name}` : null);
 		if (!tag) return;
 		const line = node.loc?.start?.line ?? 1;
 
 		const root = tag.split('.')[0] ?? tag;
 		const isComponent = /^[A-Z]/.test(root);
-		const isSystem = isComponent && known.has(root);
+		const isSystem = isComponent && canonicals.has(root);
 		if (isSystem) {
 			const c = canonicals.get(root) ?? root;
 			uses.set(c, (uses.get(c) ?? 0) + 1);
@@ -677,7 +665,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		const emitsTag = member
 			? // `<UI.Text render={ <h4 /> }>` — the namespace is what was imported,
 				// so the component name is the member.
-				known.has(root) &&
+				canonicals.has(root) &&
 				(ds.textComponents.includes(canonicalName(member, ds.normalizeExports)) ||
 					ds.layoutComponents.includes(canonicalName(member, ds.normalizeExports)))
 			: textLike.has(root) || layout.has(root);
@@ -688,7 +676,11 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		for (const attr of node.attributes) {
 			if (attr.type !== 'JSXAttribute') continue;
 			const an = attr.name.type === 'JSXIdentifier' ? attr.name.name : attr.name.name.name;
-			if (an === 'className' || an === 'class') stringsIn(attr.value, strings);
+			if (an === 'className' || an === 'class')
+				walkAst(attr.value, (n) => {
+					if (n.type === 'StringLiteral') strings.push(n.value);
+					else if (n.type === 'TemplateElement') strings.push(n.value.cooked ?? n.value.raw);
+				});
 			else if (an === 'style') style = readStyleAttr(attr.value);
 			else if (an === 'css') cssAttr = attr.value;
 			// Only a tag-emitting design-system component's substitution prop earns the
@@ -712,7 +704,6 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 				target: isComponent ? root : tag.toLowerCase(),
 				isSystem,
 				isText: isSystem && textLike.has(root),
-				isLayout: isSystem && layout.has(root),
 			});
 
 		if (style?.present)
@@ -720,7 +711,6 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 				tag: isComponent ? root : tag.toLowerCase(),
 				isSystem,
 				isText: isSystem && textLike.has(root),
-				isLayout: isSystem && layout.has(root),
 				decls: style.decls,
 				dynamic: style.dynamic,
 				file: relPath,
@@ -730,9 +720,7 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 		if (isComponent) {
 			if (!isSystem) return;
 			const isText = textLike.has(root);
-			const isLayout = layout.has(root);
-			for (const cls of classes)
-				bindings.push({ cls, tag: root, isSystem: true, isText, isLayout, file: relPath, line });
+			for (const cls of classes) bindings.push({ cls, tag: root, isSystem: true, isText, file: relPath, line });
 		} else {
 			// `render={ <h4 /> }` is not markup being rendered — it is the argument
 			// telling a design-system component which tag to emit, and it is the
@@ -748,17 +736,17 @@ export function scanMarkup(text: string, relPath: string, ds: DesignSystem, rule
 			// out with style={{ display: 'flex' }} and no className at all.
 			if (mapped.styledOnly && !classes.length && !style?.present) return;
 			rawEls.push({
-				tag: lower, classes, file: relPath, line,
-				suggest: mapped.component, styledOnly: mapped.styledOnly,
+				tag: lower,
+				classes,
+				file: relPath,
+				line,
+				suggest: mapped.component,
+				styledOnly: mapped.styledOnly,
 				inlineStyled: Boolean(style?.present),
 				inlineLayout: Boolean(style?.decls?.some(isLayoutDecl)),
 			});
 		}
 	});
 
-	return {
-		bindings, rawEls, inlineStyles, cssInJs, composites, ruleHits, imports, referenced, stems,
-		componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })),
-		parseError: null,
-	};
+	return { ...result, componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })) };
 }

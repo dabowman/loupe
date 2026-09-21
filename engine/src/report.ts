@@ -13,7 +13,15 @@ import { SEV_PAINT, cyan, dim, green, magenta, red, yellow } from './color.ts';
 import { RULES, renderTitle } from './rules.ts';
 import { messageLine } from './text.ts';
 import type {
-	AnalyzeResult, BaselinedResult, Config, Directive, Finding, ReportPayload, RuleDescriptor, RuleId, Severity,
+	AnalyzeResult,
+	BaselinedResult,
+	Config,
+	Directive,
+	Finding,
+	ReportPayload,
+	RuleDescriptor,
+	RuleId,
+	Severity,
 } from './types.ts';
 
 const SEV_MARK: Partial<Record<Severity, string>> = { error: '\u2717', warn: '\u2022' };
@@ -39,7 +47,7 @@ const SEV_WORD: Partial<Record<Severity, string>> = { error: 'blocking', warn: '
  * only where a signature puts them — against a bracket, a comma or an arrow, or
  * at the end — so a stray capitalised word in a CSS value is left alone.
  */
-const COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
+const COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|<[A-Z][A-Za-z0-9]*(?=\s)|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
 
 /**
  * The same message with those names painted \u2014 at print time, never at capture.
@@ -52,6 +60,25 @@ const COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2
 const components = (message: string): string => message.replace(COMPONENT, cyan);
 
 /**
+ * A finding's line, with what `--judge` wrote in green and the rest through
+ * `components`. Each span is its own fragment rather than a colour over the
+ * line: the names beside it carry their own, and a nested pair would end the
+ * green at the first one. A span the line bound elided is simply not painted.
+ */
+const painted = (f: Finding): string => {
+	const line = withNote(f);
+	let out = '';
+	let at = 0;
+	for (const span of f.judged?.spans ?? []) {
+		const i = line.indexOf(span, at);
+		if (i < 0) continue;
+		out += `${components(line.slice(at, i))}${green(span)}`;
+		at = i + span.length;
+	}
+	return out + components(line.slice(at));
+};
+
+/**
  * A rule title with its {placeholders} resolved.
  *
  * `RULES[id].title` is a template — `replace with a {tokenPrefix} token` — and
@@ -62,8 +89,10 @@ const components = (message: string): string => message.replace(COMPONENT, cyan)
  * Binding this per formatter keeps the obligation in one place, so a fourth
  * format cannot quietly skip it.
  */
-const titleFor = (config: Config) => (id: RuleId): string =>
-	renderTitle(id, config.designSystem, config.suppression.keyword);
+const titleFor =
+	(config: Config) =>
+	(id: RuleId): string =>
+		renderTitle(id, config.designSystem, config.suppression.keyword);
 
 /** How far from a finding a directive can sit and still plausibly be for it. */
 const NEAR = 5;
@@ -92,14 +121,16 @@ function nearMisses(result: AnalyzeResult | BaselinedResult): string[] {
 		// comment above it does not work — only the nearest line is consulted —
 		// so the remedy there is the comma list, not a move that would displace
 		// a suppression someone else signed off.
-		const occupant = result.directives.find((d) => d.file === f.file && d.line === f.line - 1 && !d.rules.includes(f.rule));
+		const occupant = result.directives.find(
+			(d) => d.file === f.file && d.line === f.line - 1 && !d.rules.includes(f.rule),
+		);
 		out.push(
 			occupant
 				? `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but line ${f.line - 1} already carries one for ` +
-					`\`${occupant.rules.join(', ')}\` — only the nearest line is read, so name both on it: ` +
-					`\`${occupant.rules.join(', ')}, ${f.rule} -- <reason>\`.`
+						`\`${occupant.rules.join(', ')}\` — only the nearest line is read, so name both on it: ` +
+						`\`${occupant.rules.join(', ')}, ${f.rule} -- <reason>\`.`
 				: `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but this finding anchors to line ${f.line} — ` +
-					`move it to line ${f.line}, or the line directly above it.`,
+						`move it to line ${f.line}, or the line directly above it.`,
 		);
 	}
 	return out;
@@ -151,12 +182,10 @@ function suppressionLine(directives: readonly Directive[]): string {
 	const rules = tally(directives.flatMap((d) => d.rules));
 	const rest = rules.length - TOP;
 	const files = new Set(directives.map((d) => d.file)).size;
-	return (
-		`${directives.length} active suppression(s) in ${files} file(s), silencing ${rules
-			.slice(0, TOP)
-			.map(([rule, n]) => `${rule} (${n})`)
-			.join(', ')}${rest > 0 ? `, +${rest} more rule(s)` : ''}` + ' — run `loupe suppressions` to read them.'
-	);
+	return `${directives.length} active suppression(s) in ${files} file(s), silencing ${rules
+		.slice(0, TOP)
+		.map(([rule, n]) => `${rule} (${n})`)
+		.join(', ')}${rest > 0 ? `, +${rest} more rule(s)` : ''} — run \`loupe suppressions\` to read them.`;
 }
 
 /**
@@ -220,21 +249,17 @@ export function formatAgent(
 		// and an agent that only ever sees one rule only ever fixes one rule.
 		const quota = new Map<RuleId, number>(groups.map(([id]) => [id, 0]));
 		let budget = maxFindings > 0 ? maxFindings : Infinity;
-		if (budget !== Infinity) {
-			let progress = true;
-			while (budget > 0 && progress) {
-				progress = false;
-				for (const [id, group] of groups) {
-					if (budget <= 0) break;
-					const taken = quota.get(id) ?? 0;
-					if (taken >= group.length) continue;
-					quota.set(id, taken + 1);
-					budget--;
-					progress = true;
-				}
+		let progress = true;
+		while (budget > 0 && progress) {
+			progress = false;
+			for (const [id, group] of groups) {
+				if (budget <= 0) break;
+				const taken = quota.get(id) ?? 0;
+				if (taken >= group.length) continue;
+				quota.set(id, taken + 1);
+				budget--;
+				progress = true;
 			}
-		} else {
-			for (const [id, group] of groups) quota.set(id, group.length);
 		}
 
 		let hidden = 0;
@@ -247,19 +272,21 @@ export function formatAgent(
 			// thing on the line that did not look like itself.
 			lines.push(
 				`${SEV_PAINT[sev](SEV_MARK[sev] ?? '\u2022')} ${magenta(ruleId)} ${dim(`(${group.length})`)} ` +
-					`${SEV_PAINT[sev](SEV_WORD[sev] ?? 'advisory')} \u2014 ${title(ruleId)}`
+					`${SEV_PAINT[sev](SEV_WORD[sev] ?? 'advisory')} \u2014 ${title(ruleId)}`,
 			);
 			const show = group.slice(0, quota.get(ruleId) ?? 0);
 			hidden += group.length - show.length;
 			// Location dimmed, message plain: the location is what an editor
 			// consumes and the message is what a reader does, and the pair sits on
 			// one line with nothing else to tell them apart.
-			for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${components(withNote(f))}`);
+			for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${painted(f)}`);
 			if (group.length > show.length) lines.push(dim(`    \u2026 ${group.length - show.length} more`));
 		}
 		if (hidden) {
 			lines.push('');
-			lines.push(dim(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`));
+			lines.push(
+				dim(`${hidden} finding(s) not shown \u2014 run \`loupe check --all --max-findings 0\` for the full list.`),
+			);
 		}
 		if (!terse) {
 			const dense = densestLine(findings);
@@ -275,10 +302,14 @@ export function formatAgent(
 		lines.push(
 			dim(
 				'Next: `loupe fix` applies the unambiguous token substitutions, `loupe explain <ruleId>` says what a rule wants, ' +
-					'`--format json` carries every finding whole.'
-			)
+					'`--format json` carries every finding whole.',
+			),
 		);
-		lines.push(dim(`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`));
+		lines.push(
+			dim(
+				`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`,
+			),
+		);
 		// A directive for the right rule, sitting just too far from the finding
 		// it was written for, is the single most expensive thing to debug from
 		// the report alone: the hint above is already followed, the finding is
@@ -299,8 +330,8 @@ export function formatAgent(
 		lines.push('');
 		lines.push(
 			yellow(
-				`! no ${config.designSystem.tokenPrefixes.join('/')} tokens were found, so unknown ones cannot be reported \u2014 check designSystem.tokenSources against what the package actually ships.`
-			)
+				`! no ${config.designSystem.tokenPrefixes.join('/')} tokens were found, so unknown ones cannot be reported \u2014 check designSystem.tokenSources against what the package actually ships.`,
+			),
 		);
 	}
 	return lines.join('\n');
@@ -367,7 +398,7 @@ function fingerprints(findings: readonly Finding[]): string[] {
 /**
  * The one machine-readable shape of a report.
  *
- * `formatJson` prints this and `formatHtml` embeds it, so the page and the JSON
+ * `--format json` prints this and `formatHtml` embeds it, so the page and the JSON
  * cannot disagree about what was found — a divergence that would otherwise be
  * invisible, because each looks correct on its own.
  */
@@ -397,10 +428,6 @@ export function reportPayload(result: AnalyzeResult | BaselinedResult, config: C
 		parseErrors: result.diagnostics.parseErrors,
 		config: { rules: config.rules, enabled: config.enabled },
 	};
-}
-
-export function formatJson(result: AnalyzeResult | BaselinedResult, config: Config): string {
-	return JSON.stringify(reportPayload(result, config), null, 2);
 }
 
 export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Config): string {
@@ -449,6 +476,6 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 			],
 		},
 		null,
-		2
+		2,
 	);
 }

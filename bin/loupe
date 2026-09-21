@@ -11,19 +11,10 @@
 #     ln -s ~/.claude/plugins/<marketplace>/loupe/bin/loupe ~/.local/bin/loupe
 #
 # Both routes reach it through a symlink, but different ones: Claude Code
-# symlinks the plugin *directory*, ~/.local/bin symlinks this *file*. `cd -P`
-# resolves the first and not the second, so the link chain is walked explicitly
-# — otherwise the ~/.local/bin route looks for the engine in ~/.local/engine.
-target=$0
-while [ -L "$target" ]; do
-	dir=$(dirname -- "$target")
-	target=$(readlink -- "$target")
-	case $target in
-		/*) ;;
-		*) target=$dir/$target ;;
-	esac
-done
-here=$(CDPATH= cd -- "$(dirname -- "$target")" && pwd -P)
+# symlinks the plugin *directory*, ~/.local/bin symlinks this *file*. `realpath`
+# resolves both — otherwise the ~/.local/bin route looks for the engine in
+# ~/.local/engine.
+here=$(dirname -- "$(realpath -- "$0")")
 
 # Default to the shipped design-system profiles, the same ones the hooks and
 # commands pass. A profile only supplies its registries to a project that
