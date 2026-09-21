@@ -28105,14 +28105,22 @@ function findingLines(group) {
   const width = Math.max(...group.map((f) => String(f.line).length));
   return [...group].sort((a, b) => a.line - b.line).map((f) => `      ${dim(String(f.line).padStart(width))}  ${painted(f)}`);
 }
-function formatAgent(result, config, { maxFindings = 0, terse = false, group = "rule" } = {}) {
+function formatAgent(result, config, {
+  maxFindings = 0,
+  terse = false,
+  group = "rule",
+  concise = false
+} = {}) {
   const { findings, diagnostics } = result;
   const kw = config.suppression.keyword;
   const title = titleFor(config);
   const lines = [];
   lines.push(`${formatSummary(result)} ${dim(`${diagnostics.filesScanned} file(s) scanned.`)}`);
   if (!terse && result.directives.length) lines.push(dim(suppressionLine(result.directives)));
-  if (findings.length) {
+  if (findings.length && concise) {
+    lines.push("");
+    for (const [key, all] of groupsOf(findings, group)) lines.push(heading(group, key, all, title));
+  } else if (findings.length) {
     const sub = group === "rule" ? "file" : "rule";
     const groups = groupsOf(findings, group);
     const quota = new Map(groups.map(([key]) => [key, 0]));
@@ -29618,6 +29626,9 @@ Options:
                         html writes a self-contained page \u2014 redirect it to a file
   --group-by <g>        rule | file \u2014 what the agent format heads each block
                         with; the other becomes the sub-heading (default: rule)
+  --concise             Report only the group headings --group-by chose \u2014
+                        rules or files, with counts \u2014 and the summary, not the
+                        findings themselves (default: the full report)
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn \u2014 minimum severity to report
   --baseline <path>     Read/write the baseline here instead of the configured
@@ -30160,7 +30171,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s
 `);
   else if (format === "html") process.stdout.write(formatHtml(result, config));
   else {
-    process.stdout.write(`${formatAgent(result, config, { maxFindings, group })}
+    process.stdout.write(`${formatAgent(result, config, { maxFindings, group, concise: !!args.flags.concise })}
 `);
     if ("baselined" in result && result.baselined)
       process.stdout.write(dim(`

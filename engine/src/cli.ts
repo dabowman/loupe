@@ -188,6 +188,7 @@ type Flags = { [K in ValueFlag]?: string } & {
 	'no-baseline'?: boolean;
 	'dry-run'?: boolean;
 	judge?: boolean;
+	concise?: boolean;
 	force?: boolean;
 	'no-color'?: boolean;
 };
@@ -239,6 +240,9 @@ Options:
                         html writes a self-contained page — redirect it to a file
   --group-by <g>        rule | file — what the agent format heads each block
                         with; the other becomes the sub-heading (default: rule)
+  --concise             Report only the group headings --group-by chose —
+                        rules or files, with counts — and the summary, not the
+                        findings themselves (default: the full report)
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn — minimum severity to report
   --baseline <path>     Read/write the baseline here instead of the configured
@@ -1199,7 +1203,7 @@ async function main(): Promise<number> {
 	// be redirected, which is what the process.exitCode note below is about.
 	else if (format === 'html') process.stdout.write(formatHtml(result, config));
 	else {
-		process.stdout.write(`${formatAgent(result, config, { maxFindings, group })}\n`);
+		process.stdout.write(`${formatAgent(result, config, { maxFindings, group, concise: !!args.flags.concise })}\n`);
 		if ('baselined' in result && result.baselined)
 			process.stdout.write(dim(`\n${result.baselined} baselined finding(s) hidden.\n`));
 	}

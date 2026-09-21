@@ -299,11 +299,21 @@ function findingLines(group: readonly Finding[]): string[] {
  * severity words and the next-step line stay: the first two cost nothing, and
  * the last is most needed exactly where the reader is blocked and the only
  * other suggestion on offer is how to silence the thing blocking it.
+ *
+ * `concise` withholds the findings: the tally, then one heading per group on
+ * whichever axis {@link GroupBy} heads on. The next-step lines go with them —
+ * they instruct on lines nobody printed — while the diagnostics below stay at
+ * either verbosity.
  */
 export function formatAgent(
 	result: AnalyzeResult | BaselinedResult,
 	config: Config,
-	{ maxFindings = 0, terse = false, group = 'rule' }: { maxFindings?: number; terse?: boolean; group?: GroupBy } = {},
+	{
+		maxFindings = 0,
+		terse = false,
+		group = 'rule',
+		concise = false,
+	}: { maxFindings?: number; terse?: boolean; group?: GroupBy; concise?: boolean } = {},
 ): string {
 	const { findings, diagnostics } = result;
 	const kw = config.suppression.keyword;
@@ -322,7 +332,10 @@ export function formatAgent(
 	// directives is the exact report this line exists to qualify.
 	if (!terse && result.directives.length) lines.push(dim(suppressionLine(result.directives)));
 
-	if (findings.length) {
+	if (findings.length && concise) {
+		lines.push('');
+		for (const [key, all] of groupsOf(findings, group)) lines.push(heading(group, key, all, title));
+	} else if (findings.length) {
 		const sub: GroupBy = group === 'rule' ? 'file' : 'rule';
 		const groups = groupsOf(findings, group);
 

@@ -95,6 +95,7 @@ depends on one is recorded as a parse diagnostic rather than guessed at.
 ```bash
 loupe check --all
 loupe check --all --group-by file
+loupe check --all --concise
 loupe check --all --format html > report.html
 loupe explain layout/margin-on-child
 ```
@@ -119,6 +120,21 @@ swaps the two — path at the margin, rule indented under it, files that block
 the gate first — which is the shape of the work when you are already in an
 editor rather than auditing a repo. Nothing else about the report changes, and
 `--max-findings` spreads its budget across whichever axis you grouped on.
+
+`--concise` keeps the tally and the headings of whichever axis you grouped on,
+and drops the findings underneath them — the shape of the report when the
+question is how much and where, not what to edit:
+
+```
+loupe: 12 blocking, 31 advisory (tokens/hardcoded-value, layout/margin-on-child). 84 file(s) scanned.
+
+styles/card.css (18)
+styles/row.css (14)
+src/App.jsx (11)
+```
+
+Parse errors and a token set that came back empty still print — a run that
+quietly skipped half the CSS reads as a clean one at either verbosity.
 
 `bin/loupe` is on PATH inside any Claude Code session — Claude Code adds each
 enabled plugin's `bin/` to the environment it runs commands in. For plain
