@@ -727,6 +727,15 @@ rejected should not first walk the repo. `--group-by` is rejected as loudly as
 default would print a perfectly good report in the order the caller did not ask
 for, and nothing about it would look wrong.
 
+`--concise` does **not** get that treatment, and the asymmetry is deliberate but
+not free. It is a boolean switch, and `parseArgs` runs non-strict, so `--concsie`
+is silently ignored and the full report prints. That is the same exposure every
+other switch here carries (`--judge`, `--dry-run`, `--all`), and it is the
+cheaper failure than the value-flag one: the caller gets more than they asked
+for, not a different thing that looks right. A `--verbosity concise|verbose`
+enum would close it at the cost of a validation branch for two values; the switch
+is the version that shipped, and this is the ceiling it accepts.
+
 **An unparseable baseline is not the same as no baseline.** Treating it as one
 puts the whole backlog back with the gate blocking on all of it, silently, which
 is how this class of bug stays unfound — and conflict markers in a committed

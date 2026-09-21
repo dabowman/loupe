@@ -644,6 +644,51 @@ await check('a capped report spreads its budget across the axis it groups on', (
 	assert(/… \d+ more/.test(capped), `nothing said what the cap hid:\n${capped}`);
 	assert(/\d+ finding\(s\) not shown/.test(capped), `no way back to the full list:\n${capped}`);
 });
+
+// ── concise ─────────────────────────────────────────────────────────────────
+// Defined by subtraction: every finding line gone, every heading and the tally
+// kept, on either axis.
+
+await check('--concise prints the grouping axis and the tally, and no findings', () => {
+	const { result, config } = spread;
+	for (const [mode, head] of [
+		['rule', RULE_HEAD],
+		['file', FILE_HEAD],
+	] as const) {
+		const out = formatAgent(result, config, { group: mode, concise: true });
+		assert(
+			!out.split('\n').some((l) => NUMBERED.test(l)),
+			`--concise --group-by ${mode} still prints findings:\n${out}`,
+		);
+		// Every group still named, at the margin, with its own count.
+		const heads = out.split('\n').filter((l) => head.test(l));
+		const groups = new Set(result.findings.map((f) => (mode === 'rule' ? f.rule : f.file)));
+		assert(
+			heads.length === groups.size,
+			`--concise --group-by ${mode} named ${heads.length} of ${groups.size}:\n${out}`,
+		);
+		const counted = heads.reduce((n, l) => n + Number(head.exec(l)?.[mode === 'rule' ? 3 : 2] ?? 0), 0);
+		assert(counted === result.findings.length, `the counts total ${counted}, not ${result.findings.length}:\n${out}`);
+		// The summary survives; the next-step block does not.
+		assert(/blocking|advisory/.test(out.split('\n')[0] ?? ''), `--concise dropped the tally:\n${out}`);
+		assert(!/^Next: /m.test(out), `--concise kept the next-step block:\n${out}`);
+	}
+});
 cleanup(spread.root);
+
+// A run that skipped files says so at any verbosity.
+await check('--concise still reports what could not be parsed', async () => {
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'styles/a.css': '.wf-card { padding: 12px; }',
+		'styles/broken.css': '.wf-row { color: #757575;',
+	});
+	try {
+		const out = formatAgent(result, config, { concise: true });
+		assert(/could not be parsed/.test(out), `--concise swallowed the parse errors:\n${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
 
 finish();

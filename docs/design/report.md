@@ -100,6 +100,31 @@ first two cost nothing, and the last is most needed exactly where the reader is
 blocked and the only other suggestion on offer is how to silence the thing
 blocking it.
 
+### The concise report
+
+`--concise` is the other axis, and it subtracts rather than selects: the tally,
+then one heading per group on whichever axis `--group-by` already chose, and
+nothing underneath them. The full report always answers "what do I edit", which
+is the wrong question at the start of an audit — there, the question is how much
+drift there is and where it concentrates, and **the headings already are that
+answer**. The lines beneath them are the answer to the next question, and
+printing them costs a screen, or a context window, on sites nobody is fixing
+this minute.
+
+Two things follow from that framing. The next-step block goes with the findings:
+it instructs on lines nobody printed, and `loupe fix` advice under a report with
+no findings in it reads as advice about nothing. The diagnostics do **not** go —
+parse errors and an empty token set print at either verbosity, because a run
+that skipped half the CSS looks exactly like a clean one, and the whole purpose
+of those two warnings is to tell those states apart. A concise report is allowed
+to say less about findings; it is not allowed to say less about its own
+reliability.
+
+`--group-by` therefore decides what concise means. Grouped by file it is a
+distribution — which is also why `Densest:` is dropped, since the headings state
+it more precisely than a top-three line can. Grouped by rule it is a backlog by
+kind, each with its remedy stated once.
+
 ## Colour is applied at print time, never at capture
 
 `findingKey` falls back to `message` for a finding carrying no `code`, so a
