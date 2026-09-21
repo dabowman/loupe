@@ -18425,7 +18425,7 @@ var require_util = __commonJS({
       return path;
     });
     exports.normalize = normalize2;
-    function join14(aRoot, aPath) {
+    function join15(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -18457,7 +18457,7 @@ var require_util = __commonJS({
       }
       return joined;
     }
-    exports.join = join14;
+    exports.join = join15;
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
@@ -18671,7 +18671,7 @@ var require_util = __commonJS({
             parsed.path = parsed.path.substring(0, index2 + 1);
           }
         }
-        sourceURL = join14(urlGenerate(parsed), sourceURL);
+        sourceURL = join15(urlGenerate(parsed), sourceURL);
       }
       return normalize2(sourceURL);
     }
@@ -20111,8 +20111,8 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync10, readFileSync: readFileSync13, realpathSync: realpathSync2 } = __require("fs");
-    var { dirname: dirname7, isAbsolute: isAbsolute7, join: join14, relative: relative5, sep: sep3 } = __require("path");
+    var { existsSync: existsSync10, readFileSync: readFileSync14, realpathSync: realpathSync2 } = __require("fs");
+    var { dirname: dirname8, isAbsolute: isAbsolute7, join: join15, relative: relative5, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -20139,7 +20139,7 @@ var require_previous_map = __commonJS({
         if (!this.mapFile && opts.from) {
           this.mapFile = opts.from;
         }
-        if (this.mapFile) this.root = dirname7(this.mapFile);
+        if (this.mapFile) this.root = dirname8(this.mapFile);
         if (text2) this.text = text2;
       }
       consumer() {
@@ -20185,15 +20185,15 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative5(realPath2(dirname7(cssFile)), realPath2(path));
+          let rel = relative5(realPath2(dirname8(cssFile)), realPath2(path));
           if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute7(rel)) {
             return void 0;
           }
         }
-        this.root = dirname7(path);
+        this.root = dirname8(path);
         if (existsSync10(path)) {
           this.mapFile = path;
-          return readFileSync13(path, "utf-8").toString().trim();
+          return readFileSync14(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join14(dirname7(file), map);
+          if (file) map = join15(dirname8(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -20259,7 +20259,7 @@ var require_input = __commonJS({
     var { nanoid } = require_non_secure();
     var { isAbsolute: isAbsolute7, resolve: resolve7 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
-    var { fileURLToPath: fileURLToPath4, pathToFileURL: pathToFileURL3 } = __require("url");
+    var { fileURLToPath: fileURLToPath5, pathToFileURL: pathToFileURL3 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
     var PreviousMap = require_previous_map();
     var terminalHighlight = require_terminal_highlight();
@@ -20452,8 +20452,8 @@ var require_input = __commonJS({
           url: fromUrl.toString()
         };
         if (fromUrl.protocol === "file:") {
-          if (fileURLToPath4) {
-            result.file = fileURLToPath4(fromUrl);
+          if (fileURLToPath5) {
+            result.file = fileURLToPath5(fromUrl);
           } else {
             throw new Error(`file: protocol is not available in this PostCSS build`);
           }
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname7, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
+    var { dirname: dirname8, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL3 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname7 && resolve7 && relative5 && sep3);
+    var pathAvailable = Boolean(dirname8 && resolve7 && relative5 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20767,7 +20767,7 @@ var require_map_generator = __commonJS({
       applyPrevMaps() {
         for (let prev of this.previous()) {
           let from = this.toUrl(this.path(prev.file));
-          let root2 = prev.root || dirname7(prev.file);
+          let root2 = prev.root || dirname8(prev.file);
           let map;
           if (this.mapOpts.sourcesContent === false) {
             map = new SourceMapConsumer(prev.text);
@@ -20962,9 +20962,9 @@ var require_map_generator = __commonJS({
         if (/^\w+:\/\//.test(file)) return file;
         let cached = this.memoizedPaths.get(file);
         if (cached) return cached;
-        let from = this.opts.to ? dirname7(this.opts.to) : ".";
+        let from = this.opts.to ? dirname8(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname7(resolve7(from, this.mapOpts.annotation));
+          from = dirname8(resolve7(from, this.mapOpts.annotation));
         }
         let path = relative5(from, file);
         this.memoizedPaths.set(file, path);
@@ -23495,8 +23495,8 @@ var require_lib2 = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync9, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname6, isAbsolute as isAbsolute6, join as join13, relative as relative4, resolve as resolve6 } from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
 
 // src/analyze.ts
@@ -28999,6 +28999,17 @@ ${renderTitle(rule2, config.designSystem, config.suppression.keyword)}`).join("\
 
 // src/serve.ts
 import { createServer } from "node:http";
+import { readFileSync as readFileSync10 } from "node:fs";
+import { dirname as dirname5, join as join10 } from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
+var MU_PLUGIN = join10(
+  dirname5(fileURLToPath3(import.meta.url)),
+  "..",
+  "..",
+  "integrations",
+  "wordpress",
+  "loupe-overlay.php"
+);
 var CSS2 = `
 :host { all: initial }
 * { box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
@@ -29274,7 +29285,18 @@ var INDEX = (origin) => `<!doctype html><meta charset="utf-8">
 elements they actually style on the page you are looking at &mdash; hover to outline them, click to pin
 and scroll. Findings in source this page does not render, and every JSX-anchored rule, are listed but
 cannot be located; the terminal remains the complete report.</p>
-<p class="dim">Endpoints: <code>/findings.json</code> &middot; <code>/overlay.js</code></p>
+<h1 style="margin-top:36px">WordPress</h1>
+<p>wp-admin is a full navigation per screen, so the bookmarklet is a click per page. This loads the
+overlay itself &mdash; from your project root, with this server running:</p>
+<pre>mkdir -p .loupe/mu-plugins
+curl -o .loupe/mu-plugins/loupe-overlay.php ${origin}/loupe-overlay.php</pre>
+<p>Then in <code>.wp-env.json</code>, and restart:</p>
+<pre>"mappings": { "wp-content/mu-plugins": ".loupe/mu-plugins" },
+"config":   { "LOUPE_OVERLAY_URL": "${origin}" }</pre>
+<p>Visit any page with <code>?loupe=1</code> to turn it on, <code>?loupe=0</code> to turn it off.
+It is off until you ask because browser tests usually drive the same WordPress you are looking at,
+and a panel over every page eats their clicks.</p>
+<p class="dim">Endpoints: <code>/findings.json</code> &middot; <code>/overlay.js</code> &middot; <code>/loupe-overlay.php</code></p>
 </main>`;
 function serve(opts) {
   const { port, config, run } = opts;
@@ -29303,6 +29325,22 @@ function serve(opts) {
         });
         return;
       }
+      if (path === "/loupe-overlay.php") {
+        let php;
+        try {
+          php = readFileSync10(MU_PLUGIN, "utf8");
+        } catch {
+          res.statusCode = 404;
+          res.end(
+            "loupe: the WordPress mu-plugin is not readable from this build \u2014 copy it from integrations/wordpress/.\n"
+          );
+          return;
+        }
+        res.setHeader("content-type", "text/plain; charset=utf-8");
+        res.setHeader("cache-control", "no-store");
+        res.end(php);
+        return;
+      }
       if (path === "/") {
         res.setHeader("content-type", "text/html; charset=utf-8");
         res.end(INDEX(origin));
@@ -29326,11 +29364,11 @@ function serve(opts) {
 }
 
 // src/detect.ts
-import { existsSync as existsSync6, readFileSync as readFileSync10, statSync as statSync3 } from "node:fs";
-import { join as join10 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync11, statSync as statSync3 } from "node:fs";
+import { join as join11 } from "node:path";
 var readJson = (p) => {
   try {
-    return JSON.parse(readFileSync10(p, "utf8"));
+    return JSON.parse(readFileSync11(p, "utf8"));
   } catch {
     return null;
   }
@@ -29342,12 +29380,12 @@ function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
   const walk = (dir, rel, depth) => {
     if (depth > maxDepth || out.length >= budget) return;
-    const pkg = join10(dir, "package.json");
+    const pkg = join11(dir, "package.json");
     if (existsSync6(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
     for (const e of readDir(dir)) {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walk(join10(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      walk(join11(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(root2, "", 0);
@@ -29355,7 +29393,7 @@ function manifests(root2, maxDepth = 3, budget = 60) {
 }
 function markerAt(dir, marker) {
   const name = marker.replace(/\/$/, "");
-  const full = join10(dir, name);
+  const full = join11(dir, name);
   if (!existsSync6(full)) return false;
   if (!marker.endsWith("/")) return true;
   try {
@@ -29368,7 +29406,7 @@ function probeDirs(root2) {
   const out = [{ dir: root2, rel: "" }];
   for (const e of readDir(root2)) {
     if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-    out.push({ dir: join10(root2, e.name), rel: e.name });
+    out.push({ dir: join11(root2, e.name), rel: e.name });
   }
   return out;
 }
@@ -29376,7 +29414,7 @@ var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? det
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson(join10(root2, rel, "package.json")) ?? {};
+      const pkg = readJson(join11(root2, rel, "package.json")) ?? {};
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
       const first = hit[0];
@@ -29445,7 +29483,7 @@ function libraryPrefixes(dirs, candidates) {
     if (depth > 4 || budget <= 0 || !want.size) return;
     for (const e of readDir(dir)) {
       if (budget <= 0 || !want.size) return;
-      const full = join10(dir, e.name);
+      const full = join11(dir, e.name);
       if (e.isDirectory()) {
         if (e.name === ".bin" || e.name === "node_modules") continue;
         walk(full, depth + 1);
@@ -29453,7 +29491,7 @@ function libraryPrefixes(dirs, candidates) {
         budget--;
         let text2;
         try {
-          text2 = readFileSync10(full, "utf8");
+          text2 = readFileSync11(full, "utf8");
         } catch {
           continue;
         }
@@ -29491,7 +29529,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   for (const { abs } of files.styles) {
     let text2;
     try {
-      text2 = readFileSync10(abs, "utf8");
+      text2 = readFileSync11(abs, "utf8");
     } catch {
       continue;
     }
@@ -29505,14 +29543,14 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync10(abs, "utf8"));
+      markupText.push(readFileSync11(abs, "utf8"));
     } catch {
     }
   }
   const haystack = markupText.join("\n");
   const candidates = [...cssCounts.entries()].filter(([prefix, count]) => count >= 3 && haystack.includes(prefix)).sort((a, b) => b[1] - a[1]);
   const vendored = libraryPrefixes(
-    [join10(root2, "node_modules"), ...packageDir ? [join10(root2, packageDir, "node_modules")] : []],
+    [join11(root2, "node_modules"), ...packageDir ? [join11(root2, packageDir, "node_modules")] : []],
     candidates.map(([p]) => p)
   );
   const accepted = [];
@@ -29561,10 +29599,10 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/profiles.ts
-import { existsSync as existsSync7, readFileSync as readFileSync11 } from "node:fs";
-import { isAbsolute as isAbsolute4, join as join11, resolve as resolve5 } from "node:path";
-var readJson2 = (p) => JSON.parse(readFileSync11(p, "utf8"));
-var under = (dir, rel) => isAbsolute4(rel) ? rel : join11(dir, rel);
+import { existsSync as existsSync7, readFileSync as readFileSync12 } from "node:fs";
+import { isAbsolute as isAbsolute4, join as join12, resolve as resolve5 } from "node:path";
+var readJson2 = (p) => JSON.parse(readFileSync12(p, "utf8"));
+var under = (dir, rel) => isAbsolute4(rel) ? rel : join12(dir, rel);
 var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString = (v) => typeof v === "string" && v !== "" ? v : null;
 function readProfiles(root2) {
@@ -29573,8 +29611,8 @@ function readProfiles(root2) {
   const seen = /* @__PURE__ */ new Set();
   for (const e of readDir(root2)) {
     if (!e.isDirectory()) continue;
-    const dir = join11(root2, e.name);
-    const manifest = join11(dir, "profile.json");
+    const dir = join12(root2, e.name);
+    const manifest = join12(dir, "profile.json");
     if (!existsSync7(manifest)) continue;
     try {
       const raw = readJson2(manifest);
@@ -29683,15 +29721,15 @@ function applyRegistries(config, sources) {
 }
 
 // src/hook.ts
-import { existsSync as existsSync8, readFileSync as readFileSync12, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname5, isAbsolute as isAbsolute5, join as join12, relative as relative3 } from "node:path";
+import { existsSync as existsSync8, readFileSync as readFileSync13, writeFileSync as writeFileSync3 } from "node:fs";
+import { dirname as dirname6, isAbsolute as isAbsolute5, join as join13, relative as relative3 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var readStdin = async () => process.stdin.isTTY ? "" : text(process.stdin);
 function readState(root2) {
   try {
-    const raw = JSON.parse(readFileSync12(attemptsPath(root2), "utf8"));
+    const raw = JSON.parse(readFileSync13(attemptsPath(root2), "utf8"));
     const now = Date.now();
     const sessions = {};
     for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -29704,7 +29742,7 @@ function readState(root2) {
 function writeState(root2, state) {
   try {
     const p = attemptsPath(root2);
-    ensureDir(dirname5(p));
+    ensureDir(dirname6(p));
     writeFileSync3(p, JSON.stringify(state));
   } catch {
   }
@@ -29735,7 +29773,7 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute5(raw) ? raw : join12(root2, raw);
+  const abs = isAbsolute5(raw) ? raw : join13(root2, raw);
   const rel = relative3(root2, abs);
   if (!rel || rel.startsWith("..")) return null;
   return toPosix(rel);
@@ -29749,12 +29787,12 @@ var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
 function optedIn(root2) {
   if (process.env.LOUPE !== void 0) return isOn(process.env.LOUPE);
   for (const file of [
-    join12(root2, ".claude", "settings.local.json"),
-    join12(root2, ".claude", "settings.json"),
-    join12(homedir(), ".claude", "settings.json")
+    join13(root2, ".claude", "settings.local.json"),
+    join13(root2, ".claude", "settings.json"),
+    join13(homedir(), ".claude", "settings.json")
   ]) {
     try {
-      const v = JSON.parse(readFileSync12(file, "utf8")).env?.LOUPE;
+      const v = JSON.parse(readFileSync13(file, "utf8")).env?.LOUPE;
       if (v !== void 0) return isOn(String(v));
     } catch {
     }
@@ -29775,7 +29813,7 @@ function resolvedOptions() {
   if (Object.values(fromEnv).some((v) => v !== void 0)) return { options: fromEnv, source: "environment" };
   for (const file of ["settings.local.json", "settings.json"]) {
     try {
-      const raw = JSON.parse(readFileSync12(join12(homedir(), ".claude", file), "utf8"));
+      const raw = JSON.parse(readFileSync13(join13(homedir(), ".claude", file), "utf8"));
       const configs = raw.pluginConfigs ?? {};
       const key = Object.keys(configs).find((k) => k === "loupe" || k.startsWith("loupe@"));
       const opts = key === void 0 ? void 0 : configs[key]?.options;
@@ -29835,9 +29873,9 @@ var note = (msg) => {
   process.stderr.write(yellow(msg));
 };
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
-var HERE = dirname6(fileURLToPath3(import.meta.url));
-var SINGLE_FILE = !existsSync9(join13(HERE, "..", "package.json"));
-var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join13(HERE, "..", "..", ".env");
+var HERE = dirname7(fileURLToPath4(import.meta.url));
+var SINGLE_FILE = !existsSync9(join14(HERE, "..", "package.json"));
+var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
   const entry = basename(HERE) === "src" ? "source" : "bundle";
@@ -29954,7 +29992,7 @@ var needsProject = (command, args, isHook) => {
   if (args.flags.all || args.flags.files) return false;
   return isHook || Boolean(args.flags.changed) && SCOPED_COMMANDS.has(command);
 };
-var looksLikeProject = (root2) => existsSync9(join13(root2, "package.json")) || existsSync9(join13(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
+var looksLikeProject = (root2) => existsSync9(join14(root2, "package.json")) || existsSync9(join14(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
 var CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString("en-US")}-entry ceiling`;
 var CEILING_WHY = "this root is larger than a project, so the namespaces are a guess from the part of it that was read";
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
@@ -30004,7 +30042,7 @@ async function main() {
   if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
   const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
-  const root2 = resolve6(explicitRoot ?? (anchor ? dirname6(anchor) : process.cwd()));
+  const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
   if (!existsSync9(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
@@ -30220,7 +30258,7 @@ async function main() {
 `);
       return EXIT.OK;
     }
-    const target = join13(root2, "loupe.config.json");
+    const target = join14(root2, "loupe.config.json");
     if (info.truncated && !args.flags.force) {
       fail(
         "loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. Point --root at the project, or pass --force to write it anyway.\n"

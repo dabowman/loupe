@@ -206,6 +206,28 @@ try {
 	await check('an unknown path is a 404, not a silent empty report', async () => {
 		assert((await fetch(`${url}/nope`)).status === 404, 'an unknown path did not 404');
 	});
+
+	await check('the WordPress mu-plugin is served whole, so `curl -o` installs it', async () => {
+		// The install instruction on the landing page is a `curl` at this route.
+		// A 404 here, or a truncated body, produces a file that is present and
+		// does nothing — which in WordPress looks exactly like "the overlay is
+		// off", the same thing every other misconfiguration looks like.
+		const res = await fetch(`${url}/loupe-overlay.php`);
+		assert(res.status === 200, `the mu-plugin route answered ${res.status}`);
+		const php = await res.text();
+		assert(php.startsWith('<?php'), 'the mu-plugin did not arrive as PHP');
+		assert(php.includes('LOUPE_OVERLAY_URL'), 'the constant the file gates on is missing');
+		assert(php.includes("add_action( 'admin_enqueue_scripts'"), 'nothing would enqueue it in wp-admin');
+	});
+
+	await check('the landing page names this server in both halves of the WordPress setup', async () => {
+		// The `curl` and the `LOUPE_OVERLAY_URL` value are both this origin, and
+		// `--port` moves it. A hardcoded 7331 in either would send someone to a
+		// server that is not running.
+		const html = await (await fetch(`${url}/`)).text();
+		assert(html.includes(`${url}/loupe-overlay.php`), 'the install command points elsewhere');
+		assert(html.includes(`"LOUPE_OVERLAY_URL": "${url}"`), 'the constant would be set to the wrong origin');
+	});
 } finally {
 	await close();
 	cleanup(root);

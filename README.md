@@ -61,6 +61,7 @@ than using it.
 | `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
 | `engine/` | `loupe` — the conformance engine |
 | `editors/vscode/` | The VS Code / Cursor launcher for `loupe lsp`. Other editors need no extension |
+| `integrations/wordpress/` | A dev mu-plugin that loads the `serve` overlay itself, so wp-admin is not a bookmarklet click per screen |
 | `docs/design/` | Design notes: why the engine is built the way it is, and the measurements behind its tuned numbers |
 
 The three skills are design-system agnostic: each one starts at `loupe status`
