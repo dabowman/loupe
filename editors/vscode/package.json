@@ -1,0 +1,43 @@
+{
+  "name": "loupe-vscode",
+  "displayName": "Loupe",
+  "description": "Design-system conformance, in the editor. Findings on save, the rule's guidance on hover, its fix as a quick fix.",
+  "version": "0.7.0",
+  "publisher": "dabowman",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Linters"],
+  "main": "./extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "configuration": {
+      "title": "Loupe",
+      "properties": {
+        "loupe.path": {
+          "type": "string",
+          "default": "loupe",
+          "description": "The loupe executable. The default resolves `loupe` on PATH — the plugin's own bin/loupe shim, which is what passes the shipped design-system profiles. Point this at that file directly if it is not on your PATH."
+        },
+        "loupe.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the language server in this workspace."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "loupe.restart",
+        "title": "Loupe: Restart Language Server"
+      }
+    ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0"
+  }
+}

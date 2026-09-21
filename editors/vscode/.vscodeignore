@@ -1,0 +1,7 @@
+# node_modules is deliberately NOT here: this extension is unbundled, and
+# vscode-languageclient is a runtime dependency. Excluding it packages a .vsix
+# that installs cleanly and fails on activation.
+.vscode/**
+.gitignore
+*.vsix
+**/*.map

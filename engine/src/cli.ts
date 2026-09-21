@@ -23,6 +23,7 @@ import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discov
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
+import { lsp } from './lsp.ts';
 import { serve } from './serve.ts';
 import { oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
@@ -229,6 +230,9 @@ Commands:
   status                Show the effective config: rules, severities, what blocks
   serve                 Serve the findings to the running app, so a stylesheet
                         finding can be resolved to the elements it styles
+  lsp                   Language server on stdin/stdout: diagnostics on save,
+                        the rule's guidance on hover, and its fix as a quick
+                        fix. Editors launch this; you do not run it by hand
   hook                  Claude Code hook mode (reads payload on stdin)
 
 Options:
@@ -905,6 +909,41 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
+	// What `serve` and `lsp` analyze with: fresh per request, against the config
+	// loaded at startup, with the baseline applied. Both return before the shared
+	// baseline block below, so they apply it here or show a backlog the project
+	// has already accepted.
+	const baselinedRun = (notice: (line: string) => void): (() => Promise<AnalyzeResult | BaselinedResult>) => {
+		let warned = false;
+		return async () => {
+			const fresh = await analyze(config, { scope: null });
+			if (args.flags['no-baseline']) return fresh;
+			const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+			const baseline = found ? readBaseline(bPath) : null;
+			// Once, not per request: a long-lived process would repeat it until the
+			// line meant nothing.
+			if (found && !baseline && !warned) {
+				warned = true;
+				notice(`loupe: baseline at ${bPath} is unreadable — ignoring it.\n`);
+			}
+			return applyBaseline(fresh, baseline);
+		};
+	};
+
+	// Before every reporting path below: only framed protocol messages may reach
+	// stdout once the server is running.
+	if (command === 'lsp') {
+		const { closed } = lsp({
+			config,
+			run: baselinedRun((line) => process.stderr.write(line)),
+			input: process.stdin,
+			output: process.stdout,
+			log: (line) => process.stderr.write(`loupe: ${line}\n`),
+		});
+		await closed;
+		return EXIT.OK;
+	}
+
 	if (command === 'serve') {
 		// `0` is a legal port — it asks the OS to choose — so the floor is 0, and
 		// the `??` default is what makes a bare `loupe serve` predictable.
@@ -913,30 +952,7 @@ async function main(): Promise<number> {
 			fail(`loupe: --port wants a port number, got ${args.flags.port}\n`);
 			return EXIT.CANNOT_RUN;
 		}
-		// The analysis runs per request rather than once here, so the panel's
-		// refresh reflects the tree as it is now. The config is the one loaded at
-		// startup: re-reading it per request would make a half-saved
-		// loupe.config.json an error on an unrelated keystroke.
-		//
-		// The baseline is applied here rather than inherited, because the shared
-		// block that does it for `check` sits further down and this command
-		// returns before reaching it. Skipping it would have made the panel the
-		// one surface that shows a backlog the project already accepted — the
-		// same divergence `--no-baseline` exists to ask for deliberately.
-		let warned = false;
-		const run = async (): Promise<AnalyzeResult | BaselinedResult> => {
-			const fresh = await analyze(config, { scope: null });
-			if (args.flags['no-baseline']) return fresh;
-			const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
-			const baseline = found ? readBaseline(bPath) : null;
-			// Once, not per request: a long-lived server would otherwise repeat it
-			// on every refresh until the line meant nothing.
-			if (found && !baseline && !warned) {
-				warned = true;
-				note(`loupe: baseline at ${bPath} is unreadable — ignoring it.\n`);
-			}
-			return applyBaseline(fresh, baseline);
-		};
+		const run = baselinedRun(note);
 		const { url } = await serve({ port, config, run });
 		process.stdout.write(
 			`${green(`loupe serve — ${url}`)}\n` +

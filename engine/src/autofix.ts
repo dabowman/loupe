@@ -44,7 +44,7 @@ export const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
  * its finding stays standing — which is why the caller counts findings cleared
  * rather than fixes applied.
  */
-function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
+export function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
 	const out: TokenFix[] = [];
 	for (const f of findings) {
 		// `suggest` is the licence: an entry is a declaration whose value a token
@@ -85,12 +85,32 @@ export function settledBy(
 }
 
 /**
- * Rewrite each fix in place. Returns what was applied and what was left alone.
+ * One declaration rewritten on the line it sits on, or why it was not.
  *
- * A fix that cannot find its declaration exactly once on the line it was
- * reported at is skipped rather than guessed at: the file has moved under the
- * report, and a substitution against a stale line number edits the wrong
- * declaration.
+ * Shared by `loupe fix` and the language server's quick fix, so the two cannot
+ * write different bytes for one finding.
+ *
+ * A fix that cannot find its declaration exactly once on its reported line is
+ * refused rather than guessed at: the file has moved under the report, and a
+ * substitution against a stale line number edits the wrong declaration.
+ */
+export function substituteOnLine(line: string, fix: Pick<TokenFix, 'prop' | 'value' | 'to'>): string | { why: string } {
+	// The property boundary matters: `background` must not match inside
+	// `background-color`, and `border-radius` must not match inside
+	// `-webkit-border-radius`. `!important` and the terminator are left
+	// alone — only the value is replaced.
+	const re = new RegExp(
+		`(^|[;{\\s])(${escapeRe(fix.prop)}\\s*:\\s*)${escapeRe(fix.value.trim())}(?=\\s*(?:!important)?\\s*(?:[;}]|$))`,
+		'gi',
+	);
+	const hits = line.match(re);
+	if (hits?.length !== 1)
+		return { why: hits ? `${hits.length} matches on line` : 'declaration not on its reported line' };
+	return line.replace(re, `$1$2${fix.to}`);
+}
+
+/**
+ * Rewrite each fix in place. Returns what was applied and what was left alone.
  */
 export function applyTokenFixes(
 	root: string,
@@ -127,20 +147,12 @@ export function applyTokenFixes(
 				skipped.push({ ...fix, why: 'line out of range' });
 				continue;
 			}
-			// The property boundary matters: `background` must not match inside
-			// `background-color`, and `border-radius` must not match inside
-			// `-webkit-border-radius`. `!important` and the terminator are left
-			// alone — only the value is replaced.
-			const re = new RegExp(
-				`(^|[;{\\s])(${escapeRe(fix.prop)}\\s*:\\s*)${escapeRe(fix.value.trim())}(?=\\s*(?:!important)?\\s*(?:[;}]|$))`,
-				'gi',
-			);
-			const hits = line.match(re);
-			if (hits?.length !== 1) {
-				skipped.push({ ...fix, why: hits ? `${hits.length} matches on line` : 'declaration not on its reported line' });
+			const rewritten = substituteOnLine(line, fix);
+			if (typeof rewritten !== 'string') {
+				skipped.push({ ...fix, why: rewritten.why });
 				continue;
 			}
-			lines[i] = line.replace(re, `$1$2${fix.to}`);
+			lines[i] = rewritten;
 			dirty = true;
 			applied.push(fix);
 		}

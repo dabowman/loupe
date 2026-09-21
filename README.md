@@ -60,6 +60,8 @@ than using it.
 | `profiles/*/patterns/index.json` | The composite registry |
 | `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
 | `engine/` | `loupe` — the conformance engine |
+| `editors/vscode/` | The VS Code / Cursor launcher for `loupe lsp`. Other editors need no extension |
+| `docs/design/` | Why the engine is the way it is — the reasoning that does not belong in a comment |
 
 The three skills are design-system agnostic: each one starts at `loupe status`
 to learn which system is in play, then reads that system's own notes —
@@ -789,6 +791,48 @@ file, never per rule — two agents editing one file collide. `css/dead-class` a
 agent cannot make. Verification is one repo-wide re-run by the caller, because
 every run re-indexes the whole repo regardless of `--files` scope.
 
+### In an editor
+
+`loupe lsp` is a language server on stdin/stdout. Findings land in the Problems
+panel and the gutter, hover gives the rule's guidance, and where the engine
+settled an answer on its own the substitution is offered as a quick fix — the
+same one `loupe fix` writes, from the same function, so the editor cannot
+propose something the CLI would not.
+
+```bash
+ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe
+cd editors/vscode && npm install && npx @vscode/vsce package
+code --install-extension loupe-vscode-0.7.0.vsix   # or: cursor --install-extension
+```
+
+The extension is a launcher and nothing else — it spawns the server, names the
+languages worth syncing, and stops. Everything a reader sees is decided in
+`engine/src/lsp.ts`, which is the copy every other editor reaches too: Zed,
+Neovim and Helix need no extension at all, just `loupe lsp` as the command.
+`editors/vscode/README.md` has the per-editor configuration.
+
+Use `bin/loupe` rather than `engine/bin/loupe.mjs`, here as everywhere: the shim
+is what passes the shipped profiles, and without them the component and
+composite rules are silently off — the editor would show a thinner report than
+CI does, and nothing would say so.
+
+Two things are deliberate and both are visible the first time they bite.
+
+**It reports on save, not on keystroke.** The engine reads the working tree and
+correlates across files, so an unsaved buffer is a verdict on a tree that does
+not exist; a dirty file shows the last saved verdict until it is written. That
+is also why this doubles as the push channel for an agent working in the editor
+— every edit an agent makes *is* a save, so there is nothing to approximate.
+The cost was measured rather than assumed before settling on re-analyzing whole:
+a warm server re-runs a 613-file project in ~115ms and Gutenberg's 9,531 in
+~2.4s, against 380ms and 5.9s for the same runs cold through the CLI.
+
+**The suppress quick fix leaves the reason blank.** A directive with no reason
+does not mute — it reports as `suppression/malformed`, an error. So taking that
+action trades a finding for a louder one that clears only once somebody writes
+down why. Filling the reason in for you would be the one way to get a signed-off
+silence nobody signed off on.
+
 ## Settings
 
 Configured where you enable the plugin, read by the hook from the environment:
@@ -829,7 +873,7 @@ five seconds.
 
 Working: all three channels (stylesheets, `style={{ … }}`, CSS-in-JS template
 literals), the token set, both composite rules, all three skills, commands,
-hooks, the registries, and profile selection.
+hooks, the registries, profile selection, and the language server.
 
 A whole-repo scan of Gutenberg — 6,100 markup files, 1,300 stylesheets — takes
 about four seconds.
@@ -852,9 +896,13 @@ Known limits, in rough priority order:
 4. **Composite matching is greedy.** A registered child claims the first node it
    fits. For registries of a handful of nodes this is exact; a large pattern with
    several interchangeable children could in principle miss a match.
-5. **No index cache.** Every hook run rebuilds the repo index. At four seconds on
-   the largest repo in the ecosystem this has not been worth the complexity —
-   revisit if a project drags.
+5. **No index cache.** Every hook run rebuilds the repo index, and the language
+   server re-analyzes whole on every save. At ~115ms warm on an ordinary project
+   this has not been worth the complexity; Gutenberg's ~2.4s is the case that
+   would justify splitting `analyze` into index and check phases.
+6. **The editor reports on save.** A dirty buffer shows the previous verdict.
+   Diagnosing unsaved text means threading a buffer overlay through every read
+   in the analyzer, which is what (5) would also want.
 
 ## Working on the engine
 
