@@ -21,6 +21,7 @@
 
 import type { Candidate } from '../../analyze.ts';
 import type { ComponentEntry, RawElement } from '../../types.ts';
+import { supersededEverywhere } from './currency.ts';
 
 /**
  * The element map's analog, forwarded if the registry has since superseded it.
@@ -28,9 +29,9 @@ import type { ComponentEntry, RawElement } from '../../types.ts';
  * legacy in one package and recommended in another keeps the bare name.
  */
 function currentAnalog(registry: ReadonlyMap<string, ComponentEntry>, suggest: string): string {
-	const entries = [...registry.values()].filter((e) => e.name === suggest);
-	const current = entries.some((e) => e.status === 'recommended');
-	return (!current && entries.find((e) => e.supersededBy)?.supersededBy) || `<${suggest}>`;
+	if (!supersededEverywhere(registry, suggest)) return `<${suggest}>`;
+	const remedy = [...registry.values()].find((e) => e.name === suggest && e.supersededBy)?.supersededBy;
+	return remedy || `<${suggest}>`;
 }
 
 export function rawElements(

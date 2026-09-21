@@ -20,7 +20,7 @@ locally true. Decide correctly the first time.
 ## First: find out which design system this is
 
 The rules below are the same everywhere. The nouns are not — one system's
-layout primitive is `Stack`, another's is `HStack`, a third has none at all;
+layout primitive is `Stack`, another's is `Box`, a third has none at all;
 tokens are `--wpds-color-*` here and `--color-text-*` there. Guessing those is
 the single largest source of code that looks conformant and imports nothing
 real.
@@ -35,8 +35,8 @@ Read the top block before writing anything:
 | --- | --- |
 | `system:` | The design system's name |
 | `packages:` | What its components are imported from |
-| `layout:` | The layout primitive(s). `(none)` is a real answer — a headless library has none |
-| `text:` | The text component(s), or `(none)` — then type is a token, not a component |
+| `layout:` | The layout primitive(s), canonical first. A name marked `(legacy)` is recognized but superseded — never write one. `(none)` is a real answer — a headless library has none |
+| `text:` | The text component(s), same convention, or `(none)` — then type is a token, not a component |
 | `tokens:` | The token namespace(s). Everything you write comes from these |
 | `suppress:` | The exact escape-hatch keyword for this project |
 | `profile:` | The active design-system profile, and the directory it lives in |

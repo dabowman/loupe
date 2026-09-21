@@ -14,7 +14,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
 import { analyze } from './analyze.ts';
-import { usableReplacement } from './checks/system/currency.ts';
+import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { CSS_FILE, applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
@@ -660,13 +660,22 @@ async function main(): Promise<number> {
 		// system, and inferring it from a missing line recommends one that isn't there.
 		const ds = config.designSystem;
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
+		// `layout:`/`text:` get read as "what should I write", but they are
+		// recognition lists and carry the superseded spellings too. Mark those, so
+		// the reader takes the canonical name rather than the first one it knows.
+		// Unmarked without a registry: that is currency data missing, not a clean
+		// bill of health.
+		const components = (arr: readonly string[] | undefined): string =>
+			arr?.length
+				? arr.map((n) => (supersededEverywhere(config.componentRegistry, n) ? `${n} (legacy)` : n)).join(', ')
+				: '(none)';
 		const lines = [
 			`${dim('version:    ')}${versionLine()}`,
 			`${dim('config:     ')}${src}`,
 			`${dim('system:     ')}${ds.name || '(unnamed)'}`,
 			`${dim('packages:   ')}${orNone(ds.packages)}`,
-			`${dim('layout:     ')}${orNone(ds.layoutComponents)}`,
-			`${dim('text:       ')}${orNone(ds.textComponents)}`,
+			`${dim('layout:     ')}${components(ds.layoutComponents)}`,
+			`${dim('text:       ')}${components(ds.textComponents)}`,
 			`${dim('tokens:     ')}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(', ') : '(none \u2014 token rules inactive)'}`,
 			`${dim('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
 			`${dim('suppress:   ')}${config.suppression.keyword} <ruleId> -- <reason>`,

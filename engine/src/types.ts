@@ -531,6 +531,12 @@ export interface MergedConfig {
 		styleSources: string[];
 		cssInJsPackages: string[];
 		normalizeExports: string;
+		/**
+		 * Recognition lists: every spelling of a layout or text component the
+		 * rules must match, superseded ones included, so a check reads code that
+		 * still writes the old name. **Canonical first** — guidance names the
+		 * first entry, so a legacy name there is a recommendation to write it.
+		 */
 		components: { layout: string[]; text: string[] };
 		elementMap: Record<string, string | AuthoredElementMapping>;
 		substitutionProps: string[];

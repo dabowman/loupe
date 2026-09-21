@@ -170,13 +170,15 @@ export const isSeverity = (v: unknown): v is Severity => typeof v === 'string' &
  * generic phrase.
  */
 export function renderTitle(ruleId: RuleId, ds: DesignSystem, keyword: string): string {
-	const list = (arr: readonly string[] | undefined, fallback: string): string =>
-		arr?.length
-			? arr
-					.slice(0, 2)
-					.map((c) => `<${c}>`)
-					.join('/')
-			: fallback;
+	// The canonical entry only. `components.layout`/`.text` are recognition
+	// lists — they carry every spelling a rule has to match, superseded ones
+	// included — so naming the second entry recommended whatever happened to sit
+	// there: `<Stack>/<HStack>` under WPDS, where `HStack` is legacy. Both lists
+	// are canonical-first; see `components` in `AuthoredConfig`.
+	const list = (arr: readonly string[] | undefined, fallback: string): string => {
+		const canonical = arr?.[0];
+		return canonical ? `<${canonical}>` : fallback;
+	};
 	// One prefix is the namespace; several are families within one, and naming the
 	// first of them is a different, wrong statement. The per-finding suggestion
 	// names the real token when the token set is readable; the title says which
