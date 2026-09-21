@@ -3,15 +3,12 @@
  *
  * Two passes with deliberately different characters:
  *
- *   1. Structure (bindings, raw elements) comes from a real AST. The regex this
- *      replaces silently dropped any tag containing a nested brace — `style={{}}`
- *      or a handler with a block body — and the bias ran the wrong way: an
- *      inline-styled component is *more* likely to be an override, not less.
+ *   1. Structure — bindings, raw elements, composites — from a real AST.
+ *   2. The reference index for dead-class detection: raw-text token harvesting,
+ *      which over-collects on purpose. A false "referenced" costs one missed
+ *      finding; a false "dead" tells an agent to delete live CSS.
  *
- *   2. The reference index for dead-class detection stays raw-text token
- *      harvesting. It over-collects on purpose. A false "referenced" costs one
- *      missed finding; a false "dead" tells an agent to delete live CSS, so the
- *      asymmetry is worth the imprecision.
+ * Design notes: docs/design/analysis.md
  */
 
 import { parse as babelParse } from '@babel/parser';
@@ -52,12 +49,9 @@ import type {
 const PLUGINS: ParserPlugin[] = ['jsx', 'typescript', 'decorators-legacy', 'classProperties', 'importAttributes'];
 
 /**
- * Narrow reads of the shapes a CSS-in-JS tag can take.
- *
- * `styled.div`, `styled(Button)` and a bare `css` are three different
- * expression types, and the chain of optional reads this replaces returned
- * `undefined` for every mismatch — which `Set.has` then answered `false` to,
- * so a genuinely unhandled tag shape was indistinguishable from a rejected one.
+ * Narrow reads of the shapes a CSS-in-JS tag can take: `styled.div`,
+ * `styled(Button)` and a bare `css` are three different expression types, and an
+ * unhandled shape has to be distinguishable from a rejected one.
  */
 const memberObject = (t: Expression): string | undefined =>
 	t.type === 'MemberExpression' && t.object.type === 'Identifier' ? t.object.name : undefined;
@@ -76,19 +70,14 @@ const identifierOf = (t: Expression): string | undefined => (t.type === 'Identif
  * The element(s) a component-substitution prop can hand over.
  *
  * `render={ <h4 /> }` is how a design-system text component is told which tag to
- * emit — `as` and `component` are the same idiom elsewhere. The callback
- * spelling `render={ ( props ) => <h4 { ...props } /> }` says the same thing and
- * is equally documented, and so do the shapes an ordinary refactor turns those
- * into: a block body that returns one element, an older `function` spelling of
- * the same callback, a conditional choosing between two, a guard. Each resolves
- * to the element it can produce, because a spelling this rule does not follow
- * reproduces exactly the unsatisfiable finding the exemption exists to end.
- * Anything opaque — a variable, a call — yields nothing, which is the safe
- * direction: the element still reports.
+ * emit — `as` and `component` are the same idiom elsewhere. Every spelling an
+ * ordinary refactor produces resolves the same way: the callback form, a block
+ * body returning one element, the `function` spelling, a conditional or a guard
+ * choosing between two. Anything opaque — a variable, a call — yields nothing,
+ * which is the safe direction: the element still reports.
  *
  * Only the element the prop is given counts. Anything nested *inside* it is
- * markup the author wrote and React renders as markup, so it stays subject to
- * every rule.
+ * markup the author wrote, and stays subject to every rule.
  */
 function substitutionTargets(node: Node | null | undefined, out: JSXElement[] = []): JSXElement[] {
 	// A type assertion is not a different value: `render={ ( <h4 /> ) as ReactElement }`.
@@ -99,12 +88,10 @@ function substitutionTargets(node: Node | null | undefined, out: JSXElement[] = 
 			break;
 		case 'ArrowFunctionExpression':
 		case 'FunctionExpression': {
-			// `( props ) => <h4 />`, and the same body once someone has put braces
-			// around it — a `return` of one element is still one element, whatever
-			// the block does first. Keying on the *first* statement missed
-			// `( { className, ...rest } ) => { … return <h4 /> }`, the shape a
-			// callback takes the moment it touches its props, and missing it
-			// reproduces the unsatisfiable finding this exemption exists to end.
+			// `( props ) => <h4 />`, and the same body with braces around it — a
+			// `return` of one element is still one element, whatever the block does
+			// first. `( { className, ...rest } ) => { … return <h4 /> }` is the shape a
+			// callback takes the moment it touches its props.
 			if (expr.body.type !== 'BlockStatement') return substitutionTargets(expr.body, out);
 			for (const stmt of expr.body.body) if (stmt.type === 'ReturnStatement') substitutionTargets(stmt.argument, out);
 			break;
@@ -115,9 +102,7 @@ function substitutionTargets(node: Node | null | undefined, out: JSXElement[] = 
 			break;
 		case 'LogicalExpression':
 			// Both arms, for the same reason a conditional takes both: `<h4 /> || fb`
-			// and `big && <h2 /> || <h4 />` each name an element the prop can receive,
-			// and following only the right one exempted the fallback while still
-			// reporting the guarded element — the same tag, in the same prop.
+			// and `big && <h2 /> || <h4 />` each name an element the prop can receive.
 			substitutionTargets(expr.left, out);
 			substitutionTargets(expr.right, out);
 			break;
@@ -152,9 +137,7 @@ export function harvestTokens(text: string, into: Set<string> = new Set()): Set<
  *
  * Scans forward for `${` and walks the identifier backwards. The obvious
  * `/([A-Za-z_][\w-]*)\$\{/g` backtracks quadratically on any long run of word
- * characters with no `${` after it, and one 10MB generated file (an emscripten
- * blob checked in as .ts) turned a whole-repo scan into a hundred seconds — past
- * every hook timeout, so the gate silently never ran.
+ * characters with no `${` after it.
  */
 const MAX_STEM = 128;
 export function harvestStems(text: string, into: Set<string> = new Set()): Set<string> {
@@ -179,8 +162,7 @@ function classesFrom(strings: readonly string[]): string[] {
 	for (const s of strings) {
 		for (const t of s.split(/\s+/)) {
 			const c = t.trim();
-			// No hyphen requirement: a single-word class is still a binding, and
-			// filtering on `-` made `<Text className="title">` unbindable.
+			// No hyphen requirement: a single-word class is still a binding.
 			if (c && CLASS_TOKEN.test(c)) out.push(c);
 		}
 	}
@@ -247,8 +229,7 @@ function walkAst(node: unknown, visit: (n: Node) => void): void {
 /**
  * Local names imported from a design-system package, classified as layout or
  * text. Export names are normalized first: `@wordpress/components` publishes
- * `__experimentalText`, so matching the raw specifier against `Text` never hits
- * and the typography-in-CSS rule silently degrades into a generic override.
+ * `__experimentalText`, which never matches a raw specifier of `Text`.
  */
 function systemImports(
 	ast: File,
@@ -283,12 +264,9 @@ function systemImports(
 			if (ds.textComponents.includes(c)) text.add(local);
 			if (ds.layoutComponents.includes(c)) layout.add(local);
 			packages.set(local, node.source.value);
-			// The specifier's line, not the declaration's. Every name in a
-			// multi-line import used to report on the `import {` line, so the one
-			// placement a reader reaches for — the comment above the offending
-			// name — anchored to nothing, and the placement that did work muted
-			// every other superseded name in the same declaration under a reason
-			// written for one of them.
+			// The specifier's line, not the declaration's: the placement a reader
+			// reaches for is the comment above the offending name, and one directive
+			// on the `import {` line mutes every other name in the declaration.
 			componentImports.push({
 				canonical: c,
 				package: node.source.value,
@@ -654,13 +632,10 @@ export function scanMarkup(
 			uses.set(c, (uses.get(c) ?? 0) + 1);
 		}
 
-		// Which carriers can earn the substitution exemption. Not every export of a
-		// design-system package — `@wordpress/components` ships `FormFileUpload`,
-		// whose `render` is an ordinary render callback, and hand-rolled markup
-		// inside that is markup the author wrote. The exemption is for the
-		// components whose job is emitting a tag, which is exactly the text and
-		// layout sets. That also picks up `__experimentalText`, a text component
-		// the old `/^[A-Z]/` test dropped for its prefix.
+		// Which carriers can earn the substitution exemption: the components whose
+		// job is emitting a tag, which is exactly the text and layout sets. Not every
+		// export of a design-system package — `@wordpress/components` ships
+		// `FormFileUpload`, whose `render` is an ordinary render callback.
 		const member = tag.includes('.') ? tag.slice(tag.indexOf('.') + 1) : null;
 		const emitsTag = member
 			? // `<UI.Text render={ <h4 /> }>` — the namespace is what was imported,
@@ -684,15 +659,11 @@ export function scanMarkup(
 			else if (an === 'style') style = readStyleAttr(attr.value);
 			else if (an === 'css') cssAttr = attr.value;
 			// Only a tag-emitting design-system component's substitution prop earns the
-			// exemption. `render` is not a name WPDS reserved — react-router, Formik
-			// and Downshift all spell a render prop exactly that, and an element handed
-			// to one of those is ordinary markup with a `Heading` analog, which the
-			// remediation guidance tells an agent to convert or suppress. Exempting it
-			// would silence a real finding and leave nothing to suppress.
+			// exemption. `render` is not a name WPDS reserved — react-router, Formik and
+			// Downshift all spell a render prop exactly that.
 			//
-			// The name must be a plain identifier: `attr.name` collapses a namespace,
-			// so `xlink:render` would otherwise read as `render` and exempt an element
-			// no substitution prop was ever given.
+			// The name must be a plain identifier: `attr.name` collapses a namespace, so
+			// `xlink:render` would otherwise read as `render`.
 			else if (emitsTag && attr.name.type === 'JSXIdentifier' && ds.substitutionProps.has(an))
 				for (const target of substitutionTargets(attr.value)) substituted.add(target.openingElement);
 		}
@@ -723,17 +694,14 @@ export function scanMarkup(
 			for (const cls of classes) bindings.push({ cls, tag: root, isSystem: true, isText, file: relPath, line });
 		} else {
 			// `render={ <h4 /> }` is not markup being rendered — it is the argument
-			// telling a design-system component which tag to emit, and it is the
-			// documented way to keep an element's semantics through exactly the
-			// conversion this rule asks for. Flagging it leaves nothing to do but
-			// undo the fix. Its children are ordinary markup and still count.
+			// telling a design-system component which tag to emit. Its children are
+			// ordinary markup and still count.
 			if (substituted.has(node)) return;
 			const lower = tag.toLowerCase();
 			const mapped = ds.elementMap.get(lower);
 			if (!mapped) return;
-			// An inline style is styling too. Requiring a CSS-styled class here
-			// exempted exactly the shape agents write most: a bare <div> laid
-			// out with style={{ display: 'flex' }} and no className at all.
+			// An inline style is styling too: a bare <div> laid out with
+			// style={{ display: 'flex' }} and no className is the shape agents write most.
 			if (mapped.styledOnly && !classes.length && !style?.present) return;
 			rawEls.push({
 				tag: lower,

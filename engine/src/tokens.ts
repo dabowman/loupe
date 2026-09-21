@@ -1,20 +1,16 @@
 /**
  * The token set.
  *
- * `tokenPrefixes` used to be cosmetic: it shaped a message and nothing
- * validated anything against it. So a finding said "13px is hardcoded — use a
- * `--wpds-*` token", and the agent, having no list to choose from, invented
- * `--wpds-font-size-13`. A finding that names a namespace instead of a value is
- * a finding that manufactures its own next bug.
+ * Token definitions are plain CSS custom properties, and a design system ships
+ * them in a file — `@wordpress/theme` emits 190 of them into one stylesheet.
+ * Reading that, plus anything the project defines itself, is what lets a finding
+ * name the token rather than the namespace.
  *
- * So read the real set. Token definitions are plain CSS custom properties, and
- * a design system ships them in a file — `@wordpress/theme` emits 190 of them
- * into one stylesheet. Read that, plus anything the project defines itself, and
- * a finding can name the token instead of the namespace.
+ * Everything degrades when no definitions are found: no annotation on hardcoded
+ * values, and `tokens/unknown-token` stays silent rather than declaring every
+ * token unknown.
  *
- * Everything degrades to today's behaviour when no definitions are found: no
- * annotation on hardcoded values, and `tokens/unknown-token` stays silent
- * rather than declaring every token unknown.
+ * Design notes: docs/design/analysis.md#the-token-set
  */
 
 import { readFileSync, statSync } from 'node:fs';
@@ -27,18 +23,15 @@ import { messageParts, snippet } from './text.ts';
 import type { Suggestion, TokenSet } from './types.ts';
 
 /**
- * Which token names could plausibly answer for this property.
- *
- * `1px` is both `--wpds-border-radius-xs` and `--wpds-border-width-xs`, and
- * naming the wrong one is worse advice than naming none: the agent applies it,
- * the value is right, and the semantics are quietly wrong forever.
+ * Which token names could plausibly answer for this property. Naming the wrong
+ * one is worse advice than naming none: `1px` is both `--wpds-border-radius-xs`
+ * and `--wpds-border-width-xs`, and the agent applies whichever it is given.
  */
 const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	[/^border-radius|radius$/, /radius/],
 	[/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
-	// Colour roles are split finer than the rest: suggesting a background token
-	// for a `color` gives the right pixels and the wrong meaning, which survives
-	// review precisely because it looks correct.
+	// Colour roles are split finer than the rest: a background token suggested for
+	// a `color` gives the right pixels and the wrong meaning.
 	[/^color$/, /colou?r-(fg|text|content|foreground)/],
 	[/^background(-color)?$|^background-image$/, /colou?r-(bg|background|surface)/],
 	[/border.*-color$|^border-color$|^outline-color$/, /colou?r-(border|line|stroke)/],
@@ -131,10 +124,8 @@ export function cssFilesUnder(
 }
 
 /**
- * Read the declared token set from `designSystem.tokenSources`.
- *
- * These paths deliberately reach into `node_modules`, which the project walk
- * prunes: the design system's tokens are the whole point, and they live there.
+ * Read the declared token set from `designSystem.tokenSources`. These paths
+ * deliberately reach into `node_modules`, which the project walk prunes.
  */
 export function readTokenSources(
 	root: string,
@@ -189,9 +180,9 @@ function familyFor(set: TokenSet, prop: string): [string, string][] {
 
 /**
  * What kind of literal a value is, and where it sits if it is on a scale: a
- * length in px (a rem is 16), a duration in ms. Negative lengths are not
- * measured — a token substituted for one flips its sign — and nor is anything
- * relative to something the stylesheet cannot see (`em`, `%`, `vw`).
+ * length in px (a rem is 16), a duration in ms. Not measured: a negative length
+ * (a token substituted for one flips its sign) or a unit relative to something
+ * the stylesheet cannot see (`em`, `%`, `vw`).
  */
 function measure(value: string): { kind: 'px' | 'ms'; n: number } | { kind: 'color' } | null {
 	const v = normalizeValue(value);
@@ -219,10 +210,9 @@ export interface Candidates {
 /**
  * Spacing: padding, gap, and position, which is an offset from an edge.
  *
- * A spacing value the scale covers is snapped, never kept: the scale is how
- * the system spaces things, and "6px is deliberate" is the judgement that lets
- * a one-off survive every pass. Past the end of the scale it may still be kept
- * — 48px of page padding snapped to a 32px top step is a different layout.
+ * A spacing value the scale covers is snapped, never kept. Past the end of the
+ * scale it may still be kept — 48px of page padding snapped to a 32px top step
+ * is a different layout.
  */
 const SPACING = /padding|gap$|^(inset|top|right|bottom|left)$/;
 
@@ -230,29 +220,17 @@ const SPACING = /padding|gap$|^(inset|top|right|bottom|left)$/;
  * The tokens a judgement chooses among for one literal part of a value.
  *
  * A length or a duration is narrowed here, in code, to the scale steps either
- * side of it: closeness on a scale is arithmetic, and there is no role left to
- * choose once the property has picked its family. Whether it may also be kept
- * is decided here too — see {@link SPACING}. Anything else — a colour, a
- * cursor, an easing — gets the whole family, since which one the rule *means*
- * is the question, and the pink card background that is either a mistake or a
- * decision is only answerable with every option on the table.
+ * side of it: closeness on a scale is arithmetic, and no role is left to choose
+ * once the property has picked its family. Whether it may also be kept is
+ * decided here too — see {@link SPACING}.
  *
- * Colours were narrowed too, once, to the tokens within sight of the value.
- * `evals/values` scored that lower than offering them all (91% against 95%),
- * because a light tint's nearest tokens are greys of the wrong role, and the
- * success wash it should have been is further away than they are.
+ * Anything else — a colour, a cursor, an easing — gets the whole family, since
+ * which one the rule *means* is the question. What was measured about narrowing
+ * and labelling colours is in docs/design/judge.md#which-token.
  *
- * Nor are they labelled with how close each looks. Offering every token with
- * its OKLab distance to the literal ("looks the same", "a close shade", "a
- * visibly different colour") — the docs' advice for a model that cannot
- * compare hex — scored 94% against 96% on the colours, and made the keeps
- * worse (precision 93% to 82%). The misses it was aimed at were never about
- * distance: most are content against interactive at the same hex, and in the
- * rest the nearest token is the wrong one.
- *
- * Null when the part is not something this family can replace: a token set
- * with no family for the property, or a literal of another kind (`5%` of a
- * padding scale, a negative inset).
+ * Null when the part is not something this family can replace: a token set with
+ * no family for the property, or a literal of another kind (`5%` of a padding
+ * scale, a negative inset).
  */
 export function candidatesFor(set: TokenSet, prop: string, part: string): Candidates | null {
 	const family = familyFor(set, prop);
@@ -364,11 +342,9 @@ export function planValue(
 /**
  * `→ --wpds-border-radius-md`, or `` when nothing on-role matches.
  *
- * The token's name, not the `var()` around it. Every line of a report that
- * names a token wore the same six characters of wrapper, and on a run that
- * names a hundred they are the only thing the eye has to scan past to reach
- * the part that differs. The wrapper is also not news: the rule says to use a
- * token and the reader is looking at CSS.
+ * The token's name, not the `var()` around it: on a run naming a hundred tokens
+ * the wrapper is the only thing the eye scans past to reach the part that
+ * differs, and the rule already says to use a token.
  */
 export const remedyFor = (names: readonly string[]): string => {
 	if (!names.length) return '';
@@ -386,19 +362,16 @@ const stated = (s: Suggestion): string => {
 };
 
 /**
- * The one line a finding's flagged declarations compose, with the channel
- * marker last.
+ * The one line a finding's flagged declarations compose, with the channel marker
+ * last. Composed in one place, because both the token pass and `--judge` write
+ * this message.
  *
- * Composed rather than edited, and composed in one place, because both the
- * token pass and `--judge` write this message and a second composer is a
- * second set of rules to keep in step. It is a *list*: a collapsed finding
- * carries one remedy per property, and a line bound that cuts it mid-token
- * loses the last remedy and every remedy after it without saying so, so
- * `messageParts` drops whole parts and counts them instead.
+ * It is a *list*: a collapsed finding carries one remedy per property, so
+ * `messageParts` drops whole parts and counts them rather than cutting the last
+ * one mid-token.
  *
  * A judgement is rendered from `judged.spans`, which is also what the report
- * paints green — one source for what the message says about a declaration and
- * for which of it a model wrote.
+ * paints green.
  */
 export const declarationMessage = (parts: readonly Suggestion[], tail: string): string =>
 	messageParts(parts.map(stated), tail);

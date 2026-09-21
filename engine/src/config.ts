@@ -4,6 +4,8 @@
  *
  * Everything project-specific lives here. The rules and the file walker know
  * nothing about WordPress, or about any particular design system.
+ *
+ * Design notes: docs/design/cli.md#config
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -47,11 +49,9 @@ export const DEFAULTS: MergedConfig = {
 		normalizeExports: '',
 		components: { layout: [], text: [] },
 		elementMap: {},
-		// Props that hand a component the element it should render — `render` in
-		// WPDS and Base UI, `as` and `component` in most other React systems. The
-		// element in one of these is an argument naming a tag, not markup being
-		// rendered, so the raw-element rule leaves it alone. Set it to `[]` to get
-		// the old behaviour back; a system with a differently-named prop names it.
+		// Props that hand a component the element it should render — `render` in WPDS
+		// and Base UI, `as` and `component` elsewhere. The element in one of these is
+		// an argument naming a tag, not markup being rendered. `[]` turns it off.
 		substitutionProps: ['render', 'as', 'component'],
 	},
 	namespaces: { project: [], external: [], neverDead: [] },
@@ -75,12 +75,12 @@ export const DEFAULTS: MergedConfig = {
 const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 
 /**
- * Deep merge; arrays replace rather than concatenate so a preset can be overridden.
+ * Deep merge; arrays replace rather than concatenate so a preset can be
+ * overridden.
  *
- * Declared as returning the base's type. That is the contract every caller
- * relies on — merging *onto* `DEFAULTS` is what makes every field present — and
- * it is what keeps a settled config strict downstream. Extra keys an override
- * carries do survive at runtime; nothing reads them.
+ * Declared as returning the base's type, which is the contract every caller
+ * relies on: merging *onto* `DEFAULTS` is what makes every field present. Extra
+ * keys an override carries survive at runtime; nothing reads them.
  */
 export function merge<T>(base: T, over: unknown): T {
 	if (!isObj(base) || !isObj(over)) return over === undefined ? base : (over as T);
@@ -173,19 +173,16 @@ export function listPresets(): string[] {
 }
 
 /**
- * The suppression vocabulary of every shipped preset: the keywords each one
- * asks people to write, and the blanket forms each one refuses.
+ * The suppression vocabulary of every shipped preset: the keywords each one asks
+ * people to write, and the blanket forms each one refuses.
  *
- * Read from the directory for the same reason {@link listPresets} is: a list
- * kept by hand drifts the moment a preset is added, and here the drift is
- * invisible — a directive written in the missing vocabulary simply stops
- * suppressing. Read every time rather than cached, so a preset dropped into
- * `presets/` takes effect in the same run that adds it; it is a handful of
- * small files, once per `normalize`.
+ * Read from the directory rather than kept by hand, for the same reason
+ * {@link listPresets} is — and here the drift is invisible, since a directive in
+ * the missing vocabulary simply stops suppressing. Read every time, so a preset
+ * dropped into `presets/` takes effect in the run that adds it.
  *
- * Both halves matter. A term one preset treats as a blanket disable must never
- * become a muting keyword somewhere else just because a third preset names it,
- * so the blanket side is collected to be *excluded* from the alias set.
+ * Both halves matter: a term one preset treats as a blanket disable must never
+ * become a muting keyword somewhere else.
  */
 function shippedVocabulary(): { keywords: string[]; blanket: Set<string> } {
 	const keywords = new Set<string>([DEFAULTS.suppression.keyword]);
@@ -253,25 +250,20 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
 	}
 
-	// `new Set('render')` is a set of four characters, and a config that means
-	// nothing it says would report exactly like one that meant `[]` — the whole
-	// exemption off, with nothing to see. Every coercion here that cannot mean
-	// what it says throws; this one does too.
-	//
-	// The fallback is the default rather than `[]` because this key is the one
-	// whose default is not empty: `merge` writes an explicit `undefined` straight
-	// over the default, so `designSystem: { ...opts, substitutionProps: opts.subs }`
-	// in a `.mjs` config would otherwise turn the exemption off silently. `[]`
-	// stays the way to ask for that on purpose.
+	// `new Set('render')` is a set of four characters, and a config meaning nothing
+	// it says reports exactly like one that meant `[]`. The fallback is the default
+	// rather than `[]` because this is the one key whose default is not empty:
+	// `merge` writes an explicit `undefined` straight over a default. `[]` stays
+	// the way to ask for the exemption off.
 	const substitutionProps: unknown = ds.substitutionProps ?? DEFAULTS.designSystem.substitutionProps;
 	if (!Array.isArray(substitutionProps) || substitutionProps.some((p) => typeof p !== 'string'))
 		throw new Error(
 			`designSystem.substitutionProps must be an array of prop names, got: ${JSON.stringify(substitutionProps)}`,
 		);
 
-	// The same mistake costs more here. A bare string is walked one character at
-	// a time, `/` is the repo root, and every project stylesheet is then skipped
-	// as the library's own: a clean report from a gate that read nothing.
+	// The same mistake costs more here: a bare string is walked one character at a
+	// time, `/` is the repo root, and every project stylesheet is then skipped as
+	// the library's own.
 	const styleSources: unknown = ds.styleSources ?? [];
 	if (!Array.isArray(styleSources) || styleSources.some((p) => typeof p !== 'string' || p === ''))
 		throw new Error(`designSystem.styleSources must be an array of paths, got: ${JSON.stringify(styleSources)}`);
@@ -280,28 +272,15 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	const textComponents = ds.components?.text ?? [];
 
 	// Read aliases: every keyword the shipped presets know, plus any this config
-	// names itself. The keyword is preset-scoped, so adopting a preset renames it
-	// — and a directive in the old vocabulary is not read as a directive at all,
-	// which loses the suppression and reports nothing. Reading them all keeps a
-	// recorded reason counting; `keyword` alone is still what the tool tells
-	// people to write, and the only vocabulary a malformed directive is judged
-	// against.
+	// names itself, so a directive written in a preset's old vocabulary still
+	// mutes. `keyword` stays the one the tool tells people to write, and the only
+	// vocabulary a malformed directive is judged against.
 	//
-	// A blanket term anywhere in the shipped presets is never an alias: `wpds`
-	// refuses `ds-disable`, and another preset adopting that spelling as its
-	// keyword must not turn it into a mute here. Declared aliases are filtered
-	// too — the guard is about the term, not about who named it — and anything
-	// that is not a non-empty string is dropped rather than interpolated into a
-	// regex.
-	//
-	// The same guard has to cover `keyword` and `blanket`. `merge` copies a
-	// non-object value from authored JSON verbatim, so the declared types are a
-	// contract with the author, not a check: `"keyword": ""` makes the parser's
-	// `startsWith`/`includes` universally true and reports every line of every
-	// file as malformed, `"keyword": 12` throws out of `escapeRe`, and `"blanket":
-	// "ds-disable"` spreads into eleven single-character prefixes. An unusable
-	// value falls back to the default vocabulary for the same reason an
-	// unreadable preset directory does — a broken install still has to run.
+	// A blanket term anywhere in the shipped presets is never an alias, declared
+	// aliases included. Anything that is not a non-empty string is dropped rather
+	// than interpolated into a regex — as are unusable `keyword` and `blanket`
+	// values, which fall back to the default vocabulary.
+	// See docs/design/cli.md#coercion-throws-because-the-silent-reading-is-worse.
 	const shipped = shippedVocabulary();
 	const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
 	const isTerm = (v: unknown): v is string => typeof v === 'string' && v !== '';
@@ -360,8 +339,7 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 
 /**
  * A registry given inline or as a path. A path that does not resolve leaves it
- * empty, which disables the rules that need one rather than throwing — the
- * engine has to keep working in a project that ships no patterns. So does a
+ * empty, which disables the rules that need one rather than throwing. So does a
  * registry scoped to packages this project does not import: it describes some
  * other design system that happens to name its components the same.
  */
@@ -392,10 +370,9 @@ function readRegistry<T>(
 function enabledRules(config: Omit<Config, 'enabled'>): Record<RuleId, boolean> {
 	const ds = config.designSystem;
 	// A composite is built from every name imported out of `designSystem.packages`,
-	// whether or not it is a layout or text primitive — so the compositional rules
-	// need the packages and nothing else. A headless library (Base UI, Radix) has
-	// no layout or text layer at all, and gating its composites on one meant the
-	// only rules that could ever have fired on it were off by construction.
+	// whether or not it is a layout or text primitive, so the compositional rules
+	// need the packages and nothing else — a headless library has no layout or text
+	// layer at all.
 	const hasPackages = ds.packages.length > 0;
 	const hasComponents = hasPackages && ds.layoutComponents.length + ds.textComponents.length > 0;
 	const capability: Record<Capability, boolean> = {

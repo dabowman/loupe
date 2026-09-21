@@ -1,21 +1,15 @@
 /**
  * The data files the engine ships, compiled into it.
  *
- * `dist/loupe.mjs` can reach its presets on disk: it sits one directory below
- * them, and `bin/loupe.mjs` keeps `dist/` at the same depth as `src/` precisely
- * so the `import.meta.url` arithmetic lands in the same place from either entry.
- * A single-file binary has no such directory. `import.meta.url` inside one
- * resolves to a synthetic root, so every `join(HERE, '..', 'presets')` becomes
- * `/presets`, and the engine comes up unable to name a single design system.
+ * A single-file binary has no directory to read presets from: `import.meta.url`
+ * inside one resolves to a synthetic root, so every `join(HERE, '..', 'presets')`
+ * becomes `/presets`. So the data is imported rather than read, which puts a
+ * copy inside whatever artifact the bundler produces.
  *
- * So the data is imported rather than read, which puts a copy inside whatever
- * artifact the bundler produces — `dist/`, or a compiled binary.
+ * Disk still wins wherever it exists — the import and the disk read name the
+ * same file, so there is one source and two ways of reaching it.
  *
- * Disk still wins wherever it exists. `presets/` remains a published directory
- * of files you can read, copy and extend, and an install that has them reads
- * them; this is the floor under that, not a replacement for it. The two halves
- * cannot disagree: the import and the disk read name the same file, so there is
- * one source and two ways of reaching it.
+ * Design notes: docs/design/cli.md#presets-and-data-files-compiled-in
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -53,18 +47,13 @@ export const EMBEDDED_LANGUAGE: unknown = patternLanguage;
 /** Strip the `loupe/presets/` prefix a config may spell a preset with. */
 export const presetKey = (spec: string): string => spec.replace(/^loupe\/presets\//, '');
 
-/**
- * Where presets live on disk. `config.ts` and `detect.ts` each derived this
- * from their own `import.meta.url` and each had to be taught the fallback
- * separately; it is one derivation, so it is one place.
- */
+/** Where presets live on disk, derived once rather than in each caller. */
 export const PRESET_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'presets');
 
 /**
- * Preset names, disk first. A readable directory is authoritative — an install
- * with `presets/` behaves exactly as it always did, and a preset dropped in by
- * hand takes effect in the run that adds it. Only when there is no directory to
- * read at all does the compiled-in set stand in.
+ * Preset names, disk first. A readable directory is authoritative, so a preset
+ * dropped in by hand takes effect in the run that adds it; the compiled-in set
+ * stands in only when there is no directory to read at all.
  */
 export const presetNames = (): string[] => {
 	try {

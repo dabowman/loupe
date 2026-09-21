@@ -1,14 +1,12 @@
 /**
- * Baseline.
- *
- * The adoption blocker for a tool like this is the first run on an existing
- * codebase: hundreds of advisory findings, none of them the work in front of
- * you. A baseline turns that backlog into a ratchet — existing findings are
- * recorded and stay quiet, new ones surface immediately.
+ * Baseline: the first run's backlog, turned into a ratchet. Existing findings
+ * are recorded and stay quiet; new ones surface immediately.
  *
  * Entries are keyed on rule + file + normalized code, deliberately NOT on line
  * number, so reformatting or an unrelated edit above doesn't resurrect every
  * finding in the file.
+ *
+ * Design notes: docs/design/report.md#baseline
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -21,11 +19,9 @@ import type { AnalyzeResult, Baseline, BaselineFile, BaselinedResult } from './t
  * Read a baseline, or null if there isn't one *or* it can't be parsed.
  *
  * Callers that already know the file is there — `findExistingBaseline` reports
- * it — can read a null as "unreadable" and say so. That distinction matters:
- * the likeliest corruption for a file this project now asks people to commit is
- * a merge conflict, and conflict markers in it turn every accepted finding back
- * on with the gate blocking on all of them, which is the precise symptom the
- * baseline was pinned to the project to stop producing.
+ * it — can read a null as "unreadable" and say so. The likeliest corruption for
+ * a file the project is asked to commit is a merge conflict, and conflict
+ * markers turn every accepted finding back on with the gate blocking on it.
  */
 export function readBaseline(path: string): Baseline | null {
 	if (!existsSync(path)) return null;
@@ -33,11 +29,8 @@ export function readBaseline(path: string): Baseline | null {
 		const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<BaselineFile>;
 		// A file whose `entries` is missing or not an array is as unreadable as one
 		// that doesn't parse: both mean "we cannot tell you what was accepted".
-		// Defaulting it to `[]` instead said "nothing was accepted", which reads to
-		// every caller as a healthy empty baseline — so the backlog went live, the
-		// gate blocked on all of it, and the warning that exists for exactly this
-		// never fired. `jq` rewriting the file without `.entries` is enough to get
-		// here, and valid JSON is the case least likely to be suspected.
+		// Defaulting it to `[]` says "nothing was accepted", which reads as a healthy
+		// empty baseline and puts the whole backlog live.
 		if (!Array.isArray(parsed.entries)) return null;
 		return { createdAt: parsed.createdAt ?? '', entries: parsed.entries, set: new Set(parsed.entries) };
 	} catch {
@@ -49,38 +42,30 @@ export function readBaseline(path: string): Baseline | null {
  * Record the backlog.
  *
  * Both counts come back because they are different numbers: several findings
- * collapse into one entry whenever they share a key — the same declaration on
- * two selectors, the same code on two lines — and `check` reports the findings
- * it hid, not the entries that hid them. Returning only the entries left the
- * caller labelling them as findings and the two commands disagreeing with
- * nothing to reconcile them against.
+ * collapse into one entry whenever they share a key, and `check` reports the
+ * findings it hid, not the entries that hid them.
  */
 export function writeBaseline(
 	root: string,
 	full: string,
 	result: AnalyzeResult,
 ): { path: string; findings: number; entries: number } {
-	// A *configured* baseline may name a directory that doesn't exist yet — the
-	// default one sits in the project root, which the caller already proved
-	// exists, so don't mkdir it. `ensureDir` rather than a bare `mkdirSync`
-	// because a bad path should fail on the write that wanted it: mkdir on a
-	// path whose parent is a file reports `EEXIST ... a.css`, which names the
-	// wrong problem, where the write reports ENOTDIR and names the right one.
+	// A *configured* baseline may name a directory that doesn't exist yet; the
+	// default one sits in a project root the caller already proved exists.
+	// `ensureDir` rather than a bare `mkdirSync` so a bad path fails on the write
+	// that wanted it, naming ENOTDIR rather than `EEXIST ... a.css`.
 	const dir = dirname(full);
 	if (dir !== resolve(root)) ensureDir(dir);
 	const entries = [...new Set(result.findings.map(findingKey))].sort();
-	// Re-recording the same backlog rewrites the same bytes. A fresh timestamp on
-	// every run made this file — which the project is now asked to commit — differ
-	// from itself, so two branches that each re-baselined conflicted on line 3
-	// with identical entry lists, and a conflict-markered baseline is unreadable.
-	// The timestamp records when the backlog was taken, not when the command was.
+	// Re-recording the same backlog rewrites the same bytes. A fresh timestamp made
+	// this file — which the project is asked to commit — differ from itself, and a
+	// conflict-markered baseline is unreadable. It records when the backlog was
+	// taken, not when the command was.
 	const prior = readBaseline(full);
 	const unchanged =
 		prior !== null && prior.entries.length === entries.length && prior.entries.every((e, i) => e === entries[i]);
-	// Both numbers, for the same reason the CLI prints both: `count` is entries,
-	// and a file that reports only entries under a name a reader hears as
-	// "findings" is how 194 came to be quoted against `check`'s 253. `count`
-	// keeps its meaning so 0.1.x files still parse; `findings` says the rest.
+	// Both numbers: `count` is entries, `findings` is what collapsed into them.
+	// `count` keeps its meaning so 0.1.x files still parse.
 	const file: BaselineFile = {
 		version: 1,
 		createdAt: unchanged && prior.createdAt ? prior.createdAt : new Date().toISOString(),

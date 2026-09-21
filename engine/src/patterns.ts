@@ -1,30 +1,23 @@
 /**
- * Composite conformance.
- *
- * Component-level drift is the cheap half. The expensive half is
- * compositional: a codebase ends up with six page headers and four modal
- * footers, each individually defensible, collectively a maintenance tax nobody
- * chose. No per-file linter can see it, because every instance looks fine on
- * its own — the finding only exists across files.
+ * Composite conformance — the drift no per-file linter can see, because every
+ * instance looks fine on its own and the finding only exists across files.
  *
  * A signature is the design-system component tree with everything else dropped:
  * props, text and raw elements are all transparent, so an intervening `<div>`
  * never hides a match and a prop change never invents one.
  *
- * Matching is containment, not equality. A registered pattern matches when its
- * children appear among the subtree's children *in order* — a header with one
- * extra button is still that header, and demanding equality would mean the
- * rules only ever fired on code that already came from the pattern.
+ * Matching is containment, not equality: a registered pattern matches when its
+ * children appear among the subtree's children *in order*.
+ *
+ * Design notes: docs/design/analysis.md#composite-signatures
  */
 
 import type { Pattern, PatternNode, RuleSpec } from './types.ts';
 
 /**
  * `"Stack"` → any `Stack`; `"@wordpress/components::Stack"` → that package's.
- *
- * Qualifying is opt-in per node. A registry scoped by its own `packages` field
- * (see registry.ts) needs none of this; qualification is for the project that
- * imports two systems at once and needs `Stack` to mean one of them.
+ * Qualifying is opt-in per node, for the project that imports two systems at
+ * once; a registry scoped by its own `packages` field needs none of it.
  */
 const split = (spec: string): { name: string; pkg: string | null } => {
 	const i = spec.indexOf('::');
@@ -61,15 +54,9 @@ function descendants(tree: PatternNode, out: PatternNode[] = []): PatternNode[] 
 }
 
 /**
- * `"Stack"` matches `Stack`; `"Stack|VStack|HStack"` matches any of the three.
- *
- * One shape often has more than one spelling — `ToggleGroupControlOption` and
- * `ToggleGroupControlOptionIcon` are the same segmented control, and the same
- * modal footer is written with `Stack` in new code and `VStack` in old. Without
- * this, each spelling needs its own registry entry, and the ones nobody wrote
- * come back as `unregistered-composite` noise against code that is in fact
- * using the pattern. Only pattern nodes carry alternations; a tree built from
- * real code is always one name.
+ * `"Stack"` matches `Stack`; `"Stack|VStack|HStack"` matches any of the three —
+ * one shape often has more than one spelling. Only pattern nodes carry
+ * alternations; a tree built from real code is always one name.
  */
 const nameMatches = (spec: string, actual: string): boolean =>
 	spec === actual || (spec.includes('|') && spec.split('|').includes(actual));
@@ -77,17 +64,13 @@ const nameMatches = (spec: string, actual: string): boolean =>
 /**
  * Does `pattern` occur within `tree`?
  *
- * A registered child has to appear *somewhere* beneath the root, not as a
- * direct sibling in a fixed order. `form-modal` records its footer as a sibling
- * of the body; real code nests the footer inside the body, and both are the
- * same composition. Requiring the recorded shape exactly meant the rule only
- * ever matched code that had already been generated from the pattern — the one
- * case where there is nothing to report.
+ * A registered child has to appear *somewhere* beneath the root, not as a direct
+ * sibling in a fixed order — `form-modal` records its footer as a sibling of the
+ * body and real code nests it inside.
  *
  * Each registered child must claim a distinct node, so `["VStack","Text","Text"]`
  * needs two Texts rather than matching one twice. Assignment is greedy, largest
- * child first; a registered pattern is a handful of nodes, so the cases where
- * greedy loses to a smarter assignment do not arise in practice.
+ * child first.
  */
 export function matches(pattern: PatternNode, tree: PatternNode): boolean {
 	if (!nameMatches(pattern.name, tree.name)) return false;
@@ -125,11 +108,10 @@ export function partsOf(root: string, tree: PatternNode): boolean {
 /**
  * A registry entry as authored, in either format.
  *
- * Version 1 keys an entry by `id` and carries one `signature`. Version 2 keys
- * it by `pattern` (an abstract id, `id.variant` or `id#part`), may nest
- * `parts`, may carry a second shape as `rendered_signature`, and says in
- * `detector` how it is checked at all. Both load here: the fields the matcher
- * needs are the same, and a registry written before v2 existed keeps working.
+ * v1 keys an entry by `id` and carries one `signature`. v2 keys it by `pattern`
+ * (`id.variant` or `id#part`), may nest `parts`, may carry a second shape as
+ * `rendered_signature`, and says in `detector` how it is checked at all. The
+ * fields the matcher needs are the same in both.
  */
 interface RawPattern {
 	id?: string;
@@ -184,12 +166,9 @@ export function loadPatterns(raw: unknown): Pattern[] {
 		// Navigator.Buttons is using Navigator.
 		const canonical = 'canonical' in (p ?? {}) ? bindName(p.canonical) : inheritedCanonical;
 		const shapes = [toNode(p?.signature), toNode(p?.rendered_signature)].filter((n): n is PatternNode => n !== null);
-		// A list of shapes, or — because `signature` next to it takes exactly one —
-		// a single shape written directly. A list never starts with a string, so
-		// the leading element settles it. Without this, `["Modal", ["VStack", …]]`
-		// read as four separate anti-shapes: the `"Modal"` that gave the rest its
-		// context dropped under the floor, and the nested child survived as a
-		// standalone shape far broader than anything the author asked for.
+		// A list of shapes, or — because `signature` next to it takes exactly one — a
+		// single shape written directly. A list never starts with a string, so the
+		// leading element settles it.
 		const authored: unknown = p?.instead_of_signature;
 		const antiShapes: unknown[] = !Array.isArray(authored)
 			? []
@@ -197,8 +176,7 @@ export function loadPatterns(raw: unknown): Pattern[] {
 				? [authored]
 				: authored;
 		// An anti-shape below the floor would fire on half a codebase: a bare
-		// `SelectControl` is one node and says nothing about whether the
-		// choice it presents wanted a segmented control instead.
+		// `SelectControl` is one node and says nothing about the choice it presents.
 		const avoid = antiShapes
 			.map((shape) => toNode(shape))
 			.filter((n): n is PatternNode => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes);
@@ -276,12 +254,12 @@ function systemChildren<E extends object>(
 }
 
 /**
+/**
  * Floors that keep the rules from firing on every two-component pairing.
  *
  * A three-node signature like `HStack(Button,Button)` is a true description of
- * an action bar and a useless finding: it matched 48 files in one repo, and
- * "you have 48 action bars" is not a defect anyone can act on. Below this size a
- * registry entry is documentation for a person, not a check.
+ * an action bar and a useless finding — it matched 48 files in one repo. Below
+ * this size a registry entry is documentation for a person, not a check.
  */
 export const SUBSTANTIAL = { minNodes: 4, minDepth: 2 };
 

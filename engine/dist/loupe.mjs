@@ -23857,7 +23857,7 @@ function makeSuppressionParser({
           rules: ids,
           reason: oneLine(m[3]),
           // Carried only when it is not the keyword the config asks for, so
-          // `loupe suppressions` can name the rename and nothing else has to.
+          // `loupe suppressions` can name the rename.
           ...used === keyword ? {} : { alias: used }
         });
       } else if (written.test(stripped) || shaped.test(stripped)) {
@@ -23865,13 +23865,10 @@ function makeSuppressionParser({
           rule: "suppression/malformed",
           file: relPath,
           line,
-          // Cut on the raw text, and by code point. `head`, not `oneLine`
-          // then `slice`: this string is also the finding's `code`, and
-          // `findingKey` collapses whitespace on `code` itself — so
-          // flattening first changes nothing a reader sees and only moves
-          // the 60-character window, taking every baseline key already
-          // written for a directive long enough to be cut with it. What a
-          // reader sees is flattened by the line bound in `analyze`.
+          // Cut on the raw text, and by code point: this string is also the
+          // finding's `code`, and `findingKey` collapses whitespace on `code`
+          // itself, so flattening first would only move the 60-character window
+          // and take every baseline key already written with it.
           message: head(stripped.trim(), 60)
         });
       }
@@ -24871,9 +24868,8 @@ import { join as join2 } from "node:path";
 var ROLE_HINTS = [
   [/^border-radius|radius$/, /radius/],
   [/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
-  // Colour roles are split finer than the rest: suggesting a background token
-  // for a `color` gives the right pixels and the wrong meaning, which survives
-  // review precisely because it looks correct.
+  // Colour roles are split finer than the rest: a background token suggested for
+  // a `color` gives the right pixels and the wrong meaning.
   [/^color$/, /colou?r-(fg|text|content|foreground)/],
   [/^background(-color)?$|^background-image$/, /colou?r-(bg|background|surface)/],
   [/border.*-color$|^border-color$|^outline-color$/, /colou?r-(border|line|stroke)/],
@@ -25249,14 +25245,10 @@ function currency(imports, registry, enabled2) {
       file: ci.file,
       line: ci.line,
       message: `${ci.canonical} (${ci.package})${uses}${remedy}`,
-      // Carried, not concatenated: the finalize pass caps `message`, and a
-      // registry note spliced into it lost its own last clause to that cap
-      // in every format at once.
+      // Carried, not concatenated: the finalize pass caps `message`.
       note: entry.note,
       code: `${rule2}:${ci.package}:${ci.canonical}`,
-      // The declaration line and the one above it: both were live anchors
-      // when every specifier reported on the declaration, and a directive
-      // someone signed off must not go silent because the reporting moved.
+      // The declaration line and the one above it are both suppression anchors.
       scopeLines: [ci.declLine, ci.declLine - 1]
     });
   }
@@ -25433,10 +25425,8 @@ function collapsePerRule(pending) {
     out.push({
       ...first,
       // Bounded per contributor, so one long value cannot spend the whole
-      // line and crowd the others out of a message that is several of them.
-      // Safe to bound here where it is not at capture: a collapsed finding
-      // always carries its own `code` below, so identity does not fall back
-      // to this string.
+      // line. Safe here where it is not at capture: a collapsed finding
+      // carries its own `code`, so identity does not fall back to this.
       message: group.map((f) => snippet(f.message)).join("; "),
       // Each hint keeps the line it was flagged on. The collapsed finding
       // reports at the first one, and `fix` matches every other against the
@@ -27733,11 +27723,9 @@ var DEFAULTS = {
     normalizeExports: "",
     components: { layout: [], text: [] },
     elementMap: {},
-    // Props that hand a component the element it should render — `render` in
-    // WPDS and Base UI, `as` and `component` in most other React systems. The
-    // element in one of these is an argument naming a tag, not markup being
-    // rendered, so the raw-element rule leaves it alone. Set it to `[]` to get
-    // the old behaviour back; a system with a differently-named prop names it.
+    // Props that hand a component the element it should render — `render` in WPDS
+    // and Base UI, `as` and `component` elsewhere. The element in one of these is
+    // an argument naming a tag, not markup being rendered. `[]` turns it off.
     substitutionProps: ["render", "as", "component"]
   },
   namespaces: { project: [], external: [], neverDead: [] },
@@ -28235,9 +28223,8 @@ function reportPayload(result, config) {
       ..."baselined" in result ? { baselined: result.baselined } : {}
     },
     rules: usedRules(result, config),
-    // `rank` orders the report and `suffix` carries the channel marker for
-    // whoever recomposes a message; both are working state, spent by the time
-    // there is a payload, and this is the last place they can be dropped.
+    // `rank` orders the report and `suffix` carries the channel marker; both are
+    // working state, and this is the last place they can be dropped.
     findings: result.findings.map(({ rank, suffix, ...f }) => ({ ...f, fix: title(f.rule) })),
     suppressions: result.directives,
     parseErrors: result.diagnostics.parseErrors,
@@ -28260,10 +28247,9 @@ function formatSarif(result, config) {
               rules: usedRules(result, config).map((r) => ({
                 id: r.id,
                 shortDescription: { text: r.title },
-                // No `fullDescription`: the rule catalog holds exactly one line of
-                // guidance per rule, and shipping it twice under two names tells a
-                // reader there is more to read when there is not. `help` points at
-                // where the rest of the reasoning actually lives.
+                // No `fullDescription`: the catalog holds one line of guidance per
+                // rule, and shipping it twice under two names tells a reader there
+                // is more to read when there is not. `help` points at the rest.
                 help: { text: `Run \`loupe explain ${r.id}\` for this rule's guidance.` },
                 // The namespace, so a security tab with fifteen rules can be
                 // filtered down to the layout ones.
@@ -28487,8 +28473,8 @@ var JS = `
       { k: '\\u2717 blocking', v: err, err: err > 0 },
       { k: '\\u2022 advisory', v: rows.length - err }
     ];
-    // Only when it hid something. A baseline that accepted nothing and a project
-    // with no baseline file both report 0, so a zero tile states nothing.
+    // Only when it hid something: a baseline that accepted nothing and a project
+    // with no baseline file both report 0.
     if (s.baselined) tiles.push({ k: 'baselined', v: s.baselined });
     tiles.push({ k: 'suppressions', v: s.suppressions });
     // Next to the unparsed count on purpose: zero unparsed files means nothing
@@ -28503,11 +28489,9 @@ var JS = `
 
   function renderRules(rows) {
     var counts = tally(rows, function (f) { return f.rule; });
-    // Frequency order, deliberately not the agent format's rank order. The two
-    // answer different questions \u2014 rank is "fix this first", length is "there is
-    // the most of this" \u2014 and a bar chart sorted by neither its own lengths nor a
-    // natural category order is unreadable. Rank breaks ties, and severity is
-    // carried by the mark's color and by the blocking tile above.
+  // Frequency order, deliberately not the agent format's rank order: rank is
+  // "fix this first", length is "there is the most of this". Rank breaks ties,
+  // and severity is carried by the mark's color and by the blocking tile.
     counts.sort(function (a, b) {
       var ra = byRank.get(a[0]), rb = byRank.get(b[0]);
       return b[1] - a[1] || (rb ? rb.rank : 0) - (ra ? ra.rank : 0);
@@ -28528,8 +28512,7 @@ var JS = `
   }
 
   // Top directories only. Past the cap the tail is folded into one row rather
-  // than truncated silently \u2014 a report that drops rows without saying so reads
-  // as though it covered everything.
+  // than truncated silently.
   var DIR_CAP = 12;
   function renderPaths(rows) {
     var counts = tally(rows, function (f) { return dirOf(f.file); });
@@ -28568,10 +28551,9 @@ var JS = `
     }).join('');
   }
 
-  // Grouped by rule, for the same reason the agent format groups by rule: the
-  // remedy and the severity are properties of the rule, not of the finding, and
-  // a column that repeats one sentence down two hundred rows is the report
-  // costing more to read than it is worth. Group order matches the chart above.
+  // Grouped by rule, for the same reason the agent format is: the remedy and the
+  // severity are properties of the rule, not of the finding. Group order matches
+  // the chart above.
   function renderTable(rows) {
     var host = document.getElementById('table');
     if (!rows.length) { host.innerHTML = '<p class="empty">No findings in this slice.</p>'; return; }
@@ -28592,8 +28574,8 @@ var JS = `
         return '<tr>' +
           '<td class="loc">' + esc(f.file) + ':' + f.line + '</td>' +
           '<td class="msg">' + esc(f.message) +
-            // Whole, not clipped: the page has room the one-line agent format
-            // does not, which is the reason the note is a field of its own.
+						// Whole, not clipped: the page has room the one-line agent
+						// format does not.
             (f.note ? ' <span class="note">(' + esc(f.note) + ')</span>' : '') +
             (tokens.length ? '<div class="tokens">\\u2192 ' + esc(tokens.join(', ')) + '</div>' : '') + '</td>' +
           '</tr>';
@@ -29077,16 +29059,13 @@ var JS2 = `
     });
   }
 
-  // A selector as authored is not always a selector the DOM will accept, and
-  // one bad one must not take the panel down with it. Pseudo-elements have no
-  // node to match, and a state pseudo-class describes when the rule applies,
-  // not what it applies to \u2014 both are dropped so the query resolves to the
-  // elements the author was styling.
-  // The trailing lookahead, not \\b: a word boundary sits happily between
-  // 'focus' and the '-' of ':focus-visible', so \\b would strip the ':focus'
-  // and leave '-visible' welded to the class before it. That yields
-  // '.components-button-visible' \u2014 a perfectly valid selector for an element
-  // that does not exist, which is the one failure here that stays silent.
+  // A selector as authored is not always one the DOM will accept, and one bad one
+  // must not take the panel down. Pseudo-elements have no node to match, and a
+  // state pseudo-class says when a rule applies, not what to.
+  //
+  // The trailing lookahead, not \b: a word boundary sits happily between 'focus'
+  // and the '-' of ':focus-visible', so \b would leave '-visible' welded to the
+  // class before it \u2014 a valid selector for an element that does not exist.
   var STATE = /:(?:hover|focus-within|focus-visible|focus|active|visited|target|checked|disabled|enabled|indeterminate|placeholder-shown|autofill|default|read-only|read-write|link|any-link|user-invalid|user-valid|valid|invalid|required|optional)(?![\\w-])/g;
   function domSelector(sel) {
     var parts = String(sel).split(',').map(function (s) {
@@ -29127,10 +29106,9 @@ var JS2 = `
     });
   }
 
-  // Whether the rule's own @media condition holds at this moment. An
-  // unparseable query normalizes to 'not all', which never matches \u2014 reporting
-  // that as "inactive at this width" would invent a reason the finding is not
-  // showing, so an unreadable condition is treated as no condition.
+  // Whether the rule's own @media condition holds at this moment. An unparseable
+  // query normalizes to 'not all', which never matches, so an unreadable
+  // condition is treated as no condition.
   function active(f) {
     if (!f.media) return true;
     try {
@@ -29141,10 +29119,8 @@ var JS2 = `
   }
 
   // Ordering is the panel's one opinion: what this page can actually show you
-  // comes first. A finding styling live elements right now is the reason to be
-  // looking in a browser at all; one behind a breakpoint you are not at is real
-  // but not visible; one that resolves to nothing is a hint the page does not
-  // exercise it; one with no selector was never a browser question.
+  // comes first, then what is real but not visible at this width, then what
+  // resolves to nothing, then what was never a browser question.
   function rows() {
     var needle = q.toLowerCase();
     return data.findings.map(function (f) {
@@ -29188,10 +29164,9 @@ var JS2 = `
             : r.n === 0
               ? '<span class="hits zero">0 on page</span>'
               : '<span class="hits zero">no selector</span>';
-          // The condition is shown whenever there is one, not only when it
-          // fails: "styling these three elements, and only under this query" is
-          // a different fact from "styling these three elements", and the row
-          // should not have to be re-read at another width to tell them apart.
+          // Shown whenever there is one, not only when it fails: "styling these
+          // three elements, and only under this query" is a different fact from
+          // "styling these three elements".
           var cond = f.media
             ? '<span class="cond' + (r.on ? ' on' : '') + '">@media ' + esc(f.media) +
               (r.on ? '' : ' \\u2014 not at this width') + '</span>'
@@ -29238,10 +29213,9 @@ var JS2 = `
   }
 
   function reposition() { if (pinned !== null) { var rs = rows(); if (rs[pinned]) draw(rs[pinned].els); } }
-  // A resize is the one gesture that changes the answers themselves: crossing a
-  // breakpoint turns findings on and off, so the boxes move *and* the list is
-  // restated. Debounced, because a drag fires this continuously and each render
-  // re-runs every selector.
+  // A resize changes the answers themselves: crossing a breakpoint turns findings
+  // on and off, so the boxes move *and* the list is restated. Debounced, because
+  // a drag fires this continuously and each render re-runs every selector.
   var resizeTimer = null;
   function onResize() {
     reposition();
@@ -29546,12 +29520,9 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   return {
     project: accepted.map(([p]) => p),
     coverage,
-    // A truncated walk read part of a tree, so `high` is a claim it cannot
-    // make: the prefixes it did not reach are exactly the ones that would
-    // have changed the answer. Coverage is measured against what was read,
-    // which is why it can look convincing and still be wrong. It demotes
-    // `high` only: `none` is the different and still-true claim that nothing
-    // was found, and swallowing it printed "(none found) [low confidence]".
+    // A truncated walk read part of a tree, so `high` is a claim it cannot make.
+    // It demotes `high` only: `none` is the different and still-true claim that
+    // nothing was found.
     confidence: accepted.length === 0 ? "none" : files.truncated ? "low" : coverage >= 0.5 ? "high" : "low",
     sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
     truncated: files.truncated
@@ -29681,8 +29652,8 @@ function applyRegistries(config, sources) {
     // there is nothing for a signature to be compared against.
     !config.designSystem.packages.length ? "merged but enabled nothing \u2014 this config declares no designSystem.packages, so no composite is ever built to compare" : (
       // `knownComponents` is `designSystem.components.layout` + `.text`.
-      // A merged component *registry* does not feed it, so naming
-      // "components" here without saying which pointed at the wrong file.
+      // A merged component *registry* does not feed it, so "components"
+      // alone would point at the wrong file.
       !config.designSystem.knownComponents.size ? "merged but enabled nothing \u2014 this config declares no designSystem.components for its signatures to match" : null
     )
   );
@@ -29693,9 +29664,8 @@ function applyRegistries(config, sources) {
       notes.push({
         label: f.label,
         kind: f.kind,
-        // Named against what the *config* declares, not what the project
-        // imports — those differ on an inferred config, and blaming the
-        // imports is what sent people hunting through source that was fine.
+        // Named against what the *config* declares, not what the project imports:
+        // those differ on an inferred config.
         note: `forced past the scope check \u2014 it is scoped to ${f.offScope.join(", ")} and this config declares ${config.designSystem.packages.length ? `${config.designSystem.packages.join(", ")} \u2014 so its findings name a design system this config does not declare` : "no design-system packages, so nothing here says which design system its findings are about"}`
       });
     const note2 = f.kind === "patterns" ? patternsNote(f.added) : componentsNote(f.added);
@@ -30171,18 +30141,13 @@ async function main() {
       `${dim("baseline:   ")}${base.path}${base.found && readBaseline(base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
       `${dim("options:    ")}${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
       `${dim("plugin:     ")}${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
-      // Asked through the same predicate the gate uses. Reporting on mere
-      // truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
-      // blocking — a diagnostic lying about the one thing it exists to say.
+      // Asked through the same predicate the gate uses: reporting on mere truthiness
+      // meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
       ...off ? [yellow(`hook:       OFF \u2014 ${off}`)] : [],
-      // Which design system's registries are in play, and — when none are —
-      // which ones were on offer. "No composite findings" and "no composite
-      // registry" look identical in a report; they must not look identical here.
-      // The directory, not just the id: a profile carries the authoring prose
-      // for its design system beside its registries, and the skills that read
-      // it are written for no design system in particular. Told only "archer",
-      // a skill has to guess where that lives \u2014 and guesses wrong the moment
-      // the profiles root is a project's own rather than the plugin's.
+      // Which design system's registries are in play, and — when none are — which
+      // were on offer: "no composite findings" and "no composite registry" look
+      // identical in a report and must not look identical here. The directory, not
+      // just the id: a profile carries its authoring prose beside its registries.
       `${dim("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(", ") : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
       "",
       bold("rules:")
@@ -30228,10 +30193,8 @@ async function main() {
     const lines = [
       `${dim("preset:     ")}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
       dim(`            ${info.presetReasons.join("; ")}`),
-      // What inference concluded still gets reported; it is just no longer
-      // what the run uses. `init` writes the config below verbatim, so the
-      // two lines disagreeing without explanation is a file someone would
-      // have to reverse-engineer.
+      // What inference concluded is still reported; it is just no longer what the
+      // run uses, and `init` writes the config below verbatim.
       ...profilePreset ? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`] : [],
       `${dim("namespaces: ")}${info.namespaces.project.join(", ") || "(none found)"}  ${confidence(info.namespaceConfidence)}`,
       dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),

@@ -2,9 +2,10 @@
  * CSS-side primitives: property groups, value classification, and the two AST
  * helpers that make nested CSS behave.
  *
- * Property groups are CSS-generic, not design-system-specific, so they live in
- * code rather than config. What varies between design systems is which
- * *components* own these properties — and that is what config carries.
+ * Property groups are CSS-generic, so they live in code. What varies between
+ * design systems is which *components* own these properties, and that is config.
+ *
+ * Design notes: docs/design/analysis.md
  */
 
 import type { Container, Declaration, Rule } from 'postcss';
@@ -85,10 +86,9 @@ const MOTION_PROPS = new Set([
 const CURSOR_PROPS = new Set(['cursor']);
 
 /**
- * Appearance-only. Layout and box-model props are deliberately excluded: on a
- * layout primitive that exposes no padding or per-child sizing prop, a
- * styling-hook class carrying them is the *intended* usage, not an override, so
- * flagging them just manufactures suppressions.
+ * Appearance-only. Layout and box-model props are excluded: on a layout
+ * primitive exposing no padding or per-child sizing prop, a styling-hook class
+ * carrying them is the intended usage, not an override.
  */
 export const APPEARANCE_PROPS = new Set([
 	...COLOR_PROPS,
@@ -142,36 +142,26 @@ export const isGridDecl = (prop: string, value: string): boolean =>
 
 /**
  * Does this declaration lay anything out? `<div>` maps to a layout primitive,
- * so that suggestion is only true when the div is actually laying something
- * out — a bordered, coloured `<div>` has no layout primitive analog.
+ * so that suggestion only holds when the div is actually laying something out.
  */
 export const isLayoutDecl = ({ prop, value }: Decl): boolean =>
 	isFlexDecl(prop, value) || GAP_PROPS.has(prop) || isGridDecl(prop, value);
 
 /**
- * Classify a margin declaration: `'spacing' | 'negative' | null`.
+ * Classify a margin declaration.
  *
- * The original rule fired on every margin, which sounds right — the design
- * system ships no margin token, so margin is never the sanctioned way to space
- * things — but the majority of real margins in a codebase have no `gap` remedy
- * at all:
- *
- *   margin: 0            a reset. There is nothing to move to a parent.
- *   margin: 0 auto       horizontal centering. `gap` cannot express it.
- *   margin-inline: auto  same, logical form.
- *
- * Reporting those trains everyone to reflex-suppress the one rule that matters
- * most, and a habitually suppressed rule is an off rule. Negative margins split
- * out on their own: a bleed is a real technique, so it warrants a "confirm this"
- * rather than the "move it to gap" remedy, which would be wrong advice.
+ *   margin: 0             a reset, nothing to move to a parent  → null
+ *   margin: 0 auto        centering, `gap` cannot express it    → null
+ *   margin-inline: auto   same, logical form                    → null
+ *   any negative part     a bleed, a technique to confirm       → 'negative'
+ *   anything else                                               → 'spacing'
  */
 export function classifyMargin(value: string): MarginKind {
 	const parts = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
 	if (!parts.length) return null;
-	// `var(--x)` on a margin is still margin, but we cannot see its sign. A
-	// leading `--` is a custom property name, not a minus: `var( --gap )` splits
-	// on the spaces prettier writes, and reading that as a bleed flags every
-	// tokenized margin in the repo.
+	// `var(--x)` on a margin is still margin, but its sign is invisible. A leading
+	// `--` is a custom property name, not a minus: `var( --gap )` splits on the
+	// spaces prettier writes.
 	if (parts.some((p) => /^-(?!-)/.test(p) && !ZERO.test(p))) return 'negative';
 	if (parts.some((p) => p === 'auto')) return null;
 	if (parts.every((p) => ZERO.test(p) || KEYWORD.test(p))) return null;
@@ -179,11 +169,9 @@ export function classifyMargin(value: string): MarginKind {
 }
 
 /**
- * A value with nothing to tokenize: a keyword, or a zero.
- *
- * `font-family: inherit` and `line-height: 0` are not untokenized type styling —
- * there is no token that means "whatever the parent said", and a rule that
- * demands one for every reset is a rule people turn off.
+ * A value with nothing to tokenize: a keyword, or a zero. No token means
+ * "whatever the parent said", so `font-family: inherit` and `line-height: 0`
+ * are not untokenized type styling.
  */
 export const isInertValue = (value: string): boolean => {
 	const parts = String(value).trim().split(/\s+/).filter(Boolean);
@@ -207,13 +195,9 @@ export function isHardcodedTokenValue(prop: string, value: string): boolean {
 /**
  * Declarations belonging to THIS rule.
  *
- * postcss's `walkDecls` is recursive, so a parent rule sees every descendant's
- * declarations: findings get duplicated across parent and child, a child's
- * `font-size` gets attributed to whatever component the *parent* class is bound
- * to, and a nested `display: grid` marks the whole parent as a grid.
- *
- * At-rules are transparent — a `@media` block's declarations still belong to
- * the enclosing selector — but nested rules are not.
+ * postcss's `walkDecls` is recursive, so a parent rule would otherwise see every
+ * descendant's declarations. At-rules are transparent — a `@media` block's
+ * declarations still belong to the enclosing selector — but nested rules are not.
  */
 export function* ownDecls(rule: Container): Generator<Declaration> {
 	for (const node of rule.nodes ?? []) {
@@ -237,22 +221,17 @@ export function resolvedSelectors(rule: Rule): string[] {
 }
 
 /**
- * The `@media` conditions a rule sits under, combined the way CSS combines
- * them: a nested query applies only when every enclosing one does, which is
- * what ` and ` means. Empty when the rule is unconditional.
+ * The `@media` conditions a rule sits under, combined the way CSS combines them:
+ * a nested query applies only when every enclosing one does, which is what
+ * ` and ` means. Empty when the rule is unconditional.
  *
- * The companion of `resolvedSelectors` for a reader in a browser. A selector
- * says which elements a rule reaches; this says when it reaches them, and
- * without it a finding written for one breakpoint is reported against elements
- * that the declaration is not currently styling at all.
+ * The companion of `resolvedSelectors` for a reader in a browser — a selector
+ * says which elements a rule reaches, this says when.
  *
- * Conditions are returned unparenthesized and joined as written, because both
- * of the shapes that actually occur combine correctly that way — `screen` with
- * `(max-width: 40em)` is `screen and (max-width: 40em)`, and two parenthesized
- * conditions likewise. A comma binds looser than `and`, so a comma inside any
- * one of several conditions cannot be combined without rewriting the query;
- * rather than emit something subtly wrong, that case returns nothing and the
- * finding reads as unconditional — the same answer as before this existed.
+ * Conditions are returned unparenthesized and joined as written, which is
+ * correct for both shapes that occur. A comma binds looser than `and`, so a
+ * comma inside any one condition returns nothing and the finding reads as
+ * unconditional rather than subtly wrong.
  */
 export function mediaQuery(rule: Rule): string {
 	// Walked structurally rather than through postcss's node union: only `type`,

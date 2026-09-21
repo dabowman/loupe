@@ -3,8 +3,8 @@
  *
  * A design system with two live packages (`@wordpress/components`,
  * `@wordpress/ui`) can have the same name mean two different things at once —
- * `Button` is stable in one and experimental in the other — so the registry
- * keys on `package::name`, never on name alone.
+ * `Button` is stable in one and experimental in the other — so the registry keys
+ * on `package::name`, never on name alone.
  */
 
 import type { ComponentEntry } from './types.ts';

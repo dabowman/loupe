@@ -1,19 +1,14 @@
 /**
- * CSS-in-JS template literals.
+ * CSS-in-JS template literals — emotion's ``css` ` `` and styled-components'
+ * ``styled.div` ` ``, the channel `@wordpress/components` is itself built on.
  *
- * The inline pass reads `style={{ … }}` object expressions, and the stylesheet
- * pass reads `.css` files. Between them sits the channel `@wordpress/components`
- * is itself built on: emotion's ``css` ` `` and styled-components' ``styled.div` ` ``.
- * Leaving it unchecked is not a neutral gap — it makes the unchecked channel the
- * attractive one, which is the same trap the inline pass was written to close.
+ * The declarations go through the SAME classifier as the stylesheet and inline
+ * passes, so one declaration cannot mean different things in different channels.
  *
- * The declarations go through the SAME classifier as the other two channels, so
- * `margin-bottom: 16px` cannot mean one thing in a stylesheet and another in a
- * template literal.
+ * An interpolation is opaque: a template whose structure depends on one is
+ * reported as a parse diagnostic rather than guessed at.
  *
- * What this cannot do: an interpolation is opaque. `${({ theme }) => …}` could
- * emit anything, so a template whose structure depends on one is reported as a
- * parse diagnostic rather than guessed at.
+ * Design notes: docs/design/analysis.md
  */
 
 import postcss from 'postcss';
@@ -24,12 +19,9 @@ import { messageOf } from './text.ts';
 import type { CssInJsLocals, Decl, TemplateGroup } from './types.ts';
 
 /**
- * The export name an import specifier binds, or `'default'`.
- *
- * `import x from 'y'` and `import { css as x } from 'y'` reach the same local
- * name by different shapes, and the imported half can be a string literal
- * (`import { 'a-b' as x }`), so the three specifier kinds need telling apart
- * rather than a chain of optional reads that silently yields undefined.
+ * The export name an import specifier binds, or `'default'`. The three specifier
+ * kinds are told apart rather than read through a chain of optional lookups: the
+ * imported half can itself be a string literal (`import { 'a-b' as x }`).
  */
 export const importedName = (spec: ImportDeclaration['specifiers'][number]): string => {
 	if (spec.type !== 'ImportSpecifier') return 'default';
@@ -41,12 +33,9 @@ export const fromPackage = (packages: readonly string[], src: string): boolean =
 	packages.some((p) => src === p || src.startsWith(`${p}/`));
 
 /**
- * Local names bound to a CSS-in-JS tag.
- *
- * `styled` produces `styled.div` and `styled(Button)`; `css` and
- * `createGlobalStyle` are bare tags. `keyframes` is deliberately excluded — its
- * body is animation stops, where a literal is the point and there is no token
- * to reach for.
+ * Local names bound to a CSS-in-JS tag. `styled` produces `styled.div` and
+ * `styled(Button)`; `css` and `createGlobalStyle` are bare tags. `keyframes` is
+ * excluded — its body is animation stops, where a literal is the point.
  */
 export function cssInJsLocals(ast: File, packages: readonly string[] | undefined): CssInJsLocals {
 	const styled = new Set<string>();
@@ -68,11 +57,10 @@ export function cssInJsLocals(ast: File, packages: readonly string[] | undefined
 /**
  * The CSS text of a template, with interpolations neutralized.
  *
- * `raw` rather than `cooked`: an escape sequence in `cooked` collapses to one
- * character and every line number after it shifts, which puts findings on the
- * wrong lines.
+ * `raw` rather than `cooked`, which collapses an escape sequence to one
+ * character and shifts every line number after it.
  *
- * A placeholder has to parse where it sits. After `;`, `{`, `}` or at the start
+ * A placeholder has to parse where it sits: after `;`, `{`, `}` or at the start
  * an interpolation stands in for whole statements, so it becomes a comment;
  * anywhere else it is part of a value or selector, so it becomes an identifier.
  * Neither introduces a newline, which is what keeps the line map exact.
@@ -92,10 +80,9 @@ export function templateText(quasi: TemplateLiteral): string {
 /**
  * Declaration groups in a template, each with the selector that owns it.
  *
- * The body is wrapped in a synthetic rule because a styled template's top level
- * is bare declarations, which is not a stylesheet. The wrapper is prepended
- * without a newline so every line number still maps straight back to source.
- *
+ * A styled template's top level is bare declarations, so the body is wrapped in
+ * a synthetic rule — prepended without a newline, so every line number still
+ * maps straight back to source.
  */
 export function parseTemplate(cssText: string, startLine: number): { groups: TemplateGroup[]; error: string | null } {
 	let root: Root;
@@ -114,8 +101,8 @@ export function parseTemplate(cssText: string, startLine: number): { groups: Tem
 		const walk = (container: Container): void => {
 			for (const node of container.nodes ?? []) {
 				if (node.type === 'decl') {
-					// A value that came from an interpolation is unknowable, and naming a
-					// property whose value we cannot see is noise, not a finding.
+					// A value from an interpolation is unknowable, and naming a property
+					// whose value we cannot see is noise.
 					if (node.value.includes('dsh-e')) continue;
 					decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
 				} else if (node.type === 'atrule')

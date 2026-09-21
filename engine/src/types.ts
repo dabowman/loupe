@@ -4,10 +4,11 @@
  * These live in one file rather than beside their producers because most of
  * them are contracts *between* modules — a `Finding` is built in `analyze.ts`,
  * grouped in `report.ts`, keyed in `baseline.ts` and rewritten in `autofix.ts`.
- * A shape that four modules read is not owned by any of them.
  *
- * Rule ids are the keys of `RULES`, so a typo in one is an error at the place
- * it was typed rather than a silently-absent lookup somewhere downstream.
+ * Rule ids are the keys of `RULES`, so a typo in one is an error at the place it
+ * was typed rather than a silently-absent lookup downstream.
+ *
+ * Design notes: docs/design/report.md#shared-shapes
  */
 
 import type { Rule as PostcssRule } from 'postcss';
@@ -58,12 +59,12 @@ export interface Hint {
 
 /**
  * What `check --judge` settled about one declaration, or about a whole
- * one-declaration finding. `answer` is the model's pick — a replacement value,
- * `keep`, a variant, a `not_` option, a force value — and
- * `confidence` its certainty, as data: a later reader, `fix --judge` or an
- * autofix that accepts judged answers above a floor, takes them from here
- * rather than parsing the prose. `spans` are the parts of `message` the
- * judgement wrote, in the order they appear, which the report paints green.
+ * one-declaration finding.
+ *
+ * `answer` is the model's pick — a replacement value, `keep`, a variant, a
+ * `not_` option, a force value — and `confidence` its certainty, as data, so a
+ * later reader takes them from here rather than parsing the prose. `spans` are
+ * the parts of `message` the judgement wrote, which the report paints green.
  */
 export interface Judged {
 	answer: string;
@@ -107,24 +108,19 @@ export interface Finding {
 	/**
 	 * Cluster key, for rules whose finding is one member of an N-way relation.
 	 *
-	 * The two pattern rules are the only findings that cannot exist in one file:
-	 * a composite rebuilt in six files is one defect reported six times, and
-	 * only a shared key puts those six back together. `code` happens to hold the
-	 * same value today, but `code` is the *baselining* identity — tying the
-	 * cluster to it means a future change to what survives a value tweak
-	 * silently regroups the report. Say which one the grouping means.
+	 * A composite rebuilt in six files is one defect reported six times, and only a
+	 * shared key puts those six back together. Not `code`, which holds the same
+	 * value today but is the *baselining* identity: tying the cluster to it would
+	 * let a change in what survives a value tweak silently regroup the report.
 	 */
 	group?: string | undefined;
 	/**
 	 * Registry prose about this component or shape — why it is flagged, in the
 	 * registry's own words rather than the source's.
 	 *
-	 * Its own field because `message` carries a display cap that is applied
-	 * before any format is built. A note concatenated into it spent that cap on
-	 * prose and then lost the end of it — the actionable half — mid-word, in
-	 * `--format json` as much as in the report, where nothing could recover it.
-	 * The agent format composes the two and bounds the result to its one line;
-	 * JSON and SARIF ship this whole.
+	 * Its own field because `message` carries a display cap: a note concatenated
+	 * into it spends that cap on prose and loses its own actionable end. The agent
+	 * format composes the two and bounds the result; JSON and SARIF ship this whole.
 	 */
 	note?: string | undefined;
 	/**
@@ -137,26 +133,21 @@ export interface Finding {
 	/**
 	 * The selector of the CSS rule this finding sits in, as authored.
 	 *
-	 * Every other consumer anchors on `file`/`line`, which is what an editor
-	 * needs and all it can use. A browser has no lines — but a stylesheet
-	 * finding's selector *is* a DOM query, and that makes this the one field
-	 * that lets a reader outside the source say which rendered elements the
-	 * flagged declaration actually lands on.
+	 * Every other consumer anchors on `file`/`line`. A browser has no lines — but a
+	 * stylesheet finding's selector *is* a DOM query, which is what lets a reader
+	 * outside the source say which rendered elements the declaration lands on.
 	 *
-	 * The whole resolved selector list, not the key selector: `.card .title`
-	 * and `.title` match different elements, and the point of carrying it is to
-	 * match the same ones the browser does. Absent on JSX, inline-style and
-	 * CSS-in-JS findings, which have no selector to carry.
+	 * The whole resolved selector list, not the key selector: `.card .title` and
+	 * `.title` match different elements. Absent on JSX, inline-style and CSS-in-JS
+	 * findings, which have no selector to carry.
 	 */
 	selector?: string | undefined;
 	/**
 	 * The `@media` condition the finding's rule sits under, if any.
 	 *
-	 * `selector` says which elements a rule reaches; this says when. A reader in
-	 * a browser can ask `matchMedia` and tell "these three elements are wrong"
-	 * from "these three elements would be wrong at a width you are not
-	 * currently at" — a distinction that does not exist in a source listing,
-	 * where every finding is equally true. Absent on an unconditional rule.
+	 * `selector` says which elements a rule reaches; this says when, so a reader in
+	 * a browser can ask `matchMedia` and tell "these three elements are wrong" from
+	 * "would be wrong at a width you are not at". Absent on an unconditional rule.
 	 */
 	media?: string | undefined;
 	rank: number;
@@ -206,12 +197,9 @@ export interface Diagnostics {
 	/**
 	 * How many tokens the declared `tokenSources` actually yielded.
 	 *
-	 * `tokens/unknown-token` fires only when the set is non-empty, because a
-	 * project that declares no sources must not have every token it writes
-	 * called unknown. That fail-open is silent, so a `tokenSources` path that
-	 * stops resolving — a dependency moving its stylesheet, which
-	 * `@wordpress/theme` did — turns the rule off and reports `clean`. Carrying
-	 * the count is what lets the report say so.
+	 * `tokens/unknown-token` fires only when the set is non-empty, so a
+	 * `tokenSources` path that stops resolving turns the rule off and reports
+	 * `clean`. Carrying the count is what lets the report say so.
 	 */
 	tokensKnown: number;
 }
@@ -337,11 +325,9 @@ export interface ComponentImport {
 	/**
 	 * How many times the file renders it.
 	 *
-	 * Currency findings anchor at the import, one per file and component, so
-	 * eight of them on one `import {` line read as eight duplicates and say
-	 * nothing about how much work the migration is. The JSX walk already visits
-	 * every opening element and already knows which are design-system ones, so
-	 * the count is a tally kept alongside it rather than a second pass.
+	 * Currency findings anchor at the import, one per file and component, so the
+	 * count is what says how much work the migration is. Tallied by the JSX walk,
+	 * which already visits every opening element.
 	 */
 	uses: number;
 	/** Attached by the analyzer once it knows which file the scan came from. */
@@ -622,14 +608,11 @@ export interface SkippedRegistry {
 /**
  * Something worth saying about a registry `--profile` forced past the scope gate.
  *
- * Two states earn a note and neither shows up anywhere else. A registry that
- * merged and changed nothing is exactly as invisible as one that was skipped —
- * the thing skip reporting exists to prevent, reached by the other road. And a
- * registry merged onto a config naming a different design system still matches:
- * composite signatures are bare component names, so `Stack(Text,Button)` fits
- * every design system that ships those names, and the finding names an import
- * the project has never heard of. Forcing that is allowed — it is what the flag
- * asks for — but it may not be silent.
+ * Two states earn a note and neither shows up anywhere else: a registry that
+ * merged and changed nothing is as invisible as one that was skipped, and one
+ * merged onto a config naming a different design system still matches, because
+ * composite signatures are bare component names. Forcing either is allowed —
+ * it is what the flag asks for — but it may not be silent.
  */
 export interface RegistryNote {
 	label: string;

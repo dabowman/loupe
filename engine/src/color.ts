@@ -1,23 +1,20 @@
 /**
  * Terminal colour.
  *
- * Off by default, on only when a human is provably watching. Every other
- * consumer of this output is a machine that reads the bytes: the hook hands its
- * report back to the agent, `--format json|sarif` is parsed, `--format html` is
- * redirected to a file, and a CI log is a file too. An escape sequence in any
- * of those is corruption — which is why the bash wrapper this CLI replaced had
- * to strip ANSI in the first place, and why that stripping is not coming back.
+ * Off by default, on only when a human is provably watching — every other
+ * consumer of this output is a machine that reads the bytes, and an escape
+ * sequence in any of them is corruption.
  *
- * `process.stdout` is the one stream consulted, even for the stderr sites: a
- * run whose stdout is a pipe is a run being consumed, and the cost of guessing
- * wrong in that direction is only a colourless error message.
+ * `process.stdout` is the one stream consulted, even for the stderr sites: a run
+ * whose stdout is a pipe is a run being consumed.
+ *
+ * Design notes: docs/design/cli.md#colour-is-off-unless-a-human-is-provably-watching
  */
 
 import type { Severity } from './types.ts';
 
-// An empty variable is an unset one. Every shell that has ever exported
-// `FORCE_COLOR=` to clear it means "not set", and reading it as "set to
-// something that is not 0" turns clearing the switch into throwing it.
+// An empty variable is an unset one: every shell that exports `FORCE_COLOR=` to
+// clear it means "not set".
 const { NO_COLOR, FORCE_COLOR, TERM } = process.env;
 
 let enabled = NO_COLOR ? false : FORCE_COLOR ? FORCE_COLOR !== '0' : Boolean(process.stdout.isTTY) && TERM !== 'dumb';
@@ -53,17 +50,12 @@ export const cyan = paint('36');
  *   red/yellow/green  severity, and whether a run is in trouble
  *   green    inside a finding, what a model judged (`check --judge`) rather
  *            than what the parse found
- *
- * Three surfaces name rules and two name components, and a reader who has
- * learned the colour in the report has learned it in `status` and `explain`.
  */
 
 /**
- * Severity's colour, in one place.
- *
- * The report and `status` both say what a rule will do, in different words, and
- * a reader who has learned that red blocks in one of them has learned it for
- * the other. Two independent maps is how that stops being true.
+ * Severity's colour, in one place: the report and `status` both say what a rule
+ * will do, in different words, and two independent maps is how a reader's
+ * learned association stops being true.
  */
 export const SEV_PAINT: Record<Severity, (s: string) => string> = {
 	error: red,

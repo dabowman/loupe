@@ -1,13 +1,6 @@
 /**
  * Design-system profiles.
  *
- * The engine is design-system agnostic: everything it knows about WPDS arrives
- * as config. The *plugin* was not — it passed the WPDS pattern and component
- * registries on every run, to every project, because there was nowhere else to
- * put them. On a WordPress repo that is invisible. On any other React repo it
- * is a WPDS composite matching by name alone and a finding telling the agent to
- * import a module that does not exist there.
- *
  * A profile is the bundle that makes one design system real: which packages it
  * is, which preset configures it, and the registries that describe its
  * components and composites. Profiles are selected by what the project actually
@@ -22,6 +15,8 @@
  *
  * A profile with no `packages` is never selected automatically — there is
  * nothing to recognize it by — and has to be named with `--profile <id>`.
+ *
+ * Design notes: docs/design/cli.md#profiles
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -79,10 +74,8 @@ interface RawProfile {
 export function readProfiles(root: string | null | undefined): Profile[] {
 	if (!root || !existsSync(root)) return [];
 	const out: Profile[] = [];
-	// Sorted, and one profile per id: two directories claiming the same id would
-	// otherwise both be selected, and `--profile <id>` would apply each of them.
-	// Sorting is what makes "the first one wins" a fact rather than a filesystem
-	// accident.
+	// Sorted, and one profile per id. Sorting is what makes "the first one wins" a
+	// fact rather than a filesystem accident.
 	const seen = new Set<string>();
 	for (const e of readDir(root)) {
 		if (!e.isDirectory()) continue;
@@ -91,13 +84,9 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 		if (!existsSync(manifest)) continue;
 		try {
 			const raw = readJson(manifest) as RawProfile;
-			// Every field is whatever JSON happened to hold. `id` in particular is
-			// a Set key, the thing `--profile` is matched against and a sort key
-			// three lines from the end of this function — and that sort runs
-			// outside every `try` here, so a manifest carrying `"id": 3` used to
-			// throw past all of this. Under `loupe hook` that is exit 2: a turn
-			// blocked by a stack trace, which is exactly what this function's
-			// contract promises one bad directory cannot do.
+			// Every field is whatever JSON happened to hold, and `id` is a Set key, a
+			// `--profile` match and a sort key — and that sort runs outside every `try`
+			// here, so a manifest carrying `"id": 3` would throw past all of it.
 			const id = asString(raw.id) ?? e.name;
 			if (seen.has(id)) continue;
 			const patterns = asString(raw.patterns);
@@ -113,10 +102,8 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 				tokenDescriptions: tokenDescriptions ? under(dir, tokenDescriptions) : null,
 				dir,
 			});
-			// Claimed only once the entry is on the list. Reserving it above meant a
-			// directory that threw on the way to `push` locked the id out, and a
-			// well-formed second directory claiming it was dropped too — leaving
-			// `--profile <id>` matching neither.
+			// Claimed only once the entry is on the list: reserving it above let a
+			// directory that threw on the way to `push` lock the id out.
 			seen.add(id);
 		} catch {
 			/* a profile that cannot be parsed contributes nothing */
@@ -136,8 +123,7 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 export function selectProfiles(
 	profiles: readonly Profile[],
 	// Narrower than `Config` on purpose: selection reads the package list and
-	// nothing else, and a caller holding just that should not have to build a
-	// whole config to ask which profiles apply.
+	// nothing else.
 	config: { designSystem?: { packages?: readonly string[] } },
 	force: string | null = null,
 ): Profile[] {
@@ -148,12 +134,11 @@ export function selectProfiles(
 }
 
 /**
- * Merge registries from `sources` into `config`.
+ * Merge registries from `sources` into `config`. The project always wins.
  *
- * The project always wins: a repo that has written down its own `page-header`
- * means that one, not the shipped generic. Returns what was applied and what
- * was skipped, so the CLI can say why a registry it was handed did nothing —
- * a registry silently ignored looks exactly like a registry with no findings.
+ * Returns what was applied and what was skipped, so the CLI can say why a
+ * registry it was handed did nothing — a registry silently ignored looks exactly
+ * like a registry with no findings.
  */
 export function applyRegistries(
 	config: Config,
@@ -162,11 +147,9 @@ export function applyRegistries(
 	const applied: string[] = [];
 	const skipped: SkippedRegistry[] = [];
 	const errors: string[] = [];
-	// The sources merged by fiat, for the notes below — with what each one
-	// actually contributed, not just its label. Reading the merged totals instead
-	// answered a different question: a forced registry whose every id collided
-	// with the project's own added nothing and was reported as fine, because some
-	// *other* source had filled the same list.
+	// The sources merged by fiat, with what each one actually contributed rather
+	// than just its label: a forced registry whose every id collided with the
+	// project's own added nothing, and merged totals would report it as fine.
 	const forced: { label: string; kind: 'patterns' | 'components'; added: number; offScope: string[] }[] = [];
 
 	let patterns: Pattern[] = config.patterns ?? [];
@@ -210,25 +193,18 @@ export function applyRegistries(
 	}
 
 	// Only reattach what actually changed: the setters recompute rule
-	// availability, and reattaching an untouched registry is a no-op that reads
-	// like one that did something.
+	// availability, and reattaching an untouched registry reads like a no-op that
+	// did something.
 	if (saw.patterns) setPatterns(config, patterns);
 	if (saw.components) setComponentRegistry(config, components);
 
 	// Merging a registry by fiat is not the same as its rules coming on: a
 	// composite signature still needs a component layer to match against, and a
-	// registry that contributed no entries enables nothing. Either way it is
-	// exactly as invisible as one that was skipped — the thing the skip
-	// reporting exists to prevent, reached by the other road.
+	// registry that contributed no entries enables nothing. Either way it is as
+	// invisible as one that was skipped.
 	//
-	// Each note is stated once, in the order a reader would check it, rather than
-	// left to emerge from which `if` happens to fall through. "A rule the config
-	// turns off is not reported" comes first, because that one was asked for —
-	// testing `config.enabled` instead conflated it with the cases below and
-	// sent someone after a component layer they had nothing wrong with.
-	// Every rule the registry feeds, not just the first: with `duplicate-composite`
-	// turned off and `superseded-composite` left on, testing only the first said
-	// "nothing to report here" about a registry that had in fact enabled nothing.
+	// Each note is stated once, in the order a reader would check it. Every rule
+	// the registry feeds, not just the first.
 	const registryRules = [
 		'patterns/duplicate-composite',
 		'patterns/superseded-composite',
@@ -245,8 +221,8 @@ export function applyRegistries(
 					!config.designSystem.packages.length
 					? 'merged but enabled nothing — this config declares no designSystem.packages, so no composite is ever built to compare'
 					: // `knownComponents` is `designSystem.components.layout` + `.text`.
-						// A merged component *registry* does not feed it, so naming
-						// "components" here without saying which pointed at the wrong file.
+						// A merged component *registry* does not feed it, so "components"
+						// alone would point at the wrong file.
 						!config.designSystem.knownComponents.size
 						? 'merged but enabled nothing — this config declares no designSystem.components for its signatures to match'
 						: null;
@@ -259,18 +235,16 @@ export function applyRegistries(
 
 	const notes: RegistryNote[] = [];
 	for (const f of forced) {
-		// Merged past the scope gate onto a config that names a different design
-		// system. The registry still applies — that is what `--profile` asked for
-		// — but composite signatures are bare component names, so this is the one
-		// state in which they match a codebase they describe nothing about, and
-		// the finding tells the agent to import a module that is not there.
+		// Merged past the scope gate onto a config naming a different design system.
+		// The registry applies — that is what `--profile` asked for — but composite
+		// signatures are bare component names, so this is the one state in which they
+		// match a codebase they describe nothing about.
 		if (f.offScope.length)
 			notes.push({
 				label: f.label,
 				kind: f.kind,
-				// Named against what the *config* declares, not what the project
-				// imports — those differ on an inferred config, and blaming the
-				// imports is what sent people hunting through source that was fine.
+				// Named against what the *config* declares, not what the project imports:
+				// those differ on an inferred config.
 				note: `forced past the scope check — it is scoped to ${f.offScope.join(', ')} and this config declares ${
 					config.designSystem.packages.length
 						? `${config.designSystem.packages.join(', ')} — so its findings name a design system this config does not declare`

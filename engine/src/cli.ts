@@ -5,6 +5,8 @@
  *   0  clean, or advisory findings only
  *   1  blocking findings
  *   2  could not run (bad usage, not a git worktree, config error)
+ *
+ * Design notes: docs/design/cli.md
  */
 
 import { existsSync, writeFileSync } from 'node:fs';
@@ -66,12 +68,8 @@ function judgeKey(): string | undefined {
 }
 
 /**
- * The two things stderr carries, told apart by colour as well as by wording.
- *
- * A refusal ends the run; a note is a run continuing on a partial answer. They
- * were already interleaved on one stream in the same `loupe:` voice, and a
- * reader scanning for the reason a command exited 2 had to read every line to
- * find which one it was.
+ * The two things stderr carries, told apart by colour as well as by wording: a
+ * refusal ends the run, a note is a run continuing on a partial answer.
  */
 const fail = (msg: string): void => {
 	process.stderr.write(red(msg));
@@ -81,11 +79,9 @@ const note = (msg: string): void => {
 };
 
 /**
- * How far a detection result is to be trusted, coloured to match.
- *
- * `detect` prints two of these and `init` writes the config they describe, so
- * the thing worth seeing at a glance is the weaker of the two — a low-confidence
- * namespace list is the one that gets written down and then blocks turns.
+ * How far a detection result is to be trusted, coloured to match. `detect`
+ * prints two of these and `init` writes the config they describe, so what is
+ * worth seeing at a glance is the weaker of the two.
  */
 const confidence = (level: string): string =>
 	(level === 'high' ? green : level === 'none' ? red : yellow)(`[${level} confidence]`);
@@ -93,10 +89,10 @@ const confidence = (level: string): string =>
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Whether this is a single-file artifact rather than an installed directory.
- * A binary carries its data compiled in, so it can never see the manifest that
- * sits beside the engine — which makes that the test, with no dependence on
- * how any particular compiler spells its synthetic root.
+ * Whether this is a single-file artifact rather than an installed directory. A
+ * binary carries its data compiled in and can never see the manifest beside the
+ * engine, which makes that the test — with no dependence on how a compiler
+ * spells its synthetic root.
  */
 const SINGLE_FILE = !existsSync(join(HERE, '..', 'package.json'));
 
@@ -106,10 +102,9 @@ const ENV_FILE = SINGLE_FILE ? resolve('.env') : join(HERE, '..', '..', '.env');
 /**
  * Which loupe this is: the version, whether it runs from source or the built
  * bundle, and where it lives. Three copies of the plugin can coexist on one
- * machine (a checkout, a dotfiles clone on PATH, the marketplace install the
- * hook runs), and the manifest alone cannot say which one answered. Both
- * entries sit one level below `engine/`, which is what lets one relative path
- * find the manifest from either.
+ * machine, and the manifest alone cannot say which one answered. Both entries
+ * sit one level below `engine/`, which is what lets one relative path find the
+ * manifest from either.
  */
 function versionLine(): string {
 	// A compiled binary has no engine directory: `execPath` is the only location
@@ -125,11 +120,9 @@ const jsonKeys = (json: string): string => json.replace(/"([^"\\]+)":/g, (_m, na
 /**
  * {@link USAGE}, painted at the print site.
  *
- * The text stays one plain template above: it is also what `--help | grep`
- * gets, and threading colour through forty lines of it would put an escape
- * sequence in front of every word someone might search for. Commands and
- * options are matched where the layout already puts them — first token of an
- * indented line — so a reworded description cannot accidentally light up.
+ * The text stays one plain template above: it is also what `--help | grep` gets.
+ * Commands and options are matched where the layout already puts them — first
+ * token of an indented line — so a reworded description cannot light up.
  */
 const usage = (): string =>
 	USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag: string) => `  ${cyan(flag)}`)
@@ -137,10 +130,8 @@ const usage = (): string =>
 		.replace(/^(Commands|Options|Environment):$/gm, (_m, head: string) => `${bold(`${head}:`)}`);
 
 /**
- * The flags that take a value. Everything else is a boolean switch.
- *
- * Declared `as const` so the two halves cannot drift: this list decides what
- * consumes the next argv entry, and {@link Flags} decides what type comes back.
+ * The flags that take a value. Everything else is a boolean switch. `as const`
+ * so this list and {@link Flags} cannot drift.
  */
 const VALUE_FLAGS = [
 	'format',
@@ -162,24 +153,18 @@ const VALUE_FLAGS = [
 type ValueFlag = (typeof VALUE_FLAGS)[number];
 
 /**
- * What `--format` accepts on the check path.
- *
- * Held as a list because the dispatch used to be a chain ending in `else`, so a
- * typo — `--format sarf` — printed the agent format and exited 0. That reads as
- * a successful run to a CI job that then uploads an empty artifact, which is
- * the worst available failure: silent, and shaped exactly like success.
+ * What `--format` accepts on the check path. A list, not a chain ending in
+ * `else`: a typo that printed the agent format and exited 0 reads as a
+ * successful run to a CI job that then uploads an empty artifact.
  */
 const FORMATS = ['agent', 'json', 'sarif', 'html'] as const;
 type Format = (typeof FORMATS)[number];
 const isFormat = (f: string): f is Format => (FORMATS as readonly string[]).includes(f);
 
 /**
- * Parsed command-line flags.
- *
- * Written out rather than left as a string-keyed record: `--files` carries a
- * path list and `--all` carries nothing, and a record that types both as
- * `string | boolean` pushes that distinction to every read site — which is
- * where it used to get lost.
+ * Parsed command-line flags. Written out rather than left as a string-keyed
+ * record: `--files` carries a path list and `--all` carries nothing, and a
+ * record typing both as `string | boolean` pushes that to every read site.
  */
 type Flags = { [K in ValueFlag]?: string } & {
 	help?: boolean;
@@ -292,12 +277,9 @@ Run 'loupe detect' to see what that produces, 'init' to write it down.
 type ScopeResult = string[] | null | { error: string };
 
 /**
- * The refusal a run gets when there is no project here to ask git about.
- *
- * One constant because it is now said in two places — once by the scope
- * resolver, and once by the guard that runs before inference so the walk is
- * never paid for on the way to it — and a gate that phrases the same refusal
- * two ways is a gate whose callers cannot match on either.
+ * The refusal a run gets when there is no project here to ask git about. One
+ * constant because it is said in two places — the scope resolver, and the guard
+ * that runs before inference so the walk is never paid for on the way to it.
  */
 const NOT_A_WORKTREE = 'not a git worktree; use --all or --files';
 
@@ -307,19 +289,14 @@ const SCOPED_COMMANDS = new Set(['check', 'fix']);
 /**
  * Would this run refuse anyway without a worktree?
  *
- * `--all` and `--files` name their own scope and never ask git anything, so
- * they work perfectly well in a directory that is neither a package nor a
- * worktree — and did, before the guard that reads this existed. `--changed` is
- * only a scope on the two commands that resolve one: `detect --changed`,
- * `baseline --changed` and `status --changed` ignore the flag entirely, and a
- * guard standing in for a refusal those runs would never have got is a guard
- * inventing one.
+ * `--all` and `--files` name their own scope and never ask git anything.
+ * `--changed` is only a scope on the two commands that resolve one: `detect`,
+ * `baseline` and `status` ignore the flag entirely, and a guard standing in for
+ * a refusal those runs would never have got is a guard inventing one.
  *
- * The hook is here for a different reason. Its root is a fallback to the
- * process cwd whenever CLAUDE_PROJECT_DIR is unset, so it is the one caller
- * that gets pointed at a directory nobody chose — and a PostToolUse payload
- * naming a file short-circuits the scope resolver, so on that path the refusal
- * below is genuinely new rather than merely earlier.
+ * The hook is here for a different reason: its root falls back to the process
+ * cwd whenever CLAUDE_PROJECT_DIR is unset, so it is the one caller that gets
+ * pointed at a directory nobody chose.
  */
 const needsProject = (command: string, args: Args, isHook: boolean): boolean => {
 	if (args.flags.all || args.flags.files) return false;
@@ -330,31 +307,20 @@ const needsProject = (command: string, args: Args, isHook: boolean): boolean => 
  * Is there a project here, by any evidence the engine already trusts?
  *
  * Deliberately generous, because the cost of a false negative is a gate that
- * turns itself off and says so only in a message the hook suppresses. Five
- * kinds of evidence, cheapest first, none of which walks the tree:
+ * turns itself off and says so only in a message the hook suppresses. Five kinds
+ * of evidence, cheapest first, none of which walks the tree:
  *
- * - a manifest, node-shaped or PHP-shaped. `composer.json` is here because a
- *   WordPress plugin is as likely to carry one as a `package.json`, and this
- *   plugin's audience is more likely to be in one than in a React app;
- * - a `.git` entry anywhere up the tree. Searched upwards, because the case
- *   that needs answering is the subdirectory, and a subdirectory has no `.git`
- *   of its own — and answered off the filesystem, which survives the two cases
- *   where asking git fails rather than answers: a dubious-ownership mount, the
- *   normal state inside a container, and no `git` binary on PATH at all;
- * - git itself, which is what still recognises a worktree the filesystem walk
- *   above cannot see — one told by `GIT_DIR`, say. Asked after that walk and
- *   not before it, because it is a subprocess and the walk is a handful of
- *   `existsSync` calls;
- * - and last, a preset that matches, which is the engine's own definition of a
- *   project. A deployed block theme in `wp-content/themes/` has a `theme.json`
- *   and a `templates/` directory and frequently none of the above, and
- *   `detectPreset` identifies it at high confidence. Refusing to gate a
- *   directory this same binary confidently identifies is indefensible.
+ * - a manifest, node-shaped or PHP-shaped (`composer.json` counts: a WordPress
+ *   plugin is as likely to carry one as a `package.json`);
+ * - a `.git` entry anywhere up the tree, searched upwards and answered off the
+ *   filesystem, which survives a dubious-ownership mount and a missing `git`;
+ * - git itself, which still recognises a worktree the filesystem walk cannot see.
+ *   Asked after that walk, because it is a subprocess;
+ * - and last, a preset that matches — the engine's own definition of a project,
+ *   and the dearest of the five, though still bounded to manifests three levels
+ *   down and markers in the root and its immediate children.
  *
- * `detectPreset` reads manifests three levels down and the markers in the root
- * and its immediate children — bounded, and nowhere near `discover`, so this
- * stays off the walk that the guard exists to avoid. It is still the dearest of
- * the five, which is why it is asked last.
+ * Design notes: docs/design/cli.md#is-there-a-project-here
  */
 const looksLikeProject = (root: string): boolean =>
 	existsSync(join(root, 'package.json')) ||
@@ -367,17 +333,12 @@ const looksLikeProject = (root: string): boolean =>
  * What a run says when inference answered from part of a tree.
  *
  * Namespaces, precisely: `detectPreset` reads manifests and top-level markers
- * rather than walking, so the preset line stays as good as it ever was and can
- * still legitimately read `high`. It is the namespace list that came from a
- * prefix — and a namespace list drawn from a prefix looks exactly like one
- * drawn from a whole project, down to the confident-looking coverage
- * percentage, which is computed over what was read.
+ * rather than walking, so the preset line is complete either way. A namespace
+ * list drawn from a prefix looks exactly like one drawn from a whole project,
+ * down to the coverage percentage, which is computed over what was read.
  *
  * Four surfaces say this — stderr, `status`, `detect`'s `scanned:` line and the
- * hook's own message — so they are built from two shared fragments rather than
- * written out four times, and rewording it stays one edit. The ceiling carries
- * its thousands separator: `${DETECT_ENTRY_BUDGET}` alone renders `50000`
- * against the `50,000` both READMEs document.
+ * hook's own message — so they are built from two shared fragments.
  */
 const CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString('en-US')}-entry ceiling`;
 const CEILING_WHY =
@@ -402,8 +363,8 @@ function resolveScope(
 				.split(',')
 				.map((f) => f.trim())
 				.filter(Boolean)
-				// Findings are keyed repo-relative, so an absolute path matched nothing
-				// and the run reported clean — the worst answer a gate can give.
+				// Findings are keyed repo-relative, so an absolute path matches nothing and the
+				// run reports clean.
 				.map((f) => toPosix(isAbsolute(f) ? relative(config.root, resolve(f)) : f))
 				.filter((f) => f && !f.startsWith('..'))
 		);
@@ -427,11 +388,9 @@ async function main(): Promise<number> {
 	const first = args._[0];
 	const command = first && !first.startsWith('-') ? first : 'check';
 
-	// Two readers are never human, whatever stdout happens to be attached to:
-	// the hook, whose report is fed back to an agent, and a machine format,
-	// which is parsed. Both would otherwise colour when someone runs them by
-	// hand in a terminal to see what they emit — and the escapes they emitted
-	// then would be exactly the ones the real consumer chokes on unseen.
+	// Two readers are never human, whatever stdout happens to be attached to: the
+	// hook, whose report is fed back to an agent, and a machine format, which is
+	// parsed.
 	if (command === 'hook' || args.flags['no-color'] || (args.flags.format && args.flags.format !== 'agent'))
 		setColor(false);
 
@@ -450,37 +409,23 @@ async function main(): Promise<number> {
 
 	const isHook = command === 'hook';
 
-	// Read the payload before anything can return.
-	//
-	// Claude Code writes it to this process's stdin, and a hook that exits
-	// without draining leaves the writer holding a pipe nobody is reading: once
-	// the payload outgrows the pipe buffer — which a Write of a large file does,
-	// since `tool_input.content` carries the whole file — the write fails with
-	// EPIPE instead of completing. Every early return below is downstream of
-	// this line for that reason, the off switch most of all: silencing the gate
-	// must not turn every large write into a broken pipe.
+	// Read the payload before anything can return: a hook that exits without
+	// draining leaves Claude Code holding a pipe nobody reads, and once the payload
+	// outgrows the pipe buffer that write fails with EPIPE. Every early return
+	// below is downstream of this line, the off switch most of all.
 	const payload: HookPayload = isHook ? parsePayload(await readStdin()) : {};
 
 	// Off unless the project opted in, or silenced for the session.
 	//
-	// Silence, not advisory mode. An advisory finding still lands in the agent's
-	// context, and an agent that sees a finding starts fixing it — which is the
-	// whole complaint. The only way to work on something else is for the gate to
-	// say nothing at all. Deliberately hook-only: `loupe check` typed by hand is
-	// someone asking, and answering "nothing" would be a lie.
+	// Silence, not advisory mode: an advisory finding still lands in the agent's
+	// context, and an agent that sees a finding starts fixing it. Hook-only —
+	// `loupe check` typed by hand is someone asking.
 	if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
 
-	// The project, not the directory you happen to be standing in.
-	//
-	// The hook roots at CLAUDE_PROJECT_DIR; a typed command used to root at the
-	// cwd, so the same repo had two roots and everything keyed off one of them
-	// disagreed. `loupe baseline` in `packages/app` of a monorepo wrote
-	// `packages/app/.loupe-baseline.json` with subdirectory-relative keys, and
-	// the hook — rooted at the repo — never read it and blocked on the findings
-	// that had just been accepted. Anchoring to the config the run is actually
-	// governed by makes the two agree, because it is the same config file the
-	// hook resolves. `--root` still overrides, for the case where someone means
-	// the subdirectory.
+	// The project, not the directory you happen to be standing in: the hook roots
+	// at CLAUDE_PROJECT_DIR, and a typed command rooting at the cwd gave the same
+	// repo two roots. Anchoring to the config the run is governed by makes them
+	// agree. `--root` still overrides.
 	const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
 	const anchor = explicitRoot ? null : findConfig(resolve(process.cwd()));
 	const root = resolve(explicitRoot ?? (anchor ? dirname(anchor) : process.cwd()));
@@ -499,11 +444,9 @@ async function main(): Promise<number> {
 	// to be settled before the config it would configure is loaded.
 	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
 	const forced = args.flags.profile ? (profiles.find((p) => p.id === args.flags.profile) ?? null) : null;
-	// A named profile that resolves to nothing used to be a silent no-op — no
-	// registries, no preset, exit 0 — which is indistinguishable from the profile
-	// applying and finding nothing. Worse, it also suppresses the profile
-	// *selection* would have made, so a typo checks strictly less than no flag at
-	// all. The sibling failure one screen down already warns; this one has to.
+	// A named profile that resolves to nothing is not a no-op: it also suppresses
+	// the profile *selection* would have made, so a typo checks strictly less than
+	// no flag at all.
 	if (args.flags.profile && !forced && !isHook)
 		note(
 			`loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve(args.flags.profiles) : 'any profiles directory (--profiles was not given)'}${
@@ -527,43 +470,27 @@ async function main(): Promise<number> {
 	};
 	try {
 		// An explicit path or a typed `--preset` wins; then a discovered project
-		// config; then the plugin's preset setting; then whatever the project
-		// itself implies. Without the last step a project with no config file
-		// fell through to `generic`, which declares no component layer and
-		// therefore silently disables every correlation rule.
+		// config; then the plugin's preset setting; then whatever the project itself
+		// implies. Without the last step a project with no config file fell through to
+		// `generic`, which silently disables every correlation rule.
 		//
-		// The plugin setting sits *below* the project config on purpose. Both the
-		// README and the option's own description promise "a project's own
-		// loupe.config.json always wins", and it did not: the setting reaches the
-		// hook through the environment and a terminal only through a best-guess
-		// read of ~/.claude/settings.json, so the two sides loaded different
-		// configs — different severities, a different suppression keyword, and
-		// therefore different finding keys, which means a baseline recorded on one
-		// side matched nothing on the other. A setting that names a default for
-		// projects that have not written a config is useful; one that quietly
-		// discards a config they did write is the split this branch exists to end.
-		// `--preset`, typed at the moment of use, is a different thing and still
-		// wins.
+		// The plugin setting sits *below* the project config on purpose: the two sides
+		// read it differently, so a setting that discarded a project's own config gave
+		// hook and terminal different finding keys. `--preset`, typed at the moment of
+		// use, is a different thing and still wins.
 		const projectConfig = args.flags.config ? null : findConfig(root);
 		const optionPreset = options.preset && options.preset !== 'auto' ? options.preset : null;
 		const explicitPreset = args.flags.preset ?? (projectConfig ? null : optionPreset);
 
-		// The project-shape guard runs ahead of inference, not after it.
-		//
-		// Inference walks the tree; the scope resolver further down is what
-		// decides there is no project here. In that order the whole walk was
-		// paid for on the way to the refusal — and `hookRoot()` falls back to
-		// the process cwd whenever CLAUDE_PROJECT_DIR is unset, so the tree
-		// being indexed was sometimes a home directory, on every edit, past
-		// the hook's timeout.
+		// The project-shape guard runs ahead of inference, not after it: inference
+		// walks the tree, and `hookRoot()` falls back to the process cwd, so the tree
+		// being indexed can be a home directory, on every edit.
 		//
 		// Only where there is nothing but the directory to go on: a config file,
-		// `--config` or `--preset` is somebody stating that *this* directory is a
-		// project, and that statement outranks anything guessed from shape. The
-		// `preset` plugin option is not such a statement — it is set once, for
-		// every project its owner ever opens — so it configures the run without
-		// vouching for the root, and leaving it in this test switched the guard
-		// off everywhere for anyone who had pinned one.
+		// `--config` or `--preset` states that *this* directory is a project. The
+		// `preset` plugin option is not such a statement — it is set once, for every
+		// project its owner ever opens — so it configures the run without vouching
+		// for the root.
 		const statedProject = Boolean(args.flags.config) || Boolean(args.flags.preset) || Boolean(projectConfig);
 		if (!statedProject && needsProject(command, args, isHook) && !looksLikeProject(root)) {
 			if (isHook) return emitClean(`loupe: skipped \u2014 ${NOT_A_WORKTREE}`);
@@ -572,13 +499,10 @@ async function main(): Promise<number> {
 		}
 
 		const unconfigured = !args.flags.config && !explicitPreset && !projectConfig;
-		// A named profile's preset ranks last among the statements *about this
-		// project* — --config, --preset, the plugin option's own preset and the
-		// project's config file each outrank it — and first against inference,
-		// which is a guess about the design system `--profile` just named
-		// outright. Until this it was read by nothing at all: naming a profile
-		// merged its registries into a config that knew none of its components
-		// and left every severity at the generic default.
+		// A named profile's preset ranks last among the statements *about this project*
+		// — --config, --preset, the plugin option's preset and the project's config
+		// file each outrank it — and first against inference, which is a guess about
+		// the design system `--profile` just named outright.
 		if (unconfigured && forced?.preset) {
 			if (hasPreset(forced.preset)) profilePreset = forced.preset;
 			// A profile naming a preset this install does not carry is a broken
@@ -586,16 +510,10 @@ async function main(): Promise<number> {
 			// what was ignored rather than failing the run over it.
 			else if (!isHook) note(`loupe: profile ${forced.id} names preset ${forced.preset}, which is not installed\n`);
 		}
-		// Override the preset inference chose, not the run it produced. The
-		// namespaces are a reading of *this* project and hold whoever picked the
-		// design system; skipping detection to inject the preset instead dropped
-		// them, which switched css/dead-class off on a repo where it had been
-		// running and left `init` writing that loss to disk.
-		//
-		// Both overrides live here rather than at the call site because `detect`
-		// and `init` re-run detection when the run did not, and a config written
-		// to someone's repo without them is a wrong artifact that outlives the
-		// process that made it.
+		// Override the preset inference chose, not the run it produced: the namespaces
+		// are a reading of *this* project, and injecting the preset instead dropped
+		// them. Both overrides live here rather than at the call site because `detect`
+		// and `init` re-run detection when the run did not.
 		if (unconfigured) detected = runDetection();
 		config = await loadConfig({
 			root,
@@ -605,10 +523,9 @@ async function main(): Promise<number> {
 			inferred: Boolean(detected),
 		});
 	} catch (err) {
-		// Under the hook, EXIT.CANNOT_RUN is exit 2 — which blocks the turn. A
-		// mistyped preset in the plugin settings would then block every turn in
-		// every project with nothing the agent could do about it. A gate that
-		// cannot configure itself stands aside and says so.
+		// Under the hook, EXIT.CANNOT_RUN is exit 2, which blocks the turn: a mistyped
+		// preset in the plugin settings would block every turn in every project. A gate
+		// that cannot configure itself stands aside and says so.
 		if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf(err)}`);
 		fail(`loupe: config error \u2014 ${messageOf(err)}\n`);
 		return EXIT.CANNOT_RUN;
@@ -653,13 +570,9 @@ async function main(): Promise<number> {
 		for (const n of registries.notes) note(`loupe: ${n.label} ${n.kind} registry ${n.note}\n`);
 	}
 
-	// Inference that stopped early is still used — a partial answer beats
-	// `generic`, which switches every correlation rule off — but it is never used
-	// silently. Under the hook stderr is the wrong channel (a clean run's is
-	// discarded, and a blocking one's is the agent's report), so the hook says it
-	// where it speaks: appended to the systemMessage, which is one line either
-	// way. The hook is the caller this ceiling exists for; it cannot be the one
-	// caller that never hears about it.
+	// Inference that stopped early is still used — a partial answer beats `generic`,
+	// which switches every correlation rule off — but never silently. Under the hook
+	// stderr is the wrong channel, so it is appended to the systemMessage instead.
 	if (detected?.truncated && !isHook) note(TRUNCATED_NOTE);
 	const ceilingSuffix = detected?.truncated ? CEILING_SUFFIX : '';
 
@@ -670,10 +583,9 @@ async function main(): Promise<number> {
 
 	// Whether the gate may stop a turn.
 	//
-	// A config file is a deliberate statement about THIS project, so its
-	// severities stand. An inferred config is a guess about a project the plugin
-	// has just met, and blocking someone's turn on a guess is hostile — so a
-	// guessed config is advisory-only unless blocking is explicitly turned on.
+	// A config file is a deliberate statement about THIS project, so its severities
+	// stand. An inferred config is a guess, and blocking a turn on a guess is
+	// hostile — so it is advisory-only unless blocking is explicitly turned on.
 	// The plugin option can force advisory either way.
 	const blockingAllowed = options.blocking === true || (!config.inferred && options.blocking !== false);
 	if (isHook && !blockingAllowed) {
@@ -694,12 +606,9 @@ async function main(): Promise<number> {
 		process.stdout.write(
 			`${magenta(id)}  [${state}]\n  ${renderTitle(id, config.designSystem, config.suppression.keyword)}\n`,
 		);
-		// The two registry-backed rules have nothing of their own to explain: what
-		// they fire on is a list somebody else authored, and a title that says
-		// "a current component now covers this job" without saying whose list
-		// decided that leaves a reader with nothing to check. Name the size, a few
-		// entries to recognise it by, and the file — not the list itself, which
-		// runs to hundreds.
+		// The two registry-backed rules have nothing of their own to explain: what they
+		// fire on is a list somebody else authored. Name the size, a few entries to
+		// recognise it by, and the file — not the list, which runs to hundreds.
 		const flagged =
 			id === 'system/locked-component' ? 'locked' : id === 'system/superseded-component' ? 'legacy' : null;
 		if (flagged) {
@@ -728,11 +637,8 @@ async function main(): Promise<number> {
 
 	if (command === 'status') {
 		// One conclusion, asked once. `blockingAllowed` answers "do the severities
-		// permit blocking"; it is not the same question as "will this gate stop a
-		// turn", because a silenced hook stops nothing. Deriving the two answers
-		// separately is what let `status` print `hook: OFF` and `Turns are blocked
-		// by: ...` seven lines apart — the same drift `isOn` closed one layer down,
-		// reappearing in the conclusion instead of the predicate.
+		// permit blocking", which is not "will this gate stop a turn" — a silenced hook
+		// stops nothing.
 		const off = hookOff(root);
 		const gateBlocks = blockingAllowed && !off;
 		const src =
@@ -744,13 +650,10 @@ async function main(): Promise<number> {
 						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
 		const base = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
-		// What design system this run thinks it is checking, in the terms the
-		// rules are written against. The rules roster below says which checks are
-		// live; it does not say what they will name as the remedy, and that is the
-		// half a skill authored for no design system in particular has to read
-		// before it writes a line of UI. Empty fields are printed as such: "no
-		// layout primitive" is a fact about the system, and inferring it from a
-		// missing line is how a skill ends up recommending one that isn't there.
+		// What design system this run thinks it is checking, in the terms the rules are
+		// written against — the half a skill has to read before it writes a line of UI.
+		// Empty fields are printed as such: "no layout primitive" is a fact about the
+		// system, and inferring it from a missing line recommends one that isn't there.
 		const ds = config.designSystem;
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
 		const lines = [
@@ -780,18 +683,13 @@ async function main(): Promise<number> {
 						: 'none found — plugin defaults apply'
 			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
 			`${dim('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
-			// Asked through the same predicate the gate uses. Reporting on mere
-			// truthiness meant `LOUPE_OFF=0` printed OFF while the hook went on
-			// blocking — a diagnostic lying about the one thing it exists to say.
+			// Asked through the same predicate the gate uses: reporting on mere truthiness
+			// meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
 			...(off ? [yellow(`hook:       OFF \u2014 ${off}`)] : []),
-			// Which design system's registries are in play, and — when none are —
-			// which ones were on offer. "No composite findings" and "no composite
-			// registry" look identical in a report; they must not look identical here.
-			// The directory, not just the id: a profile carries the authoring prose
-			// for its design system beside its registries, and the skills that read
-			// it are written for no design system in particular. Told only "archer",
-			// a skill has to guess where that lives \u2014 and guesses wrong the moment
-			// the profiles root is a project's own rather than the plugin's.
+			// Which design system's registries are in play, and — when none are — which
+			// were on offer: "no composite findings" and "no composite registry" look
+			// identical in a report and must not look identical here. The directory, not
+			// just the id: a profile carries its authoring prose beside its registries.
 			`${dim('profile:    ')}${
 				config.profiles?.active?.length
 					? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(', ')
@@ -805,15 +703,10 @@ async function main(): Promise<number> {
 		for (const id of RULE_IDS) {
 			const def = RULES[id];
 			const sev = config.severityOf(id);
-			// Report what will actually happen, not the configured severity: an
-			// error-severity rule under a gate that isn't allowed to block is
-			// advisory in practice, and saying otherwise here is how you end up
-			// debugging a gate that "should" be blocking and isn't. `gateBlocks`
-			// rather than `blockingAllowed` for the same reason: a silenced hook
-			// blocks nothing, whatever the severities say.
-			// Coloured by what it does, not by the rule's configured severity —
-			// same reason the words are: an error-severity rule under a gate that
-			// cannot block is advisory, and painting it red says otherwise.
+			// Report what will actually happen, not the configured severity — an
+			// error-severity rule under a gate that cannot block is advisory in practice,
+			// and the colour follows the words for the same reason. `gateBlocks` rather
+			// than `blockingAllowed`: a silenced hook blocks nothing.
 			// The hook never judges, so this one cannot stop a turn at any severity.
 			const judgeOnly = id === 'patterns/judged-redirect';
 			const verdict = config.enabled[id]
@@ -864,10 +757,8 @@ async function main(): Promise<number> {
 		const lines = [
 			`${dim('preset:     ')}${bold(info.preset)}  ${confidence(info.presetConfidence)}`,
 			dim(`            ${info.presetReasons.join('; ')}`),
-			// What inference concluded still gets reported; it is just no longer
-			// what the run uses. `init` writes the config below verbatim, so the
-			// two lines disagreeing without explanation is a file someone would
-			// have to reverse-engineer.
+			// What inference concluded is still reported; it is just no longer what the
+			// run uses, and `init` writes the config below verbatim.
 			...(profilePreset
 				? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`]
 				: []),
@@ -885,12 +776,9 @@ async function main(): Promise<number> {
 			return EXIT.OK;
 		}
 		const target = join(root, 'loupe.config.json');
-		// A written config is not a guess any more: `config.inferred` goes false,
-		// which turns blocking back on by default and lifts the css/dead-class
-		// demotion. A namespace list drawn from the part of the tree that was
-		// read would then block turns and tell an agent to delete classes it
-		// never read the stylesheet for — so the one thing inference must never
-		// do silently is launder a truncated answer into an authored one.
+		// A written config is not a guess any more: `inferred` goes false, which turns
+		// blocking back on by default and lifts the css/dead-class demotion. Inference
+		// must never launder a truncated answer into an authored one.
 		if (info.truncated && !args.flags.force) {
 			// The note above has already said why; this says only what it refuses
 			// to do about it, so the two lines do not read as one repeated twice.
@@ -984,11 +872,9 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
-	// A directive written in a keyword this config no longer asks for still
-	// mutes. It is doing its job, so the rename is named here rather than turned
-	// into a finding of its own — the inventory is where you would come looking
-	// for it. (A directive that carries the grammar's shape and breaks it —
-	// missing reason, missing rule ids, bare keyword — still reports as
+	// A directive written in a keyword this config no longer asks for still mutes,
+	// so the rename is named in the inventory rather than turned into a finding.
+	// (One that carries the grammar's shape and breaks it still reports as
 	// `suppression/malformed`, whichever keyword it was written in.)
 	if (command === 'suppressions') {
 		const { directives } = await analyze(config, { scope: null });
@@ -1014,9 +900,7 @@ async function main(): Promise<number> {
 
 	// ── fix ───────────────────────────────────────────────────────────────────
 	// Only substitutions the engine resolved to exactly one on-role token. The
-	// baseline is deliberately ignored: it exists to stop the gate blocking on an
-	// accepted backlog, and burning that backlog down is the point of this
-	// command.
+	// baseline is deliberately ignored: burning that backlog down is the point.
 	if (command === 'fix') {
 		const fixScope = resolveScope(config, args, { defaultChanged: false });
 		if (fixScope !== null && !Array.isArray(fixScope)) {
@@ -1042,15 +926,9 @@ async function main(): Promise<number> {
 			? applyKeeps(root, toFix.findings, config.suppression.keyword, { dry, directives: toFix.directives })
 			: { applied: [], skipped: [] };
 		const verb = dry ? 'would fix' : 'fixed';
-		// The value is held raw — it is what the substitution matches against —
-		// so this is the one place the flattening belongs at the print site
-		// rather than at capture: a multi-line declaration is exactly the kind
-		// `fix` skips, and it reported the skip across six lines.
-		//
-		// Flattened but not bounded. Both lines exist to be acted on — the skip
-		// names a value the reader now has to find and edit by hand, and the
-		// applied line is the preview `--dry-run` exists to give — and an elided
-		// value is one neither of them can be matched against.
+		// Flattened at the print site rather than at capture, because the raw value is
+		// what the substitution matches against. Not bounded: both lines exist to be
+		// acted on, and an elided value can be matched against neither.
 		const decl = (f: { prop: string; value: string }): string => oneLine(`${f.prop}: ${f.value}`);
 		for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2192 ${green(f.to)}\n`);
 		for (const k of kept.applied)
@@ -1085,10 +963,9 @@ async function main(): Promise<number> {
 		fail(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(', ')}\n`);
 		return EXIT.CANNOT_RUN;
 	}
-	// Rejected here for the same reason as `--format`, and loudly for the same
-	// reason: a misspelled `--group-by fil` that fell back to the default would
-	// print a perfectly good report in the order the caller did not ask for, and
-	// nothing about it would look wrong.
+	// Rejected here for the same reason as `--format`: a misspelled `--group-by fil`
+	// falling back to the default prints a perfectly good report in the order the
+	// caller did not ask for.
 	const group = args.flags['group-by'] ?? 'rule';
 	if (!isGroupBy(group)) {
 		fail(`loupe: unknown grouping "${group}" \u2014 expected ${GROUP_BYS.join(', ')}\n`);
@@ -1123,17 +1000,12 @@ async function main(): Promise<number> {
 		const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
 		const baseline = found ? readBaseline(bPath) : null;
 		// A file that is present and unparseable is not the same as no file, and
-		// treating it as one puts the whole backlog back with the gate blocking on
-		// all of it — silently, which is how this class of bug stays unfound.
-		// Conflict markers in a committed baseline are the ordinary way to get
-		// here, so name the file rather than letting it fail open in silence.
+		// treating it as one puts the whole backlog back with the gate blocking on all
+		// of it. Conflict markers in a committed baseline are the ordinary way here.
 		//
-		// The hook says it too. Guarding this on `!isHook` kept it quiet on the one
-		// surface where it bites: the agent is handed back a backlog it explicitly
-		// accepted, with no reason given, and spends its retry budget on findings
-		// nobody asked it to fix. `emitBlocking` already writes the report to
-		// stderr and Claude Code feeds that back on exit 2, so the line is carried
-		// by a channel that already exists.
+		// The hook says it too: it is the surface where the agent is handed back a
+		// backlog it accepted, with no reason given. `emitBlocking` already writes to
+		// stderr, and Claude Code feeds that back on exit 2.
 		if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
 		result = applyBaseline(result, baseline);
 	}
@@ -1185,16 +1057,10 @@ async function main(): Promise<number> {
 			return emitClean(`loupe: blocking findings remain (retry budget unavailable).${ceilingSuffix}`);
 		}
 		if (attempts > max) {
-			// Latched, not cleared. Clearing the counter here reset the budget, so
-			// "gate stood down" lasted exactly one turn: the next fire blocked at
-			// attempt 1 of 3 again, and an agent that could not fix a finding was
-			// stopped in perpetual bursts of three for the rest of the session.
-			// Leaving the count above `max` keeps the stand-down standing; the
-			// clean-run branch above still releases it the moment the finding goes,
-			// and `readState` ages the entry out after MAX_AGE_MS either way.
-			//
-			// Say it once. Repeating the stand-down line every fire is the same
-			// nagging the stand-down exists to end.
+			// Latched, not cleared: clearing the counter here reset the budget, so the
+			// stand-down lasted exactly one turn. The clean-run branch above releases it
+			// the moment the finding goes, and `readState` ages the entry out.
+			// Said once: repeating it every fire is the nagging it exists to end.
 			return emitClean(
 				attempts === max + 1
 					? `loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}${ceilingSuffix}`

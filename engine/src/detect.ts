@@ -1,15 +1,16 @@
 /**
  * Zero-config project detection.
  *
- * The hook runs `loupe hook` with no `--preset`, so a project without a
- * `loupe.config.json` fell through to `generic` — which declares no
- * component layer, which disables every correlation rule. The gate stayed
- * green and quiet on exactly the wp-admin code it exists to check. A preset
- * that has to be selected by hand is a preset that mostly isn't.
+ * The hook runs `loupe hook` with no `--preset`, and a project without a
+ * `loupe.config.json` would otherwise fall through to `generic` — which declares
+ * no component layer, which disables every correlation rule. So when no config
+ * exists, infer one.
  *
- * So when no config exists, infer one. Inference is a guess and the caller
- * treats it as one: see `confidence`, and note that the CLI refuses to let an
- * inferred config run a destructive rule at error severity.
+ * Inference is a guess and the caller treats it as one: see `confidence`, and
+ * note that the CLI refuses to let an inferred config run a destructive rule at
+ * error severity.
+ *
+ * Design notes: docs/design/cli.md#detection-inference-budgeted
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -87,35 +88,20 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'build', 'dist', '.
  * How many directory entries inference will look at before it gives up and
  * answers from what it has.
  *
- * Inference is a guess, and a guess does not earn an unbounded walk. The caller
- * that matters is the hook, which has 60s for a PostToolUse and 120s for a
- * Stop, and whose root falls back to the process cwd whenever
- * CLAUDE_PROJECT_DIR is unset — so the tree handed to this is not always a
- * project, and was sometimes a home directory. The ceiling is what stops that
- * from being paid for on every edit.
+ * Inference is a guess, and a guess does not earn an unbounded walk — the caller
+ * that matters is the hook, whose root falls back to the process cwd and is
+ * sometimes a home directory. Entries, not files: a home directory is mostly
+ * directories holding almost nothing.
  *
- * Entries, not files: a home directory is mostly directories that hold almost
- * nothing — a package cache, a pnpm store, maildirs — and a file-counting
- * budget walks all of them for free.
- *
- * 50,000 is several times the largest project this plugin plausibly meets —
- * WordPress core is around 7,000 files and Gutenberg around 15,000 once
- * node_modules is pruned, which the walk does — so a real repo reaches its own
- * end long before the ceiling, and a tree that trips it is one where the answer
- * was never going to be about a project anyway. It costs about a second of
- * walking, which leaves the hook's budget for the analysis that follows.
+ * 50,000 is several times the largest project this plugin plausibly meets, and
+ * costs about a second of walking. See docs/design/cli.md#detection-inference-budgeted.
  */
 export const DETECT_ENTRY_BUDGET = 50_000;
 
 /**
- * Every `package.json` in the project, shallowest first.
- *
- * A WordPress repo is very often a monorepo: the root manifest carries
- * `@wordpress/env` and a build script, and the plugin that actually imports
- * `@wordpress/components` sits a directory down. Reading only the root meant
- * those repos detected as `generic`, which declares no component layer and
- * therefore switched off every rule this plugin exists to run — silently, and
- * on exactly the code it was pointed at.
+ * Every `package.json` in the project, shallowest first. A WordPress repo is
+ * very often a monorepo: the root manifest carries `@wordpress/env` and a build
+ * script, and the plugin importing `@wordpress/components` sits a directory down.
  */
 function manifests(root: string, maxDepth = 3, budget = 60): { dir: string; rel: string }[] {
 	const out: { dir: string; rel: string }[] = [];
@@ -163,12 +149,9 @@ const confidenceOf = (detect: DetectBlock, kind: string): string | null =>
 	typeof detect.confidence === 'string' ? detect.confidence : (detect.confidence?.[kind] ?? null);
 
 /**
- * Match one preset's declared markers against the project.
- *
- * Two kinds, because there are two kinds of evidence a design system leaves: a
- * dependency in a manifest, and files on disk. A preset declaring neither is
- * never inferred — `wordpress-components` is a parent others extend, not a
- * conclusion, and `generic` is the fallback rather than a match.
+ * Match one preset's declared markers against the project: a dependency in a
+ * manifest, and files on disk. A preset declaring neither is never inferred —
+ * `wordpress-components` is a parent others extend, `generic` is the fallback.
  */
 function matchPreset(
 	name: string,
@@ -177,9 +160,8 @@ function matchPreset(
 	found: readonly { dir: string; rel: string }[],
 ): PresetMatch | null {
 	if (detect.dependencies?.length) {
-		// Shallowest manifest declaring the library wins, so a root that happens to
-		// list it beats a nested one, and `packageDir` names where its
-		// `node_modules` — and therefore the token stylesheet — will be.
+		// Shallowest manifest declaring the library wins, and `packageDir` names where
+		// its `node_modules` — and therefore the token stylesheet — will be.
 		for (const { rel } of found) {
 			const pkg =
 				(readJson(join(root, rel, 'package.json')) as {
@@ -235,15 +217,9 @@ function matchPreset(
  * Which preset fits this project?
  *
  * The markers live in the presets, not here: a preset declares a `detect` block
- * and this walks them by descending priority. That is the whole difference
- * between "add a design system" meaning a JSON file and meaning a patch to the
- * engine — and the reason the WordPress markers that used to be hardcoded in
- * this function now sit in `wpds.json` and `wordpress-block-theme.json`.
- *
- * Priority matters where two presets both match: `wpds` outranks any weaker
- * WordPress preset because it extends one and adds the token prefix and
- * severities the plugin exists to enforce, so selecting the parent would
- * silently drop them.
+ * and this walks them by descending priority. Priority matters where two presets
+ * both match — `wpds` outranks any weaker WordPress preset because it extends
+ * one and adds the token prefix and severities the plugin exists to enforce.
  */
 export function detectPreset(root: string): PresetMatch {
 	const found = manifests(root);
@@ -277,17 +253,11 @@ const prefixOf = (cls: string | undefined): string | null => {
 /**
  * Which of these prefixes are defined by an installed dependency?
  *
- * A prefix appearing in both the project's CSS and its markup looks exactly
- * like a namespace the project owns — and that is also exactly what styling a
- * third-party library looks like. `rbc-` (react-big-calendar) passed every test
- * and accounted for every dead-class finding in a real repo, all of them false:
- * the rule then tells an agent to delete CSS that is holding a vendored
- * component together.
- *
- * The distinguishing evidence is where the class is *defined*. A library ships
- * its own stylesheet; a project's own namespace appears nowhere in
- * `node_modules`. Stops as soon as every candidate is decided, so the usual
- * case costs a fraction of the budget.
+ * A prefix in both the project's CSS and its markup looks exactly like a
+ * namespace the project owns — and exactly like styling a third-party library.
+ * The distinguishing evidence is where the class is *defined*: a library ships
+ * its own stylesheet, a project's own namespace appears nowhere in
+ * `node_modules`. Stops as soon as every candidate is decided.
  */
 function libraryPrefixes(dirs: readonly string[], candidates: readonly string[]): Set<string> {
 	const want = new Set(candidates);
@@ -337,10 +307,8 @@ function resolvePreset(name: string, seen = new Set<string>()): PresetFile {
 /**
  * Infer which class prefixes the project owns.
  *
- * Only prefixes that appear in BOTH the CSS and the markup count. A prefix
- * present only in CSS is exactly what a dead class looks like, so accepting it
- * on CSS evidence alone would let the dead-class rule bootstrap its own false
- * positives.
+ * Only prefixes appearing in BOTH the CSS and the markup: one present only in
+ * CSS is exactly what a dead class looks like.
  */
 function detectNamespaces(
 	root: string,
@@ -353,11 +321,9 @@ function detectNamespaces(
 	const sources = merge(DEFAULTS.sources, base.sources);
 	const files = discover({ root, sources, limit });
 
-	// Library prefixes from *every* shipped preset, not just the detected one, so
-	// a project styling only third-party classes yields no namespace rather than
-	// adopting theirs. Every preset rather than a named few: each one lists the
-	// prefixes its design system owns, and a prefix owned by any of them is
-	// somebody's library whichever preset this project turned out to be.
+	// Library prefixes from *every* shipped preset, not just the detected one, so a
+	// project styling only third-party classes yields no namespace rather than
+	// adopting theirs.
 	const others = presetNames()
 		.filter((n) => n !== presetName)
 		.map((n) => resolvePreset(n));
@@ -422,12 +388,9 @@ function detectNamespaces(
 	return {
 		project: accepted.map(([p]) => p),
 		coverage,
-		// A truncated walk read part of a tree, so `high` is a claim it cannot
-		// make: the prefixes it did not reach are exactly the ones that would
-		// have changed the answer. Coverage is measured against what was read,
-		// which is why it can look convincing and still be wrong. It demotes
-		// `high` only: `none` is the different and still-true claim that nothing
-		// was found, and swallowing it printed "(none found) [low confidence]".
+		// A truncated walk read part of a tree, so `high` is a claim it cannot make.
+		// It demotes `high` only: `none` is the different and still-true claim that
+		// nothing was found.
 		confidence: accepted.length === 0 ? 'none' : files.truncated ? 'low' : coverage >= 0.5 ? 'high' : 'low',
 		sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
 		truncated: files.truncated,
@@ -451,19 +414,15 @@ export function detectConfig(
 ): DetectedConfig {
 	const { preset: name, reasons, confidence: presetConfidence, packageDir } = detectPreset(root);
 	const ns = detectNamespaces(root, name, packageDir, limit);
-	// `--profile <id>` names the design system outright, which is the one
-	// statement that beats a guess about it. Inference's own verdict is still
-	// returned as `preset` — `status` and `init` report it — but the config
-	// extends what the flag named. Everything derived from the preset below has
-	// to follow it: overriding `extends` after the fact left a config extending
-	// one preset while carrying another's token sources.
+	// `--profile <id>` names the design system outright, which beats a guess about
+	// it. Inference's own verdict is still returned as `preset`, but the config
+	// extends what the flag named, and everything derived from the preset below has
+	// to follow it.
 	const extend = override || name;
 	const config: AuthoredConfig = { extends: extend, namespaces: { project: ns.project } };
 
-	// A preset's token sources are written relative to the project root. In a
-	// monorepo the design system is installed beside the manifest that asked for
-	// it, so without this the token set comes back empty and every finding goes
-	// back to naming a namespace instead of a token.
+	// A preset's token sources are written relative to the project root; in a
+	// monorepo the design system is installed beside the manifest that asked for it.
 	if (packageDir) {
 		const sources = resolvePreset(extend).designSystem?.tokenSources ?? [];
 		if (sources.length) config.designSystem = { tokenSources: sources.map((p) => `${packageDir}/${p}`) };

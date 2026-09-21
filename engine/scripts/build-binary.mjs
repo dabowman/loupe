@@ -2,34 +2,21 @@
 /**
  * Compiles the engine into a single self-contained executable.
  *
- * This is a third artifact, not a replacement for either of the two that
- * exist. `src/` is the real code; `dist/loupe.mjs` is the committed bundle that
- * makes a marketplace install work without a toolchain. Both still need Node on
- * the machine. A binary is for the places that have no Node and should not be
- * made to grow one — somebody else's CI, a pre-commit hook in a repo that is
- * not JavaScript, a designer who wants the checker and not a dev environment.
+ * A third artifact, for the places that have no Node and should not be made to
+ * grow one. Bun does the compiling because it is the only toolchain that reads
+ * the engine's TypeScript as-is and cross-compiles to every target from one
+ * machine; nothing about the produced binary depends on Bun elsewhere.
  *
- * Bun does the compiling because it is the only toolchain that reads the
- * engine's TypeScript as-is and cross-compiles to every target from one
- * machine. It is a build-time tool: nothing about the produced binary depends
- * on Bun being installed anywhere else, and the engine keeps no runtime
- * dependency on it.
+ * Output is deliberately not `dist/`, which is committed: these are 60-100 MB
+ * each and belong on a release.
  *
- * Output is deliberately not `dist/`. `dist/` is committed, and these are 60-100
- * MB each — they belong on a release, never in the history.
+ * NO CREDENTIAL IS EVER COMPILED IN, and nothing here may change that. The
+ * engine reads `process.env.TYPESAFE_API_KEY` at runtime and neither compiler
+ * substitutes it. `--define:process.env.TYPESAFE_API_KEY=...`, or anything that
+ * inlines the ambient environment, would bake whatever the build machine
+ * exported into a published artifact. Do not add one.
  *
- * No credential is ever compiled in, and nothing here may change that. The
- * engine reads `process.env.TYPESAFE_API_KEY` at runtime and `--judge` is the
- * user's own key or nothing — verified three ways against a canary value: a key
- * in a `.env` at the checkout, a key exported into the build environment, and a
- * `.env` sitting in this build's working directory all leave the artifact clean,
- * and a binary run with no key refuses and says where to put one.
- *
- * That holds because the value is read through `process.env` at runtime and
- * neither compiler substitutes it. `--define` is what would break it: passing
- * `--define:process.env.TYPESAFE_API_KEY=...`, or anything that inlines the
- * ambient environment, bakes whatever the build machine happened to export into
- * an artifact meant to be published. Do not add one.
+ * Design notes: docs/design/cli.md#the-binary
  */
 
 import { execFileSync } from 'node:child_process';
@@ -44,10 +31,9 @@ const OUT_DIR = join(ENGINE, 'binaries');
 /**
  * Short name -> Bun target. The short name is what `--target` takes.
  *
- * Linux appears twice on purpose. The default build links against glibc and
- * exits "not found" on Alpine, which is what a lot of CI actually runs — the
- * failure reads like a missing file rather than a missing libc, so it is worth
- * shipping the musl build beside it rather than letting people find out.
+ * Linux appears twice on purpose: the default build links against glibc and
+ * exits "not found" on Alpine, a failure that reads like a missing file rather
+ * than a missing libc.
  */
 const TARGETS = {
 	'linux-x64': 'bun-linux-x64',
@@ -93,10 +79,9 @@ for (const name of chosen) {
 	const outfile = join(OUT_DIR, `loupe-${name}${name.startsWith('windows') ? '.exe' : ''}`);
 	// A compiled Bun executable reads the working directory's bunfig.toml at
 	// startup and runs its `preload` scripts, and this binary is run inside
-	// repositories it is checking — somebody else's CI. That would be the
-	// scanned repo executing code with the job's environment, so it is off.
-	// (The .env autoload stays on: it is how the binary finds a `--judge` key,
-	// since Bun has no `process.loadEnvFile`.)
+	// repositories it is checking. That would be the scanned repo executing code
+	// with the job's environment, so it is off. (The .env autoload stays on: it is
+	// how the binary finds a `--judge` key.)
 	execFileSync(
 		'bun',
 		[
