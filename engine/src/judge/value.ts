@@ -5,10 +5,8 @@
  * candidates arrive already narrowed where arithmetic can narrow them —
  * `candidatesFor` picks the scale steps either side of a length — so what is
  * asked is the half code cannot do: which token this rule *means*, judged by
- * what it styles, and whether the value was a decision at all. The pink card
- * background is the case the keep option is for: it is either a mistake with a
- * system default it should have used, or a choice to suppress and leave alone.
- * `evals/values` scores it.
+ * what it styles, and whether the value was a decision at all. `evals/values`
+ * scores it; docs/design/judge.md has the numbers.
  *
  * What one literal sends, whole — the request body `ask` posts. A value is asked
  * about part by part, so this is `1px` of a `padding: 1px 7px`, and `7px` is a

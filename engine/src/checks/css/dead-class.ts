@@ -50,12 +50,8 @@ export function deadClasses(
 		const key = `${file}\u0000${cls}`;
 		if (seen.has(key) || !isProject(cls) || isReferenced(cls)) return [];
 		seen.add(key);
-		// The selector is the verdict, restated as a question a browser can
-		// answer. This rule's expensive failure is the false "dead" — the
-		// reference index missing a class built at runtime — and that failure is
-		// invisible in the source but obvious in a page, where the class is
-		// sitting on three elements. Carrying it is what lets the overlay show
-		// the rule being wrong.
+		// The selector is carried so `loupe serve` can resolve the finding to the
+		// live elements it claims are unstyled.
 		return [
 			{ rule: 'css/dead-class', file, line, message: `.${cls}`, code: `.${cls}`, selector: `.${cls}`, scopeLines },
 		];

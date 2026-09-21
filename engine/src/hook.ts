@@ -1,18 +1,16 @@
 /**
  * Claude Code Stop-hook mode.
  *
- * This replaces the hand-written bash wrapper. Folding it into the CLI removes
- * the `jq` dependency, the shell quoting, the ANSI stripping, and — the part
- * that actually rots — a second artifact that has to stay in sync with this one.
- *
  * Exit protocol:
  *   0 + {systemMessage}  clean, or advisory-only, or gave up after N attempts
  *   2 + stderr           blocking findings; stderr is handed back to the agent
  *
- * Bounded retry rather than an absolute bail on `stop_hook_active`. Skipping
+ * Bounded retry rather than an absolute bail on `stop_hook_active`: skipping
  * every hook-triggered turn means the turn that *fixes* a finding is never
- * checked, so you never confirm the fix. Instead each session gets N gated
- * passes, then the gate stands down and says so.
+ * checked. Each session gets N gated passes, then the gate stands down and says
+ * so.
+ *
+ * Design notes: docs/design/cli.md#exit-codes-are-a-contract
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -107,9 +105,7 @@ export function parsePayload(raw: string): HookPayload {
  * The file a PostToolUse payload just touched, as a repo-relative path.
  *
  * Scoping to it is what turns this from a review-time gate into a write-time
- * one: the drift is reported while the agent still has the decision in hand,
- * rather than forty tool calls later once the pattern is load-bearing and every
- * argument for keeping it has become locally true.
+ * one: the drift is reported while the agent still has the decision in hand.
  *
  * Returns null for a payload with no file (a Stop event, or a non-file tool),
  * which the caller maps to the changed-files scope.
@@ -132,26 +128,20 @@ export function hookRoot(): string {
 }
 
 /**
- * One spelling of "on" for every switch this tool reads.
- *
- * The set was written out three times — plugin options from the environment,
- * the same options from the settings file, and the `LOUPE_OFF` gate — which is
- * two chances for a switch to mean something different depending on which door
- * it came through. It also made `status` disagree with the gate: `LOUPE_OFF=0`
- * reported the hook OFF while the hook went right on blocking.
+ * One spelling of "on" for every switch this tool reads. Written out per door,
+ * it let `status` disagree with the gate: `LOUPE_OFF=0` reported the hook OFF
+ * while the hook went right on blocking.
  */
 export const isOn = (v: string | undefined): boolean => v !== undefined && /^(1|true|yes|on)$/i.test(v);
 
 /**
  * Whether this project turned the gate on.
  *
- * Off by default: a gate that fires in every repo the plugin is installed for
- * lands findings in sessions that are about something else. A project opts in
- * where Claude Code keeps per-project, per-person switches —
- * `.claude/settings.local.json` → `"env": { "LOUPE": "on" }`. Claude Code hands
- * that to the hook as an environment variable, which a terminal never sees, so
- * the same files are read when the environment has nothing to say; otherwise
- * `status` typed by hand reports OFF for a project the hook is gating.
+ * Off by default: a gate firing in every repo the plugin is installed for lands
+ * findings in sessions that are about something else. A project opts in at
+ * `.claude/settings.local.json` → `"env": { "LOUPE": "on" }`, which Claude Code
+ * hands the hook as an environment variable a terminal never sees — so the same
+ * files are read when the environment has nothing to say.
  */
 function optedIn(root: string): boolean {
 	if (process.env.LOUPE !== undefined) return isOn(process.env.LOUPE);
@@ -171,10 +161,8 @@ function optedIn(root: string): boolean {
 }
 
 /**
- * Why the hook says nothing, or null when it runs. Asked once.
- *
- * Both the gate and `status` call this, so a diagnostic that says the hook is
- * off is a diagnostic that watched the same values the hook did.
+ * Why the hook says nothing, or null when it runs. Asked once, so a diagnostic
+ * saying the hook is off is one that watched the same values the hook did.
  */
 export function hookOff(root: string): string | null {
 	// Per-session off switch: `LOUPE_OFF=1 claude` silences an opted-in project.
@@ -189,14 +177,11 @@ const OPTION_KEYS = ['preset', 'project_prefixes', 'blocking', 'max_attempts', '
 /**
  * Options the user set when enabling the plugin.
  *
- * Claude Code refuses to substitute ${user_config.*} into a shell-form hook
- * command, but it exports every option to hook processes as
- * CLAUDE_PLUGIN_OPTION_<KEY> — to hook processes only, not to terminals or
- * tool calls. So `status`, whose entire job is to say what the gate will
- * actually do, could not see the blocking switch from a terminal. The values
- * are also in the settings file, under this plugin's key: read them there when
- * the environment has nothing to say, and report the source so a stale answer
- * is recognizable as one.
+ * Claude Code exports every option to hook processes as
+ * CLAUDE_PLUGIN_OPTION_<KEY> — to hook processes only, not to terminals, so
+ * `status` typed by hand cannot see them. They are also in the settings file
+ * under this plugin's key: read them there when the environment has nothing to
+ * say, and report the source so a stale answer is recognizable as one.
  */
 export function resolvedOptions(): {
 	options: PluginOptions;

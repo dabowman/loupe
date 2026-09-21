@@ -1,11 +1,9 @@
 /**
  * `system/raw-element`: which variant?
  *
- * `<p> → <Text>` is right about the component and silent about the variant,
- * which is the half an agent has to guess — and on a real plugin it is wrong
- * about the component often enough to matter: a `<span>` that is a colour
- * swatch, a `<p>` that only wraps a button. Neither is decidable from the tag
- * and its classes; both are obvious from reading the element.
+ * `<p> → <Text>` is right about the component and silent about the variant, the
+ * half an agent has to guess — and often enough wrong about the component too,
+ * which is what `not_text` is for. Design notes: docs/design/judge.md
  *
  * What one `<p>` sends, whole — the request body `ask` posts, with six of the
  * nine Text variants elided:

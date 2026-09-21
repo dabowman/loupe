@@ -1,26 +1,22 @@
 #!/usr/bin/env node
 /**
- * Score the `represents` question against 100 hand-labelled controls.
+ * Score the `represents` question against 100 hand-labelled controls from
+ * `gutenberg/packages/{editor,edit-site}` and `site-foundry/src`, extracted once
+ * and committed so this reproduces without either checkout.
  *
- * This is the half a stub test cannot cover. `tests/features.ts` pins what gets
- * asked and what gets written; this pins whether the answers are any good, which
- * only a live model and labelled code can say. It is deliberately outside
- * `npm test`: it costs tokens, needs a key, and a model is allowed to drift in
- * ways a build should not fail on.
+ * Deliberately outside `npm test`: it costs tokens, needs a key, and a model is
+ * allowed to drift in ways a build should not fail on.
  *
- * The controls come from `gutenberg/packages/{editor,edit-site}` and
- * `site-foundry/src`, extracted once and committed, so the eval reproduces
- * without either checkout. `labels.json` is `[answer, ambiguous]` — the 13
- * flagged ambiguous are ones a careful reader could defend either way, and the
- * headline number is reported with and without them.
- *
- * The question is the one `check --judge` sends: `represents` as the vocabulary
- * in `patterns/index.json` words it, framed by `src/judge/force.ts`, one control
- * per request. Edit the wording in either and this scores the edit.
+ * `labels.json` is `[answer, ambiguous]` — the 13 flagged ambiguous are ones a
+ * careful reader could defend either way, and the headline number is reported
+ * with and without them. The question is the one `check --judge` sends, so
+ * editing the vocabulary or `src/judge/force.ts` is what this scores.
  *
  *   node evals/represents/run.ts        # three runs
  *   node evals/represents/run.ts 1      # one
  *   node evals/represents/run.ts 1 --batch 10   # sweep the batch size
+ *
+ * Design notes: docs/design/judge.md#the-evals
  */
 
 import { readFileSync } from 'node:fs';

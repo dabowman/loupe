@@ -24,17 +24,8 @@ import type { ComponentEntry, RawElement } from '../../types.ts';
 
 /**
  * The element map's analog, forwarded if the registry has since superseded it.
- *
- * The map is keyed by tag and names a bare component; the registry is keyed by
- * package and knows currency. Nothing reconciled them, so on a two-package
- * system the two rules contradicted each other: `system/raw-element` said
- * `<h3> → <Heading>`, and doing that earned a `system/superseded-component`
- * saying `Heading` is legacy. An agent that follows the first finding
- * manufactures the second, which is a loop a weaker model can run forever.
- *
- * Only forwards when *every* package carrying the name is stale, so a component
- * that is legacy in one package and recommended in another (WPDS has several)
- * keeps the bare name and lets the import rule speak to the package.
+ * Only when *every* package carrying the name is stale, so a component that is
+ * legacy in one package and recommended in another keeps the bare name.
  */
 function currentAnalog(registry: ReadonlyMap<string, ComponentEntry>, suggest: string): string {
 	const entries = [...registry.values()].filter((e) => e.name === suggest);
@@ -59,15 +50,11 @@ export function rawElements(
 	},
 ): Candidate[] {
 	return els.flatMap((el): Candidate[] => {
-		// A `styledOnly` mapping only earns its suggestion when the element is doing
-		// what the suggested component is for. `<span>` → `<Text>` needs styling of
-		// any kind; `<div>` → a layout primitive needs the div to actually lay
-		// something out. Accepting any styling for both told agents to turn every
-		// bordered `<div>` into an `<HStack>` — the largest single source of
-		// findings in a real repo, and wrong nearly every time.
+		// A `styledOnly` mapping earns its suggestion only when the element does
+		// what the suggested component is for: `<span>` → `<Text>` needs styling of
+		// any kind, `<div>` → a layout primitive needs the div to lay something out.
 		if (el.styledOnly) {
-			// `String`: an elementMap entry authored as `{ styledOnly: true }` has no
-			// `component`, and one bad entry must not take the whole run down.
+			// `String`: a `{ styledOnly: true }` entry may carry no `component`.
 			const suggestsLayout = String(el.suggest)
 				.split('/')
 				.some((n) => layoutComponents.includes(n.trim()));

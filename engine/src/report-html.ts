@@ -1,29 +1,18 @@
 /**
  * The HTML report.
  *
- * Every other formatter in this codebase spends its design budget on brevity,
- * because its reader is an agent and context is the scarce resource. This one
- * has the opposite constraint: nobody's context pays for it, and the reader is
- * a person who wants to know where the drift *is* before deciding what to fix.
- *
- * Two decisions follow from that, and they are the whole design:
+ * Every other formatter here spends its design budget on brevity, because its
+ * reader is an agent. This one's reader is a person deciding what to fix, so:
  *
  * 1. The page renders client-side from the exact `--format json` payload,
- *    embedded verbatim. There is no second selection of fields, no second
- *    notion of what a finding is, and therefore no way for the page to
- *    disagree with the JSON — a divergence that would otherwise be invisible,
- *    since each looks perfectly correct read on its own.
+ *    embedded verbatim, so it cannot disagree with the JSON.
+ * 2. It shows the two things a line-per-finding list structurally cannot: a
+ *    directory rollup, and the composite rules as the N-way relations they are.
  *
- * 2. It shows the two things a line-per-finding list structurally cannot. A
- *    directory rollup answers "is this clustered or is it everywhere", which is
- *    the first question `/loupe-audit` tells the agent to answer and the one a
- *    flat list buries. And the composite rules — the only findings that cannot
- *    exist in one file — are shown as the N-way relations they are, instead of
- *    printed N times as if they were unrelated.
+ * No timestamp is rendered — re-running the same check would produce a file that
+ * differs from itself. The file's mtime records when it was taken.
  *
- * No timestamp is rendered. Re-running the same check would otherwise produce a
- * file that differs from itself, which is the same trap `writeBaseline` already
- * had to climb out of; the file's mtime records when it was taken.
+ * Design notes: docs/design/report.md#the-html-report
  */
 
 import { reportPayload } from './report.ts';
@@ -32,26 +21,21 @@ import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
 /**
  * Embed the payload in a `<script type="application/json">` block.
  *
- * The block's content is raw text — the only thing that can end it early is the
+ * The block's content is raw text: the only thing that can end it early is the
  * literal `</script`, and the only thing that can open a comment is `<!--`.
  * Escaping every `<` closes both, and is safe wholesale because in JSON a `<`
- * can only ever occur inside a string, where `<` means exactly the same
- * character. A finding's message routinely carries CSS-in-JS source, so this is
- * a live hazard rather than a theoretical one.
+ * can only occur inside a string, where it means the same character.
  */
 const embed = (json: string): string => json.replace(/</g, '\\u003c');
 
 /**
  * Palette and chrome.
  *
- * Every themed value is `light-dark(light, dark)`: `color-scheme` follows the
- * OS setting, and a `data-theme` stamp on the root overrides it either way.
- * Severity uses the reserved status colors rather than a series hue, because
- * severity is a state, not an identity. On the light surface the advisory amber
- * falls below 3:1, which is by design for that palette and carries an
- * obligation with it: every severity is rendered with its glyph and the word,
- * never the color alone, and the findings table is the table view that makes
- * each value readable without reference to hue.
+ * Every themed value is `light-dark(light, dark)`: `color-scheme` follows the OS
+ * setting, and a `data-theme` stamp on the root overrides it either way.
+ * Severity uses the reserved status colors, because severity is a state, not an
+ * identity — and on the light surface the advisory amber falls below 3:1, so
+ * every severity is rendered with its glyph and the word, never colour alone.
  */
 const CSS = `
 :root {
@@ -161,10 +145,9 @@ td.msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:
 `;
 
 /**
- * The client. Written without template literals on purpose: this whole string
- * is itself inside one, and a stray `${` in here would be interpolated by the
- * bundler rather than shipped — a failure that shows up as a broken page, not a
- * build error.
+ * The client. Written without template literals on purpose: this whole string is
+ * itself inside one, and a stray `${` would be interpolated by the bundler
+ * rather than shipped.
  */
 const JS = `
 (function () {
@@ -251,8 +234,8 @@ const JS = `
       { k: '\\u2717 blocking', v: err, err: err > 0 },
       { k: '\\u2022 advisory', v: rows.length - err }
     ];
-    // Only when it hid something. A baseline that accepted nothing and a project
-    // with no baseline file both report 0, so a zero tile states nothing.
+    // Only when it hid something: a baseline that accepted nothing and a project
+    // with no baseline file both report 0.
     if (s.baselined) tiles.push({ k: 'baselined', v: s.baselined });
     tiles.push({ k: 'suppressions', v: s.suppressions });
     // Next to the unparsed count on purpose: zero unparsed files means nothing
@@ -267,11 +250,9 @@ const JS = `
 
   function renderRules(rows) {
     var counts = tally(rows, function (f) { return f.rule; });
-    // Frequency order, deliberately not the agent format's rank order. The two
-    // answer different questions — rank is "fix this first", length is "there is
-    // the most of this" — and a bar chart sorted by neither its own lengths nor a
-    // natural category order is unreadable. Rank breaks ties, and severity is
-    // carried by the mark's color and by the blocking tile above.
+  // Frequency order, deliberately not the agent format's rank order: rank is
+  // "fix this first", length is "there is the most of this". Rank breaks ties,
+  // and severity is carried by the mark's color and by the blocking tile.
     counts.sort(function (a, b) {
       var ra = byRank.get(a[0]), rb = byRank.get(b[0]);
       return b[1] - a[1] || (rb ? rb.rank : 0) - (ra ? ra.rank : 0);
@@ -292,8 +273,7 @@ const JS = `
   }
 
   // Top directories only. Past the cap the tail is folded into one row rather
-  // than truncated silently — a report that drops rows without saying so reads
-  // as though it covered everything.
+  // than truncated silently.
   var DIR_CAP = 12;
   function renderPaths(rows) {
     var counts = tally(rows, function (f) { return dirOf(f.file); });
@@ -332,10 +312,9 @@ const JS = `
     }).join('');
   }
 
-  // Grouped by rule, for the same reason the agent format groups by rule: the
-  // remedy and the severity are properties of the rule, not of the finding, and
-  // a column that repeats one sentence down two hundred rows is the report
-  // costing more to read than it is worth. Group order matches the chart above.
+  // Grouped by rule, for the same reason the agent format is: the remedy and the
+  // severity are properties of the rule, not of the finding. Group order matches
+  // the chart above.
   function renderTable(rows) {
     var host = document.getElementById('table');
     if (!rows.length) { host.innerHTML = '<p class="empty">No findings in this slice.</p>'; return; }
@@ -356,8 +335,8 @@ const JS = `
         return '<tr>' +
           '<td class="loc">' + esc(f.file) + ':' + f.line + '</td>' +
           '<td class="msg">' + esc(f.message) +
-            // Whole, not clipped: the page has room the one-line agent format
-            // does not, which is the reason the note is a field of its own.
+						// Whole, not clipped: the page has room the one-line agent
+						// format does not.
             (f.note ? ' <span class="note">(' + esc(f.note) + ')</span>' : '') +
             (tokens.length ? '<div class="tokens">\\u2192 ' + esc(tokens.join(', ')) + '</div>' : '') + '</td>' +
           '</tr>';
@@ -410,14 +389,11 @@ const JS = `
 /** The page body — everything between the markers, so a host that supplies its own shell can lift it out whole. */
 function body(payload: string, clean: boolean, parseErrors: number): string {
 	// `<style>`/`<script>` sit inside the markers rather than in `<head>` so the
-	// fragment is self-sufficient: `/loupe-report` publishes exactly this span
-	// into an Artifact, which supplies its own document shell.
+	// fragment is self-sufficient: `/loupe-report` publishes exactly this span into
+	// an Artifact, which supplies its own document shell.
 	//
 	// Unparsed files are named before anything else: nothing in them was checked,
-	// so every count below is a floor rather than a total. The clean page needs
-	// it most, not least — `stylesheet/unparsed` can be off, baselined or out of
-	// scope, and then a page reading "clean" is reporting that the files it never
-	// opened had nothing wrong with them.
+	// so every count below is a floor rather than a total.
 	const banner = parseErrors
 		? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely — ${
 				clean ? 'a clean result covers only what could be read' : 'every number below is a floor, not a total'

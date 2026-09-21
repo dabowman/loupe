@@ -60,6 +60,7 @@ than using it.
 | `profiles/*/patterns/index.json` | The composite registry |
 | `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
 | `engine/` | `loupe` — the conformance engine |
+| `docs/design/` | Design notes: why the engine is built the way it is, and the measurements behind its tuned numbers |
 
 The three skills are design-system agnostic: each one starts at `loupe status`
 to learn which system is in play, then reads that system's own notes —
@@ -902,6 +903,20 @@ lookups — the preset directory, the plugin manifest — resolve identically fr
 either entry. Presets stay on disk as JSON next to the bundle rather than inside
 it: `loupe presets` lists that directory, and a preset you can read is a preset
 you can copy.
+
+### Comments and design notes
+
+Code comments in `engine/` are concise inline documentation: what a thing is,
+what it decides, the contract it holds. Each check states its decision chain as
+a `Logic, per <unit>: … → verdict` table; each `judge/` query carries the whole
+request body it posts.
+
+Reasoning does not live there. Why a rule is ordered the way it is, what a
+simplification would break, and the eval numbers behind a tuned floor are in
+[`docs/design/`](docs/design/README.md), and a module whose reasoning moved out
+carries a one-line `Design notes:` pointer to the file and anchor. When a change
+needs a justification longer than a sentence, put the sentence in the code and
+the rest in the matching design note — move the rationale, never drop it.
 
 The type model lives in `engine/src/types.ts`, and two distinctions in it carry
 most of the weight: `AuthoredConfig` (a config file, partial all the way down)

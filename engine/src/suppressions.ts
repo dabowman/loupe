@@ -6,27 +6,20 @@
  * where `<keyword>` is what the active preset asks for — `ds-allow` under
  * `generic`, `wpds-allow` under `wpds`. Rule id(s) and a reason are both
  * mandatory. Anything looser — a whole-file disable, a missing reason, a bare
- * keyword — is not a mute but its own violation (`suppression/malformed`),
- * which is the severity inversion that keeps the escape hatch honest.
+ * keyword — is not a mute but its own violation (`suppression/malformed`).
  *
- * The directive must be the first thing in its comment. That is what stops the
- * checker flagging its own documentation: a line reading
- * `* Suppression: <keyword> <ids> -- <reason>` is prose about the grammar, not
- * an instance of it. Note the limit of that defence: an *indented* example
- * inside a doc comment is still first in its comment once the asterisks are
- * stripped, so a file that quotes the grammar verbatim under a scanned `src/`
- * is writing a live directive. Write it the way this comment does.
+ * The directive must be the first thing in its comment, which is what stops the
+ * checker flagging its own documentation. Note the limit of that defence: an
+ * *indented* example inside a doc comment is still first in its comment once the
+ * asterisks are stripped, so a file that quotes the grammar verbatim under a
+ * scanned `src/` is writing a live directive. Write it the way this comment does.
  *
  * The keyword is preset-scoped, so adopting a different preset renames it. Read
  * aliases are what keep that rename from orphaning the directives already
  * written: every keyword the engine knows *mutes*, whichever one the active
- * config asks people to write. What an alias does *not* widen is prose: a
- * comment that merely opens with another preset's keyword is left alone, while
- * one that carries a directive's shape — the keyword alone, or a reason
- * separator, or rule ids — reports as `suppression/malformed` exactly as it
- * would in the active keyword. Both halves are load-bearing. Prose must not
- * become an error, and a directive someone signed off must never go silent:
- * silence is the one outcome a written-down reason can never have.
+ * config asks people to write.
+ *
+ * Design notes: docs/design/report.md#suppression
  */
 
 import { canonicalRuleId } from './rules.ts';
@@ -35,10 +28,9 @@ import type { Directive, MalformedDirective, SuppressionConfig, Suppressions } f
 
 const ID = '(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)';
 
-// Leading whitespace, jsdoc asterisks, then an optional comment opener. The
-// JSX opener admits a space before the comment (`{ /* … */ }`): WordPress's
-// prettier config mandates that form, so refusing it makes the directive
-// unwritable in a JSX child position anywhere in a WordPress repo.
+// Leading whitespace, jsdoc asterisks, then an optional comment opener. The JSX
+// opener admits a space before the comment (`{ /* … */ }`), the form WordPress's
+// prettier config mandates.
 const OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
 
 /**
@@ -58,10 +50,9 @@ const OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
 function spannedLines(lines: readonly string[], i: number, raw: string, stripped: string): number[] {
 	const opener = raw.slice(0, raw.length - stripped.length);
 	const close = /\/\*/.test(opener) ? '*/' : /<!--/.test(opener) ? '-->' : null;
-	// A continuation line inside a jsdoc block (`* <keyword> …`) strips to the
-	// same shape with no opener of its own. Nothing is extended from there,
-	// which under-covers rather than over-covers, and over-covering is the
-	// failure that silently mutes a rule nobody signed off.
+	// A continuation line inside a jsdoc block (`* <keyword> …`) strips to the same
+	// shape with no opener of its own. Nothing is extended from there, which
+	// under-covers rather than over-covers.
 	if (close === null || stripped.includes(close)) return [];
 	const LIMIT = 40;
 	for (let j = i + 1; j < lines.length && j - i <= LIMIT; j++) {
@@ -77,22 +68,17 @@ export function makeSuppressionParser({
 	blanket = [],
 	aliases = [],
 }: SuppressionConfig): (text: string, relPath: string) => Suppressions {
-	// A read alias mutes exactly as the active keyword does. An unrecognized
-	// directive is not read as a directive at all — it neither suppresses nor
-	// reports — and that silence is the one outcome a reason someone wrote down
-	// must never have.
+	// A read alias mutes exactly as the active keyword does: an unrecognized
+	// directive is not read as a directive at all, and that silence is the one
+	// outcome a reason someone wrote down must never have.
 	//
-	// Which terms are offered as aliases is `normalize`'s call: it is the only
-	// place that can see every preset's vocabulary. What survives here is the
-	// invariant this function can enforce on whatever it is handed — an alias
-	// never outranks this config's own blanket list, so an alias widens what may
-	// be *written*, never what a directive is allowed to do.
+	// Which terms are offered is `normalize`'s call. The invariant enforced here is
+	// that an alias never outranks this config's own blanket list — it widens what
+	// may be *written*, never what a directive is allowed to do.
 	const heads = [keyword, ...aliases.filter((a) => a !== keyword && !blanket.includes(a))];
-	// Longest first: alternation takes the first branch that matches, so a
-	// keyword that is a prefix of another would otherwise shadow it. The
-	// boundary is what stops `ds-allowlist` reading as `ds-allow` wherever the
-	// term is not already followed by mandatory whitespace — which is the
-	// malformed gate below, not `strict`.
+	// Longest first, since alternation takes the first branch that matches and a
+	// keyword that is a prefix of another would shadow it. The boundary is what
+	// stops `ds-allowlist` reading as `ds-allow`.
 	const alternation = (terms: readonly string[]): string =>
 		[...new Set(terms)]
 			.sort((a, b) => b.length - a.length)
@@ -100,27 +86,18 @@ export function makeSuppressionParser({
 			.join('|');
 	const keywordHead = `(${alternation(heads)})(?![\\w-])`;
 	const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
-	// The reason may not be the comment terminator itself: `<kw> <ids> -- */`
-	// records `*/` as a signed-off reason and mutes, which is the missing-reason
-	// case wearing a directive's clothes. Rejecting it here drops it through to
-	// `shaped`, where it belongs.
+	// The reason may not be the comment terminator itself: `<kw> <ids> -- */` is
+	// the missing-reason case wearing a directive's clothes, so it drops through
+	// to `shaped`.
 	const strict = new RegExp(`^${keywordHead}\\s+(${IDS})\\s*--\\s*(?!\\*/|-->|\\})(\\S.*?)(?:\\*/|-->|\\}|$)`);
-	// A line with a directive's *shape* that `strict` rejected: the keyword
-	// alone, or with rule ids, or with a reason separator and nothing usable
-	// after it. This is the only route by which a read alias can produce a
-	// finding, and the shape is what separates `ds-allow tokens/hardcoded-value`
-	// and `ds-allow -- Stack exposes no padding` (directives someone wrote and
-	// broke) from `ds-allow is the old keyword, write wpds-allow` (a sentence
-	// about one). Prose that merely opens with a keyword this config does not
-	// ask for stays prose — the rename must not cost a clean repo its exit code
-	// — but a broken directive must not go silent either, which is what happens
-	// when the shape gate is narrower than the grammar it guards.
+	// A line with a directive's *shape* that `strict` rejected: the keyword alone,
+	// or with rule ids, or with a separator and nothing usable after it. This is
+	// the only route by which a read alias can produce a finding, and the shape is
+	// what separates a broken directive from a sentence about one.
 	const shaped = new RegExp(`^${keywordHead}\\s*(?:${IDS}\\s*)?(?:--|\\*/|-->|\\}|$)`);
-	// The malformed gate: the vocabulary this config asks people to write, in
-	// any shape at all, plus the blanket forms it names. A regex rather than
-	// `startsWith` so it carries the same word boundary the heads do —
-	// `ds-allowlist` and `ds-disabled` are other words, not this one written
-	// badly, and `suppression/malformed` is an error in every preset.
+	// The malformed gate: the vocabulary this config asks people to write, in any
+	// shape at all, plus the blanket forms it names. A regex rather than
+	// `startsWith` so it carries the same word boundary the heads do.
 	const written = new RegExp(`^(?:${alternation([keyword, ...blanket])})(?![\\w-])`);
 	// The cheap whole-line filter — everything that could reach either gate.
 	const anyHead = [...heads, ...blanket];
@@ -151,9 +128,8 @@ export function makeSuppressionParser({
 			const raw = lines[i];
 			if (raw === undefined || !anyHead.some((p) => raw.includes(p))) continue;
 			const stripped = raw.replace(OPENER, '');
-			// Every gate below is `^`-anchored on a member of `anyHead`, so this
-			// is output-identical and keeps prose that merely mentions a keyword
-			// from paying for a regex pass.
+			// Every gate below is `^`-anchored on a member of `anyHead`, so this is
+			// output-identical and keeps prose that mentions a keyword off the regex.
 			if (!anyHead.some((p) => stripped.startsWith(p))) continue; // prose, not a directive
 			const line = i + 1;
 			const m = stripped.match(strict);
@@ -161,28 +137,24 @@ export function makeSuppressionParser({
 				const ids = m[2].split(',').map((s) => canonicalRuleId(s.trim()));
 				const used = m[1] ?? keyword;
 				byLine.set(line, new Set(ids));
-				// A block comment covers every line it spans, not just the one the
-				// keyword sits on. `isSuppressed` only looks at the finding's line and
-				// the one above it, so a directive whose comment closes two lines
-				// higher anchors to nothing — and a reason good enough to be worth
-				// writing is usually long enough for a formatter to wrap it there.
-				// Refusing the wrapped form makes the escape hatch unwritable in
-				// exactly the repos whose formatter mandates it.
+				// A block comment covers every line it spans, not just the one the keyword
+				// sits on. `isSuppressed` looks only at the finding's line and the one
+				// above, so a directive whose comment closes two lines higher anchors to
+				// nothing — and a formatter wraps a reason worth writing.
 				for (const l of spannedLines(lines, i, raw, stripped)) {
 					const set = byLine.get(l) ?? new Set<string>();
 					for (const id of ids) set.add(id);
 					byLine.set(l, set);
 				}
-				// Flattened for the same reason the malformed branch below is: a tab
-				// in the reason resets the columns `loupe suppressions` prints in,
-				// and the reason is quoted source like any other captured snippet.
+				// Flattened for the same reason the malformed branch below is: a tab in
+				// the reason resets the columns `loupe suppressions` prints in.
 				directives.push({
 					file: relPath,
 					line,
 					rules: ids,
 					reason: oneLine(m[3]),
 					// Carried only when it is not the keyword the config asks for, so
-					// `loupe suppressions` can name the rename and nothing else has to.
+					// `loupe suppressions` can name the rename.
 					...(used === keyword ? {} : { alias: used }),
 				});
 			} else if (written.test(stripped) || shaped.test(stripped)) {
@@ -190,13 +162,10 @@ export function makeSuppressionParser({
 					rule: 'suppression/malformed',
 					file: relPath,
 					line,
-					// Cut on the raw text, and by code point. `head`, not `oneLine`
-					// then `slice`: this string is also the finding's `code`, and
-					// `findingKey` collapses whitespace on `code` itself — so
-					// flattening first changes nothing a reader sees and only moves
-					// the 60-character window, taking every baseline key already
-					// written for a directive long enough to be cut with it. What a
-					// reader sees is flattened by the line bound in `analyze`.
+					// Cut on the raw text, and by code point: this string is also the
+					// finding's `code`, and `findingKey` collapses whitespace on `code`
+					// itself, so flattening first would only move the 60-character window
+					// and take every baseline key already written with it.
 					message: head(stripped.trim(), 60),
 				});
 			}

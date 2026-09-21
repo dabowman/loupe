@@ -1,19 +1,12 @@
 /**
  * Rule catalog.
  *
- * `title` is the one-time fix guidance, printed once per group header. Per-
- * finding lines carry only what varies (file:line + the offending code), so the
- * guidance is never repeated across hundreds of lines — the agent reading this
- * output pays for every duplicated token.
+ * `title` is the one-time fix guidance, printed once per group header; per-
+ * finding lines carry only what varies. `rank` orders findings within a report,
+ * higher first. `needs` declares what the rule requires from the design-system
+ * model — a rule whose needs the active config cannot meet disables itself.
  *
- * `rank` orders findings within a report: higher first. It lives here rather
- * than at the call site so severity and ordering are data, not scattered
- * magic numbers.
- *
- * `needs` declares what the rule requires from the design-system model. A rule
- * whose needs aren't met by the active config disables itself silently — that
- * is what lets a component-less preset (a block theme, say) reuse the same
- * engine without emitting garbage.
+ * Design notes: docs/design/cli.md#the-rule-catalog
  */
 
 import type { DesignSystem, RuleDef, RuleId, Severity } from './types.ts';
@@ -184,11 +177,8 @@ export function renderTitle(ruleId: RuleId, ds: DesignSystem, keyword: string): 
 					.map((c) => `<${c}>`)
 					.join('/')
 			: fallback;
-	// One prefix is the namespace; several are families within one namespace, and
-	// naming the first of them is not a shorter way of saying that — it is a
-	// different, wrong statement. A system whose tokens are `--color-*`,
-	// `--space-*` and `--type-styles-*` told agents to fix `font-size: 18px` with
-	// "a --color-* type token", which does not exist. The per-finding suggestion
+	// One prefix is the namespace; several are families within one, and naming the
+	// first of them is a different, wrong statement. The per-finding suggestion
 	// names the real token when the token set is readable; the title says which
 	// namespace to look in, and says nothing when there is no single one.
 	const prefixes = ds.tokenPrefixes ?? [];

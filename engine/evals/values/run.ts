@@ -1,27 +1,23 @@
 #!/usr/bin/env node
 /**
  * Score the hardcoded-value question, `src/judge/value.ts`, against 145
- * hand-labelled literals.
+ * hand-labelled literals from `vip-digital-asset-manager` — an un-remediated
+ * WPDS plugin whose stylesheets were written against the wp-admin palette, so
+ * nearly none of its values are exactly a WPDS token and most are close to one.
  *
- * The literals are every one `check --judge` asks about in
- * `vip-digital-asset-manager`: an un-remediated WPDS plugin whose stylesheets
- * were written against the wp-admin palette (`#1d2327`, `#646970`, `#2271b1`),
- * so nearly none of its values are exactly a WPDS token and most are close to
- * one. Extracted once with the plugin's own config pointed at
- * `@wordpress/theme`'s `design-tokens.css`, and committed, so this reproduces
- * without the checkout. `tokens.json` is that token set; candidates are worked
- * out here, live, by `candidatesFor`, so a change to how they are narrowed is
- * scored by this and not frozen out of it.
+ * Extracted once and committed, so this reproduces without the checkout.
+ * `tokens.json` is that token set; candidates are worked out here, live, by
+ * `candidatesFor`, so a change to how they are narrowed is scored by this.
  *
- * `labels.json` lists every answer a careful reader would accept: `10px` of
- * padding is `padding-sm` or `padding-md`, a scrim is `keep`, a pill's `3px`
- * is either. So "right" is "one of those", and an item whose right answer was
- * not among the candidates is a miss the narrowing made, not the model —
- * counted separately as coverage.
+ * `labels.json` lists every answer a careful reader would accept, so "right" is
+ * "one of those" — and an item whose right answer was not among the candidates
+ * is a miss the narrowing made, counted separately as coverage.
  *
  *   node evals/values/run.ts          # three runs
  *   node evals/values/run.ts 1        # one
  *   node evals/values/run.ts --bare   # without the token descriptions
+ *
+ * Design notes: docs/design/judge.md#the-evals
  */
 
 import { readFileSync } from 'node:fs';
@@ -75,8 +71,8 @@ process.stdout.write(
 );
 
 // The WPDS profile's token descriptions, as `check --judge` sends them.
-// `--bare` asks with names and values alone, which is the ablation that
-// justified shipping them: 85% without, 92% with.
+// `--bare` asks with names and values alone — the ablation that justified
+// shipping them (docs/design/judge.md#which-token).
 const about = process.argv.includes('--bare')
 	? new Map<string, string>()
 	: tokenDescriptions([
@@ -109,10 +105,8 @@ for (const tier of ['exact', 'near', 'end', 'family'] as const) {
 	);
 }
 
-// The two ways to be wrong cost differently. A wrong token changes the design;
-// a wrong keep suppresses a mistake for good. Scored as `fix --judge` would
-// act: picks at or above the floor, and every pick where keeping was never an
-// answer (spacing inside its scale), which it applies whatever the confidence.
+// The two ways to be wrong cost differently: a wrong token changes the design, a
+// wrong keep suppresses a mistake for good. Scored as `fix --judge` would act.
 process.stdout.write('\nfloor  acted  right  wrong-token  wrong-keep\n');
 for (const floor of [0.5, 0.7, 0.8, 0.9]) {
 	let acted = 0;

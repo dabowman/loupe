@@ -1,22 +1,17 @@
 #!/usr/bin/env node
 /**
- * The reach-for table, generated.
- *
- * A profile's patterns.md used to carry a hand-written table of "about to
- * build → reach for → not this" beside a registry that said the same things
- * in JSON, and the two drifted. The table is what an agent reads before it
- * writes, so it is the half that matters; this makes it a projection of the
- * registry rather than a second copy.
+ * The reach-for table, generated — a projection of the registry rather than a
+ * second copy of it, since the table is what an agent reads before it writes.
  *
  * It also validates: every realization key must name something the abstract
  * language defines, every `resolve` rule must consult a force its pattern
- * declares with a value the vocabulary lists, and every redirect must land on
- * a real pattern. That is as much of the registration rule as a machine can
- * check — "does this occupy an empty cell" is a judgement, but "does this
- * point at anything" is not.
+ * declares with a value the vocabulary lists, and every redirect must land on a
+ * real pattern.
  *
  *   node scripts/patterns-doc.ts            # rewrite every profile that extends the abstract file
  *   node scripts/patterns-doc.ts --check    # exit 1 if any patterns.md is stale (CI)
+ *
+ * Design notes: docs/design/cli.md#the-generated-reach-for-table
  */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';

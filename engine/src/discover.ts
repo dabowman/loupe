@@ -3,18 +3,14 @@
  *
  * One walk of the tree, matched against the three source globs. Directories are
  * pruned against the ignore globs during traversal rather than filtered
- * afterwards, so a large node_modules is never enumerated.
+ * afterwards, so a large node_modules is never enumerated. Dot-directories are
+ * pruned too, unless a glob names one.
  *
- * The walk is unbounded by default, because a scan that quietly stopped
- * halfway would report "clean" for the half it never read. A caller that is
- * only guessing — inference, which has to answer inside a hook timeout and is
- * sometimes pointed at a home directory — passes a `limit` on the entries it
- * will look at, and reads `truncated` back.
+ * The walk is unbounded by default: a scan that quietly stopped halfway would
+ * report "clean" for the half it never read. A caller that is only guessing
+ * passes a `limit` and reads `truncated` back.
  *
- * Dot-directories are pruned too, unless a glob names one: with picomatch's
- * `dot: false`, nothing inside `.venv`, `.cache` or a pnpm store can match a
- * `**` glob anyway, so descending into them buys nothing and spends both the
- * clock and the entry budget.
+ * Design notes: docs/design/cli.md#file-discovery
  */
 
 import { existsSync, readdirSync } from 'node:fs';
@@ -27,29 +23,21 @@ import type { Discovered, DiscoveredFile, SourceGlobs, SourceKind } from './type
 export const toPosix = (p: string): string => p.split(sep).join('/').split('\\').join('/');
 
 /**
- * Byte order, not collation. `localeCompare` folds case and treats `-` as
- * ignorable, and answers differently under a different ICU or `LANG`; an order
- * this engine reports has to be a property of the input, not of the host.
+ * Byte order, not collation. `localeCompare` folds case, treats `-` as
+ * ignorable, and answers differently under a different ICU or `LANG`.
  */
 export const byBytes = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
  * One directory's entries, in an order that does not depend on the machine.
  *
- * `readdirSync` hands back whatever order the filesystem holds, and that
- * differs between filesystems and between runtimes: Node and Bun disagree on
- * the same directory, which is how the compiled binary came to cite a different
- * example file than `node` did for the same project. Sorting by byte value
- * makes a walk's result a property of the tree rather than of whatever read it.
+ * `readdirSync` hands back whatever order the filesystem holds, and Node and Bun
+ * disagree on the same directory. Sorting by byte value makes a walk's result a
+ * property of the tree rather than of whatever read it — which is what makes
+ * "the first one wins" a fact rather than a filesystem accident.
  *
- * `readProfiles` already did exactly this for its own walk, and said why:
- * sorting is what makes "the first one wins" a fact rather than a filesystem
- * accident. The same is true of every other walk here, so it belongs in one
- * place rather than in whichever one noticed.
- *
- * An unreadable directory yields nothing rather than throwing. Every caller
- * already treated a failed read that way; carrying the `try` here means none of
- * them has to say so again.
+ * An unreadable directory yields nothing rather than throwing, here rather than
+ * in every caller.
  */
 export function readDir(dir: string): Dirent[] {
 	try {
@@ -60,9 +48,8 @@ export function readDir(dir: string): Dirent[] {
 }
 
 /**
- * One `git` invocation, one place. Both callers here want the same cwd, the
- * same encoding and the same "stderr is not our business" wiring, and a
- * timeout added to one of two copies is a timeout that does not apply.
+ * One `git` invocation, one place: both callers want the same cwd, the same
+ * encoding, the same "stderr is not our business" wiring and the same timeout.
  */
 const git = (root: string, args: readonly string[]): string =>
 	execFileSync('git', [...args], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
@@ -76,17 +63,12 @@ const HARD_SKIP = new Set(['.git', 'node_modules']);
  * Could any of these globs match something *inside* a dot-directory?
  *
  * picomatch leaves `dot: false` on, so a `*` or `**` segment never matches a
- * name beginning with a dot: nothing under `.venv`, `.cache`, `.cargo`,
- * `.yarn/cache` or a pnpm store can ever satisfy `**\/*.css`. Descending into
- * them is therefore pure cost — and under an entry ceiling it is worse than
- * cost, because the budget is spent on entries that could not have contributed
- * and the project's own files are never reached.
+ * name beginning with a dot — nothing under `.venv`, `.cache` or a pnpm store
+ * can satisfy `**\/*.css`, and descending into them is pure cost.
  *
- * Only a glob naming a dot segment ahead of its filename — `.storybook/**\/*.css`
- * — can reach inside one, so that is what makes the prune unsafe. No shipped
- * preset writes one; a project config may, and it may write it as a brace
- * alternative (`{.storybook,src}/**\/*.css`), which is why the test looks
- * inside the braces rather than only at the first character.
+ * Only a glob naming a dot segment ahead of its filename (`.storybook/**\/*.css`)
+ * can reach inside one. A project config may write that as a brace alternative,
+ * which is why the test looks inside the braces.
  */
 const NAMES_DOT_SEGMENT = /^\.|[{,]\./;
 const reachesDotDirs = (globs: readonly string[]): boolean =>
@@ -114,20 +96,15 @@ export function discover({
 		references: picomatch(sources.references ?? []),
 	};
 	const out: Discovered = { styles: [], markup: [], references: [], truncated: false };
-	// Every entry the walk looks at, directories included and matches irrelevant.
-	// Counting only files left the budget blind to the shape a home directory
-	// actually has — `~/.cache`, `~/.cargo/registry`, a pnpm store: hundreds of
-	// thousands of directories holding almost no files at all. The cost being
-	// bounded is the cost of reaching an entry, so an entry is what is counted.
+	// Every entry the walk looks at, directories included and matches irrelevant:
+	// the cost being bounded is the cost of reaching an entry.
 	const budget = limit ?? Infinity;
 	let seen = 0;
 	const pruneDotDirs = !KINDS.some((kind) => reachesDotDirs(sources[kind] ?? []));
 
-	// Files at this level before subdirectories below it. Depth-first on both at
-	// once meant the budget could be swallowed whole by the first subdirectory
-	// the filesystem happened to hand back, and a walk that stopped there
-	// reported zero source files for a project whose own were sitting in the
-	// root — an answer that reads identically to "this project has none".
+	// Files at this level before subdirectories below it: depth-first on both at
+	// once let the budget be swallowed by whichever subdirectory the filesystem
+	// handed back first.
 	const walk = (dir: string): void => {
 		const entries = readDir(dir);
 		const subdirs: string[] = [];
@@ -166,8 +143,7 @@ export function discover({
  * Could this path contribute anything at all?
  *
  * The PostToolUse hook fires on every Edit and Write, and without this a README
- * edit paid for a whole-repo index to be told there was nothing to say about a
- * README. On a large repo that alone was past the hook timeout.
+ * edit paid for a whole-repo index.
  */
 export function isSource(sources: SourceGlobs, rel: string): boolean {
 	const match = picomatch(sources.ignore ?? []);
@@ -178,19 +154,14 @@ export function isSource(sources: SourceGlobs, rel: string): boolean {
 /**
  * Is `root` inside a git worktree?
  *
- * The cheap half of {@link changedFiles}, split out so the question can be
- * asked before anything walks the tree. Asked of git rather than of the
- * filesystem on purpose: a linked worktree's `.git` is a file, a submodule's is
- * a file too, and a subdirectory of a repo has no `.git` of any kind while
- * still being a perfectly good root to run in.
+ * The cheap half of {@link changedFiles}, split out so the question can be asked
+ * before anything walks the tree. Asked of git rather than of the filesystem: a
+ * linked worktree's `.git` is a file, a submodule's is a file too, and a
+ * subdirectory of a repo has no `.git` of any kind.
  *
- * The answer is read, not inferred from the exit code. `rev-parse` exits 0 and
- * prints `false` inside a bare repo and inside a `.git` directory — neither of
- * which has a worktree to diff against — so a caller that only checked for a
- * throw was told yes in exactly the two places the question means no. A `git`
- * that refuses to answer (dubious ownership, or no `git` on PATH) throws, and
- * that is a "don't know", not a no: callers that treat this as evidence about
- * whether a project exists have to weigh other evidence too.
+ * The answer is read, not inferred from the exit code — `rev-parse` exits 0 and
+ * prints `false` inside a bare repo and inside a `.git` directory. A `git` that
+ * refuses to answer throws, and that is a "don't know", not a no.
  */
 export function isWorktree(root: string): boolean {
 	try {
@@ -203,12 +174,8 @@ export function isWorktree(root: string): boolean {
 /**
  * Is `root` inside a repository, going by the filesystem alone?
  *
- * The fallback for when git will not answer — a dubious-ownership mount, which
- * is the normal state inside a container, or no `git` binary on PATH at all.
- * Checking only `root` covered the top of a repo and nothing else: a
- * subdirectory has no `.git` of its own, which is precisely the case
- * {@link isWorktree} was added to catch and precisely the case that has no
- * answer left when git declines. So walk up.
+ * The fallback for when git will not answer — a dubious-ownership mount, or no
+ * `git` on PATH. Walks up, because a subdirectory has no `.git` of its own.
  */
 export function hasGitDir(root: string): boolean {
 	let dir = resolve(root);
@@ -234,20 +201,13 @@ export function changedFiles(root: string): Set<string> | null {
 			if (f) set.add(toPosix(f));
 		}
 	};
-	// `diff HEAD` spans index + worktree, so it already covers staged files.
-	// Without a HEAD it fails outright, and `ls-files --others` below does NOT
-	// cover the gap: staging a file stops it being "other", so a fresh repo
-	// whose work is staged reported an empty scope and the gate passed clean.
-	// Before the first commit, every tracked file is new by definition.
+	// `diff HEAD` spans index + worktree, so it already covers staged files, and
+	// without a HEAD it fails outright — `ls-files --others` does NOT cover the gap,
+	// since staging a file stops it being "other".
 	//
-	// `--relative` is load-bearing. Findings are keyed relative to the project
-	// root, and `ls-files` is already relative to `cwd` — but `diff --name-only`
-	// answers from the *repository* root, so when the project sits in a
-	// subdirectory of the worktree the two halves of this one Set were in
-	// different coordinate systems and nothing in it ever matched a finding.
-	// `--changed` is the hook's default scope, so a gate on a monorepo package
-	// reported "clean" without checking anything. It also scopes the diff to
-	// `cwd`, which is what a root-relative Set means in the first place.
+	// `--relative` is load-bearing: findings are keyed relative to the project root,
+	// `ls-files` already is, but `diff --name-only` answers from the *repository*
+	// root. It also scopes the diff to `cwd`.
 	try {
 		add(git(root, ['diff', '--name-only', '--relative', 'HEAD']));
 	} catch {

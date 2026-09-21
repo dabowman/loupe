@@ -2,19 +2,15 @@
  * Deterministic fixes.
  *
  * The engine already knows the answer wherever a value matched the design
- * system's own token definitions on-role. Every rule that flags a declaration
- * arrives carrying one `suggest` entry per declaration — `tokens/hardcoded-value`
- * and `typography/untokenized` both — and that entry is the licence to
- * substitute, so nothing here needs a list of which rules they are. Printing that
- * into prose and paying a model to read the file back and type the same
- * substitution is the expensive way to apply a change nobody had to reason
- * about — and they are the highest-volume rules in most reports, so they crowd
- * out the findings that do need judgement.
+ * system's own token definitions on-role. Every rule that flags a substitutable
+ * declaration arrives carrying one `suggest` entry per declaration, and that
+ * entry is the licence to substitute — nothing here needs a list of which rules
+ * they are.
  *
- * Only the unambiguous case is applied. Two on-role tokens carrying the same
- * value is a semantic choice, and picking one by array order is exactly how you
- * get the right pixels with the wrong meaning — the failure the token
- * suggestion machinery exists to prevent.
+ * Only the unambiguous case is applied: two on-role tokens carrying the same
+ * value is a semantic choice, not an array lookup.
+ *
+ * Design notes: docs/design/report.md#fixing
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -25,11 +21,9 @@ import { escapeRe } from './text.ts';
 import type { Directive, FixCandidate, KeptValue, SkippedFix, SkippedKeep, TokenFix } from './types.ts';
 
 /**
- * Stylesheet channels only.
- *
- * The same rule fires on `style={{ padding: '13px' }}` and on CSS-in-JS
- * templates, where the surrounding syntax is JS and a CSS-shaped substitution
- * would write a syntax error with a clean report.
+ * Stylesheet channels only. The same rule fires on `style={{ padding: '13px' }}`
+ * and on CSS-in-JS templates, where the surrounding syntax is JS and a
+ * CSS-shaped substitution would write a syntax error with a clean report.
  */
 export const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 
@@ -37,19 +31,15 @@ export const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
  * Every declaration with one rewrite for it: a single exact token, or — only
  * once `--judge` has written one — the judged replacement.
  *
- * A finding may be several declarations. `typography/untokenized` collapses a
- * CSS rule's type block into one finding, and `font-size: 12px` there is as
- * unambiguous as it is on its own; each is matched against its own line. Where
- * a declaration is one of several on-role tokens, or none, it is left alone and
- * its finding stays standing — which is why the caller counts findings cleared
- * rather than fixes applied.
+ * A finding may be several declarations, each matched against its own line.
+ * Where a declaration is one of several on-role tokens, or none, it is left
+ * alone and its finding stays standing.
  */
 function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
 	const out: TokenFix[] = [];
 	for (const f of findings) {
-		// `suggest` is the licence: an entry is a declaration whose value a token
-		// could stand in for, which is the same thing a list of which rules those
-		// are would have said, only said once and by the finding itself.
+		// `suggest` is the licence: an entry is a declaration whose value a token could
+		// stand in for.
 		if (!CSS_FILE.test(f.file)) continue;
 		for (const s of f.suggest ?? []) {
 			// The exact token first: `--judge` is never asked about a declaration
@@ -63,13 +53,11 @@ function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
 }
 
 /**
- * How many findings every one of their declarations was settled for — what
- * `fix` actually cleared, as against how many declarations it acted on. A
- * finding holding one settled declaration and one nobody could settle is still
- * there, so it is still counted as left for review.
+ * How many findings every one of their declarations was settled for — what `fix`
+ * actually cleared, as against how many declarations it acted on.
  *
  * Settled is rewritten or suppressed: a value `--judge` kept is as done with as
- * one it replaced, and the finding it came from will not be reported again.
+ * one it replaced.
  */
 export function settledBy(
 	findings: readonly FixCandidate[],
@@ -150,21 +138,18 @@ export function applyTokenFixes(
 }
 
 /**
- * Write a suppression above each value `--judge` kept. Returns what was
- * written and what was left alone.
+ * Write a suppression above each value `--judge` kept. Returns what was written
+ * and what was left alone.
  *
  * A directive mutes its whole next line, so one is written only where every
- * flagged value on that line was kept: muting a line that also carries a
- * value nobody settled would hide it along with the one that was. Nor above a
- * rule's opening line, where a directive covers the whole rule, nor between an
- * existing directive and the line it is for. The reason is
- * what the judgement said, so the comment records that a model made the call,
- * not a person.
+ * flagged value on that line was kept. Nor above a rule's opening line, where a
+ * directive covers the whole rule, nor between an existing directive and the
+ * line it is for.
  *
- * The directive names the rules the kept declarations on that line were
- * reported under, which is not always one: a minified stylesheet can put a kept
- * colour and a kept font-weight on the same line, and a directive naming only
- * the first leaves the second reported under a comment that claims to cover it.
+ * It names every rule the kept declarations on that line were reported under,
+ * which is not always one: a minified stylesheet can put a kept colour and a
+ * kept font-weight on the same line. The reason is what the judgement said, so
+ * the comment records that a model made the call, not a person.
  */
 export function applyKeeps(
 	root: string,

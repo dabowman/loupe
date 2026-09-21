@@ -4,21 +4,21 @@
  * Two halves. Here: `ask`, the transport every judgement shares — batch the
  * items, post one request per batch, hand back one answer per item — and what
  * each check does with the answers. In `judge/`, one file per *question*: what
- * to put in the state and what to ask about it, which is the half worth reading
- * and the half an eval scores — each one carries a whole example of the request
- * it posts. An eval imports the query it scores and calls `ask` with it, the
- * same call the check makes. A new judgement is a new file there and a caller
- * here.
+ * to put in the state and what to ask about it, each carrying a whole example of
+ * the request it posts. An eval imports the query it scores and calls `ask` with
+ * it, the same call the check makes. A new judgement is a new file there and a
+ * caller here.
  *
  *   judge/variant.ts   system/raw-element — which variant of the analog
  *   judge/force.ts     a pattern force, for patterns/judged-redirect
  *   judge/value.ts     a flagged value — which token, or deliberate
  *
- * None changes a deterministic verdict. A variant or a token is written into
- * the finding's suggestion; a redirect is its own advisory finding, written
- * after the baseline and never by the hook. Each records the answer as data on
- * `Finding.judged`. The gate stays deterministic and offline, and this runs
- * only when asked.
+ * None changes a deterministic verdict. A variant or a token is written into the
+ * finding's suggestion; a redirect is its own advisory finding, written after
+ * the baseline and never by the hook. Each records the answer as data on
+ * `Finding.judged`. The gate stays deterministic and offline.
+ *
+ * Design notes, and every measurement behind the floors: docs/design/judge.md
  */
 
 import { readFileSync } from 'node:fs';
@@ -35,18 +35,16 @@ import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
 
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
-// A version, not `jev-latest`: the alias moves when a release ships, and every
-// floor in here was measured against the model the evals ran on. Moving to a
-// new one is re-running `evals/` and changing this line in the same commit.
+// A version, not `jev-latest`: every floor in here was measured against the
+// model the evals ran on. Moving to a new one is re-running `evals/` and
+// changing this line in the same commit.
 export const MODEL = 'jev-1.13.0';
 // ponytail: one floor for every outcome. Split it per outcome if an eval shows
 // `none` needs more certainty than a variant pick.
 const FLOOR = 0.5;
-// Requests in flight. One per control needs this to stay quick; 6 held for the
-// whole eval without a 429, and the endpoint answers a single control in ~200ms.
+// Requests in flight. One request per control needs this to stay quick.
 const CONCURRENCY = 6;
-// Overload is transient and a run is a hundred requests, so one 529 should not
-// lose the other ninety-nine.
+// Overload is transient and a run is a hundred requests.
 const RETRIES = 4;
 
 type Fetch = typeof fetch;
@@ -73,16 +71,12 @@ export interface Query<T> {
  * `state.elements[i]` is the convention every query is written against: the
  * question at index `i` talks about `elements[i]`, so instructions can name the
  * thing they are about and the answers come back in the order the items went in.
- * Every element in a batch is visible to every question in it, which is why a
- * batched question has to be scored batched — see the represents eval.
+ * Every element in a batch is visible to every question in it, so a batched
+ * question has to be scored batched.
  *
- * `size` is how many items share one request. The state budget allows 40, but
- * accuracy does not survive the sharing: `represents` kept 97% of its
- * destinations one per request and 69% at 40 (`evals/represents/run.ts --batch
- * N` measures it). A control is a few lines, so one each is cheap, and the pool
- * below keeps it quick.
- *
- * Throws on a failed request; the caller reports it and keeps what it had.
+ * `size` is how many items share one request; see docs/design/judge.md for why
+ * it is 1. Throws on a failed request; the caller reports it and keeps what it
+ * had.
  */
 export async function ask<T>(
 	query: Query<T>,
@@ -216,20 +210,9 @@ interface Language {
 export const LANGUAGE = EMBEDDED_LANGUAGE as Language;
 
 // A redirect sends an agent to a different pattern, which is the expensive
-// error, so an answer counts only where the eval found nothing wrong: every
-// `represents` answer at 0.90 or above was right, and under it a third of the
-// `command` picks were not.
-//
-// One floor for every value, though the eval argues for less on `destination`:
-// 27 of 27 picks under 0.90 were right. Gutenberg says otherwise. Of its 19
-// destination picks between 0.5 and 0.9, 11 were pagination buttons, a control
-// the eval has no label for, and only 2 were plainly links. The cost of 0.90 is
-// site-foundry's one real case, `onClick={ () => navigate( '#/new' ) }`, at 0.83.
-// Label pagination into the eval before lowering it.
-//
-// The floor is on the pick's confidence. The class's own probability was
-// scored as the gate too, on the same answers, and at 0.90 acts on one more
-// destination and two more commands, one of them wrong: no reason to switch.
+// error. One floor for every force value, on the pick's own confidence; what was
+// measured, and what would have to change to lower it, is in
+// docs/design/judge.md#the-redirect-floor-is-090.
 const REDIRECT_FLOOR = 0.9;
 
 /**
@@ -301,15 +284,12 @@ export async function judgeRedirects(
 // ── a flagged value: which token, or is it deliberate? ─────────────────────
 
 /**
- * What each token is for, in the design system's words: every active
- * profile's `tokenDescriptions`, merged. Token names carry their system's
- * prefix, so two profiles cannot collide.
+ * What each token is for, in the design system's words: every active profile's
+ * `tokenDescriptions`, merged. Token names carry their system's prefix, so two
+ * profiles cannot collide.
  *
- * Measured on `evals/values`: sending these as each option's meaning took the
- * question from 85% to 92%, and cut the wrong tokens it would act on at 0.5
- * from 16 to 3 over three runs. The name alone says `track`; the description
- * says "eg. scrollbar track", which is what stops `#f0f0f1` on a badge
- * becoming one for being a digit away from its value.
+ * Sent as each option's meaning, which is worth 7 points on `evals/values` —
+ * see docs/design/judge.md#which-token.
  */
 export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescriptions'>[]): Map<string, string> {
 	const out = new Map<string, string>();
@@ -329,10 +309,9 @@ export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescrip
 /**
  * Rebuild a finding's message and its own `judged` from its declarations.
  *
- * Every declaration that settled is now rendered by the same
- * `declarationMessage` the token pass used, so a judged finding and an
- * unjudged one read by one set of rules. The channel marker comes off
- * `suffix`, where the walk put it, rather than off the end of the sentence.
+ * Every settled declaration is rendered by the same `declarationMessage` the
+ * token pass used, so a judged finding and an unjudged one read by one set of
+ * rules. The channel marker comes off `suffix`, where the walk put it.
  */
 function restate(f: Finding): void {
 	const parts = f.suggest ?? [];
@@ -372,9 +351,9 @@ export async function judgeValues(
 	about: ReadonlyMap<string, string> = new Map(),
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
-	// With nothing read, every property's family is empty, and "no padding
-	// token in the design system" would be said of every value and suppressed
-	// by `fix --judge` as fact. An empty set proves nothing about the system.
+	// An empty set proves nothing about the system: with nothing read, every
+	// property's family is empty, and "no padding token in the design system" would
+	// be said of every value and suppressed by `fix --judge` as fact.
 	// ponytail: a set read only partly passes this; a per-family check is the
 	// upgrade if a token source that half-resolves turns up.
 	if (!set.known.size)
@@ -386,12 +365,9 @@ export async function judgeValues(
 	const touched = new Set<Finding>();
 	let written = 0;
 	// Every rule that flags a declaration a token could stand in for arrives with
-	// one `suggest` entry per declaration — `tokens/hardcoded-value` and
-	// `typography/untokenized` both — so carrying a list of which rules those are
-	// would be a second way of saying what the entries already say. A type
-	// property in a stylesheet is where that rule's first remedy, the text
-	// component, is not available, so a token is the remedy left and which token
-	// is the same question as for any other value.
+	// one `suggest` entry per declaration, so no list of which rules those are is
+	// needed. A type property in a stylesheet is where that rule's first remedy,
+	// the text component, is not available.
 	for (const f of findings) {
 		for (const decl of f.suggest ?? []) {
 			// The single exact token is plain `fix`'s already.
@@ -431,15 +407,8 @@ export async function judgeValues(
 
 	for (const { f, decl, parts, slots } of open) {
 		const got = slots.map((s) => ('token' in s ? { choice: s.token, confidence: 1 } : answerOf.get(s)));
-		// The shared floor holds here: on `evals/values` it acts on 71% of the
-		// literals with three wrong tokens in three runs, and no wrong keep.
-		// Gating on probability instead — keep on P(keep), else the likeliest
-		// token on P(any token) — was scored on the same answers and is no
-		// better: at 0.90 it acts on 52% with none wrong, which the floor at
-		// 0.70 matches.
-		// Except where keeping was never an answer: spacing the scale covers
-		// snaps whatever the confidence, and a low one there is only 6px sitting
-		// exactly between 4 and 8 — every option is a snap somebody would accept.
+		// The shared floor holds here, and spacing the scale covers snaps whatever
+		// the confidence — see docs/design/judge.md#which-token.
 		const unsure = (k: number): boolean => {
 			const a = got[k];
 			const s = slots[k];
@@ -448,9 +417,9 @@ export async function judgeValues(
 		if (slots.some((_, k) => unsure(k))) continue;
 		const confidence = Math.min(...got.map((a) => a?.confidence ?? 0));
 		const kept = got.find((a) => a?.choice === KEEP);
-		// A keep beside a part that settled on a token is half an answer: keeping
-		// the whole declaration would suppress the part that has a token, and
-		// rewriting the rest would exempt the kept literal. Left for review.
+		// A keep beside a part that settled on a token is half an answer: keeping the
+		// whole declaration would suppress the part that has a token, and rewriting
+		// the rest would exempt the kept literal. Left for review.
 		if (kept && got.some((a) => a?.choice !== KEEP)) continue;
 		if (kept) {
 			const why = 'deliberate, no token fits';
@@ -464,10 +433,9 @@ export async function judgeValues(
 				out[s.at] = `var(${token})`;
 				named[s.at] = token;
 			});
-			// Two renderings of one answer, because they have two readers. The
-			// message names the tokens, the way every other suggestion in the
-			// report does; `answer` stays the CSS `fix --judge` writes into the
-			// file, where the `var()` is not decoration.
+			// Two renderings of one answer, because they have two readers. The message
+			// names the tokens the way every other suggestion does; `answer` stays the
+			// CSS `fix --judge` writes into the file.
 			const to = out.join(' ');
 			const shown = named.join(' ');
 			// Settled without a question when every part was exact.

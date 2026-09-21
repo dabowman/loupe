@@ -1,35 +1,22 @@
 /**
  * `loupe serve` — the findings, in the running app.
  *
- * Every other output in this codebase answers "where in the source". This one
- * answers a question the source cannot: *which rendered elements* a finding
- * actually lands on. A stylesheet finding carries the selector of the rule it
- * sits in, and a selector is a DOM query — so the browser can resolve one
- * finding to the live elements it affects, count them, and draw a box around
- * them. That is the whole reason this exists; a list of findings in a floating
- * panel would otherwise be the terminal with worse ergonomics.
+ * Every other output here answers "where in the source". This one answers what
+ * the source cannot: *which rendered elements* a finding lands on. A stylesheet
+ * finding carries the selector of the rule it sits in, and a selector is a DOM
+ * query, so the browser can resolve one finding to the live elements it affects.
  *
- * Three decisions follow from that, and they are the design:
+ * Three decisions follow, and they are the design:
  *
- * 1. **It serves, it does not integrate.** The target dev environments are not
- *    a Vite server with a middleware slot — this one is webpack inside a Docker
- *    WordPress. So: a stdlib HTTP server, permissive CORS, and a bookmarklet to
- *    get the script into whatever page the app renders in. Nothing to install
- *    in the app, no bundler config, and it works the same in all of them.
+ * 1. It serves, it does not integrate — a stdlib HTTP server, permissive CORS,
+ *    and a bookmarklet. Nothing to install in the app, no bundler config.
+ * 2. Re-analyze per request. No watcher, no cache, no invalidation rules to get
+ *    wrong.
+ * 3. The panel says what it cannot see. A finding matching nothing on this page,
+ *    one behind an unsatisfied `@media`, and one with no selector are all shown,
+ *    and all three are labelled with which they are.
  *
- * 2. **Re-analyze per request.** No watcher, no cache, no invalidation rules to
- *    get wrong. The analysis is fast and a human presses refresh; the moment
- *    that stops being true, a watcher can go behind the same endpoint without
- *    the client noticing.
- *
- * 3. **The panel says what it cannot see.** A finding whose selector matches
- *    nothing on this page, one behind an `@media` query the viewport is not
- *    currently satisfying, and one with no selector at all are all shown, and
- *    all three are labelled with which of those they are. The browser view is a
- *    view of a *subset* — unopened modals, unrendered branches and every
- *    JSX-anchored rule are outside it — and a panel that quietly dropped those
- *    would read as "this page is clean", which is a worse answer than the
- *    terminal's.
+ * Design notes: docs/design/report.md#loupe-serve
  */
 
 import { createServer } from 'node:http';
@@ -37,8 +24,8 @@ import { reportPayload } from './report.ts';
 import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
 
 /**
- * Panel chrome. Lives in a shadow root, so this is the entire cascade it is
- * ever exposed to — no resets, no specificity games against the host app's
+ * Panel chrome. Lives in a shadow root, so this is the entire cascade it is ever
+ * exposed to — no resets, no specificity games against the host app's
  * stylesheet, which in wp-admin is considerable.
  */
 const CSS = `
@@ -115,16 +102,13 @@ const JS = `
     });
   }
 
-  // A selector as authored is not always a selector the DOM will accept, and
-  // one bad one must not take the panel down with it. Pseudo-elements have no
-  // node to match, and a state pseudo-class describes when the rule applies,
-  // not what it applies to — both are dropped so the query resolves to the
-  // elements the author was styling.
-  // The trailing lookahead, not \\b: a word boundary sits happily between
-  // 'focus' and the '-' of ':focus-visible', so \\b would strip the ':focus'
-  // and leave '-visible' welded to the class before it. That yields
-  // '.components-button-visible' — a perfectly valid selector for an element
-  // that does not exist, which is the one failure here that stays silent.
+  // A selector as authored is not always one the DOM will accept, and one bad one
+  // must not take the panel down. Pseudo-elements have no node to match, and a
+  // state pseudo-class says when a rule applies, not what to.
+  //
+  // The trailing lookahead, not \b: a word boundary sits happily between 'focus'
+  // and the '-' of ':focus-visible', so \b would leave '-visible' welded to the
+  // class before it — a valid selector for an element that does not exist.
   var STATE = /:(?:hover|focus-within|focus-visible|focus|active|visited|target|checked|disabled|enabled|indeterminate|placeholder-shown|autofill|default|read-only|read-write|link|any-link|user-invalid|user-valid|valid|invalid|required|optional)(?![\\w-])/g;
   function domSelector(sel) {
     var parts = String(sel).split(',').map(function (s) {
@@ -165,10 +149,9 @@ const JS = `
     });
   }
 
-  // Whether the rule's own @media condition holds at this moment. An
-  // unparseable query normalizes to 'not all', which never matches — reporting
-  // that as "inactive at this width" would invent a reason the finding is not
-  // showing, so an unreadable condition is treated as no condition.
+  // Whether the rule's own @media condition holds at this moment. An unparseable
+  // query normalizes to 'not all', which never matches, so an unreadable
+  // condition is treated as no condition.
   function active(f) {
     if (!f.media) return true;
     try {
@@ -179,10 +162,8 @@ const JS = `
   }
 
   // Ordering is the panel's one opinion: what this page can actually show you
-  // comes first. A finding styling live elements right now is the reason to be
-  // looking in a browser at all; one behind a breakpoint you are not at is real
-  // but not visible; one that resolves to nothing is a hint the page does not
-  // exercise it; one with no selector was never a browser question.
+  // comes first, then what is real but not visible at this width, then what
+  // resolves to nothing, then what was never a browser question.
   function rows() {
     var needle = q.toLowerCase();
     return data.findings.map(function (f) {
@@ -226,10 +207,9 @@ const JS = `
             : r.n === 0
               ? '<span class="hits zero">0 on page</span>'
               : '<span class="hits zero">no selector</span>';
-          // The condition is shown whenever there is one, not only when it
-          // fails: "styling these three elements, and only under this query" is
-          // a different fact from "styling these three elements", and the row
-          // should not have to be re-read at another width to tell them apart.
+          // Shown whenever there is one, not only when it fails: "styling these
+          // three elements, and only under this query" is a different fact from
+          // "styling these three elements".
           var cond = f.media
             ? '<span class="cond' + (r.on ? ' on' : '') + '">@media ' + esc(f.media) +
               (r.on ? '' : ' \\u2014 not at this width') + '</span>'
@@ -276,10 +256,9 @@ const JS = `
   }
 
   function reposition() { if (pinned !== null) { var rs = rows(); if (rs[pinned]) draw(rs[pinned].els); } }
-  // A resize is the one gesture that changes the answers themselves: crossing a
-  // breakpoint turns findings on and off, so the boxes move *and* the list is
-  // restated. Debounced, because a drag fires this continuously and each render
-  // re-runs every selector.
+  // A resize changes the answers themselves: crossing a breakpoint turns findings
+  // on and off, so the boxes move *and* the list is restated. Debounced, because
+  // a drag fires this continuously and each render re-runs every selector.
   var resizeTimer = null;
   function onResize() {
     reposition();
@@ -346,22 +325,19 @@ export function serve(opts: {
 	run: () => Promise<AnalyzeResult | BaselinedResult>;
 }): Promise<{ url: string; close: () => Promise<void> }> {
 	const { port, config, run } = opts;
-	// The client is served from this origin and fetches from it, so it can be
-	// told its own address rather than guessing from `document.currentScript` —
-	// which is null once the script has been `eval`'d from the console.
+	// The client is served from this origin and fetches from it, so it is told its
+	// own address — `document.currentScript` is null once the script has been
+	// `eval`'d from the console.
 	const client = (origin: string): string => JS.replace('__ORIGIN__', origin).replace('__CSS__', JSON.stringify(CSS));
-	// Read back from the socket rather than trusting the request: `--port 0`
-	// asks the OS to choose, and a client told the port it *asked* for would
-	// then fetch from nowhere.
+	// Read back from the socket rather than trusting the request: `--port 0` asks
+	// the OS to choose.
 	let url = `http://localhost:${port}`;
 
 	return new Promise((resolve, reject) => {
 		const server = createServer((req, res) => {
 			const origin = url;
-			// The app under inspection is on another port, and in wp-env another
-			// host entirely. Read-only findings about the developer's own working
-			// tree, served to a page they just clicked a bookmarklet on: the
-			// permissive header is the feature, not an oversight.
+			// The app under inspection is on another port, and in wp-env another host
+			// entirely. The permissive header is the feature, not an oversight.
 			res.setHeader('access-control-allow-origin', '*');
 			const path = (req.url ?? '/').split('?')[0];
 

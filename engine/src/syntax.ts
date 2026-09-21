@@ -1,23 +1,17 @@
 /**
  * Stylesheet parser selection.
  *
- * The analyzer used vanilla postcss for every file the `styles` glob matched,
- * and that glob ships with `**\/*.scss` in it. A single `//` comment — line one
- * of most Sass files — throws "Unknown word", the file is dropped, and the only
- * trace is a footnote under the findings. A Sass codebase got a clean report
- * from a tool that had read none of it. Silence is the worst failure mode a
- * gate can have.
+ * The `styles` glob ships with `**\/*.scss` in it, and vanilla postcss throws
+ * "Unknown word" on the `//` comment that opens most Sass files. Every file that
+ * cannot be read is reported as `stylesheet/unparsed` rather than dropped, so a
+ * clean report always means "checked and clean".
  *
- * Custom syntaxes are optional peer deps, resolved at first use. A machine
- * without `postcss-scss` still gets a working gate on its plain CSS plus an
- * explicit finding naming every file it could not read, rather than a quiet
- * hole in coverage. That is the difference between degraded and dishonest.
+ * `postcss-scss` and `postcss-less` are optional deps imported by literal
+ * specifier, so the bundler folds them into `dist/`. The other two stay behind a
+ * computed specifier: resolved from the host's `node_modules` when it has them,
+ * reported missing when it does not.
  *
- * The two declared as optional deps are imported by literal specifier so the
- * bundler can see them and fold them into `dist/`, which is the only reason a
- * marketplace install parses Sass at all. The other two stay behind a computed
- * specifier: not shipped, resolved from the host's `node_modules` when it
- * happens to have them, reported missing when it doesn't.
+ * Design notes: docs/design/analysis.md
  */
 
 import postcss from 'postcss';

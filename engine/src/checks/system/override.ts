@@ -31,11 +31,8 @@ export const systemOverride: DeclarationCheck = ({ prop }, { boundSystem, enable
 		: undefined;
 
 /**
- * The whole-rule form, for a rule that styles anything at all.
- *
- * A project prefix wins over a library one. `wp-parsely-*` matches the `wp-`
- * external prefix, and reporting a project's own class as a library internal
- * sends the agent to fix something it does not own.
+ * The whole-rule form, for a rule that styles anything at all. A project prefix
+ * wins over a library one.
  *
  * Logic, per CSS rule that styles anything at all:
  *   the first key class the library styles or that carries an external

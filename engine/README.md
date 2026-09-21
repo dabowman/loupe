@@ -14,6 +14,10 @@ one command that does, and only for substitutions with a single right answer.
 The package is not published to npm; run it from a checkout (or from the
 installed plugin) rather than through `npx`.
 
+This README says what the engine does. Why it is built this way — the failures
+that shaped each decision, and the eval numbers behind the tuned ones — is in
+[`docs/design/`](../docs/design/README.md).
+
 ```bash
 node engine/bin/loupe.mjs check --all   # or ./bin/loupe check --all
 ```

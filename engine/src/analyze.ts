@@ -1,21 +1,17 @@
 /**
  * The analyzer.
  *
- * The one thing here that no single-language linter can do: correlate the
- * markup that binds a class to a component with the CSS that styles that class.
- * Rules that need no correlation (hardcoded values, margins) are a stylelint
- * plugin in disguise; the correlation rules are why this exists.
+ * Correlates the markup that binds a class to a component with the CSS that
+ * styles that class — the rules no single-language linter can run. The index is
+ * ALWAYS built repo-wide; `scope` only filters what gets *reported*.
  *
- * Scoping note: the index is ALWAYS built repo-wide, and `scope` only filters
- * what gets *reported*. Building the index from changed files alone would make
- * every unchanged reference look absent and every class look dead.
- *
- * What lives here is the machinery: build the index, walk the three channels a
+ * The machinery lives here: build the index, walk the three channels a
  * declaration can arrive by, scope and suppress, then name tokens, dedupe and
- * bound. What each rule decides lives in `checks/`, one file per rule, or per
- * family of rules that share one pass; a new rule is a new file there and a
- * call here. The catalog — severity, rank, title — stays in `rules.ts`, where
- * the ranks can be read against each other.
+ * bound. What each rule decides lives in `checks/`, one file per rule or per
+ * family of rules sharing one pass; a new rule is a new file there and a call
+ * here. The catalog — severity, rank, title — is `rules.ts`.
+ *
+ * Design notes: docs/design/analysis.md
  *
  *   per declaration, first to claim it decides (`DECLARATIONS`):
  *     checks/typography/in-css.ts       typography/in-css
@@ -122,12 +118,9 @@ const realPath = (path: string): string | null => {
 
 /**
  * The part a library selector styles: the first class of its key compound.
- *
  * Ancestors (`.dark .label`), state modifiers (`.tab.is-active`), pseudo-class
- * arguments and attribute values are context, not a part — and harvesting them
- * made a project's own `.acme-tab.is-active` a "library internal" whose verdict
- * replaced the real findings on the rule. An escaped name (`.md\:flex`) is not
- * cut short into a class that was never written.
+ * arguments and attribute values are context, not a part. An escaped name
+ * (`.md\:flex`) is not cut short into a class that was never written.
  *
  * ponytail: a part whose class is not first in its compound (`.is-open.popover`)
  * is missed — a missed override, never a false one.
@@ -138,21 +131,10 @@ const partClass = (sel: string): string | undefined =>
 /**
  * The design system's own stylesheets: the parts they style, and where they are.
  *
- * `namespaces.external` recognises a library's internals by prefix, and a
- * system whose classes carry none — `.field-label`, `.toast-viewport` — slipped
- * past it entirely. No JSX binds those classes (the component renders them
- * itself), so a consumer rule restyling one correlated with nothing and
- * reported nothing: the override most likely to break on upgrade was the one
- * the gate could not see. Reading the classes out of the system's stylesheets
- * recognises them without a prefix to match.
- *
- * `dirs` are resolved through symlinks, so a vendored library is recognised
- * however the project walk spelled its path — a workspace link, a different
- * case — and never checked as the project's own code. Its token definitions
- * still count: that is what the project walk used to read them for.
- *
- * A sheet that cannot be read fails nothing — the project has nothing to fix in
- * it — but it is reported, since its classes then go unrecognised.
+ * Recognises a system's internals by the classes its own sheets declare, not
+ * only by `namespaces.external` prefix. `dirs` are resolved through symlinks, so
+ * a vendored library is never checked as the project's own code. A sheet that
+ * cannot be read fails nothing, but is reported: its classes go unrecognised.
  */
 async function readLibrary(
 	root: string,
@@ -235,15 +217,9 @@ const DECLARATIONS: readonly DeclarationCheck[] = [
 /**
  * Which rule, if any, a single declaration violates.
  *
- * Shared by the stylesheet walk, the JSX inline-style walk and CSS-in-JS.
- * `margin-bottom: 16px` in a stylesheet and `style={{ marginBottom: 16 }}` in
- * JSX are the same mistake with the same remedy, so they must not be able to
- * drift into different verdicts — which is exactly what happens when the chain
- * is written out twice.
- *
- * At most ONE finding per declaration, most specific first. Emitting both the
- * precise remedy and the generic one doubles the report and leaves the agent to
- * guess which to act on.
+ * Shared by the stylesheet walk, the JSX inline-style walk and CSS-in-JS, so one
+ * declaration cannot mean different things in different channels. At most ONE
+ * finding per declaration, most specific first.
  *
  * `styling` reports whether the declaration counts as styling the element at
  * all, which feeds the raw-element and library-override logic.
@@ -260,12 +236,8 @@ function classifyDeclaration(
 		isHardcodedTokenValue(prop, value) ||
 		APPEARANCE_PROPS.has(prop);
 	const ctx = { boundSystem, boundText, isGrid, enabled };
-	// Deliberately unbounded. `message` is what the dedupe tells two findings
-	// apart by, and on the rules whose `code` is only the property (`margin-*`,
-	// `gap`) it is the ONLY thing that tells them apart — so a cap applied at
-	// capture folds two distinct declarations on one line into one finding and
-	// drops a real violation. The line is bounded once, at the end of
-	// `analyze`, after the dedupe has run.
+	// Deliberately unbounded: `message` is part of what the dedupe tells two
+	// findings apart by. The line is bounded once, at the end of `analyze`.
 	for (const check of DECLARATIONS) {
 		const verdict = check({ prop, value }, ctx);
 		if (verdict !== undefined) return { finding: verdict, styling };
@@ -276,14 +248,9 @@ function classifyDeclaration(
 /**
  * Rules whose remedy is one action for the whole rule, not one per declaration.
  *
- * `display:flex; flex-direction:column; align-items:center; gap:8px` is four
- * findings for a single decision — replace this with a layout primitive — and a
- * real repo produced 702 of them. Four times the report buys nothing, and a rule
- * that floods the report crowds out every rule with a cheaper remedy.
- *
- * Values are kept in the message because they are what the agent needs to carry
- * across to the primitive; `code` drops them so baseline identity survives a
- * value tweak.
+ * Values are kept in the message because they are what the agent carries across
+ * to the primitive; `code` drops them so baseline identity survives a value
+ * tweak.
  */
 const COLLAPSE_PER_RULE = new Set(['layout/in-css', 'typography/untokenized']);
 
@@ -310,10 +277,8 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 		out.push({
 			...first,
 			// Bounded per contributor, so one long value cannot spend the whole
-			// line and crowd the others out of a message that is several of them.
-			// Safe to bound here where it is not at capture: a collapsed finding
-			// always carries its own `code` below, so identity does not fall back
-			// to this string.
+			// line. Safe here where it is not at capture: a collapsed finding
+			// carries its own `code`, so identity does not fall back to this.
 			message: group.map((f) => snippet(f.message)).join('; '),
 			// Each hint keeps the line it was flagged on. The collapsed finding
 			// reports at the first one, and `fix` matches every other against the
@@ -336,9 +301,8 @@ export async function analyze(
 	const parseSuppressions = makeSuppressionParser(config.suppression);
 	const files = discover({ root: config.root, sources: config.sources });
 
-	// Nothing a person wrote is this big. A generated blob costs more to parse
-	// than every finding it could produce, and one 10MB checked-in emscripten
-	// file was on its own enough to push a repo scan past every hook timeout.
+	// Nothing a person wrote is this big, and a generated blob costs more to
+	// parse than every finding it could produce.
 	const MAX_BYTES = 1_500_000;
 	const tooBig = (abs: string): boolean => {
 		try {
@@ -349,9 +313,7 @@ export async function analyze(
 	};
 
 	// Seeded from the design system's shipped token stylesheet, then topped up
-	// with anything the project defines itself. Without it a finding can only
-	// name a namespace, and an agent told `13px` is hardcoded invents
-	// `--wpds-font-size-13` rather than looking one up.
+	// with anything the project defines itself.
 	const tokenPrefixes = ds.tokenPrefixes ?? [];
 	const tokenSet: TokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
 	// Real paths on both sides: the walk never follows a symlink below the root,
@@ -480,8 +442,8 @@ export async function analyze(
 		}
 		diagnostics.filesScanned++;
 		suppressionsFor(rel, text); // cached for `report`
-		// A stylesheet we cannot read is a hole in coverage, not a diagnostic:
-		// it reports as a finding so a clean run always means "checked and clean".
+		// Unreadable is a hole in coverage, not a diagnostic: it reports as a
+		// finding, so a clean run always means "checked and clean".
 		const unparsed = (message: string): void => {
 			diagnostics.parseErrors.push({ file: rel, message });
 			if (config.enabled['stylesheet/unparsed'] && reports(rel))
@@ -533,13 +495,10 @@ export async function analyze(
 			const boundText = bound.filter((b) => b.isText);
 			const isGrid = ruleIsGrid(cssRule);
 			const scopeLines = [ruleLine, ruleLine - 1];
-			// Carried so a browser-side reader can resolve this rule to the
-			// elements it actually styles, and say whether it is styling them
-			// right now. The whole selector list, comma-joined, is both what the
-			// author wrote and a valid `querySelectorAll` argument; the media
-			// condition is what `matchMedia` takes. `undefined` rather than `''`
-			// for an unconditional rule, so the field is absent from the payload
-			// instead of present and empty.
+			// Carried so a browser-side reader can resolve this rule to the elements
+			// it styles: the comma-joined selector list is a valid `querySelectorAll`
+			// argument, the media condition what `matchMedia` takes. `undefined`
+			// rather than `''`, so the field is absent when a rule is unconditional.
 			const selector = selectors.join(', ');
 			const media = mediaQuery(cssRule) || undefined;
 			let touchesStyle = false;
@@ -589,10 +548,7 @@ export async function analyze(
 		report(f);
 
 	// ── inline styles ─────────────────────────────────────────────────────────
-	// Same rules, other channel. A stylesheet-only checker leaves `style={{ … }}`
-	// entirely unexamined, which is the shape an agent reaches for when it wants
-	// something to look right immediately — so tightening the CSS gate quietly
-	// makes the unchecked path the attractive one.
+	// Same rules, other channel.
 	for (const el of inlineStyles) {
 		// `report` would drop it anyway; skipping first keeps a scoped hook run
 		// from classifying every inline style in the repo on every edit.
@@ -621,15 +577,13 @@ export async function analyze(
 	}
 
 	// ── CSS-in-JS template literals ───────────────────────────────────────────
-	// The third channel, through the same classifier as the other two. A
-	// `styled(Button)` template is the stylesheet pass's "class bound to a
-	// design-system component", written somewhere no stylesheet can see.
+	// The third channel, through the same classifier. A `styled(Button)` template
+	// is the stylesheet pass's "class bound to a design-system component".
 	for (const tpl of cssInJs) {
 		if (!reports(tpl.file)) continue;
 		const supp = suppByFile.get(tpl.file);
 		if (tpl.error) {
-			// Not a finding: an interpolation-driven template is opaque by design,
-			// and a rule that fired on every one of them would just be turned off.
+			// Not a finding: an interpolation-driven template is opaque by design.
 			// It is still recorded, so a clean report can be checked against it.
 			diagnostics.parseErrors.push({ file: tpl.file, message: `css-in-js at line ${tpl.line}: ${tpl.error}` });
 			continue;
@@ -653,14 +607,10 @@ export async function analyze(
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
 			}
-			// Held whole, not bounded here. The selector is the only thing telling
-			// two otherwise identical findings in one template apart, and it never
-			// reaches `code` — so bounding it at capture made two of them
-			// byte-identical and the dedupe folded them into one, dropping a real
-			// violation. It stays in `suffix`, which is also what carries it across
-			// the token pass's rebuild of `message`; the line bound at the end of
-			// `analyze` is where it gets shortened, from the front, so the part
-			// that distinguishes two sibling selectors is the part that survives.
+			// Held whole, not bounded here: the selector is the only thing telling two
+			// otherwise identical findings in one template apart, and it never reaches
+			// `code`. It rides in `suffix`, and the line bound at the end of `analyze`
+			// shortens it from the front.
 			const where = group.selector ? ` in \`${group.selector}\`` : '';
 			for (const f of collapsePerRule(pending))
 				report({
@@ -706,31 +656,25 @@ export async function analyze(
 	}
 
 	// ── the token pass ────────────────────────────────────────────────────────
-	// Deferred to here because the token set is only complete once every stylesheet
-	// has been read, and a rule that fires against a half-built set reports the
-	// design system's own tokens as unknown.
+	// Deferred to here: the token set is only complete once every stylesheet has
+	// been read.
 
-	// Name the replacement instead of the namespace. A finding that says
-	// "13px is hardcoded — use a --wpds-* token" leaves the agent to invent one.
+	// Name the replacement instead of the namespace.
 	for (const f of findings) {
-		// An empty array is still working state, and `collapsePerRule` produces one
+		// An empty array is still working state — `collapsePerRule` produces one
 		// whenever it merges a group where nothing carried a hint. Dropped here too,
 		// or `"hints": []` rides out into `--format json`.
 		if (!f.hints?.length) {
 			delete f.hints;
 			continue;
 		}
-		// Match first, render from the match. The prose is for a reader; an
-		// unambiguous substitution should not need a model to parse it back out of
-		// a sentence in order to apply it — and the message that reader sees is
-		// then a rendering of the same thing the consumer acts on, not a second
-		// account of it. One entry per flagged declaration, matched or not: `fix`
-		// clears a finding only when every declaration in it was substituted, and
-		// an entry with no tokens is how it knows one was not.
+		// Match first, render from the match, so the message a reader sees is a
+		// rendering of what `fix` acts on rather than a second account of it. One
+		// entry per flagged declaration, matched or not: an entry with no tokens is
+		// how `fix` knows a declaration was never substituted.
 		f.suggest = f.hints.map((h) => ({ ...h, tokens: tokensFor(tokenSet, h.prop, h.value) }));
 		// Replaces what the classifier bounded rather than appending to it.
-		// `--judge` composes the same message from the same entries when it settles
-		// one; `declarationMessage` is the single place that decides how it reads.
+		// `declarationMessage` is the single place that decides how it reads.
 		f.message = declarationMessage(f.suggest, f.suffix ?? '');
 		if (f.rule === 'tokens/hardcoded-value' && f.hints.length === 1) f.decl = f.hints[0];
 		delete f.hints;
@@ -741,14 +685,8 @@ export async function analyze(
 	for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
 
 	// Dedupe: nesting and multi-selector rules can legitimately reach the same
-	// declaration twice.
-	//
-	// Keyed on identity AND display, and run BEFORE the line bound below. A cap
-	// decides how a finding reads; it must not get to decide whether a finding
-	// survives, and folding on a capped message is exactly that — two distinct
-	// declarations, or two distinct selectors, alike only up to the cut would
-	// collapse into one. `code` alone would fold the other way, since on the
-	// margin and gap rules it is deliberately just the property.
+	// declaration twice. Keyed on identity AND display, and run BEFORE the line
+	// bound below, so a cap cannot decide whether a finding survives.
 	const seen = new Set<string>();
 	const unique = findings.filter((f) => {
 		const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ''}|${f.message}`;
@@ -757,20 +695,17 @@ export async function analyze(
 		return true;
 	});
 
-	// One report line per finding, bounded — once, here, because the token pass
-	// above is the last of several writers of `message`, and a cap applied
-	// before it would simply be overwritten. Each captured snippet is bounded
-	// where it was captured; this bounds what a message assembled out of
-	// several of them adds up to, keeping the channel marker on the end.
+	// One report line per finding, bounded once — here, because the token pass
+	// above is the last of several writers of `message`. Each captured snippet is
+	// bounded where it was captured; this bounds what they add up to, keeping the
+	// channel marker on the end.
 	for (const f of unique) {
 		const tail = f.suffix ?? '';
 		const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
 		f.message = messageLine(body, tail);
 	}
-	// `suffix` is not dropped here. `--judge` runs after this and recomposes the
-	// message of anything it settles, and it needs the marker as the datum it is
-	// rather than read back off the end of a sentence. It is dropped where the
-	// output is built, which is the last place it can be spent.
+	// `suffix` is not dropped here: `--judge` runs after this and recomposes the
+	// message of anything it settles. It is dropped where the output is built.
 
 	unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
 	directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);

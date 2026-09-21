@@ -66,21 +66,14 @@ export function composites({
 		p.node && p.canonical && p.canonical === p.node.name.split('.')[0] ? [p.canonical] : [],
 	);
 
-	// Largest match wins: a page header contains an action bar, and reporting
-	// both says the same thing twice at two levels of the same tree.
+	// Largest match wins: a page header contains an action bar.
 	const bestMatch = (c: Composite): Pattern | null =>
 		registry
 			.filter((p) => p.node !== null && p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree))
 			.sort((a, b) => b.size - a.size)[0] ?? null;
 
-	// The shape a pattern exists to replace. Unlike the two rules below this
-	// one, it is a per-file defect and not a set-level one: the file in hand
-	// built the clunky version, and that is already worth saying once.
-	//
-	// Ties go to the most specific anti-shape that matched, not to the largest
-	// replacement: a pattern's own `size` says nothing about how well its
-	// anti-shape fit, and ranking by it means the smallest entry in the
-	// registry can never win a tie it deserves.
+	// The shape a pattern exists to replace — a per-file defect, not a set-level
+	// one. Ties go to the most specific anti-shape that matched, not the largest.
 	const avoidMatch = (c: Composite): Pattern | null => {
 		let best: { pattern: Pattern; fit: number } | null = null;
 		for (const p of registry) {
@@ -97,8 +90,7 @@ export function composites({
 	for (const c of found) {
 		const hit = dupEnabled ? bestMatch(c) : null;
 		if (hit) {
-			// A file that already imports the shared implementation is using the
-			// pattern, not rebuilding it.
+			// A file importing the shared implementation is using it, not rebuilding it.
 			if (hit.canonical && importsByFile.get(c.file)?.has(hit.canonical)) continue;
 			const perFile = byPattern.get(hit.id) ?? new Map<string, Composite>();
 			byPattern.set(hit.id, perFile);
@@ -108,25 +100,18 @@ export function composites({
 		}
 		const avoided = supEnabled ? avoidMatch(c) : null;
 		if (avoided) {
-			// Already importing the answer means the anti-shape sitting beside it
-			// is deliberate, not a rebuild waiting to happen.
+			// Already importing the answer means the anti-shape beside it is deliberate.
 			if (avoided.canonical && importsByFile.get(c.file)?.has(avoided.canonical)) continue;
 			const perFile = bySuperseded.get(avoided.id) ?? new Map<string, Composite>();
 			bySuperseded.set(avoided.id, perFile);
-			// Smallest wins, the opposite of `duplicate-composite`. Containment
-			// means an outer wrapper matches whatever its children match, and
-			// the whole form's tree is a worse answer to "where" than the one
-			// field that should have been a Field.
+			// Smallest wins, the opposite of `duplicate-composite`.
 			const prev = perFile.get(c.file);
 			if (!prev || c.size < prev.size) perFile.set(c.file, { ...c, pattern: avoided });
 			continue;
 		}
 		if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
-		// An anatomy entry matches from the component's root down, but a file
-		// that renders only a row or a popup cuts the same anatomy lower —
-		// `TableRow(TableCell,TableCell,TableCell)` is a Table's parts, not a
-		// composition anyone chose. Only a tree of nothing *but* parts: a
-		// `DialogPopup` holding a form is still the form.
+		// Only a tree of nothing *but* a component's own parts: `TableRow(TableCell,
+		// TableCell)` is a Table's anatomy cut lower, not a composition anyone chose.
 		if (anatomyRoots.some((root) => partsOf(root, c.tree))) continue;
 		const perFile = bySignature.get(c.signature) ?? new Map<string, Composite>();
 		bySignature.set(c.signature, perFile);
@@ -134,11 +119,7 @@ export function composites({
 		if (!prev || c.line < prev.line) perFile.set(c.file, c);
 	}
 
-	// These rules lead with a signature and close with the remedy, and a
-	// signature is as big as the tree it describes — a five-column card runs
-	// past the line bound on its own. The remedy goes in `suffix`, which that
-	// bound is built to spare: eliding the shape still names the file count
-	// and what to do about it, where eliding the end left neither.
+	// Signature first, remedy last in `suffix` — the part the line bound spares.
 	const emit = (
 		rule: RuleId,
 		c: Pick<Composite, 'file' | 'line' | 'signature'>,
@@ -157,13 +138,11 @@ export function composites({
 		});
 	};
 
-	// Two files is already a pattern being rebuilt; one is just the first use.
+	// Two files or more: one instance is just the first use.
 	for (const [id, files] of byPattern) {
 		if (files.size < 2) continue;
 		for (const c of files.values()) {
-			// With no canonical implementation recorded there is nothing to import
-			// yet, and telling an agent to import it would send it looking for a
-			// module that does not exist.
+			// No canonical recorded: there is nothing to import yet.
 			const remedy = c.pattern?.canonical ? `import \`${c.pattern.canonical}\`` : 'extract one shared implementation';
 			emit(
 				'patterns/duplicate-composite',
@@ -174,11 +153,8 @@ export function composites({
 			);
 		}
 	}
-	// One file is enough: this is a wrong choice made here, not a duplication
-	// that only exists across the set.
-	// A rule hit is the same finding from below the floor: the file in hand
-	// made the choice the entry exists to replace. The canonical import means
-	// the choice was deliberate, exactly as it does for a matched anti-shape.
+	// One file is enough — a wrong choice made here, not a duplication across the
+	// set. A rule hit is the same finding from below the four-node floor.
 	if (supEnabled)
 		for (const h of hits) {
 			const entry = registry.find((p) => p.id === h.patternId);
@@ -199,8 +175,7 @@ export function composites({
 			emit('patterns/superseded-composite', c, c.signature, ` — \`${id}\` covers this; ${remedy}`, id);
 		}
 	}
-	// Three for an unregistered shape: nothing says the second one was wrong,
-	// but a third means it is the house style and belongs in the registry.
+	// Three files: a third instance means it is the house style, not a one-off.
 	for (const [sig, files] of bySignature) {
 		if (files.size < 3) continue;
 		for (const c of files.values())

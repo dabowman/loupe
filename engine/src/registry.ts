@@ -2,16 +2,12 @@
  * Which registries apply to which projects.
  *
  * Pattern signatures are component *names*, and names are the one thing design
- * systems do not keep to themselves: `Stack`, `Button`, `Modal` and `Text` mean
- * something in almost all of them. So the WPDS `page-header` signature —
- * `Stack(Stack(Text,Text),Stack(Button))` — matches a Chakra page header
- * exactly, and the finding tells the agent to import a WordPress module that
- * project has never heard of. The registry has to say who it is for.
+ * systems do not keep to themselves — the WPDS `page-header` signature matches a
+ * Chakra page header exactly. So a registry declaring `packages` applies only to
+ * a project importing at least one of them; one declaring none applies anywhere,
+ * which is what a project's own registry wants.
  *
- * A registry that declares `packages` applies only to a project importing at
- * least one of them. One that declares none applies anywhere, which is what a
- * project's own registry wants and what every registry written before this
- * field existed gets.
+ * Design notes: docs/design/cli.md#profiles
  */
 
 /** A registry file's optional scoping field. An inline array declares nothing. */
