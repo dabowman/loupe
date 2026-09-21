@@ -134,6 +134,31 @@ export interface Finding {
 	 * acts on are on `suggest`.
 	 */
 	judged?: Judged | undefined;
+	/**
+	 * The selector of the CSS rule this finding sits in, as authored.
+	 *
+	 * Every other consumer anchors on `file`/`line`, which is what an editor
+	 * needs and all it can use. A browser has no lines — but a stylesheet
+	 * finding's selector *is* a DOM query, and that makes this the one field
+	 * that lets a reader outside the source say which rendered elements the
+	 * flagged declaration actually lands on.
+	 *
+	 * The whole resolved selector list, not the key selector: `.card .title`
+	 * and `.title` match different elements, and the point of carrying it is to
+	 * match the same ones the browser does. Absent on JSX, inline-style and
+	 * CSS-in-JS findings, which have no selector to carry.
+	 */
+	selector?: string | undefined;
+	/**
+	 * The `@media` condition the finding's rule sits under, if any.
+	 *
+	 * `selector` says which elements a rule reaches; this says when. A reader in
+	 * a browser can ask `matchMedia` and tell "these three elements are wrong"
+	 * from "these three elements would be wrong at a width you are not
+	 * currently at" — a distinction that does not exist in a source listing,
+	 * where every finding is equally true. Absent on an unconditional rule.
+	 */
+	media?: string | undefined;
 	rank: number;
 	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
@@ -166,6 +191,8 @@ export interface PendingFinding extends ClassifiedFinding {
 	line: number;
 	suffix?: string | undefined;
 	scopeLines?: number[] | undefined;
+	selector?: string | undefined;
+	media?: string | undefined;
 }
 
 export interface ParseError {

@@ -724,6 +724,53 @@ of remedies — shortened to whole remedies and a `(+N more)` count. `suggest` a
 `code` are not bounded, so a consumer that needs the whole of what was matched
 should read those rather than the prose.
 
+A finding from a stylesheet also carries `selector`: the selector of the rule it
+sits in, whole and as authored, and for `css/dead-class` the bare class it is
+about. It is the one field that is not a source location — a selector is a DOM
+query, so it is what lets a consumer in a browser resolve a finding to the
+elements it actually affects. JSX, inline-style and CSS-in-JS findings have no
+selector and omit the field.
+
+Where the rule sits under one or more `@media` queries, `media` carries the
+condition, nested ones joined with ` and `, ready for `matchMedia`. `selector`
+says which elements a rule reaches; `media` says when — the difference between
+"these three elements are wrong" and "these three would be wrong at a width you
+are not at". A comma binds looser than `and`, so a combination that would need
+the query rewritten to stay correct is omitted rather than guessed at; an
+unconditional rule omits the field.
+
+## In the browser
+
+```bash
+loupe serve                         # then open http://localhost:7331
+loupe serve --port 8100
+```
+
+A small server that hands the findings to the app you are developing: open the
+URL it prints, drag the bookmarklet to your bookmarks bar, and click it on any
+page of your app. A panel lists every finding; the ones carrying a `selector`
+resolve against the live page, so each says how many elements it currently hits,
+and hovering one outlines them. Click to pin and scroll to the first. A finding
+behind an `@media` query says so, and says whether the query holds at the width
+you are at — resize and the list restates itself.
+
+It serves rather than integrates — stdlib HTTP and a bookmarklet, no bundler
+plugin — because the dev environments this has to work in are not all a Vite
+server with a middleware slot. One of them is webpack inside a Docker WordPress.
+
+Two limits are worth stating plainly, because the panel's whole risk is reading
+as a verdict rather than a view:
+
+- **It can only see the page you are on.** A finding in an unopened modal, an
+  unrendered branch or an error state is listed but resolves to nothing. It is
+  still real.
+- **Roughly a third of findings have no selector at all** — every JSX-anchored
+  rule, `system/raw-element` most of all. They are listed and labelled, never
+  hidden.
+
+The terminal remains the complete report. This answers the one question it
+cannot: *which elements on screen*.
+
 ## Programmatic use
 
 ```js

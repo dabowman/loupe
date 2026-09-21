@@ -67,6 +67,7 @@ import {
 	isLayoutDecl,
 	isMarginProp,
 	keySelector,
+	mediaQuery,
 	ownDecls,
 	resolvedSelectors,
 	ruleIsGrid,
@@ -532,6 +533,15 @@ export async function analyze(
 			const boundText = bound.filter((b) => b.isText);
 			const isGrid = ruleIsGrid(cssRule);
 			const scopeLines = [ruleLine, ruleLine - 1];
+			// Carried so a browser-side reader can resolve this rule to the
+			// elements it actually styles, and say whether it is styling them
+			// right now. The whole selector list, comma-joined, is both what the
+			// author wrote and a valid `querySelectorAll` argument; the media
+			// condition is what `matchMedia` takes. `undefined` rather than `''`
+			// for an unconditional rule, so the field is absent from the payload
+			// instead of present and empty.
+			const selector = selectors.join(', ');
+			const media = mediaQuery(cssRule) || undefined;
 			let touchesStyle = false;
 			let touchesLayout = false;
 
@@ -563,8 +573,8 @@ export async function analyze(
 				touchesStyle && ruleIsLive('system/override')
 					? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject)
 					: null;
-			if (override) emit({ ...override, line: ruleLine, scopeLines });
-			else for (const f of collapsePerRule(pending)) emit(f);
+			if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
+			else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media });
 
 			for (const cls of keyClasses) declared.push({ file: rel, line: ruleLine, cls, scopeLines });
 		});

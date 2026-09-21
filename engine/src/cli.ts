@@ -23,6 +23,7 @@ import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discov
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
+import { serve } from './serve.ts';
 import { oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
@@ -154,6 +155,7 @@ const VALUE_FLAGS = [
 	'components',
 	'profiles',
 	'profile',
+	'port',
 ] as const;
 
 type ValueFlag = (typeof VALUE_FLAGS)[number];
@@ -225,6 +227,8 @@ Commands:
   detect                Show the config that would be inferred for this project
   init                  Write the inferred config to loupe.config.json
   status                Show the effective config: rules, severities, what blocks
+  serve                 Serve the findings to the running app, so a stylesheet
+                        finding can be resolved to the elements it styles
   hook                  Claude Code hook mode (reads payload on stdin)
 
 Options:
@@ -249,6 +253,7 @@ Options:
                         and suppresses the ones it kept; add --dry-run to
                         review them first. (TYPESAFE_API_KEY from the
                         environment or loupe's own .env)
+  --port <n>            Port for 'serve' (default: 7331)
   --force               Overwrite an existing config (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
@@ -897,6 +902,49 @@ async function main(): Promise<number> {
 		}
 		writeFileSync(target, `${JSON.stringify(info.config, null, 2)}\n`);
 		process.stdout.write(`${lines.join('\n')}\n\n${green(`Wrote ${target}`)}\n`);
+		return EXIT.OK;
+	}
+
+	if (command === 'serve') {
+		// `0` is a legal port — it asks the OS to choose — so the floor is 0, and
+		// the `??` default is what makes a bare `loupe serve` predictable.
+		const port = Number(args.flags.port ?? 7331);
+		if (!Number.isInteger(port) || port < 0 || port > 65535) {
+			fail(`loupe: --port wants a port number, got ${args.flags.port}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		// The analysis runs per request rather than once here, so the panel's
+		// refresh reflects the tree as it is now. The config is the one loaded at
+		// startup: re-reading it per request would make a half-saved
+		// loupe.config.json an error on an unrelated keystroke.
+		//
+		// The baseline is applied here rather than inherited, because the shared
+		// block that does it for `check` sits further down and this command
+		// returns before reaching it. Skipping it would have made the panel the
+		// one surface that shows a backlog the project already accepted — the
+		// same divergence `--no-baseline` exists to ask for deliberately.
+		let warned = false;
+		const run = async (): Promise<AnalyzeResult | BaselinedResult> => {
+			const fresh = await analyze(config, { scope: null });
+			if (args.flags['no-baseline']) return fresh;
+			const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+			const baseline = found ? readBaseline(bPath) : null;
+			// Once, not per request: a long-lived server would otherwise repeat it
+			// on every refresh until the line meant nothing.
+			if (found && !baseline && !warned) {
+				warned = true;
+				note(`loupe: baseline at ${bPath} is unreadable — ignoring it.\n`);
+			}
+			return applyBaseline(fresh, baseline);
+		};
+		const { url } = await serve({ port, config, run });
+		process.stdout.write(
+			`${green(`loupe serve — ${url}`)}\n` +
+				`${dim('  Open that URL for the bookmarklet, then click it on the page you are developing.')}\n` +
+				`${dim('  Ctrl-C to stop.')}\n`,
+		);
+		// Nothing resolves this: the server holds the process open until killed.
+		await new Promise(() => {});
 		return EXIT.OK;
 	}
 

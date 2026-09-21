@@ -237,6 +237,40 @@ export function resolvedSelectors(rule: Rule): string[] {
 }
 
 /**
+ * The `@media` conditions a rule sits under, combined the way CSS combines
+ * them: a nested query applies only when every enclosing one does, which is
+ * what ` and ` means. Empty when the rule is unconditional.
+ *
+ * The companion of `resolvedSelectors` for a reader in a browser. A selector
+ * says which elements a rule reaches; this says when it reaches them, and
+ * without it a finding written for one breakpoint is reported against elements
+ * that the declaration is not currently styling at all.
+ *
+ * Conditions are returned unparenthesized and joined as written, because both
+ * of the shapes that actually occur combine correctly that way — `screen` with
+ * `(max-width: 40em)` is `screen and (max-width: 40em)`, and two parenthesized
+ * conditions likewise. A comma binds looser than `and`, so a comma inside any
+ * one of several conditions cannot be combined without rewriting the query;
+ * rather than emit something subtly wrong, that case returns nothing and the
+ * finding reads as unconditional — the same answer as before this existed.
+ */
+export function mediaQuery(rule: Rule): string {
+	// Walked structurally rather than through postcss's node union: only `type`,
+	// `name` and `params` are read, and naming the union here means every
+	// container variant has to typecheck for a three-field lookup.
+	type Ancestor = { type: string; name?: string; params?: string; parent?: Ancestor } | undefined;
+	const conds: string[] = [];
+	for (let n = rule.parent as Ancestor; n; n = n.parent) {
+		if (n.type !== 'atrule' || n.name?.toLowerCase() !== 'media') continue;
+		const params = n.params?.trim();
+		if (params) conds.unshift(params);
+	}
+	if (!conds.length) return '';
+	if (conds.length === 1) return conds[0] ?? '';
+	return conds.some((c) => c.includes(',')) ? '' : conds.join(' and ');
+}
+
+/**
  * Rightmost compound of a selector — the element the rule actually styles.
  * Component bindings must correlate against this, or a descendant rule
  * attributes its declarations to the ancestor's component.

@@ -24111,6 +24111,17 @@ function resolvedSelectors(rule2) {
     (base) => own.map((s) => s.includes("&") ? s.replace(/&/g, base) : `${base} ${s}`)
   );
 }
+function mediaQuery(rule2) {
+  const conds = [];
+  for (let n = rule2.parent; n; n = n.parent) {
+    if (n.type !== "atrule" || n.name?.toLowerCase() !== "media") continue;
+    const params = n.params?.trim();
+    if (params) conds.unshift(params);
+  }
+  if (!conds.length) return "";
+  if (conds.length === 1) return conds[0] ?? "";
+  return conds.some((c) => c.includes(",")) ? "" : conds.join(" and ");
+}
 var keySelector = (sel) => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() ?? sel;
 var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => m[1] === void 0 ? [] : [m[1]]);
 var ruleIsGrid = (rule2) => [...ownDecls(rule2)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
@@ -25073,7 +25084,9 @@ function deadClasses(declared, {
     const key = `${file}\0${cls}`;
     if (seen.has(key) || !isProject(cls) || isReferenced(cls)) return [];
     seen.add(key);
-    return [{ rule: "css/dead-class", file, line, message: `.${cls}`, code: `.${cls}`, scopeLines }];
+    return [
+      { rule: "css/dead-class", file, line, message: `.${cls}`, code: `.${cls}`, selector: `.${cls}`, scopeLines }
+    ];
   });
 }
 
@@ -25585,6 +25598,8 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       const boundText = bound.filter((b) => b.isText);
       const isGrid = ruleIsGrid(cssRule);
       const scopeLines = [ruleLine, ruleLine - 1];
+      const selector = selectors.join(", ");
+      const media = mediaQuery(cssRule) || void 0;
       let touchesStyle = false;
       let touchesLayout = false;
       const pending = [];
@@ -25604,8 +25619,8 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
       if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
       const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
-      if (override) emit({ ...override, line: ruleLine, scopeLines });
-      else for (const f of collapsePerRule(pending)) emit(f);
+      if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
+      else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media });
       for (const cls of keyClasses) declared.push({ file: rel, line: ruleLine, cls, scopeLines });
     });
   }
@@ -27228,7 +27243,7 @@ var package_default = {
     "patterns-doc:check": "node scripts/patterns-doc.ts --check",
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
-    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts"
+    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts && node tests/serve.ts"
   },
   dependencies: {
     "@babel/parser": "^7.24.0",
@@ -28687,6 +28702,342 @@ ${body(payload, clean, result.diagnostics.parseErrors.length)}
 `;
 }
 
+// src/serve.ts
+import { createServer } from "node:http";
+var CSS2 = `
+:host { all: initial }
+* { box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
+.panel {
+  position: fixed; top: 16px; right: 16px; width: 380px; max-height: calc(100vh - 32px);
+  display: flex; flex-direction: column; pointer-events: auto;
+  background: #16161a; color: #e8e8ea; border: 1px solid #2c2c33; border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.45); font-size: 12px; line-height: 1.45;
+}
+.panel.min { max-height: none }
+.panel.min .body, .panel.min .search { display: none }
+.head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #2c2c33 }
+.title { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; font-size: 11px; color: #9a9aa4 }
+.count { color: #ff6b6b } .count.warn { color: #e2b341 } .count.ok { color: #4ec9a5 }
+.grow { flex: 1 }
+button { all: unset; cursor: pointer; padding: 2px 6px; border-radius: 4px; color: #9a9aa4; font-size: 11px }
+button:hover { background: #26262d; color: #e8e8ea }
+.search { padding: 8px 12px; border-bottom: 1px solid #2c2c33 }
+input { all: unset; width: 100%; padding: 5px 8px; background: #0f0f12; border: 1px solid #2c2c33; border-radius: 5px; color: #e8e8ea; font-size: 12px }
+.body { overflow: auto; padding: 4px 0 }
+.row { padding: 7px 12px; border-left: 2px solid transparent; cursor: pointer }
+.row:hover { background: #1d1d22 }
+.row.on { background: #1d1d22; border-left-color: #4ec9a5 }
+.row.dead { opacity: .5 }
+.row.offwidth { opacity: .78 }
+.row.nodom { opacity: .62; cursor: default }
+.rule { color: #7aa2f7; font-size: 11px }
+.sev { color: #ff6b6b } .sev.warn { color: #e2b341 }
+.msg { color: #e8e8ea; word-break: break-word; margin: 1px 0 }
+.meta { color: #6b6b76; font-size: 11px; display: flex; gap: 6px; flex-wrap: wrap }
+.hits { color: #4ec9a5 } .hits.zero { color: #6b6b76 }
+.cond { color: #8d7bb8 } .cond.on { color: #6b6b76 }
+.empty { padding: 20px 12px; color: #6b6b76; text-align: center }
+.note { padding: 8px 12px; color: #6b6b76; border-top: 1px solid #2c2c33; font-size: 11px }
+.marks { position: fixed; inset: 0; pointer-events: none }
+.mark { position: absolute; border: 2px solid #4ec9a5; background: rgba(78,201,165,.14); border-radius: 2px }
+.tag {
+  position: absolute; top: -18px; left: -2px; background: #4ec9a5; color: #06231c;
+  font: 600 10px ui-monospace, Menlo, monospace; padding: 1px 5px; border-radius: 3px; white-space: nowrap;
+}
+`;
+var JS2 = `
+(function () {
+  if (window.__loupe) { window.__loupe.toggle(); return; }
+  var ORIGIN = '__ORIGIN__';
+  var host = document.createElement('div');
+  host.setAttribute('data-loupe-overlay', '');
+  host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;pointer-events:none';
+  var root = host.attachShadow({ mode: 'open' });
+  var style = document.createElement('style');
+  style.textContent = __CSS__;
+  root.appendChild(style);
+  var marks = document.createElement('div');
+  marks.className = 'marks';
+  var panel = document.createElement('div');
+  panel.className = 'panel';
+  root.appendChild(marks);
+  root.appendChild(panel);
+  document.body.appendChild(host);
+
+  var data = null, pinned = null, q = '';
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // A selector as authored is not always a selector the DOM will accept, and
+  // one bad one must not take the panel down with it. Pseudo-elements have no
+  // node to match, and a state pseudo-class describes when the rule applies,
+  // not what it applies to \u2014 both are dropped so the query resolves to the
+  // elements the author was styling.
+  // The trailing lookahead, not \\b: a word boundary sits happily between
+  // 'focus' and the '-' of ':focus-visible', so \\b would strip the ':focus'
+  // and leave '-visible' welded to the class before it. That yields
+  // '.components-button-visible' \u2014 a perfectly valid selector for an element
+  // that does not exist, which is the one failure here that stays silent.
+  var STATE = /:(?:hover|focus-within|focus-visible|focus|active|visited|target|checked|disabled|enabled|indeterminate|placeholder-shown|autofill|default|read-only|read-write|link|any-link|user-invalid|user-valid|valid|invalid|required|optional)(?![\\w-])/g;
+  function domSelector(sel) {
+    var parts = String(sel).split(',').map(function (s) {
+      return s.replace(/::[a-zA-Z-]+(\\([^)]*\\))?/g, '').replace(STATE, '').trim();
+    }).filter(Boolean);
+    return parts.join(', ');
+  }
+  function match(f) {
+    if (!f.selector) return null;
+    var sel = domSelector(f.selector);
+    if (!sel) return [];
+    try {
+      return Array.prototype.slice.call(document.querySelectorAll(sel)).filter(function (el) {
+        return !host.contains(el) && el !== host;
+      });
+    } catch (e) { return []; }
+  }
+
+  function draw(els) {
+    marks.innerHTML = '';
+    if (!els || !els.length) return;
+    els.forEach(function (el, i) {
+      var r = el.getBoundingClientRect();
+      if (!r.width && !r.height) return;
+      var box = document.createElement('div');
+      box.className = 'mark';
+      box.style.left = r.left + 'px';
+      box.style.top = r.top + 'px';
+      box.style.width = r.width + 'px';
+      box.style.height = r.height + 'px';
+      if (i === 0) {
+        var tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '');
+        box.appendChild(tag);
+      }
+      marks.appendChild(box);
+    });
+  }
+
+  // Whether the rule's own @media condition holds at this moment. An
+  // unparseable query normalizes to 'not all', which never matches \u2014 reporting
+  // that as "inactive at this width" would invent a reason the finding is not
+  // showing, so an unreadable condition is treated as no condition.
+  function active(f) {
+    if (!f.media) return true;
+    try {
+      var mq = window.matchMedia(f.media);
+      if (mq.media === 'not all' && f.media.indexOf('not all') === -1) return true;
+      return mq.matches;
+    } catch (e) { return true; }
+  }
+
+  // Ordering is the panel's one opinion: what this page can actually show you
+  // comes first. A finding styling live elements right now is the reason to be
+  // looking in a browser at all; one behind a breakpoint you are not at is real
+  // but not visible; one that resolves to nothing is a hint the page does not
+  // exercise it; one with no selector was never a browser question.
+  function rows() {
+    var needle = q.toLowerCase();
+    return data.findings.map(function (f) {
+      var els = match(f);
+      return { f: f, els: els, n: els ? els.length : -1, on: active(f) };
+    }).filter(function (r) {
+      if (!needle) return true;
+      return (r.f.file + ' ' + r.f.message + ' ' + r.f.rule).toLowerCase().indexOf(needle) !== -1;
+    }).sort(function (a, b) {
+      var ga = a.n > 0 ? (a.on ? 0 : 1) : a.n === 0 ? 2 : 3;
+      var gb = b.n > 0 ? (b.on ? 0 : 1) : b.n === 0 ? 2 : 3;
+      if (ga !== gb) return ga - gb;
+      if (a.f.severity !== b.f.severity) return a.f.severity === 'error' ? -1 : 1;
+      return b.n - a.n;
+    });
+  }
+
+  function render() {
+    if (!data) { panel.innerHTML = '<div class="head"><span class="title">loupe</span></div><div class="empty">Loading\\u2026</div>'; return; }
+    var rs = rows();
+    var live = rs.filter(function (r) { return r.n > 0 && r.on; }).length;
+    var offwidth = rs.filter(function (r) { return r.n > 0 && !r.on; }).length;
+    var s = data.summary;
+    var cls = s.error ? 'count' : s.warn ? 'count warn' : 'count ok';
+    var head =
+      '<div class="head">' +
+        '<span class="title">loupe</span>' +
+        '<span class="' + cls + '">' + s.error + ' error \\u00b7 ' + s.warn + ' warn</span>' +
+        '<span class="grow"></span>' +
+        '<button data-act="refresh">refresh</button>' +
+        '<button data-act="min">\\u2013</button>' +
+        '<button data-act="close">\\u00d7</button>' +
+      '</div>' +
+      '<div class="search"><input placeholder="filter\\u2026" value="' + esc(q) + '"></div>';
+    var body = rs.length
+      ? rs.map(function (r, i) {
+          var f = r.f;
+          var k = r.n > 0 ? (r.on ? '' : ' offwidth') : r.n === 0 ? ' dead' : ' nodom';
+          var hit = r.n > 0
+            ? '<span class="hits' + (r.on ? '' : ' zero') + '">' + r.n + ' on page</span>'
+            : r.n === 0
+              ? '<span class="hits zero">0 on page</span>'
+              : '<span class="hits zero">no selector</span>';
+          // The condition is shown whenever there is one, not only when it
+          // fails: "styling these three elements, and only under this query" is
+          // a different fact from "styling these three elements", and the row
+          // should not have to be re-read at another width to tell them apart.
+          var cond = f.media
+            ? '<span class="cond' + (r.on ? ' on' : '') + '">@media ' + esc(f.media) +
+              (r.on ? '' : ' \\u2014 not at this width') + '</span>'
+            : '';
+          return '<div class="row' + k + (pinned === i ? ' on' : '') + '" data-i="' + i + '">' +
+            '<div><span class="sev ' + (f.severity === 'warn' ? 'warn' : '') + '">' +
+              (f.severity === 'error' ? '\\u2717' : '\\u2022') + '</span> ' +
+              '<span class="rule">' + esc(f.rule) + '</span></div>' +
+            '<div class="msg">' + esc(f.message) + '</div>' +
+            '<div class="meta"><span>' + esc(f.file) + ':' + f.line + '</span>' + hit + cond + '</div>' +
+          '</div>';
+        }).join('')
+      : '<div class="empty">No findings match.</div>';
+    var note = '<div class="note">' + live + ' of ' + rs.length + ' are styling elements here' +
+      (offwidth ? ', ' + offwidth + ' more only at another width' : '') +
+      '. The rest are in source this page does not render \\u2014 the terminal still has them all.</div>';
+    panel.innerHTML = head + '<div class="body">' + body + '</div>' + note;
+
+    panel.querySelectorAll('button').forEach(function (b) {
+      b.onclick = function () {
+        var a = b.getAttribute('data-act');
+        if (a === 'close') { destroy(); }
+        else if (a === 'min') { panel.classList.toggle('min'); }
+        else { load(); }
+      };
+    });
+    var input = panel.querySelector('input');
+    if (input) {
+      input.oninput = function () { q = input.value; pinned = null; render(); input.focus(); };
+      if (q) { input.focus(); input.setSelectionRange(q.length, q.length); }
+    }
+    panel.querySelectorAll('.row').forEach(function (el) {
+      var i = Number(el.getAttribute('data-i'));
+      el.onmouseenter = function () { if (pinned === null) draw(rs[i].els); };
+      el.onmouseleave = function () { if (pinned === null) draw(null); };
+      el.onclick = function () {
+        if (!rs[i].els || !rs[i].els.length) return;
+        pinned = pinned === i ? null : i;
+        draw(pinned === null ? null : rs[i].els);
+        if (pinned !== null) rs[i].els[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        render();
+      };
+    });
+  }
+
+  function reposition() { if (pinned !== null) { var rs = rows(); if (rs[pinned]) draw(rs[pinned].els); } }
+  // A resize is the one gesture that changes the answers themselves: crossing a
+  // breakpoint turns findings on and off, so the boxes move *and* the list is
+  // restated. Debounced, because a drag fires this continuously and each render
+  // re-runs every selector.
+  var resizeTimer = null;
+  function onResize() {
+    reposition();
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { resizeTimer = null; if (data) render(); }, 150);
+  }
+  function load() {
+    fetch(ORIGIN + '/findings.json', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { data = j; pinned = null; render(); })
+      .catch(function (e) {
+        panel.innerHTML = '<div class="head"><span class="title">loupe</span></div><div class="empty">' +
+          esc(String(e && e.message || e)) + '<br>Is \\u0060loupe serve\\u0060 still running?</div>';
+      });
+  }
+  function destroy() {
+    window.removeEventListener('scroll', reposition, true);
+    window.removeEventListener('resize', onResize);
+    if (resizeTimer) clearTimeout(resizeTimer);
+    host.remove();
+    delete window.__loupe;
+  }
+  window.addEventListener('scroll', reposition, true);
+  window.addEventListener('resize', onResize);
+  window.__loupe = { reload: load, destroy: destroy, toggle: function () { panel.classList.toggle('min'); } };
+  render();
+  load();
+})();
+`;
+var INDEX = (origin) => `<!doctype html><meta charset="utf-8">
+<title>loupe serve</title>
+<style>
+  body { font: 14px/1.6 ui-monospace, Menlo, monospace; background: #16161a; color: #e8e8ea; margin: 0; padding: 48px 32px; }
+  main { max-width: 760px; margin: 0 auto }
+  h1 { font-size: 15px; letter-spacing: .04em; text-transform: uppercase; color: #9a9aa4; font-weight: 600 }
+  a.bm { display: inline-block; background: #4ec9a5; color: #06231c; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600 }
+  code, pre { background: #0f0f12; border: 1px solid #2c2c33; border-radius: 6px }
+  code { padding: 2px 6px } pre { padding: 12px; overflow: auto }
+  p { color: #b6b6bd } .dim { color: #6b6b76 }
+</style>
+<main>
+<h1>loupe serve</h1>
+<p>Drag this to your bookmarks bar, then click it on any page of the app you are developing:</p>
+<p><a class="bm" href="javascript:(function(){var s=document.createElement('script');s.src='${origin}/overlay.js?'+Date.now();document.body.appendChild(s);})();">loupe</a></p>
+<p>Or paste this once in the devtools console of that page:</p>
+<pre>fetch('${origin}/overlay.js').then(r=&gt;r.text()).then(eval)</pre>
+<p class="dim">The panel lists every finding. The ones with a CSS selector resolve to the
+elements they actually style on the page you are looking at &mdash; hover to outline them, click to pin
+and scroll. Findings in source this page does not render, and every JSX-anchored rule, are listed but
+cannot be located; the terminal remains the complete report.</p>
+<p class="dim">Endpoints: <code>/findings.json</code> &middot; <code>/overlay.js</code></p>
+</main>`;
+function serve(opts) {
+  const { port, config, run } = opts;
+  const client = (origin) => JS2.replace("__ORIGIN__", origin).replace("__CSS__", JSON.stringify(CSS2));
+  let url = `http://localhost:${port}`;
+  return new Promise((resolve7, reject) => {
+    const server = createServer((req, res) => {
+      const origin = url;
+      res.setHeader("access-control-allow-origin", "*");
+      const path = (req.url ?? "/").split("?")[0];
+      if (path === "/overlay.js") {
+        res.setHeader("content-type", "text/javascript; charset=utf-8");
+        res.setHeader("cache-control", "no-store");
+        res.end(client(origin));
+        return;
+      }
+      if (path === "/findings.json") {
+        run().then((result) => {
+          res.setHeader("content-type", "application/json; charset=utf-8");
+          res.setHeader("cache-control", "no-store");
+          res.end(JSON.stringify(reportPayload(result, config)));
+        }).catch((err) => {
+          res.statusCode = 500;
+          res.setHeader("content-type", "application/json; charset=utf-8");
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        });
+        return;
+      }
+      if (path === "/") {
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end(INDEX(origin));
+        return;
+      }
+      res.statusCode = 404;
+      res.end("not found");
+    });
+    server.on("error", reject);
+    server.listen(port, () => {
+      const addr = server.address();
+      if (addr && typeof addr === "object") url = `http://localhost:${addr.port}`;
+      resolve7({
+        url,
+        close: () => new Promise((done) => {
+          server.close(() => done());
+        })
+      });
+    });
+  });
+}
+
 // src/detect.ts
 import { existsSync as existsSync6, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
 import { join as join9 } from "node:path";
@@ -29224,7 +29575,8 @@ var VALUE_FLAGS = [
   "patterns",
   "components",
   "profiles",
-  "profile"
+  "profile",
+  "port"
 ];
 var FORMATS = ["agent", "json", "sarif", "html"];
 var isFormat = (f) => FORMATS.includes(f);
@@ -29254,6 +29606,8 @@ Commands:
   detect                Show the config that would be inferred for this project
   init                  Write the inferred config to loupe.config.json
   status                Show the effective config: rules, severities, what blocks
+  serve                 Serve the findings to the running app, so a stylesheet
+                        finding can be resolved to the elements it styles
   hook                  Claude Code hook mode (reads payload on stdin)
 
 Options:
@@ -29278,6 +29632,7 @@ Options:
                         and suppresses the ones it kept; add --dry-run to
                         review them first. (TYPESAFE_API_KEY from the
                         environment or loupe's own .env)
+  --port <n>            Port for 'serve' (default: 7331)
   --force               Overwrite an existing config (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
@@ -29601,6 +29956,37 @@ async function main() {
 
 ${green(`Wrote ${target}`)}
 `);
+    return EXIT.OK;
+  }
+  if (command === "serve") {
+    const port = Number(args.flags.port ?? 7331);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+      fail(`loupe: --port wants a port number, got ${args.flags.port}
+`);
+      return EXIT.CANNOT_RUN;
+    }
+    let warned = false;
+    const run = async () => {
+      const fresh = await analyze(config, { scope: null });
+      if (args.flags["no-baseline"]) return fresh;
+      const { path: bPath, found } = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
+      const baseline = found ? readBaseline(bPath) : null;
+      if (found && !baseline && !warned) {
+        warned = true;
+        note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
+`);
+      }
+      return applyBaseline(fresh, baseline);
+    };
+    const { url } = await serve({ port, config, run });
+    process.stdout.write(
+      `${green(`loupe serve \u2014 ${url}`)}
+${dim("  Open that URL for the bookmarklet, then click it on the page you are developing.")}
+${dim("  Ctrl-C to stop.")}
+`
+    );
+    await new Promise(() => {
+    });
     return EXIT.OK;
   }
   if (command === "baseline") {
