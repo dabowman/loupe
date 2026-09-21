@@ -1,2 +1,8 @@
 node_modules/
 *.vsix
+
+# The root .gitignore excludes `.vscode/` as a personal-settings directory. Here
+# it is not: launch.json is how you run this extension, so it is source. A
+# negation only works if the directory is re-included first.
+!.vscode/
+!.vscode/launch.json

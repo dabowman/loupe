@@ -34,7 +34,17 @@ code --install-extension loupe-vscode-0.7.0.vsix
 Cursor and Windsurf are VS Code forks — the same `.vsix` installs with
 `cursor --install-extension`.
 
-To work on it instead, open `editors/vscode` in VS Code and press F5.
+## Trying it without installing
+
+`npm install` here, then open **this directory** as the VS Code window root —
+not the repository root, or F5 finds no launch configuration — and press F5.
+A second window opens with the extension loaded; open a project that uses a
+design system in it and save a file.
+
+The server it spawns is whatever `loupe` resolves to, and a checkout with its
+dependencies installed runs from `engine/src/` rather than the bundle. So an
+edit to `engine/src/lsp.ts` is live on the next **Loupe: Restart Language
+Server** — no rebuild.
 
 ## What it does
 
