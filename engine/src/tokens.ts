@@ -23,7 +23,8 @@ import { join } from 'node:path';
 import { readDir } from './discover.ts';
 import postcss from 'postcss';
 import type { Root } from 'postcss';
-import type { TokenSet } from './types.ts';
+import { messageParts, snippet } from './text.ts';
+import type { Suggestion, TokenSet } from './types.ts';
 
 /**
  * Which token names could plausibly answer for this property.
@@ -361,15 +362,41 @@ export function planValue(
 }
 
 /** `→ var(--wpds-border-radius-md)`, or `` when nothing on-role matches. */
-export function suggestionFor(set: TokenSet, prop: string, value: string): string {
-	const names = tokensFor(set, prop, value);
+export const remedyFor = (names: readonly string[]): string => {
 	if (!names.length) return '';
 	const shown = names
 		.slice(0, 2)
 		.map((n) => `var(${n})`)
 		.join(' or ');
 	return ` → ${shown}${names.length > 2 ? ` (+${names.length - 2} more)` : ''}`;
-}
+};
+
+/** What one flagged declaration says: the declaration, then what settles it. */
+const stated = (s: Suggestion): string => {
+	// The declaration is bounded and the remedy is not: a long value must not
+	// spend the whole line, and a remedy the reader is meant to act on has to
+	// arrive whole.
+	const decl = snippet(`${s.prop}: ${s.value}`);
+	return s.judged ? `${decl} → ${s.judged.spans.join(' ')}` : `${decl}${remedyFor(s.tokens)}`;
+};
+
+/**
+ * The one line a finding's flagged declarations compose, with the channel
+ * marker last.
+ *
+ * Composed rather than edited, and composed in one place, because both the
+ * token pass and `--judge` write this message and a second composer is a
+ * second set of rules to keep in step. It is a *list*: a collapsed finding
+ * carries one remedy per property, and a line bound that cuts it mid-token
+ * loses the last remedy and every remedy after it without saying so, so
+ * `messageParts` drops whole parts and counts them instead.
+ *
+ * A judgement is rendered from `judged.spans`, which is also what the report
+ * paints green — one source for what the message says about a declaration and
+ * for which of it a model wrote.
+ */
+export const declarationMessage = (parts: readonly Suggestion[], tail: string): string =>
+	messageParts(parts.map(stated), tail);
 
 /** Every `var(--prefix-…)` referenced in a value. */
 export function tokenRefsIn(value: string, prefixes: readonly string[]): string[] {

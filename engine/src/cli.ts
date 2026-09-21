@@ -14,7 +14,7 @@ import { parseArgs as parseArgv } from 'node:util';
 import { analyze } from './analyze.ts';
 import { usableReplacement } from './checks/system/currency.ts';
 import { CSS_FILE, applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
-import { VALUE_RULES, judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
+import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
@@ -960,7 +960,7 @@ async function main(): Promise<number> {
 		try {
 			toFix = await analyze(config, { scope: fixScope });
 			// Only what `fix` can write: an answer about a JSX value is paid for and dropped.
-			const judgeable = toFix.findings.filter((f) => VALUE_RULES.has(f.rule) && CSS_FILE.test(f.file));
+			const judgeable = toFix.findings.filter((f) => f.suggest?.length && CSS_FILE.test(f.file));
 			if (apiKey && toFix.tokens && judgeable.length)
 				await judgeValues(root, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
@@ -1079,7 +1079,7 @@ async function main(): Promise<number> {
 		}
 		// Its own note: the judgements above stand when this one cannot run.
 		try {
-			if (result.tokens && result.findings.some((f) => VALUE_RULES.has(f.rule)))
+			if (result.tokens && result.findings.some((f) => f.suggest?.length))
 				await judgeValues(
 					root,
 					result.findings,

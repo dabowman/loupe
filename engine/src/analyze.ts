@@ -47,8 +47,15 @@ import { discover, toPosix } from './discover.ts';
 import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
-import { messageLine, messageOf, messageParts, oneLine, snippet } from './text.ts';
-import { cssFilesUnder, harvestTokenDefs, readTokenSources, suggestionFor, tokensFor, tokenRefsIn } from './tokens.ts';
+import { messageLine, messageOf, oneLine, snippet } from './text.ts';
+import {
+	cssFilesUnder,
+	declarationMessage,
+	harvestTokenDefs,
+	readTokenSources,
+	tokensFor,
+	tokenRefsIn,
+} from './tokens.ts';
 import {
 	APPEARANCE_PROPS,
 	GAP_PROPS,
@@ -703,23 +710,18 @@ export async function analyze(
 			delete f.hints;
 			continue;
 		}
-		// Rebuilt from the hints, so each declaration goes back through `snippet` —
-		// the message the classifier bounded is being replaced, not appended to.
-		// Composed with `messageParts` rather than joined, because this is the one
-		// message that is a list: a collapsed rule carries one remedy per property,
-		// and a line bound that cuts the list mid-token loses the last remedy and
-		// every remedy after it without saying so.
-		f.message = messageParts(
-			f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
-			f.suffix ?? '',
-		);
-		// Keep the match structured as well as rendered. The prose is for a reader;
-		// an unambiguous substitution should not need a model to parse it back out
-		// of a sentence in order to apply it.
-		// One entry per flagged declaration, matched or not: `fix` clears a
-		// finding only when every declaration in it was substituted, and an
-		// entry with no tokens is how it knows one was not.
+		// Match first, render from the match. The prose is for a reader; an
+		// unambiguous substitution should not need a model to parse it back out of
+		// a sentence in order to apply it — and the message that reader sees is
+		// then a rendering of the same thing the consumer acts on, not a second
+		// account of it. One entry per flagged declaration, matched or not: `fix`
+		// clears a finding only when every declaration in it was substituted, and
+		// an entry with no tokens is how it knows one was not.
 		f.suggest = f.hints.map((h) => ({ ...h, tokens: tokensFor(tokenSet, h.prop, h.value) }));
+		// Replaces what the classifier bounded rather than appending to it.
+		// `--judge` composes the same message from the same entries when it settles
+		// one; `declarationMessage` is the single place that decides how it reads.
+		f.message = declarationMessage(f.suggest, f.suffix ?? '');
 		if (f.rule === 'tokens/hardcoded-value' && f.hints.length === 1) f.decl = f.hints[0];
 		delete f.hints;
 		// `suffix` stays until the message is bounded below, which needs to know
@@ -754,8 +756,11 @@ export async function analyze(
 		const tail = f.suffix ?? '';
 		const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
 		f.message = messageLine(body, tail);
-		delete f.suffix;
 	}
+	// `suffix` is not dropped here. `--judge` runs after this and recomposes the
+	// message of anything it settles, and it needs the marker as the datum it is
+	// rather than read back off the end of a sentence. It is dropped where the
+	// output is built, which is the last place it can be spent.
 
 	unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
 	directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);

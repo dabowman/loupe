@@ -423,7 +423,10 @@ export function reportPayload(result: AnalyzeResult | BaselinedResult, config: C
 			...('baselined' in result ? { baselined: result.baselined } : {}),
 		},
 		rules: usedRules(result, config),
-		findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: title(f.rule) })),
+		// `rank` orders the report and `suffix` carries the channel marker for
+		// whoever recomposes a message; both are working state, spent by the time
+		// there is a payload, and this is the last place they can be dropped.
+		findings: result.findings.map(({ rank, suffix, ...f }) => ({ ...f, fix: title(f.rule) })),
 		suppressions: result.directives,
 		parseErrors: result.diagnostics.parseErrors,
 		config: { rules: config.rules, enabled: config.enabled },

@@ -30,9 +30,8 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import { KEEP, planValue, suggestionFor } from './tokens.ts';
+import { KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
-import { messageParts, snippet } from './text.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
 
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
@@ -328,47 +327,16 @@ export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescrip
 }
 
 /**
- * The rules whose findings name a declaration a token could stand in for.
- * Both reach here through the same token pass, so both arrive carrying one
- * `suggest` entry per flagged declaration.
- *
- * `typography/untokenized` is several declarations to a finding — a CSS rule's
- * whole type block — which is why every answer below is written onto the
- * declaration rather than onto the finding. A type property in a stylesheet is
- * where that rule's first remedy, the text component, is not available, so a
- * token is the remedy left and it is the same question as any other value.
- */
-export const VALUE_RULES: ReadonlySet<string> = new Set(['tokens/hardcoded-value', 'typography/untokenized']);
-
-/** Where a channel marker sits on a message: ` (inline)`, `` in `.a` (css-in-js)``. */
-const MARKER = / (?:in `[^`]*` )?\((?:inline|css-in-js)\)$/;
-
-/**
- * What one declaration says in its finding's message: judged, or as the engine
- * left it. The declaration is bounded and the remedy is not, the way the token
- * pass composed it — a long value must not spend the line, and a remedy the
- * reader is meant to act on must arrive whole.
- */
-const stated = (s: Suggestion, set: TokenSet): string => {
-	const decl = snippet(`${s.prop}: ${s.value}`);
-	return s.judged ? `${decl} → ${s.judged.spans.join(' ')}` : `${decl}${suggestionFor(set, s.prop, s.value)}`;
-};
-
-/**
  * Rebuild a finding's message and its own `judged` from its declarations.
  *
- * Composed the way the token pass composed it — a bounded part each, joined by
- * `messageParts`, the channel marker kept last — rather than edited in place.
- * A collapsed message is a list that may already have dropped parts to a
- * `(+N more)` count, and editing one member of a list you cannot see all of is
- * how a remedy goes missing.
+ * Every declaration that settled is now rendered by the same
+ * `declarationMessage` the token pass used, so a judged finding and an
+ * unjudged one read by one set of rules. The channel marker comes off
+ * `suffix`, where the walk put it, rather than off the end of the sentence.
  */
-function restate(f: Finding, set: TokenSet): void {
+function restate(f: Finding): void {
 	const parts = f.suggest ?? [];
-	f.message = messageParts(
-		parts.map((s) => stated(s, set)),
-		MARKER.exec(f.message)?.[0] ?? '',
-	);
+	f.message = declarationMessage(parts, f.suffix ?? '');
 	const judged = parts.flatMap((s) => (s.judged ? [s.judged] : []));
 	if (!judged.length) return;
 	// The least certain answer speaks for the finding: it is the one a floor
@@ -417,8 +385,14 @@ export async function judgeValues(
 	const open: Open[] = [];
 	const touched = new Set<Finding>();
 	let written = 0;
+	// Every rule that flags a declaration a token could stand in for arrives with
+	// one `suggest` entry per declaration — `tokens/hardcoded-value` and
+	// `typography/untokenized` both — so carrying a list of which rules those are
+	// would be a second way of saying what the entries already say. A type
+	// property in a stylesheet is where that rule's first remedy, the text
+	// component, is not available, so a token is the remedy left and which token
+	// is the same question as for any other value.
 	for (const f of findings) {
-		if (!VALUE_RULES.has(f.rule)) continue;
 		for (const decl of f.suggest ?? []) {
 			// The single exact token is plain `fix`'s already.
 			if (decl.tokens.length === 1) continue;
@@ -497,6 +471,6 @@ export async function judgeValues(
 	}
 
 	// Once, per finding, after every answer it is waiting on has landed.
-	for (const f of touched) restate(f, set);
+	for (const f of touched) restate(f);
 	return written;
 }

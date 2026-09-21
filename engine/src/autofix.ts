@@ -2,8 +2,10 @@
  * Deterministic fixes.
  *
  * The engine already knows the answer wherever a value matched the design
- * system's own token definitions on-role — in `tokens/hardcoded-value` and in
- * `typography/untokenized`, which go through the same token pass. Printing that
+ * system's own token definitions on-role. Every rule that flags a declaration
+ * arrives carrying one `suggest` entry per declaration — `tokens/hardcoded-value`
+ * and `typography/untokenized` both — and that entry is the licence to
+ * substitute, so nothing here needs a list of which rules they are. Printing that
  * into prose and paying a model to read the file back and type the same
  * substitution is the expensive way to apply a change nobody had to reason
  * about — and they are the highest-volume rules in most reports, so they crowd
@@ -31,9 +33,6 @@ import type { Directive, FixCandidate, KeptValue, SkippedFix, SkippedKeep, Token
  */
 export const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 
-/** The rules whose findings name a declaration a token can stand in for. */
-const TOKENIZABLE = new Set<string>(['tokens/hardcoded-value', 'typography/untokenized']);
-
 /**
  * Every declaration with one rewrite for it: a single exact token, or — only
  * once `--judge` has written one — the judged replacement.
@@ -48,7 +47,10 @@ const TOKENIZABLE = new Set<string>(['tokens/hardcoded-value', 'typography/untok
 function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
 	const out: TokenFix[] = [];
 	for (const f of findings) {
-		if (!TOKENIZABLE.has(f.rule) || !CSS_FILE.test(f.file)) continue;
+		// `suggest` is the licence: an entry is a declaration whose value a token
+		// could stand in for, which is the same thing a list of which rules those
+		// are would have said, only said once and by the finding itself.
+		if (!CSS_FILE.test(f.file)) continue;
 		for (const s of f.suggest ?? []) {
 			// The exact token first: `--judge` is never asked about a declaration
 			// code already settled, so at most one of these is ever there.
@@ -174,9 +176,7 @@ export function applyKeeps(
 	// One entry per flagged declaration, at the line it is actually written on:
 	// a collapsed finding is a whole CSS rule, and its parts are not all on the
 	// line it was reported at.
-	const all = findings.flatMap((f) =>
-		TOKENIZABLE.has(f.rule) ? (f.suggest ?? []).map((s) => ({ f, s, line: s.line ?? f.line })) : [],
-	);
+	const all = findings.flatMap((f) => (f.suggest ?? []).map((s) => ({ f, s, line: s.line ?? f.line })));
 	const onLine = new Map<string, typeof all>();
 	for (const d of all) {
 		const k = `${d.f.file}\u0000${d.line}`;

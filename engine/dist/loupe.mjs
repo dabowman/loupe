@@ -25040,12 +25040,16 @@ function planValue(set, prop, value) {
   }
   return slots.length ? { parts, slots } : null;
 }
-function suggestionFor(set, prop, value) {
-  const names = tokensFor(set, prop, value);
+var remedyFor = (names) => {
   if (!names.length) return "";
   const shown = names.slice(0, 2).map((n) => `var(${n})`).join(" or ");
   return ` \u2192 ${shown}${names.length > 2 ? ` (+${names.length - 2} more)` : ""}`;
-}
+};
+var stated = (s) => {
+  const decl2 = snippet(`${s.prop}: ${s.value}`);
+  return s.judged ? `${decl2} \u2192 ${s.judged.spans.join(" ")}` : `${decl2}${remedyFor(s.tokens)}`;
+};
+var declarationMessage = (parts, tail) => messageParts(parts.map(stated), tail);
 function tokenRefsIn(value, prefixes) {
   if (!prefixes.length) return [];
   const out = [];
@@ -25703,11 +25707,8 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       delete f.hints;
       continue;
     }
-    f.message = messageParts(
-      f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
-      f.suffix ?? ""
-    );
     f.suggest = f.hints.map((h) => ({ ...h, tokens: tokensFor(tokenSet, h.prop, h.value) }));
+    f.message = declarationMessage(f.suggest, f.suffix ?? "");
     if (f.rule === "tokens/hardcoded-value" && f.hints.length === 1) f.decl = f.hints[0];
     delete f.hints;
   }
@@ -25723,7 +25724,6 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     const tail = f.suffix ?? "";
     const body2 = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
     f.message = messageLine(body2, tail);
-    delete f.suffix;
   }
   unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
   directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
@@ -25749,11 +25749,10 @@ var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.messag
 import { readFileSync as readFileSync3, writeFileSync } from "node:fs";
 import { join as join4 } from "node:path";
 var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
-var TOKENIZABLE = /* @__PURE__ */ new Set(["tokens/hardcoded-value", "typography/untokenized"]);
 function tokenFixes(findings) {
   const out = [];
   for (const f of findings) {
-    if (!TOKENIZABLE.has(f.rule) || !CSS_FILE.test(f.file)) continue;
+    if (!CSS_FILE.test(f.file)) continue;
     for (const s of f.suggest ?? []) {
       const to = s.tokens.length === 1 ? `var(${s.tokens[0]})` : s.judged?.answer;
       if (to === void 0 || to === KEEP) continue;
@@ -25817,9 +25816,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
 }
 function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } = {}) {
   const taken = new Set(directives.map((d) => `${d.file}\0${d.line}`));
-  const all = findings.flatMap(
-    (f) => TOKENIZABLE.has(f.rule) ? (f.suggest ?? []).map((s) => ({ f, s, line: s.line ?? f.line })) : []
-  );
+  const all = findings.flatMap((f) => (f.suggest ?? []).map((s) => ({ f, s, line: s.line ?? f.line })));
   const onLine = /* @__PURE__ */ new Map();
   for (const d of all) {
     const k = `${d.f.file}\0${d.line}`;
@@ -27486,18 +27483,9 @@ function tokenDescriptions(profiles) {
   }
   return out;
 }
-var VALUE_RULES = /* @__PURE__ */ new Set(["tokens/hardcoded-value", "typography/untokenized"]);
-var MARKER = / (?:in `[^`]*` )?\((?:inline|css-in-js)\)$/;
-var stated = (s, set) => {
-  const decl2 = snippet(`${s.prop}: ${s.value}`);
-  return s.judged ? `${decl2} \u2192 ${s.judged.spans.join(" ")}` : `${decl2}${suggestionFor(set, s.prop, s.value)}`;
-};
-function restate(f, set) {
+function restate(f) {
   const parts = f.suggest ?? [];
-  f.message = messageParts(
-    parts.map((s) => stated(s, set)),
-    MARKER.exec(f.message)?.[0] ?? ""
-  );
+  f.message = declarationMessage(parts, f.suffix ?? "");
   const judged = parts.flatMap((s) => s.judged ? [s.judged] : []);
   if (!judged.length) return;
   f.judged = {
@@ -27515,7 +27503,6 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
   const touched = /* @__PURE__ */ new Set();
   let written = 0;
   for (const f of findings) {
-    if (!VALUE_RULES.has(f.rule)) continue;
     for (const decl2 of f.suggest ?? []) {
       if (decl2.tokens.length === 1) continue;
       const plan = planValue(set, decl2.prop, decl2.value);
@@ -27574,7 +27561,7 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
     touched.add(f);
     written++;
   }
-  for (const f of touched) restate(f, set);
+  for (const f of touched) restate(f);
   return written;
 }
 
@@ -28201,7 +28188,10 @@ function reportPayload(result, config) {
       ..."baselined" in result ? { baselined: result.baselined } : {}
     },
     rules: usedRules(result, config),
-    findings: result.findings.map(({ rank, ...f }) => ({ ...f, fix: title(f.rule) })),
+    // `rank` orders the report and `suffix` carries the channel marker for
+    // whoever recomposes a message; both are working state, spent by the time
+    // there is a payload, and this is the last place they can be dropped.
+    findings: result.findings.map(({ rank, suffix, ...f }) => ({ ...f, fix: title(f.rule) })),
     suppressions: result.directives,
     parseErrors: result.diagnostics.parseErrors,
     config: { rules: config.rules, enabled: config.enabled }
@@ -29622,7 +29612,7 @@ ${green(`Wrote ${target}`)}
     let toFix;
     try {
       toFix = await analyze(config, { scope: fixScope });
-      const judgeable = toFix.findings.filter((f) => VALUE_RULES.has(f.rule) && CSS_FILE.test(f.file));
+      const judgeable = toFix.findings.filter((f) => f.suggest?.length && CSS_FILE.test(f.file));
       if (apiKey && toFix.tokens && judgeable.length)
         await judgeValues(root2, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
@@ -29704,7 +29694,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s
 `);
     }
     try {
-      if (result.tokens && result.findings.some((f) => VALUE_RULES.has(f.rule)))
+      if (result.tokens && result.findings.some((f) => f.suggest?.length))
         await judgeValues(
           root2,
           result.findings,
