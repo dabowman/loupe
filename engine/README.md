@@ -758,6 +758,16 @@ It serves rather than integrates — stdlib HTTP and a bookmarklet, no bundler
 plugin — because the dev environments this has to work in are not all a Vite
 server with a middleware slot. One of them is webpack inside a Docker WordPress.
 
+A bookmarklet injects into the current document only, so on a multi-page app it
+is a click per navigation. Where that grates, have the app itself load
+`<origin>/overlay.js` under whatever flag already means "this is a dev build" —
+in footer or deferred, since the overlay appends to `document.body` as it
+evaluates. Under wp-env that is a mu-plugin reading a constant from
+`.wp-env.json`, mapped in as a *directory*: Docker cannot bind-mount a single
+file into a parent that does not yet exist in the container, and
+`wp-content/mu-plugins/` does not. Keep the flag out of any environment that
+runs browser tests — a fixed panel over every page intercepts their clicks.
+
 Two limits are worth stating plainly, because the panel's whole risk is reading
 as a verdict rather than a view:
 
