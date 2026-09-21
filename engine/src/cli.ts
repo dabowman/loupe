@@ -21,7 +21,7 @@ import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
 import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
-import { formatAgent, formatSarif, formatSummary, reportPayload } from './report.ts';
+import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
 import { oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
@@ -142,6 +142,7 @@ const usage = (): string =>
  */
 const VALUE_FLAGS = [
 	'format',
+	'group-by',
 	'config',
 	'root',
 	'preset',
@@ -232,6 +233,8 @@ Options:
   --files a,b           Only report findings in these files
   --format <f>          agent | json | sarif | html  (default: agent)
                         html writes a self-contained page — redirect it to a file
+  --group-by <g>        rule | file — what the agent format heads each block
+                        with; the other becomes the sub-heading (default: rule)
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn — minimum severity to report
   --baseline <path>     Read/write the baseline here instead of the configured
@@ -1018,6 +1021,15 @@ async function main(): Promise<number> {
 		fail(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(', ')}\n`);
 		return EXIT.CANNOT_RUN;
 	}
+	// Rejected here for the same reason as `--format`, and loudly for the same
+	// reason: a misspelled `--group-by fil` that fell back to the default would
+	// print a perfectly good report in the order the caller did not ask for, and
+	// nothing about it would look wrong.
+	const group = args.flags['group-by'] ?? 'rule';
+	if (!isGroupBy(group)) {
+		fail(`loupe: unknown grouping "${group}" \u2014 expected ${GROUP_BYS.join(', ')}\n`);
+		return EXIT.CANNOT_RUN;
+	}
 	// ── check / hook ──────────────────────────────────────────────────────────
 	// A PostToolUse payload names the file just written; scope to it so drift is
 	// reported at write time. Stop payloads carry no file and fall through to
@@ -1139,7 +1151,7 @@ async function main(): Promise<number> {
 	// be redirected, which is what the process.exitCode note below is about.
 	else if (format === 'html') process.stdout.write(formatHtml(result, config));
 	else {
-		process.stdout.write(`${formatAgent(result, config, { maxFindings })}\n`);
+		process.stdout.write(`${formatAgent(result, config, { maxFindings, group })}\n`);
 		if ('baselined' in result && result.baselined)
 			process.stdout.write(dim(`\n${result.baselined} baselined finding(s) hidden.\n`));
 	}

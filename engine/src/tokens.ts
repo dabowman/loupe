@@ -361,13 +361,18 @@ export function planValue(
 	return slots.length ? { parts, slots } : null;
 }
 
-/** `→ var(--wpds-border-radius-md)`, or `` when nothing on-role matches. */
+/**
+ * `→ --wpds-border-radius-md`, or `` when nothing on-role matches.
+ *
+ * The token's name, not the `var()` around it. Every line of a report that
+ * names a token wore the same six characters of wrapper, and on a run that
+ * names a hundred they are the only thing the eye has to scan past to reach
+ * the part that differs. The wrapper is also not news: the rule says to use a
+ * token and the reader is looking at CSS.
+ */
 export const remedyFor = (names: readonly string[]): string => {
 	if (!names.length) return '';
-	const shown = names
-		.slice(0, 2)
-		.map((n) => `var(${n})`)
-		.join(' or ');
+	const shown = names.slice(0, 2).join(' or ');
 	return ` → ${shown}${names.length > 2 ? ` (+${names.length - 2} more)` : ''}`;
 };
 

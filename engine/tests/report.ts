@@ -240,6 +240,24 @@ await check('an unknown --format is rejected, not silently treated as agent', ()
 	}
 });
 
+// Same hazard, same answer: a `--group-by fil` that fell through to the default
+// would print a perfectly good report in the order nobody asked for, and there
+// is nothing in the output to say so.
+await check('an unknown --group-by is rejected, not silently treated as rule', () => {
+	const dir = scratch('loupe-group-');
+	writeAll(dir, DRIFTY);
+	try {
+		execFileSync(process.execPath, [CLI, 'check', '--all', '--group-by', 'fil'], { cwd: dir, encoding: 'utf8' });
+		throw new Error('a misspelled grouping exited 0');
+	} catch (err) {
+		const e = execFailure(err);
+		assert(e.status === 2, `expected exit 2 (cannot run), got ${String(e.status)}`);
+		assert(e.stderr.includes('fil') && e.stderr.includes('file'), `stderr did not name the valid axes: ${e.stderr}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
 await check('--format html writes a whole document to stdout', () => {
 	const dir = scratch('loupe-html-');
 	writeAll(dir, DRIFTY);
@@ -544,5 +562,88 @@ await check('a prefix with no tokens behind it is said out loud, not failed open
 		cleanup(root);
 	}
 });
+
+// ── grouping ────────────────────────────────────────────────────────────────
+// The path used to ride on every finding line, so a rule firing forty times in
+// one file printed that path forty times. Both orders are a nesting now: a
+// heading, its counterpart as a sub-heading, and a bare line number under that.
+// The axes swap and nothing else about the report does — which is the half that
+// is easy to break, so it is the half asserted hardest.
+
+const RULE_HEAD = /^([✗•]) (\S+\/\S+) \((\d+)\) (blocking|advisory) — /;
+const FILE_HEAD = /^(\S+\.(?:css|jsx)) \((\d+)\)$/;
+/** A finding line: six spaces, a right-aligned line number, the message. */
+const NUMBERED = /^ {6} *\d+ {2}\S/;
+
+// `DRIFTY` puts every finding in one stylesheet, which cannot tell a file
+// grouping from a rule grouping — both would print one heading. Three files,
+// so the axes are actually distinguishable and the budget has somewhere to
+// spread.
+const spread = await run({
+	'loupe.config.json': CONFIG,
+	'src/App.jsx': 'export const App = () => <div className="wf-card"><span className="wf-row">hi</span></div>;',
+	'styles/a.css': '.wf-card { padding: 12px; margin-bottom: 16px; }',
+	'styles/b.css': '.wf-row { font-size: 13px; color: #757575; }',
+});
+
+await check('both groupings nest, and neither repeats a path per finding', () => {
+	const { result, config } = spread;
+	const byRule = formatAgent(result, config, { group: 'rule' });
+	const byFile = formatAgent(result, config, { group: 'file' });
+	const lines = (out: string, re: RegExp, indent: string): string[] =>
+		out.split('\n').filter((l) => re.test(l.startsWith(indent) ? l.slice(indent.length) : '\u0000'));
+
+	for (const [mode, out] of [
+		['rule', byRule],
+		['file', byFile],
+	] as const) {
+		// The old shape, and the one thing both modes exist to stop printing.
+		const perLine = out.split('\n').filter((l) => NUMBERED.test(l) && /\.(css|jsx):\d+/.test(l));
+		assert(!perLine.length, `--group-by ${mode} still prints a path per finding:\n${perLine.join('\n')}`);
+		// Every finding reached a line, under exactly one heading pair.
+		const numbered = out.split('\n').filter((l) => NUMBERED.test(l));
+		assert(
+			numbered.length === result.findings.length,
+			`--group-by ${mode} printed ${numbered.length} of ${result.findings.length} findings:\n${out}`,
+		);
+	}
+
+	// Rule first: the rule and its remedy at the margin, the path indented under
+	// it. Asserted on the indent as well as the text, since two headings at the
+	// same indent read as two groups rather than one nesting.
+	assert(lines(byRule, RULE_HEAD, '').length > 1, `--group-by rule did not head on rules:\n${byRule}`);
+	assert(lines(byRule, FILE_HEAD, '  ').length > 0, `--group-by rule did not sub-head on paths:\n${byRule}`);
+	assert(!lines(byRule, FILE_HEAD, '').length, `--group-by rule put a path at the margin:\n${byRule}`);
+	// File first: the same two, swapped.
+	assert(lines(byFile, FILE_HEAD, '').length > 1, `--group-by file did not head on paths:\n${byFile}`);
+	assert(lines(byFile, RULE_HEAD, '  ').length > 0, `--group-by file did not sub-head on rules:\n${byFile}`);
+	assert(!lines(byFile, RULE_HEAD, '').length, `--group-by file put a rule at the margin:\n${byFile}`);
+
+	// Same findings either way — only what they are filed under changes.
+	const numbered = (out: string): string =>
+		out
+			.split('\n')
+			.filter((l) => NUMBERED.test(l))
+			.map((l) => l.trim())
+			.sort()
+			.join('\n');
+	assert(
+		numbered(byRule) === numbered(byFile),
+		`the two groupings disagree:\n${numbered(byRule)}\n--\n${numbered(byFile)}`,
+	);
+});
+
+// The budget is spent round-robin across whatever the reader is being shown, so
+// no one group can eat it. Grouped by file that has to be files: a rule-keyed
+// quota would spend the whole cap inside the first file and leave the rest of
+// the repo behind a count, which is the opposite of what this grouping is for.
+await check('a capped report spreads its budget across the axis it groups on', () => {
+	const capped = formatAgent(spread.result, spread.config, { group: 'file', maxFindings: 2 });
+	const heads = capped.split('\n').filter((l) => FILE_HEAD.test(l));
+	assert(heads.length > 1, `the cap was spent inside one file:\n${capped}`);
+	assert(/… \d+ more/.test(capped), `nothing said what the cap hid:\n${capped}`);
+	assert(/\d+ finding\(s\) not shown/.test(capped), `no way back to the full list:\n${capped}`);
+});
+cleanup(spread.root);
 
 finish();

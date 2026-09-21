@@ -507,9 +507,10 @@ sources), plus `keep` where it is allowed. A value settles only if every part
 clears 0.5, apart from the in-scale spacing picks above. A value judged `keep` in
 every part is kept; one that mixes `keep` with a token is left for review, since
 a `var()` anywhere in it would exempt the kept literal. The result is written
-into the finding (`padding: 6px 12px → var(…-sm) var(…-md) (judged 0.60)`, or
+into the finding (`padding: 6px 12px → …-sm …-md (judged 0.60)`, or
 `deliberate, no token fits`) and recorded on `judged`. For values, `answer` is
-the replacement text or `keep`.
+the replacement text — `var()` and all, since that is what `fix --judge`
+writes — or `keep`. The message names the tokens without it.
 
 `fix --judge` applies those answers in stylesheets only. A replacement goes
 through the same line-exact substitution as `fix`. A kept value gets a

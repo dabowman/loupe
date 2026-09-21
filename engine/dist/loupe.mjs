@@ -25042,7 +25042,7 @@ function planValue(set, prop, value) {
 }
 var remedyFor = (names) => {
   if (!names.length) return "";
-  const shown = names.slice(0, 2).map((n) => `var(${n})`).join(" or ");
+  const shown = names.slice(0, 2).join(" or ");
   return ` \u2192 ${shown}${names.length > 2 ? ` (+${names.length - 2} more)` : ""}`;
 };
 var stated = (s) => {
@@ -25315,7 +25315,7 @@ function unknownTokens(refs, known) {
     const key = `${file}\0${name}`;
     if (known.has(name) || seen.has(key)) return [];
     seen.add(key);
-    return [{ rule: "tokens/unknown-token", file, line, message: `var(${name})`, code: name, scopeLines }];
+    return [{ rule: "tokens/unknown-token", file, line, message: name, code: name, scopeLines }];
   });
 }
 
@@ -27551,12 +27551,16 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
       decl2.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
     } else {
       const out = [...parts];
+      const named = [...parts];
       slots.forEach((s, k) => {
-        out[s.at] = `var(${got[k]?.choice ?? ""})`;
+        const token = got[k]?.choice ?? "";
+        out[s.at] = `var(${token})`;
+        named[s.at] = token;
       });
       const to = out.join(" ");
+      const shown = named.join(" ");
       const tail = confidence2 < 1 ? judgedTail(confidence2) : "";
-      decl2.judged = { answer: to, confidence: confidence2, spans: tail ? [to, tail] : [to] };
+      decl2.judged = { answer: to, confidence: confidence2, spans: tail ? [shown, tail] : [shown] };
     }
     touched.add(f);
     written++;
@@ -28059,7 +28063,34 @@ function suppressionLine(directives) {
   return `${directives.length} active suppression(s) in ${files} file(s), silencing ${rules.slice(0, TOP).map(([rule2, n]) => `${rule2} (${n})`).join(", ")}${rest > 0 ? `, +${rest} more rule(s)` : ""} \u2014 run \`loupe suppressions\` to read them.`;
 }
 var withNote = (f) => f.note ? messageLine(f.message, ` (${f.note})`) : f.message;
-function formatAgent(result, config, { maxFindings = 0, terse = false } = {}) {
+var GROUP_BYS = ["rule", "file"];
+var isGroupBy = (g) => GROUP_BYS.includes(g);
+function bucket(findings, key) {
+  const out = /* @__PURE__ */ new Map();
+  for (const f of findings) {
+    const g = out.get(key(f));
+    if (g) g.push(f);
+    else out.set(key(f), [f]);
+  }
+  return [...out.entries()];
+}
+var byRank = (a, b) => RULES[b[0]].rank - RULES[a[0]].rank;
+var byWeight = (a, b) => {
+  const blocking = (g) => g.filter((f) => f.severity === "error").length;
+  return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]);
+};
+var groupsOf = (findings, by) => by === "rule" ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
+function ruleHeading(id, group, title) {
+  const sev = group[0]?.severity ?? "warn";
+  return `${SEV_PAINT[sev](SEV_MARK[sev] ?? "\u2022")} ${magenta(id)} ${dim(`(${group.length})`)} ${SEV_PAINT[sev](SEV_WORD[sev] ?? "advisory")} \u2014 ${title(id)}`;
+}
+var fileHeading = (file, group) => `${bold(file)} ${dim(`(${group.length})`)}`;
+var heading = (by, key, group, title) => by === "rule" ? ruleHeading(key, group, title) : fileHeading(key, group);
+function findingLines(group) {
+  const width = Math.max(...group.map((f) => String(f.line).length));
+  return [...group].sort((a, b) => a.line - b.line).map((f) => `      ${dim(String(f.line).padStart(width))}  ${painted(f)}`);
+}
+function formatAgent(result, config, { maxFindings = 0, terse = false, group = "rule" } = {}) {
   const { findings, diagnostics } = result;
   const kw = config.suppression.keyword;
   const title = titleFor(config);
@@ -28067,38 +28098,33 @@ function formatAgent(result, config, { maxFindings = 0, terse = false } = {}) {
   lines.push(`${formatSummary(result)} ${dim(`${diagnostics.filesScanned} file(s) scanned.`)}`);
   if (!terse && result.directives.length) lines.push(dim(suppressionLine(result.directives)));
   if (findings.length) {
-    const byRule = /* @__PURE__ */ new Map();
-    for (const f of findings) {
-      const group = byRule.get(f.rule) ?? [];
-      group.push(f);
-      byRule.set(f.rule, group);
-    }
-    const groups = [...byRule.entries()].sort((a, b) => RULES[b[0]].rank - RULES[a[0]].rank);
-    const quota = new Map(groups.map(([id]) => [id, 0]));
+    const sub = group === "rule" ? "file" : "rule";
+    const groups = groupsOf(findings, group);
+    const quota = new Map(groups.map(([key]) => [key, 0]));
     let budget = maxFindings > 0 ? maxFindings : Infinity;
     let progress = true;
     while (budget > 0 && progress) {
       progress = false;
-      for (const [id, group] of groups) {
+      for (const [key, all] of groups) {
         if (budget <= 0) break;
-        const taken = quota.get(id) ?? 0;
-        if (taken >= group.length) continue;
-        quota.set(id, taken + 1);
+        const taken = quota.get(key) ?? 0;
+        if (taken >= all.length) continue;
+        quota.set(key, taken + 1);
         budget--;
         progress = true;
       }
     }
     let hidden = 0;
-    for (const [ruleId, group] of groups) {
-      const sev = group[0]?.severity ?? "warn";
+    for (const [key, all] of groups) {
       lines.push("");
-      lines.push(
-        `${SEV_PAINT[sev](SEV_MARK[sev] ?? "\u2022")} ${magenta(ruleId)} ${dim(`(${group.length})`)} ${SEV_PAINT[sev](SEV_WORD[sev] ?? "advisory")} \u2014 ${title(ruleId)}`
-      );
-      const show = group.slice(0, quota.get(ruleId) ?? 0);
-      hidden += group.length - show.length;
-      for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${painted(f)}`);
-      if (group.length > show.length) lines.push(dim(`    \u2026 ${group.length - show.length} more`));
+      lines.push(heading(group, key, all, title));
+      const show = all.slice(0, quota.get(key) ?? 0);
+      hidden += all.length - show.length;
+      for (const [subKey, subGroup] of groupsOf(show, sub)) {
+        lines.push(`  ${heading(sub, subKey, subGroup, title)}`);
+        lines.push(...findingLines(subGroup));
+      }
+      if (all.length > show.length) lines.push(dim(`  \u2026 ${all.length - show.length} more`));
     }
     if (hidden) {
       lines.push("");
@@ -29187,6 +29213,7 @@ var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${dim(`"${
 var usage = () => USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^ {2}([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
 var VALUE_FLAGS = [
   "format",
+  "group-by",
   "config",
   "root",
   "preset",
@@ -29235,6 +29262,8 @@ Options:
   --files a,b           Only report findings in these files
   --format <f>          agent | json | sarif | html  (default: agent)
                         html writes a self-contained page \u2014 redirect it to a file
+  --group-by <g>        rule | file \u2014 what the agent format heads each block
+                        with; the other becomes the sub-heading (default: rule)
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn \u2014 minimum severity to report
   --baseline <path>     Read/write the baseline here instead of the configured
@@ -29657,6 +29686,12 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s
 `);
     return EXIT.CANNOT_RUN;
   }
+  const group = args.flags["group-by"] ?? "rule";
+  if (!isGroupBy(group)) {
+    fail(`loupe: unknown grouping "${group}" \u2014 expected ${GROUP_BYS.join(", ")}
+`);
+    return EXIT.CANNOT_RUN;
+  }
   const touched = isHook ? payloadFile(payload, root2) : null;
   if (touched && !isSource(config.sources, touched)) return emitClean("loupe: skipped \u2014 not a checked file type.");
   const scope = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
@@ -29739,7 +29774,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s
 `);
   else if (format === "html") process.stdout.write(formatHtml(result, config));
   else {
-    process.stdout.write(`${formatAgent(result, config, { maxFindings })}
+    process.stdout.write(`${formatAgent(result, config, { maxFindings, group })}
 `);
     if ("baselined" in result && result.baselined)
       process.stdout.write(dim(`

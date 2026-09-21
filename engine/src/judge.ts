@@ -458,13 +458,21 @@ export async function judgeValues(
 			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
 		} else {
 			const out = [...parts];
+			const named = [...parts];
 			slots.forEach((s, k) => {
-				out[s.at] = `var(${got[k]?.choice ?? ''})`;
+				const token = got[k]?.choice ?? '';
+				out[s.at] = `var(${token})`;
+				named[s.at] = token;
 			});
+			// Two renderings of one answer, because they have two readers. The
+			// message names the tokens, the way every other suggestion in the
+			// report does; `answer` stays the CSS `fix --judge` writes into the
+			// file, where the `var()` is not decoration.
 			const to = out.join(' ');
+			const shown = named.join(' ');
 			// Settled without a question when every part was exact.
 			const tail = confidence < 1 ? judgedTail(confidence) : '';
-			decl.judged = { answer: to, confidence, spans: tail ? [to, tail] : [to] };
+			decl.judged = { answer: to, confidence, spans: tail ? [shown, tail] : [shown] };
 		}
 		touched.add(f);
 		written++;

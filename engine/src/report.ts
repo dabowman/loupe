@@ -1,15 +1,19 @@
 /**
  * Formatters.
  *
- * The agent format exists because context is the scarce resource: fix guidance
- * is printed once per rule group, and per-finding lines carry only what varies.
- * A report that repeats the same remedy 200 times costs more to read than the
- * findings are worth.
+ * The agent format exists because context is the scarce resource: it is built
+ * as a nesting, and a per-finding line carries only what varies inside it. A
+ * report that repeats the same remedy 200 times, or the same path 40 times,
+ * costs more to read than the findings are worth.
+ *
+ * Which of rule and path heads a block and which sub-heads it is the reader's
+ * choice ({@link GroupBy}); everything else about the report is the same
+ * either way.
  */
 
 import { createHash } from 'node:crypto';
 import { findingKey } from './analyze.ts';
-import { SEV_PAINT, cyan, dim, green, magenta, red, yellow } from './color.ts';
+import { SEV_PAINT, bold, cyan, dim, green, magenta, red, yellow } from './color.ts';
 import { RULES, renderTitle } from './rules.ts';
 import { messageLine } from './text.ts';
 import type {
@@ -201,6 +205,89 @@ function suppressionLine(directives: readonly Directive[]): string {
 const withNote = (f: Finding): string => (f.note ? messageLine(f.message, ` (${f.note})`) : f.message);
 
 /**
+ * Which axis the report groups on. The other one becomes the sub-heading, so
+ * neither the rule nor the path is ever repeated line by line.
+ *
+ * Both orders answer a real question and neither answers the other's. Rule
+ * first is "what is wrong with this codebase, and in what order do I fix it" —
+ * the remedy is stated once and every site of it sits underneath. File first is
+ * "what do I have to change in the file I have open", which is the shape of the
+ * work when a reader is already in an editor rather than triaging a repo.
+ */
+export const GROUP_BYS = ['rule', 'file'] as const;
+export type GroupBy = (typeof GROUP_BYS)[number];
+export const isGroupBy = (g: string): g is GroupBy => (GROUP_BYS as readonly string[]).includes(g);
+
+/** A heading and everything filed under it. */
+type Group = [key: string, findings: Finding[]];
+
+/** Findings bucketed by key, first-seen order — what both axes are built from. */
+function bucket(findings: readonly Finding[], key: (f: Finding) => string): Group[] {
+	const out = new Map<string, Finding[]>();
+	for (const f of findings) {
+		const g = out.get(key(f));
+		if (g) g.push(f);
+		else out.set(key(f), [f]);
+	}
+	return [...out.entries()];
+}
+
+/** Rules richest first — the order the guidance under them wants to be read in. */
+const byRank = (a: Group, b: Group): number => RULES[b[0] as RuleId].rank - RULES[a[0] as RuleId].rank;
+
+/**
+ * Files worst first: whatever blocks, then by weight, then by name.
+ *
+ * A path has no rank to sort on, and first-seen order is the order the file
+ * walker happened to reach them in — which is neither meaningful nor stable
+ * across platforms. Somebody reading a file-grouped report is working through
+ * it file by file, so the file holding the gate belongs where they start.
+ */
+const byWeight = (a: Group, b: Group): number => {
+	const blocking = (g: Finding[]): number => g.filter((f) => f.severity === 'error').length;
+	return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]);
+};
+
+/** The findings grouped on one axis, that axis's own order. */
+const groupsOf = (findings: readonly Finding[], by: GroupBy): Group[] =>
+	by === 'rule' ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
+
+/** `✗ layout/margin-on-child (3) blocking — margin — move spacing to the parent…` */
+function ruleHeading(id: string, group: readonly Finding[], title: (id: RuleId) => string): string {
+	const sev = group[0]?.severity ?? 'warn';
+	// Spans, not one paint: severity carries the mark and the word beside it,
+	// the id carries the colour rules wear everywhere else, and the count is
+	// arithmetic. Painting the whole heading by severity made the id the one
+	// thing on the line that did not look like itself.
+	return (
+		`${SEV_PAINT[sev](SEV_MARK[sev] ?? '•')} ${magenta(id)} ${dim(`(${group.length})`)} ` +
+		`${SEV_PAINT[sev](SEV_WORD[sev] ?? 'advisory')} — ${title(id as RuleId)}`
+	);
+}
+
+/** `styles/card.css (3)` */
+const fileHeading = (file: string, group: readonly Finding[]): string => `${bold(file)} ${dim(`(${group.length})`)}`;
+
+const heading = (by: GroupBy, key: string, group: readonly Finding[], title: (id: RuleId) => string): string =>
+	by === 'rule' ? ruleHeading(key, group, title) : fileHeading(key, group);
+
+/**
+ * The findings of one group, by line.
+ *
+ * The number alone: the path is the heading two lines up in one mode and the
+ * heading itself in the other, and a reader who has to check whether line 4 of
+ * this block is still the same file as line 3 is paying for the grouping twice.
+ * Right-aligned so a three-digit line does not push a two-digit one out of
+ * column — the message is what the eye is scanning down, not the number.
+ */
+function findingLines(group: readonly Finding[]): string[] {
+	const width = Math.max(...group.map((f) => String(f.line).length));
+	return [...group]
+		.sort((a, b) => a.line - b.line)
+		.map((f) => `      ${dim(String(f.line).padStart(width))}  ${painted(f)}`);
+}
+
+/**
  * The report a reader gets.
  *
  * `terse` is the hook's version: blocking findings handed back mid-turn, to a
@@ -216,7 +303,7 @@ const withNote = (f: Finding): string => (f.note ? messageLine(f.message, ` (${f
 export function formatAgent(
 	result: AnalyzeResult | BaselinedResult,
 	config: Config,
-	{ maxFindings = 0, terse = false }: { maxFindings?: number; terse?: boolean } = {},
+	{ maxFindings = 0, terse = false, group = 'rule' }: { maxFindings?: number; terse?: boolean; group?: GroupBy } = {},
 ): string {
 	const { findings, diagnostics } = result;
 	const kw = config.suppression.keyword;
@@ -236,51 +323,39 @@ export function formatAgent(
 	if (!terse && result.directives.length) lines.push(dim(suppressionLine(result.directives)));
 
 	if (findings.length) {
-		const byRule = new Map<RuleId, Finding[]>();
-		for (const f of findings) {
-			const group = byRule.get(f.rule) ?? [];
-			group.push(f);
-			byRule.set(f.rule, group);
-		}
-		const groups = [...byRule.entries()].sort((a, b) => RULES[b[0]].rank - RULES[a[0]].rank);
+		const sub: GroupBy = group === 'rule' ? 'file' : 'rule';
+		const groups = groupsOf(findings, group);
 
-		// Spend the budget round-robin across rule groups. Filling it first-come
-		// buries every other rule behind whichever one happens to rank highest,
-		// and an agent that only ever sees one rule only ever fixes one rule.
-		const quota = new Map<RuleId, number>(groups.map(([id]) => [id, 0]));
+		// Spend the budget round-robin across the groups the reader is being
+		// shown. Filling it first-come buries every other group behind whichever
+		// one happens to sort highest, and an agent that only ever sees one rule
+		// only ever fixes one rule \u2014 or, grouped by file, one file.
+		const quota = new Map<string, number>(groups.map(([key]) => [key, 0]));
 		let budget = maxFindings > 0 ? maxFindings : Infinity;
 		let progress = true;
 		while (budget > 0 && progress) {
 			progress = false;
-			for (const [id, group] of groups) {
+			for (const [key, all] of groups) {
 				if (budget <= 0) break;
-				const taken = quota.get(id) ?? 0;
-				if (taken >= group.length) continue;
-				quota.set(id, taken + 1);
+				const taken = quota.get(key) ?? 0;
+				if (taken >= all.length) continue;
+				quota.set(key, taken + 1);
 				budget--;
 				progress = true;
 			}
 		}
 
 		let hidden = 0;
-		for (const [ruleId, group] of groups) {
-			const sev = group[0]?.severity ?? 'warn';
+		for (const [key, all] of groups) {
 			lines.push('');
-			// Spans, not one paint: severity carries the mark and the word beside it,
-			// the id carries the colour rules wear everywhere else, and the count is
-			// arithmetic. Painting the whole heading by severity made the id the one
-			// thing on the line that did not look like itself.
-			lines.push(
-				`${SEV_PAINT[sev](SEV_MARK[sev] ?? '\u2022')} ${magenta(ruleId)} ${dim(`(${group.length})`)} ` +
-					`${SEV_PAINT[sev](SEV_WORD[sev] ?? 'advisory')} \u2014 ${title(ruleId)}`,
-			);
-			const show = group.slice(0, quota.get(ruleId) ?? 0);
-			hidden += group.length - show.length;
-			// Location dimmed, message plain: the location is what an editor
-			// consumes and the message is what a reader does, and the pair sits on
-			// one line with nothing else to tell them apart.
-			for (const f of show) lines.push(`    ${dim(`${f.file}:${f.line}`)}  ${painted(f)}`);
-			if (group.length > show.length) lines.push(dim(`    \u2026 ${group.length - show.length} more`));
+			lines.push(heading(group, key, all, title));
+			const show = all.slice(0, quota.get(key) ?? 0);
+			hidden += all.length - show.length;
+			for (const [subKey, subGroup] of groupsOf(show, sub)) {
+				lines.push(`  ${heading(sub, subKey, subGroup, title)}`);
+				lines.push(...findingLines(subGroup));
+			}
+			if (all.length > show.length) lines.push(dim(`  \u2026 ${all.length - show.length} more`));
 		}
 		if (hidden) {
 			lines.push('');

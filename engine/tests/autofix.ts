@@ -17,6 +17,7 @@ import { applyKeeps, applyTokenFixes, settledBy } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
 import { judgeValues } from '../src/judge.ts';
 import { KEEP, emptyTokenSet, harvestTokenDefs, planValue } from '../src/tokens.ts';
+import { messageParts } from '../src/text.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
 import type { Finding, FixCandidate, SkippedFix, TokenFix } from '../src/types.ts';
 
@@ -388,9 +389,13 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 		};
 		const padding = at('styles/card.css', 2, 'padding');
 		assert(
-			padding.message ===
-				'padding: 10px 12px → var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md) (judged 0.30)',
+			padding.message === 'padding: 10px 12px → --wpds-dimension-padding-sm --wpds-dimension-padding-md (judged 0.30)',
 			padding.message,
+		);
+		// The message names the tokens; the answer stays the CSS `fix` writes.
+		assert(
+			padding.judged?.answer === 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md)',
+			`judged answer is not the replacement value: ${padding.judged?.answer}`,
 		);
 		assert(
 			padding.judged?.spans.every((s) => padding.message.includes(s)),
@@ -489,13 +494,17 @@ await check('a collapsed typography finding is judged and fixed declaration by d
 		assert(by['letter-spacing']?.judged?.answer === KEEP, 'letter-spacing should be kept, tokenless');
 		// Each declaration keeps the line it is written on, not the finding's.
 		assert([2, 3, 4].join() === (f?.suggest ?? []).map((s) => s.line).join(), JSON.stringify(f?.suggest));
-		// Composed as a list, not edited in place: three remedies bounded to one
-		// line, with what did not fit counted rather than cut mid-token. The
-		// message is the display — the answer `fix --judge` acts on is on
-		// `suggest`, which is why a dropped part is not a lost one.
+		// Composed as a list, not edited in place. All three remedies fit now that
+		// the message names tokens without the `var()` around them: the same list
+		// spent 12 characters on two wrappers before, and dropped its third part
+		// to `(+1 more)` to pay for them. The message is the display — the answer
+		// `fix --judge` acts on is on `suggest`, which is why a part the bound
+		// does drop is not a part that is lost.
 		assert(
 			f?.message ===
-				'font-size: 12px → var(--wpds-typography-font-size-sm); font-weight: 500 → var(--wpds-typography-font-weight-emphasis) (judged 0.80) (+1 more)',
+				'font-size: 12px → --wpds-typography-font-size-sm; ' +
+					'font-weight: 500 → --wpds-typography-font-weight-emphasis (judged 0.80); ' +
+					'letter-spacing: 0.02em → no letter-spacing token in the design system',
 			f?.message,
 		);
 		assert(by['letter-spacing']?.judged?.spans.join() === 'no letter-spacing token in the design system', 'lost');
@@ -518,6 +527,24 @@ await check('a collapsed typography finding is judged and fixed declaration by d
 	} finally {
 		cleanup(root);
 	}
+});
+
+// The list bound, asserted on its own since the fixture above stopped tripping
+// it — dropping `var()` from the message freed exactly the room its third part
+// needed. A list this cuts mid-token is worse than one it shortens: the remedy
+// the reader is meant to act on ends in half a token name, and nothing on the
+// line says a fourth remedy existed at all.
+await check('an over-long list drops whole parts and counts them', () => {
+	const part = (n: number): string =>
+		`property-${n}: some-fairly-long-literal-value-${n} \u2192 --design-system-token-name-${n}`;
+	const short = messageParts([part(1), part(2)]);
+	assert(short === `${part(1)}; ${part(2)}`, `a list that fits was shortened anyway: ${short}`);
+	const long = messageParts([part(1), part(2), part(3), part(4)]);
+	assert(long.startsWith(part(1)), `the first part did not survive: ${long}`);
+	assert(/ \(\+\d+ more\)$/.test(long), `parts were dropped without saying so: ${long}`);
+	// Whole parts only: every `\u2192` that made it kept the token it points at.
+	for (const piece of long.replace(/ \(\+\d+ more\)$/, '').split('; '))
+		assert(/\u2192 --design-system-token-name-\d+$/.test(piece), `a part was cut mid-token: ${piece}`);
 });
 
 await check('a value is planned by what it measures, and a part is only what its parentheses close', () => {

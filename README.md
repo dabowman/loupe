@@ -94,9 +94,31 @@ depends on one is recorded as a parse diagnostic rather than guessed at.
 
 ```bash
 loupe check --all
+loupe check --all --group-by file
 loupe check --all --format html > report.html
 loupe explain layout/margin-on-child
 ```
+
+The report is a nesting, so neither the rule nor the path is repeated line by
+line. `--group-by` picks which of the two heads a block — the other becomes the
+sub-heading, and the findings under it are bare line numbers:
+
+```
+• tokens/hardcoded-value (4) advisory — hardcoded value — replace with a --wpds-* token
+  styles/card.css (3)
+       2  color: #1e1e1e → --wpds-color-foreground-content-neutral
+       3  border-radius: 4px → --wpds-border-radius-md
+      14  padding: 16px → --wpds-dimension-padding-md
+  styles/row.css (1)
+       4  color: #1e1e1e → --wpds-color-foreground-content-neutral
+```
+
+`--group-by rule` (the default) is the triage order: the remedy is stated once
+and every site of it sits underneath, richest rule first. `--group-by file`
+swaps the two — path at the margin, rule indented under it, files that block
+the gate first — which is the shape of the work when you are already in an
+editor rather than auditing a repo. Nothing else about the report changes, and
+`--max-findings` spreads its budget across whichever axis you grouped on.
 
 `bin/loupe` is on PATH inside any Claude Code session — Claude Code adds each
 enabled plugin's `bin/` to the environment it runs commands in. For plain
@@ -167,7 +189,9 @@ for `wpds` that is `@wordpress/theme`, 190 of them in one file — and anything 
 project defines itself is added to the set. Findings then name the token:
 
 ```
-styles/card.scss:12  border-radius: 4px → var(--wpds-border-radius-md)
+• tokens/hardcoded-value (1) advisory — hardcoded value — replace with a --wpds-* token
+  styles/card.scss (1)
+      12  border-radius: 4px → --wpds-border-radius-md
 ```
 
 Only an on-role token is offered. `1px` is both `--wpds-border-radius-xs` and
@@ -202,9 +226,12 @@ only wraps a button. `loupe check --judge` sends those elements to
 the element is not text at all:
 
 ```
-src/components/build-summary.tsx:142  <p> → <Text variant="body-sm"> (judged 0.80)
-src/components/build-summary.tsx:131  <h3> → Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.66)
-src/components/brand-picker.tsx:101  <span> → no analog, not Text content (judged 1.00)
+• system/raw-element (3) advisory — raw element — use its design-system analog
+  src/components/build-summary.tsx (2)
+      131  <h3> → Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.66)
+      142  <p> → <Text variant="body-sm"> (judged 0.80)
+  src/components/brand-picker.tsx (1)
+      101  <span> → no analog, not Text content (judged 1.00)
 ```
 
 The answer is written into the suggestion, confidence last, and what the model
@@ -224,11 +251,18 @@ for `tokens/hardcoded-value` and for the type properties of
 `typography/untokenized`:
 
 ```
-assets/css/admin-panels.css:33  color: #1d2327 → var(--wpds-color-foreground-content-neutral) (judged 0.77)
-assets/css/admin-panels.css:85  background: #fcf0f1 → var(--wpds-color-background-surface-error-weak) (judged 0.81)
-assets/css/admin-panels.css:209  font-weight: 700 → var(--wpds-typography-font-weight-emphasis) (judged 0.85)
-assets/css/bulk-edit.css:30  background: rgba(0, 0, 0, 0.55) → deliberate, no token fits (judged 0.99)
-assets/css/report-page.css:70  box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ) → no box-shadow token in the design system
+• tokens/hardcoded-value (4) advisory — hardcoded value — replace with a --wpds-* token
+  assets/css/admin-panels.css (2)
+       33  color: #1d2327 → --wpds-color-foreground-content-neutral (judged 0.77)
+       85  background: #fcf0f1 → --wpds-color-background-surface-error-weak (judged 0.81)
+  assets/css/bulk-edit.css (1)
+       30  background: rgba(0, 0, 0, 0.55) → deliberate, no token fits (judged 0.99)
+  assets/css/report-page.css (1)
+       70  box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ) → no box-shadow token in the design system
+
+• typography/untokenized (1) advisory — raw type styling — use <Text>/<Heading>, or a --wpds-* type token if it cannot be used
+  assets/css/admin-panels.css (1)
+      209  font-weight: 700 → --wpds-typography-font-weight-emphasis (judged 0.85)
 ```
 
 Code does the arithmetic and the model does the reading. The property picks the
@@ -265,7 +299,10 @@ the profile names, and runs the pattern language's `resolve` table on the
 answer. A button that navigates is a link however it is styled, so:
 
 ```
-widgets/site-preview/render.tsx:116  <Button> (represents: destination) → `navigate-hierarchy` (judged 1.00)
+• patterns/judged-redirect (1) advisory — a model read what this control stands for, and the
+  pattern it was built as redirects that reading elsewhere; confirm before changing it
+  widgets/site-preview/render.tsx (1)
+      116  <Button> (represents: destination) → `navigate-hierarchy` (judged 1.00)
 ```
 
 That is `patterns/judged-redirect`, reported only at 0.90 confidence or above,

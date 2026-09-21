@@ -72,7 +72,7 @@ await check('a hardcoded value names the token that carries it', async () => {
 	});
 	const [f] = at(r, 'tokens/hardcoded-value');
 	assert(f, 'expected a hardcoded-value finding');
-	assert(f.message.includes('var(--wpds-border-radius-md)'), `named nothing useful: ${f.message}`);
+	assert(f.message.includes('→ --wpds-border-radius-md'), `named nothing useful: ${f.message}`);
 });
 
 // `#fcfcfc` is a real token — a background one. Offering it for `color` gives
@@ -86,7 +86,7 @@ await check('an off-role token is never offered', async () => {
 	});
 	const [f] = at(r, 'tokens/hardcoded-value');
 	assert(f, 'expected a hardcoded-value finding');
-	assert(!f.message.includes('var('), `offered a background token for a foreground: ${f.message}`);
+	assert(!f.message.includes('--wpds-'), `offered a background token for a foreground: ${f.message}`);
 });
 
 // Both were ambiguities `fix` had to skip, and neither was a real choice.

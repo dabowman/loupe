@@ -32,6 +32,8 @@ export function unknownTokens(refs: readonly TokenRef[], known: ReadonlySet<stri
 		const key = `${file}\u0000${name}`;
 		if (known.has(name) || seen.has(key)) return [];
 		seen.add(key);
-		return [{ rule: 'tokens/unknown-token', file, line, message: `var(${name})`, code: name, scopeLines }];
+		// The name alone. The `var()` was the same on every line of the group and
+		// the rule's own title already says a token is what is being named.
+		return [{ rule: 'tokens/unknown-token', file, line, message: name, code: name, scopeLines }];
 	});
 }
