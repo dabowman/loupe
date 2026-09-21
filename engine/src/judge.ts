@@ -12,7 +12,7 @@
  *
  *   judge/variant.ts   system/raw-element — which variant of the analog
  *   judge/force.ts     a pattern force, for patterns/judged-redirect
- *   judge/value.ts     tokens/hardcoded-value — which token, or deliberate
+ *   judge/value.ts     a flagged value — which token, or deliberate
  *
  * None changes a deterministic verdict. A variant or a token is written into
  * the finding's suggestion; a redirect is its own advisory finding, written
@@ -30,9 +30,10 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import { KEEP, planValue } from './tokens.ts';
+import { KEEP, planValue, suggestionFor } from './tokens.ts';
 import type { Slot } from './tokens.ts';
-import type { ComponentEntry, Control, Finding, Profile, Severity, TokenSet } from './types.ts';
+import { messageParts, snippet } from './text.ts';
+import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
 
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 // A version, not `jev-latest`: the alias moves when a release ships, and every
@@ -298,7 +299,7 @@ export async function judgeRedirects(
 	});
 }
 
-// ── tokens/hardcoded-value: which token, or is it deliberate? ───────────────
+// ── a flagged value: which token, or is it deliberate? ─────────────────────
 
 /**
  * What each token is for, in the design system's words: every active
@@ -326,26 +327,71 @@ export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescrip
 	return out;
 }
 
+/**
+ * The rules whose findings name a declaration a token could stand in for.
+ * Both reach here through the same token pass, so both arrive carrying one
+ * `suggest` entry per flagged declaration.
+ *
+ * `typography/untokenized` is several declarations to a finding — a CSS rule's
+ * whole type block — which is why every answer below is written onto the
+ * declaration rather than onto the finding. A type property in a stylesheet is
+ * where that rule's first remedy, the text component, is not available, so a
+ * token is the remedy left and it is the same question as any other value.
+ */
+export const VALUE_RULES: ReadonlySet<string> = new Set(['tokens/hardcoded-value', 'typography/untokenized']);
+
 /** Where a channel marker sits on a message: ` (inline)`, `` in `.a` (css-in-js)``. */
 const MARKER = / (?:in `[^`]*` )?\((?:inline|css-in-js)\)$/;
 
-/** `padding: 10px → <what> <tail>`, the channel marker kept last. */
-function rewrite(f: Finding, what: string, tail: string): void {
-	const marker = MARKER.exec(f.message)?.[0] ?? '';
-	const body = f.message.slice(0, f.message.length - marker.length);
-	const head = body.includes(' → ') ? body.slice(0, body.indexOf(' → ')) : body;
-	f.message = `${head} → ${what}${tail ? ` ${tail}` : ''}${marker}`;
+/**
+ * What one declaration says in its finding's message: judged, or as the engine
+ * left it. The declaration is bounded and the remedy is not, the way the token
+ * pass composed it — a long value must not spend the line, and a remedy the
+ * reader is meant to act on must arrive whole.
+ */
+const stated = (s: Suggestion, set: TokenSet): string => {
+	const decl = snippet(`${s.prop}: ${s.value}`);
+	return s.judged ? `${decl} → ${s.judged.spans.join(' ')}` : `${decl}${suggestionFor(set, s.prop, s.value)}`;
+};
+
+/**
+ * Rebuild a finding's message and its own `judged` from its declarations.
+ *
+ * Composed the way the token pass composed it — a bounded part each, joined by
+ * `messageParts`, the channel marker kept last — rather than edited in place.
+ * A collapsed message is a list that may already have dropped parts to a
+ * `(+N more)` count, and editing one member of a list you cannot see all of is
+ * how a remedy goes missing.
+ */
+function restate(f: Finding, set: TokenSet): void {
+	const parts = f.suggest ?? [];
+	f.message = messageParts(
+		parts.map((s) => stated(s, set)),
+		MARKER.exec(f.message)?.[0] ?? '',
+	);
+	const judged = parts.flatMap((s) => (s.judged ? [s.judged] : []));
+	if (!judged.length) return;
+	// The least certain answer speaks for the finding: it is the one a floor
+	// downstream would stop at.
+	f.judged = {
+		answer: judged.map((j) => j.answer).join('; '),
+		confidence: Math.min(...judged.map((j) => j.confidence)),
+		spans: judged.flatMap((j) => j.spans),
+	};
 }
 
 /**
- * Settle every hardcoded value a single exact token did not: write the token
- * it should use, or that it stays, into the finding. Returns how many were
- * written.
+ * Settle every flagged value a single exact token did not: write the token it
+ * should use, or that it stays, onto the declaration. Returns how many
+ * declarations were settled.
  *
  * A value is asked about part by part, and settles only when every part does:
  * `padding: 10px 12px` becomes two tokens or nothing, and it is kept only when
  * every part is judged deliberate. Where the set has no token for the property
  * at all there is nothing to ask, and the answer is written without a model.
+ * Where the property has a family but the literal is of another kind —
+ * `line-height: 1.4` against line heights written in px — there is no question
+ * to put, and the declaration is left exactly as the engine wrote it.
  *
  * `judged` carries the replacement value (or {@link KEEP}) so `fix --judge`
  * applies what this wrote, not a second reading of it.
@@ -367,48 +413,49 @@ export async function judgeValues(
 		throw new Error(
 			'no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships',
 		);
-	type Plan = { f: Finding; parts: string[]; slots: Slot[] };
-	const plans: Plan[] = [];
+	type Open = { f: Finding; decl: Suggestion; line: number; parts: string[]; slots: Slot[] };
+	const open: Open[] = [];
+	const touched = new Set<Finding>();
 	let written = 0;
 	for (const f of findings) {
-		// The single exact token is plain `fix`'s already.
-		if (
-			f.rule !== 'tokens/hardcoded-value' ||
-			!f.decl ||
-			(f.suggest?.length === 1 && f.suggest[0]?.tokens.length === 1)
-		)
-			continue;
-		const plan = planValue(set, f.decl.prop, f.decl.value);
-		if (plan === 'none') {
-			const why = `no ${f.decl.prop} token in the design system`;
-			rewrite(f, why, '');
-			f.judged = { answer: KEEP, confidence: 1, spans: [why] };
-			written++;
-		} else if (plan) plans.push({ f, ...plan });
+		if (!VALUE_RULES.has(f.rule)) continue;
+		for (const decl of f.suggest ?? []) {
+			// The single exact token is plain `fix`'s already.
+			if (decl.tokens.length === 1) continue;
+			const plan = planValue(set, decl.prop, decl.value);
+			if (plan === 'none') {
+				decl.judged = { answer: KEEP, confidence: 1, spans: [`no ${decl.prop} token in the design system`] };
+				touched.add(f);
+				written++;
+			} else if (plan) open.push({ f, decl, line: decl.line ?? f.line, ...plan });
+		}
 	}
 
-	const asked = plans.flatMap(({ f, parts, slots }) =>
-		slots.flatMap((slot) => {
-			if (!('candidates' in slot) || !f.decl) return [];
-			return [
-				{
-					file: f.file,
-					// Eight lines before it reach the selector of an ordinary rule, which
-					// is most of what says what the value is for.
-					...around(root, f.file, f.line, 8, 3),
-					prop: f.decl.prop,
-					value: parts.join(' '),
-					part: slot.part,
-					candidates: slot.candidates,
-					slot,
-				},
-			];
-		}),
+	const asked = open.flatMap(({ f, decl, line, parts, slots }) =>
+		slots.flatMap((slot) =>
+			'candidates' in slot
+				? [
+						{
+							file: f.file,
+							// Eight lines before it reach the selector of an ordinary rule, which
+							// is most of what says what the value is for. Read around the
+							// declaration's own line, which in a collapsed finding is not the
+							// line the finding is reported at.
+							...around(root, f.file, line, 8, 3),
+							prop: decl.prop,
+							value: parts.join(' '),
+							part: slot.part,
+							candidates: slot.candidates,
+							slot,
+						},
+					]
+				: [],
+		),
 	);
 	const answers = await ask(valueQuery(about), asked, apiKey, fetchImpl);
 	const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
 
-	for (const { f, parts, slots } of plans) {
+	for (const { f, decl, parts, slots } of open) {
 		const got = slots.map((s) => ('token' in s ? { choice: s.token, confidence: 1 } : answerOf.get(s)));
 		// The shared floor holds here: on `evals/values` it acts on 71% of the
 		// literals with three wrong tokens in three runs, and no wrong keep.
@@ -434,8 +481,7 @@ export async function judgeValues(
 		if (kept) {
 			const why = 'deliberate, no token fits';
 			const tail = judgedTail(kept.confidence);
-			rewrite(f, why, tail);
-			f.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
 		} else {
 			const out = [...parts];
 			slots.forEach((s, k) => {
@@ -444,10 +490,13 @@ export async function judgeValues(
 			const to = out.join(' ');
 			// Settled without a question when every part was exact.
 			const tail = confidence < 1 ? judgedTail(confidence) : '';
-			rewrite(f, to, tail);
-			f.judged = { answer: to, confidence, spans: tail ? [to, tail] : [to] };
+			decl.judged = { answer: to, confidence, spans: tail ? [to, tail] : [to] };
 		}
+		touched.add(f);
 		written++;
 	}
+
+	// Once, per finding, after every answer it is waiting on has landed.
+	for (const f of touched) restate(f, set);
 	return written;
 }

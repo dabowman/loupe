@@ -25421,7 +25421,10 @@ function collapsePerRule(pending) {
       // always carries its own `code` below, so identity does not fall back
       // to this string.
       message: group.map((f) => snippet(f.message)).join("; "),
-      hints: group.flatMap((f) => f.hints ?? []),
+      // Each hint keeps the line it was flagged on. The collapsed finding
+      // reports at the first one, and `fix` matches every other against the
+      // line it is actually written on rather than that one.
+      hints: group.flatMap((f) => (f.hints ?? []).map((h) => ({ ...h, line: f.line }))),
       code: `${rule2}:${props.sort().join(",")}`
     });
   }
@@ -25704,8 +25707,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       f.hints.map(({ prop, value }) => `${snippet(`${prop}: ${value}`)}${suggestionFor(tokenSet, prop, value)}`),
       f.suffix ?? ""
     );
-    const suggest = f.hints.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) })).filter((s) => s.tokens.length);
-    if (suggest.length) f.suggest = suggest;
+    f.suggest = f.hints.map((h) => ({ ...h, tokens: tokensFor(tokenSet, h.prop, h.value) }));
     if (f.rule === "tokens/hardcoded-value" && f.hints.length === 1) f.decl = f.hints[0];
     delete f.hints;
   }
@@ -25747,18 +25749,26 @@ var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.messag
 import { readFileSync as readFileSync3, writeFileSync } from "node:fs";
 import { join as join4 } from "node:path";
 var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
+var TOKENIZABLE = /* @__PURE__ */ new Set(["tokens/hardcoded-value", "typography/untokenized"]);
 function tokenFixes(findings) {
   const out = [];
   for (const f of findings) {
-    if (f.rule !== "tokens/hardcoded-value" || !CSS_FILE.test(f.file)) continue;
-    const only = f.suggest?.length === 1 ? f.suggest[0] : void 0;
-    const token = only?.tokens.length === 1 ? only.tokens[0] : void 0;
-    if (only && token !== void 0)
-      out.push({ file: f.file, line: f.line, prop: only.prop, value: only.value, to: `var(${token})` });
-    else if (f.decl && f.judged && f.judged.answer !== KEEP)
-      out.push({ file: f.file, line: f.line, prop: f.decl.prop, value: f.decl.value, to: f.judged.answer });
+    if (!TOKENIZABLE.has(f.rule) || !CSS_FILE.test(f.file)) continue;
+    for (const s of f.suggest ?? []) {
+      const to = s.tokens.length === 1 ? `var(${s.tokens[0]})` : s.judged?.answer;
+      if (to === void 0 || to === KEEP) continue;
+      out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to });
+    }
   }
   return out;
+}
+function settledBy(findings, applied, kept = []) {
+  const at = (d) => `${d.file}\0${d.line}\0${d.prop}`;
+  const done = new Set([...applied, ...kept].map(at));
+  return findings.filter((f) => {
+    const parts = f.suggest ?? (f.decl ? [f.decl] : []);
+    return parts.length > 0 && parts.every((s) => done.has(at({ file: f.file, line: s.line ?? f.line, prop: s.prop })));
+  }).length;
 }
 function applyTokenFixes(root2, findings, { dry = false } = {}) {
   const byFile = /* @__PURE__ */ new Map();
@@ -25807,25 +25817,30 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
 }
 function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } = {}) {
   const taken = new Set(directives.map((d) => `${d.file}\0${d.line}`));
+  const all = findings.flatMap(
+    (f) => TOKENIZABLE.has(f.rule) ? (f.suggest ?? []).map((s) => ({ f, s, line: s.line ?? f.line })) : []
+  );
   const onLine = /* @__PURE__ */ new Map();
-  for (const f of findings) {
-    if (f.rule !== "tokens/hardcoded-value") continue;
-    const k = `${f.file}\0${f.line}`;
-    onLine.set(k, [...onLine.get(k) ?? [], f]);
+  for (const d of all) {
+    const k = `${d.f.file}\0${d.line}`;
+    onLine.set(k, [...onLine.get(k) ?? [], d]);
   }
+  const rulesOn = new Map(
+    [...onLine].map(([k, group]) => [k, [...new Set(group.map((d) => d.f.rule))].sort().join(",")])
+  );
   const byFile = /* @__PURE__ */ new Map();
   const skipped = [];
-  for (const f of findings) {
-    if (f.rule !== "tokens/hardcoded-value" || f.judged?.answer !== KEEP || !f.decl) continue;
+  for (const { f, s: decl2, line } of all) {
+    if (decl2.judged?.answer !== KEEP) continue;
     const kept = {
       file: f.file,
-      line: f.line,
-      prop: f.decl.prop,
-      value: f.decl.value,
-      reason: f.judged.spans.join(" ")
+      line,
+      prop: decl2.prop,
+      value: decl2.value,
+      reason: decl2.judged.spans.join(" ")
     };
     if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
-    else if (onLine.get(`${f.file}\0${f.line}`)?.some((o) => o.judged?.answer !== KEEP))
+    else if (onLine.get(`${f.file}\0${line}`)?.some((o) => o.s.judged?.answer !== KEEP))
       skipped.push({ ...kept, why: "shares its line with a value that was not kept" });
     else byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
   }
@@ -25862,7 +25877,8 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
       }
       const indent = /^[ \t]*/.exec(line)?.[0] ?? "";
       const eol = line.endsWith("\r") ? "\r" : "";
-      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} tokens/hardcoded-value -- ${k.reason} */${eol}`);
+      const rules = rulesOn.get(`${file}\0${k.line}`) ?? "tokens/hardcoded-value";
+      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} ${rules} -- ${k.reason} */${eol}`);
       applied.push(k);
       last = k.line;
     }
@@ -27470,52 +27486,68 @@ function tokenDescriptions(profiles) {
   }
   return out;
 }
+var VALUE_RULES = /* @__PURE__ */ new Set(["tokens/hardcoded-value", "typography/untokenized"]);
 var MARKER = / (?:in `[^`]*` )?\((?:inline|css-in-js)\)$/;
-function rewrite(f, what, tail) {
-  const marker = MARKER.exec(f.message)?.[0] ?? "";
-  const body2 = f.message.slice(0, f.message.length - marker.length);
-  const head2 = body2.includes(" \u2192 ") ? body2.slice(0, body2.indexOf(" \u2192 ")) : body2;
-  f.message = `${head2} \u2192 ${what}${tail ? ` ${tail}` : ""}${marker}`;
+var stated = (s, set) => {
+  const decl2 = snippet(`${s.prop}: ${s.value}`);
+  return s.judged ? `${decl2} \u2192 ${s.judged.spans.join(" ")}` : `${decl2}${suggestionFor(set, s.prop, s.value)}`;
+};
+function restate(f, set) {
+  const parts = f.suggest ?? [];
+  f.message = messageParts(
+    parts.map((s) => stated(s, set)),
+    MARKER.exec(f.message)?.[0] ?? ""
+  );
+  const judged = parts.flatMap((s) => s.judged ? [s.judged] : []);
+  if (!judged.length) return;
+  f.judged = {
+    answer: judged.map((j) => j.answer).join("; "),
+    confidence: Math.min(...judged.map((j) => j.confidence)),
+    spans: judged.flatMap((j) => j.spans)
+  };
 }
 async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */ new Map(), fetchImpl = fetch) {
   if (!set.known.size)
     throw new Error(
       "no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships"
     );
-  const plans = [];
+  const open = [];
+  const touched = /* @__PURE__ */ new Set();
   let written = 0;
   for (const f of findings) {
-    if (f.rule !== "tokens/hardcoded-value" || !f.decl || f.suggest?.length === 1 && f.suggest[0]?.tokens.length === 1)
-      continue;
-    const plan = planValue(set, f.decl.prop, f.decl.value);
-    if (plan === "none") {
-      const why = `no ${f.decl.prop} token in the design system`;
-      rewrite(f, why, "");
-      f.judged = { answer: KEEP, confidence: 1, spans: [why] };
-      written++;
-    } else if (plan) plans.push({ f, ...plan });
+    if (!VALUE_RULES.has(f.rule)) continue;
+    for (const decl2 of f.suggest ?? []) {
+      if (decl2.tokens.length === 1) continue;
+      const plan = planValue(set, decl2.prop, decl2.value);
+      if (plan === "none") {
+        decl2.judged = { answer: KEEP, confidence: 1, spans: [`no ${decl2.prop} token in the design system`] };
+        touched.add(f);
+        written++;
+      } else if (plan) open.push({ f, decl: decl2, line: decl2.line ?? f.line, ...plan });
+    }
   }
-  const asked = plans.flatMap(
-    ({ f, parts, slots }) => slots.flatMap((slot) => {
-      if (!("candidates" in slot) || !f.decl) return [];
-      return [
+  const asked = open.flatMap(
+    ({ f, decl: decl2, line, parts, slots }) => slots.flatMap(
+      (slot) => "candidates" in slot ? [
         {
           file: f.file,
           // Eight lines before it reach the selector of an ordinary rule, which
-          // is most of what says what the value is for.
-          ...around(root2, f.file, f.line, 8, 3),
-          prop: f.decl.prop,
+          // is most of what says what the value is for. Read around the
+          // declaration's own line, which in a collapsed finding is not the
+          // line the finding is reported at.
+          ...around(root2, f.file, line, 8, 3),
+          prop: decl2.prop,
           value: parts.join(" "),
           part: slot.part,
           candidates: slot.candidates,
           slot
         }
-      ];
-    })
+      ] : []
+    )
   );
   const answers = await ask(valueQuery(about), asked, apiKey, fetchImpl);
   const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
-  for (const { f, parts, slots } of plans) {
+  for (const { f, decl: decl2, parts, slots } of open) {
     const got = slots.map((s) => "token" in s ? { choice: s.token, confidence: 1 } : answerOf.get(s));
     const unsure = (k) => {
       const a = got[k];
@@ -27529,8 +27561,7 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
     if (kept) {
       const why = "deliberate, no token fits";
       const tail = judgedTail(kept.confidence);
-      rewrite(f, why, tail);
-      f.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+      decl2.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
     } else {
       const out = [...parts];
       slots.forEach((s, k) => {
@@ -27538,11 +27569,12 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
       });
       const to = out.join(" ");
       const tail = confidence2 < 1 ? judgedTail(confidence2) : "";
-      rewrite(f, to, tail);
-      f.judged = { answer: to, confidence: confidence2, spans: tail ? [to, tail] : [to] };
+      decl2.judged = { answer: to, confidence: confidence2, spans: tail ? [to, tail] : [to] };
     }
+    touched.add(f);
     written++;
   }
+  for (const f of touched) restate(f, set);
   return written;
 }
 
@@ -29590,7 +29622,7 @@ ${green(`Wrote ${target}`)}
     let toFix;
     try {
       toFix = await analyze(config, { scope: fixScope });
-      const judgeable = toFix.findings.filter((f) => f.rule === "tokens/hardcoded-value" && CSS_FILE.test(f.file));
+      const judgeable = toFix.findings.filter((f) => VALUE_RULES.has(f.rule) && CSS_FILE.test(f.file));
       if (apiKey && toFix.tokens && judgeable.length)
         await judgeValues(root2, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
@@ -29613,11 +29645,11 @@ ${green(`Wrote ${target}`)}
     for (const f of [...skipped, ...kept.skipped])
       process.stdout.write(`${yellow("skip")} ${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2014 ${f.why}
 `);
-    const left = toFix.findings.length - applied.length - kept.applied.length;
+    const left = toFix.findings.length - settledBy(toFix.findings, applied, kept.applied);
     const nSkipped = skipped.length + kept.skipped.length;
     process.stdout.write(
       `
-loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${apiKey ? `, ${dry ? "would suppress" : "suppressed"} ${kept.applied.length}` : ""}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ""}. ${left} left for review.
+loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s)`)}${apiKey ? `, ${dry ? "would suppress" : "suppressed"} ${kept.applied.length}` : ""}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ""}. ${left} of ${toFix.findings.length} finding(s) left for review.
 `
     );
     return EXIT.OK;
@@ -29672,7 +29704,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}
 `);
     }
     try {
-      if (result.tokens && result.findings.some((f) => f.rule === "tokens/hardcoded-value"))
+      if (result.tokens && result.findings.some((f) => VALUE_RULES.has(f.rule)))
         await judgeValues(
           root2,
           result.findings,

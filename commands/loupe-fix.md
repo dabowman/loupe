@@ -24,8 +24,9 @@ values the engine matched unambiguously; anything with two candidate tokens, or
 in a JS channel, is left for the passes below.
 
 If `TYPESAFE_API_KEY` is set (in the environment or loupe's `.env`), offer the
-judged pass for the hardcoded values no single token matches: the near-misses,
-the ambiguous ones, and the values that are either a mistake or a deliberate
+judged pass for the values no single token matches — hardcoded values and the
+type properties of `typography/untokenized` alike: the near-misses, the
+ambiguous ones, and the values that are either a mistake or a deliberate
 choice. Review it first, and show the user the list:
 
 ```bash

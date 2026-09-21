@@ -390,12 +390,25 @@ rather than looking like a registry that found nothing.
 loupe fix   # apply; --dry-run to preview; --judge for the values below
 ```
 
-Applies only `tokens/hardcoded-value` findings the engine already resolved to
-exactly **one** on-role token, and only in stylesheets. Two candidate tokens is
-a semantic choice — the right pixels with the wrong meaning is the failure the
-suggestion machinery exists to prevent — and the JS channels (`style={{ … }}`,
-CSS-in-JS) are left alone because a CSS-shaped substitution there writes a
-syntax error with a clean report.
+Applies only the declarations the engine already resolved to exactly **one**
+on-role token — in `tokens/hardcoded-value` and `typography/untokenized` — and
+only in stylesheets. Two candidate tokens is a semantic choice — the right
+pixels with the wrong meaning is the failure the suggestion machinery exists to
+prevent — and the JS channels (`style={{ … }}`, CSS-in-JS) are left alone
+because a CSS-shaped substitution there writes a syntax error with a clean
+report. A type property in a stylesheet is where the rule's first remedy — use
+the text component — is not available, which is the case its second one is for.
+
+A finding is not a declaration. `typography/untokenized` collapses a CSS rule's
+whole type block into one finding reported at the first declaration's line, and
+every other declaration in it carries the line it is actually written on, so
+each is matched against that. One settled beside one nobody could settle is a
+substitution made and a finding still standing, which is why the summary counts
+both:
+
+```
+loupe: fixed 79 declaration(s) in 54 finding(s). 258 left for review.
+```
 
 A declaration that is not on its reported line exactly once is skipped and
 named: the file moved under the report, and substituting against a stale line
@@ -436,9 +449,26 @@ key refuses `--judge` and says where to put one. The value is read through
 
 ### Judged values
 
-`tokens/hardcoded-value` suggests a token only when exactly one on-role token
-carries the value. `--judge` settles the rest, and `fix --judge` applies what
-it settled.
+`tokens/hardcoded-value` and `typography/untokenized` suggest a token only
+where exactly one on-role token carries the value. `--judge` settles the rest,
+and `fix --judge` applies what it settled. A type property in a stylesheet is
+where the typography rule's first remedy — use the text component — is not
+available, so a token is the remedy left, and which token is the same question
+as for any other value.
+
+The answer is written onto the declaration, not the finding:
+`typography/untokenized` collapses a CSS rule's whole type block into one
+finding, and three declarations there can settle three different ways. Each is
+asked about with its own line's context, and each carries its own answer on
+`suggest[i].judged`. The finding's own `judged` is those answers joined, for a
+reader; `fix --judge` acts on the per-declaration ones.
+
+A value the property has a family for but that the engine cannot relate to it
+is not asked about and is left exactly as reported — `line-height: 1.4` against
+line heights written in px is the case that comes up, and on
+`vip-digital-asset-manager` it is 11 of the 27 open type declarations. Working
+out what a ratio means needs the `font-size` beside it, which is code's job,
+not a question.
 
 `planValue` splits a flagged value into parts (on whitespace outside
 parentheses), skips zeros and keywords, and settles each literal part a single
@@ -492,23 +522,26 @@ reason:
 ```
 
 A directive mutes its whole next line. So one is written only where every
-hardcoded value on that line was kept, and otherwise the value is reported as
-skipped.
+flagged value on that line was kept, and otherwise the value is reported as
+skipped. It names the rules the kept declarations on that line were reported
+under, which on a minified stylesheet is not always one.
 
 ```bash
 npm run eval:values                     # three runs
 node evals/values/run.ts --bare         # without the token descriptions
 ```
 
-`evals/values` carries all 145 literals `--judge` asks about in
+`evals/values` carries all 157 literals `--judge` asks about in
 `vip-digital-asset-manager`, an un-remediated WPDS plugin written against the
-wp-admin palette. Each one is hand-labelled with every answer a careful reader
-would accept: `10px` of padding is `sm` or `md`, a scrim is `keep`. It scores
-97% on each of three runs, and 97% of its answers repeat run to run. As
-`fix --judge` applies it (at the 0.5 floor, plus the in-scale spacing picks)
-it acts on 70% of the literals: one wrong token, and not one wrong keep, across
-three runs. Three measurements shaped the
-design:
+wp-admin palette — 145 from `tokens/hardcoded-value` and 12 from
+`typography/untokenized`. Each one is hand-labelled with every answer a careful
+reader would accept: `10px` of padding is `sm` or `md`, a scrim is `keep`. It
+scores 96–97% on each of three runs, and 98% of its answers repeat run to run.
+As `fix --judge` applies it (at the 0.5 floor, plus the in-scale spacing picks)
+it acts on 71% of the literals: three wrong tokens, and not one wrong keep,
+across three runs. The type literals score 11 of 12 on every run; the miss,
+`line-height: 18px` on a pill, answers at 0.24 and so is never acted on. Three
+measurements shaped the design:
 
 - **Descriptions.** Without them it scores 85% and makes 16 wrong token picks
   at the floor. The name says `track`; the description says "eg. scrollbar
@@ -522,9 +555,11 @@ design:
   buttons. Offering the sizes had the model put `size-5xs` on `top: 4px`, and
   took the score from 97% to 95%.
 
-Applied to that plugin, `fix --judge` took `tokens/hardcoded-value` from 183
-findings to 63, with 16 suppressions and no other finding moved. What is left
-is mostly the coin-flips: `10px` between 8 and 12, `3px` between 2 and 4.
+Applied to that plugin, `fix --judge` rewrites 156 declarations and writes 20
+suppressions, taking `tokens/hardcoded-value` from 183 findings to 70 and
+`typography/untokenized` from 43 to 12, with no other finding moved. What is
+left is mostly the coin-flips — `10px` between 8 and 12, `3px` between 2 and
+4 — and the unitless line heights nobody is asked about.
 
 ### Judged redirects
 
@@ -672,11 +707,15 @@ loupe suppressions                  # audit every active directive
 Exit codes are a contract: `0` clean or advisory-only, `1` blocking findings,
 `2` could not run.
 
-JSON findings carry `suggest` when the engine matched a value against the token
-set: `[{ prop, value, tokens }]`, most specific first. The prose message says the
-same thing for a reader; `suggest` is there so a consumer does not have to parse
-it back out of a sentence. `loupe fix` is that consumer for the
-single-token case.
+JSON findings that flag a declaration carry `suggest`: `[{ prop, value, tokens,
+line? }]`, one entry per declaration, tokens most specific first. `tokens` is
+empty where nothing matched — the entry is still there, so "no token for this"
+and "this declaration was never flagged" are told apart without reading the
+prose. `line` appears only where the declaration is not on the finding's own
+line, which is how a collapsed finding carries the rest of its CSS rule. The
+prose message says the same thing for a reader; `suggest` is there so a consumer
+does not have to parse it back out of a sentence. `loupe fix` is that consumer
+for the single-token case.
 
 `message` is one line, and bounded: a quoted value has its whitespace collapsed,
 and a message longer than the bound is elided with `…`, or — where it is a list

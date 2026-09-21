@@ -1448,5 +1448,126 @@
   "part": "#646970",
   "context_before": "\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,\n.vip-dam-report .vip-dam-health-off { background: #f0f0f1; color: #50575e; border: 1px solid #dcdcde; }\n\n.vip-dam-report .vip-dam-health-name { font-weight: 600; color: #1d2327; }",
   "source": ".vip-dam-report .vip-dam-health-detail { color: #646970; font-size: 0.92rem; }\n\n@media ( max-width: 600px ) {"
+ },
+
+ {
+  "id": "t001",
+  "file": "assets/css/admin-panels.css",
+  "line": 30,
+  "prop": "font-weight",
+  "value": "700",
+  "part": "700",
+  "context_before": "\n/* Full-width section heading. In a meta box this is a plain block, so a\n\tnormal top border spans the whole panel, no table-cell clipping. */\n.vip-dam-sec {\n\tmargin: 14px 0 8px;\n\tpadding-top: 10px;\n\tborder-top: 1px solid #dcdcde;\n\tfont-size: 12px;",
+  "source": "\tfont-weight: 700;\n\ttext-transform: uppercase;\n\tletter-spacing: .02em;"
+ },
+ {
+  "id": "t002",
+  "file": "assets/css/admin-panels.css",
+  "line": 118,
+  "prop": "line-height",
+  "value": "18px",
+  "part": "18px",
+  "context_before": "\tborder-bottom: 1px solid #f0f0f1;\n}\n.vip-dam-share-status {\n\tflex: 0 0 auto;\n\tpadding: 1px 7px;\n\tborder-radius: 9px;\n\tfont-size: 11px;\n\tfont-weight: 600;",
+  "source": "\tline-height: 18px;\n\tbackground: #f0f0f1;\n\tcolor: #50575e;"
+ },
+ {
+  "id": "t003",
+  "file": "assets/css/admin-panels.css",
+  "line": 162,
+  "prop": "font-size",
+  "value": "14px",
+  "part": "14px",
+  "context_before": "\tcolor: #646970;\n}\n\n/* Master panel title (edit-screen meta box gets this from its box header;\n\tthe modal has no chrome, so we render + style it here). */\n.vip-dam-title {\n\tmargin: 0 0 6px;\n\tpadding: 0;",
+  "source": "\tfont-size: 14px;\n\tfont-weight: 600;\n\tline-height: 1.4;"
+ },
+ {
+  "id": "t004",
+  "file": "assets/css/admin-panels.css",
+  "line": 208,
+  "prop": "font-size",
+  "value": "10px",
+  "part": "10px",
+  "context_before": "}\n\n/* Rights status badge, trailing the Rights & Licensing heading. */\n.vip-dam-status {\n\tdisplay: inline-block;\n\tmargin-left: 8px;\n\tpadding: 2px 8px;\n\tborder-radius: 3px;",
+  "source": "\tfont-size: 10px;\n\tfont-weight: 700;\n\ttext-transform: uppercase;"
+ },
+ {
+  "id": "t005",
+  "file": "assets/css/admin-panels.css",
+  "line": 209,
+  "prop": "font-weight",
+  "value": "700",
+  "part": "700",
+  "context_before": "\n/* Rights status badge, trailing the Rights & Licensing heading. */\n.vip-dam-status {\n\tdisplay: inline-block;\n\tmargin-left: 8px;\n\tpadding: 2px 8px;\n\tborder-radius: 3px;\n\tfont-size: 10px;",
+  "source": "\tfont-weight: 700;\n\ttext-transform: uppercase;\n\tvertical-align: middle;"
+ },
+ {
+  "id": "t006",
+  "file": "assets/css/bulk-edit.css",
+  "line": 57,
+  "prop": "font-size",
+  "value": "16px",
+  "part": "16px",
+  "context_before": "\tborder-radius: 4px;\n\tbox-shadow: 0 5px 15px rgba(0, 0, 0, 0.7);\n\tfont-size: 13px;\n\tcolor: #1d2327;\n}\n\n.vip-dam-be-title {\n\tmargin: 0 0 4px;",
+  "source": "\tfont-size: 16px;\n\tfont-weight: 600;\n\tline-height: 1.4;"
+ },
+ {
+  "id": "t007",
+  "file": "assets/css/bulk-edit.css",
+  "line": 73,
+  "prop": "font-weight",
+  "value": "700",
+  "part": "700",
+  "context_before": "}\n\n/* Section headings: same treatment as the DAM meta box sections. */\n.vip-dam-be-sec {\n\tmargin: 18px 0 10px;\n\tpadding-top: 12px;\n\tborder-top: 1px solid #dcdcde;\n\tfont-size: 12px;",
+  "source": "\tfont-weight: 700;\n\ttext-transform: uppercase;\n\tletter-spacing: 0.02em;"
+ },
+ {
+  "id": "t008",
+  "file": "assets/css/folders.css",
+  "line": 293,
+  "prop": "font-family",
+  "value": "Consolas, Monaco, monospace",
+  "part": "Consolas, Monaco, monospace",
+  "context_before": "\n/* Term id, shown only when the toggle is on. Monospace because it is an\n   identifier somebody is about to retype into a WP-CLI command, and the\n   digits lining up is the whole reason to display it. */\n.vip-dam-folder-tree .vip-dam-folder-node .vip-dam-folder-id {\n\tflex: 0 0 auto;\n\tcolor: #787c82;\n\tfont-size: 11px;",
+  "source": "\tfont-family: Consolas, Monaco, monospace;\n}\n"
+ },
+ {
+  "id": "t009",
+  "file": "assets/css/media-hub-library.css",
+  "line": 84,
+  "prop": "font-size",
+  "value": "10px",
+  "part": "10px",
+  "context_before": "}\n\n.vip-dam-hub-badge {\n\tposition: absolute;\n\ttop: 4px;\n\tleft: 4px;\n\tbackground: #b32d2e;\n\tcolor: #fff;",
+  "source": "\tfont-size: 10px;\n\tline-height: 1;\n\tpadding: 3px 5px;"
+ },
+ {
+  "id": "t010",
+  "file": "assets/css/media-inline-play.css",
+  "line": 107,
+  "prop": "font-size",
+  "value": "16px",
+  "part": "16px",
+  "context_before": "\twidth: 22px;\n\theight: 22px;\n\tpadding: 0;\n\tline-height: 20px;\n\tborder: none;\n\tborder-radius: 50%;\n\tbackground: rgba( 19, 25, 30, 0.75 );\n\tcolor: #fff;",
+  "source": "\tfont-size: 16px;\n\tcursor: pointer;\n}"
+ },
+ {
+  "id": "t011",
+  "file": "assets/css/report-page.css",
+  "line": 13,
+  "prop": "font-weight",
+  "value": "500",
+  "part": "500",
+  "context_before": "/* Report KEY/VALUE tables (label | value, no <thead>): fixed-width label\n   column so every value column starts at the same x-position, and a\n   right-aligned value column. Scoped with :not(:has(thead)) so the\n   multi-column DATA tables (Growth, Most-used, Takedown log, Stale cleanup),\n   which DO have a <thead>, keep default column sizing and left alignment,   otherwise their body cells did not line up under their headers. */\n.vip-dam-report .widefat.striped:not(:has(thead)) tbody tr td:first-child {\n\twidth: 280px;\n\tvertical-align: top;",
+  "source": "\tfont-weight: 500;\n\tcolor: #1d2327;\n}"
+ },
+ {
+  "id": "t012",
+  "file": "assets/css/report-page.css",
+  "line": 154,
+  "prop": "font-size",
+  "value": "0.92rem",
+  "part": "0.92rem",
+  "context_before": "\n.vip-dam-report .vip-dam-health-active { background: #edf6ee; color: #0a7227; border: 1px solid #b8e0c2; }\n.vip-dam-report .vip-dam-health-degraded { background: #fbeded; color: #8a1f1f; border: 1px solid #eabcbc; }\n.vip-dam-report .vip-dam-health-fallback { background: #fbf3e0; color: #8a5a12; border: 1px solid #e6cf9a; }\n.vip-dam-report .vip-dam-health-standalone,\n.vip-dam-report .vip-dam-health-off { background: #f0f0f1; color: #50575e; border: 1px solid #dcdcde; }\n\n.vip-dam-report .vip-dam-health-name { font-weight: 600; color: #1d2327; }",
+  "source": ".vip-dam-report .vip-dam-health-detail { color: #646970; font-size: 0.92rem; }\n\n@media ( max-width: 600px ) {"
  }
 ]

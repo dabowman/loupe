@@ -307,7 +307,10 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 			// always carries its own `code` below, so identity does not fall back
 			// to this string.
 			message: group.map((f) => snippet(f.message)).join('; '),
-			hints: group.flatMap((f) => f.hints ?? []),
+			// Each hint keeps the line it was flagged on. The collapsed finding
+			// reports at the first one, and `fix` matches every other against the
+			// line it is actually written on rather than that one.
+			hints: group.flatMap((f) => (f.hints ?? []).map((h) => ({ ...h, line: f.line }))),
 			code: `${rule}:${props.sort().join(',')}`,
 		});
 	}
@@ -713,10 +716,10 @@ export async function analyze(
 		// Keep the match structured as well as rendered. The prose is for a reader;
 		// an unambiguous substitution should not need a model to parse it back out
 		// of a sentence in order to apply it.
-		const suggest = f.hints
-			.map(({ prop, value }) => ({ prop, value, tokens: tokensFor(tokenSet, prop, value) }))
-			.filter((s) => s.tokens.length);
-		if (suggest.length) f.suggest = suggest;
+		// One entry per flagged declaration, matched or not: `fix` clears a
+		// finding only when every declaration in it was substituted, and an
+		// entry with no tokens is how it knows one was not.
+		f.suggest = f.hints.map((h) => ({ ...h, tokens: tokensFor(tokenSet, h.prop, h.value) }));
 		if (f.rule === 'tokens/hardcoded-value' && f.hints.length === 1) f.decl = f.hints[0];
 		delete f.hints;
 		// `suffix` stays until the message is bounded below, which needs to know

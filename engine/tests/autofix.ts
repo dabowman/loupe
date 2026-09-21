@@ -13,10 +13,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import postcss from 'postcss';
 import { analyze } from '../src/analyze.ts';
-import { applyKeeps, applyTokenFixes } from '../src/autofix.ts';
+import { applyKeeps, applyTokenFixes, settledBy } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
 import { judgeValues } from '../src/judge.ts';
-import { emptyTokenSet, harvestTokenDefs, planValue } from '../src/tokens.ts';
+import { KEEP, emptyTokenSet, harvestTokenDefs, planValue } from '../src/tokens.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
 import type { Finding, FixCandidate, SkippedFix, TokenFix } from '../src/types.ts';
 
@@ -27,6 +27,8 @@ const TOKENS = `:root {
 	--wpds-color-foreground-content-neutral: #1e1e1e;
 	--wpds-color-foreground-content-strong: #1e1e1e;
 	--wpds-dimension-space-md: 8px;
+	--wpds-typography-font-size-sm: 12px;
+	--wpds-typography-line-height-xs: 16px;
 }`;
 
 interface Fixture {
@@ -175,6 +177,37 @@ await check('a skipped multi-line declaration is reported on one line', async ()
 	} finally {
 		cleanup(root);
 	}
+});
+
+// A collapsed finding is the case a line-exact substitution gets wrong by
+// default: `typography/untokenized` reports a CSS rule's whole type block at
+// the first declaration's line, and matching the others against that line
+// either misses them or edits the wrong one.
+await check('every declaration of a collapsed finding is matched against its own line', async () => {
+	const { applied, skipped, read, findings } = await fixture({
+		'styles/t.css': '.wf-t {\n\tfont-size: 12px;\n\tfont-weight: 500;\n\tline-height: 16px;\n}',
+		'src/T.jsx': 'export const T = () => <div className="wf-t" />;',
+	});
+	const type = findings.filter((f) => f.rule === 'typography/untokenized');
+	assert(type.length === 1, `expected one collapsed finding, got ${type.length}`);
+	assert(!skipped.length, `nothing should skip: ${skipped.map((s) => s.why).join(', ')}`);
+	assert(applied.length === 2, `expected 2 fixes, got ${applied.length}`);
+	const out = read('styles/t.css');
+	assert(out.includes('font-size: var(--wpds-typography-font-size-sm);'), `font-size not substituted:\n${out}`);
+	assert(out.includes('line-height: var(--wpds-typography-line-height-xs);'), `line-height not substituted:\n${out}`);
+	// No token carries 500, so that declaration stays and its finding stands.
+	assert(out.includes('font-weight: 500;'), `an unmatched value was rewritten:\n${out}`);
+	assert(settledBy(findings, applied) === 0, 'a finding with an unsettled declaration is not cleared');
+});
+
+await check('a collapsed finding is cleared only once every declaration is settled', async () => {
+	const { applied, read, findings } = await fixture({
+		'styles/u.css': '.wf-u {\n\tfont-size: 12px;\n\tline-height: 16px;\n}',
+		'src/U.jsx': 'export const U = () => <div className="wf-u" />;',
+	});
+	assert(applied.length === 2, `expected 2 fixes, got ${applied.length}`);
+	assert(settledBy(findings, applied) === 1, 'both declarations settled, so the finding is cleared');
+	assert(!/\b(12px|16px)\b/.test(read('styles/u.css')), `a literal survived:\n${read('styles/u.css')}`);
 });
 
 // ── fix --judge ─────────────────────────────────────────────────────────────
@@ -408,6 +441,85 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 });
 
 // Each of these once wrote CSS that was wrong in a way no report would show.
+// The rule `--judge` was widened to, and the shape the widening is about: one
+// finding, three declarations, three different outcomes on three lines.
+await check('a collapsed typography finding is judged and fixed declaration by declaration', async () => {
+	const root = scratch('dsh-judge-type-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			'styles/tokens.css': `${JUDGE_TOKENS}\n:root {\n\t--wpds-typography-font-size-sm: 12px;\n\t--wpds-typography-font-size-md: 13px;\n\t--wpds-typography-font-weight-default: 400;\n\t--wpds-typography-font-weight-emphasis: 600;\n}`,
+			'styles/type.css': [
+				'.wf-t {',
+				'\tfont-size: 12px;',
+				'\tfont-weight: 500;',
+				'\tletter-spacing: 0.02em;',
+				'}',
+			].join('\n'),
+			'src/T.jsx': 'export const T = () => <div className="wf-t" />;',
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const result = await analyze(config, { scope: null });
+		assert(result.tokens, 'analyze did not hand back its token set');
+		const type = result.findings.filter((f) => f.rule === 'typography/untokenized');
+		assert(type.length === 1, `expected one collapsed finding, got ${type.length}`);
+		const f = type[0];
+		assert(f?.suggest?.length === 3, `expected three declarations, got ${JSON.stringify(f?.suggest)}`);
+
+		// font-size was exact, so it is never a question; letter-spacing has no
+		// family at all, so it is answered without one. Only font-weight is asked.
+		const asked: string[] = [];
+		const stub = (async (_url: string, init: { body: string }) => {
+			const questions = JSON.parse(init.body).questions as Record<string, { criteria: Record<string, string> }>;
+			const answers = Object.fromEntries(
+				Object.entries(questions).map(([k, q]) => {
+					asked.push(Object.keys(q.criteria).join(','));
+					return [k, { choice: '--wpds-typography-font-weight-emphasis', confidence: 0.8 }];
+				}),
+			);
+			return new Response(JSON.stringify({ answers }));
+		}) as unknown as typeof fetch;
+		const written = await judgeValues(root, result.findings, result.tokens, 'key', new Map(), stub);
+		assert(asked.length === 1, `asked ${asked.length} questions, expected 1: ${asked.join(' | ')}`);
+		assert(written === 2, `wrote ${written}, expected 2 (font-weight, letter-spacing)`);
+
+		const by = Object.fromEntries((f?.suggest ?? []).map((s) => [s.prop, s]));
+		assert(by['font-size']?.judged === undefined, 'an exact token was sent to the model');
+		assert(by['font-weight']?.judged?.answer === 'var(--wpds-typography-font-weight-emphasis)', 'font-weight');
+		assert(by['letter-spacing']?.judged?.answer === KEEP, 'letter-spacing should be kept, tokenless');
+		// Each declaration keeps the line it is written on, not the finding's.
+		assert([2, 3, 4].join() === (f?.suggest ?? []).map((s) => s.line).join(), JSON.stringify(f?.suggest));
+		// Composed as a list, not edited in place: three remedies bounded to one
+		// line, with what did not fit counted rather than cut mid-token. The
+		// message is the display — the answer `fix --judge` acts on is on
+		// `suggest`, which is why a dropped part is not a lost one.
+		assert(
+			f?.message ===
+				'font-size: 12px → var(--wpds-typography-font-size-sm); font-weight: 500 → var(--wpds-typography-font-weight-emphasis) (judged 0.80) (+1 more)',
+			f?.message,
+		);
+		assert(by['letter-spacing']?.judged?.spans.join() === 'no letter-spacing token in the design system', 'lost');
+
+		const fixes = applyTokenFixes(root, result.findings);
+		assert(
+			fixes.applied.map((x) => `${x.line}:${x.prop}`).join() === '2:font-size,3:font-weight',
+			JSON.stringify(fixes),
+		);
+		const kept = applyKeeps(root, result.findings, config.suppression.keyword);
+		assert(kept.applied.map((k) => k.line).join() === '4', JSON.stringify(kept));
+		const css = readFileSync(join(root, 'styles/type.css'), 'utf8');
+		assert(css.includes('font-size: var(--wpds-typography-font-size-sm);'), css);
+		assert(css.includes('font-weight: var(--wpds-typography-font-weight-emphasis);'), css);
+		// The suppression names the rule the declaration was reported under.
+		assert(css.includes(`/* ${config.suppression.keyword} typography/untokenized -- no letter-spacing token`), css);
+		// And it mutes exactly what it was written for: nothing left in this rule.
+		const after = await analyze(config, { scope: ['styles/type.css'] });
+		assert(!after.findings.some((x) => x.rule === 'typography/untokenized'), JSON.stringify(after.findings));
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('a value is planned by what it measures, and a part is only what its parentheses close', () => {
 	const set = harvestTokenDefs(
 		postcss.parse(
@@ -477,8 +589,14 @@ await check(
 				rule: 'tokens/hardcoded-value',
 				file,
 				line,
-				decl: { prop: 'background', value: '#f0c' },
-				judged: { answer: 'keep', confidence: 0.9, spans: ['deliberate, no token fits'] },
+				suggest: [
+					{
+						prop: 'background',
+						value: '#f0c',
+						tokens: [],
+						judged: { answer: 'keep', confidence: 0.9, spans: ['deliberate, no token fits'] },
+					},
+				],
 			});
 			const { applied, skipped } = applyKeeps(
 				root,

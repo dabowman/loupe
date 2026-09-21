@@ -140,6 +140,14 @@ prefer converting to it. Where `text:` is `(none)`, the remedy is the token
 route: apply the named type role as a whole, not a font size on its own — the
 five type properties move together or they drift apart.
 
+One finding is a whole CSS rule's type block, so it lists several declarations
+and each carries its own remedy. A token ending `(judged 0.xx)` came from
+`check --judge`, which picked it among the tokens near the value by what the
+rule styles — the same reading as for `tokens/hardcoded-value`, and the same
+caution: check it against the role. `no letter-spacing token in the design
+system` is not a judgement but a fact, and the declaration stays. A finding
+does not clear until every declaration in it does.
+
 ### `system/override`
 
 CSS restyling a design-system component, or reaching into another library's

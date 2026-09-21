@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
 import { analyze } from './analyze.ts';
 import { usableReplacement } from './checks/system/currency.ts';
-import { CSS_FILE, applyKeeps, applyTokenFixes } from './autofix.ts';
-import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
+import { CSS_FILE, applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
+import { VALUE_RULES, judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
@@ -960,7 +960,7 @@ async function main(): Promise<number> {
 		try {
 			toFix = await analyze(config, { scope: fixScope });
 			// Only what `fix` can write: an answer about a JSX value is paid for and dropped.
-			const judgeable = toFix.findings.filter((f) => f.rule === 'tokens/hardcoded-value' && CSS_FILE.test(f.file));
+			const judgeable = toFix.findings.filter((f) => VALUE_RULES.has(f.rule) && CSS_FILE.test(f.file));
 			if (apiKey && toFix.tokens && judgeable.length)
 				await judgeValues(root, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
@@ -992,12 +992,15 @@ async function main(): Promise<number> {
 			);
 		for (const f of [...skipped, ...kept.skipped])
 			process.stdout.write(`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2014 ${f.why}\n`);
-		const left = toFix.findings.length - applied.length - kept.applied.length;
+		// A collapsed finding is several declarations, so a declaration acted on is
+		// not a finding cleared. What is counted as done is the finding every one
+		// of whose declarations was rewritten or suppressed.
+		const left = toFix.findings.length - settledBy(toFix.findings, applied, kept.applied);
 		const nSkipped = skipped.length + kept.skipped.length;
 		process.stdout.write(
-			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} finding(s)`)}${
+			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s)`)}${
 				apiKey ? `, ${dry ? 'would suppress' : 'suppressed'} ${kept.applied.length}` : ''
-			}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ''}. ${left} left for review.\n`,
+			}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ''}. ${left} of ${toFix.findings.length} finding(s) left for review.\n`,
 		);
 		return EXIT.OK;
 	}
@@ -1076,7 +1079,7 @@ async function main(): Promise<number> {
 		}
 		// Its own note: the judgements above stand when this one cannot run.
 		try {
-			if (result.tokens && result.findings.some((f) => f.rule === 'tokens/hardcoded-value'))
+			if (result.tokens && result.findings.some((f) => VALUE_RULES.has(f.rule)))
 				await judgeValues(
 					root,
 					result.findings,

@@ -217,13 +217,16 @@ or a `.env` beside the checkout (see `.env.example`).
 
 ### Judged values
 
-Most hardcoded values are not exactly a token. A plugin written against the
+Most flagged values are not exactly a token. A plugin written against the
 wp-admin palette uses `#1d2327` and `#646970`, which WPDS never ships, so the
-exact-match fix above settles almost none of them. `--judge` settles the rest:
+exact-match fix above settles almost none of them. `--judge` settles the rest,
+for `tokens/hardcoded-value` and for the type properties of
+`typography/untokenized`:
 
 ```
 assets/css/admin-panels.css:33  color: #1d2327 → var(--wpds-color-foreground-content-neutral) (judged 0.77)
 assets/css/admin-panels.css:85  background: #fcf0f1 → var(--wpds-color-background-surface-error-weak) (judged 0.81)
+assets/css/admin-panels.css:209  font-weight: 700 → var(--wpds-typography-font-weight-emphasis) (judged 0.85)
 assets/css/bulk-edit.css:30  background: rgba(0, 0, 0, 0.55) → deliberate, no token fits (judged 0.99)
 assets/css/report-page.css:70  box-shadow: 0 1px 2px rgba( 0, 0, 0, 0.04 ) → no box-shadow token in the design system
 ```
@@ -247,10 +250,12 @@ loupe fix --judge             # rewrite the settled values, suppress the kept on
 Only picks at 0.5 confidence or above are applied. The exception is spacing
 (padding, gap, `top`/`left`/…) that falls between two steps of the scale:
 it always snaps to one of them, and is never judged deliberate. Settled values
-are rewritten in place. Kept ones get a `wpds-allow tokens/hardcoded-value` directive whose
-reason says a model made the call. Everything else is left for review. On an
-un-remediated WPDS plugin that took `tokens/hardcoded-value` from 183 findings
-to 63. See `engine/README.md` for how it scored.
+are rewritten in place. Kept ones get a `wpds-allow` directive naming the rule
+they were reported under, with a reason that says a model made the call.
+Everything else is left for review. On an un-remediated WPDS plugin that
+rewrote 156 declarations and wrote 20 suppressions, taking
+`tokens/hardcoded-value` from 183 findings to 70 and `typography/untokenized`
+from 43 to 12. See `engine/README.md` for how it scored.
 
 ### Judged redirects
 

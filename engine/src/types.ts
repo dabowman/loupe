@@ -47,11 +47,45 @@ export interface RuleDef {
 export interface Hint {
 	prop: string;
 	value: string;
+	/**
+	 * The line this declaration is on, where that is not the finding's own.
+	 * A collapsed finding reports at the first declaration's line and carries
+	 * the rest, which sit further down the same CSS rule — and a substitution
+	 * matched against the wrong line edits the wrong declaration.
+	 */
+	line?: number | undefined;
 }
 
-/** A resolved substitution: the token(s) that carry this exact value on-role. */
+/**
+ * What `check --judge` settled about one declaration, or about a whole
+ * one-declaration finding. `answer` is the model's pick — a replacement value,
+ * `keep`, a variant, a `not_` option, a force value — and
+ * `confidence` its certainty, as data: a later reader, `fix --judge` or an
+ * autofix that accepts judged answers above a floor, takes them from here
+ * rather than parsing the prose. `spans` are the parts of `message` the
+ * judgement wrote, in the order they appear, which the report paints green.
+ */
+export interface Judged {
+	answer: string;
+	confidence: number;
+	spans: string[];
+}
+
+/** One declaration and the token(s) that carry its exact value on-role. */
 export interface Suggestion extends Hint {
+	/**
+	 * Empty where nothing matched. The entry is still here, one per flagged
+	 * declaration, so a consumer can tell "no token for this" from "this
+	 * declaration was never flagged" without reading it back out of `message`.
+	 */
 	tokens: string[];
+	/**
+	 * What `--judge` settled for this declaration, where `tokens` did not. A
+	 * collapsed finding is several declarations with several answers, so this is
+	 * where `fix --judge` reads them — the finding's own `judged` is the same
+	 * answers rendered for a reader.
+	 */
+	judged?: Judged | undefined;
 }
 
 /**
@@ -94,22 +128,21 @@ export interface Finding {
 	 */
 	note?: string | undefined;
 	/**
-	 * What `check --judge` wrote into this finding. `answer` is the model's pick
-	 * (a variant, a `not_` option, a force value) and `confidence` its
-	 * certainty, as data: a later reader, an autofix that accepts judged answers
-	 * above a floor say, takes them from here rather than parsing the prose.
-	 * `spans` are the parts of `message` the judgement wrote, in the order they
-	 * appear, which the report paints green.
+	 * What `check --judge` wrote into this finding, as a whole. Where the
+	 * finding is several declarations, `answer` is their answers joined and
+	 * `confidence` the least certain of them; the per-declaration answers a fix
+	 * acts on are on `suggest`.
 	 */
-	judged?: { answer: string; confidence: number; spans: string[] } | undefined;
+	judged?: Judged | undefined;
 	rank: number;
 	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
 	suggest?: Suggestion[] | undefined;
 	/**
-	 * The declaration `tokens/hardcoded-value` flagged, as written. `suggest`
-	 * only exists where a token matched exactly; this is what a judgement acts
-	 * on where none did, without reading it back out of `message`.
+	 * The declaration `tokens/hardcoded-value` flagged, as written — what a
+	 * judgement acts on, without reading it back out of `message`. Set only
+	 * where the finding is one declaration, which is the only shape
+	 * `judgeValues` writes an answer for.
 	 */
 	decl?: Hint | undefined;
 }

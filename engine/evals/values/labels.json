@@ -143,5 +143,17 @@
  "v142": ["--wpds-color-background-surface-neutral-weak"],
  "v143": ["--wpds-color-foreground-content-neutral-weak", "--wpds-color-foreground-content-neutral"],
  "v144": ["--wpds-color-foreground-content-neutral"],
- "v145": ["--wpds-color-foreground-content-neutral-weak"]
+ "v145": ["--wpds-color-foreground-content-neutral-weak"],
+ "t001": ["--wpds-typography-font-weight-emphasis"],
+ "t002": ["--wpds-typography-line-height-xs", "keep"],
+ "t003": ["--wpds-typography-font-size-lg", "--wpds-typography-font-size-md"],
+ "t004": ["--wpds-typography-font-size-xs", "keep"],
+ "t005": ["--wpds-typography-font-weight-emphasis"],
+ "t006": ["--wpds-typography-font-size-lg"],
+ "t007": ["--wpds-typography-font-weight-emphasis"],
+ "t008": ["--wpds-typography-font-family-mono"],
+ "t009": ["--wpds-typography-font-size-xs", "keep"],
+ "t010": ["keep", "--wpds-typography-font-size-lg"],
+ "t011": ["--wpds-typography-font-weight-emphasis"],
+ "t012": ["--wpds-typography-font-size-lg", "--wpds-typography-font-size-md"]
 }
