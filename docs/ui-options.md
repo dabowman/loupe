@@ -7,9 +7,9 @@ capabilities want to live in.
 
 This document names the gap, then the options, then a recommendation.
 
-> **Status.** Stage 1 (option A) is built and shipped as `loupe ui`. Everything
-> else here is still a decision document. What landed, against what this document
-> asked for:
+> **Status.** Stages 1 and 2 are built — `loupe ui` (option A) and the DevTools
+> extension in `browser/devtools/` (option E). Everything else here is still a
+> decision document. What landed, against what this document asked for:
 >
 > | | |
 > |---|---|
@@ -17,7 +17,7 @@ This document names the gap, then the options, then a recommendation.
 > | navigation | **done** — every location links into the reader's editor, `--editor` templated |
 > | write-back | **done** — `fix`, `mute` and `accept as baseline` from the page |
 > | triage state | **partial** — the baseline is still the only memory. Nothing records what a reader has looked at, deferred, or seen arrive since yesterday |
-> | DOM correlation without the bookmarklet | **not started** — that is Stage 2 |
+> | DOM correlation without the bookmarklet | **done** — a DevTools panel that survives navigation, plus the Elements pane this document did not anticipate |
 >
 > Of the shared prerequisites, the write endpoints and the watcher landed, and
 > the payload discipline held: `report-view.ts` is now the one renderer, and
@@ -38,7 +38,20 @@ This document names the gap, then the options, then a recommendation.
 >   page has somewhere, so it asks and refuses a blank answer — the two surfaces
 >   write different bytes from the same principle.
 >
-> Design notes: [design/report.md](design/report.md#loupe-ui).
+> Stage 2 added one thing this document did not ask for and should have: the
+> Elements sidebar. The panel was framed here as the overlay made permanent, but
+> the interesting half turned out to be the inversion — select a node, see what
+> styles it. It is also the only loupe surface that cannot exist as a bookmarklet,
+> because it needs the inspector's selection.
+>
+> And one piece of shared machinery came out of it: `engine/src/dom-match.ts`,
+> the single answer to "does this rule reach anything on screen", which the
+> overlay splices in and the extension vendors. Same discipline as
+> `report-view.ts` in Stage 1, and the same reason — two copies would be two
+> answers and the disagreement would be invisible.
+>
+> Design notes: [design/report.md](design/report.md#loupe-ui) and
+> [#resolving-a-finding-to-elements](design/report.md#resolving-a-finding-to-elements).
 
 ## What exists now
 
@@ -311,9 +324,10 @@ app with write endpoints satisfies the need, stop here and save the release
 pipeline. That test is now runnable rather than hypothetical, which is the point
 of having done it first.
 
-**Stage 2 — option E, the DevTools panel.** Deepens the capability that is
+**Stage 2 — option E, the DevTools panel. Built.** Deepens the capability that is
 actually unique, reuses panel logic that is already written and already handles
 the hard cases, and costs a store listing rather than a notarization pipeline.
+(It is currently loaded unpacked; no store listing has been made.)
 
 **Stage 3 — option D, the VS Code webview, as a second client of the Stage 1
 server.** Only once the server is the single source of the payload, so the panel

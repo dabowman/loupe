@@ -744,6 +744,23 @@ no CORS header, and every write carries a secret minted at startup plus the run
 it was aimed at, so a click against a page the tree has moved past is refused
 rather than applied to whatever now sits at that index.
 
+### In the browser's inspector
+
+`browser/devtools/` is a Manifest V3 extension over `loupe serve`. It adds a
+**Loupe panel** — the findings resolved against the page you are looking at, each
+row saying how many elements it currently styles and whether its `@media` query
+holds at this width — and a **Loupe pane in Elements**, which is the inversion:
+select a node, see the findings that style *that node*.
+
+That second one is the question a person in DevTools actually has. They have
+already found the thing that looks wrong; every other output loupe produces
+starts from the findings and asks where they are. It is also the only surface
+that cannot be a bookmarklet, because it needs the inspector's selection.
+
+Load it unpacked — `browser/devtools/README.md` has the steps. It reads, it does
+not write: `loupe ui` is the surface that changes files, and it answers only the
+page it served.
+
 ### In CI
 
 `--format sarif` puts each finding on the line that caused it in a pull

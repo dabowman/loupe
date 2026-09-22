@@ -826,6 +826,26 @@ cannot: *which elements on screen*. `loupe ui` answers a different one — what 
 wrong right now, and can I fix it from here — and the two are separate commands
 because that one writes to your files and this one answers any origin.
 
+### In DevTools
+
+`browser/devtools/` is a Manifest V3 extension that reads this same server and
+puts it where the inspector already is. Load it unpacked; `browser/devtools/README.md`
+has the steps.
+
+It adds two surfaces. The **Loupe panel** is this overlay without the
+bookmarklet — same list, same resolution, same ordering — and it gains the two
+things injection costs you: it survives a navigation, and it is not a fixed panel
+over the app intercepting the clicks of the thing you are testing.
+
+The **Loupe pane in the Elements panel** is the one that could not be a
+bookmarklet. Select a node, and it lists the findings that style *that node*.
+Every other output here starts from the findings and asks where they are; a
+person who has opened DevTools has already found the thing that looks wrong, and
+this is the only surface that answers the question they actually have.
+
+Both read `/findings.json` from this server. They cannot read `loupe ui` — that
+one writes to your files, so it answers only the page it served.
+
 ## Programmatic use
 
 ```js

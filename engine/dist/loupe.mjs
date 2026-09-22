@@ -27239,7 +27239,7 @@ var package_default = {
     "patterns-doc:check": "node scripts/patterns-doc.ts --check",
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
-    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts && node tests/serve.ts && node tests/ui.ts && node tests/lsp.ts"
+    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts && node tests/dom-match.ts && node tests/serve.ts && node tests/ui.ts && node tests/lsp.ts"
   },
   dependencies: {
     "@babel/parser": "^7.24.0",
@@ -29102,6 +29102,213 @@ ${renderTitle(rule2, config.designSystem, config.suppression.keyword)}`).join("\
 
 // src/serve.ts
 import { createServer } from "node:http";
+
+// src/dom-match.ts
+var MATCH_VERSION = 1;
+var MATCH_JS = `
+(function () {
+  if (window.__loupeMatch && window.__loupeMatch.version === ${MATCH_VERSION}) return;
+
+  // Marks live in a shadow root of their own. The host page's stylesheet is the
+  // adversary here \u2014 in wp-admin it is considerable \u2014 and an outline drawn into
+  // the ordinary cascade is one \`* { box-sizing }\` away from being the wrong
+  // size and one \`div { display: none }\` away from being invisible.
+  var host = null, layer = null;
+  function ensure() {
+    if (host && host.isConnected) return;
+    host = document.createElement('div');
+    host.setAttribute('data-loupe-marks', '');
+    host.style.cssText = 'position:fixed;inset:0;z-index:2147483646;pointer-events:none';
+    var root = host.attachShadow({ mode: 'open' });
+    var style = document.createElement('style');
+    style.textContent =
+      ':host { all: initial }' +
+      '.marks { position: fixed; inset: 0; pointer-events: none }' +
+      '.mark { position: absolute; border: 2px solid #4ec9a5; background: rgba(78,201,165,.14); border-radius: 2px }' +
+      '.tag { position: absolute; top: -18px; left: -2px; background: #4ec9a5; color: #06231c;' +
+      ' font: 600 10px ui-monospace, Menlo, monospace; padding: 1px 5px; border-radius: 3px; white-space: nowrap }';
+    layer = document.createElement('div');
+    layer.className = 'marks';
+    root.appendChild(style);
+    root.appendChild(layer);
+    document.documentElement.appendChild(host);
+  }
+
+  // A selector as authored is not always one the DOM will accept, and one bad
+  // one must not take the caller down. Pseudo-elements have no node to match,
+  // and a state pseudo-class says *when* a rule applies, not what to.
+  //
+  // The trailing lookahead, not \b: a word boundary sits happily between
+  // 'focus' and the '-' of ':focus-visible', so \\b would leave '-visible'
+  // welded to the class before it \u2014 a valid selector for an element that does
+  // not exist.
+  var STATE = /:(?:hover|focus-within|focus-visible|focus|active|visited|target|checked|disabled|enabled|indeterminate|placeholder-shown|autofill|default|read-only|read-write|link|any-link|user-invalid|user-valid|valid|invalid|required|optional)(?![\\w-])/g;
+  function domSelector(sel) {
+    var parts = String(sel).split(',').map(function (s) {
+      return s.replace(/::[a-zA-Z-]+(\\([^)]*\\))?/g, '').replace(STATE, '').trim();
+    }).filter(Boolean);
+    return parts.join(', ');
+  }
+
+  /** Loupe's own furniture is never a finding's target. */
+  function ours(el) {
+    return !!(el.closest && (el.closest('[data-loupe-marks]') || el.closest('[data-loupe-overlay]')));
+  }
+
+  function elementsFor(f) {
+    if (!f || !f.selector) return null;
+    var sel = domSelector(f.selector);
+    if (!sel) return [];
+    try {
+      return Array.prototype.slice.call(document.querySelectorAll(sel)).filter(function (el) {
+        return !ours(el);
+      });
+    } catch (e) { return []; }
+  }
+
+  // Whether the rule's own @media condition holds at this moment. An unparseable
+  // query normalizes to 'not all', which never matches, so an unreadable
+  // condition is treated as no condition rather than as one that never holds.
+  function active(f) {
+    if (!f || !f.media) return true;
+    try {
+      var mq = window.matchMedia(f.media);
+      if (mq.media === 'not all' && f.media.indexOf('not all') === -1) return true;
+      return mq.matches;
+    } catch (e) { return true; }
+  }
+
+  /**
+   * The page's opinion about ordering, shared so both readers list the same way:
+   * what this page can actually show you first, then what is real but not at
+   * this width, then what resolves to nothing, then what was never a browser
+   * question at all.
+   */
+  function bucket(n, on) { return n > 0 ? (on ? 0 : 1) : n === 0 ? 2 : 3; }
+
+  var loaded = [];
+
+  var api = {
+    version: ${MATCH_VERSION},
+
+    /** Hand over the findings. Only \`selector\`, \`media\` and \`severity\` are read. */
+    load: function (findings) {
+      loaded = (findings || []).map(function (f) {
+        return { selector: f.selector || null, media: f.media || null, severity: f.severity || 'warn' };
+      });
+      return loaded.length;
+    },
+
+    domSelector: domSelector,
+    active: function (i) { return active(loaded[i]); },
+
+    /**
+     * One row per loaded finding: how many elements it reaches and whether its
+     * condition holds. One eval for the whole list \u2014 a call per finding would
+     * cost a round trip each across the DevTools boundary.
+     */
+    snapshot: function () {
+      return loaded.map(function (f, i) {
+        var els = elementsFor(f);
+        var n = els ? els.length : -1;
+        var on = active(f);
+        return { i: i, n: n, on: on, bucket: bucket(n, on) };
+      });
+    },
+
+    /**
+     * Which loaded findings style this element.
+     *
+     * The inversion the panel is for: not "where are these 200 findings" but
+     * "what is wrong with *this*". \`matches\` rather than re-querying, because
+     * the question is about one node.
+     */
+    forElement: function (el) {
+      if (!el || el.nodeType !== 1) return [];
+      var out = [];
+      for (var i = 0; i < loaded.length; i++) {
+        var f = loaded[i];
+        if (!f.selector) continue;
+        var sel = domSelector(f.selector);
+        if (!sel) continue;
+        try {
+          if (el.matches(sel)) out.push({ i: i, on: active(f) });
+        } catch (e) { /* a selector the DOM refuses matches nothing */ }
+      }
+      return out;
+    },
+
+    /** Outline what finding \`i\` reaches. Returns how many boxes were drawn. */
+    highlight: function (i) {
+      ensure();
+      layer.innerHTML = '';
+      var els = elementsFor(loaded[i]);
+      if (!els || !els.length) return 0;
+      var drawn = 0;
+      els.forEach(function (el, k) {
+        var r = el.getBoundingClientRect();
+        if (!r.width && !r.height) return;
+        drawn++;
+        var box = document.createElement('div');
+        box.className = 'mark';
+        box.style.left = r.left + 'px';
+        box.style.top = r.top + 'px';
+        box.style.width = r.width + 'px';
+        box.style.height = r.height + 'px';
+        if (k === 0) {
+          var tag = document.createElement('span');
+          tag.className = 'tag';
+          tag.textContent = el.tagName.toLowerCase() +
+            (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '');
+          box.appendChild(tag);
+        }
+        layer.appendChild(box);
+      });
+      return drawn;
+    },
+
+    /** Outline one element, for the Elements sidebar's own hover. */
+    highlightElement: function (el) {
+      ensure();
+      layer.innerHTML = '';
+      if (!el || el.nodeType !== 1) return 0;
+      var r = el.getBoundingClientRect();
+      if (!r.width && !r.height) return 0;
+      var box = document.createElement('div');
+      box.className = 'mark';
+      box.style.left = r.left + 'px';
+      box.style.top = r.top + 'px';
+      box.style.width = r.width + 'px';
+      box.style.height = r.height + 'px';
+      layer.appendChild(box);
+      return 1;
+    },
+
+    clear: function () { if (layer) layer.innerHTML = ''; },
+
+    /** Take the marks layer out of the page entirely. For a caller shutting down. */
+    teardown: function () {
+      if (host) host.remove();
+      host = null;
+      layer = null;
+    },
+
+    scrollTo: function (i) {
+      var els = elementsFor(loaded[i]);
+      if (!els || !els.length) return false;
+      els[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return true;
+    },
+
+    /** Marks are absolutely positioned against the viewport, so a scroll moves them. */
+    reposition: function (i) { return i === null || i === undefined ? api.clear() : api.highlight(i); },
+  };
+
+  window.__loupeMatch = api;
+})();
+`;
+
+// src/serve.ts
 var CSS2 = `
 :host { all: initial }
 * { box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
@@ -29136,12 +29343,6 @@ input { all: unset; width: 100%; padding: 5px 8px; background: #0f0f12; border: 
 .cond { color: #8d7bb8 } .cond.on { color: #6b6b76 }
 .empty { padding: 20px 12px; color: #6b6b76; text-align: center }
 .note { padding: 8px 12px; color: #6b6b76; border-top: 1px solid #2c2c33; font-size: 11px }
-.marks { position: fixed; inset: 0; pointer-events: none }
-.mark { position: absolute; border: 2px solid #4ec9a5; background: rgba(78,201,165,.14); border-radius: 2px }
-.tag {
-  position: absolute; top: -18px; left: -2px; background: #4ec9a5; color: #06231c;
-  font: 600 10px ui-monospace, Menlo, monospace; padding: 1px 5px; border-radius: 3px; white-space: nowrap;
-}
 `;
 var JS2 = `
 (function () {
@@ -29154,14 +29355,15 @@ var JS2 = `
   var style = document.createElement('style');
   style.textContent = __CSS__;
   root.appendChild(style);
-  var marks = document.createElement('div');
-  marks.className = 'marks';
   var panel = document.createElement('div');
   panel.className = 'panel';
-  root.appendChild(marks);
   root.appendChild(panel);
   document.body.appendChild(host);
 
+  var M = window.__loupeMatch;
+  // \`pinned\` is an index into the payload, not a position in the sorted list:
+  // the sort is recomputed on every resize, and a pin that meant "row 4" would
+  // follow the row rather than the finding across a breakpoint.
   var data = null, pinned = null, q = '';
 
   function esc(s) {
@@ -29170,80 +29372,19 @@ var JS2 = `
     });
   }
 
-  // A selector as authored is not always one the DOM will accept, and one bad one
-  // must not take the panel down. Pseudo-elements have no node to match, and a
-  // state pseudo-class says when a rule applies, not what to.
-  //
-  // The trailing lookahead, not \b: a word boundary sits happily between 'focus'
-  // and the '-' of ':focus-visible', so \b would leave '-visible' welded to the
-  // class before it \u2014 a valid selector for an element that does not exist.
-  var STATE = /:(?:hover|focus-within|focus-visible|focus|active|visited|target|checked|disabled|enabled|indeterminate|placeholder-shown|autofill|default|read-only|read-write|link|any-link|user-invalid|user-valid|valid|invalid|required|optional)(?![\\w-])/g;
-  function domSelector(sel) {
-    var parts = String(sel).split(',').map(function (s) {
-      return s.replace(/::[a-zA-Z-]+(\\([^)]*\\))?/g, '').replace(STATE, '').trim();
-    }).filter(Boolean);
-    return parts.join(', ');
-  }
-  function match(f) {
-    if (!f.selector) return null;
-    var sel = domSelector(f.selector);
-    if (!sel) return [];
-    try {
-      return Array.prototype.slice.call(document.querySelectorAll(sel)).filter(function (el) {
-        return !host.contains(el) && el !== host;
-      });
-    } catch (e) { return []; }
-  }
-
-  function draw(els) {
-    marks.innerHTML = '';
-    if (!els || !els.length) return;
-    els.forEach(function (el, i) {
-      var r = el.getBoundingClientRect();
-      if (!r.width && !r.height) return;
-      var box = document.createElement('div');
-      box.className = 'mark';
-      box.style.left = r.left + 'px';
-      box.style.top = r.top + 'px';
-      box.style.width = r.width + 'px';
-      box.style.height = r.height + 'px';
-      if (i === 0) {
-        var tag = document.createElement('span');
-        tag.className = 'tag';
-        tag.textContent = el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '');
-        box.appendChild(tag);
-      }
-      marks.appendChild(box);
-    });
-  }
-
-  // Whether the rule's own @media condition holds at this moment. An unparseable
-  // query normalizes to 'not all', which never matches, so an unreadable
-  // condition is treated as no condition.
-  function active(f) {
-    if (!f.media) return true;
-    try {
-      var mq = window.matchMedia(f.media);
-      if (mq.media === 'not all' && f.media.indexOf('not all') === -1) return true;
-      return mq.matches;
-    } catch (e) { return true; }
-  }
-
-  // Ordering is the panel's one opinion: what this page can actually show you
-  // comes first, then what is real but not visible at this width, then what
-  // resolves to nothing, then what was never a browser question.
+  // One query of the page per render, from the shared matcher; the bucket it
+  // returns is what orders the list \u2014 what this page can actually show you
+  // first, then what is real but not at this width, then what resolves to
+  // nothing, then what was never a browser question.
   function rows() {
     var needle = q.toLowerCase();
-    return data.findings.map(function (f) {
-      var els = match(f);
-      return { f: f, els: els, n: els ? els.length : -1, on: active(f) };
+    return M.snapshot().map(function (r) {
+      return { i: r.i, f: data.findings[r.i], n: r.n, on: r.on, bucket: r.bucket };
     }).filter(function (r) {
       if (!needle) return true;
       return (r.f.file + ' ' + r.f.message + ' ' + r.f.rule).toLowerCase().indexOf(needle) !== -1;
     }).sort(function (a, b) {
-      var ga = a.n > 0 ? (a.on ? 0 : 1) : a.n === 0 ? 2 : 3;
-      var gb = b.n > 0 ? (b.on ? 0 : 1) : b.n === 0 ? 2 : 3;
-      if (ga !== gb) return ga - gb;
+      if (a.bucket !== b.bucket) return a.bucket - b.bucket;
       if (a.f.severity !== b.f.severity) return a.f.severity === 'error' ? -1 : 1;
       return b.n - a.n;
     });
@@ -29282,7 +29423,7 @@ var JS2 = `
             ? '<span class="cond' + (r.on ? ' on' : '') + '">@media ' + esc(f.media) +
               (r.on ? '' : ' \\u2014 not at this width') + '</span>'
             : '';
-          return '<div class="row' + k + (pinned === i ? ' on' : '') + '" data-i="' + i + '">' +
+          return '<div class="row' + k + (pinned === r.i ? ' on' : '') + '" data-i="' + r.i + '">' +
             '<div><span class="sev ' + (f.severity === 'warn' ? 'warn' : '') + '">' +
               (f.severity === 'error' ? '\\u2717' : '\\u2022') + '</span> ' +
               '<span class="rule">' + esc(f.rule) + '</span></div>' +
@@ -29311,19 +29452,22 @@ var JS2 = `
     }
     panel.querySelectorAll('.row').forEach(function (el) {
       var i = Number(el.getAttribute('data-i'));
-      el.onmouseenter = function () { if (pinned === null) draw(rs[i].els); };
-      el.onmouseleave = function () { if (pinned === null) draw(null); };
+      var row = rs.filter(function (r) { return r.i === i; })[0];
+      el.onmouseenter = function () { if (pinned === null) M.highlight(i); };
+      el.onmouseleave = function () { if (pinned === null) M.clear(); };
       el.onclick = function () {
-        if (!rs[i].els || !rs[i].els.length) return;
+        if (!row || row.n <= 0) return;
         pinned = pinned === i ? null : i;
-        draw(pinned === null ? null : rs[i].els);
-        if (pinned !== null) rs[i].els[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (pinned === null) M.clear();
+        else { M.highlight(i); M.scrollTo(i); }
         render();
       };
     });
   }
 
-  function reposition() { if (pinned !== null) { var rs = rows(); if (rs[pinned]) draw(rs[pinned].els); } }
+  // Marks are positioned against the viewport, so a scroll moves what they
+  // should be over. Re-drawing is the whole of it \u2014 the answer has not changed.
+  function reposition() { if (pinned !== null) M.highlight(pinned); }
   // A resize changes the answers themselves: crossing a breakpoint turns findings
   // on and off, so the boxes move *and* the list is restated. Debounced, because
   // a drag fires this continuously and each render re-runs every selector.
@@ -29336,7 +29480,7 @@ var JS2 = `
   function load() {
     fetch(ORIGIN + '/findings.json', { cache: 'no-store' })
       .then(function (r) { return r.json(); })
-      .then(function (j) { data = j; pinned = null; render(); })
+      .then(function (j) { data = j; pinned = null; M.load(data.findings); render(); })
       .catch(function (e) {
         panel.innerHTML = '<div class="head"><span class="title">loupe</span></div><div class="empty">' +
           esc(String(e && e.message || e)) + '<br>Is \\u0060loupe serve\\u0060 still running?</div>';
@@ -29346,6 +29490,7 @@ var JS2 = `
     window.removeEventListener('scroll', reposition, true);
     window.removeEventListener('resize', onResize);
     if (resizeTimer) clearTimeout(resizeTimer);
+    M.teardown();
     host.remove();
     delete window.__loupe;
   }
@@ -29381,7 +29526,7 @@ cannot be located; the terminal remains the complete report.</p>
 </main>`;
 function serve(opts) {
   const { port, config, run } = opts;
-  const client = (origin) => JS2.replace("__ORIGIN__", origin).replace("__CSS__", JSON.stringify(CSS2));
+  const client = (origin) => MATCH_JS + JS2.replace("__ORIGIN__", origin).replace("__CSS__", JSON.stringify(CSS2));
   let url = `http://localhost:${port}`;
   return new Promise((resolve7, reject) => {
     const server = createServer((req, res) => {

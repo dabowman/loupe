@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Loupe",
+  "version": "0.8.0",
+  "description": "Design-system conformance in DevTools: which rendered elements a finding lands on, and what is wrong with the element you selected.",
+  "devtools_page": "devtools.html",
+  "permissions": ["storage"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
+  "icons": {}
+}

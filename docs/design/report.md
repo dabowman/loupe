@@ -283,6 +283,68 @@ Other decisions there:
   so the fragment is self-sufficient: `/loupe-report` publishes exactly that span
   into an Artifact, which supplies its own document shell.
 
+## Resolving a finding to elements
+
+`selector` is the one field on a finding that is not a source location. Every
+other consumer anchors on `file`/`line`; a browser has no lines, and a selector
+*is* a DOM query. That is the whole basis of `loupe serve` and of the DevTools
+extension, and it is the only thing loupe does that no other conformance checker
+can.
+
+It lives in `dom-match.ts`, as one source string, because it has two readers that
+cannot share a module: the overlay is spliced into a script the server sends, and
+the extension is a separate build artifact that may not fetch code at all.
+
+**Two copies would be two answers, and the disagreement would be invisible.**
+Both would highlight *something* plausible — the panel would still load, still
+list findings, still draw boxes. Nobody would file a bug about boxes on the wrong
+nodes; they would conclude the rule was wrong. So the extension's copy is
+generated from the same constant and `--check`ed in CI, exactly as `dist/` is,
+and for the same reason: a vendored file nobody regenerates is a version behind
+and says nothing about it.
+
+### It is a source string, so nothing type-checks it
+
+That is the cost of having one matcher, and it concentrates the risk in one
+place: escaping. The string sits inside a template literal, so every regex in it
+is written one level up. `[\\w-]` in the source emits `[\w-]` — correct — and
+`[\\\\w-]` emits `[\\w-]`, a character class of backslash, w and dash.
+
+Both compile. Both run. The second silently strips `:hover` out of `.a:hovered`
+and leaves `.aed`: a valid selector for an element that does not exist, so the
+finding reports zero hits and reads as "not on this page". That mistake was made
+writing the file and is why `tests/dom-match.ts` compiles the regexes back out of
+the emitted source and exercises them, rather than trusting that the file looks
+right.
+
+### The extension gets the question the report cannot ask
+
+The panel is the overlay without the bookmarklet, and the two things it gains are
+both consequences of living in DevTools rather than in the document: it survives
+navigation, and it is not a fixed panel over the app intercepting the clicks of
+the thing you are testing.
+
+The Elements pane is the part that could not have been a bookmarklet at all. It
+needs the inspector's selection, which does not exist in the page. And it inverts
+the interaction: every other output starts from the findings and asks where they
+are, but a person who has opened DevTools has already found the thing that looks
+wrong. Their question is the other one, and answering it previously meant reading
+two hundred rows and guessing which were about this node.
+
+`$0` is DevTools' handle on that selection inside an eval, and the matching is
+done in the page because that is where the node is. A node cannot cross the
+DevTools boundary, and reconstructing a selector for one on this side would be a
+second matcher — worse, and disagreeing with the first.
+
+### It reads `serve`, not `ui`
+
+`serve` sends `access-control-allow-origin: *` because being read from another
+origin is its purpose. `ui` sends no CORS header at all, because it rewrites
+source files and answers only the page it served. An extension cannot reach `ui`,
+and that is the security posture working rather than a gap to close: the DevTools
+surface is a reading surface, and the panel says so when a connection is refused
+rather than leaving a reader to guess at the port.
+
 ## `loupe ui`
 
 The report is a photograph and this is a window. They render the same view —

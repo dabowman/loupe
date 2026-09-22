@@ -29,6 +29,13 @@ jobs:
       # marketplace install still running the previous version of it.
       - run: npm run build:check
 
+      # The DevTools extension carries a generated copy of the matcher, because
+      # Manifest V3 forbids fetching code at runtime. `npm test` already checks
+      # it is in sync — this is the same check from the repo root, so a change
+      # made to the extension alone is caught too.
+      - name: the extension's vendored matcher matches the engine's
+        run: node ../browser/devtools/build.mjs --check
+
   bundle:
     name: bundle runs with no dependencies installed
     runs-on: ubuntu-latest
