@@ -30156,10 +30156,12 @@ var isFormat = (f) => FORMATS.includes(f);
 function parseArgs(args) {
   const { values, positionals } = parseArgv({
     args,
-    options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: "string" }])),
+    options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: "string", multiple: f === "files" }])),
     allowPositionals: true,
     strict: false
   });
+  const files = [values.files ?? []].flat().filter((v) => typeof v === "string");
+  values.files = files.length ? files.join(",") : void 0;
   for (const f of VALUE_FLAGS) if (typeof values[f] !== "string") delete values[f];
   for (const [k, v] of Object.entries(values))
     if (typeof v === "string" && !VALUE_FLAGS.includes(k)) values[k] = v !== "false";
