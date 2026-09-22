@@ -25,8 +25,8 @@
 
 import { ask } from './judge.ts';
 import type { Choice } from './judge.ts';
-import { NONE, counterpartQuery } from './judge/counterpart.ts';
-import type { CounterpartItem } from './judge/counterpart.ts';
+import { FULL_CONTEXT, NONE, counterpartQuery } from './judge/counterpart.ts';
+import type { Context, CounterpartItem } from './judge/counterpart.ts';
 import { bold, dim, green, yellow } from './color.ts';
 import { TIERS, isTierWord } from './dtcg.ts';
 import type { Tier, Token, TokenDoc } from './dtcg.ts';
@@ -246,8 +246,29 @@ const WEIGHT: Record<Tier, { value: number; name: number }> = {
 /** What agreeing on the tier is worth, out of the whole score. */
 const TIER_WEIGHT = 0.2;
 
-/** How many candidates a question offers. Eight fits a reader's attention and the model's. */
-export const CANDIDATES = 8;
+/**
+ * How many candidates a question offers.
+ *
+ * It was eight, on the reasoning that a shortlist is what makes the question
+ * answerable. `evals/counterparts` says that was wrong, and expensively so.
+ * Accuracy tracks the *ceiling* — how often the true counterpart is on the
+ * shortlist at all — almost exactly, in every arm of both substrates: the model
+ * picks correctly essentially whenever the answer is in front of it, and more
+ * options do not confuse it. On the Archer substrate eight candidates held the
+ * answer 37% of the time and scored 37%; offering the whole set scored 98%.
+ *
+ * On the real WPDS-to-Archer pair, eight reported 61 of 106 tokens as having no
+ * counterpart against 18 at full choice — 43 false gaps, every one of them the
+ * ranking discarding the answer before the model saw it.
+ *
+ * So the shortlist exists only because a request has a size limit, and the
+ * number is that limit rather than a judgement. 253 options fit in one question
+ * at the measured average option size; this leaves room for sets whose
+ * descriptions run longer. A target set smaller than this is sent whole.
+ *
+ * docs/design/map.md#what-context-a-judgement-needs has the tables.
+ */
+export const CANDIDATES = 200;
 
 /** One candidate and why it ranked where it did. */
 export interface Scored {
@@ -258,11 +279,18 @@ export interface Scored {
 	sameTier: boolean;
 }
 
-/** Rank every comparable token in `targets` against `t`, best first. */
-export function rank(t: Token, targets: readonly Token[]): Scored[] {
+/**
+ * Rank every comparable token in `targets` against `t`, best first.
+ *
+ * `gate` off compares a token against the whole set, types and all. It is here
+ * for `evals/counterparts` to score: whether the gate earns its place, or
+ * whether a set's other types are context that helps the model place the one it
+ * is asked about, is a measurement rather than an opinion.
+ */
+export function rank(t: Token, targets: readonly Token[], gate = true): Scored[] {
 	const w = WEIGHT[t.tier];
 	return targets
-		.filter((c) => comparable(t.type, c.type))
+		.filter((c) => !gate || comparable(t.type, c.type))
 		.map((c): Scored => {
 			const value = valueScore(t, c);
 			const name = nameScore(t, c);
@@ -315,6 +343,13 @@ export interface PlanOptions {
 	types?: readonly string[] | undefined;
 	limit?: number | undefined;
 	candidates?: number | undefined;
+	/** Gate candidates on `$type`. Off compares against the whole set; see {@link rank}. */
+	typeGate?: boolean | undefined;
+	/**
+	 * Settle a path that exists in both sets without asking. Off for an eval,
+	 * which has to score every row the model would answer, not only the hard ones.
+	 */
+	settleExact?: boolean | undefined;
 }
 
 /** What a run will do, worked out before a single request is sent. */
@@ -366,12 +401,12 @@ export function planMap(from: TokenDoc, to: TokenDoc, opts: PlanOptions = {}): M
 			tier: t.tier,
 			fromValue: t.literal,
 		};
-		const twin = byPath.get(t.path);
+		const twin = opts.settleExact === false ? undefined : byPath.get(t.path);
 		if (twin && comparable(t.type, twin.type)) {
 			settled.push({ ...row, to: twin.path, toValue: twin.literal, confidence: 1, how: 'exact', considered: [] });
 			continue;
 		}
-		const ranked = rank(t, to.tokens).slice(0, size);
+		const ranked = rank(t, to.tokens, opts.typeGate !== false).slice(0, size);
 		if (!ranked.length) {
 			settled.push({ ...row, to: null, confidence: 1, how: 'absent', considered: [] });
 			continue;
@@ -398,8 +433,9 @@ export async function askCounterparts(
 	plan: MapPlan,
 	apiKey: string,
 	fetchImpl: Fetch = fetch,
+	ctx: Context = FULL_CONTEXT,
 ): Promise<{ mappings: Mapping[]; answers: (Choice | undefined)[] }> {
-	const answers = plan.jobs.length ? await ask(counterpartQuery, plan.jobs, apiKey, fetchImpl) : [];
+	const answers = plan.jobs.length ? await ask(counterpartQuery(ctx), plan.jobs, apiKey, fetchImpl) : [];
 	const judged = plan.jobs.map((job, i): Mapping => rowFor(job, answers[i]));
 	// Back into the order the tokens were authored in: a map read by a person is
 	// read beside the file it came from, and which rows needed a model is not an

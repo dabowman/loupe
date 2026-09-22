@@ -37,7 +37,7 @@
  *     "questions": {
  *       "e0": {
  *         "type": "choice",
- *         "instructions": "`elements[0]` is one design token from the design system \"wpds\". Each option below is a token from a different design system, \"archer\", given as its tier, its value, and what that system says it is for. Which option is the counterpart of `elements[0]` — the token an interface being ported from wpds to archer should use in its place? Judge by the role each token plays in its own system, not by how close the two values happen to be: two systems can agree on a role and still round the value differently, and two unrelated tokens can share a value by coincidence.",
+ *         "instructions": "`elements[0]` is one design token from the design system \"wpds\". Each option below is a token from a different design system, \"archer\", given as the tier it sits at, its value and what that system says it is for. Which option is the counterpart of `elements[0]` — the token an interface being ported from wpds to archer should use in its place, or does archer have no counterpart for it? Match the intent of the token: the decision it records, and how specific that decision is. Two systems can agree on an intent and still round the value differently, and two unrelated tokens can share a value by coincidence.",
  *         "criteria": {
  *           "text.muted": "semantic · #6b7280 — Lower-emphasis text beside a primary label.",
  *           "text.default": "semantic · #111827 — Body copy and labels.",
@@ -75,45 +75,90 @@ const NONE_CRITERION =
 	'None of these. The second system has no counterpart for this token — it models this part of the interface ' +
 	'differently, or does not model it at all — and a port would have to add a token rather than reuse one.';
 
-/** `semantic · #6b7280 — Lower-emphasis text beside a primary label.` */
-const describe = (t: Token): string => {
-	const head = `${t.tier} · ${t.literal || '(composite)'}`;
-	return t.description ? `${head} — ${t.description}` : head;
+/**
+ * Which facts about a token reach the model.
+ *
+ * Every flag here is a claim that this part of a token carries its meaning, and
+ * that is an empirical question rather than a design one. `evals/counterparts`
+ * turns each one off in turn and scores what it costs, which is the only way to
+ * tell context from noise. The defaults are what `map` ships.
+ */
+export interface Context {
+	/** What the model reads about the token being mapped. */
+	element: {
+		/** Its path. Off asks whether the description alone identifies it; the
+		 * options keep theirs either way, since a path is how an answer is named. */
+		name: boolean;
+		type: boolean;
+		tier: boolean;
+		value: boolean;
+		/** What it points at — often the clearest statement of its role a set makes. */
+		alias: boolean;
+		description: boolean;
+		/** The other leaves in its group: one step of a scale, or a decision on its own. */
+		siblings: boolean;
+	};
+	/** What the model reads about each option. */
+	option: { tier: boolean; value: boolean; description: boolean };
+}
+
+export const FULL_CONTEXT: Context = {
+	element: { name: true, type: true, tier: true, value: true, alias: true, description: true, siblings: true },
+	option: { tier: true, value: true, description: true },
 };
 
+/** `semantic · #6b7280 — Lower-emphasis text beside a primary label.`, minus whatever is switched off. */
+const describe = (t: Token, opt: Context['option']): string => {
+	const head = [opt.tier ? t.tier : '', opt.value ? t.literal || '(composite)' : ''].filter(Boolean).join(' \u00b7 ');
+	const desc = opt.description ? t.description : undefined;
+	if (!head) return desc ?? '(name only)';
+	return desc ? `${head} \u2014 ${desc}` : head;
+};
+
+/** What the instructions promise each option carries, so the wording tracks the context. */
+function optionShape(opt: Context['option']): string {
+	const said = [
+		opt.tier ? 'the tier it sits at' : '',
+		opt.value ? 'its value' : '',
+		opt.description ? 'what that system says it is for' : '',
+	].filter(Boolean);
+	if (!said.length) return 'its name alone';
+	if (said.length === 1) return said[0] as string;
+	return `${said.slice(0, -1).join(', ')} and ${said.at(-1)}`;
+}
+
 /**
- * What the model reads about the token being mapped.
+ * The question, over whichever context is switched on.
  *
- * Everything here is something a reader would need to answer the question and
- * cannot get from the name. `aliases` is what the token points at, which is
- * often the clearest statement of its role a set makes — a semantic token whose
- * name is opaque still says `{color.red.600}`. `group_siblings` say whether the
- * token is one step of a scale or a decision on its own, which is what separates
- * `spacing.md` from `card.padding`.
+ * It asks for the *intent* of the token rather than for a nearest neighbour, and
+ * says outright that a value agreeing is not evidence. Specificity is part of
+ * that intent, not a separate axis: a button's border token and a common border
+ * token record the same kind of decision at different scopes, so the tier is
+ * offered as one more fact about meaning rather than as a filter.
  */
-export const counterpartQuery: Query<CounterpartItem> = {
+export const counterpartQuery = (ctx: Context = FULL_CONTEXT): Query<CounterpartItem> => ({
 	element: ({ token, fromLabel }) => ({
 		set: fromLabel,
-		token: token.path,
-		type: token.type || 'unknown',
-		tier: token.tier,
-		value: token.literal,
-		...(token.alias ? { aliases: token.alias } : {}),
-		...(token.description ? { description: token.description } : {}),
-		...(token.siblings.length ? { group_siblings: token.siblings } : {}),
+		...(ctx.element.name ? { token: token.path } : {}),
+		...(ctx.element.type ? { type: token.type || 'unknown' } : {}),
+		...(ctx.element.tier ? { tier: token.tier } : {}),
+		...(ctx.element.value && token.literal ? { value: token.literal } : {}),
+		...(ctx.element.alias && token.alias ? { aliases: token.alias } : {}),
+		...(ctx.element.description && token.description ? { description: token.description } : {}),
+		...(ctx.element.siblings && token.siblings.length ? { group_siblings: token.siblings } : {}),
 	}),
 	question: ({ candidates, fromLabel, toLabel }, i) => ({
 		type: 'choice',
 		instructions:
-			`\`elements[${i}]\` is one design token from the design system "${fromLabel}". Each option below is a token ` +
-			`from a different design system, "${toLabel}", given as its tier, its value, and what that system says it is ` +
-			`for. Which option is the counterpart of \`elements[${i}]\` — the token an interface being ported from ` +
-			`${fromLabel} to ${toLabel} should use in its place? Judge by the role each token plays in its own system, ` +
-			'not by how close the two values happen to be: two systems can agree on a role and still round the value ' +
-			'differently, and two unrelated tokens can share a value by coincidence.',
+			`\`elements[${i}]\` is one design token from the design system "${fromLabel}". Each option below is a ` +
+			`token from a different design system, "${toLabel}", given as ${optionShape(ctx.option)}. Which option is ` +
+			`the counterpart of \`elements[${i}]\` — the token an interface being ported from ${fromLabel} to ` +
+			`${toLabel} should use in its place, or does ${toLabel} have no counterpart for it? Match the intent of ` +
+			'the token: the decision it records, and how specific that decision is. Two systems can agree on an intent ' +
+			'and still round the value differently, and two unrelated tokens can share a value by coincidence.',
 		criteria: {
-			...Object.fromEntries(candidates.map((c) => [c.path, describe(c)])),
+			...Object.fromEntries(candidates.map((c) => [c.path, describe(c, ctx.option)])),
 			[NONE]: NONE_CRITERION,
 		},
 	}),
-};
+});

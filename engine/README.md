@@ -663,6 +663,15 @@ half of the result: mapping WPDS onto Primer, nine WPDS tokens land on
 `bgColor.disabled`, because WPDS has a disabled background per tone and per
 emphasis where Primer has one.
 
+How many options a question offers is the setting that matters most, and it is
+measured rather than chosen: `evals/counterparts` shows accuracy tracking the
+*ceiling* — whether the true counterpart is on the shortlist at all — almost
+exactly, so a short list loses answers the model would otherwise have found.
+Eight candidates scored 37% on one substrate where offering the whole set scored
+98%. The shortlist is now 200, which is what fits in one request; a smaller set
+is sent whole. Run `npm run eval:counterparts` (needs a key) or
+`node evals/counterparts/run.ts --ceilings` for the free half.
+
 `--dry-run` prints the shortlists and asks nothing, which is the first thing to
 run on a new pair: a shortlist that does not contain the right answer cannot be
 rescued by the model. Everything else needs `TYPESAFE_API_KEY`, and unlike

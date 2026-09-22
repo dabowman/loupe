@@ -27239,7 +27239,8 @@ var package_default = {
     "patterns-doc:check": "node scripts/patterns-doc.ts --check",
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
-    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/map.ts && node tests/report.ts && node tests/serve.ts && node tests/lsp.ts"
+    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/map.ts && node tests/report.ts && node tests/serve.ts && node tests/lsp.ts",
+    "eval:counterparts": "node evals/counterparts/run.ts"
   },
   dependencies: {
     "@babel/parser": "^7.24.0",
@@ -27810,30 +27811,46 @@ function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
 // src/judge/counterpart.ts
 var NONE = "none";
 var NONE_CRITERION = "None of these. The second system has no counterpart for this token \u2014 it models this part of the interface differently, or does not model it at all \u2014 and a port would have to add a token rather than reuse one.";
-var describe = (t) => {
-  const head2 = `${t.tier} \xB7 ${t.literal || "(composite)"}`;
-  return t.description ? `${head2} \u2014 ${t.description}` : head2;
+var FULL_CONTEXT = {
+  element: { name: true, type: true, tier: true, value: true, alias: true, description: true, siblings: true },
+  option: { tier: true, value: true, description: true }
 };
-var counterpartQuery = {
+var describe = (t, opt) => {
+  const head2 = [opt.tier ? t.tier : "", opt.value ? t.literal || "(composite)" : ""].filter(Boolean).join(" \xB7 ");
+  const desc = opt.description ? t.description : void 0;
+  if (!head2) return desc ?? "(name only)";
+  return desc ? `${head2} \u2014 ${desc}` : head2;
+};
+function optionShape(opt) {
+  const said = [
+    opt.tier ? "the tier it sits at" : "",
+    opt.value ? "its value" : "",
+    opt.description ? "what that system says it is for" : ""
+  ].filter(Boolean);
+  if (!said.length) return "its name alone";
+  if (said.length === 1) return said[0];
+  return `${said.slice(0, -1).join(", ")} and ${said.at(-1)}`;
+}
+var counterpartQuery = (ctx = FULL_CONTEXT) => ({
   element: ({ token, fromLabel }) => ({
     set: fromLabel,
-    token: token.path,
-    type: token.type || "unknown",
-    tier: token.tier,
-    value: token.literal,
-    ...token.alias ? { aliases: token.alias } : {},
-    ...token.description ? { description: token.description } : {},
-    ...token.siblings.length ? { group_siblings: token.siblings } : {}
+    ...ctx.element.name ? { token: token.path } : {},
+    ...ctx.element.type ? { type: token.type || "unknown" } : {},
+    ...ctx.element.tier ? { tier: token.tier } : {},
+    ...ctx.element.value && token.literal ? { value: token.literal } : {},
+    ...ctx.element.alias && token.alias ? { aliases: token.alias } : {},
+    ...ctx.element.description && token.description ? { description: token.description } : {},
+    ...ctx.element.siblings && token.siblings.length ? { group_siblings: token.siblings } : {}
   }),
   question: ({ candidates, fromLabel, toLabel }, i) => ({
     type: "choice",
-    instructions: `\`elements[${i}]\` is one design token from the design system "${fromLabel}". Each option below is a token from a different design system, "${toLabel}", given as its tier, its value, and what that system says it is for. Which option is the counterpart of \`elements[${i}]\` \u2014 the token an interface being ported from ${fromLabel} to ${toLabel} should use in its place? Judge by the role each token plays in its own system, not by how close the two values happen to be: two systems can agree on a role and still round the value differently, and two unrelated tokens can share a value by coincidence.`,
+    instructions: `\`elements[${i}]\` is one design token from the design system "${fromLabel}". Each option below is a token from a different design system, "${toLabel}", given as ${optionShape(ctx.option)}. Which option is the counterpart of \`elements[${i}]\` \u2014 the token an interface being ported from ${fromLabel} to ${toLabel} should use in its place, or does ${toLabel} have no counterpart for it? Match the intent of the token: the decision it records, and how specific that decision is. Two systems can agree on an intent and still round the value differently, and two unrelated tokens can share a value by coincidence.`,
     criteria: {
-      ...Object.fromEntries(candidates.map((c) => [c.path, describe(c)])),
+      ...Object.fromEntries(candidates.map((c) => [c.path, describe(c, ctx.option)])),
       [NONE]: NONE_CRITERION
     }
   })
-};
+});
 
 // src/color.ts
 var { NO_COLOR, FORCE_COLOR, TERM } = process.env;
@@ -27963,10 +27980,10 @@ var WEIGHT = {
   component: { value: 0.3, name: 0.7 }
 };
 var TIER_WEIGHT = 0.2;
-var CANDIDATES = 8;
-function rank(t, targets) {
+var CANDIDATES = 200;
+function rank(t, targets, gate = true) {
   const w = WEIGHT[t.tier];
-  return targets.filter((c) => comparable(t.type, c.type)).map((c) => {
+  return targets.filter((c) => !gate || comparable(t.type, c.type)).map((c) => {
     const value = valueScore(t, c);
     const name = nameScore(t, c);
     const sameTier = c.tier === t.tier;
@@ -27996,12 +28013,12 @@ function planMap(from, to, opts = {}) {
       tier: t.tier,
       fromValue: t.literal
     };
-    const twin = byPath.get(t.path);
+    const twin = opts.settleExact === false ? void 0 : byPath.get(t.path);
     if (twin && comparable(t.type, twin.type)) {
       settled.push({ ...row, to: twin.path, toValue: twin.literal, confidence: 1, how: "exact", considered: [] });
       continue;
     }
-    const ranked = rank(t, to.tokens).slice(0, size);
+    const ranked = rank(t, to.tokens, opts.typeGate !== false).slice(0, size);
     if (!ranked.length) {
       settled.push({ ...row, to: null, confidence: 1, how: "absent", considered: [] });
       continue;
@@ -28016,8 +28033,8 @@ function planMap(from, to, opts = {}) {
   }
   return { jobs, shortlists, settled, skipped: from.tokens.length - capped.length, from, to };
 }
-async function askCounterparts(plan, apiKey, fetchImpl = fetch) {
-  const answers = plan.jobs.length ? await ask(counterpartQuery, plan.jobs, apiKey, fetchImpl) : [];
+async function askCounterparts(plan, apiKey, fetchImpl = fetch, ctx = FULL_CONTEXT) {
+  const answers = plan.jobs.length ? await ask(counterpartQuery(ctx), plan.jobs, apiKey, fetchImpl) : [];
   const judged = plan.jobs.map((job, i) => rowFor(job, answers[i]));
   const order = new Map(plan.from.tokens.map((t, i) => [t.path, i]));
   const mappings = [...plan.settled, ...judged].sort(

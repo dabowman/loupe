@@ -1,0 +1,526 @@
+{
+  "bgColor": {
+    "muted": {
+      "$value": "#F6F8FA",
+      "$type": "color",
+      "$description": "Muted background for secondary content areas and subtle grouping"
+    },
+    "emphasis": {
+      "$value": "#25292E",
+      "$type": "color",
+      "$description": "High-emphasis dark background for strong visual contrast"
+    },
+    "inverse": {
+      "$value": "#25292E",
+      "$type": "color",
+      "$description": "Inverse background that flips between light and dark modes"
+    },
+    "disabled": {
+      "$value": "#EFF2F5",
+      "$type": "color",
+      "$description": "Background for disabled interactive elements"
+    },
+    "transparent": {
+      "$value": "#ffffff",
+      "$type": "color",
+      "$description": "Fully transparent background"
+    },
+    "neutral": {
+      "muted": {
+        "$value": "#818B98",
+        "$type": "color",
+        "$description": "Subtle neutral background for tags, labels, and secondary UI elements"
+      },
+      "emphasis": {
+        "$value": "#59636E",
+        "$type": "color",
+        "$description": "Strong neutral background for prominent neutral elements"
+      }
+    },
+    "accent": {
+      "muted": {
+        "$value": "#ddf4ff",
+        "$type": "color",
+        "$description": "Subtle accent background for informational or selected elements"
+      },
+      "emphasis": {
+        "$value": "#0969da",
+        "$type": "color",
+        "$description": "Strong accent background for active states and focused states"
+      }
+    },
+    "success": {
+      "muted": {
+        "$value": "#dafbe1",
+        "$type": "color",
+        "$description": "Subtle success background for positive feedback and completed states"
+      }
+    },
+    "open": {
+      "emphasis": {
+        "$value": "#1f883d",
+        "$type": "color",
+        "$description": "Strong background for open state badges and labels"
+      }
+    },
+    "attention": {
+      "muted": {
+        "$value": "#fff8c5",
+        "$type": "color",
+        "$description": "Subtle attention background for warnings and caution states"
+      },
+      "emphasis": {
+        "$value": "#9a6700",
+        "$type": "color",
+        "$description": "Strong attention background for prominent warnings"
+      }
+    },
+    "severe": {
+      "muted": {
+        "$value": "#fff1e5",
+        "$type": "color",
+        "$description": "Subtle severe background for high-priority warnings"
+      },
+      "emphasis": {
+        "$value": "#bc4c00",
+        "$type": "color",
+        "$description": "Strong severe background for prominent high-priority warnings"
+      }
+    },
+    "danger": {
+      "muted": {
+        "$value": "#ffebe9",
+        "$type": "color",
+        "$description": "Muted danger background for error states and destructive action contexts"
+      },
+      "emphasis": {
+        "$value": "#cf222e",
+        "$type": "color",
+        "$description": "Emphasized danger background for critical errors and delete confirmations"
+      }
+    },
+    "done": {
+      "muted": {
+        "$value": "#fbefff",
+        "$type": "color",
+        "$description": "Subtle background for completed/done state indicators"
+      },
+      "emphasis": {
+        "$value": "#8250df",
+        "$type": "color",
+        "$description": "Strong background for completed/done state badges and labels"
+      }
+    },
+    "sponsors": {
+      "muted": {
+        "$value": "#ffeff7",
+        "$type": "color",
+        "$description": "Subtle background for GitHub Sponsors content"
+      },
+      "emphasis": {
+        "$value": "#bf3989",
+        "$type": "color",
+        "$description": "Strong background for prominent GitHub Sponsors elements"
+      }
+    }
+  },
+  "borderColor": {
+    "default": {
+      "$value": "#D1D9E0",
+      "$type": "color",
+      "$description": "Default border color for most UI elements"
+    },
+    "emphasis": {
+      "$value": "#818B98",
+      "$type": "color",
+      "$description": "Strong border for emphasis and visual weight"
+    },
+    "disabled": {
+      "$value": "#818B98",
+      "$type": "color",
+      "$description": "Border color for disabled interactive elements"
+    },
+    "transparent": {
+      "$value": "#ffffff",
+      "$type": "color",
+      "$description": "Fully transparent border"
+    },
+    "neutral": {
+      "emphasis": {
+        "$value": "#59636E",
+        "$type": "color",
+        "$description": "Strong neutral semantic border"
+      }
+    },
+    "accent": {
+      "muted": {
+        "$value": "#54aeff",
+        "$type": "color",
+        "$description": "Subtle accent border for selected or focused elements"
+      },
+      "emphasis": {
+        "$value": "#0969da",
+        "$type": "color",
+        "$description": "Strong accent border for selected or focused elements"
+      }
+    },
+    "success": {
+      "muted": {
+        "$value": "#4ac26b",
+        "$type": "color",
+        "$description": "Subtle success border for positive feedback elements"
+      },
+      "emphasis": {
+        "$value": "#1a7f37",
+        "$type": "color",
+        "$description": "Strong success border for prominent positive elements"
+      }
+    },
+    "attention": {
+      "muted": {
+        "$value": "#d4a72c",
+        "$type": "color",
+        "$description": "Subtle attention border for warnings and caution states"
+      },
+      "emphasis": {
+        "$value": "#9a6700",
+        "$type": "color",
+        "$description": "Strong attention border for prominent warnings"
+      }
+    },
+    "severe": {
+      "muted": {
+        "$value": "#fb8f44",
+        "$type": "color",
+        "$description": "Subtle severe border for high-priority warnings"
+      },
+      "emphasis": {
+        "$value": "#bc4c00",
+        "$type": "color",
+        "$description": "Strong severe border for prominent high-priority warnings"
+      }
+    },
+    "danger": {
+      "muted": {
+        "$value": "#ff8182",
+        "$type": "color",
+        "$description": "Subtle danger border for errors and destructive contexts"
+      },
+      "emphasis": {
+        "$value": "#cf222e",
+        "$type": "color",
+        "$description": "Strong danger border for destructive actions and errors"
+      }
+    },
+    "done": {
+      "muted": {
+        "$value": "#c297ff",
+        "$type": "color",
+        "$description": "Subtle border for completed/done state indicators"
+      },
+      "emphasis": {
+        "$value": "#8250df",
+        "$type": "color",
+        "$description": "Strong border for completed/done state badges"
+      }
+    },
+    "sponsors": {
+      "muted": {
+        "$value": "#ff80c8",
+        "$type": "color",
+        "$description": "Subtle border for GitHub Sponsors content"
+      },
+      "emphasis": {
+        "$value": "#bf3989",
+        "$type": "color",
+        "$description": "Strong border for prominent GitHub Sponsors elements"
+      }
+    }
+  },
+  "fgColor": {
+    "muted": {
+      "$value": "#59636E",
+      "$type": "color",
+      "$description": "Muted text for secondary content and less important information"
+    },
+    "disabled": {
+      "$value": "#818B98",
+      "$type": "color",
+      "$description": "Text color for disabled interactive elements"
+    },
+    "neutral": {
+      "$value": "#59636E",
+      "$type": "color",
+      "$description": "Neutral semantic text for icons and secondary elements"
+    },
+    "accent": {
+      "$value": "#0969da",
+      "$type": "color",
+      "$description": "Accent text for links and interactive elements"
+    },
+    "success": {
+      "$value": "#1a7f37",
+      "$type": "color",
+      "$description": "Success text for positive feedback and completed states"
+    },
+    "attention": {
+      "$value": "#9a6700",
+      "$type": "color",
+      "$description": "Attention text for warnings and caution states"
+    },
+    "severe": {
+      "$value": "#bc4c00",
+      "$type": "color",
+      "$description": "Severe text for high-priority warnings"
+    },
+    "closed": {
+      "$value": "#d1242f",
+      "$type": "color",
+      "$description": "Text color for closed state indicators (issues, PRs)"
+    },
+    "done": {
+      "$value": "#8250df",
+      "$type": "color",
+      "$description": "Text color for completed/done state indicators"
+    },
+    "sponsors": {
+      "$value": "#bf3989",
+      "$type": "color",
+      "$description": "Text color for GitHub Sponsors content"
+    }
+  },
+  "ansi": {
+    "blackBright": {
+      "$value": "#393F46",
+      "$type": "color",
+      "$description": "ANSI bright black (dark gray) for dimmed terminal text"
+    },
+    "white": {
+      "$value": "#59636E",
+      "$type": "color",
+      "$description": "ANSI white for terminal text"
+    },
+    "whiteBright": {
+      "$value": "#818B98",
+      "$type": "color",
+      "$description": "ANSI bright white for emphasized terminal text"
+    },
+    "gray": {
+      "$value": "#59636E",
+      "$type": "color",
+      "$description": "ANSI gray for secondary terminal text"
+    },
+    "red": {
+      "$value": "#cf222e",
+      "$type": "color",
+      "$description": "ANSI red for errors and alerts in terminal output"
+    },
+    "redBright": {
+      "$value": "#a40e26",
+      "$type": "color",
+      "$description": "ANSI bright red for highlighted errors in terminal"
+    },
+    "green": {
+      "$value": "#116329",
+      "$type": "color",
+      "$description": "ANSI green for success indicators in terminal"
+    },
+    "greenBright": {
+      "$value": "#1a7f37",
+      "$type": "color",
+      "$description": "ANSI bright green for highlighted success in terminal"
+    },
+    "yellow": {
+      "$value": "#4d2d00",
+      "$type": "color",
+      "$description": "ANSI yellow for warnings in terminal output"
+    },
+    "yellowBright": {
+      "$value": "#633c01",
+      "$type": "color",
+      "$description": "ANSI bright yellow for highlighted warnings in terminal"
+    },
+    "blue": {
+      "$value": "#0969da",
+      "$type": "color",
+      "$description": "ANSI blue for informational terminal text"
+    },
+    "blueBright": {
+      "$value": "#218bff",
+      "$type": "color",
+      "$description": "ANSI bright blue for highlighted info in terminal"
+    },
+    "magenta": {
+      "$value": "#8250df",
+      "$type": "color",
+      "$description": "ANSI magenta for special terminal text"
+    },
+    "magentaBright": {
+      "$value": "#a475f9",
+      "$type": "color",
+      "$description": "ANSI bright magenta for highlighted special text"
+    }
+  },
+  "prettylights": {
+    "syntax": {
+      "comment": {
+        "$value": "#59636E",
+        "$type": "color",
+        "$description": "Syntax highlighting color for code comments"
+      },
+      "constant": {
+        "$value": "#0550ae",
+        "$type": "color",
+        "$description": "Syntax highlighting color for constants and literal values"
+      },
+      "constantOtherReferenceLink": {
+        "$value": "#0a3069",
+        "$type": "color",
+        "$description": "Syntax highlighting color for reference links and URLs in code"
+      },
+      "entityTag": {
+        "$value": "#0550ae",
+        "$type": "color",
+        "$description": "Syntax highlighting color for HTML/XML tags"
+      },
+      "entity": {
+        "$value": "#6639ba",
+        "$type": "color",
+        "$description": "Syntax highlighting color for class names, type definitions, and declarations"
+      },
+      "keyword": {
+        "$value": "#cf222e",
+        "$type": "color",
+        "$description": "Syntax highlighting color for language keywords (if, else, return)"
+      },
+      "string": {
+        "$value": "#0a3069",
+        "$type": "color",
+        "$description": "Syntax highlighting color for string literals"
+      },
+      "variable": {
+        "$value": "#953800",
+        "$type": "color",
+        "$description": "Syntax highlighting color for variables and parameters"
+      },
+      "bracketHighlighterUnmatched": {
+        "$value": "#82071e",
+        "$type": "color",
+        "$description": "Syntax highlighting color for unmatched brackets"
+      },
+      "bracketHighlighterAngle": {
+        "$value": "#59636E",
+        "$type": "color",
+        "$description": "Syntax highlighting color for angle brackets"
+      },
+      "invalidIllegal": {
+        "text": {
+          "$value": "#d1242f",
+          "$type": "color",
+          "$description": "Text color for invalid or illegal code syntax"
+        }
+      },
+      "carriageReturn": {
+        "text": {
+          "$value": "#F6F8FA",
+          "$type": "color",
+          "$description": "Text color for carriage return characters in diffs"
+        },
+        "bg": {
+          "$value": "#cf222e",
+          "$type": "color",
+          "$description": "Background color for carriage return characters in diffs"
+        }
+      },
+      "stringRegexp": {
+        "$value": "#116329",
+        "$type": "color",
+        "$description": "Syntax highlighting color for regular expression literals"
+      },
+      "markup": {
+        "list": {
+          "$value": "#3b2300",
+          "$type": "color",
+          "$description": "Syntax highlighting color for list markers in markdown"
+        },
+        "heading": {
+          "$value": "#0550ae",
+          "$type": "color",
+          "$description": "Syntax highlighting color for headings in markdown"
+        },
+        "deleted": {
+          "text": {
+            "$value": "#82071e",
+            "$type": "color",
+            "$description": "Text color for deleted lines in diff views"
+          },
+          "bg": {
+            "$value": "#ffebe9",
+            "$type": "color",
+            "$description": "Background color for deleted lines in diff views"
+          }
+        },
+        "inserted": {
+          "text": {
+            "$value": "#116329",
+            "$type": "color",
+            "$description": "Text color for inserted lines in diff views"
+          },
+          "bg": {
+            "$value": "#dafbe1",
+            "$type": "color",
+            "$description": "Background color for inserted lines in diff views"
+          }
+        },
+        "changed": {
+          "text": {
+            "$value": "#953800",
+            "$type": "color",
+            "$description": "Text color for changed lines in diff views"
+          },
+          "bg": {
+            "$value": "#ffd8b5",
+            "$type": "color",
+            "$description": "Background color for changed lines in diff views"
+          }
+        },
+        "ignored": {
+          "text": {
+            "$value": "#D1D9E0",
+            "$type": "color",
+            "$description": "Text color for ignored content in diffs"
+          },
+          "bg": {
+            "$value": "#0550ae",
+            "$type": "color",
+            "$description": "Background color for ignored content in diffs"
+          }
+        }
+      },
+      "metaDiffRange": {
+        "$value": "#8250df",
+        "$type": "color",
+        "$description": "Syntax highlighting color for diff range information (@@ lines)"
+      },
+      "sublimeLinterGutterMark": {
+        "$value": "#818B98",
+        "$type": "color",
+        "$description": "Color for linter gutter marks in code editors"
+      }
+    }
+  },
+  "color": {
+    "ansi": {
+      "cyan": {
+        "$value": "#1b7c83",
+        "$type": "color",
+        "$description": "Deprecated. Use ansi.cyan instead."
+      },
+      "cyan-bright": {
+        "$value": "#3192aa",
+        "$type": "color",
+        "$description": "Deprecated. Use ansi.cyanBright instead."
+      }
+    }
+  }
+}

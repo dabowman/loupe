@@ -269,11 +269,88 @@ Nothing in the tool does this yet — the two runs were diffed by hand. A
 `--confirm` that ran the reverse and marked the agreeing rows would turn it into
 a property of the map.
 
+## What context a judgement needs
+
+`evals/counterparts` scores this. A real set is renamed into a different
+convention, its descriptions paraphrased, its values nudged, and a fifth of its
+tokens held back so their true answer is `none`; the labels are facts about the
+transformation rather than opinions about design. Read `rename.ts` for what that
+does and does not simulate — mechanical paraphrase leaves the two sides'
+descriptions more alike than two real systems' would be.
+
+Two numbers per arm. **Ceiling** is how often the true counterpart was on the
+shortlist at all — free to compute, and a hard cap. **Accuracy** is how often the
+model then picked it, scored on the raw answer so the floor is not being measured
+too.
+
+### The ranking was the bottleneck, not the question
+
+`archer-common`, 63 tokens, whose values are unresolved aliases so the ranking
+has only names to work with:
+
+| options offered | ceiling | accuracy |
+|---|---|---|
+| 4 | 37% | 37% |
+| 8 (the old default) | 37% | 37% |
+| 16 | 45% | 45% |
+| 32 | 69% | 69% |
+| all 49 | **100%** | **98%** |
+
+**Accuracy tracks the ceiling exactly, in every arm of both substrates.** The
+model picks correctly essentially whenever the answer is in front of it, and
+more options do not confuse it — the premise that a short list makes the question
+answerable was simply wrong. Eight candidates were throwing away the answer 63%
+of the time and the model was being blamed for it.
+
+On the real WPDS-to-Archer pair the cost was plain: at eight options `map`
+reported **61 of 106** tokens as having no counterpart; at full choice, **18**.
+Forty-three false gaps, none of which the model ever had a chance to avoid.
+
+So the shortlist now exists only because a request has a size limit. 253 options
+fit in one question at the measured average option size, and {@link CANDIDATES}
+is 200 to leave room for longer descriptions. A set smaller than that is sent
+whole. The wider shortlist splits the probability mass, so more rows land under
+the floor — on that pair, 34 `unsure` against 4. That is the honest trade: an
+unsettled row is a row for a person, where a false `none` is a wrong claim about
+the second system. The floor itself has not been re-measured against the wider
+list, and should be.
+
+### The description carries the meaning; most of the rest is inert
+
+`primer-semantic`, 92 tokens, whose ceiling is 97% at eight options so the
+differences are attributable to the question rather than to the shortlist:
+
+| arm | accuracy | false `none` |
+|---|---|---|
+| everything `map` sends | 97% | 3% |
+| description only (no name) | 97% | 3% |
+| name + description | 96% | 4% |
+| **name only** | **53%** | **41%** |
+| full − description | 73% | 8% |
+| full − siblings | 97% | 3% |
+| full − value | 97% | 3% |
+| full − tier | 97% | 3% |
+
+The `$description` is the load-bearing field. Without it the arm drops 24 points;
+with nothing else it loses nothing. A name on its own is not enough — and its
+failure mode is the bad one: 41% of the time it declines when a real counterpart
+exists, so a set whose tokens are thinly described will quietly report gaps that
+are not there.
+
+Siblings, value and tier each cost nothing to remove. They stay for now because
+both substrates are single-type colour sets, where the tier is constant and the
+value is weak by construction; neither is evidence that they are inert on a set
+that spans types. The type gate is untestable for the same reason and its row is
+not reported here.
+
 ## What is not settled
 
-- **No eval.** `evals/` has labelled sets for `represents` and `values`; there
-  is none for this, so the floor of 0.5, the eight candidates, the tier weight
-  of 0.2 and the weight table are all arguments rather than measurements. The
+- **The floor is still an argument.** `evals/counterparts` now measures the
+  context and the shortlist width, but 0.5 was chosen before the shortlist grew
+  to 200 and the wider list demonstrably pushes rows under it. The tier weight of
+  0.2 and the value/name weight table are likewise unmeasured — and the two
+  substrates are single-type colour sets, so neither can say anything about the
+  type gate. The
   runs above say the thing works, and round-trip agreement says it is
   self-consistent; neither says how often it is *right*, because nobody has
   labelled it. A few hundred hand-checked pairs is what would turn every number
