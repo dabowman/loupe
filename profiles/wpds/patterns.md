@@ -46,6 +46,7 @@ Most bad choices are the wrong pattern, not the wrong variant. Each row is a for
 | `choose` (choose) | represents = command | `action-cluster.overflow` | A list of things to do is a menu, not a choice of value. |
 | `choose` (choose) | represents = destination | `navigate-hierarchy#descend` | A list of places to go is navigation. |
 | `enter-value` (enter) | set = closed | `choose` | A value from a fixed set is a choice. |
+| `edit-graph` (enter) | structure = fields | `edit-record` | One thing's own fields are a form, however the region draws them. |
 | `action-cluster` (act) | represents = destination | `navigate-hierarchy` | Something that navigates is a link, however it is styled. |
 | `confirm` (confirm) | reversibility = reversible | `report.toast` | Reversible actions get an undo, not a question. A confirm on a reversible action trains the user to click through it. |
 | `navigate-hierarchy` (navigate) | relation = siblings | `switch-view` | Tabs are for peers; depth wants navigation. |
@@ -74,6 +75,7 @@ Most bad choices are the wrong pattern, not the wrong variant. Each row is a for
 | A modal with the fields and a submit/cancel cluster in the standard place. | `edit-record.dialog` — not shipped; extract the project's own | Modal with an inline form and per-instance submit placement |
 | A side surface for a multi-section edit that keeps the subject visible. | `edit-record.drawer` — not shipped; extract the project's own |  |
 | A persistent aside that edits whatever is selected in the main region, with its own header and scroll area. | `edit-record.inspector` — not shipped; extract the project's own | One-off panel layouts with bespoke headers |
+| The author arranges the things and draws the connections: positions are theirs and are kept, and the layout only re-runs when asked for. | `edit-graph.canvas` — not shipped; extract the project's own | A flow editor whose layout re-runs on every edit, so an arrangement the author made is gone by the next keystroke; Endpoints that can be grabbed and dropped and silently spring back, because nothing asked the model whether the move was allowed |
 | Two or three visible actions, consistently ordered, gap-spaced, primary last. | `action-cluster.bar` — not shipped; extract the project's own | div.actions with hand-set margins; Buttons spaced with margin-right |
 | Grouped commands with one tab stop and arrow-key movement between them. | `action-cluster.toolbar` → `Toolbar` (`@wordpress/components`) (unverified) | A Stack of Buttons with a Divider between the groups — it looks the same and has no roving focus, so every control is a tab stop |
 | Secondary and destructive commands behind one icon-triggered menu. | `action-cluster.overflow` → `Menu` (`@wordpress/ui`) | Rename and Delete rendered as two secondary Buttons in a header; A destructive Button sitting in the primary action row |
@@ -117,7 +119,7 @@ A pattern declares where it happens; the profile picks the container.
 Below the four-node floor the engine runs `few-static-options`, `confirm-pair`, `judge`.
 Specified but not shipped: `button-that-navigates`, `unconditional-optional-controls`, `hand-managed-selection`.
 
-No wpds realization yet: `choose.checklist`, `enter-value.text`, `enter-value.number`, `enter-value.date`, `enter-value.rich-text`, `edit-record.form-screen`, `report.inline`. Building one of these is registering one, not inventing a pattern.
+No wpds realization yet: `choose.checklist`, `enter-value.text`, `enter-value.number`, `enter-value.date`, `enter-value.rich-text`, `edit-record.form-screen`, `edit-graph.auto-layout`, `report.inline`. Building one of these is registering one, not inventing a pattern.
 
 <!-- /generated:patterns -->
 

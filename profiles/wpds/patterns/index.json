@@ -308,6 +308,15 @@
       "note": "Not shipped. Extract the project's own the first time a second screen needs it and fill `canonical` in."
     },
     {
+      "pattern": "edit-graph.canvas",
+      "detector": "declared",
+      "instead_of": [
+        "A flow editor whose layout re-runs on every edit, so an arrangement the author made is gone by the next keystroke",
+        "Endpoints that can be grabbed and dropped and silently spring back, because nothing asked the model whether the move was allowed"
+      ],
+      "note": "Not shipped: WPDS has no canvas, and nothing here draws an edge. A project that needs one extracts it and fills `canonical` in — including the routing, which is a decision about every line at once and cannot be left to each edge. The card's own fields stay in edit-record.inspector beside it."
+    },
+    {
       "pattern": "action-cluster.bar",
       "detector": ["declared", { "rule": "judge", "components": ["Button"], "unless": ["href", "render"] }],
       "instead_of": [
