@@ -743,6 +743,45 @@ are not at". A comma binds looser than `and`, so a combination that would need
 the query rewritten to stay correct is omitted rather than guessed at; an
 unconditional rule omits the field.
 
+## The live UI
+
+```bash
+loupe ui                            # then open http://127.0.0.1:7332
+loupe ui --port 8200
+loupe ui --editor 'cursor://file{path}:{line}'
+```
+
+The findings, live on the working tree. Same page as `--format html` — the same
+rollups, the same charts, the same grouping — with the four things a file cannot
+do:
+
+- **It re-runs.** A watcher over the directories the analysis actually read,
+  pushed to the page over SSE. Save a file, the page restates itself; it crosses
+  into clean and back out again without a reload.
+- **Every location is a link** into your editor, at the line. `--editor` takes a
+  template; `{path}` is the file's absolute path and `{line}` its line, so
+  `cursor://file{path}:{line}`, `zed://file{path}:{line}` and
+  `idea://open?file={path}&line={line}` all work.
+- **`fix` and `mute` are on the row.** `fix` appears only where the engine
+  settled on exactly one on-role token — the same predicate `loupe fix` uses, run
+  where the files are, so the button cannot offer a substitution the writer would
+  refuse. `mute` asks for a reason and writes the directive.
+- **`accept as baseline` is a button**, and it records the whole backlog rather
+  than whatever the page still had on screen.
+
+It writes to your files, so unlike `loupe serve` it is not open to the network:
+it binds loopback, sends no CORS header, and holds every write to a secret minted
+at startup and handed only to the page it served. A write also names the run it
+was aimed at, so a click against a payload the tree has moved past is refused
+rather than applied to whatever now sits at that index.
+
+The header says what it is doing — when it last ran, how long that took, how many
+files, and how many directories it is watching. Where a watch cannot be
+established it says so and leaves the re-run button, rather than showing a stale
+page under a live-looking indicator.
+
+For the terminal-shaped question — *which elements on screen* — see below.
+
 ## In the browser
 
 ```bash
@@ -783,7 +822,9 @@ as a verdict rather than a view:
   hidden.
 
 The terminal remains the complete report. This answers the one question it
-cannot: *which elements on screen*.
+cannot: *which elements on screen*. `loupe ui` answers a different one — what is
+wrong right now, and can I fix it from here — and the two are separate commands
+because that one writes to your files and this one answers any origin.
 
 ## Programmatic use
 

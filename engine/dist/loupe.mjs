@@ -18425,7 +18425,7 @@ var require_util = __commonJS({
       return path;
     });
     exports.normalize = normalize2;
-    function join14(aRoot, aPath) {
+    function join15(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -18457,7 +18457,7 @@ var require_util = __commonJS({
       }
       return joined;
     }
-    exports.join = join14;
+    exports.join = join15;
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
@@ -18671,7 +18671,7 @@ var require_util = __commonJS({
             parsed.path = parsed.path.substring(0, index2 + 1);
           }
         }
-        sourceURL = join14(urlGenerate(parsed), sourceURL);
+        sourceURL = join15(urlGenerate(parsed), sourceURL);
       }
       return normalize2(sourceURL);
     }
@@ -20111,8 +20111,8 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync10, readFileSync: readFileSync13, realpathSync: realpathSync2 } = __require("fs");
-    var { dirname: dirname7, isAbsolute: isAbsolute7, join: join14, relative: relative5, sep: sep3 } = __require("path");
+    var { existsSync: existsSync10, readFileSync: readFileSync14, realpathSync: realpathSync2 } = __require("fs");
+    var { dirname: dirname8, isAbsolute: isAbsolute7, join: join15, relative: relative5, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -20139,7 +20139,7 @@ var require_previous_map = __commonJS({
         if (!this.mapFile && opts.from) {
           this.mapFile = opts.from;
         }
-        if (this.mapFile) this.root = dirname7(this.mapFile);
+        if (this.mapFile) this.root = dirname8(this.mapFile);
         if (text2) this.text = text2;
       }
       consumer() {
@@ -20185,15 +20185,15 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative5(realPath2(dirname7(cssFile)), realPath2(path));
+          let rel = relative5(realPath2(dirname8(cssFile)), realPath2(path));
           if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute7(rel)) {
             return void 0;
           }
         }
-        this.root = dirname7(path);
+        this.root = dirname8(path);
         if (existsSync10(path)) {
           this.mapFile = path;
-          return readFileSync13(path, "utf-8").toString().trim();
+          return readFileSync14(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join14(dirname7(file), map);
+          if (file) map = join15(dirname8(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname7, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
+    var { dirname: dirname8, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL3 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname7 && resolve7 && relative5 && sep3);
+    var pathAvailable = Boolean(dirname8 && resolve7 && relative5 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20767,7 +20767,7 @@ var require_map_generator = __commonJS({
       applyPrevMaps() {
         for (let prev of this.previous()) {
           let from = this.toUrl(this.path(prev.file));
-          let root2 = prev.root || dirname7(prev.file);
+          let root2 = prev.root || dirname8(prev.file);
           let map;
           if (this.mapOpts.sourcesContent === false) {
             map = new SourceMapConsumer(prev.text);
@@ -20962,9 +20962,9 @@ var require_map_generator = __commonJS({
         if (/^\w+:\/\//.test(file)) return file;
         let cached = this.memoizedPaths.get(file);
         if (cached) return cached;
-        let from = this.opts.to ? dirname7(this.opts.to) : ".";
+        let from = this.opts.to ? dirname8(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname7(resolve7(from, this.mapOpts.annotation));
+          from = dirname8(resolve7(from, this.mapOpts.annotation));
         }
         let path = relative5(from, file);
         this.memoizedPaths.set(file, path);
@@ -23494,8 +23494,8 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync9, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname6, isAbsolute as isAbsolute6, join as join13, relative as relative4, resolve as resolve6 } from "node:path";
+import { existsSync as existsSync9, writeFileSync as writeFileSync5 } from "node:fs";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
 
@@ -27239,7 +27239,7 @@ var package_default = {
     "patterns-doc:check": "node scripts/patterns-doc.ts --check",
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
-    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts && node tests/serve.ts && node tests/lsp.ts"
+    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts && node tests/serve.ts && node tests/ui.ts && node tests/lsp.ts"
   },
   dependencies: {
     "@babel/parser": "^7.24.0",
@@ -28288,8 +28288,7 @@ function formatSarif(result, config) {
   );
 }
 
-// src/report-html.ts
-var embed = (json) => json.replace(/</g, "\\u003c");
+// src/report-view.ts
 var CSS = `
 :root {
   color-scheme: light dark;
@@ -28396,19 +28395,82 @@ td.msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:
 #tip.on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { #tip { transition: none; } }
 `;
+var LIVE_CSS = `
+.top {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--hairline);
+  font-size: 12.5px; color: var(--ink-2);
+}
+.top .grow { flex: 1; }
+.conn { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); flex: none; }
+.conn.on { background: #2f9e6f; }
+.conn.off { background: var(--sev-error); }
+.conn.busy { background: var(--sev-warn); }
+.btn {
+  font: inherit; font-size: 12px; padding: 5px 11px; border-radius: 7px; cursor: pointer;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--axis);
+}
+.btn:hover:not(:disabled) { background: var(--track); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn:focus-visible, .act-btn:focus-visible, .jump:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
+.act-btn {
+  font: inherit; font-size: 11.5px; padding: 2px 8px; margin-left: 4px; border-radius: 5px; cursor: pointer;
+  background: none; color: var(--ink-2); border: 1px solid var(--hairline);
+}
+.act-btn:hover:not(:disabled) { background: var(--track); color: var(--ink); }
+.act-btn:disabled { opacity: .45; cursor: default; }
+td.act { text-align: right; white-space: nowrap; width: 1%; }
+a.jump { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--axis); }
+a.jump:hover { color: var(--seq); border-bottom-color: var(--seq); }
+/* The flash a write leaves behind: what happened, where the row was. */
+.said { padding: 8px 20px; font-size: 12.5px; border-bottom: 1px solid var(--hairline); background: var(--surface); }
+.said.err { color: var(--sev-error); }
+.said:empty { display: none; }
+.wrap.live { padding-top: 20px; }
+`;
 var JS = `
 (function () {
-  var data = JSON.parse(document.getElementById('loupe-data').textContent);
+  // Two hosts, one view. The static report embeds its payload and renders once;
+  // \`loupe ui\` serves this same script with no embedded block and drives it
+  // through \`load\`. \`__loupe\` is how the live host announces itself \u2014 absent in
+  // the artifact, so LIVE is false there and nothing below changes its output.
+  var HOST = window.__loupe || {};
+  var LIVE = !!HOST.live;
+  var COLS = LIVE ? 3 : 2;
+  var data = { findings: [], rules: [], summary: {} };
+  var byRank = new Map();
+  var fixable = new Set();
   var state = { rule: null, severity: null, q: '' };
   var MARK = { error: '\\u2717', warn: '\\u2022' };
   var WORD = { error: 'blocking', warn: 'advisory' };
-  var byRank = new Map(data.rules.map(function (r) { return [r.id, r]; }));
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  // Where a finding is, as the reader's editor addresses it. The host supplies
+  // both halves: the absolute root \u2014 already slash-led, so the result is a URI
+  // path on every platform \u2014 and the template, because which scheme opens is the
+  // reader's choice.
+  function href(f) {
+    return String(HOST.editor || '').replace('{path}', (HOST.root || '') + '/' + f.file).replace('{line}', f.line);
+  }
+
+  // The live row's third cell. Empty string in the artifact, where COLS is 2 and
+  // no host is listening for the clicks.
+  //
+  // Only a finding the server said it can rewrite offers \`fix\`: the predicate is
+  // \`tokenFixes\`, run where the files are, so this cell cannot offer a
+  // substitution the writer would refuse.
+  function acts(f) {
+    if (!LIVE) return '';
+    return '<td class="act">' +
+      (fixable.has(f.__i) ? '<button class="act-btn" data-act="fix" data-i="' + f.__i + '">fix</button>' : '') +
+      '<button class="act-btn" data-act="mute" data-i="' + f.__i + '">mute</button>' +
+      '</td>';
+  }
+
   function dirOf(file) {
     var i = String(file).lastIndexOf('/');
     return i === -1 ? '.' : file.slice(0, i);
@@ -28579,16 +28641,18 @@ var JS = `
       var sev = group[0].severity;
       var body = group.map(function (f) {
         var tokens = (f.suggest || []).map(function (s) { return s.tokens.join(' / '); }).filter(Boolean);
+        var loc = esc(f.file) + ':' + f.line;
         return '<tr>' +
-          '<td class="loc">' + esc(f.file) + ':' + f.line + '</td>' +
+          '<td class="loc">' + (LIVE ? '<a class="jump" href="' + esc(href(f)) + '">' + loc + '</a>' : loc) + '</td>' +
           '<td class="msg">' + esc(f.message) +
 						// Whole, not clipped: the page has room the one-line agent
 						// format does not.
             (f.note ? ' <span class="note">(' + esc(f.note) + ')</span>' : '') +
             (tokens.length ? '<div class="tokens">\\u2192 ' + esc(tokens.join(', ')) + '</div>' : '') + '</td>' +
+          acts(f) +
           '</tr>';
       }).join('');
-      return '<tbody><tr class="grp"><th colspan="2">' +
+      return '<tbody><tr class="grp"><th colspan="' + COLS + '">' +
         '<span class="sev ' + sev + '">' + MARK[sev] + ' ' + WORD[sev] + '</span> ' +
         '<span class="rule">' + esc(rule) + '</span> ' +
         '<span class="count">' + group.length + '</span>' +
@@ -28600,6 +28664,17 @@ var JS = `
 
   function render() {
     var rows = slice();
+    // Live only: the artifact decides clean once, at generation, and never ships
+    // the panels. A live page crosses that line in both directions.
+    if (LIVE) {
+      var none = data.findings.length === 0;
+      var clean = document.getElementById('clean');
+      if (clean) clean.hidden = !none;
+      Array.prototype.forEach.call(document.querySelectorAll('[data-when="findings"]'), function (el) {
+        el.hidden = none;
+      });
+      if (none) return;
+    }
     renderKpis(rows);
     renderRules(rows);
     renderPaths(rows);
@@ -28629,16 +28704,35 @@ var JS = `
     document.getElementById('q').value = '';
     render();
   });
-  render();
+
+  // Replace the payload and redraw. The artifact calls this once, from its own
+  // embedded block; the live host calls it on every re-analysis.
+  //
+  // \`__i\` is stamped here rather than passed around because every renderer below
+  // works on the filtered slice, and an action has to name the finding's position
+  // in the whole payload. It is written onto the client's own parsed copy and
+  // never sent back.
+  function load(next, meta) {
+    data = next;
+    data.findings.forEach(function (f, i) { f.__i = i; });
+    byRank = new Map(data.rules.map(function (r) { return [r.id, r]; }));
+    fixable = new Set((meta && meta.fixable) || []);
+    render();
+  }
+
+  var embedded = document.getElementById('loupe-data');
+  if (embedded) load(JSON.parse(embedded.textContent));
+  window.__loupeView = { load: load, render: render, state: state };
 })();
 `;
-function body(payload, clean, parseErrors) {
+function body(opts) {
+  const { payload, clean, parseErrors, live = false } = opts;
   const banner = parseErrors ? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely \u2014 ${clean ? "a clean result covers only what could be read" : "every number below is a floor, not a total"}. See <code>stylesheet/unparsed</code>.</div>
 ` : "";
-  const main2 = clean ? `  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
-</div>` : `  <div class="kpis" id="kpis"></div>
+  const cleanCard = `  <div class="card clean" id="clean"${live ? " hidden" : ""}><div class="v">clean</div><p class="sub">No findings.</p></div>`;
+  const panels = `  <div class="kpis" id="kpis" data-when="findings"></div>
 
-  <div class="filters">
+  <div class="filters" data-when="findings">
     <input type="search" id="q" placeholder="Filter by file, rule or value\u2026" aria-label="Filter findings">
     <button class="chip" data-sev="error" aria-pressed="false">\u2717 blocking</button>
     <button class="chip" data-sev="warn" aria-pressed="false">\u2022 advisory</button>
@@ -28646,7 +28740,7 @@ function body(payload, clean, parseErrors) {
     <span class="scope" id="scope"></span>
   </div>
 
-  <div class="card">
+  <div class="card" data-when="findings">
     <h2>By rule</h2>
     <p class="legend">
       <span><i class="dot" style="background:var(--sev-error)"></i> \u2717 blocking</span>
@@ -28655,7 +28749,7 @@ function body(payload, clean, parseErrors) {
     <div class="bars" id="rules"></div>
   </div>
 
-  <div class="card">
+  <div class="card" data-when="findings">
     <h2>Where it is</h2>
     <div class="bars" id="paths"></div>
   </div>
@@ -28665,25 +28759,34 @@ function body(payload, clean, parseErrors) {
     <div id="clusters"></div>
   </div>
 
-  <div class="card">
+  <div class="card" data-when="findings">
     <h2>Findings</h2>
     <div id="table"></div>
-  </div>
+  </div>`;
+  const main2 = live ? `${cleanCard}
+${panels}
+</div>
+<div id="tip" role="status" aria-live="polite"></div>
+<script>${JS}</script>` : clean ? `${cleanCard}
+</div>` : `${panels}
 </div>
 <div id="tip" role="status" aria-live="polite"></div>
 <script>${JS}</script>`;
+  const data = payload === void 0 ? "" : `
+<script type="application/json" id="loupe-data">${payload}</script>`;
   return `<!-- loupe:begin -->
-<style>${CSS}</style>
-<script type="application/json" id="loupe-data">${payload}</script>
-<div class="wrap">
+<style>${CSS}${live ? LIVE_CSS : ""}</style>${data}
+<div class="wrap${live ? " live" : ""}">
   <h1>Loupe</h1>
   <p class="sub">Design-system conformance report</p>
 ${banner}${main2}
 <!-- loupe:end -->`;
 }
+
+// src/report-html.ts
+var embed = (json) => json.replace(/</g, "\\u003c");
 function formatHtml(result, config) {
   const payload = embed(JSON.stringify(reportPayload(result, config)));
-  const clean = result.findings.length === 0;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -28692,7 +28795,7 @@ function formatHtml(result, config) {
 <title>Loupe report</title>
 </head>
 <body>
-${body(payload, clean, result.diagnostics.parseErrors.length)}
+${body({ payload, clean: result.findings.length === 0, parseErrors: result.diagnostics.parseErrors.length })}
 </body>
 </html>
 `;
@@ -29325,12 +29428,474 @@ function serve(opts) {
   });
 }
 
+// src/ui.ts
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { readFileSync as readFileSync10, watch, writeFileSync as writeFileSync3 } from "node:fs";
+import { createServer as createServer2 } from "node:http";
+import { dirname as dirname5, join as join10 } from "node:path";
+var commentFor2 = (file, text2) => /\.(css|scss|sass|less|pcss|postcss)$/i.test(file) ? `/* ${text2} */` : `// ${text2}`;
+var WATCH_CAP = 2048;
+var DEBOUNCE_MS = 140;
+var BODY_LIMIT = 64 * 1024;
+var PEEK = 12;
+function secretEquals(presented, real) {
+  const a = Buffer.from(presented);
+  const b = Buffer.from(real);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+var CLIENT = `
+(function () {
+  var TOKEN = '__TOKEN__';
+  var view = window.__loupeView;
+  var rev = -1;
+  var busy = false;
+
+  function el(id) { return document.getElementById(id); }
+  function say(msg, isErr) {
+    var s = el('said');
+    s.textContent = msg || '';
+    s.className = 'said' + (isErr ? ' err' : '');
+  }
+  function conn(cls, text) {
+    el('conn').className = 'conn ' + cls;
+    el('status').textContent = text;
+  }
+
+  function paint(s) {
+    rev = s.rev;
+    view.load(s.payload, { fixable: s.fixable });
+    var when = new Date(s.ranAt).toLocaleTimeString();
+    el('ran').textContent = when + ' \\u00b7 ' + s.ms + 'ms \\u00b7 ' + s.payload.summary.filesScanned + ' files';
+    // The panel says what it cannot see: a watch that could not be established
+    // is named, so a stale page never sits under a live-looking dot.
+    conn(s.watching === null ? 'busy' : 'on',
+      s.watching === null ? 'not watching \\u2014 re-run by hand' : 'watching ' + s.watching + ' directories');
+    el('accept').disabled = s.payload.summary.total === 0;
+    el('accept').textContent = s.baseline.found ? 're-baseline' : 'accept as baseline';
+  }
+
+  function load() {
+    return fetch('/state').then(function (r) { return r.json(); }).then(paint);
+  }
+
+  // Every mutating request carries the secret and the revision it was aimed at.
+  // A 409 means the tree moved under the page; reload and let the reader retry
+  // against what is actually there.
+  function post(path, payload) {
+    if (busy) return Promise.resolve(null);
+    busy = true;
+    say('');
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-loupe-token': TOKEN, 'x-loupe-rev': String(rev) },
+      body: JSON.stringify(payload || {})
+    }).then(function (r) {
+      return r.json().then(function (b) { return { ok: r.ok, status: r.status, body: b }; });
+    }).then(function (res) {
+      if (!res.ok) {
+        say(res.body && res.body.error ? res.body.error : 'request failed (' + res.status + ')', true);
+        if (res.status === 409) return load();
+        return null;
+      }
+      return res.body;
+    }).catch(function (e) {
+      say(String(e && e.message ? e.message : e), true);
+      return null;
+    }).then(function (out) {
+      busy = false;
+      return out;
+    });
+  }
+
+  el('rerun').addEventListener('click', function () {
+    conn('busy', 'analyzing\\u2026');
+    post('/run');
+  });
+
+  el('accept').addEventListener('click', function () {
+    post('/baseline').then(function (b) {
+      if (b) say('baselined ' + b.findings + ' finding(s) as ' + b.entries + ' entr' + (b.entries === 1 ? 'y' : 'ies') + ' \\u2014 ' + b.path);
+    });
+  });
+
+  // Delegation, because the table is replaced wholesale on every render.
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!b) return;
+    var i = Number(b.getAttribute('data-i'));
+    if (b.getAttribute('data-act') === 'fix') {
+      post('/fix', { findings: [i] }).then(function (r) {
+        if (!r) return;
+        if (r.applied) say('rewrote ' + r.applied + ' declaration(s)');
+        else say(r.skipped && r.skipped.length ? r.skipped[0].why : 'nothing to rewrite', true);
+      });
+      return;
+    }
+    if (b.getAttribute('data-act') === 'mute') {
+      // The reason is asked for rather than left blank. A directive without one
+      // reports as suppression/malformed by design, and this is the one surface
+      // that can put the question to a person instead of writing the silence.
+      var reason = window.prompt('Why is this one allowed? (a directive with no reason is itself an error)');
+      if (reason === null) return;
+      if (!reason.trim()) { say('a suppression needs a reason', true); return; }
+      post('/suppress', { finding: i, reason: reason.trim() }).then(function (r) {
+        if (r) say('suppressed at ' + r.file + ':' + r.line);
+      });
+    }
+  });
+
+  var es = new EventSource('/events');
+  es.onmessage = function (m) { paint(JSON.parse(m.data)); };
+  es.onerror = function () { conn('off', 'disconnected \\u2014 is the server still running?'); };
+
+  load().catch(function (e) { conn('off', String(e)); });
+})();
+`;
+function page(opts) {
+  const abs = toPosix(opts.root).replace(/^(?!\/)/, "/");
+  const host = JSON.stringify({ live: true, root: abs, editor: opts.editor });
+  const toolbar = `<div class="top">
+  <span class="conn" id="conn"></span>
+  <span id="status">connecting\u2026</span>
+  <span class="grow"></span>
+  <span class="ran" id="ran"></span>
+  <button class="btn" id="rerun">re-run</button>
+  <button class="btn" id="accept" disabled>accept as baseline</button>
+</div>
+<div class="said" id="said"></div>`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loupe</title>
+<!-- Declared empty so the browser does not ask for /favicon.ico. A page whose
+     whole job is to report what is wrong should not open with a 404 of its own. -->
+<link rel="icon" href="data:,">
+</head>
+<body>
+<script>window.__loupe = ${host};</script>
+${toolbar}
+${body({ clean: false, parseErrors: 0, live: true })}
+<script>${CLIENT.replace("__TOKEN__", opts.token)}</script>
+</body>
+</html>
+`;
+}
+async function ui(opts) {
+  const { port, config, root: root2, analyze: analyze2, present, baselineTarget, baselineFound, editor } = opts;
+  const log = opts.log ?? (() => {
+  });
+  const token = randomBytes(24).toString("hex");
+  let url = `http://127.0.0.1:${port}`;
+  let rev = 0;
+  let fresh = null;
+  let shown = null;
+  let state = null;
+  let watching = null;
+  const clients = /* @__PURE__ */ new Set();
+  const snapshot = () => {
+    if (!fresh || !shown) throw new Error("no analysis yet");
+    const payload = reportPayload(shown, config);
+    return {
+      rev,
+      ranAt: (/* @__PURE__ */ new Date()).toISOString(),
+      ms: 0,
+      payload,
+      fixable: shown.findings.flatMap((f, i) => tokenFixes([f]).length > 0 ? [i] : []),
+      watching,
+      baseline: { path: baselineTarget, found: baselineFound() }
+    };
+  };
+  const push = () => {
+    if (!state) return;
+    const frame = `data: ${JSON.stringify(state)}
+
+`;
+    for (const res of clients) res.write(frame);
+  };
+  const runOnce = async () => {
+    const started = Date.now();
+    fresh = await analyze2();
+    shown = present(fresh);
+    rev++;
+    rewatch();
+    state = { ...snapshot(), ms: Date.now() - started };
+    push();
+  };
+  let running = false;
+  let queued = false;
+  let timer = null;
+  const drain = async () => {
+    if (running) return;
+    running = true;
+    try {
+      while (queued) {
+        queued = false;
+        try {
+          await runOnce();
+        } catch (err) {
+          log(`loupe: analysis failed \u2014 ${messageOf(err)}
+`);
+        }
+      }
+    } finally {
+      running = false;
+    }
+  };
+  const schedule = (delay = DEBOUNCE_MS) => {
+    queued = true;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      void drain();
+    }, delay);
+  };
+  const watchers = /* @__PURE__ */ new Map();
+  function rewatch() {
+    let dirs;
+    try {
+      const found = discover({ root: root2, sources: config.sources });
+      dirs = /* @__PURE__ */ new Set([root2, ...[...found.styles, ...found.markup, ...found.references].map((f) => dirname5(f.abs))]);
+    } catch (err) {
+      log(`loupe: cannot establish a watch \u2014 ${messageOf(err)}
+`);
+      watching = null;
+      return;
+    }
+    if (dirs.size > WATCH_CAP) {
+      log(`loupe: ${dirs.size} directories is past the watch ceiling of ${WATCH_CAP} \u2014 watching nothing.
+`);
+      for (const w of watchers.values()) w.close();
+      watchers.clear();
+      watching = null;
+      return;
+    }
+    for (const [dir, w] of watchers) {
+      if (dirs.has(dir)) continue;
+      w.close();
+      watchers.delete(dir);
+    }
+    for (const dir of dirs) {
+      if (watchers.has(dir)) continue;
+      try {
+        const w = watch(dir, { persistent: false }, () => schedule());
+        w.on("error", () => {
+          w.close();
+          watchers.delete(dir);
+        });
+        watchers.set(dir, w);
+      } catch {
+      }
+    }
+    watching = watchers.size;
+  }
+  const send = (res, status, value) => {
+    const text2 = JSON.stringify(value);
+    res.writeHead(status, {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "content-length": Buffer.byteLength(text2)
+    });
+    res.end(text2);
+  };
+  const readBody = (req) => new Promise((done, bad) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > BODY_LIMIT) {
+        bad(new Error("body too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw.trim()) return done({});
+      try {
+        done(JSON.parse(raw));
+      } catch {
+        bad(new Error("body is not JSON"));
+      }
+    });
+    req.on("error", bad);
+  });
+  const guard = (req) => {
+    const origin = req.headers.origin;
+    if (typeof origin === "string" && origin !== url) return { status: 403, error: "cross-origin request refused" };
+    const presented = req.headers["x-loupe-token"];
+    if (typeof presented !== "string" || !secretEquals(presented, token))
+      return { status: 403, error: "this page was not served by this process" };
+    const named = Number(req.headers["x-loupe-rev"]);
+    if (!Number.isInteger(named) || named !== rev)
+      return { status: 409, error: "the tree moved since this page was drawn \u2014 reloading" };
+    return null;
+  };
+  const findingAt = (value) => {
+    if (!shown || !Number.isInteger(value)) return null;
+    const i = value;
+    return i >= 0 && i < shown.findings.length ? shown.findings[i] ?? null : null;
+  };
+  const routes = {
+    "GET /": (_req, res) => {
+      const html = page({ token, root: root2, editor });
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      res.end(html);
+    },
+    "GET /state": (_req, res) => {
+      if (!state) return send(res, 503, { error: "still analyzing" });
+      send(res, 200, state);
+    },
+    // Byte-for-byte what `--format json` writes, exactly as `loupe serve`
+    // answers it, so anything already pointed at that endpoint works here.
+    "GET /findings.json": (_req, res) => {
+      if (!shown) return send(res, 503, { error: "still analyzing" });
+      send(res, 200, reportPayload(shown, config));
+    },
+    "GET /events": (_req, res) => {
+      res.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-store",
+        connection: "keep-alive"
+      });
+      res.write(": open\n\n");
+      clients.add(res);
+      if (state) res.write(`data: ${JSON.stringify(state)}
+
+`);
+      res.on("close", () => clients.delete(res));
+    },
+    /**
+     * A window of source around a finding.
+     *
+     * The allowlist is the current run's own findings rather than a path check
+     * against the root: a comparison of resolved prefixes has to get symlinks,
+     * case-insensitive volumes and `..` all right to be safe, and a set of
+     * paths the analyzer just reported has none of those questions in it.
+     */
+    "GET /source": (_req, res, q) => {
+      const want = q.get("file");
+      if (!shown || !want) return send(res, 400, { error: "name a file" });
+      const known = new Set(shown.findings.map((f) => f.file));
+      if (!known.has(want)) return send(res, 404, { error: "not a file in this run" });
+      const at = Number(q.get("line") ?? 1);
+      try {
+        const lines = readFileSync10(join10(root2, want), "utf8").split("\n");
+        const from = Math.max(1, at - PEEK);
+        const to = Math.min(lines.length, at + PEEK);
+        send(res, 200, { file: want, from, to, lines: lines.slice(from - 1, to) });
+      } catch (err) {
+        send(res, 404, { error: messageOf(err) });
+      }
+    },
+    "POST /run": async (_req, res) => {
+      send(res, 200, { rev });
+      schedule(0);
+    },
+    "POST /fix": async (req, res) => {
+      const payload = await readBody(req);
+      const asked = Array.isArray(payload.findings) ? payload.findings : [];
+      const picked = asked.map(findingAt).filter((f) => f !== null);
+      if (!picked.length) return send(res, 400, { error: "no finding named" });
+      const { applied, skipped } = applyTokenFixes(root2, picked);
+      send(res, 200, {
+        applied: applied.length,
+        skipped: skipped.map((s) => ({ file: s.file, line: s.line, why: s.why }))
+      });
+      if (applied.length) schedule(0);
+    },
+    "POST /baseline": async (_req, res) => {
+      if (!fresh) return send(res, 503, { error: "still analyzing" });
+      try {
+        send(res, 200, writeBaseline(root2, baselineTarget, fresh));
+      } catch (err) {
+        return send(res, 500, { error: messageOf(err) });
+      }
+      schedule(0);
+    },
+    /**
+     * Write a suppression directive above the finding.
+     *
+     * The reason is required here, where the language server's quick fix leaves
+     * it blank. That is not a disagreement: a quick fix has nowhere to ask, so
+     * it writes a directive that reports as `suppression/malformed` until a
+     * person fills it in. A page can ask, so it does, and refuses the write
+     * rather than committing a silence nobody signed.
+     */
+    "POST /suppress": async (req, res) => {
+      const payload = await readBody(req);
+      const finding = findingAt(payload.finding);
+      const reason = typeof payload.reason === "string" ? payload.reason.trim() : "";
+      if (!finding) return send(res, 400, { error: "no finding named" });
+      if (!reason) return send(res, 400, { error: "a suppression needs a reason" });
+      const oneLine2 = reason.replace(/\s+/g, " ");
+      const full = join10(root2, finding.file);
+      try {
+        const lines = readFileSync10(full, "utf8").split("\n");
+        const target = lines[finding.line - 1];
+        if (target === void 0) return send(res, 409, { error: "that line is no longer in the file" });
+        const indent = /^[ \t]*/.exec(target)?.[0] ?? "";
+        const directive = commentFor2(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${oneLine2}`);
+        lines.splice(finding.line - 1, 0, `${indent}${directive}`);
+        writeFileSync3(full, lines.join("\n"));
+        send(res, 200, { file: finding.file, line: finding.line, rule: finding.rule });
+      } catch (err) {
+        return send(res, 500, { error: messageOf(err) });
+      }
+      schedule(0);
+    }
+  };
+  const server = createServer2((req, res) => {
+    const parsed = new URL(req.url ?? "/", url);
+    const key = `${req.method ?? "GET"} ${parsed.pathname}`;
+    const route = routes[key];
+    if (!route) {
+      const exists = Object.keys(routes).some((k) => k.endsWith(` ${parsed.pathname}`));
+      return send(res, exists ? 405 : 404, { error: exists ? "method not allowed" : "not found" });
+    }
+    if (req.method === "POST") {
+      const refusal = guard(req);
+      if (refusal) return send(res, refusal.status, { error: refusal.error });
+    }
+    Promise.resolve(route(req, res, parsed.searchParams)).catch((err) => {
+      if (!res.headersSent) send(res, 500, { error: messageOf(err) });
+    });
+  });
+  const beat = setInterval(() => {
+    for (const res of clients) res.write(": beat\n\n");
+  }, 25e3);
+  beat.unref();
+  await new Promise((done, bad) => {
+    server.on("error", bad);
+    server.listen(port, "127.0.0.1", () => {
+      const addr = server.address();
+      if (addr && typeof addr === "object") url = `http://127.0.0.1:${addr.port}`;
+      done();
+    });
+  });
+  await runOnce();
+  return {
+    url,
+    close: () => new Promise((done) => {
+      clearInterval(beat);
+      if (timer) clearTimeout(timer);
+      for (const w of watchers.values()) w.close();
+      watchers.clear();
+      for (const res of clients) res.end();
+      clients.clear();
+      server.close(() => done());
+    })
+  };
+}
+
 // src/detect.ts
-import { existsSync as existsSync6, readFileSync as readFileSync10, statSync as statSync3 } from "node:fs";
-import { join as join10 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync11, statSync as statSync3 } from "node:fs";
+import { join as join11 } from "node:path";
 var readJson = (p) => {
   try {
-    return JSON.parse(readFileSync10(p, "utf8"));
+    return JSON.parse(readFileSync11(p, "utf8"));
   } catch {
     return null;
   }
@@ -29342,12 +29907,12 @@ function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
   const walk = (dir, rel, depth) => {
     if (depth > maxDepth || out.length >= budget) return;
-    const pkg = join10(dir, "package.json");
+    const pkg = join11(dir, "package.json");
     if (existsSync6(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
     for (const e of readDir(dir)) {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walk(join10(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      walk(join11(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(root2, "", 0);
@@ -29355,7 +29920,7 @@ function manifests(root2, maxDepth = 3, budget = 60) {
 }
 function markerAt(dir, marker) {
   const name = marker.replace(/\/$/, "");
-  const full = join10(dir, name);
+  const full = join11(dir, name);
   if (!existsSync6(full)) return false;
   if (!marker.endsWith("/")) return true;
   try {
@@ -29368,7 +29933,7 @@ function probeDirs(root2) {
   const out = [{ dir: root2, rel: "" }];
   for (const e of readDir(root2)) {
     if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-    out.push({ dir: join10(root2, e.name), rel: e.name });
+    out.push({ dir: join11(root2, e.name), rel: e.name });
   }
   return out;
 }
@@ -29376,7 +29941,7 @@ var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? det
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson(join10(root2, rel, "package.json")) ?? {};
+      const pkg = readJson(join11(root2, rel, "package.json")) ?? {};
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
       const first = hit[0];
@@ -29445,7 +30010,7 @@ function libraryPrefixes(dirs, candidates) {
     if (depth > 4 || budget <= 0 || !want.size) return;
     for (const e of readDir(dir)) {
       if (budget <= 0 || !want.size) return;
-      const full = join10(dir, e.name);
+      const full = join11(dir, e.name);
       if (e.isDirectory()) {
         if (e.name === ".bin" || e.name === "node_modules") continue;
         walk(full, depth + 1);
@@ -29453,7 +30018,7 @@ function libraryPrefixes(dirs, candidates) {
         budget--;
         let text2;
         try {
-          text2 = readFileSync10(full, "utf8");
+          text2 = readFileSync11(full, "utf8");
         } catch {
           continue;
         }
@@ -29491,7 +30056,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   for (const { abs } of files.styles) {
     let text2;
     try {
-      text2 = readFileSync10(abs, "utf8");
+      text2 = readFileSync11(abs, "utf8");
     } catch {
       continue;
     }
@@ -29505,14 +30070,14 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync10(abs, "utf8"));
+      markupText.push(readFileSync11(abs, "utf8"));
     } catch {
     }
   }
   const haystack = markupText.join("\n");
   const candidates = [...cssCounts.entries()].filter(([prefix, count]) => count >= 3 && haystack.includes(prefix)).sort((a, b) => b[1] - a[1]);
   const vendored = libraryPrefixes(
-    [join10(root2, "node_modules"), ...packageDir ? [join10(root2, packageDir, "node_modules")] : []],
+    [join11(root2, "node_modules"), ...packageDir ? [join11(root2, packageDir, "node_modules")] : []],
     candidates.map(([p]) => p)
   );
   const accepted = [];
@@ -29561,10 +30126,10 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/profiles.ts
-import { existsSync as existsSync7, readFileSync as readFileSync11 } from "node:fs";
-import { isAbsolute as isAbsolute4, join as join11, resolve as resolve5 } from "node:path";
-var readJson2 = (p) => JSON.parse(readFileSync11(p, "utf8"));
-var under = (dir, rel) => isAbsolute4(rel) ? rel : join11(dir, rel);
+import { existsSync as existsSync7, readFileSync as readFileSync12 } from "node:fs";
+import { isAbsolute as isAbsolute4, join as join12, resolve as resolve5 } from "node:path";
+var readJson2 = (p) => JSON.parse(readFileSync12(p, "utf8"));
+var under = (dir, rel) => isAbsolute4(rel) ? rel : join12(dir, rel);
 var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString = (v) => typeof v === "string" && v !== "" ? v : null;
 function readProfiles(root2) {
@@ -29573,8 +30138,8 @@ function readProfiles(root2) {
   const seen = /* @__PURE__ */ new Set();
   for (const e of readDir(root2)) {
     if (!e.isDirectory()) continue;
-    const dir = join11(root2, e.name);
-    const manifest = join11(dir, "profile.json");
+    const dir = join12(root2, e.name);
+    const manifest = join12(dir, "profile.json");
     if (!existsSync7(manifest)) continue;
     try {
       const raw = readJson2(manifest);
@@ -29683,15 +30248,15 @@ function applyRegistries(config, sources) {
 }
 
 // src/hook.ts
-import { existsSync as existsSync8, readFileSync as readFileSync12, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname5, isAbsolute as isAbsolute5, join as join12, relative as relative3 } from "node:path";
+import { existsSync as existsSync8, readFileSync as readFileSync13, writeFileSync as writeFileSync4 } from "node:fs";
+import { dirname as dirname6, isAbsolute as isAbsolute5, join as join13, relative as relative3 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var readStdin = async () => process.stdin.isTTY ? "" : text(process.stdin);
 function readState(root2) {
   try {
-    const raw = JSON.parse(readFileSync12(attemptsPath(root2), "utf8"));
+    const raw = JSON.parse(readFileSync13(attemptsPath(root2), "utf8"));
     const now = Date.now();
     const sessions = {};
     for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -29704,8 +30269,8 @@ function readState(root2) {
 function writeState(root2, state) {
   try {
     const p = attemptsPath(root2);
-    ensureDir(dirname5(p));
-    writeFileSync3(p, JSON.stringify(state));
+    ensureDir(dirname6(p));
+    writeFileSync4(p, JSON.stringify(state));
   } catch {
   }
 }
@@ -29735,7 +30300,7 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute5(raw) ? raw : join12(root2, raw);
+  const abs = isAbsolute5(raw) ? raw : join13(root2, raw);
   const rel = relative3(root2, abs);
   if (!rel || rel.startsWith("..")) return null;
   return toPosix(rel);
@@ -29749,12 +30314,12 @@ var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
 function optedIn(root2) {
   if (process.env.LOUPE !== void 0) return isOn(process.env.LOUPE);
   for (const file of [
-    join12(root2, ".claude", "settings.local.json"),
-    join12(root2, ".claude", "settings.json"),
-    join12(homedir(), ".claude", "settings.json")
+    join13(root2, ".claude", "settings.local.json"),
+    join13(root2, ".claude", "settings.json"),
+    join13(homedir(), ".claude", "settings.json")
   ]) {
     try {
-      const v = JSON.parse(readFileSync12(file, "utf8")).env?.LOUPE;
+      const v = JSON.parse(readFileSync13(file, "utf8")).env?.LOUPE;
       if (v !== void 0) return isOn(String(v));
     } catch {
     }
@@ -29775,7 +30340,7 @@ function resolvedOptions() {
   if (Object.values(fromEnv).some((v) => v !== void 0)) return { options: fromEnv, source: "environment" };
   for (const file of ["settings.local.json", "settings.json"]) {
     try {
-      const raw = JSON.parse(readFileSync12(join12(homedir(), ".claude", file), "utf8"));
+      const raw = JSON.parse(readFileSync13(join13(homedir(), ".claude", file), "utf8"));
       const configs = raw.pluginConfigs ?? {};
       const key = Object.keys(configs).find((k) => k === "loupe" || k.startsWith("loupe@"));
       const opts = key === void 0 ? void 0 : configs[key]?.options;
@@ -29834,10 +30399,16 @@ var fail = (msg) => {
 var note = (msg) => {
   process.stderr.write(yellow(msg));
 };
+function listenFailure(err, command, port) {
+  const code = err?.code;
+  const why = code === "EADDRINUSE" ? `port ${port} is already in use \u2014 run \`loupe ${command} --port <n>\` on another, or --port 0 to be given a free one` : code === "EACCES" ? `not allowed to bind port ${port} \u2014 ports below 1024 need privileges` : `${command} could not start \u2014 ${messageOf2(err)}`;
+  return `loupe: ${why}
+`;
+}
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
-var HERE = dirname6(fileURLToPath3(import.meta.url));
-var SINGLE_FILE = !existsSync9(join13(HERE, "..", "package.json"));
-var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join13(HERE, "..", "..", ".env");
+var HERE = dirname7(fileURLToPath3(import.meta.url));
+var SINGLE_FILE = !existsSync9(join14(HERE, "..", "package.json"));
+var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
   const entry = basename(HERE) === "src" ? "source" : "bundle";
@@ -29859,7 +30430,8 @@ var VALUE_FLAGS = [
   "components",
   "profiles",
   "profile",
-  "port"
+  "port",
+  "editor"
 ];
 var FORMATS = ["agent", "json", "sarif", "html"];
 var isFormat = (f) => FORMATS.includes(f);
@@ -29891,6 +30463,9 @@ Commands:
   status                Show the effective config: rules, severities, what blocks
   serve                 Serve the findings to the running app, so a stylesheet
                         finding can be resolved to the elements it styles
+  ui                    The findings, live on the working tree: re-analyzed on
+                        save, every location a link into your editor, and fix,
+                        baseline and suppress from the row. Loopback only
   lsp                   Language server on stdin/stdout: diagnostics on save,
                         the rule's guidance on hover, and its fix as a quick
                         fix. Editors launch this; you do not run it by hand
@@ -29921,7 +30496,11 @@ Options:
                         and suppresses the ones it kept; add --dry-run to
                         review them first. (TYPESAFE_API_KEY from the
                         environment or loupe's own .env)
-  --port <n>            Port for 'serve' (default: 7331)
+  --port <n>            Port for 'serve' (7331) or 'ui' (7332)
+  --editor <t>          What a location in 'ui' links to. {path} is the file's
+                        absolute path and {line} its line
+                        (default: vscode://file{path}:{line}; for Cursor or Zed,
+                        swap the scheme: cursor://file{path}:{line})
   --force               Overwrite an existing config (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
@@ -29954,7 +30533,7 @@ var needsProject = (command, args, isHook) => {
   if (args.flags.all || args.flags.files) return false;
   return isHook || Boolean(args.flags.changed) && SCOPED_COMMANDS.has(command);
 };
-var looksLikeProject = (root2) => existsSync9(join13(root2, "package.json")) || existsSync9(join13(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
+var looksLikeProject = (root2) => existsSync9(join14(root2, "package.json")) || existsSync9(join14(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
 var CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString("en-US")}-entry ceiling`;
 var CEILING_WHY = "this root is larger than a project, so the namespaces are a guess from the part of it that was read";
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
@@ -30004,7 +30583,7 @@ async function main() {
   if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
   const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
-  const root2 = resolve6(explicitRoot ?? (anchor ? dirname6(anchor) : process.cwd()));
+  const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
   if (!existsSync9(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
@@ -30220,7 +30799,7 @@ async function main() {
 `);
       return EXIT.OK;
     }
-    const target = join13(root2, "loupe.config.json");
+    const target = join14(root2, "loupe.config.json");
     if (info.truncated && !args.flags.force) {
       fail(
         "loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. Point --root at the project, or pass --force to write it anyway.\n"
@@ -30232,7 +30811,7 @@ async function main() {
 `);
       return EXIT.CANNOT_RUN;
     }
-    writeFileSync4(target, `${JSON.stringify(info.config, null, 2)}
+    writeFileSync5(target, `${JSON.stringify(info.config, null, 2)}
 `);
     process.stdout.write(`${lines.join("\n")}
 
@@ -30240,10 +30819,9 @@ ${green(`Wrote ${target}`)}
 `);
     return EXIT.OK;
   }
-  const baselinedRun = (notice) => {
+  const presenter = (notice) => {
     let warned = false;
-    return async () => {
-      const fresh = await analyze(config, { scope: null });
+    return (fresh) => {
       if (args.flags["no-baseline"]) return fresh;
       const { path: bPath, found } = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
       const baseline = found ? readBaseline(bPath) : null;
@@ -30254,6 +30832,10 @@ ${green(`Wrote ${target}`)}
       }
       return applyBaseline(fresh, baseline);
     };
+  };
+  const baselinedRun = (notice) => {
+    const present = presenter(notice);
+    return async () => present(await analyze(config, { scope: null }));
   };
   if (command === "lsp") {
     const { closed } = lsp({
@@ -30275,10 +30857,51 @@ ${green(`Wrote ${target}`)}
       return EXIT.CANNOT_RUN;
     }
     const run = baselinedRun(note);
-    const { url } = await serve({ port, config, run });
+    let url;
+    try {
+      ({ url } = await serve({ port, config, run }));
+    } catch (err) {
+      fail(listenFailure(err, "serve", port));
+      return EXIT.CANNOT_RUN;
+    }
     process.stdout.write(
       `${green(`loupe serve \u2014 ${url}`)}
 ${dim("  Open that URL for the bookmarklet, then click it on the page you are developing.")}
+${dim("  Ctrl-C to stop.")}
+`
+    );
+    await new Promise(() => {
+    });
+    return EXIT.OK;
+  }
+  if (command === "ui") {
+    const port = Number(args.flags.port ?? 7332);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+      fail(`loupe: --port wants a port number, got ${args.flags.port}
+`);
+      return EXIT.CANNOT_RUN;
+    }
+    const present = presenter(note);
+    let handle;
+    try {
+      handle = await ui({
+        port,
+        config,
+        root: root2,
+        analyze: () => analyze(config, { scope: null }),
+        present,
+        baselineTarget: baselinePath(root2, args.flags.baseline || config.baselinePath),
+        baselineFound: () => findExistingBaseline(root2, args.flags.baseline, config.baselinePath).found,
+        editor: args.flags.editor ?? "vscode://file{path}:{line}",
+        log: (line) => process.stderr.write(line)
+      });
+    } catch (err) {
+      fail(listenFailure(err, "ui", port));
+      return EXIT.CANNOT_RUN;
+    }
+    process.stdout.write(
+      `${green(`loupe ui \u2014 ${handle.url}`)}
+${dim("  Findings, live on the working tree: re-analyzed on save, with fix, baseline and suppress.")}
 ${dim("  Ctrl-C to stop.")}
 `
     );

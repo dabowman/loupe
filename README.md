@@ -720,7 +720,29 @@ alone.
 sharing a drift audit with people who are not going to run the CLI. It only
 renders and publishes: the page comes from the engine, so two people running it
 never see two different reports. Anything you want to change about how it looks
-belongs in `engine/src/report-html.ts`.
+belongs in `engine/src/report-view.ts`, which is the one renderer both the file
+and the live UI below draw from.
+
+### Live, while you work
+
+```bash
+loupe ui                            # then open http://127.0.0.1:7332
+```
+
+The same page, on the working tree instead of on a moment. It re-runs on save —
+a watcher over the directories the analysis read, pushed to the page — so the
+counts restate themselves as you fix things, and it crosses into clean and back
+without a reload. Every location links into your editor at the line
+(`--editor` takes a template, so Cursor, Zed and the JetBrains IDEs all work).
+Each row carries `fix` where the engine settled on exactly one token, and `mute`,
+which asks for a reason before it writes the directive — the quick fix leaves
+that blank because it has nowhere to ask, and a page does. `accept as baseline`
+is a button.
+
+Because it writes to your files it is not `loupe serve`: it binds loopback, sends
+no CORS header, and every write carries a secret minted at startup plus the run
+it was aimed at, so a click against a page the tree has moved past is refused
+rather than applied to whatever now sits at that index.
 
 ### In CI
 

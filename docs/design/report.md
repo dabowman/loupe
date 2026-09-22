@@ -283,6 +283,113 @@ Other decisions there:
   so the fragment is self-sufficient: `/loupe-report` publishes exactly that span
   into an Artifact, which supplies its own document shell.
 
+## `loupe ui`
+
+The report is a photograph and this is a window. They render the same view —
+`report-view.ts`, which both hosts import — and differ in where the payload comes
+from and in what a reader may do with a row.
+
+**The view is shared because the alternative was two of it.** A second renderer
+would start as a copy and drift, and the drift would be in exactly the numbers
+this project spends its discipline keeping consistent: the page a reader triages
+from would eventually disagree with the file they attached to a ticket. So every
+count, rollup, grouping and sort is one implementation, and the seam between the
+hosts is one object:
+
+```js
+var HOST = window.__loupe || {};
+var LIVE = !!HOST.live;
+```
+
+Absent, it is the artifact: the payload comes from the embedded block, rows carry
+no actions, and the rendered page is what `--format html` has always rendered.
+Present, it is the live host, which fetches and calls `load` on every
+re-analysis. The artifact does carry the unexercised half of each branch in its
+script text, and inert `data-when` attributes in its markup. That is the price of
+one implementation and it is worth paying; the test asserts on the *emitted*
+markup rather than the source, because emitting a button nobody can click is the
+failure, not shipping the code that would have.
+
+**The timestamp comes back here.** The report renders none because a file that
+differs from itself cannot be diffed. Nobody diffs a window, and a live page that
+will not say when it last ran is asking to be read as current when it is stale —
+so this one says when, and how long the run took.
+
+### It is a separate command from `serve`, and that is the design
+
+`loupe serve` is read-only and answers any origin, because a bookmarklet on some
+other origin is the entire point. This one rewrites source files, records
+baselines and writes suppressions. Folding them together would put a writer
+behind `access-control-allow-origin: *` — which is a page on any site the reader
+happens to have open, rewriting this repository.
+
+So the write surface is guarded three ways, and each closes a different door:
+
+- **Loopback bind, and no CORS header anywhere.** The default bind is every
+  interface, which on a shared network publishes a writer for this checkout.
+  Without a CORS header no cross-origin reader can see a response, so nothing can
+  be read back out of it either.
+- **A secret minted per run**, handed only to the page this process served.
+  Sending it as a custom header also forces a preflight, which this server
+  answers for nobody. An `Origin` that is present and not ours is refused before
+  either check, because a browser attaches one to any cross-site request.
+- **A revision on every write.** An index addresses the payload the page is
+  holding, and the tree moves under it — a rebuild, a rebase, the reader's own
+  editor. A stale index still names *a* finding, so a write against it would be
+  plausible and wrong. Each run stamps a `rev`, each write names the one it was
+  aimed at, and a mismatch is a 409 the page recovers from by reloading.
+  `substituteOnLine` would refuse most of these anyway by finding no declaration
+  on the reported line; this makes the refusal certain rather than likely.
+
+`/source` is allowlisted to the files the current run reported, rather than
+checked against the project root. A prefix comparison has to get symlinks,
+case-insensitive volumes and `..` all right to be safe, and a set of paths the
+analyzer just handed back has none of those questions in it.
+
+### The suppression reason is required here
+
+The language server's quick fix leaves it blank on purpose: a directive with no
+reason does not mute, it reports as `suppression/malformed`, so taking that
+action trades a finding for a louder one that clears only when somebody writes
+down why. That is not a rule about suppressions — it is a consequence of a quick
+fix having nowhere to ask.
+
+A page has somewhere to ask. So it asks, and refuses the write on a blank answer.
+The two surfaces disagree about the bytes and agree about the principle: no
+silence that nobody signed.
+
+### Watching is reported, never implied
+
+One `fs.watch` per directory rather than one recursive watch on the root.
+Recursive is unsupported on Linux before Node 20 and this floor is Node 18, so
+the choice is between a platform branch and a set that is the same code
+everywhere. Per-directory is also self-healing: a new directory is a new entry in
+a directory already watched, which fires, which rebuilds the set.
+
+The set is rebuilt after every run rather than once at boot, because a project
+grows directories while it is being worked on and a watcher pinned to the tree as
+it was at startup goes quiet on exactly the files someone just added.
+
+Past the ceiling the watch is **refused whole, and said to be refused** — a watch
+covering part of a tree reports nothing for edits outside it, which reads exactly
+like no edit. The page prints the directory count it is actually watching, or
+says it is not watching and keeps the re-run button, which is the same discipline
+`serve`'s panel follows in labelling what it cannot resolve.
+
+### Baselining needs the unbaselined run
+
+`serve` and `lsp` take one runner that analyzes and applies the baseline in a
+single step. This host needs the two halves apart: it *displays* the baselined
+result and *baselines* the fresh one.
+
+Collapsed, `accept as baseline` would record only what the page still had on
+screen — the findings the existing baseline had not already accepted — and every
+previously accepted finding would silently drop out of the file and come back
+live on the next run, reported as a successful write. That is why `cli.ts` has a
+`presenter` the runner is built from rather than the other way round, and why the
+test for it takes two baselines with a new finding in between: one baseline
+cannot tell the two implementations apart.
+
 ## Baseline
 
 The adoption blocker for a tool like this is the first run on an existing

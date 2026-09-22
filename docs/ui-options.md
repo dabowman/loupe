@@ -5,8 +5,40 @@ kind. The question is not "does loupe need a UI" — it is which of the things a
 *real* UI does that none of the three currently does, and what shell those
 capabilities want to live in.
 
-This document names the gap, then the options, then a recommendation. It is a
-decision document, not a plan; nothing here has been built.
+This document names the gap, then the options, then a recommendation.
+
+> **Status.** Stage 1 (option A) is built and shipped as `loupe ui`. Everything
+> else here is still a decision document. What landed, against what this document
+> asked for:
+>
+> | | |
+> |---|---|
+> | liveness | **done** — a watcher over the directories the analysis read, pushed over SSE |
+> | navigation | **done** — every location links into the reader's editor, `--editor` templated |
+> | write-back | **done** — `fix`, `mute` and `accept as baseline` from the page |
+> | triage state | **partial** — the baseline is still the only memory. Nothing records what a reader has looked at, deferred, or seen arrive since yesterday |
+> | DOM correlation without the bookmarklet | **not started** — that is Stage 2 |
+>
+> Of the shared prerequisites, the write endpoints and the watcher landed, and
+> the payload discipline held: `report-view.ts` is now the one renderer, and
+> `--format html` and `loupe ui` cannot disagree about a number. **Incremental
+> analysis did not** — re-analysis is still whole-tree, which is instant on an
+> ordinary project and not on a large one. That remains the cost ceiling on
+> everything below.
+>
+> Two things the build taught, which this document did not anticipate:
+>
+> - **A writing server is a different server.** `serve` answers any origin
+>   because a bookmarklet must reach it. A surface that rewrites source files
+>   cannot be that, so `ui` is a separate command with a loopback bind, no CORS,
+>   a per-run secret and a revision on every write. Folding them together would
+>   have put a writer behind `access-control-allow-origin: *`.
+> - **The UI can ask, which changes what it should write.** The quick fix leaves
+>   a suppression's reason blank because it has nowhere to put the question. A
+>   page has somewhere, so it asks and refuses a blank answer — the two surfaces
+>   write different bytes from the same principle.
+>
+> Design notes: [design/report.md](design/report.md#loupe-ui).
 
 ## What exists now
 
@@ -270,12 +302,14 @@ both are strictly on the path to it.
 
 Staged, cheapest-first, nothing thrown away.
 
-**Stage 1 — `loupe ui`, option A.** Do the shared prerequisites and serve the
-existing views live from the existing server. This is where essentially all of
-the user-visible gain per unit of effort is: liveness, navigation, write-back and
-triage, with no new language, no packaging and no signing. It is also the honest
-test of whether the gap is a shell problem at all — if a live local web app with
-write endpoints satisfies the need, stop here and save the release pipeline.
+**Stage 1 — `loupe ui`, option A. Built.** Do the shared prerequisites and serve
+the existing views live from the existing server. This is where essentially all
+of the user-visible gain per unit of effort is: liveness, navigation, write-back
+and triage, with no new language, no packaging and no signing. It is also the
+honest test of whether the gap is a shell problem at all — if a live local web
+app with write endpoints satisfies the need, stop here and save the release
+pipeline. That test is now runnable rather than hypothetical, which is the point
+of having done it first.
 
 **Stage 2 — option E, the DevTools panel.** Deepens the capability that is
 actually unique, reuses panel logic that is already written and already handles
