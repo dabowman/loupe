@@ -225,6 +225,28 @@ await check('--files accepts an absolute path', () => {
 	}
 });
 
+// A repeated `--files` kept only the last value, silently skipping the rest.
+await check('--files may repeat', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'warn' } }),
+		'a.css': '.a { margin-bottom: 16px; }',
+		'b.css': '.b { margin-bottom: 16px; }',
+	});
+	try {
+		const total = (...args: string[]): number =>
+			(
+				JSON.parse(
+					execFileSync('node', [CLI, 'check', '--root', root, ...args, '--format', 'json'], { encoding: 'utf8' }),
+				) as { summary: { total: number } }
+			).summary.total;
+		const comma = total('--files', 'a.css,b.css');
+		assert(total('--files', 'a.css') < comma, 'fixture should find more in two files than one');
+		assert(total('--files', 'a.css', '--files', 'b.css') === comma, 'repeated --files dropped a file');
+	} finally {
+		cleanup(root);
+	}
+});
+
 // A mistyped preset in the plugin settings made loadConfig throw, which under
 // the hook is exit 2 — blocking every turn in every project, with nothing the
 // agent could do about it.
