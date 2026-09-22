@@ -109,7 +109,7 @@ export const FULL_CONTEXT: Context = {
 
 /** `semantic · #6b7280 — Lower-emphasis text beside a primary label.`, minus whatever is switched off. */
 const describe = (t: Token, opt: Context['option']): string => {
-	const head = [opt.tier ? t.tier : '', opt.value ? t.literal || '(composite)' : ''].filter(Boolean).join(' \u00b7 ');
+	const head = [opt.tier ? t.tier : '', opt.value ? t.literal || '(no value)' : ''].filter(Boolean).join(' \u00b7 ');
 	const desc = opt.description ? t.description : undefined;
 	if (!head) return desc ?? '(name only)';
 	return desc ? `${head} \u2014 ${desc}` : head;

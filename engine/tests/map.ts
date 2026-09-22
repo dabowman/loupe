@@ -17,7 +17,7 @@
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readTokenDoc } from '../src/dtcg.ts';
+import { literalOf, readTokenDoc, tierOf } from '../src/dtcg.ts';
 import type { Token, TokenDoc } from '../src/dtcg.ts';
 import {
 	FLOOR,
@@ -25,12 +25,15 @@ import {
 	collisionsIn,
 	comparable,
 	countBy,
+	mapPayload,
 	nameScore,
 	planMap,
 	rank,
 	valueScore,
+	words,
 } from '../src/mapping.ts';
-import { assert, check, finish, one } from './harness.ts';
+import { counterpartQuery } from '../src/judge/counterpart.ts';
+import { assert, check, cleanup, finish, one, scratch, write } from './harness.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SETS = join(HERE, 'token-sets');
@@ -53,14 +56,32 @@ await check('a group $type reaches the tokens under it', () => {
 	assert(find(alpha, 'component.button.padding-x').type === 'dimension', 'own $type was lost');
 });
 
+/** A set written for one test, read the way `map` reads one. */
+const setOf = (json: object | string, name = 'set.json'): TokenDoc => {
+	const root = scratch('loupe-map-');
+	try {
+		write(root, name, typeof json === 'string' ? json : JSON.stringify(json));
+		return readTokenDoc(join(root, name), 'probe');
+	} finally {
+		cleanup(root);
+	}
+};
+
 await check('a token with no $type of its own takes the one it aliases', () => {
-	// `control.gutter` declares its own; `pad.tight` inherits from its group. The
-	// case that matters is a set that declares neither, which is what this builds.
-	const untyped = readTokenDoc(join(SETS, 'alpha.json'), 'alpha').tokens;
-	assert(
-		untyped.every((t) => t.type),
-		'a token came back with no type at all',
-	);
+	// Nothing in the chain declares a type on `body` itself, and its value alone
+	// would infer `number`: only the alias chain can say `fontWeight`.
+	const doc = setOf({
+		weight: { regular: { $type: 'fontWeight', $value: 400 } },
+		text: { body: { $value: '{weight.regular}' } },
+	});
+	assert(find(doc, 'text.body').type === 'fontWeight', `typed ${find(doc, 'text.body').type}`);
+	// The spec types a reference by its target ahead of its group.
+	const mixed = setOf({
+		radius: { $type: 'dimension', md: { $value: '8px' } },
+		button: { $type: 'color', bg: { $value: '#3366ff' }, corner: { $value: '{radius.md}' } },
+	});
+	assert(find(mixed, 'button.corner').type === 'dimension', `typed ${find(mixed, 'button.corner').type}`);
+	assert(find(mixed, 'button.bg').type === 'color', 'a literal lost its group $type');
 });
 
 await check('the 2025 object spellings render to the same literal as the old strings', () => {
@@ -111,9 +132,38 @@ await check('a tier word in the leaf is a name, not a tier', () => {
 	// `color.background.base` is a semantic token whose own name is `base`, and
 	// reading that as a tier files every "base" variant of every scale as a
 	// primitive. The word only counts above the leaf.
-	const doc = readTokenDoc(join(SETS, 'alpha.json'), 'alpha');
-	const brand = doc.tokens.find((t) => t.path === 'brand.partner-badge');
-	assert(brand?.tierFrom === 'structural', `brand token read its tier from ${brand?.tierFrom}`);
+	const doc = setOf({
+		ink: { white: { $type: 'color', $value: '#ffffff' } },
+		color: { background: { base: { $value: '{ink.white}' } } },
+	});
+	const t = find(doc, 'color.background.base');
+	assert(t.tier === 'semantic' && t.tierFrom === 'structural', `${t.tier}/${t.tierFrom}`);
+	// And above the leaf, the outermost group decides: `base` here is a variant.
+	const variant = tierOf(['component', 'button', 'base', 'padding'], 2);
+	assert(variant.tier === 'component', `component.button.base.padding read as ${variant.tier}`);
+});
+
+await check('a $root token is read, and an alias to it resolves', () => {
+	const doc = setOf({
+		color: { $type: 'color', accent: { $root: { $value: '#0969da' }, light: { $value: '#54aeff' } } },
+		link: { default: { $value: '{color.accent.$root}' } },
+	});
+	const link = find(doc, 'link.default');
+	assert(link.literal === '#0969da' && link.type === 'color', `resolved to ${link.literal} (${link.type})`);
+});
+
+await check('a file saved with a byte-order mark still reads', () => {
+	const doc = setOf('\uFEFF{"size":{"$type":"dimension","sm":{"$value":"4px"}}}');
+	assert(find(doc, 'size.sm').literal === '4px', 'the BOM-prefixed set did not read');
+});
+
+await check('a colour with a hex fallback keeps its alpha', () => {
+	// The spec's hex is six digits and leaves alpha out of it.
+	const scrim = literalOf({ colorSpace: 'srgb', components: [0, 0, 0], alpha: 0.5, hex: '#000000' });
+	assert(scrim === '#00000080', `a 50% scrim rendered as ${scrim}`);
+	// And a `none` component converts as 0, the way CSS reads it.
+	const grey = literalOf({ colorSpace: 'hsl', components: ['none', 0, 50] });
+	assert(grey === '#808080', `an achromatic hsl grey rendered as ${grey}`);
 });
 
 // ── the ranking ─────────────────────────────────────────────────────────────
@@ -140,6 +190,8 @@ await check('names are compared on meaning, not on the words a file is organised
 	// but `default` against `default` would be.
 	const self = nameScore(a, a);
 	assert(self === 1, `a token did not match its own name: ${self}`);
+	const kept = [...words(find(alpha, 'primitive.color.slate.500'))];
+	assert(kept.join(' ') === 'slate 500', `the tier and type words were kept: ${kept.join(' ')}`);
 });
 
 await check('the value carries a primitive and the name carries a role', () => {
@@ -156,6 +208,16 @@ await check('the value carries a primitive and the name carries a role', () => {
 	// reach the shortlist, which is all the ranking owes it.
 	const shortlist = rank(find(alpha, 'semantic.text.muted'), beta.tokens).map((c) => c.token.path);
 	assert(shortlist.includes('fg.subdued'), `fg.subdued was not shortlisted: ${shortlist.join(', ')}`);
+});
+
+await check('a value measures the same however it is spelled', () => {
+	const colour = (literal: string): Token => ({ ...find(alpha, 'primitive.color.slate.900'), literal });
+	for (const spelled of ['hsl(0, 100%, 50%)', 'hwb(0 0% 0%)', 'rgb(255 0 0)'])
+		assert(valueScore(colour(spelled), colour('#ff0000')) === 1, `${spelled} did not measure as #ff0000`);
+	assert(valueScore(colour('white'), colour('#ffffff')) === 1, 'white did not measure as #ffffff');
+	// A bare number is the `number` row `comparable` admits against a dimension.
+	const bare: Token = { ...find(beta, 'step.md'), type: 'number', literal: '16' };
+	assert(valueScore(bare, find(beta, 'step.md')) === 1, '16 did not measure as 16px');
 });
 
 // ── the plan ────────────────────────────────────────────────────────────────
@@ -183,6 +245,11 @@ await check('--tier and --limit scope the run, and the rest is counted as skippe
 	assert(plan.skipped === alpha.tokens.length - plan.jobs.length - plan.settled.length, `skipped ${plan.skipped}`);
 	const capped = planMap(alpha, beta, { limit: 3 });
 	assert(capped.jobs.length + capped.settled.length === 3, 'the limit did not hold');
+	// The tokens the cap cut are skipped too, and the JSON says so: a partial map
+	// must not read as the whole set.
+	const skipped = alpha.tokens.length - 3;
+	assert(capped.skipped === skipped, `skipped ${capped.skipped}, expected ${skipped}`);
+	assert(mapPayload(capped, [], 'model').skipped === skipped, 'the payload did not carry the skipped count');
 });
 
 // ── the question and the answers ────────────────────────────────────────────
@@ -208,8 +275,10 @@ await check('the options offered are the shortlist, plus a reasoned way to say t
 	const plan = planMap(alpha, beta);
 	const job = plan.jobs.find((j) => j.token.path === 'semantic.text.muted');
 	assert(job, 'semantic.text.muted was not put to the model');
-	const criteria = Object.fromEntries(job.candidates.map((c) => [c.path, true]));
-	assert(!('none' in criteria), 'a candidate was literally named none');
+	// The question itself offers the shortlist and `none`, and nothing else.
+	const offered = Object.keys((counterpartQuery().question(job, 0) as { criteria: object }).criteria);
+	const expected = [...job.candidates.map((c) => c.path), 'none'];
+	assert(offered.join('|') === expected.join('|'), `offered ${offered.join(', ')}`);
 	// Everything offered is a token the target set actually has, so an answer can
 	// always be written into the map as a path.
 	for (const c of job.candidates)
@@ -295,7 +364,7 @@ await check('a map that is not one-to-one says so', async () => {
 	// Every token answered with the same counterpart: the rows are individually
 	// fine and the map collapses, which is the case a per-row report hides. On two
 	// real systems this is not a contrived case — WPDS has a disabled background
-	// per tone where Primer has one, and ten rows land on it.
+	// per tone where Primer has one, and nine rows land on it.
 	const plan = planMap(alpha, beta, { tiers: ['semantic'], types: ['color'] });
 	// `fg.body` is on every semantic colour's shortlist, so answering it wherever
 	// it is offered lands every row on one token.

@@ -27361,9 +27361,10 @@ var MODEL = "jev-1.13.0";
 var FLOOR = 0.5;
 var CONCURRENCY = 6;
 var RETRIES = 4;
-async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
+async function ask(query, items, apiKey, fetchImpl = fetch, size = 1, backoff = 500) {
   const batches = [];
   for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
+  let stopped = false;
   const sendBatch = async (batch) => {
     const body2 = JSON.stringify({
       model: MODEL,
@@ -27371,27 +27372,33 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
       questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)]))
     });
     for (let attempt = 0; ; attempt++) {
+      if (stopped) throw new Error("stopped: another request failed");
       let res;
+      let parsed;
       try {
         res = await fetchImpl(ENDPOINT, {
           method: "POST",
           headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
           body: body2
         });
+        if (res.ok) parsed = await res.json();
       } catch (err) {
-        if (attempt >= RETRIES) throw new Error(`TypeSafe unreachable: ${messageOf(err)}`);
-        await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+        if (attempt >= RETRIES) {
+          const cause = err instanceof Error && err.cause ? `: ${messageOf(err.cause)}` : "";
+          throw new Error(`TypeSafe unreachable: ${messageOf(err)}${cause}`);
+        }
+        await new Promise((r) => setTimeout(r, backoff * 2 ** attempt));
         continue;
       }
-      if (res.ok) {
-        const parsed = await res.json();
-        return batch.map((_, i) => parsed.answers[`e${i}`]);
+      if (parsed) {
+        const { answers } = parsed;
+        return batch.map((_, i) => answers[`e${i}`]);
       }
       const transient = res.status === 429 || res.status >= 500;
       if (!transient || attempt >= RETRIES)
         throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
       const after = Number(res.headers.get("retry-after"));
-      await new Promise((r) => setTimeout(r, after > 0 ? after * 1e3 : 500 * 2 ** attempt));
+      await new Promise((r) => setTimeout(r, after > 0 ? after * 1e3 : backoff * 2 ** attempt));
     }
   };
   const done = new Array(batches.length);
@@ -27404,6 +27411,7 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
           done[at] = await sendBatch(batches[at] ?? []);
         } catch (err) {
           next = batches.length;
+          stopped = true;
           throw err;
         }
       }
@@ -27605,11 +27613,14 @@ function tokenFilesUnder(path, budget = 200) {
   const out = [];
   const walk = (dir) => {
     for (const e of readDir(dir)) {
-      if (out.length >= budget) return;
       const full = join7(dir, e.name);
       if (e.isDirectory()) {
         if (e.name !== "node_modules") walk(full);
-      } else if (e.name.endsWith(".json") && !e.name.startsWith(".")) out.push(full);
+      } else if (e.name.endsWith(".json") && !e.name.startsWith(".")) {
+        if (out.length >= budget)
+          throw new Error(`more than ${budget} .json files under ${path}; point at the token sources`);
+        out.push(full);
+      }
     }
   };
   walk(path);
@@ -27617,12 +27628,12 @@ function tokenFilesUnder(path, budget = 200) {
   return out;
 }
 var isToken = (n) => "$value" in n;
-function walkFile(raw, file, into) {
+function walkFile(raw, file, into, groupOf) {
   if (!isNode(raw)) return;
   const walk = (node, trail, inheritedType) => {
     const declared = typeof node.$type === "string" ? node.$type : inheritedType;
     for (const [key, child] of Object.entries(node)) {
-      if (key.startsWith("$") || !isNode(child)) continue;
+      if (key.startsWith("$") && key !== "$root" || !isNode(child)) continue;
       const trailNext = [...trail, key];
       if (!isToken(child)) {
         walk(child, trailNext, declared);
@@ -27630,16 +27641,18 @@ function walkFile(raw, file, into) {
       }
       const path = trailNext.join(".");
       if (into.has(path)) continue;
-      const own = typeof child.$type === "string" ? child.$type : declared;
+      const own = typeof child.$type === "string" ? child.$type : void 0;
       const value = child.$value;
+      const isRef = aliasTarget(value) !== void 0;
+      if (own === void 0 && isRef && declared !== void 0) groupOf.set(path, declared);
       into.set(path, {
         path,
         segments: trailNext,
         leaf: key,
-        // Filled in by `resolve`, which is the only place that can see the
+        // Completed by `resolve`, which is the only place that can see the
         // whole set and therefore the only place an alias's type is knowable.
-        type: own ?? "",
-        typed: own !== void 0,
+        type: own ?? (isRef ? "" : declared ?? ""),
+        typed: (own ?? declared) !== void 0,
         value,
         resolved: value,
         literal: "",
@@ -27653,11 +27666,13 @@ function walkFile(raw, file, into) {
 }
 var ALIAS = /^\{([^{}]+)\}$/;
 var aliasTarget = (value) => typeof value === "string" ? ALIAS.exec(value.trim())?.[1] ?? void 0 : void 0;
-function resolve2(tokens) {
+function resolve2(tokens, groupOf) {
+  const declaredOf = new Map([...tokens].map(([path, t]) => [path, t.type]));
   for (const t of tokens.values()) {
     const direct = aliasTarget(t.value);
     if (direct !== void 0) t.alias = direct;
     let at = t;
+    let type = t.type;
     const seen = /* @__PURE__ */ new Set([t.path]);
     let depth = 0;
     for (; ; ) {
@@ -27668,21 +27683,11 @@ function resolve2(tokens) {
       seen.add(next);
       at = to;
       depth++;
+      type ||= declaredOf.get(next) ?? "";
     }
     t.resolved = at.value;
-    t.depth = depth;
-    if (!t.type) {
-      let hop = t;
-      const hops = /* @__PURE__ */ new Set([t.path]);
-      while (!hop.type) {
-        const next = aliasTarget(hop.value);
-        const to = next === void 0 ? void 0 : tokens.get(next);
-        if (!to || hops.has(to.path)) break;
-        hops.add(to.path);
-        hop = to;
-      }
-      t.type = hop.type || inferType(t.resolved);
-    }
+    t.depth = depth || (direct !== void 0 ? 1 : 0);
+    t.type = type || groupOf.get(t.path) || inferType(t.resolved);
     t.literal = literalOf(t.resolved);
   }
 }
@@ -27695,8 +27700,9 @@ function literalOf(value) {
   if (typeof value.value === "number" && typeof value.unit === "string") return `${value.value}${value.unit}`;
   if (Array.isArray(value.components) && typeof value.colorSpace === "string") {
     const alpha = typeof value.alpha === "number" ? value.alpha : 1;
-    if (typeof value.hex === "string" && /^#[0-9a-f]{3,8}$/i.test(value.hex.trim())) return value.hex.trim();
-    const numbers = value.components.every((c) => typeof c === "number") ? value.components : null;
+    const hex = typeof value.hex === "string" ? value.hex.trim() : "";
+    if (/^#[0-9a-f]{6}$/i.test(hex)) return `${hex}${alpha < 1 ? byte(alpha) : ""}`;
+    const numbers = value.components.every((c) => typeof c === "number" || c === "none") ? value.components.map((c) => typeof c === "number" ? c : 0) : null;
     const srgb = numbers && toSrgb(value.colorSpace, numbers);
     if (srgb) return hexOf(srgb, alpha);
     const parts = value.components.map((c) => typeof c === "number" ? round(c) : String(c));
@@ -27741,8 +27747,8 @@ function hslToSrgb(hue, s, l) {
   const [r, g, b] = h < 60 ? [chroma, x, 0] : h < 120 ? [x, chroma, 0] : h < 180 ? [0, chroma, x] : h < 240 ? [0, x, chroma] : h < 300 ? [x, 0, chroma] : [chroma, 0, x];
   return [r + m, g + m, b + m];
 }
+var byte = (n) => Math.max(0, Math.min(255, Math.round(n * 255))).toString(16).padStart(2, "0");
 function hexOf(components2, alpha) {
-  const byte = (n) => Math.max(0, Math.min(255, Math.round(n * 255))).toString(16).padStart(2, "0");
   const [r = 0, g = 0, b = 0] = components2;
   return `#${byte(r)}${byte(g)}${byte(b)}${alpha < 1 ? byte(alpha) : ""}`;
 }
@@ -27773,25 +27779,28 @@ var TIER_WORDS = {
 };
 var isTierWord = (word) => TIERS.some((t) => TIER_WORDS[t].test(word.toLowerCase()));
 function tierOf(segments, depth) {
-  const above = segments.slice(0, -1).map((s) => s.toLowerCase());
-  for (const tier of TIERS) if (above.some((s) => TIER_WORDS[tier].test(s))) return { tier, tierFrom: "named" };
+  for (const s of segments.slice(0, -1)) {
+    const tier = TIERS.find((t) => TIER_WORDS[t].test(s.toLowerCase()));
+    if (tier) return { tier, tierFrom: "named" };
+  }
   return { tier: depth === 0 ? "base" : depth === 1 ? "semantic" : "component", tierFrom: "structural" };
 }
 var SIBLINGS = 12;
 function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
   const files = tokenFilesUnder(path);
   const flat = /* @__PURE__ */ new Map();
+  const groupOf = /* @__PURE__ */ new Map();
   for (const file of files) {
     let raw;
     try {
-      raw = JSON.parse(readFileSync7(file, "utf8"));
+      raw = JSON.parse(readFileSync7(file, "utf8").replace(/^\uFEFF/, ""));
     } catch (err) {
       throw new Error(`${file} is not readable JSON: ${err instanceof Error ? err.message : String(err)}`);
     }
-    walkFile(raw, file, flat);
+    walkFile(raw, file, flat, groupOf);
   }
   if (!flat.size) throw new Error(`${path} holds no DTCG tokens ($value was not found anywhere)`);
-  resolve2(flat);
+  resolve2(flat, groupOf);
   const byGroup = /* @__PURE__ */ new Map();
   for (const t of flat.values()) {
     const group = t.segments.slice(0, -1).join(".");
@@ -27816,7 +27825,7 @@ var FULL_CONTEXT = {
   option: { tier: true, value: true, description: true }
 };
 var describe = (t, opt) => {
-  const head2 = [opt.tier ? t.tier : "", opt.value ? t.literal || "(composite)" : ""].filter(Boolean).join(" \xB7 ");
+  const head2 = [opt.tier ? t.tier : "", opt.value ? t.literal || "(no value)" : ""].filter(Boolean).join(" \xB7 ");
   const desc = opt.description ? t.description : void 0;
   if (!head2) return desc ?? "(name only)";
   return desc ? `${head2} \u2014 ${desc}` : head2;
@@ -27875,8 +27884,14 @@ var SEV_PAINT = {
 // src/mapping.ts
 var AS_PX = { px: 1, rem: 16, em: 16, pt: 4 / 3 };
 var AS_MS = { ms: 1, s: 1e3 };
+var NAMED = /* @__PURE__ */ new Map([
+  ["white", "#ffffff"],
+  ["black", "#000000"],
+  ["transparent", "#00000000"]
+]);
 function parseColor(text2) {
-  const v = text2.trim().toLowerCase();
+  const lower = text2.trim().toLowerCase();
+  const v = NAMED.get(lower) ?? lower;
   const hex = /^#([0-9a-f]{3,8})$/.exec(v)?.[1];
   if (hex && (hex.length === 3 || hex.length === 4 || hex.length === 6 || hex.length === 8)) {
     const wide = hex.length <= 4;
@@ -27887,21 +27902,14 @@ function parseColor(text2) {
     const has = wide ? hex.length === 4 : hex.length === 8;
     return { rgb: [at(0), at(1), at(2)], alpha: has ? at(3) : 1 };
   }
-  const fn = /^rgba?\(([^)]+)\)$/.exec(v)?.[1];
-  if (!fn) return null;
-  const nums = fn.split(/[\s,/]+/).filter(Boolean).map((p) => p.endsWith("%") ? Number.parseFloat(p) / 100 : Number.parseFloat(p));
-  const [r, g, b, a] = nums;
-  if (r === void 0 || g === void 0 || b === void 0 || [r, g, b].some(Number.isNaN)) return null;
-  const scale = (n, pct) => pct ? n : n / 255;
-  const parts = fn.split(/[\s,/]+/).filter(Boolean);
-  return {
-    rgb: [
-      scale(r, parts[0]?.endsWith("%") ?? false),
-      scale(g, parts[1]?.endsWith("%") ?? false),
-      scale(b, parts[2]?.endsWith("%") ?? false)
-    ],
-    alpha: a === void 0 || Number.isNaN(a) ? 1 : a
-  };
+  const fn = /^(rgb|hsl|hwb)a?\(([^)]+)\)$/.exec(v);
+  if (!fn?.[1] || !fn[2]) return null;
+  const parts = fn[2].split(/[\s,/]+/).filter(Boolean);
+  const [x, y, z] = parts.map((p) => Number.parseFloat(p));
+  if (x === void 0 || y === void 0 || z === void 0 || [x, y, z].some(Number.isNaN)) return null;
+  const a = parts[3] === void 0 ? 1 : Number.parseFloat(parts[3]) / (parts[3].endsWith("%") ? 100 : 1);
+  const rgb = fn[1] === "rgb" ? [x, y, z].map((n, i) => n / (parts[i]?.endsWith("%") ? 100 : 255)) : toSrgb(fn[1], [x, y, z]);
+  return rgb && { rgb, alpha: Number.isNaN(a) ? 1 : a };
 }
 function oklab([r, g, b]) {
   const lin = (c) => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -27930,8 +27938,22 @@ function measure2(literal) {
   return { kind: "number", n, unit };
 }
 var COLOR_STEP = 0.06;
+var FEATURES = /* @__PURE__ */ new WeakMap();
+function featuresOf(t) {
+  let f = FEATURES.get(t);
+  if (!f) {
+    f = {
+      measured: measure2(t.literal),
+      words: words(t),
+      leaf: new Set(splitWords(t.leaf)),
+      leafName: t.leaf.toLowerCase()
+    };
+    FEATURES.set(t, f);
+  }
+  return f;
+}
 function valueScore(a, b) {
-  const [x, y] = [measure2(a.literal), measure2(b.literal)];
+  const [x, y] = [featuresOf(a).measured, featuresOf(b).measured];
   if (!x || !y) return a.literal !== "" && a.literal === b.literal ? 1 : 0;
   if (x.kind !== y.kind) return 0;
   if (x.kind === "color" && y.kind === "color") {
@@ -27939,7 +27961,7 @@ function valueScore(a, b) {
     return 1 / (1 + (d + Math.abs(x.alpha - y.alpha) * 0.5) / COLOR_STEP);
   }
   if (x.kind === "number" && y.kind === "number") {
-    if (x.unit !== y.unit) return 0;
+    if (x.unit !== y.unit && x.unit && y.unit) return 0;
     if (x.n === y.n) return 1;
     if (x.n === 0 || y.n === 0 || x.n * y.n < 0) return 0;
     const ratio = Math.min(Math.abs(x.n), Math.abs(y.n)) / Math.max(Math.abs(x.n), Math.abs(y.n));
@@ -27962,10 +27984,9 @@ function dice(a, b) {
   return 2 * hit / (a.size + b.size);
 }
 function nameScore(a, b) {
-  const whole = dice(words(a), words(b));
-  const leafA = new Set(splitWords(a.leaf));
-  const leafB = new Set(splitWords(b.leaf));
-  const leaf = a.leaf.toLowerCase() === b.leaf.toLowerCase() ? 1 : dice(leafA, leafB);
+  const [fa, fb] = [featuresOf(a), featuresOf(b)];
+  const whole = dice(fa.words, fb.words);
+  const leaf = fa.leafName === fb.leafName ? 1 : dice(fa.leaf, fb.leaf);
   return 0.6 * whole + 0.4 * leaf;
 }
 var NUMERIC = /* @__PURE__ */ new Set(["dimension", "duration", "fontWeight", "number"]);
@@ -27994,7 +28015,7 @@ function rank(t, targets, gate = true) {
       sameTier,
       score: TIER_WEIGHT * (sameTier ? 1 : 0) + (1 - TIER_WEIGHT) * (w.value * value + w.name * name)
     };
-  }).sort((a, b) => b.score - a.score || a.token.path.localeCompare(b.token.path));
+  }).sort((a, b) => b.score - a.score || byBytes(a.token.path, b.token.path));
 }
 var FLOOR2 = 0.5;
 function planMap(from, to, opts = {}) {
@@ -28038,7 +28059,7 @@ async function askCounterparts(plan, apiKey, fetchImpl = fetch, ctx = FULL_CONTE
   const judged = plan.jobs.map((job, i) => rowFor(job, answers[i]));
   const order = new Map(plan.from.tokens.map((t, i) => [t.path, i]));
   const mappings = [...plan.settled, ...judged].sort(
-    (a, b) => (order.get(a.from) ?? 0) - (order.get(b.from) ?? 0) || a.from.localeCompare(b.from)
+    (a, b) => (order.get(a.from) ?? 0) - (order.get(b.from) ?? 0) || byBytes(a.from, b.from)
   );
   return { mappings, answers };
 }
@@ -28051,7 +28072,7 @@ function rowFor(job, answer) {
     fromValue: token.literal,
     considered: candidates.map((c) => c.path)
   };
-  if (!answer || answer.confidence < FLOOR2) {
+  if (!answer || !(answer.confidence >= FLOOR2)) {
     return { ...row, to: null, confidence: answer?.confidence ?? 0, how: "unsure" };
   }
   const rest = Object.entries(answer.probabilities ?? {}).filter(([k]) => k !== answer.choice && k !== NONE).sort((a, b) => b[1] - a[1])[0];
@@ -28071,7 +28092,7 @@ function rowFor(job, answer) {
 function collisionsIn(mappings) {
   const claims = /* @__PURE__ */ new Map();
   for (const m of mappings) if (m.to) claims.set(m.to, [...claims.get(m.to) ?? [], m.from]);
-  return [...claims].filter(([, from]) => from.length > 1).map(([to, from]) => ({ to, from })).sort((a, b) => b.from.length - a.from.length || a.to.localeCompare(b.to));
+  return [...claims].filter(([, from]) => from.length > 1).map(([to, from]) => ({ to, from })).sort((a, b) => b.from.length - a.from.length || byBytes(a.to, b.to));
 }
 var countBy = (mappings) => {
   const counts = { exact: 0, judged: 0, none: 0, absent: 0, unsure: 0 };
@@ -28088,6 +28109,7 @@ var mapPayload = (plan, mappings, model) => ({
   to: { label: plan.to.label, path: plan.to.path, files: plan.to.files.length, tokens: plan.to.tokens.length },
   model,
   floor: FLOOR2,
+  skipped: plan.skipped,
   counts: countBy(mappings),
   collisions: collisionsIn(mappings),
   mappings: [...mappings]
@@ -30565,15 +30587,20 @@ function resolveScope(config, args, { defaultChanged = false }) {
 }
 var listFlag = (value) => (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 function mapLabels(a, b) {
-  const base = (p) => basename2(p).replace(/\.json$/i, "");
+  const base = (p) => basename2(resolve7(p)).replace(/\.json$/i, "");
   if (base(a) !== base(b)) return [base(a), base(b)];
   const withDir = (p) => `${basename2(dirname6(resolve7(p)))}/${base(p)}`;
   return withDir(a) === withDir(b) ? [`${base(a)} (a)`, `${base(b)} (b)`] : [withDir(a), withDir(b)];
 }
 async function runMap(args) {
-  const [, fromPath, toPath] = args._;
+  const [, fromPath, toPath, ...extra] = args._;
   if (!fromPath || !toPath) {
     fail("loupe: map needs two token sets \u2014 `loupe map <from> <to>`, each a DTCG file or a directory of them\n");
+    return EXIT.CANNOT_RUN;
+  }
+  if (extra.length) {
+    fail(`loupe: map takes two token sets, got ${extra.length + 2} \u2014 name a directory rather than a glob
+`);
     return EXIT.CANNOT_RUN;
   }
   const format = args.flags.format ?? "agent";
@@ -30582,10 +30609,26 @@ async function runMap(args) {
 `);
     return EXIT.CANNOT_RUN;
   }
+  if (args.flags["dry-run"] && (format === "json" || args.flags.out)) {
+    fail("loupe: map --dry-run prints the shortlists as text; --format json and --out apply to a real run\n");
+    return EXIT.CANNOT_RUN;
+  }
   const tiers = listFlag(args.flags.tier);
   const badTiers = tiers.filter((t) => !isTier(t));
   if (badTiers.length) {
     fail(`loupe: unknown tier(s) ${badTiers.join(", ")} \u2014 expected base, semantic, component
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  const limit = args.flags.limit === void 0 ? 0 : Number(args.flags.limit);
+  if (args.flags.limit !== void 0 && !(Number.isInteger(limit) && limit > 0)) {
+    fail(`loupe: --limit takes a positive whole number, not "${args.flags.limit}"
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  const out = args.flags.out ? resolve7(args.flags.out) : null;
+  if (out && !existsSync9(dirname6(out))) {
+    fail(`loupe: cannot write the map to ${out} \u2014 ${dirname6(out)} does not exist
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -30610,19 +30653,25 @@ async function runMap(args) {
     );
     return EXIT.CANNOT_RUN;
   }
-  const plan = planMap(from, to, { tiers, types, limit: Number(args.flags.limit ?? 0) || 0 });
+  const plan = planMap(from, to, { tiers, types, limit });
   process.stderr.write(
     dim(
       `loupe: ${from.label} ${from.tokens.length} token(s) from ${from.files.length} file(s), ${to.label} ${to.tokens.length} from ${to.files.length}
 `
     )
   );
+  if (!plan.jobs.length && !plan.settled.length) {
+    const scope = `--tier ${tiers.join(",")}${types.length ? ` --type ${types.join(",")}` : ""}`;
+    fail(`loupe: no token in ${from.label} is in scope for ${scope}
+`);
+    return EXIT.CANNOT_RUN;
+  }
   if (args.flags["dry-run"]) {
     process.stdout.write(formatPlan(plan, CANDIDATES));
     return EXIT.OK;
   }
-  const apiKey = judgeKey();
-  if (!apiKey) {
+  const apiKey = plan.jobs.length ? judgeKey() : "";
+  if (plan.jobs.length && !apiKey) {
     fail(`loupe: map needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE} \u2014 or use --dry-run
 `);
     return EXIT.CANNOT_RUN;
@@ -30631,20 +30680,24 @@ async function runMap(args) {
 `));
   let mappings;
   try {
-    ({ mappings } = await askCounterparts(plan, apiKey));
+    ({ mappings } = await askCounterparts(plan, apiKey ?? ""));
   } catch (err) {
     fail(`loupe: ${messageOf2(err)}
 `);
     return EXIT.CANNOT_RUN;
   }
-  const payload = mapPayload(plan, mappings, MODEL);
-  if (args.flags.out) writeFileSync4(resolve7(args.flags.out), `${JSON.stringify(payload, null, 2)}
+  const json = `${JSON.stringify(mapPayload(plan, mappings, MODEL), null, 2)}
+`;
+  process.stdout.write(format === "json" ? json : formatMap(plan, mappings));
+  if (out) {
+    try {
+      writeFileSync4(out, json);
+    } catch (err) {
+      fail(`loupe: could not write the map to ${out}: ${messageOf2(err)}
 `);
-  if (format === "json") process.stdout.write(`${JSON.stringify(payload, null, 2)}
-`);
-  else process.stdout.write(formatMap(plan, mappings));
-  if (args.flags.out) {
-    const said = green(`loupe: map written to ${resolve7(args.flags.out)}
+      return EXIT.CANNOT_RUN;
+    }
+    const said = green(`loupe: map written to ${out}
 `);
     if (format === "json") process.stderr.write(said);
     else process.stdout.write(`

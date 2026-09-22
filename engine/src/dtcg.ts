@@ -101,11 +101,16 @@ export function tokenFilesUnder(path: string, budget = 200): string[] {
 	const out: string[] = [];
 	const walk = (dir: string): void => {
 		for (const e of readDir(dir)) {
-			if (out.length >= budget) return;
 			const full = join(dir, e.name);
 			if (e.isDirectory()) {
 				if (e.name !== 'node_modules') walk(full);
-			} else if (e.name.endsWith('.json') && !e.name.startsWith('.')) out.push(full);
+			} else if (e.name.endsWith('.json') && !e.name.startsWith('.')) {
+				// Refused rather than cut short: the files left unread would report
+				// their tokens as missing from the system.
+				if (out.length >= budget)
+					throw new Error(`more than ${budget} .json files under ${path}; point at the token sources`);
+				out.push(full);
+			}
 		}
 	};
 	walk(path);
@@ -132,14 +137,19 @@ const isToken = (n: Node): boolean => '$value' in n;
  * top-level keys would collide with another's is the exception, and the loser
  * keeps the first definition — the same rule `harvestTokenDefs` uses.
  */
-function walkFile(raw: unknown, file: string, into: Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings'>>): void {
+function walkFile(
+	raw: unknown,
+	file: string,
+	into: Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings'>>,
+	groupOf: Map<string, string>,
+): void {
 	if (!isNode(raw)) return;
 	const walk = (node: Node, trail: string[], inheritedType: string | undefined): void => {
 		const declared = typeof node.$type === 'string' ? node.$type : inheritedType;
 		for (const [key, child] of Object.entries(node)) {
-			// `$`-prefixed keys are the spec's own; a group member can never be named
-			// one, so this needs no other test for metadata.
-			if (key.startsWith('$') || !isNode(child)) continue;
+			// `$`-prefixed keys are the spec's own metadata, except `$root`: the
+			// group's own token, referenced as `{group.$root}`.
+			if ((key.startsWith('$') && key !== '$root') || !isNode(child)) continue;
 			const trailNext = [...trail, key];
 			if (!isToken(child)) {
 				walk(child, trailNext, declared);
@@ -147,16 +157,20 @@ function walkFile(raw: unknown, file: string, into: Map<string, Omit<Token, 'tie
 			}
 			const path = trailNext.join('.');
 			if (into.has(path)) continue;
-			const own = typeof child.$type === 'string' ? child.$type : declared;
+			const own = typeof child.$type === 'string' ? child.$type : undefined;
 			const value = child.$value;
+			// The spec types a reference by its target ahead of its group, so a
+			// reference's group type waits in `groupOf` as `resolve`'s fallback.
+			const isRef = aliasTarget(value) !== undefined;
+			if (own === undefined && isRef && declared !== undefined) groupOf.set(path, declared);
 			into.set(path, {
 				path,
 				segments: trailNext,
 				leaf: key,
-				// Filled in by `resolve`, which is the only place that can see the
+				// Completed by `resolve`, which is the only place that can see the
 				// whole set and therefore the only place an alias's type is knowable.
-				type: own ?? '',
-				typed: own !== undefined,
+				type: own ?? (isRef ? '' : (declared ?? '')),
+				typed: (own ?? declared) !== undefined,
 				value,
 				resolved: value,
 				literal: '',
@@ -186,11 +200,18 @@ const aliasTarget = (value: unknown): string | undefined =>
  * cycle, or a reference to a token this set does not define — stops where it is,
  * and the token keeps the alias as its value; it is still comparable by name.
  */
-function resolve(tokens: Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings'>>): void {
+function resolve(
+	tokens: Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings'>>,
+	groupOf: ReadonlyMap<string, string>,
+): void {
+	// Types as authored, read before this pass fills any in, so no token's answer
+	// depends on which tokens were resolved before it.
+	const declaredOf = new Map([...tokens].map(([path, t]) => [path, t.type]));
 	for (const t of tokens.values()) {
 		const direct = aliasTarget(t.value);
 		if (direct !== undefined) t.alias = direct;
 		let at = t;
+		let type = t.type;
 		const seen = new Set<string>([t.path]);
 		let depth = 0;
 		for (;;) {
@@ -201,23 +222,14 @@ function resolve(tokens: Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings
 			seen.add(next);
 			at = to;
 			depth++;
+			type ||= declaredOf.get(next) ?? '';
 		}
 		t.resolved = at.value;
-		t.depth = depth;
-		// A token's type is the first one declared along its own alias chain: a
-		// semantic token that omits `$type` and points at a colour is a colour.
-		if (!t.type) {
-			let hop = t;
-			const hops = new Set<string>([t.path]);
-			while (!hop.type) {
-				const next = aliasTarget(hop.value);
-				const to = next === undefined ? undefined : tokens.get(next);
-				if (!to || hops.has(to.path)) break;
-				hops.add(to.path);
-				hop = to;
-			}
-			t.type = hop.type || inferType(t.resolved);
-		}
+		// A reference that leads out of the set still makes this an alias, not a primitive.
+		t.depth = depth || (direct !== undefined ? 1 : 0);
+		// Its own type, else the first declared along its alias chain (a reference
+		// to a colour is a colour), else its group's, else its value's shape.
+		t.type = type || groupOf.get(t.path) || inferType(t.resolved);
 		t.literal = literalOf(t.resolved);
 	}
 }
@@ -247,11 +259,15 @@ export function literalOf(value: unknown): string {
 	// `{ colorSpace, components, alpha }` — the 2025 colour object.
 	if (Array.isArray(value.components) && typeof value.colorSpace === 'string') {
 		const alpha = typeof value.alpha === 'number' ? value.alpha : 1;
-		// A set that carries its own hex is taken at its word: it is the value the
-		// system publishes, and recomputing it from the components only introduces
-		// a rounding difference between this and the CSS the system ships.
-		if (typeof value.hex === 'string' && /^#[0-9a-f]{3,8}$/i.test(value.hex.trim())) return value.hex.trim();
-		const numbers = value.components.every((c) => typeof c === 'number') ? (value.components as number[]) : null;
+		// A set that carries its own hex is taken at its word for the RGB: it is the
+		// value the system publishes. The spec keeps alpha out of the hex, so it is
+		// appended here.
+		const hex = typeof value.hex === 'string' ? value.hex.trim() : '';
+		if (/^#[0-9a-f]{6}$/i.test(hex)) return `${hex}${alpha < 1 ? byte(alpha) : ''}`;
+		// `none` is a component the spec allows and CSS converts as 0.
+		const numbers = value.components.every((c) => typeof c === 'number' || c === 'none')
+			? value.components.map((c) => (typeof c === 'number' ? c : 0))
+			: null;
 		const srgb = numbers && toSrgb(value.colorSpace, numbers);
 		if (srgb) return hexOf(srgb, alpha);
 		const parts = value.components.map((c) => (typeof c === 'number' ? round(c) : String(c)));
@@ -326,12 +342,14 @@ export function hslToSrgb(hue: number, s: number, l: number): [number, number, n
 	return [r + m, g + m, b + m];
 }
 
+/** A 0..1 channel as two hex digits. */
+const byte = (n: number): string =>
+	Math.max(0, Math.min(255, Math.round(n * 255)))
+		.toString(16)
+		.padStart(2, '0');
+
 /** sRGB components in 0..1 as `#rrggbb`, which is how every set that predates the object writes them. */
 function hexOf(components: readonly number[], alpha: number): string {
-	const byte = (n: number): string =>
-		Math.max(0, Math.min(255, Math.round(n * 255)))
-			.toString(16)
-			.padStart(2, '0');
 	const [r = 0, g = 0, b = 0] = components;
 	return `#${byte(r)}${byte(g)}${byte(b)}${alpha < 1 ? byte(alpha) : ''}`;
 }
@@ -383,20 +401,6 @@ const TIER_WORDS: Record<Tier, RegExp> = {
 };
 
 /**
- * Which tier a token belongs to, and how that was decided.
- *
- * A named tier wins: a set that groups under `primitive/` has said outright what
- * those tokens are, and no structural signal should overrule it. The name has to
- * appear *above* the leaf to count — `color.background.base` is a semantic token
- * whose own name happens to be `base`, and reading that as a tier would file
- * every "base" and "core" variant of every scale as a primitive.
- *
- * Otherwise the alias depth answers, because a literal, a reference to a literal
- * and a reference to a reference are the three tiers restated. It is a weaker
- * signal — a set whose semantic tokens alias each other reads one tier too deep —
- * which is why `map` treats the tier as evidence and not as a gate.
- */
-/**
  * Whether a word names a tier rather than describing a token.
  *
  * `mapping.ts` drops these before comparing two names: one set writing
@@ -406,9 +410,26 @@ const TIER_WORDS: Record<Tier, RegExp> = {
  */
 export const isTierWord = (word: string): boolean => TIERS.some((t) => TIER_WORDS[t].test(word.toLowerCase()));
 
+/**
+ * Which tier a token belongs to, and how that was decided.
+ *
+ * A named tier wins: a set that groups under `primitive/` has said outright what
+ * those tokens are, and no structural signal should overrule it. The name has to
+ * appear *above* the leaf to count — `color.background.base` is a semantic token
+ * whose own name happens to be `base`, and reading that as a tier would file
+ * every "base" and "core" variant of every scale as a primitive. Above the leaf
+ * the outermost wins: in `component.button.base.padding`, `base` is a variant.
+ *
+ * Otherwise the alias depth answers, because a literal, a reference to a literal
+ * and a reference to a reference are the three tiers restated. It is a weaker
+ * signal — a set whose semantic tokens alias each other reads one tier too deep —
+ * which is why `map` treats the tier as evidence and not as a gate.
+ */
 export function tierOf(segments: readonly string[], depth: number): { tier: Tier; tierFrom: 'named' | 'structural' } {
-	const above = segments.slice(0, -1).map((s) => s.toLowerCase());
-	for (const tier of TIERS) if (above.some((s) => TIER_WORDS[tier].test(s))) return { tier, tierFrom: 'named' };
+	for (const s of segments.slice(0, -1)) {
+		const tier = TIERS.find((t) => TIER_WORDS[t].test(s.toLowerCase()));
+		if (tier) return { tier, tierFrom: 'named' };
+	}
 	return { tier: depth === 0 ? 'base' : depth === 1 ? 'semantic' : 'component', tierFrom: 'structural' };
 }
 
@@ -428,17 +449,18 @@ const SIBLINGS = 12;
 export function readTokenDoc(path: string, label = basename(path).replace(/\.json$/, '')): TokenDoc {
 	const files = tokenFilesUnder(path);
 	const flat = new Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings'>>();
+	const groupOf = new Map<string, string>();
 	for (const file of files) {
 		let raw: unknown;
 		try {
-			raw = JSON.parse(readFileSync(file, 'utf8'));
+			raw = JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 		} catch (err) {
 			throw new Error(`${file} is not readable JSON: ${err instanceof Error ? err.message : String(err)}`);
 		}
-		walkFile(raw, file, flat);
+		walkFile(raw, file, flat, groupOf);
 	}
 	if (!flat.size) throw new Error(`${path} holds no DTCG tokens ($value was not found anywhere)`);
-	resolve(flat);
+	resolve(flat, groupOf);
 
 	// Siblings are the group's other leaves, which is what says a token is one
 	// step of a scale rather than a value on its own.

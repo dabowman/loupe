@@ -155,11 +155,12 @@ decoration.
   every property's family is empty, and "no padding token in the design system"
   would be said of every value and suppressed by `fix --judge` as fact.
 - **One failure fails the whole ask.** The pool stops its other workers rather
-  than pay for answers that are about to be thrown away; the caller reports the
-  failure and keeps what it had.
+  than pay for answers that are about to be thrown away — a worker mid-retry
+  stops at its next attempt; the caller reports the failure and keeps what it had.
 - **Overload is transient.** A run is a hundred requests, so one 529 should not
   lose the other ninety-nine — retried with the server's own wait where it names
-  one, doubling otherwise.
+  one, doubling otherwise. A dropped connection is retried on the same budget,
+  whether it drops before the response or while its body is read.
 
 ## The evals
 
