@@ -77,7 +77,7 @@ const NONE_CRITERION =
 
 /** `semantic · #6b7280 — Lower-emphasis text beside a primary label.` */
 const describe = (t: Token): string => {
-	const head = `${t.tier} · ${t.literal || '(composite)'}`;
+	const head = `${t.tier} · ${t.literal || '(no value)'}`;
 	return t.description ? `${head} — ${t.description}` : head;
 };
 

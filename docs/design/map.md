@@ -64,7 +64,8 @@ comparable to it.
 
 A token that declares no type of its own takes the first one declared along its
 alias chain: a semantic token that omits `$type` and points at a colour is a
-colour.
+colour. That comes ahead of its group's `$type`, which is the spec's order: a
+group type only reaches a reference whose chain declares none.
 
 ### The value, across two drafts of the spec
 
@@ -83,11 +84,15 @@ in alphabetical order, because with every score tied the tie-break was doing all
 the work. A space this cannot convert (`oklch`, `display-p3`) renders as
 `color(space …)` and compares on equality alone, which is worse than a
 conversion and better than a guess: a converted-by-guesswork value would rank
-*as though it had been measured*.
+*as though it had been measured*. The older string spellings — `hsl()`, `hwb()`,
+`rgb()` and the names `white`, `black`, `transparent` — measure through the same
+conversion, so the draft does not decide whether two colours can be compared.
 
 A set that publishes its own `hex` beside the components is taken at its word.
 Recomputing it only introduces a rounding difference between the map and the CSS
-the system actually ships.
+the system actually ships. Alpha is the exception: the spec keeps it out of the
+six-digit hex, so it is appended, or every translucent colour would read as
+opaque.
 
 ### The tier
 
@@ -96,7 +101,9 @@ those tokens are, and no structural signal should overrule it.
 
 The name has to appear **above the leaf** to count. `color.background.base` is a
 semantic token whose own name happens to be `base`, and reading that as a tier
-files every "base" and "core" variant of every scale as a primitive.
+files every "base" and "core" variant of every scale as a primitive. Above the
+leaf the outermost tier word wins: in `component.button.base.padding` the set is
+organised by `component`, and `base` is a variant.
 
 Otherwise the alias depth answers, because a literal, a reference to a literal
 and a reference to a reference are the three tiers restated. It is the weaker
@@ -288,6 +295,10 @@ a property of the map.
 - **Strict JSON only.** Primer authors its sources in JSON5, which this cannot
   read; the verification runs went through a conversion step. Whether to take
   the dependency is open.
+- **`$extends` and `$ref` are not read.** A group's `$root` token is, but a
+  group that inherits through `$extends`, or a token written as a JSON-pointer
+  `$ref`, is missing from the set, and rows that should land on it come back
+  `none` or `absent`.
 - **Composites are compared as JSON.** A typography or shadow token renders as
   its own JSON and matches only on equality, so those rows lean entirely on the
   name and the model.

@@ -28,7 +28,8 @@ import type { Choice } from './judge.ts';
 import { NONE, counterpartQuery } from './judge/counterpart.ts';
 import type { CounterpartItem } from './judge/counterpart.ts';
 import { bold, dim, green, yellow } from './color.ts';
-import { TIERS, isTierWord } from './dtcg.ts';
+import { byBytes } from './discover.ts';
+import { TIERS, isTierWord, toSrgb } from './dtcg.ts';
 import type { Tier, Token, TokenDoc } from './dtcg.ts';
 
 type Fetch = typeof fetch;
@@ -46,9 +47,17 @@ const AS_PX: Record<string, number> = { px: 1, rem: 16, em: 16, pt: 4 / 3 };
 /** The same for time. */
 const AS_MS: Record<string, number> = { ms: 1, s: 1000 };
 
-/** `#abc`, `#aabbcc`, `#aabbccdd` and `rgb()/rgba()` as sRGB 0..1 plus alpha. */
+/** The named colours token sets actually use. */
+const NAMED = new Map([
+	['white', '#ffffff'],
+	['black', '#000000'],
+	['transparent', '#00000000'],
+]);
+
+/** `#abc`, `#aabbcc`, `#aabbccdd`, `rgb()`, `hsl()`, `hwb()` and the common names as sRGB 0..1 plus alpha. */
 function parseColor(text: string): { rgb: [number, number, number]; alpha: number } | null {
-	const v = text.trim().toLowerCase();
+	const lower = text.trim().toLowerCase();
+	const v = NAMED.get(lower) ?? lower;
 	const hex = /^#([0-9a-f]{3,8})$/.exec(v)?.[1];
 	if (hex && (hex.length === 3 || hex.length === 4 || hex.length === 6 || hex.length === 8)) {
 		const wide = hex.length <= 4;
@@ -59,25 +68,19 @@ function parseColor(text: string): { rgb: [number, number, number]; alpha: numbe
 		const has = wide ? hex.length === 4 : hex.length === 8;
 		return { rgb: [at(0), at(1), at(2)], alpha: has ? at(3) : 1 };
 	}
-	const fn = /^rgba?\(([^)]+)\)$/.exec(v)?.[1];
-	if (!fn) return null;
-	const nums = fn
-		.split(/[\s,/]+/)
-		.filter(Boolean)
-		.map((p) => (p.endsWith('%') ? Number.parseFloat(p) / 100 : Number.parseFloat(p)));
-	const [r, g, b, a] = nums;
-	if (r === undefined || g === undefined || b === undefined || [r, g, b].some(Number.isNaN)) return null;
-	// A `%` component is already 0..1; a plain one is 0..255.
-	const scale = (n: number, pct: boolean): number => (pct ? n : n / 255);
-	const parts = fn.split(/[\s,/]+/).filter(Boolean);
-	return {
-		rgb: [
-			scale(r, parts[0]?.endsWith('%') ?? false),
-			scale(g, parts[1]?.endsWith('%') ?? false),
-			scale(b, parts[2]?.endsWith('%') ?? false),
-		],
-		alpha: a === undefined || Number.isNaN(a) ? 1 : a,
-	};
+	const fn = /^(rgb|hsl|hwb)a?\(([^)]+)\)$/.exec(v);
+	if (!fn?.[1] || !fn[2]) return null;
+	const parts = fn[2].split(/[\s,/]+/).filter(Boolean);
+	const [x, y, z] = parts.map((p) => Number.parseFloat(p));
+	if (x === undefined || y === undefined || z === undefined || [x, y, z].some(Number.isNaN)) return null;
+	const a = parts[3] === undefined ? 1 : Number.parseFloat(parts[3]) / (parts[3].endsWith('%') ? 100 : 1);
+	// An rgb channel is 0..255, or 0..100 with `%`; hsl and hwb take the same
+	// 0..100 percentages the 2025 colour object does.
+	const rgb =
+		fn[1] === 'rgb'
+			? ([x, y, z].map((n, i) => n / (parts[i]?.endsWith('%') ? 100 : 255)) as [number, number, number])
+			: toSrgb(fn[1], [x, y, z]);
+	return rgb && { rgb, alpha: Number.isNaN(a) ? 1 : a };
 }
 
 /**
@@ -136,9 +139,33 @@ export function measure(literal: string): Measured {
  */
 const COLOR_STEP = 0.06;
 
+/** What scoring reads off one token. `rank` meets every token once per token on the other side, so it is worked out once. */
+interface Features {
+	measured: Measured;
+	words: Set<string>;
+	leaf: Set<string>;
+	leafName: string;
+}
+
+const FEATURES = new WeakMap<Token, Features>();
+
+function featuresOf(t: Token): Features {
+	let f = FEATURES.get(t);
+	if (!f) {
+		f = {
+			measured: measure(t.literal),
+			words: words(t),
+			leaf: new Set(splitWords(t.leaf)),
+			leafName: t.leaf.toLowerCase(),
+		};
+		FEATURES.set(t, f);
+	}
+	return f;
+}
+
 /** How close two values are, as 0..1. Two things nothing can measure score on equality alone. */
 export function valueScore(a: Token, b: Token): number {
-	const [x, y] = [measure(a.literal), measure(b.literal)];
+	const [x, y] = [featuresOf(a).measured, featuresOf(b).measured];
 	if (!x || !y) return a.literal !== '' && a.literal === b.literal ? 1 : 0;
 	if (x.kind !== y.kind) return 0;
 	if (x.kind === 'color' && y.kind === 'color') {
@@ -149,9 +176,10 @@ export function valueScore(a: Token, b: Token): number {
 		return 1 / (1 + (d + Math.abs(x.alpha - y.alpha) * 0.5) / COLOR_STEP);
 	}
 	if (x.kind === 'number' && y.kind === 'number') {
-		// px and ms are already normalised; anything else has to be the same unit,
-		// since `50%` and `50deg` are not near each other.
-		if (x.unit !== y.unit) return 0;
+		// px and ms are already normalised, and a bare number is read in the unit it
+		// is compared against (the `number` row of `comparable`). Anything else has
+		// to be the same unit, since `50%` and `50deg` are not near each other.
+		if (x.unit !== y.unit && x.unit && y.unit) return 0;
 		if (x.n === y.n) return 1;
 		if (x.n === 0 || y.n === 0 || x.n * y.n < 0) return 0;
 		// The ratio, squared: on a scale that doubles, one step away should not
@@ -208,10 +236,9 @@ function dice(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
  * as `foreground.primary` against `foreground.inverted`.
  */
 export function nameScore(a: Token, b: Token): number {
-	const whole = dice(words(a), words(b));
-	const leafA = new Set(splitWords(a.leaf));
-	const leafB = new Set(splitWords(b.leaf));
-	const leaf = a.leaf.toLowerCase() === b.leaf.toLowerCase() ? 1 : dice(leafA, leafB);
+	const [fa, fb] = [featuresOf(a), featuresOf(b)];
+	const whole = dice(fa.words, fb.words);
+	const leaf = fa.leafName === fb.leafName ? 1 : dice(fa.leaf, fb.leaf);
 	return 0.6 * whole + 0.4 * leaf;
 }
 
@@ -275,7 +302,7 @@ export function rank(t: Token, targets: readonly Token[]): Scored[] {
 				score: TIER_WEIGHT * (sameTier ? 1 : 0) + (1 - TIER_WEIGHT) * (w.value * value + w.name * name),
 			};
 		})
-		.sort((a, b) => b.score - a.score || a.token.path.localeCompare(b.token.path));
+		.sort((a, b) => b.score - a.score || byBytes(a.token.path, b.token.path));
 }
 
 // ── the map ─────────────────────────────────────────────────────────────────
@@ -406,7 +433,7 @@ export async function askCounterparts(
 	// order anyone wants it in.
 	const order = new Map(plan.from.tokens.map((t, i) => [t.path, i]));
 	const mappings = [...plan.settled, ...judged].sort(
-		(a, b) => (order.get(a.from) ?? 0) - (order.get(b.from) ?? 0) || a.from.localeCompare(b.from),
+		(a, b) => (order.get(a.from) ?? 0) - (order.get(b.from) ?? 0) || byBytes(a.from, b.from),
 	);
 	return { mappings, answers };
 }
@@ -421,7 +448,7 @@ function rowFor(job: CounterpartItem, answer: Choice | undefined): Mapping {
 		fromValue: token.literal,
 		considered: candidates.map((c) => c.path),
 	};
-	if (!answer || answer.confidence < FLOOR) {
+	if (!answer || !(answer.confidence >= FLOOR)) {
 		return { ...row, to: null, confidence: answer?.confidence ?? 0, how: 'unsure' };
 	}
 	// The best option that is neither the pick nor `none`: how close the call was,
@@ -449,17 +476,12 @@ function rowFor(job: CounterpartItem, answer: Choice | undefined): Mapping {
 /**
  * The target tokens more than one source token landed on, most claimed first.
  *
- * A map is not a bijection and was never going to be, but a report that lists
- * every row as `a \u2192 b` reads like one. On WPDS against Primer, 139 judged rows
- * land on 76 distinct tokens and one of them absorbs ten: WPDS has a disabled
- * background per tone and per emphasis where Primer has a single
- * `bgColor.disabled`. Every one of those ten answers is defensible on its own,
- * which is exactly why the collapse has to be said out loud rather than left for
- * a reader to notice by sorting the file.
+ * A map is not a bijection, but a report that lists every row as `a \u2192 b` reads
+ * like one. Each row landing on a shared target can be defensible on its own, so
+ * the collapse is said out loud: it is where one system draws a distinction the
+ * other does not, and it is only visible across rows.
  *
- * It is also the interesting half of the result. "This system draws a
- * distinction the other one does not" is what someone comparing two systems came
- * to find out, and it is only visible across rows.
+ * Design notes: docs/design/map.md#what-two-real-pairs-look-like
  */
 export function collisionsIn(mappings: readonly Mapping[]): { to: string; from: string[] }[] {
 	const claims = new Map<string, string[]>();
@@ -467,7 +489,7 @@ export function collisionsIn(mappings: readonly Mapping[]): { to: string; from: 
 	return [...claims]
 		.filter(([, from]) => from.length > 1)
 		.map(([to, from]) => ({ to, from }))
-		.sort((a, b) => b.from.length - a.from.length || a.to.localeCompare(b.to));
+		.sort((a, b) => b.from.length - a.from.length || byBytes(a.to, b.to));
 }
 
 /** How many rows landed each way. */
@@ -488,6 +510,8 @@ export interface MapPayload {
 	model: string;
 	/** The confidence a judgement had to clear to be written as a counterpart. */
 	floor: number;
+	/** Source tokens `--tier`/`--type`/`--limit` left out: non-zero means the map is not the whole set. */
+	skipped: number;
 	counts: Counts;
 	/** Where the map is not one-to-one. See {@link collisionsIn}. */
 	collisions: { to: string; from: string[] }[];
@@ -504,6 +528,7 @@ export const mapPayload = (plan: MapPlan, mappings: readonly Mapping[], model: s
 	to: { label: plan.to.label, path: plan.to.path, files: plan.to.files.length, tokens: plan.to.tokens.length },
 	model,
 	floor: FLOOR,
+	skipped: plan.skipped,
 	counts: countBy(mappings),
 	collisions: collisionsIn(mappings),
 	mappings: [...mappings],

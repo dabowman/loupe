@@ -1282,20 +1282,46 @@ await check('the force query sends one control per request, and keeps answers in
 
 await check('a dropped connection is retried, not thrown away', async () => {
 	// A reset arrives as a throw rather than a status, so it has to be caught where
-	// the status retries are. A thousand-request `map` run used to lose every
-	// answer already paid for to one dropped socket.
+	// the status retries are.
 	let calls = 0;
 	const stub = (async () => {
 		if (++calls <= 2) throw new TypeError('fetch failed');
 		return new Response(JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }));
 	}) as unknown as typeof fetch;
+	// Backoff 0: the retries are what is under test, not the waits between them.
 	const [a] = await ask(
 		forceQuery(represents),
 		[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
 		'key',
 		stub,
+		1,
+		0,
 	);
 	assert(calls === 3 && a?.choice === 'command', `${calls} calls, answer ${JSON.stringify(a)}`);
+
+	// A socket that drops after the headers fails in the body read, and is retried too.
+	let reads = 0;
+	const midBody = (async () => {
+		if (++reads === 1) {
+			const body = new ReadableStream({
+				start(c) {
+					c.enqueue(new TextEncoder().encode('{"answ'));
+					c.error(new TypeError('terminated'));
+				},
+			});
+			return new Response(body);
+		}
+		return new Response(JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }));
+	}) as unknown as typeof fetch;
+	const [b] = await ask(
+		forceQuery(represents),
+		[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+		'key',
+		midBody,
+		1,
+		0,
+	);
+	assert(reads === 2 && b?.choice === 'command', `${reads} calls, answer ${JSON.stringify(b)}`);
 
 	// And a host that is simply gone still fails the run, once the budget is out.
 	let tries = 0;
@@ -1305,7 +1331,14 @@ await check('a dropped connection is retried, not thrown away', async () => {
 	}) as unknown as typeof fetch;
 	let threw = '';
 	try {
-		await ask(forceQuery(represents), [{ file: 'a.jsx', component: 'B', enclosing: 'C', source: '<B />' }], 'k', dead);
+		await ask(
+			forceQuery(represents),
+			[{ file: 'a.jsx', component: 'B', enclosing: 'C', source: '<B />' }],
+			'k',
+			dead,
+			1,
+			0,
+		);
 	} catch (err) {
 		threw = err instanceof Error ? err.message : String(err);
 	}

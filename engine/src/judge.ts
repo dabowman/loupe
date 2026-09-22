@@ -76,7 +76,8 @@ export interface Query<T> {
  * question has to be scored batched.
  *
  * `size` is how many items share one request; see docs/design/judge.md for why
- * it is 1. Throws on a failed request; the caller reports it and keeps what it
+ * it is 1. `backoff` is the first retry's wait in ms, doubling after; a test
+ * passes 0. Throws on a failed request; the caller reports it and keeps what it
  * had.
  */
 export async function ask<T>(
@@ -85,9 +86,13 @@ export async function ask<T>(
 	apiKey: string,
 	fetchImpl: Fetch = fetch,
 	size = 1,
+	backoff = 500,
 ): Promise<(Choice | undefined)[]> {
 	const batches: T[][] = [];
 	for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
+	// Set when one batch fails: the others stop retrying rather than pay for
+	// answers that are about to be thrown away.
+	let stopped = false;
 
 	const sendBatch = async (batch: readonly T[]): Promise<(Choice | undefined)[]> => {
 		const body = JSON.stringify({
@@ -96,25 +101,31 @@ export async function ask<T>(
 			questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)])),
 		});
 		for (let attempt = 0; ; attempt++) {
+			if (stopped) throw new Error('stopped: another request failed');
 			let res: Response;
+			let parsed: { answers: Record<string, Choice> } | undefined;
 			try {
 				res = await fetchImpl(ENDPOINT, {
 					method: 'POST',
 					headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
 					body,
 				});
+				// Read inside the try: a socket that drops after the headers fails
+				// here, and is as transient as one that drops before them.
+				if (res.ok) parsed = (await res.json()) as { answers: Record<string, Choice> };
 			} catch (err) {
 				// A connection reset is as transient as a 503 and arrives as a throw
-				// rather than a status, so the retry budget has to cover both — a run
-				// is a hundred requests and `map` is a thousand, and one dropped socket
-				// used to discard every answer already paid for.
-				if (attempt >= RETRIES) throw new Error(`TypeSafe unreachable: ${messageOf(err)}`);
-				await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+				// rather than a status, so the retry budget covers both.
+				if (attempt >= RETRIES) {
+					const cause = err instanceof Error && err.cause ? `: ${messageOf(err.cause)}` : '';
+					throw new Error(`TypeSafe unreachable: ${messageOf(err)}${cause}`);
+				}
+				await new Promise((r) => setTimeout(r, backoff * 2 ** attempt));
 				continue;
 			}
-			if (res.ok) {
-				const parsed = (await res.json()) as { answers: Record<string, Choice> };
-				return batch.map((_, i) => parsed.answers[`e${i}`]);
+			if (parsed) {
+				const { answers } = parsed;
+				return batch.map((_, i) => answers[`e${i}`]);
 			}
 			const transient = res.status === 429 || res.status >= 500;
 			if (!transient || attempt >= RETRIES)
@@ -122,7 +133,7 @@ export async function ask<T>(
 			// The server's own wait when it names one, in seconds; a date or
 			// nothing falls back to doubling.
 			const after = Number(res.headers.get('retry-after'));
-			await new Promise((r) => setTimeout(r, after > 0 ? after * 1000 : 500 * 2 ** attempt));
+			await new Promise((r) => setTimeout(r, after > 0 ? after * 1000 : backoff * 2 ** attempt));
 		}
 	};
 
@@ -140,6 +151,7 @@ export async function ask<T>(
 					// One failure fails the whole ask: stop the other workers rather
 					// than pay for answers that are about to be thrown away.
 					next = batches.length;
+					stopped = true;
 					throw err;
 				}
 			}

@@ -413,7 +413,7 @@ const listFlag = (value: string | undefined): string[] =>
  * mapped onto itself, so the directory above breaks the tie.
  */
 function mapLabels(a: string, b: string): [string, string] {
-	const base = (p: string): string => basename(p).replace(/\.json$/i, '');
+	const base = (p: string): string => basename(resolve(p)).replace(/\.json$/i, '');
 	if (base(a) !== base(b)) return [base(a), base(b)];
 	const withDir = (p: string): string => `${basename(dirname(resolve(p)))}/${base(p)}`;
 	return withDir(a) === withDir(b) ? [`${base(a)} (a)`, `${base(b)} (b)`] : [withDir(a), withDir(b)];
@@ -435,9 +435,14 @@ function mapLabels(a: string, b: string): [string, string] {
  * Design notes: docs/design/map.md
  */
 async function runMap(args: Args): Promise<number> {
-	const [, fromPath, toPath] = args._;
+	const [, fromPath, toPath, ...extra] = args._;
 	if (!fromPath || !toPath) {
 		fail('loupe: map needs two token sets \u2014 `loupe map <from> <to>`, each a DTCG file or a directory of them\n');
+		return EXIT.CANNOT_RUN;
+	}
+	// An unquoted glob expands to several paths, and taking the first two maps the wrong pair.
+	if (extra.length) {
+		fail(`loupe: map takes two token sets, got ${extra.length + 2} \u2014 name a directory rather than a glob\n`);
 		return EXIT.CANNOT_RUN;
 	}
 	// `map` has no report to paint as SARIF or HTML; a run that accepted the flag
@@ -447,11 +452,28 @@ async function runMap(args: Args): Promise<number> {
 		fail(`loupe: map writes agent or json, not "${format}"\n`);
 		return EXIT.CANNOT_RUN;
 	}
+	// The dry run prints the shortlists as text and writes nothing.
+	if (args.flags['dry-run'] && (format === 'json' || args.flags.out)) {
+		fail('loupe: map --dry-run prints the shortlists as text; --format json and --out apply to a real run\n');
+		return EXIT.CANNOT_RUN;
+	}
 
 	const tiers = listFlag(args.flags.tier);
 	const badTiers = tiers.filter((t) => !isTier(t));
 	if (badTiers.length) {
 		fail(`loupe: unknown tier(s) ${badTiers.join(', ')} \u2014 expected base, semantic, component\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// A cap that does not parse must not mean "no cap": every token is a paid request.
+	const limit = args.flags.limit === undefined ? 0 : Number(args.flags.limit);
+	if (args.flags.limit !== undefined && !(Number.isInteger(limit) && limit > 0)) {
+		fail(`loupe: --limit takes a positive whole number, not "${args.flags.limit}"\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// Checked before anything is asked, so a mistyped path cannot cost the run.
+	const out = args.flags.out ? resolve(args.flags.out) : null;
+	if (out && !existsSync(dirname(out))) {
+		fail(`loupe: cannot write the map to ${out} \u2014 ${dirname(out)} does not exist\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -479,21 +501,30 @@ async function runMap(args: Args): Promise<number> {
 		return EXIT.CANNOT_RUN;
 	}
 
-	const plan = planMap(from, to, { tiers: tiers as Tier[], types, limit: Number(args.flags.limit ?? 0) || 0 });
+	const plan = planMap(from, to, { tiers: tiers as Tier[], types, limit });
 	process.stderr.write(
 		dim(
 			`loupe: ${from.label} ${from.tokens.length} token(s) from ${from.files.length} file(s), ` +
 				`${to.label} ${to.tokens.length} from ${to.files.length}\n`,
 		),
 	);
+	// A valid tier the set does not use, or a tier and type that never meet, is
+	// the same clean run over zero tokens the type check refuses.
+	if (!plan.jobs.length && !plan.settled.length) {
+		const scope = `--tier ${tiers.join(',')}${types.length ? ` --type ${types.join(',')}` : ''}`;
+		fail(`loupe: no token in ${from.label} is in scope for ${scope}\n`);
+		return EXIT.CANNOT_RUN;
+	}
 
 	if (args.flags['dry-run']) {
 		process.stdout.write(formatPlan(plan, CANDIDATES));
 		return EXIT.OK;
 	}
 
-	const apiKey = judgeKey();
-	if (!apiKey) {
+	// Only a run that has something to ask needs the key: a set mapped onto
+	// itself settles every row without one.
+	const apiKey = plan.jobs.length ? judgeKey() : '';
+	if (plan.jobs.length && !apiKey) {
 		fail(`loupe: map needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE} \u2014 or use --dry-run\n`);
 		return EXIT.CANNOT_RUN;
 	}
@@ -501,7 +532,7 @@ async function runMap(args: Args): Promise<number> {
 	if (plan.jobs.length) process.stderr.write(dim(`loupe: asking ${MODEL} about ${plan.jobs.length} token(s)\u2026\n`));
 	let mappings: Mapping[];
 	try {
-		({ mappings } = await askCounterparts(plan, apiKey));
+		({ mappings } = await askCounterparts(plan, apiKey ?? ''));
 	} catch (err) {
 		// Nothing partial is written: half a map read as a whole one would report
 		// every unasked token as having no counterpart.
@@ -509,14 +540,20 @@ async function runMap(args: Args): Promise<number> {
 		return EXIT.CANNOT_RUN;
 	}
 
-	const payload = mapPayload(plan, mappings, MODEL);
-	if (args.flags.out) writeFileSync(resolve(args.flags.out), `${JSON.stringify(payload, null, 2)}\n`);
-	if (format === 'json') process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-	else process.stdout.write(formatMap(plan, mappings));
-	// To stderr under --format json, where stdout is the map itself and a line of
-	// prose in it is corruption.
-	if (args.flags.out) {
-		const said = green(`loupe: map written to ${resolve(args.flags.out)}\n`);
+	const json = `${JSON.stringify(mapPayload(plan, mappings, MODEL), null, 2)}\n`;
+	// Printed before the file is written, so a write that fails still leaves the
+	// paid answers on screen.
+	process.stdout.write(format === 'json' ? json : formatMap(plan, mappings));
+	if (out) {
+		try {
+			writeFileSync(out, json);
+		} catch (err) {
+			fail(`loupe: could not write the map to ${out}: ${messageOf(err)}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		// To stderr under --format json, where stdout is the map itself and a line of
+		// prose in it is corruption.
+		const said = green(`loupe: map written to ${out}\n`);
 		if (format === 'json') process.stderr.write(said);
 		else process.stdout.write(`\n${said}`);
 	}
