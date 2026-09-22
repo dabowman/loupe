@@ -567,6 +567,9 @@ export async function analyze(
 			if (finding)
 				pending.push({
 					...finding,
+					// The classifier sees the translated declaration, which is not what
+					// the file says. Only the span points back at the bytes it came from.
+					hints: finding.hints?.map((h) => ({ ...h, span: d.span })),
 					line: d.line ?? el.line,
 					code: finding.code ?? finding.message,
 					suffix: ' (inline)',

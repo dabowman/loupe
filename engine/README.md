@@ -395,15 +395,22 @@ loupe fix   # apply; --dry-run to preview; --judge for the values below
 ```
 
 Applies only the declarations the engine already resolved to exactly **one**
-on-role token — in `tokens/hardcoded-value` and `typography/untokenized` — and
-only in stylesheets. Two candidate tokens is a semantic choice — the right
-pixels with the wrong meaning is the failure the suggestion machinery exists to
-prevent — and the JS channels (`style={{ … }}`, CSS-in-JS) are left alone
-because a CSS-shaped substitution there writes a syntax error with a clean
-report. A type property in a stylesheet is where the rule's first remedy — use
-the text component — is not available, which is the case its second one is for.
+on-role token — in `tokens/hardcoded-value` and `typography/untokenized`. Two
+candidate tokens is a semantic choice — the right pixels with the wrong meaning
+is the failure the suggestion machinery exists to prevent. A type property in a
+stylesheet is where the rule's first remedy — use the text component — is not
+available, which is the case its second one is for.
 
-A finding is not a declaration. `typography/untokenized` collapses a CSS rule's
+All three channels are written, two ways. A stylesheet declaration and a
+CSS-in-JS one are matched as CSS on the line they were reported at: inside a
+template the text *is* CSS, and a declaration whose value comes from an
+interpolation never gets here because the template parse drops it. A JSX style
+object is spliced at the literal instead — `style={{ paddingBottom: 13 }}` is
+reported as `padding-bottom: 13px`, and neither half of that is in the file, so
+the scan records where the value sits and the fix writes the token there as a
+string, in the quote the value already used.
+
+A finding is not a substitution. `typography/untokenized` collapses a CSS rule's
 whole type block into one finding reported at the first declaration's line, and
 every other declaration in it carries the line it is actually written on, so
 each is matched against that. One settled beside one nobody could settle is a
@@ -516,10 +523,9 @@ into the finding (`padding: 6px 12px → …-sm …-md (judged 0.60)`, or
 the replacement text — `var()` and all, since that is what `fix --judge`
 writes — or `keep`. The message names the tokens without it.
 
-`fix --judge` applies those answers in stylesheets only. A replacement goes
-through the same line-exact substitution as `fix`. A kept value gets a
-directive on its own line above the declaration, with the judgement as its
-reason:
+`fix --judge` applies a replacement through the same substitution as `fix`, in
+whichever channel the declaration came from. A kept value gets a directive on
+its own line above the declaration, with the judgement as its reason:
 
 ```css
 	/* wpds-allow tokens/hardcoded-value -- deliberate, no token fits (judged 0.98) */
@@ -529,7 +535,11 @@ reason:
 A directive mutes its whole next line. So one is written only where every
 flagged value on that line was kept, and otherwise the value is reported as
 skipped. It names the rules the kept declarations on that line were reported
-under, which on a minified stylesheet is not always one.
+under, which on a minified stylesheet is not always one. Suppressions are
+stylesheets only: a substitution replaces bytes already there, while a directive
+adds a line, and a comment line above a JSX element is rendered text rather than
+a comment. A value kept outside a stylesheet is reported as skipped for a reader
+to suppress by hand.
 
 ```bash
 npm run eval:values                     # three runs

@@ -19,7 +19,7 @@ import { judgeValues } from '../src/judge.ts';
 import { KEEP, emptyTokenSet, harvestTokenDefs, planValue } from '../src/tokens.ts';
 import { messageParts } from '../src/text.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
-import type { Finding, FixCandidate, SkippedFix, TokenFix } from '../src/types.ts';
+import type { Finding, FixCandidate, ParseError, SkippedFix, TokenFix } from '../src/types.ts';
 
 const CONFIG = JSON.stringify({ extends: 'wpds', namespaces: { project: ['wf-'] } });
 
@@ -28,6 +28,7 @@ const TOKENS = `:root {
 	--wpds-color-foreground-content-neutral: #1e1e1e;
 	--wpds-color-foreground-content-strong: #1e1e1e;
 	--wpds-dimension-space-md: 8px;
+	--wpds-dimension-space-lg: 13px;
 	--wpds-typography-font-size-sm: 12px;
 	--wpds-typography-line-height-xs: 16px;
 }`;
@@ -37,6 +38,13 @@ interface Fixture {
 	skipped: SkippedFix[];
 	read: (rel: string) => string;
 	findings: Finding[];
+	/**
+	 * What the engine's own parsers make of the files `fix` just wrote. A
+	 * substitution in a JS channel is bytes spliced into a program, and a report
+	 * that goes clean because the file no longer parses is the worst outcome
+	 * this path has.
+	 */
+	parseErrors: ParseError[];
 }
 
 /** Analyze a throwaway repo, apply fixes, hand back what the files now say. */
@@ -48,6 +56,7 @@ async function fixture(files: Record<string, string>): Promise<Fixture> {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		const result = await analyze(config, { scope: null });
 		const outcome = applyTokenFixes(root, result.findings);
+		const reread = await analyze(config, { scope: null });
 		// Read before the cleanup below: a closure over `root` would resolve
 		// against a directory this function has already removed.
 		const after = new Map(Object.keys(all).map((rel) => [rel, readFileSync(join(root, rel), 'utf8')]));
@@ -59,6 +68,7 @@ async function fixture(files: Record<string, string>): Promise<Fixture> {
 				return text;
 			},
 			findings: result.findings,
+			parseErrors: reread.diagnostics.parseErrors,
 		};
 	} finally {
 		cleanup(root);
@@ -105,11 +115,96 @@ await check('two fixes on one line both land', async () => {
 	);
 });
 
-await check('the JS channels are never rewritten as CSS', async () => {
-	const { applied } = await fixture({
-		'src/E.jsx': 'export const E = () => <div className="wf-e" style={{ borderRadius: \'4px\' }} />;',
+// `style={{ paddingBottom: 13 }}` is reported as `padding-bottom: 13px`, and
+// neither half of that is written in the file: the key is camelCase and React
+// is what gives the number its unit. So the fix is spliced at the span the scan
+// recorded — and the attribute next to it is what a CSS-shaped match would have
+// rewritten instead.
+await check('a JSX inline style is substituted at the bytes it was written at', async () => {
+	const { applied, read, parseErrors } = await fixture({
+		'src/E.jsx': [
+			'export const E = () => (',
+			'\t<div style={{ padding: 13, paddingBottom: \'13px\' }} title="padding: 13px">',
+			'\t\t<span style={{ borderRadius: `4px` }} />',
+			'\t</div>',
+			');',
+		].join('\n'),
 	});
-	assert(!applied.length, `inline style was rewritten: ${JSON.stringify(applied)}`);
+	assert(applied.length === 3, `expected 3 fixes, got ${JSON.stringify(applied)}`);
+	const out = read('src/E.jsx');
+	// A bare number is a length React suffixed, and a token is a string.
+	assert(out.includes("padding: 'var(--wpds-dimension-space-lg)',"), `bare number not substituted:\n${out}`);
+	// Two on one line: the first splice must not move the second.
+	assert(out.includes("paddingBottom: 'var(--wpds-dimension-space-lg)' }}"), `quoted value lost:\n${out}`);
+	// The quote the value was already written in is the quote it keeps.
+	assert(out.includes('borderRadius: `var(--wpds-border-radius-md)`'), `template quote not kept:\n${out}`);
+	assert(out.includes('title="padding: 13px"'), `a lookalike elsewhere on the line was rewritten:\n${out}`);
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+// A template's text is literal CSS, so it is matched as CSS. A declaration whose
+// value comes from an interpolation never reaches `fix` at all — the parse drops
+// it, because a value nothing can see is not a value anything can replace.
+await check('a CSS-in-JS declaration is substituted and an interpolated one is left alone', async () => {
+	const { applied, read, parseErrors } = await fixture({
+		'src/F.jsx': [
+			"import styled from 'styled-components';",
+			'const pad = 8;',
+			'export const Card = styled.div`',
+			'\tpadding: ${pad}px;',
+			'\tborder-radius: 4px;',
+			'`;',
+			'export const Pill = styled.span`padding: 8px`;',
+		].join('\n'),
+	});
+	assert(applied.map((f) => f.line).join() === '5,7', `fixes: ${JSON.stringify(applied)}`);
+	const out = read('src/F.jsx');
+	assert(out.includes('\tborder-radius: var(--wpds-border-radius-md);'), `not substituted:\n${out}`);
+	// A template on one line: its backtick bounds the declaration the way a brace does.
+	assert(out.includes('styled.span`padding: var(--wpds-dimension-space-md)`'), `one-line template:\n${out}`);
+	assert(out.includes('padding: ${pad}px;'), `an interpolated value was touched:\n${out}`);
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+await check('an ambiguous inline value is left alone', async () => {
+	const { applied, read } = await fixture({
+		'src/G.jsx': "export const G = () => <div style={{ color: '#1e1e1e' }} />;",
+	});
+	assert(!applied.length, `an ambiguous value was rewritten: ${JSON.stringify(applied)}`);
+	assert(read('src/G.jsx').includes("'#1e1e1e'"), 'value should be untouched');
+});
+
+// The quick fix and a second `fix` run both read a file that may have moved
+// since the scan. A column is not self-checking the way a match is, so what
+// stands at it is checked against what was reported there.
+await check('a span that has moved skips rather than rewriting the wrong bytes', () => {
+	const root = scratch('dsh-fix-');
+	try {
+		const scanned = 'export const H = () => <div style={{ padding: 13 }} />;';
+		// The same line, re-indented since: every column past the indent moved.
+		write(root, 'src/H.jsx', `\t${scanned}`);
+		const findings: FixCandidate[] = [
+			{
+				rule: 'tokens/hardcoded-value',
+				file: 'src/H.jsx',
+				line: 1,
+				suggest: [
+					{
+						prop: 'padding',
+						value: '13px',
+						tokens: ['--wpds-dimension-space-lg'],
+						span: { col: scanned.indexOf('13'), text: '13' },
+					},
+				],
+			},
+		];
+		const { applied, skipped } = applyTokenFixes(root, findings);
+		assert(!applied.length && skipped.length === 1, `expected one skip: ${JSON.stringify({ applied, skipped })}`);
+		assert(skipped[0]?.why.includes('no longer where'), `wrong reason: ${skipped[0]?.why}`);
+		assert(readFileSync(join(root, 'src/H.jsx'), 'utf8') === `\t${scanned}`, 'file must be untouched');
+	} finally {
+		cleanup(root);
+	}
 });
 
 await check('a stale line number skips rather than guesses', async () => {

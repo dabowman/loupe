@@ -417,18 +417,30 @@ value is a semantic choice, and picking one by array order is exactly how you
 get the right pixels with the wrong meaning — the failure the token suggestion
 machinery exists to prevent.
 
-**Stylesheet channels only.** The same rule fires on `style={{ padding: '13px'
-}}` and on CSS-in-JS templates, where the surrounding syntax is JS and a
-CSS-shaped substitution would write a syntax error with a clean report.
+**All three channels, two ways in.** A stylesheet declaration and a CSS-in-JS
+one are both matched as text on the line they were reported at: what is inside a
+template *is* literal CSS, and a declaration whose value comes from an
+interpolation never reaches `fix` at all, because the template parse drops it. A
+JSX style object is not CSS in any form. `style={{ paddingBottom: 13 }}` is
+reported as `padding-bottom: 13px` and neither half of that is written in the
+file — the key is camelCase, and React is what gives the number its unit — so a
+CSS-shaped match there finds nothing, or worse, finds a lookalike in the
+attribute beside it. The scan records where the value's literal sits instead,
+and `fix` splices that span, writing the token as a string in whichever quote
+the value was already written in.
 
-**A fix that cannot find its declaration exactly once on the line it was
-reported at is skipped**, not guessed at: the file has moved under the report,
-and a substitution against a stale line number edits the wrong declaration.
-Lines are re-read as fixes apply, because two can land on one line and the
-second must see what the first wrote. The property boundary matters —
-`background` must not match inside `background-color`, `border-radius` must not
-match inside `-webkit-border-radius` — and `!important` and the terminator are
-left alone.
+**A fix that cannot locate its declaration exactly is skipped**, not guessed at:
+the file has moved under the report, and a substitution against a stale line or
+column edits the wrong bytes. A match has to hit exactly once on the line it was
+reported at. A span is checked against the text the scan recorded there before
+anything is written, because a column is not self-checking the way a match is.
+Lines are re-read as fixes apply, because two can land on one line and the second
+must see what the first wrote, and splices run right to left within a line so one
+never moves another. The property boundary matters — `background` must not match
+inside `background-color`, `border-radius` must not match inside
+`-webkit-border-radius` — and `!important` and the terminator are left alone. A
+replacement that would have to be escaped to survive as a JS string is refused
+rather than escaped; a token substitution never is one.
 
 **Findings cleared, not fixes applied**, is what gets counted. A collapsed
 finding holding one settled declaration and one nobody could settle is still
@@ -452,6 +464,12 @@ judgement said, so the comment records that a model made the call, not a person.
 
 Indentation is copied with spaces and tabs only — `\s` would copy a byte-order
 mark onto the directive — and the line's own ending, so a CRLF file stays one.
+
+Suppressions are the one half of this that is still stylesheets only. A
+substitution replaces bytes that are already there; a directive adds a line, and
+a comment line above a JSX element is not a comment at all — it is rendered
+text. So a value `--judge` kept outside a stylesheet is reported as skipped, for
+a reader to suppress where they can see what the line is.
 
 ## `loupe serve`
 

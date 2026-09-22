@@ -228,12 +228,14 @@ Because the engine resolved that substitution itself, it can also apply it:
 loupe fix   # --dry-run to see it first
 ```
 
-Only where exactly one on-role token carries the value, and only in stylesheets
-— the same rule fires on `style={{ padding: '13px' }}`, where a CSS-shaped
-substitution would write a syntax error with a clean report. Two candidate
-tokens is a semantic choice, so it is left alone. Paying a model to read a file
-back and retype an answer nothing had to reason about is the expensive way to
-apply a substitution, and this is usually the highest-volume rule in a report.
+Only where exactly one on-role token carries the value. Two candidates is a
+semantic choice, so it is left alone. All three channels are rewritten: a
+stylesheet and a CSS-in-JS template are matched as the CSS they are, and a
+`style={{ padding: 13 }}` object is spliced at the literal the scan recorded,
+since `padding-bottom: 13px` is a translation of what the file says rather than
+a copy of it. Paying a model to read a file back and retype an answer nothing
+had to reason about is the expensive way to apply a substitution, and this is
+usually the highest-volume rule in a report.
 
 ### Judged variants
 

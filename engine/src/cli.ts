@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
 import { analyze } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
-import { CSS_FILE, applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
+import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
@@ -923,8 +923,10 @@ async function main(): Promise<number> {
 		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
-			// Only what `fix` can write: an answer about a JSX value is paid for and dropped.
-			const judgeable = toFix.findings.filter((f) => f.suggest?.length && CSS_FILE.test(f.file));
+			// Every channel: a judged replacement is written in all three. Only a
+			// judged `keep` outside a stylesheet has nowhere to go, and that one is
+			// reported as a skip rather than paid for silently.
+			const judgeable = toFix.findings.filter((f) => f.suggest?.length);
 			if (apiKey && toFix.tokens && judgeable.length)
 				await judgeValues(root, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {

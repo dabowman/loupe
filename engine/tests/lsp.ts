@@ -29,8 +29,13 @@ const FILES = {
 	// design-system component reports `system/override` instead — one
 	// attribute-level finding supersedes the per-declaration ones there — and
 	// there is no token substitution to offer for it.
+	// The inline style is the second channel a quick fix has to write: the
+	// declaration it is reported as appears nowhere in this file, so the fix is
+	// a splice at the literal rather than a match on the line.
 	'src/App.jsx': `
-export default () => <div className="wf-note">hi</div>;
+export default () => (
+	<div className="wf-note" style={{ color: '#1e1e1e' }}>hi</div>
+);
 `,
 	// One declaration the engine can settle on its own — that is the one a quick
 	// fix is offered for, and the one `loupe fix` would rewrite.
@@ -118,6 +123,21 @@ function send(msg: Record<string, unknown>, { split = false }: { split?: boolean
 
 const appCss = join(root, 'styles', 'app.css');
 const cssUri = `file://${appCss}`;
+const appJsx = join(root, 'src', 'App.jsx');
+const jsxUri = `file://${appJsx}`;
+
+/**
+ * The line `loupe fix` would write, without leaving it written. Both files are
+ * restored: one `applyTokenFixes` run settles every channel at once, and a file
+ * left rewritten would take the rest of the session's findings with it.
+ */
+function viaCli(path: string, line: number): string {
+	const before = [appCss, appJsx].map((p) => [p, readFileSync(p, 'utf8')] as const);
+	applyTokenFixes(root, baseline.findings);
+	const out = readFileSync(path, 'utf8').split('\n')[line] ?? '';
+	for (const [p, text] of before) writeFileSync(p, text);
+	return out;
+}
 
 lsp({ config, run, input: toServer, output: fromServer });
 
@@ -204,15 +224,38 @@ await check('the quick fix writes exactly what `loupe fix` writes', () => {
 	const edit = first(fix.edit.changes[cssUri] ?? [], 'the action carried no edit for this file');
 
 	// The same declaration, put through the CLI's own path on a copy.
-	const before = readFileSync(appCss, 'utf8');
-	applyTokenFixes(root, baseline.findings);
-	const viaCli = readFileSync(appCss, 'utf8').split('\n')[1];
-	writeFileSync(appCss, before);
-
+	const cli = viaCli(appCss, 1);
 	assert(
-		edit.newText === viaCli,
-		`the editor would write ${JSON.stringify(edit.newText)}, the CLI writes ${JSON.stringify(viaCli)}`,
+		edit.newText === cli,
+		`the editor would write ${JSON.stringify(edit.newText)}, the CLI writes ${JSON.stringify(cli)}`,
 	);
+});
+
+send({ method: 'textDocument/didOpen', params: { textDocument: { uri: jsxUri, text: readFileSync(appJsx, 'utf8') } } });
+send({
+	id: 5,
+	method: 'textDocument/codeAction',
+	params: {
+		textDocument: { uri: jsxUri },
+		range: { start: { line: 2, character: 0 }, end: { line: 2, character: 60 } },
+		context: { diagnostics: [] },
+	},
+});
+const jsxActions = await until((m) => m.id === 5, 'the JSX code action reply');
+
+await check('the quick fix splices a JSX style object exactly as `loupe fix` does', () => {
+	const list = jsxActions.result as { title: string; edit: { changes: Record<string, { newText: string }[]> } }[];
+	const fix = first(
+		list.filter((a) => a.title.startsWith('Replace')),
+		'no replace action was offered for the inline style',
+	);
+	const edit = first(fix.edit.changes[jsxUri] ?? [], 'the action carried no edit for this file');
+	const cli = viaCli(appJsx, 2);
+	assert(
+		edit.newText === cli,
+		`the editor would write ${JSON.stringify(edit.newText)}, the CLI writes ${JSON.stringify(cli)}`,
+	);
+	assert(edit.newText.includes("color: 'var(--wpds-color-foreground-content-neutral)'"), edit.newText);
 });
 
 await check('the suppress action leaves the reason for a person to write', () => {

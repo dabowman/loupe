@@ -22,7 +22,7 @@ import type {
 	Node,
 	TaggedTemplateExpression,
 } from '@babel/types';
-import { keyName, toCssProp, toCssValue } from './inline.ts';
+import { keyName, toCssProp, toCssValue, valueSpan } from './inline.ts';
 import { isLayoutDecl } from './styles.ts';
 import { messageOf } from './text.ts';
 import { cssInJsLocals, fromPackage, importedName, parseTemplate, templateText } from './cssinjs.ts';
@@ -206,7 +206,8 @@ function readStyleAttr(value: JSXAttribute['value']): {
 			dynamic++;
 			continue;
 		}
-		decls.push({ prop: cssProp, value: cssValue, line: prop.loc?.start?.line ?? null });
+		const line = prop.loc?.start?.line ?? null;
+		decls.push({ prop: cssProp, value: cssValue, line, span: valueSpan(prop.value, line) });
 	}
 	return { decls, dynamic, present: true };
 }

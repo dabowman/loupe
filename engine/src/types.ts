@@ -44,6 +44,22 @@ export interface RuleDef {
 
 // ── findings ────────────────────────────────────────────────────────────────
 
+/**
+ * Where a value is written, in a channel whose source text is not CSS.
+ *
+ * `style={{ paddingBottom: 13 }}` is reported as `padding-bottom: 13px`, and
+ * neither half of that is in the file: the key is camelCase and React is what
+ * gives the number its unit. So the JSX channel hands `fix` the bytes instead
+ * of a declaration to match. `col` is 0-based within the declaration's own
+ * reported line, and `text` is the literal exactly as written there — checked
+ * before the splice, so a file that has moved under the report refuses rather
+ * than rewriting whatever now sits in that column.
+ */
+export interface ValueSpan {
+	col: number;
+	text: string;
+}
+
 /** A property/value pair whose literal could be a token. Feeds the token pass. */
 export interface Hint {
 	prop: string;
@@ -55,6 +71,8 @@ export interface Hint {
 	 * matched against the wrong line edits the wrong declaration.
 	 */
 	line?: number | undefined;
+	/** Set by the channels whose source is not CSS, where a match cannot find it. */
+	span?: ValueSpan | undefined;
 }
 
 /**
@@ -249,6 +267,8 @@ export interface Decl {
 	prop: string;
 	value: string;
 	line?: number | null;
+	/** The JSX channel's pointer back at the bytes this declaration was translated from. */
+	span?: ValueSpan | undefined;
 }
 
 export type MarginKind = 'spacing' | 'negative' | null;
@@ -791,6 +811,8 @@ export interface TokenFix {
 	value: string;
 	/** `var(--token)`, or one per part for a shorthand the judge settled. */
 	to: string;
+	/** Where to splice, for a declaration whose source text is not the CSS reported. */
+	span?: ValueSpan | undefined;
 }
 
 export interface SkippedFix extends TokenFix {
