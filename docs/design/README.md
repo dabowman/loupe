@@ -21,10 +21,13 @@ points at it.
 | [lsp.md](lsp.md) | the language server: on-save analysis, repo-wide diagnostics, the quick fix shared with `loupe fix`, JSON-RPC framing |
 | [report.md](report.md) | the agent format, message bounding, JSON/SARIF/HTML, baseline, the suppression grammar, `fix`, `loupe serve` |
 
-Two other documents sit outside this set:
+Three other documents sit outside this set:
 
 - [patterns-v2.md](../patterns-v2.md) — the abstract pattern language: what it is
   for and what was deliberately left out.
+- [ui-options.md](../ui-options.md) — the option space for a UI past the static
+  report, what each option unlocks and costs, and a staged recommendation.
+  Forward-looking: nothing in it has been built.
 - [MIGRATION.md](../../engine/MIGRATION.md) — moving off the bash quality hook
   this replaced.
 
