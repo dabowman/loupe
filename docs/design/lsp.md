@@ -14,10 +14,13 @@ obvious plan — "one channel, editor diagnostics, serves humans and agents
 alike" — is only half true:
 
 - Humans get diagnostics reliably. A squiggle is a squiggle in every editor.
-- Agents get them inconsistently. Claude Code reads IDE diagnostics through
-  `mcp__ide__getDiagnostics`, but agent-initiated — the plugin does not push
-  them after each edit. Copilot agent mode does not act on leftover lint errors
-  after editing. Cursor's agent does read them. Three tools, three behaviours.
+- Agents get them inconsistently. Claude Code attaches new IDE diagnostics to
+  the turn after an edit tool runs, unasked, and also reads them on request
+  through `mcp__ide__getDiagnostics`. That is checked against 2.1.276–2.1.278;
+  an earlier note here recorded only the request path, so treat the unasked
+  half as a moving target. Copilot agent mode does not act on leftover lint
+  errors after editing. Cursor's agent does read them. Three tools, three
+  behaviours.
 
 So the architecture is one engine with two deliveries: diagnostics for humans,
 and a push hook for agents. Loupe already had the second for Claude Code. This
@@ -35,6 +38,38 @@ own.
 This is also why `editors/vscode/extension.js` is under sixty lines and should
 stay that way. The question to ask before adding behaviour there is why every
 other editor should not have it.
+
+## Why the plugin does not declare it under `lspServers`
+
+A Claude Code plugin can register a language server of its own — `lspServers` in
+the manifest, or a `.lsp.json` beside it — and the host genuinely pushes what
+that server publishes: it sends `textDocument/didSave` after an edit and
+attaches the new diagnostics to the turn without the agent asking. On the face
+of it that is this server reaching agents for ten lines of manifest.
+
+It is declined, because four properties of that channel are wrong for these
+findings:
+
+- A server owns a file extension. The binding is `extensionToLanguage`, and a
+  second claimant is shadowed with a warning telling the user to disable one of
+  the two plugins. Loupe claiming `.tsx` competes with whatever reports type
+  errors there, and that is not a trade worth putting in front of anyone.
+- It cannot block. An attachment is informational, so the `blocking` option, the
+  attempt budget and the stand-down have no equivalent — the Stop hook stays
+  either way, and the findings then arrive twice.
+- An empty publish is dropped. The explicit clear this server sends so a fixed
+  file loses its squiggles is the one message the host discards, so the agent
+  would be told what is wrong and never told when it is right.
+- Repo-wide is the wrong scope for a context window. Publishing the whole
+  backlog is right for a Problems panel and ruinous on Gutenberg, where it is
+  thousands of findings attached to a single turn.
+
+What is left is the warm process, and that is a property of staying resident
+rather than of speaking LSP: a daemon behind the hook would buy it without any
+of the above.
+
+`textDocument/codeAction` is not part of the host's client at all, so the quick
+fixes below stay a human surface whatever happens here.
 
 ## Why on save, not on keystroke
 
