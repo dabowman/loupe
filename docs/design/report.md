@@ -454,7 +454,9 @@ editor are acting on one list and not on two fix paths.
 **The threshold is one keystroke, and never a digit.** A candidate has to be one
 insertion, deletion or substitution from the name as written — a slip, not a
 guess — and exactly one known token may be. Two is a question, and answering it
-by array order is how a rename lands on a real token with the wrong meaning. A
+by array order is how a rename lands on a real token with the wrong meaning.
+`--judge` is where it gets asked instead
+([judge.md](judge.md#which-token-was-meant-judgetokents)). A
 transposition is two edits under this rule and so is not offered; it stays
 reported, which is the cheap half of the trade.
 

@@ -405,7 +405,8 @@ available, which is the case its second one is for.
 nothing defines is usually a misspelling, so where exactly **one** known token
 is one keystroke away — one insertion, deletion or substitution, and not a
 digit — the name is renamed on every line of the file that references it. Two
-candidates, or none, and the finding stands. A digit is excluded because
+candidates, or none, and the finding stands, unless `--judge` settles it
+([judged renames](#judged-renames)). A digit is excluded because
 `--wpds-dimension-space-20` and `--wpds-dimension-space-30` are one keystroke
 apart and mean different amounts: a step on a scale is not a spelling.
 
@@ -586,6 +587,46 @@ suppressions, taking `tokens/hardcoded-value` from 183 findings to 70 and
 `typography/untokenized` from 43 to 12, with no other finding moved. What is
 left is mostly the coin-flips — `10px` between 8 and 12, `3px` between 2 and
 4 — and the unitless line heights nobody is asked about.
+
+### Judged renames
+
+A `tokens/unknown-token` name the spelling rule could not settle is one of two
+things: a typo that lands one keystroke from two real tokens, or, far more
+often, a name an agent made up in someone else's vocabulary —
+`--wpds-color-text-muted`, `--wpds-spacing-lg`, `--wpds-font-weight-semibold`.
+`--judge` asks which real token its author was naming, or `none`. A pick at 0.80
+or above is written onto the finding as a rename, exactly as a spelled one would
+be, and `fix --judge` applies it on every line of the file that names it:
+
+```
+src/card.scss
+     9  --wpds-color-text-primary → --wpds-color-foreground-content-neutral (judged 0.98)
+    14  --wpds-color-text-muted → --wpds-color-foreground-content-neutral-weak (judged 0.92)
+     6  --wpds-z-index-dropdown
+```
+
+The options are the known tokens for the property the name is written in, by
+the same role table the value suggestions use. A custom property is read by
+the longest property its name ends in (`--acme-button-background-color` as
+`background-color`), and one that matches nothing falls back to the tokens that
+share the name's leading segments. Every token a keystroke away is added too, and
+each is described by its value and the profile's `tokenDescriptions`. A name
+with no candidates at all, such as `--wpds-z-index-dropdown` in WPDS, is never
+asked about and stands for a reader. `none` answers are written as `no token
+means this` and renamed to nothing.
+
+```bash
+npm run eval:renames
+```
+
+`evals/renames` carries 158 made-up names. Real code has almost none to label
+(Gutenberg's three are test fixtures), so each is a real `var(--wpds-*)` from
+`site-foundry` or Gutenberg with its name swapped for an agent-style guess, a
+typo between two steps, or a name for something WPDS has no token for. At the
+floor it renames 49% of them at 99% right across three runs. Its one wrong pick
+is `--wpds-color-background-control-primary-weak-active` read as brand rather
+than neutral, which "primary" arguably is. It never renames a between-steps
+typo. The measurements are in [docs/design/judge.md](../docs/design/judge.md#which-token-was-meant-judgetokents).
 
 ### Judged redirects
 

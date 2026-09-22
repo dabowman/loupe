@@ -24926,6 +24926,8 @@ var ROLE_HINTS = [
   // the sizes (icons, buttons) and surface widths a system also ships under it.
   [/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
   [/^cursor$/, /cursor/],
+  // Never flagged as a hardcoded value; here for the token a name in one meant.
+  [/^(min-|max-)?(width|height|inline-size|block-size)$/, /(?<!font-)size|surface-width/],
   // By role word, not by one system's spelling: WPDS writes `motion-duration-*`,
   // Archer `duration-*`.
   [/^transition-duration$|^animation-duration$/, /duration/],
@@ -25000,7 +25002,8 @@ function onRole(names, prop) {
   return preferred.length ? preferred : onRole2;
 }
 function tokensFor(set, prop, value) {
-  return onRole(set.byValue.get(normalizeValue(value)) ?? [], prop);
+  const family = new Set(onRole([...set.known], prop));
+  return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
 }
 function familyFor(set, prop) {
   const all = [...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v]));
@@ -25387,6 +25390,18 @@ function nearMiss(name, known) {
   }
   return found;
 }
+function renameCandidates(name, prop, known) {
+  const names = [...known];
+  const tails = prop.startsWith("--") ? prop.slice(2).split("-") : [];
+  let family = onRole(names, prop);
+  for (let k = 0; !family.length && k < tails.length; k++) family = onRole(names, tails.slice(k).join("-"));
+  const segs = name.split("-");
+  for (let k = segs.length - 1; !family.length && k >= 4; k--) {
+    const head2 = `${segs.slice(0, k).join("-")}-`;
+    family = names.filter((n) => n.startsWith(head2));
+  }
+  return [.../* @__PURE__ */ new Set([...family, ...names.filter((n) => oneEdit(name, n))])];
+}
 function unknownTokens(refs, known) {
   if (!known.size) return [];
   const groups = /* @__PURE__ */ new Map();
@@ -25399,7 +25414,7 @@ function unknownTokens(refs, known) {
     }
     groups.set(`${ref.file}\0${ref.name}`, { ...ref, lines: [ref.line] });
   }
-  return [...groups.values()].map(({ file, line, name, scopeLines, lines }) => {
+  return [...groups.values()].map(({ file, line, name, prop, scopeLines, lines }) => {
     const to = nearMiss(name, known);
     const rename = to === void 0 ? void 0 : { from: name, to, lines };
     return {
@@ -25412,7 +25427,8 @@ function unknownTokens(refs, known) {
       message: to === void 0 ? name : `${name} \u2192 ${to}`,
       code: name,
       scopeLines,
-      rename
+      rename,
+      unknown: rename ? void 0 : { prop, lines }
     };
   });
 }
@@ -25698,7 +25714,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
         if (styling) touchesStyle = true;
         if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
         for (const name of tokenRefsIn(decl2.value, tokenPrefixes))
-          tokenRefs.push({ file: rel, line, name, scopeLines });
+          tokenRefs.push({ file: rel, line, name, prop, scopeLines });
         if (finding) pending.push({ ...finding, line, scopeLines });
       }
       if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
@@ -25765,7 +25781,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       for (const d of group.decls) {
         if (supp)
           for (const name of tokenRefsIn(d.value, tokenPrefixes))
-            tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, scopeLines: [tpl.line] });
+            tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
         const { finding } = classifyDeclaration(d, {
           boundSystem: onTarget ? boundSystem : [],
           boundText: onTarget ? boundText : [],
@@ -27432,6 +27448,7 @@ var package_default = {
     "patterns-doc:check": "node scripts/patterns-doc.ts --check",
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
+    "eval:renames": "node evals/renames/run.ts",
     test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts && node tests/serve.ts && node tests/lsp.ts"
   },
   dependencies: {
@@ -27496,6 +27513,18 @@ var forceQuery = (force) => ({
     criteria: force.criteria
   })
 });
+
+// src/judge/token.ts
+var NONE = "none";
+var NONE_CRITERION = "None of these. The name stands for something the design system has no token for \u2014 a z-index, an opacity, a shadow, a colour of the product\u2019s own \u2014 so no real token is what it meant.";
+var renameQuery = {
+  element: ({ file, context_before, source }) => ({ file, context_before, source }),
+  question: ({ name, prop, options }, i) => ({
+    type: "choice",
+    instructions: `The first line of \`elements[${i}].source\` uses \`var(${name})\` in \`${prop}\`. The name is in the design system's token namespace, but the design system defines no token by that name: it is misspelled, or was invented to look like one of the system's own. Which of the design system's real tokens was its author naming? Keep whatever the name already says \u2014 its step on a scale, its emphasis, its state \u2014 and use what the rule styles only to decide what the name leaves open.`,
+    criteria: { ...Object.fromEntries(options), [NONE]: NONE_CRITERION }
+  })
+};
 
 // src/judge/value.ts
 var KEEP_CRITERION = "None of these. The hardcoded value is a deliberate one-off the design system has no token for \u2014 a brand or illustration colour, an overlay or scrim, a size locked to something outside the system \u2014 and should stay as written.";
@@ -27773,6 +27802,41 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
   }
   for (const f of touched) restate(f);
   return written;
+}
+var RENAME_FLOOR = 0.8;
+function renameOptions(name, prop, set, about = /* @__PURE__ */ new Map()) {
+  const values = new Map([...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v])));
+  return renameCandidates(name, prop, set.known).map((n) => [
+    n,
+    [values.get(n), about.get(n)].filter(Boolean).join(" \u2014 ") || n
+  ]);
+}
+async function judgeRenames(root2, findings, set, apiKey, about = /* @__PURE__ */ new Map(), fetchImpl = fetch) {
+  const jobs = findings.flatMap((f) => {
+    if (f.rule !== "tokens/unknown-token" || f.rename || !f.unknown || !f.code) return [];
+    const { prop, lines } = f.unknown;
+    const options = renameOptions(f.code, prop, set, about);
+    if (!options.length) return [];
+    return [{ f, lines, item: { file: f.file, ...around(root2, f.file, f.line, 8, 3), name: f.code, prop, options } }];
+  });
+  const answers = await ask(
+    renameQuery,
+    jobs.map((j) => j.item),
+    apiKey,
+    fetchImpl
+  );
+  let settled = 0;
+  jobs.forEach(({ f, lines, item }, i) => {
+    const a = answers[i];
+    if (!a || a.confidence < RENAME_FLOOR) return;
+    const tail = judgedTail(a.confidence);
+    const span = a.choice === NONE ? "no token means this" : a.choice;
+    f.message = `${item.name} \u2192 ${span} ${tail}`;
+    f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+    if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
+    settled++;
+  });
+  return settled;
 }
 
 // src/baseline.ts
@@ -30209,7 +30273,8 @@ Options:
                         element needs, whether a control stands for the
                         pattern it was built as (patterns/judged-redirect), and
                         which token a hardcoded value should be, or whether it
-                        is deliberate. With fix, rewrites the values it settled
+                        is deliberate, and which real token an unknown one
+                        meant. With fix, rewrites the values it settled
                         and suppresses the ones it kept; add --dry-run to
                         review them first. (TYPESAFE_API_KEY from the
                         environment or loupe's own .env)
@@ -30620,8 +30685,9 @@ ${dim("  Ctrl-C to stop.")}
     try {
       toFix = await analyze(config, { scope: fixScope });
       const judgeable = toFix.findings.filter((f) => f.suggest?.length);
-      if (apiKey && toFix.tokens && judgeable.length)
-        await judgeValues(root2, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
+      const about = tokenDescriptions(config.profiles?.active ?? []);
+      if (apiKey && toFix.tokens && judgeable.length) await judgeValues(root2, judgeable, toFix.tokens, apiKey, about);
+      if (apiKey && toFix.tokens) await judgeRenames(root2, toFix.findings, toFix.tokens, apiKey, about);
     } catch (err) {
       fail(`loupe: ${messageOf2(err)}
 `);
@@ -30717,6 +30783,19 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
         );
     } catch (err) {
       note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf2(err)}
+`);
+    }
+    try {
+      if (result.tokens && result.findings.some((f) => f.unknown))
+        await judgeRenames(
+          root2,
+          result.findings,
+          result.tokens,
+          apiKey,
+          tokenDescriptions(config.profiles?.active ?? [])
+        );
+    } catch (err) {
+      note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf2(err)}
 `);
     }
     result.blocking = result.findings.some((f) => f.severity === "error");

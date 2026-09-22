@@ -223,7 +223,9 @@ nothing on-role matches, the finding names no token rather than a plausible one.
 design system defines. It stays silent when no definitions were found at all,
 because an empty token set proves nothing. A name that is one keystroke from
 exactly one real token is a misspelling the engine can settle, and `loupe fix`
-renames it wherever the file writes it.
+renames it wherever the file writes it. With `--judge`, a name an agent made up
+in another system's vocabulary, like `--wpds-color-text-muted`, is renamed to the
+token it meant when the answer is confident enough.
 
 Because the engine resolved that substitution itself, it can also apply it:
 

@@ -50,6 +50,8 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	// the sizes (icons, buttons) and surface widths a system also ships under it.
 	[/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
 	[/^cursor$/, /cursor/],
+	// Never flagged as a hardcoded value; here for the token a name in one meant.
+	[/^(min-|max-)?(width|height|inline-size|block-size)$/, /(?<!font-)size|surface-width/],
 	// By role word, not by one system's spelling: WPDS writes `motion-duration-*`,
 	// Archer `duration-*`.
 	[/^transition-duration$|^animation-duration$/, /duration/],
@@ -148,7 +150,7 @@ export function readTokenSources(
 }
 
 /** The names that answer for `prop`: on-role, and the property's own family when the set has one. */
-function onRole(names: readonly string[], prop: string): string[] {
+export function onRole(names: readonly string[], prop: string): string[] {
 	const [, hint, own] = ROLE_HINTS.find(([p]) => p.test(prop)) ?? [];
 	if (!hint) return [];
 	const onRole = names.filter((n) => hint.test(n));
@@ -161,7 +163,11 @@ function onRole(names: readonly string[], prop: string): string[] {
  * Empty when nothing matches, or when only off-role tokens do.
  */
 export function tokensFor(set: TokenSet, prop: string, value: string): string[] {
-	return onRole(set.byValue.get(normalizeValue(value)) ?? [], prop);
+	// The role is decided over the whole set, not over the tokens that happen to
+	// carry the value: a padding scale that stops at 32px makes `padding: 40px`
+	// a question, not `gap-3xl` because only a gap step is 40px.
+	const family = new Set(onRole([...set.known], prop));
+	return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
 }
 
 /** Every on-role token for `prop` that has a literal value, as `[name, value]`, whatever the value. */

@@ -17,7 +17,7 @@ import { analyze } from '../src/analyze.ts';
 import { applyKeeps, applyTokenFixes, settledBy, tokenFixes } from '../src/autofix.ts';
 import { loadComponents } from '../src/components.ts';
 import { loadConfig, setComponentRegistry } from '../src/config.ts';
-import { judgeValues } from '../src/judge.ts';
+import { judgeRenames, judgeValues } from '../src/judge.ts';
 import { KEEP, emptyTokenSet, harvestTokenDefs, planValue } from '../src/tokens.ts';
 import { messageParts } from '../src/text.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
@@ -116,6 +116,20 @@ await check('an ambiguous value is left alone', async () => {
 	const { applied, read } = await fixture({ 'styles/b.css': '.wf-b {\n\tcolor: #1e1e1e;\n}' });
 	assert(!applied.length, `expected no fix, got ${applied.map((f) => f.to).join(', ')}`);
 	assert(read('styles/b.css').includes('#1e1e1e'), 'value should be untouched');
+});
+
+// vip-workflows: the padding scale stops at 32px and `gap-3xl` is 40px, so an
+// exact match taken among the tokens carrying the value wrote `padding:
+// var(--wpds-dimension-gap-3xl)` on every `padding: 40px`.
+await check("a value only a sibling family carries is not the property's token", async () => {
+	const { applied, read } = await fixture({
+		'styles/tokens.css': ':root {\n\t--wpds-dimension-padding-sm: 8px;\n\t--wpds-dimension-gap-3xl: 40px;\n}',
+		'styles/g.css': '.wf-g {\n\tpadding: 40px;\n\tpadding-top: 8px;\n}',
+	});
+	const out = read('styles/g.css');
+	assert(out.includes('padding: 40px;'), `padding took a gap token:\n${out}`);
+	assert(out.includes('padding-top: var(--wpds-dimension-padding-sm);'), `padding lost its own token:\n${out}`);
+	assert(applied.length === 1, `expected 1 fix, got ${JSON.stringify(applied)}`);
 });
 
 await check('a property is not matched inside a longer property name', async () => {
@@ -472,6 +486,80 @@ await check('a misspelled token in a CSS-in-JS template is renamed too', async (
 	assert(settledBy(findings, applied) === 1, 'every line renamed, so the finding is cleared');
 	assert(!remaining.some((f) => f.rule === 'tokens/unknown-token'), 'the next run must not report it again');
 	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+// What a spelling cannot settle, put to a stub: what is asked, and that a judged
+// rename is written exactly as a spelled one, on every line naming it.
+await check('fix --judge renames what the judgement settled, and nothing under the floor', async () => {
+	const root = scratch('dsh-judge-rename-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			'styles/tokens.css': NEAR,
+			'styles/x.css': [
+				'.wf-x {',
+				'\tpadding: var(--wpds-dimension-space-xm);',
+				'\tgap: var(--wpds-dimension-space-xm);',
+				'\tcolor: var(--wpds-color-text);',
+				'}',
+				'.wf-y { padding: var(--wpds-space-huge); }',
+			].join('\n'),
+			'src/X.jsx': `${uses('wf-x')}\n${uses('wf-y')}`,
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const result = await analyze(config, { scope: null });
+		assert(result.tokens, 'analyze did not hand back its token set');
+		const asked = new Map<string, Record<string, string>>();
+		const answer: Record<string, { choice: string; confidence: number }> = {
+			'--wpds-dimension-space-xm': { choice: '--wpds-dimension-space-xl', confidence: 0.95 },
+			'--wpds-color-text': { choice: 'none', confidence: 0.93 },
+			'--wpds-space-huge': { choice: '--wpds-dimension-space-xl', confidence: 0.7 },
+		};
+		const stub = (async (_url: string, init: { body: string }) => {
+			const questions = JSON.parse(init.body).questions as Record<
+				string,
+				{ instructions: string; criteria: Record<string, string> }
+			>;
+			const answers = Object.fromEntries(
+				Object.entries(questions).map(([k, q]) => {
+					const name = /var\((--[\w-]+)\)/.exec(q.instructions)?.[1] ?? '';
+					asked.set(name, q.criteria);
+					return [k, answer[name]];
+				}),
+			);
+			return new Response(JSON.stringify({ answers }));
+		}) as unknown as typeof fetch;
+		const settled = await judgeRenames(root, result.findings, result.tokens, 'key', new Map(), stub);
+
+		assert(asked.size === 3, `asked about ${[...asked.keys()].join(', ')}`);
+		const xm = Object.keys(asked.get('--wpds-dimension-space-xm') ?? {});
+		assert(
+			xm.join() === '--wpds-dimension-space-xs,--wpds-dimension-space-xl,--wpds-dimension-space-md,none',
+			`xm was offered ${xm.join(', ')}`,
+		);
+		assert(settled === 2, `settled ${settled}, expected 2 (the rename and the none)`);
+		const of = (name: string): Finding => {
+			const f = result.findings.find((x) => x.rule === 'tokens/unknown-token' && x.code === name);
+			assert(f, `no finding for ${name}`);
+			return f;
+		};
+		assert(
+			of('--wpds-dimension-space-xm').message === '--wpds-dimension-space-xm → --wpds-dimension-space-xl (judged 0.95)',
+			of('--wpds-dimension-space-xm').message,
+		);
+		assert(of('--wpds-color-text').message === '--wpds-color-text → no token means this (judged 0.93)', 'none');
+		assert(!of('--wpds-color-text').rename, 'a none was renamed');
+		assert(!of('--wpds-space-huge').rename && !of('--wpds-space-huge').judged, 'a sub-floor pick was recorded');
+
+		const { applied } = applyTokenFixes(root, result.findings);
+		assert(applied.map((f) => f.line).join() === '2,3', `applied: ${JSON.stringify(applied)}`);
+		assert(settledBy(result.findings, applied) === 1, 'the renamed finding is cleared, and only it');
+		const out = readFileSync(join(root, 'styles/x.css'), 'utf8');
+		assert(out.split('var(--wpds-dimension-space-xl)').length === 3, out);
+		assert(out.includes('var(--wpds-color-text)') && out.includes('var(--wpds-space-huge)'), out);
+	} finally {
+		cleanup(root);
+	}
 });
 
 // ── fix --judge ─────────────────────────────────────────────────────────────

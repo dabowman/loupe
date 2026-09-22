@@ -12,6 +12,7 @@
  *   judge/variant.ts   system/raw-element — which variant of the analog
  *   judge/force.ts     a pattern force, for patterns/judged-redirect
  *   judge/value.ts     a flagged value — which token, or deliberate
+ *   judge/token.ts     tokens/unknown-token — which real token was meant
  *
  * None changes a deterministic verdict. A variant or a token is written into the
  * finding's suggestion; a redirect is its own advisory finding, written after
@@ -22,9 +23,11 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { renameCandidates } from './checks/tokens/unknown-token.ts';
 import { EMBEDDED_LANGUAGE } from './embedded.ts';
 import type { ForceJudge } from './judge/force.ts';
 import { forceQuery } from './judge/force.ts';
+import { NONE, renameQuery } from './judge/token.ts';
 import { valueQuery } from './judge/value.ts';
 import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
@@ -457,4 +460,71 @@ export async function judgeValues(
 	// Once, per finding, after every answer it is waiting on has landed.
 	for (const f of touched) restate(f);
 	return written;
+}
+
+// ── tokens/unknown-token: which token was meant? ───────────────────────────
+
+// A rename rewrites every line of the file naming it, and a wrong one paints
+// from a token that means something else under a clean report. What was
+// measured: docs/design/judge.md#the-rename-floor-is-080.
+const RENAME_FLOOR = 0.8;
+
+/**
+ * What an unknown name is asked to be chosen among, as `[token, meaning]`: its
+ * value where it has a literal one, and what the design system says it is for.
+ */
+export function renameOptions(
+	name: string,
+	prop: string,
+	set: TokenSet,
+	about: ReadonlyMap<string, string> = new Map(),
+): [string, string][] {
+	const values = new Map([...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v])));
+	return renameCandidates(name, prop, set.known).map((n) => [
+		n,
+		[values.get(n), about.get(n)].filter(Boolean).join(' \u2014 ') || n,
+	]);
+}
+
+/**
+ * Settle every unknown token name the check could not: the rename `fix` applies,
+ * or that no real token was meant. Returns how many were settled.
+ *
+ * `<name> → <token> (judged 0.94)` carries a `rename` exactly like one the check
+ * settled by spelling, so `fix` and the report treat the two alike.
+ */
+export async function judgeRenames(
+	root: string,
+	findings: readonly Finding[],
+	set: TokenSet,
+	apiKey: string,
+	about: ReadonlyMap<string, string> = new Map(),
+	fetchImpl: Fetch = fetch,
+): Promise<number> {
+	const jobs = findings.flatMap((f) => {
+		if (f.rule !== 'tokens/unknown-token' || f.rename || !f.unknown || !f.code) return [];
+		const { prop, lines } = f.unknown;
+		const options = renameOptions(f.code, prop, set, about);
+		if (!options.length) return [];
+		return [{ f, lines, item: { file: f.file, ...around(root, f.file, f.line, 8, 3), name: f.code, prop, options } }];
+	});
+	const answers = await ask(
+		renameQuery,
+		jobs.map((j) => j.item),
+		apiKey,
+		fetchImpl,
+	);
+
+	let settled = 0;
+	jobs.forEach(({ f, lines, item }, i) => {
+		const a = answers[i];
+		if (!a || a.confidence < RENAME_FLOOR) return;
+		const tail = judgedTail(a.confidence);
+		const span = a.choice === NONE ? 'no token means this' : a.choice;
+		f.message = `${item.name} \u2192 ${span} ${tail}`;
+		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+		if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
+		settled++;
+	});
+	return settled;
 }

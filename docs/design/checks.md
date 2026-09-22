@@ -209,8 +209,10 @@ One finding per file and name, carrying **every** line that names it, because
 the known token set is right here and a name nothing defines is usually a
 misspelling. Where exactly one known token is one keystroke away, and that
 keystroke is not a digit, the finding carries the rename and `loupe fix` applies
-it on all of those lines. Where two are, or none is, it carries nothing and
-stands for a reader. The defence of that threshold — and why a scale step is
+it on all of those lines. Where two are, or none is, it carries where the name is
+written instead, and `--judge` asks which real token was meant — see
+[judge.md](judge.md#which-token-was-meant-judgetokents). Unjudged, it stands for
+a reader. The defence of that threshold — and why a scale step is
 never read as a spelling — is in [fixing](report.md#fixing).
 
 ## `css/dead-class`

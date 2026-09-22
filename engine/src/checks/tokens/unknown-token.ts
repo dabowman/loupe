@@ -22,10 +22,14 @@
  *   two or more known tokens are near misses   → no rewrite, the finding stands
  *   exactly one known token is a near miss     → rename, every line of them
  *
+ * Any case but the last carries `unknown`, and `--judge` asks which token was
+ * meant among {@link renameCandidates} — see src/judge/token.ts.
+ *
  * Design notes: docs/design/report.md#fixing
  */
 
 import type { Candidate } from '../../analyze.ts';
+import { onRole } from '../../tokens.ts';
 import type { TokenRename } from '../../types.ts';
 
 /** A `var(--name)` in the design system's namespace, where it was written. */
@@ -33,6 +37,8 @@ export interface TokenRef {
 	file: string;
 	line: number;
 	name: string;
+	/** The property whose value names it. */
+	prop: string;
 	scopeLines: number[];
 }
 
@@ -63,6 +69,32 @@ function nearMiss(name: string, known: ReadonlySet<string>): string | undefined 
 	return found;
 }
 
+/**
+ * The known tokens a judgement chooses among for an unknown name: the family of
+ * the property it is written in, and every token a keystroke from it — scale
+ * steps included, since which step was meant is what the judgement reads.
+ *
+ * A custom property answers as the longest property its name ends in:
+ * `--wp-ui-button-background-color` as `background-color`. Where nothing
+ * answers — a `transform`, `--sf-accent` — the family is the known tokens
+ * sharing the most leading segments with the name, down to the one after the
+ * system's prefix.
+ */
+export function renameCandidates(name: string, prop: string, known: ReadonlySet<string>): string[] {
+	const names = [...known];
+	const tails = prop.startsWith('--') ? prop.slice(2).split('-') : [];
+	let family = onRole(names, prop);
+	for (let k = 0; !family.length && k < tails.length; k++) family = onRole(names, tails.slice(k).join('-'));
+	const segs = name.split('-');
+	// `--wpds-color-x` splits to ['', '', 'wpds', 'color', 'x']: four is the
+	// shortest head that still names a category.
+	for (let k = segs.length - 1; !family.length && k >= 4; k--) {
+		const head = `${segs.slice(0, k).join('-')}-`;
+		family = names.filter((n) => n.startsWith(head));
+	}
+	return [...new Set([...family, ...names.filter((n) => oneEdit(name, n))])];
+}
+
 export function unknownTokens(refs: readonly TokenRef[], known: ReadonlySet<string>): Candidate[] {
 	if (!known.size) return [];
 	// Grouped rather than deduped, because the fix acts on every line the name is
@@ -77,7 +109,7 @@ export function unknownTokens(refs: readonly TokenRef[], known: ReadonlySet<stri
 		}
 		groups.set(`${ref.file}\u0000${ref.name}`, { ...ref, lines: [ref.line] });
 	}
-	return [...groups.values()].map(({ file, line, name, scopeLines, lines }): Candidate => {
+	return [...groups.values()].map(({ file, line, name, prop, scopeLines, lines }): Candidate => {
 		const to = nearMiss(name, known);
 		const rename: TokenRename | undefined = to === undefined ? undefined : { from: name, to, lines };
 		return {
@@ -91,6 +123,7 @@ export function unknownTokens(refs: readonly TokenRef[], known: ReadonlySet<stri
 			code: name,
 			scopeLines,
 			rename,
+			unknown: rename ? undefined : { prop, lines },
 		};
 	});
 }
