@@ -10,7 +10,7 @@
  * plausible rather than by throwing. Run it when you change the matcher or
  * either pane.
  *
- *   node browser/devtools/check.mjs
+ *   node integrations/devtools/check.mjs
  *
  * What it does NOT cover, and nothing automated here can: `chrome.devtools`
  * itself — panel registration, the Elements pane, and the real `$0`. Those are
@@ -165,7 +165,7 @@ try {
 	({ chromium } = await import(process.env.LOUPE_PLAYWRIGHT || 'playwright'));
 } catch {
 	process.stderr.write(
-		'browser/devtools/check.mjs needs Playwright, which this repo deliberately does not depend on.\n' +
+		'integrations/devtools/check.mjs needs Playwright, which this repo deliberately does not depend on.\n' +
 			'  npm i -g playwright   (or run with NODE_PATH pointed at an install)\n' +
 			'  Set LOUPE_CHROMIUM to a browser binary if Playwright cannot find one.\n',
 	);

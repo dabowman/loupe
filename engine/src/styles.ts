@@ -8,8 +8,8 @@
  * Design notes: docs/design/analysis.md
  */
 
-import type { Container, Declaration, Rule } from 'postcss';
-import type { Decl, MarginKind } from './types.ts';
+import type { ChildNode, Container, Declaration, Rule } from 'postcss';
+import type { DeadRule, Decl, MarginKind } from './types.ts';
 
 /** Token-backed props whose literal values duplicate a design token. */
 const COLOR_PROPS = new Set([
@@ -266,3 +266,39 @@ export const classesIn = (sel: string): string[] =>
 /** Does this rule establish a CSS Grid? */
 export const ruleIsGrid = (rule: Container): boolean =>
 	[...ownDecls(rule)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
+
+/**
+ * The lines a rule occupies, where the rule can be lifted out on its own —
+ * `null` where it cannot, and no deletion is offered for it.
+ *
+ * Whole lines are the only extent this carries, so a rule sharing its first or
+ * last line with anything else refuses. A comment glued directly above it, with
+ * no blank line between, describes the rule and goes with it; one a blank line
+ * away belongs to whatever is around it and stays.
+ *
+ * Only `loupe lsp` acts on this. Why: docs/design/report.md#deleting-is-the-editors-alone.
+ */
+export function deletableRule(rule: Rule, lines: readonly string[]): DeadRule | null {
+	const end = rule.source?.end;
+	if (!end) return null;
+	// The only child of an `@media`, an `@supports` or a parent rule: deleting it
+	// leaves an empty block behind, and taking the parent with it is a bigger
+	// edit than the finding claims.
+	const parent = rule.parent;
+	if (parent && parent.type !== 'root' && parent.nodes.length === 1) return null;
+	let head: ChildNode = rule;
+	for (;;) {
+		const prev: ChildNode | undefined = head.prev();
+		// Exactly one newline between them: a blank line breaks the attachment,
+		// and no newline means the comment is trailing whatever precedes it.
+		if (prev?.type !== 'comment' || !prev.source?.start) break;
+		if (!/^[^\S\n]*\n[^\S\n]*$/.test(head.raws.before ?? '')) break;
+		head = prev;
+	}
+	const start = head.source?.start;
+	if (!start) return null;
+	const before = (lines[start.line - 1] ?? '').slice(0, start.column - 1);
+	const after = (lines[end.line - 1] ?? '').slice(end.column);
+	if (before.trim() || after.trim()) return null;
+	return { startLine: start.line, endLine: end.line };
+}

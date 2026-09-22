@@ -44,6 +44,22 @@ export interface RuleDef {
 
 // ── findings ────────────────────────────────────────────────────────────────
 
+/**
+ * Where a value is written, in a channel whose source text is not CSS.
+ *
+ * `style={{ paddingBottom: 13 }}` is reported as `padding-bottom: 13px`, and
+ * neither half of that is in the file: the key is camelCase and React is what
+ * gives the number its unit. So the JSX channel hands `fix` the bytes instead
+ * of a declaration to match. `col` is 0-based within the declaration's own
+ * reported line, and `text` is the literal exactly as written there — checked
+ * before the splice, so a file that has moved under the report refuses rather
+ * than rewriting whatever now sits in that column.
+ */
+export interface ValueSpan {
+	col: number;
+	text: string;
+}
+
 /** A property/value pair whose literal could be a token. Feeds the token pass. */
 export interface Hint {
 	prop: string;
@@ -55,6 +71,8 @@ export interface Hint {
 	 * matched against the wrong line edits the wrong declaration.
 	 */
 	line?: number | undefined;
+	/** Set by the channels whose source is not CSS, where a match cannot find it. */
+	span?: ValueSpan | undefined;
 }
 
 /**
@@ -87,6 +105,35 @@ export interface Suggestion extends Hint {
 	 * answers rendered for a reader.
 	 */
 	judged?: Judged | undefined;
+}
+
+/**
+ * A misspelled token name and the one known token it is a near miss for.
+ *
+ * A name, not a declaration: `tokens/unknown-token` reports once per file and
+ * name however many times the file writes it, so the fix it licenses is every
+ * one of `lines` — fixing the line it was reported at would leave the rest, and
+ * the next run would report the same name again.
+ */
+export interface TokenRename {
+	from: string;
+	to: string;
+	/** Every line of this file that references the name, first-seen order. */
+	lines: number[];
+}
+
+/**
+ * The whole extent of a rule that declares nothing but a dead class, in lines.
+ *
+ * Carried only where the rule can be removed on its own — and read only by the
+ * language server, because deleting is not substituting and `loupe fix` does
+ * not do it. See docs/design/report.md#deleting-is-the-editors-alone.
+ */
+export interface DeadRule {
+	/** First line to remove: a comment attached above the rule, where there is one. */
+	startLine: number;
+	/** The line the rule's closing brace is on. */
+	endLine: number;
 }
 
 /**
@@ -161,6 +208,17 @@ export interface Finding {
 	 * `judgeValues` writes an answer for.
 	 */
 	decl?: Hint | undefined;
+	/**
+	 * The rewrite `tokens/unknown-token` licenses, where exactly one known token
+	 * is a near miss for the name. Absent where nothing is, or where more than
+	 * one is — then the finding stands for a reader.
+	 */
+	rename?: TokenRename | undefined;
+	/**
+	 * The rule a `css/dead-class` finding names, where deleting it is safe.
+	 * Absent where it is not — then no deletion is offered at all.
+	 */
+	dead?: DeadRule | undefined;
 }
 
 /**
@@ -249,6 +307,8 @@ export interface Decl {
 	prop: string;
 	value: string;
 	line?: number | null;
+	/** The JSX channel's pointer back at the bytes this declaration was translated from. */
+	span?: ValueSpan | undefined;
 }
 
 export type MarginKind = 'spacing' | 'negative' | null;
@@ -340,6 +400,20 @@ export interface ComponentEntry {
 	package: string;
 	status: 'recommended' | 'legacy' | 'locked' | 'experimental';
 	supersededBy?: string;
+	/**
+	 * Set only where moving the import to the package `supersededBy` names
+	 * changes the specifier and nothing else: same exported name, every prop the
+	 * old component takes accepted with the same meaning, no prop the old one did
+	 * not require, same default element and same rendering — established by
+	 * reading both implementations, never inferred from the names matching.
+	 *
+	 * There is no `false`. Absent means "nobody established it", which is also
+	 * what a verified no leaves behind, because a fix must not fire on a guess
+	 * that happens to be recorded. No WPDS entry carries it.
+	 *
+	 * Design notes: docs/design/checks.md#a-same-name-move-is-not-a-drop-in-move
+	 */
+	dropIn?: true;
 	note?: string;
 	/** Variant name → what it is for. Read only by `check --judge`. */
 	variants?: Record<string, string>;
@@ -531,6 +605,12 @@ export interface MergedConfig {
 		styleSources: string[];
 		cssInJsPackages: string[];
 		normalizeExports: string;
+		/**
+		 * Recognition lists: every spelling of a layout or text component the
+		 * rules must match, superseded ones included, so a check reads code that
+		 * still writes the old name. **Canonical first** — guidance names the
+		 * first entry, so a legacy name there is a recommendation to write it.
+		 */
 		components: { layout: string[]; text: string[] };
 		elementMap: Record<string, string | AuthoredElementMapping>;
 		substitutionProps: string[];
@@ -775,16 +855,25 @@ export interface ReportPayload {
  * nothing else, and asking for a whole finding would mean a caller with a
  * candidate in hand had to invent a severity and a rank to be allowed to ask.
  */
-export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest' | 'decl' | 'judged'>;
+export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest' | 'decl' | 'judged' | 'rename'>;
 
-/** One substitution: this property, this value, rewritten `to` this. */
+/**
+ * One substitution: this property, this value, rewritten `to` this.
+ *
+ * A rename carries no `prop`, because it is not a `prop: value` substitution —
+ * `value` is the misspelled token name and `to` the name it becomes, replaced
+ * inside every `var()` on the line that names it.
+ */
 export interface TokenFix {
 	file: string;
 	line: number;
-	prop: string;
+	/** Absent on a token rename, which has no declaration around it. */
+	prop?: string | undefined;
 	value: string;
-	/** `var(--token)`, or one per part for a shorthand the judge settled. */
+	/** `var(--token)`, one per part for a shorthand the judge settled, or a token name for a rename. */
 	to: string;
+	/** Where to splice, for a declaration whose source text is not the CSS reported. */
+	span?: ValueSpan | undefined;
 }
 
 export interface SkippedFix extends TokenFix {

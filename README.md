@@ -61,6 +61,7 @@ than using it.
 | `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
 | `engine/` | `loupe` — the conformance engine |
 | `editors/vscode/` | The VS Code / Cursor launcher for `loupe lsp`. Other editors need no extension |
+| `integrations/wordpress/` | A dev mu-plugin that loads the `serve` overlay itself, so wp-admin is not a bookmarklet click per screen |
 | `docs/design/` | Design notes: why the engine is built the way it is, and the measurements behind its tuned numbers |
 
 The three skills are design-system agnostic: each one starts at `loupe status`
@@ -153,7 +154,8 @@ project is and read the same baseline. Pass `--root` when you mean the
 subdirectory itself. It needs nothing added to that project: the engine carries its own dependencies, so there is no config file to
 commit and nothing to install. Nothing appears unless you run the thing that
 writes it: `loupe baseline` records `.loupe-baseline.json`, and `loupe fix` rewrites the
-stylesheets whose findings it can settle without judgment. It also passes the
+declarations — and the misspelled token names — whose findings it can settle
+without judgment. It also passes the
 shipped pattern and component registries unless you name your own with
 `--patterns`/`--components`.
 
@@ -219,7 +221,9 @@ nothing on-role matches, the finding names no token rather than a plausible one.
 
 `tokens/unknown-token` catches the other direction — a `var()` naming nothing the
 design system defines. It stays silent when no definitions were found at all,
-because an empty token set proves nothing.
+because an empty token set proves nothing. A name that is one keystroke from
+exactly one real token is a misspelling the engine can settle, and `loupe fix`
+renames it wherever the file writes it.
 
 Because the engine resolved that substitution itself, it can also apply it:
 
@@ -227,12 +231,18 @@ Because the engine resolved that substitution itself, it can also apply it:
 loupe fix   # --dry-run to see it first
 ```
 
-Only where exactly one on-role token carries the value, and only in stylesheets
-— the same rule fires on `style={{ padding: '13px' }}`, where a CSS-shaped
-substitution would write a syntax error with a clean report. Two candidate
-tokens is a semantic choice, so it is left alone. Paying a model to read a file
-back and retype an answer nothing had to reason about is the expensive way to
-apply a substitution, and this is usually the highest-volume rule in a report.
+Only where exactly one on-role token carries the value — or, for a misspelled
+name, where exactly one known token is a single keystroke away and that
+keystroke is not a digit, since `--wpds-dimension-space-20` and
+`--wpds-dimension-space-30` are one edit apart and mean different amounts. Two
+candidates is a semantic choice, so it is left alone. All three channels are
+rewritten: a
+stylesheet and a CSS-in-JS template are matched as the CSS they are, and a
+`style={{ padding: 13 }}` object is spliced at the literal the scan recorded,
+since `padding-bottom: 13px` is a translation of what the file says rather than
+a copy of it. Paying a model to read a file back and retype an answer nothing
+had to reason about is the expensive way to apply a substitution, and this is
+usually the highest-volume rule in a report.
 
 ### Judged variants
 
@@ -398,6 +408,14 @@ safe to recommend broadly — informational only, never enforced).
 says those aren't yet safe to recommend for most codebases, so pushing
 migration would be wrong, not just premature. That call stays in
 `loupe-authoring`, as prose, for an agent to reason about contextually.
+
+Neither rule offers a fix. Eight `legacy` entries name a replacement carrying
+the same exported name in `@wordpress/ui`, which is what makes an automatic
+import swap look available — and all eight, read against Gutenberg trunk, turn
+out not to be one: `Card` and `Tooltip` are namespaces there, `Text` reuses the
+name `variant` for a different set of values, `Spinner` loses a margin at every
+call site. The registry records that verdict in a `dropIn` field, and today
+carries it on nothing.
 
 The MCP has no maturity signal at all — it presents an `experimental`
 component with the same confidence as a `recommended` one, and it's
@@ -746,7 +764,7 @@ rather than applied to whatever now sits at that index.
 
 ### In the browser's inspector
 
-`browser/devtools/` is a Manifest V3 extension over `loupe serve`. It adds a
+`integrations/devtools/` is a Manifest V3 extension over `loupe serve`. It adds a
 **Loupe panel** — the findings resolved against the page you are looking at, each
 row saying how many elements it currently styles and whether its `@media` query
 holds at this width — and a **Loupe pane in Elements**, which is the inversion:
@@ -757,7 +775,7 @@ already found the thing that looks wrong; every other output loupe produces
 starts from the findings and asks where they are. It is also the only surface
 that cannot be a bookmarklet, because it needs the inspector's selection.
 
-Load it unpacked — `browser/devtools/README.md` has the steps. It reads, it does
+Load it unpacked — `integrations/devtools/README.md` has the steps. It reads, it does
 not write: `loupe ui` is the surface that changes files, and it answers only the
 page it served.
 
@@ -852,7 +870,19 @@ every run re-indexes the whole repo regardless of `--files` scope.
 panel and the gutter, hover gives the rule's guidance, and where the engine
 settled an answer on its own the substitution is offered as a quick fix — the
 same one `loupe fix` writes, from the same function, so the editor cannot
-propose something the CLI would not.
+propose a substitution the CLI would not. A misspelled token is one action
+carrying every line that names it, since clearing one occurrence would leave the
+diagnostic standing.
+
+One action goes the other way: `css/dead-class` offers to delete the rule, and
+`loupe fix` will not. Every other fix replaces a value, which the next run
+checks; a deletion leaves nothing to compare against, and the reference index
+behind that check over-collects on purpose, because a false "dead" deletes live
+CSS. That trade is priced for someone looking at the rule, so the deletion is
+offered where a person accepts it and never in a batch pass over a repo. Where
+the rule cannot be lifted out cleanly — a selector list that also styles a live
+class, the only rule inside an `@media`, a class several rules declare — no
+action is offered and nothing says why.
 
 ```bash
 ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe

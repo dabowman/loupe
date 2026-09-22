@@ -17,11 +17,11 @@ when you are already looking at the thing that seems wrong.
 Unpacked, for now — it is not in any store.
 
 ```bash
-node browser/devtools/build.mjs        # generate vendor/match.js
+node integrations/devtools/build.mjs        # generate vendor/match.js
 ```
 
 Then in Chrome or any Chromium browser: `chrome://extensions` → **Developer
-mode** on → **Load unpacked** → pick `browser/devtools/`.
+mode** on → **Load unpacked** → pick `integrations/devtools/`.
 
 Open DevTools on the app you are developing. The extension reads a `loupe serve`
 running against that app's project:
@@ -77,15 +77,15 @@ prohibits remote code, and an extension that downloaded and evaluated a script
 would deserve to be rejected. Regenerate after any change to the matcher:
 
 ```bash
-node browser/devtools/build.mjs           # write it
-node browser/devtools/build.mjs --check   # what CI runs
+node integrations/devtools/build.mjs           # write it
+node integrations/devtools/build.mjs --check   # what CI runs
 ```
 
 `engine/tests/dom-match.ts` covers the matcher itself and is in `npm test`.
 The surfaces are driven end-to-end by:
 
 ```bash
-node browser/devtools/check.mjs
+node integrations/devtools/check.mjs
 ```
 
 which starts a `loupe serve` over a throwaway project, loads both panes against

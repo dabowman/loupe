@@ -14,8 +14,8 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
 import { analyze } from './analyze.ts';
-import { usableReplacement } from './checks/system/currency.ts';
-import { CSS_FILE, applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
+import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
+import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
@@ -687,13 +687,22 @@ async function main(): Promise<number> {
 		// system, and inferring it from a missing line recommends one that isn't there.
 		const ds = config.designSystem;
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
+		// `layout:`/`text:` get read as "what should I write", but they are
+		// recognition lists and carry the superseded spellings too. Mark those, so
+		// the reader takes the canonical name rather than the first one it knows.
+		// Unmarked without a registry: that is currency data missing, not a clean
+		// bill of health.
+		const components = (arr: readonly string[] | undefined): string =>
+			arr?.length
+				? arr.map((n) => (supersededEverywhere(config.componentRegistry, n) ? `${n} (legacy)` : n)).join(', ')
+				: '(none)';
 		const lines = [
 			`${dim('version:    ')}${versionLine()}`,
 			`${dim('config:     ')}${src}`,
 			`${dim('system:     ')}${ds.name || '(unnamed)'}`,
 			`${dim('packages:   ')}${orNone(ds.packages)}`,
-			`${dim('layout:     ')}${orNone(ds.layoutComponents)}`,
-			`${dim('text:       ')}${orNone(ds.textComponents)}`,
+			`${dim('layout:     ')}${components(ds.layoutComponents)}`,
+			`${dim('text:       ')}${components(ds.textComponents)}`,
 			`${dim('tokens:     ')}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(', ') : '(none \u2014 token rules inactive)'}`,
 			`${dim('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
 			`${dim('suppress:   ')}${config.suppression.keyword} <ruleId> -- <reason>`,
@@ -994,8 +1003,10 @@ async function main(): Promise<number> {
 		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
-			// Only what `fix` can write: an answer about a JSX value is paid for and dropped.
-			const judgeable = toFix.findings.filter((f) => f.suggest?.length && CSS_FILE.test(f.file));
+			// Every channel: a judged replacement is written in all three. Only a
+			// judged `keep` outside a stylesheet has nowhere to go, and that one is
+			// reported as a skip rather than paid for silently.
+			const judgeable = toFix.findings.filter((f) => f.suggest?.length);
 			if (apiKey && toFix.tokens && judgeable.length)
 				await judgeValues(root, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
 		} catch (err) {
@@ -1013,7 +1024,9 @@ async function main(): Promise<number> {
 		// Flattened at the print site rather than at capture, because the raw value is
 		// what the substitution matches against. Not bounded: both lines exist to be
 		// acted on, and an elided value can be matched against neither.
-		const decl = (f: { prop: string; value: string }): string => oneLine(`${f.prop}: ${f.value}`);
+		// A rename has no property around it, so it prints as the bare name it is.
+		const decl = (f: { prop?: string | undefined; value: string }): string =>
+			oneLine(f.prop === undefined ? f.value : `${f.prop}: ${f.value}`);
 		for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2192 ${green(f.to)}\n`);
 		for (const k of kept.applied)
 			process.stdout.write(
@@ -1021,13 +1034,14 @@ async function main(): Promise<number> {
 			);
 		for (const f of [...skipped, ...kept.skipped])
 			process.stdout.write(`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2014 ${f.why}\n`);
-		// A collapsed finding is several declarations, so a declaration acted on is
-		// not a finding cleared. What is counted as done is the finding every one
-		// of whose declarations was rewritten or suppressed.
+		// A collapsed finding is several declarations and a misspelled token is
+		// every line naming it, so a substitution written is not a finding cleared.
+		// What is counted as done is the finding every one of whose parts was
+		// rewritten or suppressed.
 		const left = toFix.findings.length - settledBy(toFix.findings, applied, kept.applied);
 		const nSkipped = skipped.length + kept.skipped.length;
 		process.stdout.write(
-			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s)`)}${
+			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(s)`)}${
 				apiKey ? `, ${dry ? 'would suppress' : 'suppressed'} ${kept.applied.length}` : ''
 			}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ''}. ${left} of ${toFix.findings.length} finding(s) left for review.\n`,
 		);

@@ -21,7 +21,7 @@
     ],
     "components": {
       "layout": ["Stack", "Grid", "Center"],
-      "text": ["Heading", "Text"]
+      "text": ["Text", "Heading"]
     },
     "elementMap": {
       "p": "Text",

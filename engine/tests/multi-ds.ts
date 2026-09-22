@@ -16,11 +16,13 @@
  * the wrong repo — which is the failure mode no build ever catches.
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
 import { loadConfig } from '../src/config.ts';
+import { loadComponents } from '../src/components.ts';
+import { supersededEverywhere } from '../src/checks/system/currency.ts';
 import { matches, toNode } from '../src/patterns.ts';
 import { registryApplies } from '../src/registry.ts';
 import { renderTitle } from '../src/rules.ts';
@@ -586,6 +588,58 @@ await check('a rule title names a token namespace only when there is one', () =>
 	assert(several.includes('design-system'), `the fallback should be generic: ${several}`);
 	const single = renderTitle('tokens/hardcoded-value', ds(['--wpds-']), 'k');
 	assert(single.includes('--wpds-*'), `a single prefix is the namespace and should be named: ${single}`);
+});
+
+// `components.layout`/`.text` are recognition lists: they carry every spelling
+// a rule has to match, superseded ones included. Guidance that named the first
+// *two* therefore named whatever sat in second place — `layout/in-css` read
+// "use <Stack>/<HStack>" under WPDS, sending every flex fix to a legacy
+// component that `system/superseded-component` then reports. Both halves are
+// checked: the code names one entry, and the shipped lists put the canonical
+// spelling there.
+await check('guidance names the canonical component, never a superseded spelling', () => {
+	const ds = (layout: string[], text: string[]): DesignSystem => ({
+		name: 'X',
+		packages: [],
+		tokenPrefixes: [],
+		tokenSources: [],
+		styleSources: [],
+		cssInJsPackages: [],
+		normalizeExports: null,
+		layoutComponents: layout,
+		textComponents: text,
+		knownComponents: new Set(),
+		elementMap: new Map(),
+		substitutionProps: new Set(),
+	});
+	const flex = renderTitle('layout/in-css', ds(['Stack', 'HStack', 'VStack'], []), 'k');
+	assert(flex.includes('<Stack>'), `the canonical primitive should be named: ${flex}`);
+	assert(!/HStack|VStack/.test(flex), `a superseded spelling must not be recommended: ${flex}`);
+	const type = renderTitle('typography/untokenized', ds([], ['Text', 'Heading']), 'k');
+	assert(type.includes('<Text>') && !type.includes('<Heading>'), `text guidance names the canonical: ${type}`);
+	// `(none)` is a real answer, and inventing a primitive is worse than saying so.
+	const bare = renderTitle('layout/in-css', ds([], []), 'k');
+	assert(bare.includes('a layout primitive'), `no primitive keeps the generic phrase: ${bare}`);
+
+	// The data half: whatever each shipped preset puts first is a name that
+	// system's own registry still recommends. Reordering a list silently turns
+	// every one of these titles into a recommendation to write the old name.
+	for (const id of ['wpds', 'archer']) {
+		const preset = JSON.parse(readFileSync(join(PRESET_DIR, `${id}.json`), 'utf8')) as {
+			designSystem?: { components?: Record<string, string[]> };
+		};
+		const registry = loadComponents(
+			JSON.parse(readFileSync(join(HERE, '..', '..', 'profiles', id, 'components', 'index.json'), 'utf8')),
+		);
+		for (const axis of ['layout', 'text']) {
+			const canonical = preset.designSystem?.components?.[axis]?.[0];
+			if (!canonical) continue;
+			assert(
+				!supersededEverywhere(registry, canonical),
+				`${id} preset's ${axis} list is not canonical-first — guidance would recommend ${canonical}`,
+			);
+		}
+	}
 });
 
 // Anatomy entries are how a library's *required* structure stops reporting as

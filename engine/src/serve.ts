@@ -26,9 +26,32 @@
  */
 
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { MATCH_JS } from './dom-match.ts';
 import { reportPayload } from './report.ts';
 import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
+
+/**
+ * The WordPress mu-plugin, served so it can be installed with `curl`.
+ *
+ * A bookmarklet is one click per navigation, which in wp-admin is every screen.
+ * The file that fixes that ships with the plugin — but under an install path
+ * nobody knows by heart, so the server that is already running hands it over.
+ *
+ * ponytail: read from disk, so a single-file binary serves 404 here rather than
+ * the file. Embedding it needs a text loader in the bundler; do that if anyone
+ * ever installs a WordPress mu-plugin from a CI binary.
+ */
+const MU_PLUGIN = join(
+	dirname(fileURLToPath(import.meta.url)),
+	'..',
+	'..',
+	'integrations',
+	'wordpress',
+	'loupe-overlay.php',
+);
 
 /**
  * Panel chrome. Lives in a shadow root, so this is the entire cascade it is ever
@@ -256,7 +279,18 @@ const INDEX = (origin: string): string => `<!doctype html><meta charset="utf-8">
 elements they actually style on the page you are looking at &mdash; hover to outline them, click to pin
 and scroll. Findings in source this page does not render, and every JSX-anchored rule, are listed but
 cannot be located; the terminal remains the complete report.</p>
-<p class="dim">Endpoints: <code>/findings.json</code> &middot; <code>/overlay.js</code></p>
+<h1 style="margin-top:36px">WordPress</h1>
+<p>wp-admin is a full navigation per screen, so the bookmarklet is a click per page. This loads the
+overlay itself &mdash; from your project root, with this server running:</p>
+<pre>mkdir -p .loupe/mu-plugins
+curl -o .loupe/mu-plugins/loupe-overlay.php ${origin}/loupe-overlay.php</pre>
+<p>Then in <code>.wp-env.json</code>, and restart:</p>
+<pre>"mappings": { "wp-content/mu-plugins": ".loupe/mu-plugins" },
+"config":   { "LOUPE_OVERLAY_URL": "${origin}" }</pre>
+<p>Visit any page with <code>?loupe=1</code> to turn it on, <code>?loupe=0</code> to turn it off.
+It is off until you ask because browser tests usually drive the same WordPress you are looking at,
+and a panel over every page eats their clicks.</p>
+<p class="dim">Endpoints: <code>/findings.json</code> &middot; <code>/overlay.js</code> &middot; <code>/loupe-overlay.php</code></p>
 </main>`;
 
 /**
@@ -309,6 +343,25 @@ export function serve(opts: {
 						res.setHeader('content-type', 'application/json; charset=utf-8');
 						res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
 					});
+				return;
+			}
+			if (path === '/loupe-overlay.php') {
+				let php: string;
+				try {
+					php = readFileSync(MU_PLUGIN, 'utf8');
+				} catch {
+					res.statusCode = 404;
+					res.end(
+						'loupe: the WordPress mu-plugin is not readable from this build — copy it from integrations/wordpress/.\n',
+					);
+					return;
+				}
+				// text/plain, not application/x-httpd-php: this is handed to `curl -o`
+				// and to people reading it, and nothing here should tempt a browser
+				// into treating it as anything but bytes.
+				res.setHeader('content-type', 'text/plain; charset=utf-8');
+				res.setHeader('cache-control', 'no-store');
+				res.end(php);
 				return;
 			}
 			if (path === '/') {

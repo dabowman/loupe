@@ -18425,7 +18425,7 @@ var require_util = __commonJS({
       return path;
     });
     exports.normalize = normalize2;
-    function join15(aRoot, aPath) {
+    function join16(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -18457,7 +18457,7 @@ var require_util = __commonJS({
       }
       return joined;
     }
-    exports.join = join15;
+    exports.join = join16;
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
@@ -18671,7 +18671,7 @@ var require_util = __commonJS({
             parsed.path = parsed.path.substring(0, index2 + 1);
           }
         }
-        sourceURL = join15(urlGenerate(parsed), sourceURL);
+        sourceURL = join16(urlGenerate(parsed), sourceURL);
       }
       return normalize2(sourceURL);
     }
@@ -20111,8 +20111,8 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync10, readFileSync: readFileSync14, realpathSync: realpathSync2 } = __require("fs");
-    var { dirname: dirname8, isAbsolute: isAbsolute7, join: join15, relative: relative5, sep: sep3 } = __require("path");
+    var { existsSync: existsSync10, readFileSync: readFileSync15, realpathSync: realpathSync2 } = __require("fs");
+    var { dirname: dirname9, isAbsolute: isAbsolute7, join: join16, relative: relative5, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -20139,7 +20139,7 @@ var require_previous_map = __commonJS({
         if (!this.mapFile && opts.from) {
           this.mapFile = opts.from;
         }
-        if (this.mapFile) this.root = dirname8(this.mapFile);
+        if (this.mapFile) this.root = dirname9(this.mapFile);
         if (text2) this.text = text2;
       }
       consumer() {
@@ -20185,15 +20185,15 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative5(realPath2(dirname8(cssFile)), realPath2(path));
+          let rel = relative5(realPath2(dirname9(cssFile)), realPath2(path));
           if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute7(rel)) {
             return void 0;
           }
         }
-        this.root = dirname8(path);
+        this.root = dirname9(path);
         if (existsSync10(path)) {
           this.mapFile = path;
-          return readFileSync14(path, "utf-8").toString().trim();
+          return readFileSync15(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join15(dirname8(file), map);
+          if (file) map = join16(dirname9(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -20259,7 +20259,7 @@ var require_input = __commonJS({
     var { nanoid } = require_non_secure();
     var { isAbsolute: isAbsolute7, resolve: resolve7 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
-    var { fileURLToPath: fileURLToPath4, pathToFileURL: pathToFileURL3 } = __require("url");
+    var { fileURLToPath: fileURLToPath5, pathToFileURL: pathToFileURL3 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
     var PreviousMap = require_previous_map();
     var terminalHighlight = require_terminal_highlight();
@@ -20452,8 +20452,8 @@ var require_input = __commonJS({
           url: fromUrl.toString()
         };
         if (fromUrl.protocol === "file:") {
-          if (fileURLToPath4) {
-            result.file = fileURLToPath4(fromUrl);
+          if (fileURLToPath5) {
+            result.file = fileURLToPath5(fromUrl);
           } else {
             throw new Error(`file: protocol is not available in this PostCSS build`);
           }
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname8, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
+    var { dirname: dirname9, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL3 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname8 && resolve7 && relative5 && sep3);
+    var pathAvailable = Boolean(dirname9 && resolve7 && relative5 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20767,7 +20767,7 @@ var require_map_generator = __commonJS({
       applyPrevMaps() {
         for (let prev of this.previous()) {
           let from = this.toUrl(this.path(prev.file));
-          let root2 = prev.root || dirname8(prev.file);
+          let root2 = prev.root || dirname9(prev.file);
           let map;
           if (this.mapOpts.sourcesContent === false) {
             map = new SourceMapConsumer(prev.text);
@@ -20962,9 +20962,9 @@ var require_map_generator = __commonJS({
         if (/^\w+:\/\//.test(file)) return file;
         let cached = this.memoizedPaths.get(file);
         if (cached) return cached;
-        let from = this.opts.to ? dirname8(this.opts.to) : ".";
+        let from = this.opts.to ? dirname9(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname8(resolve7(from, this.mapOpts.annotation));
+          from = dirname9(resolve7(from, this.mapOpts.annotation));
         }
         let path = relative5(from, file);
         this.memoizedPaths.set(file, path);
@@ -23495,8 +23495,8 @@ var require_lib2 = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync9, writeFileSync as writeFileSync5 } from "node:fs";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { basename, dirname as dirname8, isAbsolute as isAbsolute6, join as join15, relative as relative4, resolve as resolve6 } from "node:path";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
 
 // src/analyze.ts
@@ -23637,7 +23637,10 @@ var isRuleId = (id) => Object.hasOwn(RULES, id);
 var SEVERITIES = /* @__PURE__ */ new Set(["error", "warn", "off"]);
 var isSeverity = (v) => typeof v === "string" && SEVERITIES.has(v);
 function renderTitle(ruleId, ds, keyword) {
-  const list2 = (arr, fallback) => arr?.length ? arr.slice(0, 2).map((c) => `<${c}>`).join("/") : fallback;
+  const list2 = (arr, fallback) => {
+    const canonical = arr?.[0];
+    return canonical ? `<${canonical}>` : fallback;
+  };
   const prefixes = ds.tokenPrefixes ?? [];
   const namespace = prefixes.length === 1 && prefixes[0] ? `${prefixes[0]}*` : "design-system";
   return RULES[ruleId].title.replace("{layout}", list2(ds.layoutComponents, "a layout primitive")).replace("{text}", list2(ds.textComponents, "a text component")).replace(/\{tokenPrefix\}/g, namespace).replace("{system}", ds.name || "the design system").replace("{kw}", keyword);
@@ -23958,6 +23961,21 @@ function numeric(prop, n) {
   if (n === 0) return "0";
   return UNITLESS.has(prop) ? String(n) : `${n}px`;
 }
+function valueSpan(node, line) {
+  const loc = node?.loc;
+  if (!node || !loc || loc.start.line !== line || loc.end.line !== line) return void 0;
+  const text2 = rawOf(node);
+  return text2 === null ? void 0 : { col: loc.start.column, text: text2 };
+}
+function rawOf(node) {
+  if (node.type === "TemplateLiteral") return node.expressions.length ? null : `\`${node.quasis[0]?.value.raw ?? ""}\``;
+  if (node.type === "UnaryExpression") {
+    const inner = node.argument ? rawOf(node.argument) : null;
+    return inner === null ? null : `${node.operator}${inner}`;
+  }
+  const raw = node.extra?.raw;
+  return typeof raw === "string" ? raw : null;
+}
 function keyName(node) {
   if (!node) return null;
   if (node.key.type === "Identifier" && !node.computed) return node.key.name;
@@ -24122,6 +24140,25 @@ function mediaQuery(rule2) {
 var keySelector = (sel) => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() ?? sel;
 var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => m[1] === void 0 ? [] : [m[1]]);
 var ruleIsGrid = (rule2) => [...ownDecls(rule2)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
+function deletableRule(rule2, lines) {
+  const end = rule2.source?.end;
+  if (!end) return null;
+  const parent = rule2.parent;
+  if (parent && parent.type !== "root" && parent.nodes.length === 1) return null;
+  let head2 = rule2;
+  for (; ; ) {
+    const prev = head2.prev();
+    if (prev?.type !== "comment" || !prev.source?.start) break;
+    if (!/^[^\S\n]*\n[^\S\n]*$/.test(head2.raws.before ?? "")) break;
+    head2 = prev;
+  }
+  const start = head2.source?.start;
+  if (!start) return null;
+  const before = (lines[start.line - 1] ?? "").slice(0, start.column - 1);
+  const after = (lines[end.line - 1] ?? "").slice(end.column);
+  if (before.trim() || after.trim()) return null;
+  return { startLine: start.line, endLine: end.line };
+}
 
 // node_modules/postcss/lib/postcss.mjs
 var import_postcss = __toESM(require_postcss(), 1);
@@ -24478,7 +24515,8 @@ function readStyleAttr(value) {
       dynamic++;
       continue;
     }
-    decls.push({ prop: cssProp, value: cssValue, line: prop.loc?.start?.line ?? null });
+    const line = prop.loc?.start?.line ?? null;
+    decls.push({ prop: cssProp, value: cssValue, line, span: valueSpan(prop.value, line) });
   }
   return { decls, dynamic, present: true };
 }
@@ -25075,13 +25113,27 @@ function deadClasses(declared, {
   isNeverDead
 }) {
   const isReferenced = (cls) => referenced.has(cls) || isNeverDead(cls) || stems.some((s) => cls.startsWith(s));
+  const rules = /* @__PURE__ */ new Map();
+  for (const d of declared) {
+    const key = `${d.file}\0${d.cls}`;
+    rules.set(key, (rules.get(key) ?? 0) + 1);
+  }
   const seen = /* @__PURE__ */ new Set();
-  return declared.flatMap(({ file, line, cls, scopeLines }) => {
+  return declared.flatMap(({ file, line, cls, scopeLines, cut }) => {
     const key = `${file}\0${cls}`;
     if (seen.has(key) || !isProject(cls) || isReferenced(cls)) return [];
     seen.add(key);
     return [
-      { rule: "css/dead-class", file, line, message: `.${cls}`, code: `.${cls}`, selector: `.${cls}`, scopeLines }
+      {
+        rule: "css/dead-class",
+        file,
+        line,
+        message: `.${cls}`,
+        code: `.${cls}`,
+        selector: `.${cls}`,
+        scopeLines,
+        dead: rules.get(key) === 1 ? cut : void 0
+      }
     ];
   });
 }
@@ -25217,6 +25269,10 @@ var namedReplacements = (supersededBy) => [...(supersededBy ?? "").matchAll(/([A
   name: String(m[1]),
   package: String(m[2])
 }));
+var supersededEverywhere = (registry, name) => {
+  const entries = [...registry.values()].filter((e) => e.name === name);
+  return entries.length > 0 && !entries.some((e) => e.status === "recommended");
+};
 function usableReplacement(registry, supersededBy) {
   const candidates = namedReplacements(supersededBy);
   if (!candidates.length) return true;
@@ -25276,9 +25332,9 @@ function libraryOverride(keyClasses, isLibrary, isProject) {
 
 // src/checks/system/raw-element.ts
 function currentAnalog(registry, suggest) {
-  const entries = [...registry.values()].filter((e) => e.name === suggest);
-  const current = entries.some((e) => e.status === "recommended");
-  return !current && entries.find((e) => e.supersededBy)?.supersededBy || `<${suggest}>`;
+  if (!supersededEverywhere(registry, suggest)) return `<${suggest}>`;
+  const remedy = [...registry.values()].find((e) => e.name === suggest && e.supersededBy)?.supersededBy;
+  return remedy || `<${suggest}>`;
 }
 function rawElements(els, {
   layoutComponents,
@@ -25313,14 +25369,51 @@ var hardcodedValue = ({ prop, value }) => {
 };
 
 // src/checks/tokens/unknown-token.ts
+function oneEdit(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let head2 = 0;
+  while (head2 < a.length && head2 < b.length && a[head2] === b[head2]) head2++;
+  let tail = 0;
+  while (tail < a.length - head2 && tail < b.length - head2 && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  return a.length - head2 - tail <= 1 && b.length - head2 - tail <= 1;
+}
+var spelling = (name) => name.replace(/\d/g, "");
+function nearMiss(name, known) {
+  let found;
+  for (const k of known) {
+    if (!oneEdit(name, k) || spelling(k) === spelling(name)) continue;
+    if (found !== void 0) return void 0;
+    found = k;
+  }
+  return found;
+}
 function unknownTokens(refs, known) {
   if (!known.size) return [];
-  const seen = /* @__PURE__ */ new Set();
-  return refs.flatMap(({ file, line, name, scopeLines }) => {
-    const key = `${file}\0${name}`;
-    if (known.has(name) || seen.has(key)) return [];
-    seen.add(key);
-    return [{ rule: "tokens/unknown-token", file, line, message: name, code: name, scopeLines }];
+  const groups = /* @__PURE__ */ new Map();
+  for (const ref of refs) {
+    if (known.has(ref.name)) continue;
+    const group = groups.get(`${ref.file}\0${ref.name}`);
+    if (group) {
+      if (!group.lines.includes(ref.line)) group.lines.push(ref.line);
+      continue;
+    }
+    groups.set(`${ref.file}\0${ref.name}`, { ...ref, lines: [ref.line] });
+  }
+  return [...groups.values()].map(({ file, line, name, scopeLines, lines }) => {
+    const to = nearMiss(name, known);
+    const rename = to === void 0 ? void 0 : { from: name, to, lines };
+    return {
+      rule: "tokens/unknown-token",
+      file,
+      line,
+      // The name alone: the rule's title already says a token is being named.
+      // With the replacement beside it where one is settled, so a reader sees
+      // what `fix` would write without having to run it.
+      message: to === void 0 ? name : `${name} \u2192 ${to}`,
+      code: name,
+      scopeLines,
+      rename
+    };
   });
 }
 
@@ -25577,11 +25670,13 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     }
     const emit = (f) => report({ ...f, file: rel, code: f.code ?? f.message });
     harvestTokenDefs(root2, tokenPrefixes, tokenSet);
+    const srcLines = text2.split("\n");
     root2.walkRules((cssRule) => {
       const ruleLine = cssRule.source?.start?.line ?? 1;
       const selectors = resolvedSelectors(cssRule);
       const allClasses = [...new Set(selectors.flatMap(classesIn))];
-      const keyClasses = [...new Set(selectors.map(keySelector).flatMap(classesIn))];
+      const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+      const keyClasses = [...new Set(keyClassesPer.flat())];
       if (!allClasses.length) return;
       const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
       const boundSystem = bound.filter((b) => b.isSystem);
@@ -25611,7 +25706,15 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
       if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
       else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media });
-      for (const cls of keyClasses) declared.push({ file: rel, line: ruleLine, cls, scopeLines });
+      const cut = deletableRule(cssRule, srcLines);
+      for (const cls of keyClasses)
+        declared.push({
+          file: rel,
+          line: ruleLine,
+          cls,
+          scopeLines,
+          cut: cut && keyClassesPer.every((k) => k.includes(cls)) ? cut : void 0
+        });
     });
   }
   for (const f of deadClasses(declared, {
@@ -25636,6 +25739,9 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       if (finding)
         pending.push({
           ...finding,
+          // The classifier sees the translated declaration, which is not what
+          // the file says. Only the span points back at the bytes it came from.
+          hints: finding.hints?.map((h) => ({ ...h, span: d.span })),
           line: d.line ?? el.line,
           code: finding.code ?? finding.message,
           suffix: " (inline)"
@@ -25757,26 +25863,42 @@ var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 function tokenFixes(findings) {
   const out = [];
   for (const f of findings) {
-    if (!CSS_FILE.test(f.file)) continue;
     for (const s of f.suggest ?? []) {
       const to = s.tokens.length === 1 ? `var(${s.tokens[0]})` : s.judged?.answer;
       if (to === void 0 || to === KEEP) continue;
-      out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to });
+      out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to, span: s.span });
     }
+    const rename = f.rename;
+    if (rename) for (const line of rename.lines) out.push({ file: f.file, line, value: rename.from, to: rename.to });
   }
   return out;
 }
 function settledBy(findings, applied, kept = []) {
-  const at = (d) => `${d.file}\0${d.line}\0${d.prop}`;
+  const at = (d) => `${d.file}\0${d.line}\0${d.prop ?? ""}`;
   const done = new Set([...applied, ...kept].map(at));
   return findings.filter((f) => {
-    const parts = f.suggest ?? (f.decl ? [f.decl] : []);
-    return parts.length > 0 && parts.every((s) => done.has(at({ file: f.file, line: s.line ?? f.line, prop: s.prop })));
+    const parts = f.rename ? f.rename.lines.map((line) => ({ file: f.file, line })) : (f.suggest ?? (f.decl ? [f.decl] : [])).map((s) => ({ file: f.file, line: s.line ?? f.line, prop: s.prop }));
+    return parts.length > 0 && parts.every((p) => done.has(at(p)));
   }).length;
 }
+var QUOTES = "'\"`";
 function substituteOnLine(line, fix) {
+  const span = fix.span;
+  if (span) {
+    if (line.slice(span.col, span.col + span.text.length) !== span.text)
+      return { why: "the value is no longer where it was reported" };
+    if (/['"`\\]|\$\{/.test(fix.to)) return { why: "replacement is not writable as a JS string" };
+    const opener = span.text[0];
+    const quote = opener && QUOTES.includes(opener) ? opener : "'";
+    return `${line.slice(0, span.col)}${quote}${fix.to}${quote}${line.slice(span.col + span.text.length)}`;
+  }
+  if (fix.prop === void 0) {
+    const renamed = line.replace(new RegExp(`(var\\(\\s*)${escapeRe(fix.value)}(?![-\\w])`, "g"), `$1${fix.to}`);
+    if (renamed === line) return { why: "the token is not on its reported line" };
+    return renamed;
+  }
   const re = new RegExp(
-    `(^|[;{\\s])(${escapeRe(fix.prop)}\\s*:\\s*)${escapeRe(fix.value.trim())}(?=\\s*(?:!important)?\\s*(?:[;}]|$))`,
+    `(^|[;{\\s\`])(${escapeRe(fix.prop)}\\s*:\\s*)${escapeRe(fix.value.trim())}(?=\\s*(?:!important)?\\s*(?:[;}\`]|$))`,
     "gi"
   );
   const hits = line.match(re);
@@ -25805,7 +25927,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
     }
     const lines = text2.split("\n");
     let dirty = false;
-    for (const fix of group) {
+    for (const fix of [...group].sort((a, b) => b.line - a.line || (b.span?.col ?? 0) - (a.span?.col ?? 0))) {
       const i = fix.line - 1;
       const line = lines[i];
       if (line === void 0) {
@@ -25823,6 +25945,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
     }
     if (dirty && !dry) writeFileSync(abs, lines.join("\n"));
   }
+  applied.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
   return { applied, skipped };
 }
 function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } = {}) {
@@ -25941,7 +26064,7 @@ var archer_default = {
     ],
     components: {
       layout: ["Stack", "Grid", "Center"],
-      text: ["Heading", "Text"]
+      text: ["Text", "Heading"]
     },
     elementMap: {
       p: "Text",
@@ -28850,6 +28973,29 @@ function rangeFor(finding, lineText) {
   const end = valueAt === -1 ? text2.length : valueAt + decl2.value.trim().length;
   return { start: { line, character: at }, end: { line, character: Math.min(end, text2.length) } };
 }
+function deleteRule(lines, dead, cls) {
+  let first = dead.startLine - 1;
+  let last = dead.endLine - 1;
+  if (first < 0 || last < first || last >= lines.length) return null;
+  const slice = lines.slice(first, last + 1).join("\n");
+  const opens = (slice.match(/{/g) ?? []).length;
+  if (!opens || opens !== (slice.match(/}/g) ?? []).length) return null;
+  if (!/}[^\S\n]*$/.test(slice)) return null;
+  if (!new RegExp(`${escapeRe(cls)}(?![-\\w])`).test(slice)) return null;
+  const atEnd = last + 2 >= lines.length;
+  if (!atEnd && (lines[last + 1] ?? "").trim() === "") last++;
+  else if (atEnd && first > 0 && (lines[first - 1] ?? "").trim() === "") first--;
+  if (last + 1 < lines.length)
+    return { range: { start: { line: first, character: 0 }, end: { line: last + 1, character: 0 } }, newText: "" };
+  const prev = first > 0 ? (lines[first - 1] ?? "").length : 0;
+  return {
+    range: {
+      start: { line: first > 0 ? first - 1 : 0, character: prev },
+      end: { line: last, character: (lines[last] ?? "").length }
+    },
+    newText: ""
+  };
+}
 var commentFor = (file, body2) => /\.(css|scss|sass|less|pcss|postcss)$/i.test(file) ? `/* ${body2} */` : `// ${body2}`;
 function lsp(opts) {
   const { config, run, input, output, log = () => {
@@ -28970,7 +29116,7 @@ ${f.note}` : f.message
       for (const finding of at(uri, line)) {
         const text2 = lines(rel)[line] ?? "";
         for (const fix of tokenFixes([finding])) {
-          if (fix.line - 1 !== line) continue;
+          if (fix.prop === void 0 || fix.line - 1 !== line) continue;
           const rewritten = substituteOnLine(text2, fix);
           if (typeof rewritten !== "string") continue;
           const key2 = `${line}\0${fix.prop}\0${fix.to}`;
@@ -28991,6 +29137,40 @@ ${f.note}` : f.message
               }
             }
           });
+        }
+        const rename = finding.rename;
+        if (rename && !seen.has(`rename\0${rename.from}`)) {
+          seen.add(`rename\0${rename.from}`);
+          const edits = [];
+          for (const fix of tokenFixes([finding])) {
+            const on = lines(rel)[fix.line - 1];
+            if (on === void 0) continue;
+            const rewritten = substituteOnLine(on, fix);
+            if (typeof rewritten !== "string") continue;
+            edits.push({
+              range: { start: { line: fix.line - 1, character: 0 }, end: { line: fix.line - 1, character: on.length } },
+              newText: rewritten
+            });
+          }
+          if (edits.length)
+            actions.push({
+              title: `Rename ${rename.from} to ${rename.to} (${edits.length} occurrence(s))`,
+              kind: "quickfix",
+              isPreferred: true,
+              edit: { changes: { [uri]: edits } }
+            });
+        }
+        const dead = finding.dead;
+        if (dead && !seen.has(`dead\0${line}`)) {
+          const edit = deleteRule(lines(rel), dead, finding.code ?? finding.message);
+          if (edit) {
+            seen.add(`dead\0${line}`);
+            actions.push({
+              title: `Delete the dead rule ${finding.message}`,
+              kind: "quickfix",
+              edit: { changes: { [uri]: [edit] } }
+            });
+          }
         }
         const indent = /^[ \t]*/.exec(lines(rel)[line] ?? "")?.[0] ?? "";
         const key = `suppress\0${line}\0${finding.rule}`;
@@ -29102,6 +29282,9 @@ ${renderTitle(rule2, config.designSystem, config.suppression.keyword)}`).join("\
 
 // src/serve.ts
 import { createServer } from "node:http";
+import { readFileSync as readFileSync10 } from "node:fs";
+import { dirname as dirname5, join as join10 } from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // src/dom-match.ts
 var MATCH_VERSION = 1;
@@ -29309,6 +29492,14 @@ var MATCH_JS = `
 `;
 
 // src/serve.ts
+var MU_PLUGIN = join10(
+  dirname5(fileURLToPath3(import.meta.url)),
+  "..",
+  "..",
+  "integrations",
+  "wordpress",
+  "loupe-overlay.php"
+);
 var CSS2 = `
 :host { all: initial }
 * { box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace }
@@ -29522,7 +29713,18 @@ var INDEX = (origin) => `<!doctype html><meta charset="utf-8">
 elements they actually style on the page you are looking at &mdash; hover to outline them, click to pin
 and scroll. Findings in source this page does not render, and every JSX-anchored rule, are listed but
 cannot be located; the terminal remains the complete report.</p>
-<p class="dim">Endpoints: <code>/findings.json</code> &middot; <code>/overlay.js</code></p>
+<h1 style="margin-top:36px">WordPress</h1>
+<p>wp-admin is a full navigation per screen, so the bookmarklet is a click per page. This loads the
+overlay itself &mdash; from your project root, with this server running:</p>
+<pre>mkdir -p .loupe/mu-plugins
+curl -o .loupe/mu-plugins/loupe-overlay.php ${origin}/loupe-overlay.php</pre>
+<p>Then in <code>.wp-env.json</code>, and restart:</p>
+<pre>"mappings": { "wp-content/mu-plugins": ".loupe/mu-plugins" },
+"config":   { "LOUPE_OVERLAY_URL": "${origin}" }</pre>
+<p>Visit any page with <code>?loupe=1</code> to turn it on, <code>?loupe=0</code> to turn it off.
+It is off until you ask because browser tests usually drive the same WordPress you are looking at,
+and a panel over every page eats their clicks.</p>
+<p class="dim">Endpoints: <code>/findings.json</code> &middot; <code>/overlay.js</code> &middot; <code>/loupe-overlay.php</code></p>
 </main>`;
 function serve(opts) {
   const { port, config, run } = opts;
@@ -29551,6 +29753,22 @@ function serve(opts) {
         });
         return;
       }
+      if (path === "/loupe-overlay.php") {
+        let php;
+        try {
+          php = readFileSync10(MU_PLUGIN, "utf8");
+        } catch {
+          res.statusCode = 404;
+          res.end(
+            "loupe: the WordPress mu-plugin is not readable from this build \u2014 copy it from integrations/wordpress/.\n"
+          );
+          return;
+        }
+        res.setHeader("content-type", "text/plain; charset=utf-8");
+        res.setHeader("cache-control", "no-store");
+        res.end(php);
+        return;
+      }
       if (path === "/") {
         res.setHeader("content-type", "text/html; charset=utf-8");
         res.end(INDEX(origin));
@@ -29575,9 +29793,9 @@ function serve(opts) {
 
 // src/ui.ts
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync as readFileSync10, watch, writeFileSync as writeFileSync3 } from "node:fs";
+import { readFileSync as readFileSync11, watch, writeFileSync as writeFileSync3 } from "node:fs";
 import { createServer as createServer2 } from "node:http";
-import { dirname as dirname5, join as join10 } from "node:path";
+import { dirname as dirname6, join as join11 } from "node:path";
 var commentFor2 = (file, text2) => /\.(css|scss|sass|less|pcss|postcss)$/i.test(file) ? `/* ${text2} */` : `// ${text2}`;
 var WATCH_CAP = 2048;
 var DEBOUNCE_MS = 140;
@@ -29801,7 +30019,7 @@ async function ui(opts) {
     let dirs;
     try {
       const found = discover({ root: root2, sources: config.sources });
-      dirs = /* @__PURE__ */ new Set([root2, ...[...found.styles, ...found.markup, ...found.references].map((f) => dirname5(f.abs))]);
+      dirs = /* @__PURE__ */ new Set([root2, ...[...found.styles, ...found.markup, ...found.references].map((f) => dirname6(f.abs))]);
     } catch (err) {
       log(`loupe: cannot establish a watch \u2014 ${messageOf(err)}
 `);
@@ -29927,7 +30145,7 @@ async function ui(opts) {
       if (!known.has(want)) return send(res, 404, { error: "not a file in this run" });
       const at = Number(q.get("line") ?? 1);
       try {
-        const lines = readFileSync10(join10(root2, want), "utf8").split("\n");
+        const lines = readFileSync11(join11(root2, want), "utf8").split("\n");
         const from = Math.max(1, at - PEEK);
         const to = Math.min(lines.length, at + PEEK);
         send(res, 200, { file: want, from, to, lines: lines.slice(from - 1, to) });
@@ -29976,9 +30194,9 @@ async function ui(opts) {
       if (!finding) return send(res, 400, { error: "no finding named" });
       if (!reason) return send(res, 400, { error: "a suppression needs a reason" });
       const oneLine2 = reason.replace(/\s+/g, " ");
-      const full = join10(root2, finding.file);
+      const full = join11(root2, finding.file);
       try {
-        const lines = readFileSync10(full, "utf8").split("\n");
+        const lines = readFileSync11(full, "utf8").split("\n");
         const target = lines[finding.line - 1];
         if (target === void 0) return send(res, 409, { error: "that line is no longer in the file" });
         const indent = /^[ \t]*/.exec(target)?.[0] ?? "";
@@ -30036,11 +30254,11 @@ async function ui(opts) {
 }
 
 // src/detect.ts
-import { existsSync as existsSync6, readFileSync as readFileSync11, statSync as statSync3 } from "node:fs";
-import { join as join11 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync12, statSync as statSync3 } from "node:fs";
+import { join as join12 } from "node:path";
 var readJson = (p) => {
   try {
-    return JSON.parse(readFileSync11(p, "utf8"));
+    return JSON.parse(readFileSync12(p, "utf8"));
   } catch {
     return null;
   }
@@ -30052,12 +30270,12 @@ function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
   const walk = (dir, rel, depth) => {
     if (depth > maxDepth || out.length >= budget) return;
-    const pkg = join11(dir, "package.json");
+    const pkg = join12(dir, "package.json");
     if (existsSync6(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
     for (const e of readDir(dir)) {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walk(join11(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      walk(join12(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(root2, "", 0);
@@ -30065,7 +30283,7 @@ function manifests(root2, maxDepth = 3, budget = 60) {
 }
 function markerAt(dir, marker) {
   const name = marker.replace(/\/$/, "");
-  const full = join11(dir, name);
+  const full = join12(dir, name);
   if (!existsSync6(full)) return false;
   if (!marker.endsWith("/")) return true;
   try {
@@ -30078,7 +30296,7 @@ function probeDirs(root2) {
   const out = [{ dir: root2, rel: "" }];
   for (const e of readDir(root2)) {
     if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-    out.push({ dir: join11(root2, e.name), rel: e.name });
+    out.push({ dir: join12(root2, e.name), rel: e.name });
   }
   return out;
 }
@@ -30086,7 +30304,7 @@ var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? det
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson(join11(root2, rel, "package.json")) ?? {};
+      const pkg = readJson(join12(root2, rel, "package.json")) ?? {};
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
       const first = hit[0];
@@ -30155,7 +30373,7 @@ function libraryPrefixes(dirs, candidates) {
     if (depth > 4 || budget <= 0 || !want.size) return;
     for (const e of readDir(dir)) {
       if (budget <= 0 || !want.size) return;
-      const full = join11(dir, e.name);
+      const full = join12(dir, e.name);
       if (e.isDirectory()) {
         if (e.name === ".bin" || e.name === "node_modules") continue;
         walk(full, depth + 1);
@@ -30163,7 +30381,7 @@ function libraryPrefixes(dirs, candidates) {
         budget--;
         let text2;
         try {
-          text2 = readFileSync11(full, "utf8");
+          text2 = readFileSync12(full, "utf8");
         } catch {
           continue;
         }
@@ -30201,7 +30419,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   for (const { abs } of files.styles) {
     let text2;
     try {
-      text2 = readFileSync11(abs, "utf8");
+      text2 = readFileSync12(abs, "utf8");
     } catch {
       continue;
     }
@@ -30215,14 +30433,14 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync11(abs, "utf8"));
+      markupText.push(readFileSync12(abs, "utf8"));
     } catch {
     }
   }
   const haystack = markupText.join("\n");
   const candidates = [...cssCounts.entries()].filter(([prefix, count]) => count >= 3 && haystack.includes(prefix)).sort((a, b) => b[1] - a[1]);
   const vendored = libraryPrefixes(
-    [join11(root2, "node_modules"), ...packageDir ? [join11(root2, packageDir, "node_modules")] : []],
+    [join12(root2, "node_modules"), ...packageDir ? [join12(root2, packageDir, "node_modules")] : []],
     candidates.map(([p]) => p)
   );
   const accepted = [];
@@ -30271,10 +30489,10 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/profiles.ts
-import { existsSync as existsSync7, readFileSync as readFileSync12 } from "node:fs";
-import { isAbsolute as isAbsolute4, join as join12, resolve as resolve5 } from "node:path";
-var readJson2 = (p) => JSON.parse(readFileSync12(p, "utf8"));
-var under = (dir, rel) => isAbsolute4(rel) ? rel : join12(dir, rel);
+import { existsSync as existsSync7, readFileSync as readFileSync13 } from "node:fs";
+import { isAbsolute as isAbsolute4, join as join13, resolve as resolve5 } from "node:path";
+var readJson2 = (p) => JSON.parse(readFileSync13(p, "utf8"));
+var under = (dir, rel) => isAbsolute4(rel) ? rel : join13(dir, rel);
 var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString = (v) => typeof v === "string" && v !== "" ? v : null;
 function readProfiles(root2) {
@@ -30283,8 +30501,8 @@ function readProfiles(root2) {
   const seen = /* @__PURE__ */ new Set();
   for (const e of readDir(root2)) {
     if (!e.isDirectory()) continue;
-    const dir = join12(root2, e.name);
-    const manifest = join12(dir, "profile.json");
+    const dir = join13(root2, e.name);
+    const manifest = join13(dir, "profile.json");
     if (!existsSync7(manifest)) continue;
     try {
       const raw = readJson2(manifest);
@@ -30393,15 +30611,15 @@ function applyRegistries(config, sources) {
 }
 
 // src/hook.ts
-import { existsSync as existsSync8, readFileSync as readFileSync13, writeFileSync as writeFileSync4 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute5, join as join13, relative as relative3 } from "node:path";
+import { existsSync as existsSync8, readFileSync as readFileSync14, writeFileSync as writeFileSync4 } from "node:fs";
+import { dirname as dirname7, isAbsolute as isAbsolute5, join as join14, relative as relative3 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var readStdin = async () => process.stdin.isTTY ? "" : text(process.stdin);
 function readState(root2) {
   try {
-    const raw = JSON.parse(readFileSync13(attemptsPath(root2), "utf8"));
+    const raw = JSON.parse(readFileSync14(attemptsPath(root2), "utf8"));
     const now = Date.now();
     const sessions = {};
     for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -30414,7 +30632,7 @@ function readState(root2) {
 function writeState(root2, state) {
   try {
     const p = attemptsPath(root2);
-    ensureDir(dirname6(p));
+    ensureDir(dirname7(p));
     writeFileSync4(p, JSON.stringify(state));
   } catch {
   }
@@ -30445,7 +30663,7 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute5(raw) ? raw : join13(root2, raw);
+  const abs = isAbsolute5(raw) ? raw : join14(root2, raw);
   const rel = relative3(root2, abs);
   if (!rel || rel.startsWith("..")) return null;
   return toPosix(rel);
@@ -30459,12 +30677,12 @@ var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
 function optedIn(root2) {
   if (process.env.LOUPE !== void 0) return isOn(process.env.LOUPE);
   for (const file of [
-    join13(root2, ".claude", "settings.local.json"),
-    join13(root2, ".claude", "settings.json"),
-    join13(homedir(), ".claude", "settings.json")
+    join14(root2, ".claude", "settings.local.json"),
+    join14(root2, ".claude", "settings.json"),
+    join14(homedir(), ".claude", "settings.json")
   ]) {
     try {
-      const v = JSON.parse(readFileSync13(file, "utf8")).env?.LOUPE;
+      const v = JSON.parse(readFileSync14(file, "utf8")).env?.LOUPE;
       if (v !== void 0) return isOn(String(v));
     } catch {
     }
@@ -30485,7 +30703,7 @@ function resolvedOptions() {
   if (Object.values(fromEnv).some((v) => v !== void 0)) return { options: fromEnv, source: "environment" };
   for (const file of ["settings.local.json", "settings.json"]) {
     try {
-      const raw = JSON.parse(readFileSync13(join13(homedir(), ".claude", file), "utf8"));
+      const raw = JSON.parse(readFileSync14(join14(homedir(), ".claude", file), "utf8"));
       const configs = raw.pluginConfigs ?? {};
       const key = Object.keys(configs).find((k) => k === "loupe" || k.startsWith("loupe@"));
       const opts = key === void 0 ? void 0 : configs[key]?.options;
@@ -30551,9 +30769,9 @@ function listenFailure(err, command, port) {
 `;
 }
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
-var HERE = dirname7(fileURLToPath3(import.meta.url));
-var SINGLE_FILE = !existsSync9(join14(HERE, "..", "package.json"));
-var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
+var HERE = dirname8(fileURLToPath4(import.meta.url));
+var SINGLE_FILE = !existsSync9(join15(HERE, "..", "package.json"));
+var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join15(HERE, "..", "..", ".env");
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
   const entry = basename(HERE) === "src" ? "source" : "bundle";
@@ -30678,7 +30896,7 @@ var needsProject = (command, args, isHook) => {
   if (args.flags.all || args.flags.files) return false;
   return isHook || Boolean(args.flags.changed) && SCOPED_COMMANDS.has(command);
 };
-var looksLikeProject = (root2) => existsSync9(join14(root2, "package.json")) || existsSync9(join14(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
+var looksLikeProject = (root2) => existsSync9(join15(root2, "package.json")) || existsSync9(join15(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
 var CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString("en-US")}-entry ceiling`;
 var CEILING_WHY = "this root is larger than a project, so the namespaces are a guess from the part of it that was read";
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
@@ -30728,7 +30946,7 @@ async function main() {
   if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
   const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
-  const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
+  const root2 = resolve6(explicitRoot ?? (anchor ? dirname8(anchor) : process.cwd()));
   if (!existsSync9(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
@@ -30863,13 +31081,14 @@ async function main() {
     const base = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const ds = config.designSystem;
     const orNone = (arr) => arr?.length ? arr.join(", ") : "(none)";
+    const components2 = (arr) => arr?.length ? arr.map((n) => supersededEverywhere(config.componentRegistry, n) ? `${n} (legacy)` : n).join(", ") : "(none)";
     const lines = [
       `${dim("version:    ")}${versionLine()}`,
       `${dim("config:     ")}${src}`,
       `${dim("system:     ")}${ds.name || "(unnamed)"}`,
       `${dim("packages:   ")}${orNone(ds.packages)}`,
-      `${dim("layout:     ")}${orNone(ds.layoutComponents)}`,
-      `${dim("text:       ")}${orNone(ds.textComponents)}`,
+      `${dim("layout:     ")}${components2(ds.layoutComponents)}`,
+      `${dim("text:       ")}${components2(ds.textComponents)}`,
       `${dim("tokens:     ")}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(", ") : "(none \u2014 token rules inactive)"}`,
       `${dim("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
       `${dim("suppress:   ")}${config.suppression.keyword} <ruleId> -- <reason>`,
@@ -30944,7 +31163,7 @@ async function main() {
 `);
       return EXIT.OK;
     }
-    const target = join14(root2, "loupe.config.json");
+    const target = join15(root2, "loupe.config.json");
     if (info.truncated && !args.flags.force) {
       fail(
         "loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. Point --root at the project, or pass --force to write it anyway.\n"
@@ -31092,7 +31311,7 @@ ${dim("  Ctrl-C to stop.")}
     let toFix;
     try {
       toFix = await analyze(config, { scope: fixScope });
-      const judgeable = toFix.findings.filter((f) => f.suggest?.length && CSS_FILE.test(f.file));
+      const judgeable = toFix.findings.filter((f) => f.suggest?.length);
       if (apiKey && toFix.tokens && judgeable.length)
         await judgeValues(root2, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
@@ -31104,7 +31323,7 @@ ${dim("  Ctrl-C to stop.")}
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
     const kept = apiKey ? applyKeeps(root2, toFix.findings, config.suppression.keyword, { dry, directives: toFix.directives }) : { applied: [], skipped: [] };
     const verb = dry ? "would fix" : "fixed";
-    const decl2 = (f) => oneLine(`${f.prop}: ${f.value}`);
+    const decl2 = (f) => oneLine(f.prop === void 0 ? f.value : `${f.prop}: ${f.value}`);
     for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2192 ${green(f.to)}
 `);
     for (const k of kept.applied)
@@ -31119,7 +31338,7 @@ ${dim("  Ctrl-C to stop.")}
     const nSkipped = skipped.length + kept.skipped.length;
     process.stdout.write(
       `
-loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s)`)}${apiKey ? `, ${dry ? "would suppress" : "suppressed"} ${kept.applied.length}` : ""}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ""}. ${left} of ${toFix.findings.length} finding(s) left for review.
+loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(s)`)}${apiKey ? `, ${dry ? "would suppress" : "suppressed"} ${kept.applied.length}` : ""}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ""}. ${left} of ${toFix.findings.length} finding(s) left for review.
 `
     );
     return EXIT.OK;

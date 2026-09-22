@@ -134,7 +134,7 @@ await check("loupe's own furniture is never a finding's target", () => {
 
 await check('the extension carries this exact matcher, not one behind', () => {
 	try {
-		execFileSync('node', [join(REPO, 'browser', 'devtools', 'build.mjs'), '--check'], { stdio: 'pipe' });
+		execFileSync('node', [join(REPO, 'integrations', 'devtools', 'build.mjs'), '--check'], { stdio: 'pipe' });
 	} catch (err) {
 		const e = err as { stderr?: Buffer };
 		throw new Error(String(e.stderr ?? err).trim());

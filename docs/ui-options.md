@@ -8,7 +8,7 @@ capabilities want to live in.
 This document names the gap, then the options, then a recommendation.
 
 > **Status.** Stages 1 and 2 are built — `loupe ui` (option A) and the DevTools
-> extension in `browser/devtools/` (option E). Everything else here is still a
+> extension in `integrations/devtools/` (option E). Everything else here is still a
 > decision document. What landed, against what this document asked for:
 >
 > | | |

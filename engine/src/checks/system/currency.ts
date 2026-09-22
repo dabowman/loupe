@@ -34,6 +34,18 @@ const namedReplacements = (supersededBy: string | undefined): { name: string; pa
 	}));
 
 /**
+ * Whether every package carrying this name is stale — so the name itself is no
+ * longer something to write. A component that is `legacy` in one package and
+ * `recommended` in another (`Text`, in `@wordpress/components` and
+ * `@wordpress/ui`) is not: the name is still current somewhere. Unknown to the
+ * registry is not stale either; it is unknown.
+ */
+export const supersededEverywhere = (registry: ReadonlyMap<string, ComponentEntry>, name: string): boolean => {
+	const entries = [...registry.values()].filter((e) => e.name === name);
+	return entries.length > 0 && !entries.some((e) => e.status === 'recommended');
+};
+
+/**
  * Whether a superseded entry's replacement is one the registry would recommend.
  *
  * True when the string names no component at all, or when at least one named

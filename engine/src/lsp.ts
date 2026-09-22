@@ -8,7 +8,8 @@
  *                explicit empty publish, or the client keeps its last set.
  *   hover        the rule's guidance, which a diagnostic message has no room for
  *   code action  the token substitution `loupe fix` would write, from the same
- *                function; and a suppression directive with the reason blank
+ *                function; a suppression directive with the reason blank; and
+ *                the deletion of a dead rule, which `loupe fix` will not do
  *
  * Open documents' text is tracked so a range is always valid against what the
  * editor holds. The findings behind those ranges come from the last save, so a
@@ -30,7 +31,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { substituteOnLine, tokenFixes } from './autofix.ts';
 import { renderTitle } from './rules.ts';
 import { toPosix } from './discover.ts';
-import type { AnalyzeResult, BaselinedResult, Config, Finding, Severity } from './types.ts';
+import { escapeRe } from './text.ts';
+import type { AnalyzeResult, BaselinedResult, Config, DeadRule, Finding, Severity } from './types.ts';
 
 /** LSP severities. `off` never reaches a finding; it maps to Warning so none is ever dropped. */
 const SEVERITY: Record<Severity, number> = { error: 1, warn: 2, off: 2 };
@@ -131,6 +133,44 @@ function rangeFor(finding: Finding, lineText: string | undefined): Range {
 	const valueAt = text.toLowerCase().indexOf(decl.value.trim().toLowerCase(), at);
 	const end = valueAt === -1 ? text.length : valueAt + decl.value.trim().length;
 	return { start: { line, character: at }, end: { line, character: Math.min(end, text.length) } };
+}
+
+/**
+ * The edit that removes a dead rule, or `null` where the buffer no longer holds
+ * what was reported there.
+ *
+ * A deletion cannot check itself the way a substitution's match does, so the
+ * recorded lines have to still look like the rule they were recorded for:
+ * braces that balance, a closing one last, and the class named somewhere
+ * inside. One blank line goes with the rule — the one after it, or where the
+ * rule ends the file, the one before — so what is left is the gap that was
+ * already there and not two.
+ */
+function deleteRule(lines: readonly string[], dead: DeadRule, cls: string): TextEdit | null {
+	let first = dead.startLine - 1;
+	let last = dead.endLine - 1;
+	if (first < 0 || last < first || last >= lines.length) return null;
+	const slice = lines.slice(first, last + 1).join('\n');
+	const opens = (slice.match(/{/g) ?? []).length;
+	if (!opens || opens !== (slice.match(/}/g) ?? []).length) return null;
+	if (!/}[^\S\n]*$/.test(slice)) return null;
+	if (!new RegExp(`${escapeRe(cls)}(?![-\\w])`).test(slice)) return null;
+	// Nothing but the file's own ending after it.
+	const atEnd = last + 2 >= lines.length;
+	if (!atEnd && (lines[last + 1] ?? '').trim() === '') last++;
+	else if (atEnd && first > 0 && (lines[first - 1] ?? '').trim() === '') first--;
+	if (last + 1 < lines.length)
+		return { range: { start: { line: first, character: 0 }, end: { line: last + 1, character: 0 } }, newText: '' };
+	// A file with no trailing newline: the line ending *before* the rule goes
+	// instead, so the file does not end on the blank line this would leave.
+	const prev = first > 0 ? (lines[first - 1] ?? '').length : 0;
+	return {
+		range: {
+			start: { line: first > 0 ? first - 1 : 0, character: prev },
+			end: { line: last, character: (lines[last] ?? '').length },
+		},
+		newText: '',
+	};
 }
 
 /** The comment a suppression directive has to be written in, per file type. */
@@ -297,7 +337,7 @@ export function lsp(opts: {
 				const text = lines(rel)[line] ?? '';
 				// The same list `loupe fix` acts on, through the same function.
 				for (const fix of tokenFixes([finding])) {
-					if (fix.line - 1 !== line) continue;
+					if (fix.prop === undefined || fix.line - 1 !== line) continue;
 					const rewritten = substituteOnLine(text, fix);
 					if (typeof rewritten !== 'string') continue;
 					const key = `${line}\u0000${fix.prop}\u0000${fix.to}`;
@@ -318,6 +358,49 @@ export function lsp(opts: {
 							},
 						},
 					});
+				}
+				// A misspelled token is one finding across every line the file names it
+				// on, so its action carries every one of those edits. An editor fix
+				// clearing only the occurrence under the cursor would leave the file
+				// broken and the diagnostic standing — the same reason `loupe fix`
+				// rewrites them all. Same bytes, same function.
+				const rename = finding.rename;
+				if (rename && !seen.has(`rename\u0000${rename.from}`)) {
+					seen.add(`rename\u0000${rename.from}`);
+					const edits: TextEdit[] = [];
+					for (const fix of tokenFixes([finding])) {
+						const on = lines(rel)[fix.line - 1];
+						if (on === undefined) continue;
+						const rewritten = substituteOnLine(on, fix);
+						if (typeof rewritten !== 'string') continue;
+						edits.push({
+							range: { start: { line: fix.line - 1, character: 0 }, end: { line: fix.line - 1, character: on.length } },
+							newText: rewritten,
+						});
+					}
+					if (edits.length)
+						actions.push({
+							title: `Rename ${rename.from} to ${rename.to} (${edits.length} occurrence(s))`,
+							kind: 'quickfix',
+							isPreferred: true,
+							edit: { changes: { [uri]: edits } },
+						});
+				}
+				// Deleting a dead rule is offered here and never by `loupe fix`: a
+				// deletion leaves nothing to compare against afterwards, so it is
+				// offered only where a person is looking at the code and accepts it.
+				// See docs/design/report.md#deleting-is-the-editors-alone.
+				const dead = finding.dead;
+				if (dead && !seen.has(`dead\u0000${line}`)) {
+					const edit = deleteRule(lines(rel), dead, finding.code ?? finding.message);
+					if (edit) {
+						seen.add(`dead\u0000${line}`);
+						actions.push({
+							title: `Delete the dead rule ${finding.message}`,
+							kind: 'quickfix',
+							edit: { changes: { [uri]: [edit] } },
+						});
+					}
 				}
 				// The reason is left empty on purpose: a directive without one does not
 				// mute, it reports as `suppression/malformed`. See

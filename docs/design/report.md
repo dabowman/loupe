@@ -586,23 +586,86 @@ value is a semantic choice, and picking one by array order is exactly how you
 get the right pixels with the wrong meaning — the failure the token suggestion
 machinery exists to prevent.
 
-**Stylesheet channels only.** The same rule fires on `style={{ padding: '13px'
-}}` and on CSS-in-JS templates, where the surrounding syntax is JS and a
-CSS-shaped substitution would write a syntax error with a clean report.
+**All three channels, two ways in.** A stylesheet declaration and a CSS-in-JS
+one are both matched as text on the line they were reported at: what is inside a
+template *is* literal CSS, and a declaration whose value comes from an
+interpolation never reaches `fix` at all, because the template parse drops it. A
+JSX style object is not CSS in any form. `style={{ paddingBottom: 13 }}` is
+reported as `padding-bottom: 13px` and neither half of that is written in the
+file — the key is camelCase, and React is what gives the number its unit — so a
+CSS-shaped match there finds nothing, or worse, finds a lookalike in the
+attribute beside it. The scan records where the value's literal sits instead,
+and `fix` splices that span, writing the token as a string in whichever quote
+the value was already written in.
 
-**A fix that cannot find its declaration exactly once on the line it was
-reported at is skipped**, not guessed at: the file has moved under the report,
-and a substitution against a stale line number edits the wrong declaration.
-Lines are re-read as fixes apply, because two can land on one line and the
-second must see what the first wrote. The property boundary matters —
-`background` must not match inside `background-color`, `border-radius` must not
-match inside `-webkit-border-radius` — and `!important` and the terminator are
-left alone.
+**A fix that cannot locate its declaration exactly is skipped**, not guessed at:
+the file has moved under the report, and a substitution against a stale line or
+column edits the wrong bytes. A match has to hit exactly once on the line it was
+reported at. A span is checked against the text the scan recorded there before
+anything is written, because a column is not self-checking the way a match is.
+Lines are re-read as fixes apply, because two can land on one line and the second
+must see what the first wrote, and splices run right to left within a line so one
+never moves another. The property boundary matters — `background` must not match
+inside `background-color`, `border-radius` must not match inside
+`-webkit-border-radius` — and `!important` and the terminator are left alone. A
+replacement that would have to be escaped to survive as a JS string is refused
+rather than escaped; a token substitution never is one.
+
+**A misspelled token is the same licence without a declaration around it.**
+`tokens/unknown-token` holds the known token set at the moment it fires, so
+where exactly one known token is a near miss for a name nothing defines, the
+check writes that rename onto the finding and `fix` applies it. It rides in a
+field of its own rather than in `suggest`, because a `Suggestion` is a
+`prop: value` pair and a name is neither half of one — but it is still data on
+the finding, resolved into the same `tokenFixes` list, so `loupe fix` and the
+editor are acting on one list and not on two fix paths.
+
+**The threshold is one keystroke, and never a digit.** A candidate has to be one
+insertion, deletion or substitution from the name as written — a slip, not a
+guess — and exactly one known token may be. Two is a question, and answering it
+by array order is how a rename lands on a real token with the wrong meaning. A
+transposition is two edits under this rule and so is not offered; it stays
+reported, which is the cheap half of the trade.
+
+The digit exclusion is the part that does the real work. Token systems are built
+on scales, and `--wpds-dimension-space-20` and `--wpds-dimension-space-30` are
+one keystroke apart and mean different amounts, as are `…-red-50` and
+`…-red-60`. So a known token counts as a near miss only if it still differs once
+every digit is dropped from both names, and a step on a scale is never read as a
+spelling. On a digit this failure is both the likeliest and the least visible:
+the value is plausible, the file parses, the report goes clean, and the element
+is a size nobody asked for.
+
+**The rename covers every line of the file that names it.** The rule reports
+once per file and name, however many references there are, so rewriting only the
+line it was reported at would leave the file broken and the next run would
+report the same name again. The check carries all of those lines; the fix is one
+line-substitution per line; the finding clears only once every one of them is
+written. In the editor it is one action carrying every edit, for the same
+reason — a quick fix that clears the occurrence under the cursor and leaves the
+diagnostic standing has not fixed anything.
+
+The match is bounded on both sides by what a reference is. Only inside `var()`,
+so a `--name: …` declaration keeps defining whatever it defines; and stopping at
+the end of the name, so renaming `--wpds-dimension-space-m` cannot reach into
+the `--wpds-dimension-space-md` sitting beside it. Several references on one
+line are all rewritten rather than refused as ambiguous: unlike two matching
+declarations, they are one misspelling, and the answer for one is the answer for
+every one of them.
+
+References are collected from stylesheets and from CSS-in-JS templates, the two
+channels that write `var()` as literal text on the line. A JSX style object
+contributes none — nothing scans its values for token references — so a rename
+is never spliced at a span.
 
 **Findings cleared, not fixes applied**, is what gets counted. A collapsed
 finding holding one settled declaration and one nobody could settle is still
-there. Settled means rewritten *or* suppressed: a value `--judge` kept is as
-done with as one it replaced.
+there, and so is a misspelled name still written on a line the rewrite could not
+reach. Settled means rewritten *or* suppressed: a value `--judge` kept is as
+done with as one it replaced. The tally keys on file, line and property; a
+rename has no property and takes the empty slot, which no declaration fix can
+collide with, because every declaration a fix or a keep names came out of a
+parse and a parse has no nameless property.
 
 Suppressions written for a kept value follow the grammar's own constraints. A
 directive mutes its whole next line, so one is written only where **every**
@@ -621,6 +684,105 @@ judgement said, so the comment records that a model made the call, not a person.
 
 Indentation is copied with spaces and tabs only — `\s` would copy a byte-order
 mark onto the directive — and the line's own ending, so a CRLF file stays one.
+
+Suppressions are the one half of this that is still stylesheets only. A
+substitution replaces bytes that are already there; a directive adds a line, and
+a comment line above a JSX element is not a comment at all — it is rendered
+text. So a value `--judge` kept outside a stylesheet is reported as skipped, for
+a reader to suppress where they can see what the line is.
+
+### Deleting is the editor's alone
+
+`css/dead-class` is the one finding with a quick fix that `loupe fix` will not
+apply, and the asymmetry is the design rather than an omission.
+
+Every other fix on this page is a **substitution**. The value that was there is
+still legible in the diff, the check that flagged it re-runs against whatever
+replaced it, and a wrong one shows up as a wrong colour on the next pass. A
+deletion has nothing to compare against afterwards. If the rule was live, the
+thing that tells you is a visual regression, in a browser, some weeks later.
+
+And this finding is deliberately the less certain half of a trade. The reference
+index over-collects on purpose (see [markup
+scanning](analysis.md#markup-scanning-two-passes-two-characters)): a false
+"referenced" costs one missed finding, a false "dead" recommends deleting live
+CSS. That price is set for a reader who has the rule in front of them — not for
+a batch pass rewriting a repo unattended, where nobody reads the diff and both
+failures cost the same to produce. So the deletion is offered where a person
+sees the code and accepts it, and nowhere else. The extent rides on the finding
+as `dead`, which `tokenFixes` does not read; `suggest` and `rename` remain the
+only licences the batch path has.
+
+**What is refused outright**, because a missing quick fix is invisible and a
+wrong one deletes code:
+
+- **A selector list where another selector does not name the class.**
+  `.wf-dead, .wf-live { … }` styles both, and removing the rule takes `.wf-live`
+  with it. Editing the prelude instead would be a substitution, with its own
+  question about what the remaining list should read as, so the finding stands
+  and a person removes the selector. `.wf-dead:hover, .wf-dead:focus` *is*
+  offered: every selector there is about the dead class, so nothing else can
+  lose its styling.
+- **The only child of an `@media`, a `@supports`, or a parent rule.** Deleting
+  it leaves an empty block behind, and deleting the parent as well is a bigger
+  edit than the finding claims.
+- **A rule sharing its first or last line with anything else** — a minified or
+  densely-written sheet. Whole lines are the only extent carried, and a
+  column-accurate splice into a line that also holds live CSS is exactly where a
+  stale position does the most damage.
+- **A class several rules in one file declare.** The finding is one per class per
+  file; its action has to be the rule it points at, and deleting three scattered
+  rules from one diagnostic is more than the diagnostic says.
+
+**What goes with the rule** is a comment directly above it with no blank line
+between, and one blank line after it. A comment glued to a rule describes that
+rule, and one describing a rule that is gone is its own small mess — and where
+the comment is a suppression directive, leaving it behind would silently mute
+whatever ends up beneath it. A blank line breaks the attachment, and then the
+comment stays. The blank line after keeps the deletion from leaving two where
+there was one; where the rule ends the file, the blank line before goes instead.
+
+**The recorded extent is checked against the buffer before the action is
+offered.** Braces have to balance across those lines, the last of them has to be
+the closing one, and the class has to still be named inside. A substitution
+checks itself by matching what it is replacing; a deletion has no such match, so
+this stands in for it, and anything that no longer looks like the rule that was
+reported is offered nothing at all.
+
+### Moving an import is not a substitution
+
+`system/superseded-component` has no fix, in the CLI or the editor, and the
+reason is that the licence for one is empty rather than that the edit is hard.
+
+A `dropIn` entry would be the licence — the registry's recorded claim that
+moving a specifier to the package `supersededBy` names changes the import line
+and nothing else. None of the WPDS entries carries it; the eight that share a
+name across the two packages were each read against Gutenberg trunk and each
+one fails, on a renamed prop, a dropped prop, a component that became a
+namespace, or a margin that went away. See
+[checks.md](checks.md#a-same-name-move-is-not-a-drop-in-move) for the pair-by-pair
+verdicts and what it would take to add one.
+
+So the machinery is not built, and the shape of it is worth writing down so the
+absence is a decision rather than a gap. It is not a token substitution with a
+different name. Every fix above replaces bytes inside one line, and the whole
+reason it can be trusted is that it has to match what it is replacing before it
+writes. Pulling a specifier out of one import and into another is an edit to a
+file's import structure: the old declaration may have to go entirely, the target
+declaration may or may not exist, an alias has to survive into the JSX below,
+and a file already importing the name from both packages, or importing it as a
+default or a namespace, can only be refused. None of that is self-checking. And
+the blast radius is not one wrong colour on one line — it is a component
+rendering differently everywhere the file uses it, behind a diff that reads like
+an import tidy.
+
+That is the same asymmetry `css/dead-class` resolves by going to the editor
+alone: an edit whose failure is invisible in the diff is priced for someone
+looking at the code. A verified `dropIn` move is not that — it is a
+substitution again, just a two-line one, and it would belong in both paths
+through one function like every other. But it needs an entry that earns the
+claim first, and manufacturing one to give the feature something to do is
+exactly the failure the field is shaped to prevent.
 
 ## `loupe serve`
 

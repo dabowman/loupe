@@ -395,28 +395,46 @@ loupe fix   # apply; --dry-run to preview; --judge for the values below
 ```
 
 Applies only the declarations the engine already resolved to exactly **one**
-on-role token — in `tokens/hardcoded-value` and `typography/untokenized` — and
-only in stylesheets. Two candidate tokens is a semantic choice — the right
-pixels with the wrong meaning is the failure the suggestion machinery exists to
-prevent — and the JS channels (`style={{ … }}`, CSS-in-JS) are left alone
-because a CSS-shaped substitution there writes a syntax error with a clean
-report. A type property in a stylesheet is where the rule's first remedy — use
-the text component — is not available, which is the case its second one is for.
+on-role token — in `tokens/hardcoded-value` and `typography/untokenized`. Two
+candidate tokens is a semantic choice — the right pixels with the wrong meaning
+is the failure the suggestion machinery exists to prevent. A type property in a
+stylesheet is where the rule's first remedy — use the text component — is not
+available, which is the case its second one is for.
 
-A finding is not a declaration. `typography/untokenized` collapses a CSS rule's
+`tokens/unknown-token` is fixed on the same terms. A `var()` naming a token
+nothing defines is usually a misspelling, so where exactly **one** known token
+is one keystroke away — one insertion, deletion or substitution, and not a
+digit — the name is renamed on every line of the file that references it. Two
+candidates, or none, and the finding stands. A digit is excluded because
+`--wpds-dimension-space-20` and `--wpds-dimension-space-30` are one keystroke
+apart and mean different amounts: a step on a scale is not a spelling.
+
+All three channels are written, two ways. A stylesheet declaration and a
+CSS-in-JS one are matched as CSS on the line they were reported at: inside a
+template the text *is* CSS, and a declaration whose value comes from an
+interpolation never gets here because the template parse drops it. A JSX style
+object is spliced at the literal instead — `style={{ paddingBottom: 13 }}` is
+reported as `padding-bottom: 13px`, and neither half of that is in the file, so
+the scan records where the value sits and the fix writes the token there as a
+string, in the quote the value already used.
+
+A finding is not a substitution. `typography/untokenized` collapses a CSS rule's
 whole type block into one finding reported at the first declaration's line, and
 every other declaration in it carries the line it is actually written on, so
-each is matched against that. One settled beside one nobody could settle is a
-substitution made and a finding still standing, which is why the summary counts
-both:
+each is matched against that. `tokens/unknown-token` reports once per file and
+name however many lines reference it, and every one of them is rewritten. One
+part settled beside one nobody could settle is a substitution made and a finding
+still standing, which is why the summary counts both:
 
 ```
-loupe: fixed 79 declaration(s) in 54 finding(s). 258 left for review.
+loupe: fixed 79 substitution(s). 258 of 312 finding(s) left for review.
 ```
 
 A declaration that is not on its reported line exactly once is skipped and
 named: the file moved under the report, and substituting against a stale line
-number edits the wrong declaration. `!important` and the terminator survive.
+number edits the wrong declaration. `!important` and the terminator survive. A
+rename is matched only inside `var()`, and stops at the end of the name, so it
+touches neither a definition nor a longer name beside it.
 
 The baseline is ignored here. It exists to stop the gate blocking on an accepted
 backlog; burning that backlog down is what this command is for.
@@ -516,10 +534,9 @@ into the finding (`padding: 6px 12px → …-sm …-md (judged 0.60)`, or
 the replacement text — `var()` and all, since that is what `fix --judge`
 writes — or `keep`. The message names the tokens without it.
 
-`fix --judge` applies those answers in stylesheets only. A replacement goes
-through the same line-exact substitution as `fix`. A kept value gets a
-directive on its own line above the declaration, with the judgement as its
-reason:
+`fix --judge` applies a replacement through the same substitution as `fix`, in
+whichever channel the declaration came from. A kept value gets a directive on
+its own line above the declaration, with the judgement as its reason:
 
 ```css
 	/* wpds-allow tokens/hardcoded-value -- deliberate, no token fits (judged 0.98) */
@@ -529,7 +546,11 @@ reason:
 A directive mutes its whole next line. So one is written only where every
 flagged value on that line was kept, and otherwise the value is reported as
 skipped. It names the rules the kept declarations on that line were reported
-under, which on a minified stylesheet is not always one.
+under, which on a minified stylesheet is not always one. Suppressions are
+stylesheets only: a substitution replaces bytes already there, while a directive
+adds a line, and a comment line above a JSX element is rendered text rather than
+a comment. A value kept outside a stylesheet is reported as skipped for a reader
+to suppress by hand.
 
 ```bash
 npm run eval:values                     # three runs
@@ -802,14 +823,15 @@ plugin — because the dev environments this has to work in are not all a Vite
 server with a middleware slot. One of them is webpack inside a Docker WordPress.
 
 A bookmarklet injects into the current document only, so on a multi-page app it
-is a click per navigation. Where that grates, have the app itself load
-`<origin>/overlay.js` under whatever flag already means "this is a dev build" —
-in footer or deferred, since the overlay appends to `document.body` as it
-evaluates. Under wp-env that is a mu-plugin reading a constant from
-`.wp-env.json`, mapped in as a *directory*: Docker cannot bind-mount a single
-file into a parent that does not yet exist in the container, and
-`wp-content/mu-plugins/` does not. Keep the flag out of any environment that
-runs browser tests — a fixed panel over every page intercepts their clicks.
+is a click per navigation. For WordPress that is solved: `integrations/wordpress/`
+ships a development mu-plugin that loads the overlay itself, and this server
+hands it over at `/loupe-overlay.php` so installing it is a `curl` rather than a
+hunt through the plugin's install path. The landing page prints both steps with
+this server's own origin filled in. It is gated on a cookie (`?loupe=1`) as well
+as the `LOUPE_OVERLAY_URL` constant, because browser tests usually drive the same
+WordPress you are looking at and a fixed panel over every page intercepts their
+clicks. `integrations/wordpress/README.md` has the wiring, including the
+non-wp-env case.
 
 Two limits are worth stating plainly, because the panel's whole risk is reading
 as a verdict rather than a view:
@@ -828,14 +850,17 @@ because that one writes to your files and this one answers any origin.
 
 ### In DevTools
 
-`browser/devtools/` is a Manifest V3 extension that reads this same server and
-puts it where the inspector already is. Load it unpacked; `browser/devtools/README.md`
+`integrations/devtools/` is a Manifest V3 extension that reads this same server and
+puts it where the inspector already is. Load it unpacked; `integrations/devtools/README.md`
 has the steps.
 
 It adds two surfaces. The **Loupe panel** is this overlay without the
 bookmarklet — same list, same resolution, same ordering — and it gains the two
 things injection costs you: it survives a navigation, and it is not a fixed panel
-over the app intercepting the clicks of the thing you are testing.
+over the app intercepting the clicks of the thing you are testing. That is the
+same problem the WordPress mu-plugin above solves, answered generally rather than
+for one host: nothing is installed in the app, so nothing has to be gated off for
+browser tests.
 
 The **Loupe pane in the Elements panel** is the one that could not be a
 bookmarklet. Select a node, and it lists the findings that style *that node*.

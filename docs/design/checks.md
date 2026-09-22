@@ -129,6 +129,53 @@ both were live suppression anchors when every specifier reported on the
 declaration, and a directive someone signed off must not go silent because the
 reporting moved.
 
+### A same-name move is not a drop-in move
+
+`system/superseded-component` offers no fix, and `dropIn` on a registry entry is
+what would license one.
+
+Eight of the twenty-nine `legacy` entries name a replacement with the same
+exported name in the other package — `Text`, `Card`, `Icon`, `Spinner`,
+`Tooltip`, `VisuallyHidden`, `TextareaControl`, `InputControl`, all
+`@wordpress/components` → `@wordpress/ui`. A matching name is what makes a
+mechanical rewrite *look* available, and it is the only thing about those eight
+that is mechanical. The rest need a new prop, a structural rewrite or a
+judgement call, and nothing claims otherwise.
+
+**`dropIn` is the claim that moving the import changes the specifier and nothing
+else.** Every prop the old component accepts, accepted by the new one with the
+same meaning; no prop the new one requires that the old one did not; the same
+default element and the same rendering. A renamed prop, a changed default, a
+dropped prop, a component that became a namespace, a class or a margin that went
+away — any one of those disqualifies the pair, because the failure it produces
+is a component that renders differently everywhere it is used, with a diff that
+reads like a one-line import tidy.
+
+**The evidence is both implementations, read.** The replacement's own props file
+and its stylesheet, against the same two for the component being replaced. Not
+the names matching, not the registry's own `supersededBy` prose, and not the
+design-system MCP — which carries no maturity signal at all and is measurably
+behind trunk. Where the source does not settle it, the answer is no. There is no
+`false` to record, because a verified no and nobody having looked have to leave
+the same trace: a fix that fires on a recorded guess is the failure this field
+exists to prevent.
+
+**No WPDS entry carries it.** All eight were checked against Gutenberg trunk at
+037f7ed and all eight failed, for reasons that are not close calls: `Card` and
+`Tooltip` are namespaces in `@wordpress/ui` (`Card.Root`, `Tooltip.Trigger`), so
+the old element does not render at all; `Text` keeps the name `variant` for an
+entirely different set of values; `Icon` requires an SVG element where the old
+one took a Dashicon name or a component; `VisuallyHidden` swaps polymorphic `as`
+for `render`; both form controls require `label` and changed `onChange` from the
+value to the event; and `Spinner` — the one pair whose props do line up — drops
+the `components-spinner` class, the `width`/`height` attributes and a
+`margin: 5px 11px 0`, which moves every call site.
+
+So the licence exists and holds nothing, and the import-rewriting machinery it
+would license is not built: see [report.md](report.md#moving-an-import-is-not-a-substitution).
+Populating this field is the whole of the work, and it is not a reading of the
+registry — it is a reading of the design system.
+
 ## `typography/in-css`, `typography/untokenized`
 
 `typography/in-css` supersedes the ordinary verdict — `font-size: 13px` is
@@ -154,13 +201,27 @@ was found to check against, not that every token is unknown**, so it reports
 nothing at all rather than everything.
 
 The message is the bare name. The `var()` wrapper was the same on every line of
-the group, and the rule's title already says a token is what is being named.
+the group, and the rule's title already says a token is what is being named —
+with the replacement beside it where one is settled, so a reader sees what
+`loupe fix` would write without running it.
+
+One finding per file and name, carrying **every** line that names it, because
+the known token set is right here and a name nothing defines is usually a
+misspelling. Where exactly one known token is one keystroke away, and that
+keystroke is not a digit, the finding carries the rename and `loupe fix` applies
+it on all of those lines. Where two are, or none is, it carries nothing and
+stands for a reader. The defence of that threshold — and why a scale step is
+never read as a spelling — is in [fixing](report.md#fixing).
 
 ## `css/dead-class`
 
 The reference index over-collects on purpose (see
 [markup scanning](analysis.md#markup-scanning-two-passes-two-characters)): a false "referenced"
 costs one missed finding, a false "dead" tells an agent to delete live CSS.
+
+The remedy is a deletion, which is why it is the one finding the editor offers
+a quick fix for that `loupe fix` refuses — see [deleting is the editor's
+alone](report.md#deleting-is-the-editors-alone).
 
 The finding carries its selector, which is the verdict restated as a question a
 browser can answer. This rule's expensive failure — the reference index missing

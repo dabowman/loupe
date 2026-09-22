@@ -10,24 +10,38 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import postcss from 'postcss';
 import { analyze } from '../src/analyze.ts';
-import { applyKeeps, applyTokenFixes, settledBy } from '../src/autofix.ts';
-import { loadConfig } from '../src/config.ts';
+import { applyKeeps, applyTokenFixes, settledBy, tokenFixes } from '../src/autofix.ts';
+import { loadComponents } from '../src/components.ts';
+import { loadConfig, setComponentRegistry } from '../src/config.ts';
 import { judgeValues } from '../src/judge.ts';
 import { KEEP, emptyTokenSet, harvestTokenDefs, planValue } from '../src/tokens.ts';
 import { messageParts } from '../src/text.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
-import type { Finding, FixCandidate, SkippedFix, TokenFix } from '../src/types.ts';
+import type { ComponentEntry, Finding, FixCandidate, ParseError, SkippedFix, TokenFix } from '../src/types.ts';
 
 const CONFIG = JSON.stringify({ extends: 'wpds', namespaces: { project: ['wf-'] } });
+
+/** The shipped WPDS component registry, at the path the profile loader reads. */
+const COMPONENT_REGISTRY = join(
+	dirname(fileURLToPath(import.meta.url)),
+	'..',
+	'..',
+	'profiles',
+	'wpds',
+	'components',
+	'index.json',
+);
 
 const TOKENS = `:root {
 	--wpds-border-radius-md: 4px;
 	--wpds-color-foreground-content-neutral: #1e1e1e;
 	--wpds-color-foreground-content-strong: #1e1e1e;
 	--wpds-dimension-space-md: 8px;
+	--wpds-dimension-space-lg: 13px;
 	--wpds-typography-font-size-sm: 12px;
 	--wpds-typography-line-height-xs: 16px;
 }`;
@@ -37,17 +51,34 @@ interface Fixture {
 	skipped: SkippedFix[];
 	read: (rel: string) => string;
 	findings: Finding[];
+	/**
+	 * What the engine's own parsers make of the files `fix` just wrote. A
+	 * substitution in a JS channel is bytes spliced into a program, and a report
+	 * that goes clean because the file no longer parses is the worst outcome
+	 * this path has.
+	 */
+	parseErrors: ParseError[];
+	/**
+	 * What a second run finds. A fix that settles what it reported and leaves the
+	 * rest of the file broken reports clean for one line and re-reports the same
+	 * name on the next run, which is indistinguishable from a fix that worked
+	 * until somebody runs it twice.
+	 */
+	remaining: Finding[];
 }
 
 /** Analyze a throwaway repo, apply fixes, hand back what the files now say. */
-async function fixture(files: Record<string, string>): Promise<Fixture> {
+async function fixture(files: Record<string, string>, components?: Map<string, ComponentEntry>): Promise<Fixture> {
 	const root = scratch('dsh-fix-');
 	try {
 		const all = { 'loupe.config.json': CONFIG, 'styles/tokens.css': TOKENS, ...files };
 		writeAll(root, all);
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		// The registry rides on the profile, which only a `--profiles` run merges.
+		if (components) setComponentRegistry(config, components);
 		const result = await analyze(config, { scope: null });
 		const outcome = applyTokenFixes(root, result.findings);
+		const reread = await analyze(config, { scope: null });
 		// Read before the cleanup below: a closure over `root` would resolve
 		// against a directory this function has already removed.
 		const after = new Map(Object.keys(all).map((rel) => [rel, readFileSync(join(root, rel), 'utf8')]));
@@ -59,6 +90,8 @@ async function fixture(files: Record<string, string>): Promise<Fixture> {
 				return text;
 			},
 			findings: result.findings,
+			parseErrors: reread.diagnostics.parseErrors,
+			remaining: reread.findings,
 		};
 	} finally {
 		cleanup(root);
@@ -105,11 +138,119 @@ await check('two fixes on one line both land', async () => {
 	);
 });
 
-await check('the JS channels are never rewritten as CSS', async () => {
-	const { applied } = await fixture({
-		'src/E.jsx': 'export const E = () => <div className="wf-e" style={{ borderRadius: \'4px\' }} />;',
+// `style={{ paddingBottom: 13 }}` is reported as `padding-bottom: 13px`, and
+// neither half of that is written in the file: the key is camelCase and React
+// is what gives the number its unit. So the fix is spliced at the span the scan
+// recorded — and the attribute next to it is what a CSS-shaped match would have
+// rewritten instead.
+await check('a JSX inline style is substituted at the bytes it was written at', async () => {
+	const { applied, read, parseErrors } = await fixture({
+		'src/E.jsx': [
+			'export const E = () => (',
+			'\t<div style={{ padding: 13, paddingBottom: \'13px\' }} title="padding: 13px">',
+			'\t\t<span style={{ borderRadius: `4px` }} />',
+			'\t</div>',
+			');',
+		].join('\n'),
 	});
-	assert(!applied.length, `inline style was rewritten: ${JSON.stringify(applied)}`);
+	assert(applied.length === 3, `expected 3 fixes, got ${JSON.stringify(applied)}`);
+	const out = read('src/E.jsx');
+	// A bare number is a length React suffixed, and a token is a string.
+	assert(out.includes("padding: 'var(--wpds-dimension-space-lg)',"), `bare number not substituted:\n${out}`);
+	// Two on one line: the first splice must not move the second.
+	assert(out.includes("paddingBottom: 'var(--wpds-dimension-space-lg)' }}"), `quoted value lost:\n${out}`);
+	// The quote the value was already written in is the quote it keeps.
+	assert(out.includes('borderRadius: `var(--wpds-border-radius-md)`'), `template quote not kept:\n${out}`);
+	assert(out.includes('title="padding: 13px"'), `a lookalike elsewhere on the line was rewritten:\n${out}`);
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+// A template's text is literal CSS, so it is matched as CSS. A declaration whose
+// value comes from an interpolation never reaches `fix` at all — the parse drops
+// it, because a value nothing can see is not a value anything can replace.
+await check('a CSS-in-JS declaration is substituted and an interpolated one is left alone', async () => {
+	const { applied, read, parseErrors } = await fixture({
+		'src/F.jsx': [
+			"import styled from 'styled-components';",
+			'const pad = 8;',
+			'export const Card = styled.div`',
+			'\tpadding: ${pad}px;',
+			'\tborder-radius: 4px;',
+			'`;',
+			'export const Pill = styled.span`padding: 8px`;',
+		].join('\n'),
+	});
+	assert(applied.map((f) => f.line).join() === '5,7', `fixes: ${JSON.stringify(applied)}`);
+	const out = read('src/F.jsx');
+	assert(out.includes('\tborder-radius: var(--wpds-border-radius-md);'), `not substituted:\n${out}`);
+	// A template on one line: its backtick bounds the declaration the way a brace does.
+	assert(out.includes('styled.span`padding: var(--wpds-dimension-space-md)`'), `one-line template:\n${out}`);
+	assert(out.includes('padding: ${pad}px;'), `an interpolated value was touched:\n${out}`);
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+await check('an ambiguous inline value is left alone', async () => {
+	const { applied, read } = await fixture({
+		'src/G.jsx': "export const G = () => <div style={{ color: '#1e1e1e' }} />;",
+	});
+	assert(!applied.length, `an ambiguous value was rewritten: ${JSON.stringify(applied)}`);
+	assert(read('src/G.jsx').includes("'#1e1e1e'"), 'value should be untouched');
+});
+
+// `css/dead-class` is the one finding with a quick fix that never runs here.
+// Every other fix on this page is a substitution: the old value is still in the
+// diff and the next run checks what replaced it. A deletion leaves nothing to
+// compare against, and the check over-collects references on purpose, so a
+// false "dead" is the failure it is priced to avoid — a price that only holds
+// for a reader who sees the rule. See docs/design/report.md#deleting-is-the-editors-alone.
+await check('`loupe fix` deletes nothing for a dead class', async () => {
+	const before = '/* gone with it, in the editor */\n.wf-dead {\n\tcolor: red;\n}\n';
+	const { applied, read, findings, remaining } = await fixture({ 'styles/dead.css': before });
+	const dead = findings.filter((f) => f.rule === 'css/dead-class');
+	assert(dead.length === 1, `the fixture reported ${dead.length} dead classes, expected 1`);
+	// The extent the editor deletes by is on the finding — this is the case the
+	// editor *does* offer, so the file below is untouched by choice, not by luck.
+	assert(dead[0]?.dead, 'the finding carried no extent, so this asserts nothing');
+	assert(!tokenFixes(dead).length, 'a dead class resolved into the shared fix list');
+	assert(!applied.length, `fix rewrote something: ${JSON.stringify(applied)}`);
+	assert(read('styles/dead.css') === before, `the stylesheet was edited:\n${read('styles/dead.css')}`);
+	assert(
+		remaining.some((f) => f.rule === 'css/dead-class'),
+		'the finding did not survive the fix pass',
+	);
+});
+
+// The quick fix and a second `fix` run both read a file that may have moved
+// since the scan. A column is not self-checking the way a match is, so what
+// stands at it is checked against what was reported there.
+await check('a span that has moved skips rather than rewriting the wrong bytes', () => {
+	const root = scratch('dsh-fix-');
+	try {
+		const scanned = 'export const H = () => <div style={{ padding: 13 }} />;';
+		// The same line, re-indented since: every column past the indent moved.
+		write(root, 'src/H.jsx', `\t${scanned}`);
+		const findings: FixCandidate[] = [
+			{
+				rule: 'tokens/hardcoded-value',
+				file: 'src/H.jsx',
+				line: 1,
+				suggest: [
+					{
+						prop: 'padding',
+						value: '13px',
+						tokens: ['--wpds-dimension-space-lg'],
+						span: { col: scanned.indexOf('13'), text: '13' },
+					},
+				],
+			},
+		];
+		const { applied, skipped } = applyTokenFixes(root, findings);
+		assert(!applied.length && skipped.length === 1, `expected one skip: ${JSON.stringify({ applied, skipped })}`);
+		assert(skipped[0]?.why.includes('no longer where'), `wrong reason: ${skipped[0]?.why}`);
+		assert(readFileSync(join(root, 'src/H.jsx'), 'utf8') === `\t${scanned}`, 'file must be untouched');
+	} finally {
+		cleanup(root);
+	}
 });
 
 await check('a stale line number skips rather than guesses', async () => {
@@ -209,6 +350,128 @@ await check('a collapsed finding is cleared only once every declaration is settl
 	assert(applied.length === 2, `expected 2 fixes, got ${applied.length}`);
 	assert(settledBy(findings, applied) === 1, 'both declarations settled, so the finding is cleared');
 	assert(!/\b(12px|16px)\b/.test(read('styles/u.css')), `a literal survived:\n${read('styles/u.css')}`);
+});
+
+// ── tokens/unknown-token ────────────────────────────────────────────────────
+// A name nothing defines is usually a misspelling, and the known set is right
+// there. Every case below is one where the rename would be invisible if it were
+// wrong: the file parses, the report goes clean, and the element is now painted
+// from a token that means something else.
+
+/** `xs` and `xl` differ in one character, so `xm` is a near miss for both. */
+const NEAR = `:root {
+	--wpds-color-foreground: #1e1e1e;
+	--wpds-dimension-space-xs: 4px;
+	--wpds-dimension-space-xl: 24px;
+	--wpds-dimension-space-md: 8px;
+}`;
+
+const uses = (rel: string): string => `export const X = () => <div className="${rel}" />;`;
+
+await check('a misspelled token is renamed everywhere the file names it', async () => {
+	const { applied, read, findings, remaining, parseErrors } = await fixture({
+		'styles/tokens.css': NEAR,
+		'styles/v.css': [
+			'.wf-v {',
+			'\tcolor: var(--wpds-colr-foreground);',
+			'\tborder-color: var(--wpds-colr-foreground);',
+			'\tbackground: linear-gradient(var(--wpds-colr-foreground), var(--wpds-colr-foreground));',
+			'}',
+		].join('\n'),
+		'src/V.jsx': uses('wf-v'),
+	});
+	// One finding, because the rule reports once per file and name — and four
+	// references on three lines, because that is what has to change for it to
+	// stop being true.
+	const unknown = findings.filter((f) => f.rule === 'tokens/unknown-token');
+	assert(unknown.length === 1, `expected one finding, got ${unknown.length}`);
+	assert(applied.length === 3, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('styles/v.css');
+	assert(!out.includes('--wpds-colr-'), `an occurrence survived:\n${out}`);
+	assert(out.split('--wpds-color-foreground').length === 5, `not every occurrence was renamed:\n${out}`);
+	assert(settledBy(findings, applied) === 1, 'every line renamed, so the finding is cleared');
+	assert(!remaining.some((f) => f.rule === 'tokens/unknown-token'), 'the next run must not report it again');
+	assert(!parseErrors.length, `the stylesheet no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+await check('a name two known tokens are equally near is left alone', async () => {
+	const { applied, read, findings } = await fixture({
+		'styles/tokens.css': NEAR,
+		'styles/x.css': '.wf-x { padding: var(--wpds-dimension-space-xm); }',
+		'src/X.jsx': uses('wf-x'),
+	});
+	assert(!applied.length, `a coin toss was applied: ${JSON.stringify(applied)}`);
+	assert(read('styles/x.css').includes('--wpds-dimension-space-xm'), 'the name must be untouched');
+	assert(settledBy(findings, applied) === 0, 'an unrenamed finding is not cleared');
+});
+
+await check('a name near nothing is left alone', async () => {
+	const { applied, read } = await fixture({
+		'styles/tokens.css': NEAR,
+		'styles/y.css': '.wf-y { color: var(--wpds-color-brand); }',
+		'src/Y.jsx': uses('wf-y'),
+	});
+	assert(!applied.length, `an invented name was renamed: ${JSON.stringify(applied)}`);
+	assert(read('styles/y.css').includes('--wpds-color-brand'), 'the name must be untouched');
+});
+
+// The whole defence of a one-keystroke threshold: a scale step is one keystroke
+// from its neighbour and means a different amount. `20px` where `30px` was
+// asked for is the failure this path exists to prevent — right pixels, wrong
+// meaning, clean report.
+await check('a step on a scale is not a spelling, however near it sits', async () => {
+	const { applied, read } = await fixture({
+		'styles/tokens.css': ':root {\n\t--wpds-dimension-space-20: 20px;\n}',
+		'styles/z.css': '.wf-z { padding: var(--wpds-dimension-space-30); }',
+		'src/Z.jsx': uses('wf-z'),
+	});
+	assert(!applied.length, `a scale step was renamed: ${JSON.stringify(applied)}`);
+	assert(read('styles/z.css').includes('--wpds-dimension-space-30'), 'the name must be untouched');
+});
+
+// `--wpds-dimension-space-m` is a deletion away from `-md`, and `-md` is written
+// on the same line. A rename bounded only on the left would make it `-mdd`.
+await check('a rename stops at the name it was given, and never at a definition', async () => {
+	const { applied, read, parseErrors } = await fixture({
+		'styles/tokens.css': NEAR,
+		'styles/aa.css': [
+			'.wf-aa {',
+			'\t--wf-local: var(--wpds-dimension-space-m);',
+			'\tpadding: var(--wpds-dimension-space-m) var(--wpds-dimension-space-md);',
+			'}',
+		].join('\n'),
+		'src/AA.jsx': uses('wf-aa'),
+	});
+	assert(applied.length === 2, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('styles/aa.css');
+	assert(!out.includes('-mdd'), `the rename ran past its name:\n${out}`);
+	assert(out.includes('--wf-local: var(--wpds-dimension-space-md);'), `not renamed in a custom property:\n${out}`);
+	assert(
+		out.includes('padding: var(--wpds-dimension-space-md) var(--wpds-dimension-space-md);'),
+		`both references on one line should be renamed:\n${out}`,
+	);
+	assert(!parseErrors.length, `the stylesheet no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+// The other channel `var()` references are collected from. A template's text is
+// literal CSS, so the same match finds it there.
+await check('a misspelled token in a CSS-in-JS template is renamed too', async () => {
+	const { applied, read, findings, remaining, parseErrors } = await fixture({
+		'styles/tokens.css': NEAR,
+		'src/AB.jsx': [
+			"import styled from 'styled-components';",
+			'export const Card = styled.div`',
+			'\tcolor: var(--wpds-colr-foreground);',
+			'\tborder-color: var(--wpds-colr-foreground);',
+			'`;',
+		].join('\n'),
+	});
+	assert(applied.length === 2, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('src/AB.jsx');
+	assert(!out.includes('--wpds-colr-'), `an occurrence survived:\n${out}`);
+	assert(settledBy(findings, applied) === 1, 'every line renamed, so the finding is cleared');
+	assert(!remaining.some((f) => f.rule === 'tokens/unknown-token'), 'the next run must not report it again');
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
 });
 
 // ── fix --judge ─────────────────────────────────────────────────────────────
@@ -653,5 +916,24 @@ await check(
 		}
 	},
 );
+
+// Moving an import is not a substitution, and the licence for one — `dropIn` on
+// a registry entry — is carried by nothing the shipped registry holds. `HStack`
+// needs a new prop to move at all, so it is the case a specifier swap would get
+// silently wrong. The registry is the real one, so this fails the day an entry
+// claims `dropIn` and a fix path starts reading it.
+// See docs/design/report.md#moving-an-import-is-not-a-substitution.
+await check('a superseded component import is reported and never rewritten', async () => {
+	const registry = loadComponents(JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')));
+	assert(![...registry.values()].some((e) => e.dropIn), 'no shipped entry may claim dropIn without a fix path');
+	const src = "import { HStack } from '@wordpress/components';\n\nexport const AC = () => <HStack />;\n";
+	const { applied, findings, read, parseErrors, remaining } = await fixture({ 'src/AC.jsx': src }, registry);
+	const superseded = (f: Finding): boolean => f.rule === 'system/superseded-component';
+	assert(findings.some(superseded), 'expected the import to be reported');
+	assert(applied.length === 0, `expected no fixes, got ${JSON.stringify(applied)}`);
+	assert(read('src/AC.jsx') === src, 'the import must be left byte-identical');
+	assert(parseErrors.length === 0, `expected a clean re-parse, got ${parseErrors[0]?.message}`);
+	assert(remaining.some(superseded), 'the finding must still stand afterwards');
+});
 
 finish();

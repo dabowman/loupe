@@ -57,6 +57,7 @@ import {
 	GAP_PROPS,
 	TYPE_PROPS,
 	classesIn,
+	deletableRule,
 	isFlexDecl,
 	isGridDecl,
 	isHardcodedTokenValue,
@@ -481,11 +482,18 @@ export async function analyze(
 
 		harvestTokenDefs(root, tokenPrefixes, tokenSet);
 
+		// What a rule's own lines say, for the deletion `css/dead-class` offers in
+		// the editor: an extent in lines is only safe if it is the whole of them.
+		const srcLines = text.split('\n');
+
 		root.walkRules((cssRule) => {
 			const ruleLine = cssRule.source?.start?.line ?? 1;
 			const selectors = resolvedSelectors(cssRule);
 			const allClasses = [...new Set(selectors.flatMap(classesIn))];
-			const keyClasses = [...new Set(selectors.map(keySelector).flatMap(classesIn))];
+			// Kept per selector as well as pooled: deleting the rule for one dead
+			// class is only safe if every selector in the list names that class.
+			const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+			const keyClasses = [...new Set(keyClassesPer.flat())];
 			if (!allClasses.length) return;
 
 			// Bindings correlate against the KEY selector only: `.card .title`
@@ -535,7 +543,15 @@ export async function analyze(
 			if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
 			else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media });
 
-			for (const cls of keyClasses) declared.push({ file: rel, line: ruleLine, cls, scopeLines });
+			const cut = deletableRule(cssRule, srcLines);
+			for (const cls of keyClasses)
+				declared.push({
+					file: rel,
+					line: ruleLine,
+					cls,
+					scopeLines,
+					cut: cut && keyClassesPer.every((k) => k.includes(cls)) ? cut : undefined,
+				});
 		});
 	}
 
@@ -567,6 +583,9 @@ export async function analyze(
 			if (finding)
 				pending.push({
 					...finding,
+					// The classifier sees the translated declaration, which is not what
+					// the file says. Only the span points back at the bytes it came from.
+					hints: finding.hints?.map((h) => ({ ...h, span: d.span })),
 					line: d.line ?? el.line,
 					code: finding.code ?? finding.message,
 					suffix: ' (inline)',
