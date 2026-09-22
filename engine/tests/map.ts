@@ -19,7 +19,17 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readTokenDoc } from '../src/dtcg.ts';
 import type { Token, TokenDoc } from '../src/dtcg.ts';
-import { FLOOR, askCounterparts, comparable, countBy, nameScore, planMap, rank, valueScore } from '../src/mapping.ts';
+import {
+	FLOOR,
+	askCounterparts,
+	collisionsIn,
+	comparable,
+	countBy,
+	nameScore,
+	planMap,
+	rank,
+	valueScore,
+} from '../src/mapping.ts';
 import { assert, check, finish, one } from './harness.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -279,6 +289,43 @@ await check('every token in scope comes back exactly once, in the order it was a
 	assert(new Set(mappings.map((m) => m.from)).size === mappings.length, 'a token was mapped twice');
 	const authored = alpha.tokens.map((t) => t.path);
 	assert(mappings.map((m) => m.from).join('|') === authored.join('|'), 'the rows came back in another order');
+});
+
+await check('a map that is not one-to-one says so', async () => {
+	// Every token answered with the same counterpart: the rows are individually
+	// fine and the map collapses, which is the case a per-row report hides. On two
+	// real systems this is not a contrived case — WPDS has a disabled background
+	// per tone where Primer has one, and ten rows land on it.
+	const plan = planMap(alpha, beta, { tiers: ['semantic'], types: ['color'] });
+	// `fg.body` is on every semantic colour's shortlist, so answering it wherever
+	// it is offered lands every row on one token.
+	const { mappings } = await askCounterparts(
+		plan,
+		'key',
+		stub([], (q) => ({
+			choice: 'fg.body' in (q.questions.e0?.criteria ?? {}) ? 'fg.body' : 'none',
+			confidence: 0.9,
+		})),
+	);
+	const collisions = collisionsIn(mappings);
+	const claimed = collisions.reduce((n, c) => n + c.from.length, 0);
+	assert(claimed > 0, 'a map where everything landed on one token reported no collision');
+	// Named by the target, and carrying every source that claimed it, so the
+	// report can say which distinction the second system does not draw.
+	for (const c of collisions) {
+		assert(c.from.length > 1, `${c.to} was listed as a collision with ${c.from.length} claim(s)`);
+		assert(
+			c.from.every((f) => mappings.some((m) => m.from === f && m.to === c.to)),
+			`${c.to} named a source that did not map to it`,
+		);
+	}
+	// A one-to-one map reports none.
+	const clean = await askCounterparts(
+		plan,
+		'key',
+		stub([], () => ({ choice: 'none', confidence: 0.9 })),
+	);
+	assert(!collisionsIn(clean.mappings).length, 'rows with no counterpart were counted as sharing one');
 });
 
 await check('a failed request fails the run rather than half-writing a map', async () => {

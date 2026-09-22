@@ -5,10 +5,12 @@ Why the token-set mapper is shaped the way it is. What it *does* is in
 the request it posts is written out in full at the top of
 `engine/src/judge/counterpart.ts`.
 
-**This one is an experiment, and nothing in it is measured.** Every other number
-in [judge.md](judge.md) has an eval behind it and a command that reproduces it.
-The weights and the floor here were chosen by argument. They are written down so
-the argument can be checked, not because they are right — see
+**This one is an experiment, and none of its tuning is measured.** Every other
+number in [judge.md](judge.md) has an eval behind it and a command that
+reproduces it. The weights and the floor here were chosen by argument. They are
+written down so the argument can be checked, not because they are right.
+[One real pair](#what-one-real-pair-looks-like) says the thing works and says
+nothing about how often it is right — see
 [what is not settled](#what-is-not-settled).
 
 ## The question it answers
@@ -202,17 +204,64 @@ cannot be rescued by the model.** It is also what caught the `hsl` bug above:
 the ranking was visibly wrong on real data long before anything was spent asking
 about it.
 
+## What one real pair looks like
+
+WPDS's own DTCG sources (334 tokens, 5 files) mapped onto Primer's (1,488
+tokens, 63 files) — two systems that share the spec and nothing else. The whole
+run took 14 seconds.
+
+| | judged | no counterpart | under the floor |
+|---|---|---|---|
+| base (206) | 62 | 8 | 136 |
+| semantic (128) | 76 | 14 | 38 |
+
+Three things in that table are worth reading.
+
+**Semantic tokens map and base tokens mostly do not.** 59% of the semantic tier
+settled against 30% of the base tier, and the base colours alone are 27 of 155.
+This is the result behaving correctly rather than failing: WPDS primitives are
+`primary.surface1…5`, `error.surface1…5` — five near-identical tints per tone —
+and Primer's palette has dozens of entries equally close to each. The
+probability mass genuinely splits, and a confident answer there would be a
+worse outcome than an uncertain one. Two palettes mostly do not have
+counterparts; two sets of *roles* do, and the roles are what makes the systems
+comparable.
+
+The temptation is to lower the floor to make the number look better. Don't
+without an eval: the median unsettled row sits at 0.27, and dropping the floor
+to 0.4 recovers 31 rows of the 174 while admitting every near-tie with it.
+
+**The model bridges naming gaps that nothing else could.** WPDS's `info`
+surface maps to Primer's `bgColor.accent.muted` and its `warning` to
+`bgColor.attention.muted` — right, and unreachable from either the names or the
+values alone.
+
+**The map is not one-to-one, and that is the interesting part.** 138 judged rows
+land on 75 distinct Primer tokens. 29 targets are claimed by more than one
+source, `bgColor.disabled` by nine: WPDS has a disabled background per tone and
+per emphasis where Primer has one. Likewise WPDS separates `warning` from
+`caution` and normal from `-weak`, and Primer's `attention.muted` absorbs three
+of those at once.
+
+Every one of those rows is individually defensible, which is exactly why the
+collapse has to be reported rather than left to be noticed. A per-row report
+reads like a bijection. `collisionsIn` counts the claims, the report marks each
+shared row inline *and* lists the collisions under their own heading, and the
+JSON carries them. "This system draws a distinction the other one does not" is
+what someone comparing two systems came to find out.
+
 ## What is not settled
 
 - **No eval.** `evals/` has labelled sets for `represents` and `values`; there
   is none for this, so the floor of 0.5, the eight candidates, the tier weight
-  of 0.2 and the table above are all arguments rather than measurements. A
-  labelled set of a few hundred hand-checked pairs between two real systems is
-  what would turn them into numbers.
-- **One direction only.** `map A B` does not imply `map B A`. Running both ways
-  and diffing would show where the relation is not one-to-one — two tokens in A
-  mapping onto one in B is a real and interesting finding, and nothing surfaces
-  it today.
+  of 0.2 and the weight table are all arguments rather than measurements. The
+  WPDS/Primer run above says the thing works; it does not say how often it is
+  *right*, because nobody has labelled it. A few hundred hand-checked pairs
+  between those two sets is what would turn every number here into one.
+- **One direction only.** `map A B` does not imply `map B A`. Collisions show
+  where the relation collapses *into* B; nothing shows a token of B that no
+  token of A reached, which is the other half of the same question and needs the
+  reverse run. Diffing the two would also catch pairs that only agree one way.
 - **Modes and themes are ignored.** A token's value is its first definition, and
   a set with light and dark variants contributes whichever it declares first.
   For Primer that means one theme's colours stand for all of them.

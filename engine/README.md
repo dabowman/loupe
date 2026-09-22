@@ -656,6 +656,13 @@ is no counterpart. Both spec drafts render to one value, so a set written
 `{ value: 16, unit: "px" }` and one written `"1rem"` measure as the same length,
 and a palette in `hsl` compares against one in `srgb`.
 
+A map is not a bijection, and a per-row report reads like one. Rows landing on a
+token another row already claimed are marked `shared ×n` and listed under their
+own heading, and the JSON carries them as `collisions`. That is often the useful
+half of the result: mapping WPDS onto Primer, nine WPDS tokens land on
+`bgColor.disabled`, because WPDS has a disabled background per tone and per
+emphasis where Primer has one.
+
 `--dry-run` prints the shortlists and asks nothing, which is the first thing to
 run on a new pair: a shortlist that does not contain the right answer cannot be
 rescued by the model. Everything else needs `TYPESAFE_API_KEY`, and unlike

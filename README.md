@@ -345,8 +345,11 @@ Both sides are assumed to be standard DTCG and three-tiered; nothing else about
 them has to agree, and nothing is configured per system. The engine narrows each
 token to eight candidates — `$type` as a hard gate, colour distance in OKLab,
 names as word sets with the organising words dropped — and the model picks among
-them or says the second system has no counterpart. `--dry-run` shows the
-shortlists for free, which is the first thing to run on a new pair.
+them or says the second system has no counterpart. Where several tokens land on
+one counterpart the report says so rather than reading like a bijection — which
+is often the finding: nine WPDS tokens map onto Primer's single
+`bgColor.disabled`. `--dry-run` shows the shortlists for free, which is the first
+thing to run on a new pair.
 
 Nothing about it is measured yet: no eval, and the weights and floors are
 arguments rather than numbers. `docs/design/map.md` says which, and

@@ -28044,6 +28044,11 @@ function rowFor(job, answer) {
     ...runnerUp
   };
 }
+function collisionsIn(mappings) {
+  const claims = /* @__PURE__ */ new Map();
+  for (const m of mappings) if (m.to) claims.set(m.to, [...claims.get(m.to) ?? [], m.from]);
+  return [...claims].filter(([, from]) => from.length > 1).map(([to, from]) => ({ to, from })).sort((a, b) => b.from.length - a.from.length || a.to.localeCompare(b.to));
+}
 var countBy = (mappings) => {
   const counts = { exact: 0, judged: 0, none: 0, absent: 0, unsure: 0 };
   for (const m of mappings) counts[m.how]++;
@@ -28060,6 +28065,7 @@ var mapPayload = (plan, mappings, model) => ({
   model,
   floor: FLOOR2,
   counts: countBy(mappings),
+  collisions: collisionsIn(mappings),
   mappings: [...mappings]
 });
 var OUTCOMES = [
@@ -28074,6 +28080,8 @@ function formatMap(plan, mappings) {
   const pathW = width(mappings.map((m) => m.from));
   const valueW = width(mappings.map((m) => m.fromValue));
   const pad = (s, n) => s.length > n ? `${s.slice(0, n - 1)}\u2026` : s.padEnd(n);
+  const collisions = collisionsIn(mappings);
+  const shared = new Map(collisions.map((c) => [c.to, c.from.length]));
   const out = [`${bold(`${plan.from.label} \u2192 ${plan.to.label}`)}
 `];
   for (const tier of TIERS) {
@@ -28083,7 +28091,24 @@ function formatMap(plan, mappings) {
 `);
     for (const m of rows) {
       const head2 = `  ${pad(m.from, pathW)}  ${dim(pad(m.fromValue, valueW))}  \u2192  `;
-      out.push(`${head2}${verdict(m)}
+      const many = m.to ? shared.get(m.to) : void 0;
+      out.push(`${head2}${verdict(m)}${many ? dim(`  shared \xD7${many}`) : ""}
+`);
+    }
+    out.push("\n");
+  }
+  if (collisions.length) {
+    const claimed = collisions.reduce((n, c) => n + c.from.length, 0);
+    out.push(
+      `${bold("not one-to-one")} ${dim(
+        `(${collisions.length} token(s) in ${plan.to.label} claimed by ${claimed} in ${plan.from.label})`
+      )}
+`
+    );
+    for (const c of collisions) {
+      out.push(`  ${yellow(c.to)} ${dim(`\xD7${c.from.length}`)}
+`);
+      for (const f of c.from) out.push(`      ${dim(f)}
 `);
     }
     out.push("\n");

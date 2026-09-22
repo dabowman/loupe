@@ -446,6 +446,30 @@ function rowFor(job: CounterpartItem, answer: Choice | undefined): Mapping {
 	};
 }
 
+/**
+ * The target tokens more than one source token landed on, most claimed first.
+ *
+ * A map is not a bijection and was never going to be, but a report that lists
+ * every row as `a \u2192 b` reads like one. On WPDS against Primer, 139 judged rows
+ * land on 76 distinct tokens and one of them absorbs ten: WPDS has a disabled
+ * background per tone and per emphasis where Primer has a single
+ * `bgColor.disabled`. Every one of those ten answers is defensible on its own,
+ * which is exactly why the collapse has to be said out loud rather than left for
+ * a reader to notice by sorting the file.
+ *
+ * It is also the interesting half of the result. "This system draws a
+ * distinction the other one does not" is what someone comparing two systems came
+ * to find out, and it is only visible across rows.
+ */
+export function collisionsIn(mappings: readonly Mapping[]): { to: string; from: string[] }[] {
+	const claims = new Map<string, string[]>();
+	for (const m of mappings) if (m.to) claims.set(m.to, [...(claims.get(m.to) ?? []), m.from]);
+	return [...claims]
+		.filter(([, from]) => from.length > 1)
+		.map(([to, from]) => ({ to, from }))
+		.sort((a, b) => b.from.length - a.from.length || a.to.localeCompare(b.to));
+}
+
 /** How many rows landed each way. */
 export type Counts = Record<How, number>;
 
@@ -465,6 +489,8 @@ export interface MapPayload {
 	/** The confidence a judgement had to clear to be written as a counterpart. */
 	floor: number;
 	counts: Counts;
+	/** Where the map is not one-to-one. See {@link collisionsIn}. */
+	collisions: { to: string; from: string[] }[];
 	mappings: Mapping[];
 }
 
@@ -479,6 +505,7 @@ export const mapPayload = (plan: MapPlan, mappings: readonly Mapping[], model: s
 	model,
 	floor: FLOOR,
 	counts: countBy(mappings),
+	collisions: collisionsIn(mappings),
 	mappings: [...mappings],
 });
 
@@ -506,6 +533,9 @@ export function formatMap(plan: MapPlan, mappings: readonly Mapping[]): string {
 	const valueW = width(mappings.map((m) => m.fromValue));
 	const pad = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
 
+	const collisions = collisionsIn(mappings);
+	const shared = new Map(collisions.map((c) => [c.to, c.from.length]));
+
 	const out: string[] = [`${bold(`${plan.from.label} → ${plan.to.label}`)}\n`];
 	for (const tier of TIERS) {
 		const rows = mappings.filter((m) => m.tier === tier);
@@ -513,7 +543,23 @@ export function formatMap(plan: MapPlan, mappings: readonly Mapping[]): string {
 		out.push(`${bold(tier)} ${dim(`(${rows.length})`)}\n`);
 		for (const m of rows) {
 			const head = `  ${pad(m.from, pathW)}  ${dim(pad(m.fromValue, valueW))}  →  `;
-			out.push(`${head}${verdict(m)}\n`);
+			// Marked on the row as well as listed below, because a row read on its own
+			// is where the one-to-one reading is formed.
+			const many = m.to ? shared.get(m.to) : undefined;
+			out.push(`${head}${verdict(m)}${many ? dim(`  shared ×${many}`) : ''}\n`);
+		}
+		out.push('\n');
+	}
+	if (collisions.length) {
+		const claimed = collisions.reduce((n, c) => n + c.from.length, 0);
+		out.push(
+			`${bold('not one-to-one')} ${dim(
+				`(${collisions.length} token(s) in ${plan.to.label} claimed by ${claimed} in ${plan.from.label})`,
+			)}\n`,
+		);
+		for (const c of collisions) {
+			out.push(`  ${yellow(c.to)} ${dim(`×${c.from.length}`)}\n`);
+			for (const f of c.from) out.push(`      ${dim(f)}\n`);
 		}
 		out.push('\n');
 	}
