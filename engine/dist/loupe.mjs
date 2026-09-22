@@ -25002,7 +25002,8 @@ function onRole(names, prop) {
   return preferred.length ? preferred : onRole2;
 }
 function tokensFor(set, prop, value) {
-  return onRole(set.byValue.get(normalizeValue(value)) ?? [], prop);
+  const family = new Set(onRole([...set.known], prop));
+  return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
 }
 function familyFor(set, prop) {
   const all = [...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v]));

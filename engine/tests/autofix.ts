@@ -118,6 +118,20 @@ await check('an ambiguous value is left alone', async () => {
 	assert(read('styles/b.css').includes('#1e1e1e'), 'value should be untouched');
 });
 
+// vip-workflows: the padding scale stops at 32px and `gap-3xl` is 40px, so an
+// exact match taken among the tokens carrying the value wrote `padding:
+// var(--wpds-dimension-gap-3xl)` on every `padding: 40px`.
+await check("a value only a sibling family carries is not the property's token", async () => {
+	const { applied, read } = await fixture({
+		'styles/tokens.css': ':root {\n\t--wpds-dimension-padding-sm: 8px;\n\t--wpds-dimension-gap-3xl: 40px;\n}',
+		'styles/g.css': '.wf-g {\n\tpadding: 40px;\n\tpadding-top: 8px;\n}',
+	});
+	const out = read('styles/g.css');
+	assert(out.includes('padding: 40px;'), `padding took a gap token:\n${out}`);
+	assert(out.includes('padding-top: var(--wpds-dimension-padding-sm);'), `padding lost its own token:\n${out}`);
+	assert(applied.length === 1, `expected 1 fix, got ${JSON.stringify(applied)}`);
+});
+
 await check('a property is not matched inside a longer property name', async () => {
 	const { applied, read } = await fixture({
 		'styles/c.css': '.wf-c {\n\t-webkit-border-radius: 4px;\n\tborder-radius: 4px;\n}',
