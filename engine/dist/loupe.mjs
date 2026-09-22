@@ -42,9 +42,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/constants.js
+// node_modules/picomatch/lib/constants.js
 var require_constants = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/constants.js"(exports, module) {
+  "node_modules/picomatch/lib/constants.js"(exports, module) {
     "use strict";
     var WIN_SLASH = "\\\\/";
     var WIN_NO_SLASH = `[^${WIN_SLASH}]`;
@@ -244,9 +244,9 @@ var require_constants = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/utils.js
+// node_modules/picomatch/lib/utils.js
 var require_utils = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/utils.js"(exports) {
+  "node_modules/picomatch/lib/utils.js"(exports) {
     "use strict";
     var {
       REGEX_BACKSLASH,
@@ -308,9 +308,9 @@ var require_utils = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/scan.js
+// node_modules/picomatch/lib/scan.js
 var require_scan = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/scan.js"(exports, module) {
+  "node_modules/picomatch/lib/scan.js"(exports, module) {
     "use strict";
     var utils = require_utils();
     var {
@@ -638,9 +638,9 @@ var require_scan = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/parse.js
+// node_modules/picomatch/lib/parse.js
 var require_parse = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/parse.js"(exports, module) {
+  "node_modules/picomatch/lib/parse.js"(exports, module) {
     "use strict";
     var constants = require_constants();
     var utils = require_utils();
@@ -1652,9 +1652,9 @@ var require_parse = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/picomatch.js
+// node_modules/picomatch/lib/picomatch.js
 var require_picomatch = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/lib/picomatch.js"(exports, module) {
+  "node_modules/picomatch/lib/picomatch.js"(exports, module) {
     "use strict";
     var scan = require_scan();
     var parse3 = require_parse();
@@ -1792,9 +1792,9 @@ var require_picomatch = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/index.js
+// node_modules/picomatch/index.js
 var require_picomatch2 = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picomatch/index.js"(exports, module) {
+  "node_modules/picomatch/index.js"(exports, module) {
     "use strict";
     var pico = require_picomatch();
     var utils = require_utils();
@@ -1809,9 +1809,9 @@ var require_picomatch2 = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/@babel/parser/lib/index.js
+// node_modules/@babel/parser/lib/index.js
 var require_lib = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/@babel/parser/lib/index.js"(exports) {
+  "node_modules/@babel/parser/lib/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", {
       value: true
@@ -16396,9 +16396,9 @@ var require_lib = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picocolors/picocolors.js
+// node_modules/picocolors/picocolors.js
 var require_picocolors = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/picocolors/picocolors.js"(exports, module) {
+  "node_modules/picocolors/picocolors.js"(exports, module) {
     var p = process || {};
     var argv = p.argv || [];
     var env = p.env || {};
@@ -16468,9 +16468,9 @@ var require_picocolors = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/tokenize.js
+// node_modules/postcss/lib/tokenize.js
 var require_tokenize = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/tokenize.js"(exports, module) {
+  "node_modules/postcss/lib/tokenize.js"(exports, module) {
     "use strict";
     var SINGLE_QUOTE = "'".charCodeAt(0);
     var DOUBLE_QUOTE = '"'.charCodeAt(0);
@@ -16687,9 +16687,9 @@ var require_tokenize = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/terminal-highlight.js
+// node_modules/postcss/lib/terminal-highlight.js
 var require_terminal_highlight = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/terminal-highlight.js"(exports, module) {
+  "node_modules/postcss/lib/terminal-highlight.js"(exports, module) {
     "use strict";
     var pico = require_picocolors();
     var tokenizer = require_tokenize();
@@ -16749,9 +16749,9 @@ var require_terminal_highlight = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/css-syntax-error.js
+// node_modules/postcss/lib/css-syntax-error.js
 var require_css_syntax_error = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/css-syntax-error.js"(exports, module) {
+  "node_modules/postcss/lib/css-syntax-error.js"(exports, module) {
     "use strict";
     var pico = require_picocolors();
     var terminalHighlight = require_terminal_highlight();
@@ -16846,9 +16846,9 @@ var require_css_syntax_error = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/stringifier.js
+// node_modules/postcss/lib/stringifier.js
 var require_stringifier = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/stringifier.js"(exports, module) {
+  "node_modules/postcss/lib/stringifier.js"(exports, module) {
     "use strict";
     var STYLE_TAG = /(<)(\/?style\b)/gi;
     var COMMENT_OPEN = /(<)(!--)/g;
@@ -17225,9 +17225,9 @@ var require_stringifier = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/stringify.js
+// node_modules/postcss/lib/stringify.js
 var require_stringify = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/stringify.js"(exports, module) {
+  "node_modules/postcss/lib/stringify.js"(exports, module) {
     "use strict";
     var Stringifier = require_stringifier();
     function stringify3(node, builder) {
@@ -17239,18 +17239,18 @@ var require_stringify = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/symbols.js
+// node_modules/postcss/lib/symbols.js
 var require_symbols = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/symbols.js"(exports, module) {
+  "node_modules/postcss/lib/symbols.js"(exports, module) {
     "use strict";
     module.exports.isClean = Symbol("isClean");
     module.exports.my = Symbol("my");
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/node.js
+// node_modules/postcss/lib/node.js
 var require_node = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/node.js"(exports, module) {
+  "node_modules/postcss/lib/node.js"(exports, module) {
     "use strict";
     var CssSyntaxError2 = require_css_syntax_error();
     var Stringifier = require_stringifier();
@@ -17663,9 +17663,9 @@ var require_node = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/comment.js
+// node_modules/postcss/lib/comment.js
 var require_comment = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/comment.js"(exports, module) {
+  "node_modules/postcss/lib/comment.js"(exports, module) {
     "use strict";
     var Node2 = require_node();
     var Comment2 = class extends Node2 {
@@ -17679,9 +17679,9 @@ var require_comment = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/declaration.js
+// node_modules/postcss/lib/declaration.js
 var require_declaration = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/declaration.js"(exports, module) {
+  "node_modules/postcss/lib/declaration.js"(exports, module) {
     "use strict";
     var Node2 = require_node();
     var Declaration2 = class extends Node2 {
@@ -17701,9 +17701,9 @@ var require_declaration = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/container.js
+// node_modules/postcss/lib/container.js
 var require_container = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/container.js"(exports, module) {
+  "node_modules/postcss/lib/container.js"(exports, module) {
     "use strict";
     var Comment2 = require_comment();
     var Declaration2 = require_declaration();
@@ -18123,9 +18123,9 @@ var require_container = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/at-rule.js
+// node_modules/postcss/lib/at-rule.js
 var require_at_rule = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/at-rule.js"(exports, module) {
+  "node_modules/postcss/lib/at-rule.js"(exports, module) {
     "use strict";
     var Container2 = require_container();
     var AtRule2 = class extends Container2 {
@@ -18148,9 +18148,9 @@ var require_at_rule = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/document.js
+// node_modules/postcss/lib/document.js
 var require_document = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/document.js"(exports, module) {
+  "node_modules/postcss/lib/document.js"(exports, module) {
     "use strict";
     var Container2 = require_container();
     var LazyResult;
@@ -18178,9 +18178,9 @@ var require_document = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/nanoid/non-secure/index.cjs
+// node_modules/nanoid/non-secure/index.cjs
 var require_non_secure = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/nanoid/non-secure/index.cjs"(exports, module) {
+  "node_modules/nanoid/non-secure/index.cjs"(exports, module) {
     var urlAlphabet = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
     var customAlphabet = (alphabet, defaultSize = 21) => {
       return (size = defaultSize) => {
@@ -18204,9 +18204,9 @@ var require_non_secure = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/base64.js
+// node_modules/source-map-js/lib/base64.js
 var require_base64 = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/base64.js"(exports) {
+  "node_modules/source-map-js/lib/base64.js"(exports) {
     var intToCharMap = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".split("");
     exports.encode = function(number) {
       if (0 <= number && number < intToCharMap.length) {
@@ -18245,9 +18245,9 @@ var require_base64 = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/base64-vlq.js
+// node_modules/source-map-js/lib/base64-vlq.js
 var require_base64_vlq = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/base64-vlq.js"(exports) {
+  "node_modules/source-map-js/lib/base64-vlq.js"(exports) {
     var base64 = require_base64();
     var VLQ_BASE_SHIFT = 5;
     var VLQ_BASE = 1 << VLQ_BASE_SHIFT;
@@ -18299,9 +18299,9 @@ var require_base64_vlq = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/util.js
+// node_modules/source-map-js/lib/util.js
 var require_util = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/util.js"(exports) {
+  "node_modules/source-map-js/lib/util.js"(exports) {
     function getArg(aArgs, aName, aDefaultValue) {
       if (aName in aArgs) {
         return aArgs[aName];
@@ -18679,9 +18679,9 @@ var require_util = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/array-set.js
+// node_modules/source-map-js/lib/array-set.js
 var require_array_set = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/array-set.js"(exports) {
+  "node_modules/source-map-js/lib/array-set.js"(exports) {
     var util = require_util();
     var has = Object.prototype.hasOwnProperty;
     var hasNativeMap = typeof Map !== "undefined";
@@ -18749,9 +18749,9 @@ var require_array_set = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/mapping-list.js
+// node_modules/source-map-js/lib/mapping-list.js
 var require_mapping_list = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/mapping-list.js"(exports) {
+  "node_modules/source-map-js/lib/mapping-list.js"(exports) {
     var util = require_util();
     function generatedPositionAfter(mappingA, mappingB) {
       var lineA = mappingA.generatedLine;
@@ -18788,9 +18788,9 @@ var require_mapping_list = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/source-map-generator.js
+// node_modules/source-map-js/lib/source-map-generator.js
 var require_source_map_generator = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/source-map-generator.js"(exports) {
+  "node_modules/source-map-js/lib/source-map-generator.js"(exports) {
     var base64VLQ = require_base64_vlq();
     var util = require_util();
     var ArraySet = require_array_set().ArraySet;
@@ -19081,9 +19081,9 @@ var require_source_map_generator = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/binary-search.js
+// node_modules/source-map-js/lib/binary-search.js
 var require_binary_search = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/binary-search.js"(exports) {
+  "node_modules/source-map-js/lib/binary-search.js"(exports) {
     exports.GREATEST_LOWER_BOUND = 1;
     exports.LEAST_UPPER_BOUND = 2;
     function recursiveSearch(aLow, aHigh, aNeedle, aHaystack, aCompare, aBias) {
@@ -19137,9 +19137,9 @@ var require_binary_search = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/quick-sort.js
+// node_modules/source-map-js/lib/quick-sort.js
 var require_quick_sort = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/quick-sort.js"(exports) {
+  "node_modules/source-map-js/lib/quick-sort.js"(exports) {
     function SortTemplate(comparator) {
       function swap(ary, x, y) {
         var temp = ary[x];
@@ -19186,9 +19186,9 @@ var require_quick_sort = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/source-map-consumer.js
+// node_modules/source-map-js/lib/source-map-consumer.js
 var require_source_map_consumer = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/source-map-consumer.js"(exports) {
+  "node_modules/source-map-js/lib/source-map-consumer.js"(exports) {
     var util = require_util();
     var binarySearch = require_binary_search();
     var ArraySet = require_array_set().ArraySet;
@@ -19833,9 +19833,9 @@ var require_source_map_consumer = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/source-node.js
+// node_modules/source-map-js/lib/source-node.js
 var require_source_node = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/lib/source-node.js"(exports) {
+  "node_modules/source-map-js/lib/source-node.js"(exports) {
     var SourceMapGenerator = require_source_map_generator().SourceMapGenerator;
     var util = require_util();
     var REGEX_NEWLINE = /(\r?\n)/;
@@ -20098,18 +20098,18 @@ var require_source_node = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/source-map.js
+// node_modules/source-map-js/source-map.js
 var require_source_map = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/source-map-js/source-map.js"(exports) {
+  "node_modules/source-map-js/source-map.js"(exports) {
     exports.SourceMapGenerator = require_source_map_generator().SourceMapGenerator;
     exports.SourceMapConsumer = require_source_map_consumer().SourceMapConsumer;
     exports.SourceNode = require_source_node().SourceNode;
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/previous-map.js
+// node_modules/postcss/lib/previous-map.js
 var require_previous_map = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/previous-map.js"(exports, module) {
+  "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
     var { existsSync: existsSync10, readFileSync: readFileSync14, realpathSync: realpathSync2 } = __require("fs");
     var { dirname: dirname8, isAbsolute: isAbsolute7, join: join15, relative: relative5, sep: sep3 } = __require("path");
@@ -20252,9 +20252,9 @@ var require_previous_map = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/input.js
+// node_modules/postcss/lib/input.js
 var require_input = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/input.js"(exports, module) {
+  "node_modules/postcss/lib/input.js"(exports, module) {
     "use strict";
     var { nanoid } = require_non_secure();
     var { isAbsolute: isAbsolute7, resolve: resolve7 } = __require("path");
@@ -20486,9 +20486,9 @@ var require_input = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/root.js
+// node_modules/postcss/lib/root.js
 var require_root = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/root.js"(exports, module) {
+  "node_modules/postcss/lib/root.js"(exports, module) {
     "use strict";
     var Container2 = require_container();
     var LazyResult;
@@ -20548,9 +20548,9 @@ var require_root = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/list.js
+// node_modules/postcss/lib/list.js
 var require_list = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/list.js"(exports, module) {
+  "node_modules/postcss/lib/list.js"(exports, module) {
     "use strict";
     var list2 = {
       comma(string) {
@@ -20605,9 +20605,9 @@ var require_list = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/rule.js
+// node_modules/postcss/lib/rule.js
 var require_rule = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/rule.js"(exports, module) {
+  "node_modules/postcss/lib/rule.js"(exports, module) {
     "use strict";
     var Container2 = require_container();
     var list2 = require_list();
@@ -20632,9 +20632,9 @@ var require_rule = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/fromJSON.js
+// node_modules/postcss/lib/fromJSON.js
 var require_fromJSON = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/fromJSON.js"(exports, module) {
+  "node_modules/postcss/lib/fromJSON.js"(exports, module) {
     "use strict";
     var AtRule2 = require_at_rule();
     var Comment2 = require_comment();
@@ -20726,9 +20726,9 @@ var require_fromJSON = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/map-generator.js
+// node_modules/postcss/lib/map-generator.js
 var require_map_generator = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/map-generator.js"(exports, module) {
+  "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
     var { dirname: dirname8, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
@@ -21051,9 +21051,9 @@ var require_map_generator = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/parser.js
+// node_modules/postcss/lib/parser.js
 var require_parser = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/parser.js"(exports, module) {
+  "node_modules/postcss/lib/parser.js"(exports, module) {
     "use strict";
     var AtRule2 = require_at_rule();
     var Comment2 = require_comment();
@@ -21591,9 +21591,9 @@ var require_parser = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/parse.js
+// node_modules/postcss/lib/parse.js
 var require_parse2 = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/parse.js"(exports, module) {
+  "node_modules/postcss/lib/parse.js"(exports, module) {
     "use strict";
     var Container2 = require_container();
     var Input2 = require_input();
@@ -21625,9 +21625,9 @@ var require_parse2 = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/warning.js
+// node_modules/postcss/lib/warning.js
 var require_warning = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/warning.js"(exports, module) {
+  "node_modules/postcss/lib/warning.js"(exports, module) {
     "use strict";
     var Container2 = require_container();
     var { my } = require_symbols();
@@ -21666,9 +21666,9 @@ var require_warning = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/result.js
+// node_modules/postcss/lib/result.js
 var require_result = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/result.js"(exports, module) {
+  "node_modules/postcss/lib/result.js"(exports, module) {
     "use strict";
     var Warning2 = require_warning();
     var Result2 = class {
@@ -21705,9 +21705,9 @@ var require_result = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/warn-once.js
+// node_modules/postcss/lib/warn-once.js
 var require_warn_once = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/warn-once.js"(exports, module) {
+  "node_modules/postcss/lib/warn-once.js"(exports, module) {
     "use strict";
     var printed = {};
     module.exports = function warnOnce(message) {
@@ -21720,9 +21720,9 @@ var require_warn_once = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/lazy-result.js
+// node_modules/postcss/lib/lazy-result.js
 var require_lazy_result = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/lazy-result.js"(exports, module) {
+  "node_modules/postcss/lib/lazy-result.js"(exports, module) {
     "use strict";
     var Container2 = require_container();
     var Document2 = require_document();
@@ -22247,9 +22247,9 @@ var require_lazy_result = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/no-work-result.js
+// node_modules/postcss/lib/no-work-result.js
 var require_no_work_result = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/no-work-result.js"(exports, module) {
+  "node_modules/postcss/lib/no-work-result.js"(exports, module) {
     "use strict";
     var MapGenerator = require_map_generator();
     var parse3 = require_parse2();
@@ -22362,9 +22362,9 @@ var require_no_work_result = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/processor.js
+// node_modules/postcss/lib/processor.js
 var require_processor = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/processor.js"(exports, module) {
+  "node_modules/postcss/lib/processor.js"(exports, module) {
     "use strict";
     var Document2 = require_document();
     var LazyResult = require_lazy_result();
@@ -22420,9 +22420,9 @@ var require_processor = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/postcss.js
+// node_modules/postcss/lib/postcss.js
 var require_postcss = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/postcss.js"(exports, module) {
+  "node_modules/postcss/lib/postcss.js"(exports, module) {
     "use strict";
     var AtRule2 = require_at_rule();
     var Comment2 = require_comment();
@@ -22508,9 +22508,9 @@ var require_postcss = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-stringifier.js
+// node_modules/postcss-scss/lib/scss-stringifier.js
 var require_scss_stringifier = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-stringifier.js"(exports, module) {
+  "node_modules/postcss-scss/lib/scss-stringifier.js"(exports, module) {
     var Stringifier = require_stringifier();
     var ScssStringifier = class extends Stringifier {
       comment(node) {
@@ -22558,9 +22558,9 @@ var require_scss_stringifier = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-stringify.js
+// node_modules/postcss-scss/lib/scss-stringify.js
 var require_scss_stringify = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-stringify.js"(exports, module) {
+  "node_modules/postcss-scss/lib/scss-stringify.js"(exports, module) {
     var ScssStringifier = require_scss_stringifier();
     module.exports = function scssStringify(node, builder) {
       let str2 = new ScssStringifier(builder);
@@ -22569,9 +22569,9 @@ var require_scss_stringify = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/nested-declaration.js
+// node_modules/postcss-scss/lib/nested-declaration.js
 var require_nested_declaration = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/nested-declaration.js"(exports, module) {
+  "node_modules/postcss-scss/lib/nested-declaration.js"(exports, module) {
     var { Container: Container2 } = require_postcss();
     var NestedDeclaration = class extends Container2 {
       constructor(defaults) {
@@ -22585,9 +22585,9 @@ var require_nested_declaration = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-tokenize.js
+// node_modules/postcss-scss/lib/scss-tokenize.js
 var require_scss_tokenize = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-tokenize.js"(exports, module) {
+  "node_modules/postcss-scss/lib/scss-tokenize.js"(exports, module) {
     "use strict";
     var SINGLE_QUOTE = "'".charCodeAt(0);
     var DOUBLE_QUOTE = '"'.charCodeAt(0);
@@ -22851,9 +22851,9 @@ var require_scss_tokenize = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-parser.js
+// node_modules/postcss-scss/lib/scss-parser.js
 var require_scss_parser = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-parser.js"(exports, module) {
+  "node_modules/postcss-scss/lib/scss-parser.js"(exports, module) {
     var { Comment: Comment2 } = require_postcss();
     var Parser = require_parser();
     var NestedDeclaration = require_nested_declaration();
@@ -23047,9 +23047,9 @@ var require_scss_parser = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-parse.js
+// node_modules/postcss-scss/lib/scss-parse.js
 var require_scss_parse = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-parse.js"(exports, module) {
+  "node_modules/postcss-scss/lib/scss-parse.js"(exports, module) {
     var { Input: Input2 } = require_postcss();
     var ScssParser = require_scss_parser();
     module.exports = function scssParse(scss, opts) {
@@ -23061,16 +23061,16 @@ var require_scss_parse = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-syntax.js
+// node_modules/postcss-scss/lib/scss-syntax.js
 var require_scss_syntax = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-syntax.js"(exports, module) {
+  "node_modules/postcss-scss/lib/scss-syntax.js"(exports, module) {
     var stringify3 = require_scss_stringify();
     var parse3 = require_scss_parse();
     module.exports = { parse: parse3, stringify: stringify3 };
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-syntax.mjs
+// node_modules/postcss-scss/lib/scss-syntax.mjs
 var scss_syntax_exports = {};
 __export(scss_syntax_exports, {
   default: () => scss_syntax_default,
@@ -23079,7 +23079,7 @@ __export(scss_syntax_exports, {
 });
 var import_scss_syntax, scss_syntax_default, stringify2, parse2;
 var init_scss_syntax = __esm({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-scss/lib/scss-syntax.mjs"() {
+  "node_modules/postcss-scss/lib/scss-syntax.mjs"() {
     import_scss_syntax = __toESM(require_scss_syntax(), 1);
     scss_syntax_default = import_scss_syntax.default;
     stringify2 = import_scss_syntax.default.stringify;
@@ -23087,9 +23087,9 @@ var init_scss_syntax = __esm({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/inline-comment.js
+// node_modules/postcss-less/lib/nodes/inline-comment.js
 var require_inline_comment = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/inline-comment.js"(exports, module) {
+  "node_modules/postcss-less/lib/nodes/inline-comment.js"(exports, module) {
     var tokenizer = require_tokenize();
     var Input2 = require_input();
     module.exports = {
@@ -23139,9 +23139,9 @@ var require_inline_comment = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/interpolation.js
+// node_modules/postcss-less/lib/nodes/interpolation.js
 var require_interpolation = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/interpolation.js"(exports, module) {
+  "node_modules/postcss-less/lib/nodes/interpolation.js"(exports, module) {
     module.exports = {
       interpolation(token) {
         const tokens = [token, this.tokenizer.nextToken()];
@@ -23167,9 +23167,9 @@ var require_interpolation = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/mixin.js
+// node_modules/postcss-less/lib/nodes/mixin.js
 var require_mixin = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/mixin.js"(exports, module) {
+  "node_modules/postcss-less/lib/nodes/mixin.js"(exports, module) {
     var hashColorPattern = /^#[0-9a-fA-F]{6}$|^#[0-9a-fA-F]{3}$/;
     var unpaddedFractionalNumbersPattern = /\.[0-9]/;
     var isMixinToken = (token) => {
@@ -23183,9 +23183,9 @@ var require_mixin = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/import.js
+// node_modules/postcss-less/lib/nodes/import.js
 var require_import = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/import.js"(exports, module) {
+  "node_modules/postcss-less/lib/nodes/import.js"(exports, module) {
     var tokenize = require_tokenize();
     var urlPattern = /^url\((.+)\)/;
     module.exports = (node) => {
@@ -23209,9 +23209,9 @@ var require_import = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/variable.js
+// node_modules/postcss-less/lib/nodes/variable.js
 var require_variable = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/nodes/variable.js"(exports, module) {
+  "node_modules/postcss-less/lib/nodes/variable.js"(exports, module) {
     var afterPattern = /:$/;
     var beforePattern = /^:(\s+)?/;
     module.exports = (node) => {
@@ -23236,9 +23236,9 @@ var require_variable = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/LessParser.js
+// node_modules/postcss-less/lib/LessParser.js
 var require_LessParser = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/LessParser.js"(exports, module) {
+  "node_modules/postcss-less/lib/LessParser.js"(exports, module) {
     var Comment2 = require_comment();
     var Parser = require_parser();
     var { isInlineComment } = require_inline_comment();
@@ -23398,9 +23398,9 @@ var require_LessParser = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/LessStringifier.js
+// node_modules/postcss-less/lib/LessStringifier.js
 var require_LessStringifier = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/LessStringifier.js"(exports, module) {
+  "node_modules/postcss-less/lib/LessStringifier.js"(exports, module) {
     var Stringifier = require_stringifier();
     module.exports = class LessStringifier extends Stringifier {
       atrule(node, semicolon) {
@@ -23440,9 +23440,9 @@ var require_LessStringifier = __commonJS({
   }
 });
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/index.js
+// node_modules/postcss-less/lib/index.js
 var require_lib2 = __commonJS({
-  "../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss-less/lib/index.js"(exports, module) {
+  "node_modules/postcss-less/lib/index.js"(exports, module) {
     var Input2 = require_input();
     var LessParser = require_LessParser();
     var LessStringifier = require_LessStringifier();
@@ -23961,6 +23961,21 @@ function numeric(prop, n) {
   if (n === 0) return "0";
   return UNITLESS.has(prop) ? String(n) : `${n}px`;
 }
+function valueSpan(node, line) {
+  const loc = node?.loc;
+  if (!node || !loc || loc.start.line !== line || loc.end.line !== line) return void 0;
+  const text2 = rawOf(node);
+  return text2 === null ? void 0 : { col: loc.start.column, text: text2 };
+}
+function rawOf(node) {
+  if (node.type === "TemplateLiteral") return node.expressions.length ? null : `\`${node.quasis[0]?.value.raw ?? ""}\``;
+  if (node.type === "UnaryExpression") {
+    const inner = node.argument ? rawOf(node.argument) : null;
+    return inner === null ? null : `${node.operator}${inner}`;
+  }
+  const raw = node.extra?.raw;
+  return typeof raw === "string" ? raw : null;
+}
 function keyName(node) {
   if (!node) return null;
   if (node.key.type === "Identifier" && !node.computed) return node.key.name;
@@ -24125,8 +24140,27 @@ function mediaQuery(rule2) {
 var keySelector = (sel) => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() ?? sel;
 var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => m[1] === void 0 ? [] : [m[1]]);
 var ruleIsGrid = (rule2) => [...ownDecls(rule2)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
+function deletableRule(rule2, lines) {
+  const end = rule2.source?.end;
+  if (!end) return null;
+  const parent = rule2.parent;
+  if (parent && parent.type !== "root" && parent.nodes.length === 1) return null;
+  let head2 = rule2;
+  for (; ; ) {
+    const prev = head2.prev();
+    if (prev?.type !== "comment" || !prev.source?.start) break;
+    if (!/^[^\S\n]*\n[^\S\n]*$/.test(head2.raws.before ?? "")) break;
+    head2 = prev;
+  }
+  const start = head2.source?.start;
+  if (!start) return null;
+  const before = (lines[start.line - 1] ?? "").slice(0, start.column - 1);
+  const after = (lines[end.line - 1] ?? "").slice(end.column);
+  if (before.trim() || after.trim()) return null;
+  return { startLine: start.line, endLine: end.line };
+}
 
-// ../../../../../../../../Users/davidbowman/Github/loupe/engine/node_modules/postcss/lib/postcss.mjs
+// node_modules/postcss/lib/postcss.mjs
 var import_postcss = __toESM(require_postcss(), 1);
 var postcss_default = import_postcss.default;
 var stringify = import_postcss.default.stringify;
@@ -24481,7 +24515,8 @@ function readStyleAttr(value) {
       dynamic++;
       continue;
     }
-    decls.push({ prop: cssProp, value: cssValue, line: prop.loc?.start?.line ?? null });
+    const line = prop.loc?.start?.line ?? null;
+    decls.push({ prop: cssProp, value: cssValue, line, span: valueSpan(prop.value, line) });
   }
   return { decls, dynamic, present: true };
 }
@@ -25078,13 +25113,27 @@ function deadClasses(declared, {
   isNeverDead
 }) {
   const isReferenced = (cls) => referenced.has(cls) || isNeverDead(cls) || stems.some((s) => cls.startsWith(s));
+  const rules = /* @__PURE__ */ new Map();
+  for (const d of declared) {
+    const key = `${d.file}\0${d.cls}`;
+    rules.set(key, (rules.get(key) ?? 0) + 1);
+  }
   const seen = /* @__PURE__ */ new Set();
-  return declared.flatMap(({ file, line, cls, scopeLines }) => {
+  return declared.flatMap(({ file, line, cls, scopeLines, cut }) => {
     const key = `${file}\0${cls}`;
     if (seen.has(key) || !isProject(cls) || isReferenced(cls)) return [];
     seen.add(key);
     return [
-      { rule: "css/dead-class", file, line, message: `.${cls}`, code: `.${cls}`, selector: `.${cls}`, scopeLines }
+      {
+        rule: "css/dead-class",
+        file,
+        line,
+        message: `.${cls}`,
+        code: `.${cls}`,
+        selector: `.${cls}`,
+        scopeLines,
+        dead: rules.get(key) === 1 ? cut : void 0
+      }
     ];
   });
 }
@@ -25320,14 +25369,51 @@ var hardcodedValue = ({ prop, value }) => {
 };
 
 // src/checks/tokens/unknown-token.ts
+function oneEdit(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let head2 = 0;
+  while (head2 < a.length && head2 < b.length && a[head2] === b[head2]) head2++;
+  let tail = 0;
+  while (tail < a.length - head2 && tail < b.length - head2 && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  return a.length - head2 - tail <= 1 && b.length - head2 - tail <= 1;
+}
+var spelling = (name) => name.replace(/\d/g, "");
+function nearMiss(name, known) {
+  let found;
+  for (const k of known) {
+    if (!oneEdit(name, k) || spelling(k) === spelling(name)) continue;
+    if (found !== void 0) return void 0;
+    found = k;
+  }
+  return found;
+}
 function unknownTokens(refs, known) {
   if (!known.size) return [];
-  const seen = /* @__PURE__ */ new Set();
-  return refs.flatMap(({ file, line, name, scopeLines }) => {
-    const key = `${file}\0${name}`;
-    if (known.has(name) || seen.has(key)) return [];
-    seen.add(key);
-    return [{ rule: "tokens/unknown-token", file, line, message: name, code: name, scopeLines }];
+  const groups = /* @__PURE__ */ new Map();
+  for (const ref of refs) {
+    if (known.has(ref.name)) continue;
+    const group = groups.get(`${ref.file}\0${ref.name}`);
+    if (group) {
+      if (!group.lines.includes(ref.line)) group.lines.push(ref.line);
+      continue;
+    }
+    groups.set(`${ref.file}\0${ref.name}`, { ...ref, lines: [ref.line] });
+  }
+  return [...groups.values()].map(({ file, line, name, scopeLines, lines }) => {
+    const to = nearMiss(name, known);
+    const rename = to === void 0 ? void 0 : { from: name, to, lines };
+    return {
+      rule: "tokens/unknown-token",
+      file,
+      line,
+      // The name alone: the rule's title already says a token is being named.
+      // With the replacement beside it where one is settled, so a reader sees
+      // what `fix` would write without having to run it.
+      message: to === void 0 ? name : `${name} \u2192 ${to}`,
+      code: name,
+      scopeLines,
+      rename
+    };
   });
 }
 
@@ -25584,11 +25670,13 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     }
     const emit = (f) => report({ ...f, file: rel, code: f.code ?? f.message });
     harvestTokenDefs(root2, tokenPrefixes, tokenSet);
+    const srcLines = text2.split("\n");
     root2.walkRules((cssRule) => {
       const ruleLine = cssRule.source?.start?.line ?? 1;
       const selectors = resolvedSelectors(cssRule);
       const allClasses = [...new Set(selectors.flatMap(classesIn))];
-      const keyClasses = [...new Set(selectors.map(keySelector).flatMap(classesIn))];
+      const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+      const keyClasses = [...new Set(keyClassesPer.flat())];
       if (!allClasses.length) return;
       const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
       const boundSystem = bound.filter((b) => b.isSystem);
@@ -25618,7 +25706,15 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
       if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
       else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media });
-      for (const cls of keyClasses) declared.push({ file: rel, line: ruleLine, cls, scopeLines });
+      const cut = deletableRule(cssRule, srcLines);
+      for (const cls of keyClasses)
+        declared.push({
+          file: rel,
+          line: ruleLine,
+          cls,
+          scopeLines,
+          cut: cut && keyClassesPer.every((k) => k.includes(cls)) ? cut : void 0
+        });
     });
   }
   for (const f of deadClasses(declared, {
@@ -25643,6 +25739,9 @@ async function analyze(config, { scope = null, judge = false } = {}) {
       if (finding)
         pending.push({
           ...finding,
+          // The classifier sees the translated declaration, which is not what
+          // the file says. Only the span points back at the bytes it came from.
+          hints: finding.hints?.map((h) => ({ ...h, span: d.span })),
           line: d.line ?? el.line,
           code: finding.code ?? finding.message,
           suffix: " (inline)"
@@ -25764,26 +25863,42 @@ var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 function tokenFixes(findings) {
   const out = [];
   for (const f of findings) {
-    if (!CSS_FILE.test(f.file)) continue;
     for (const s of f.suggest ?? []) {
       const to = s.tokens.length === 1 ? `var(${s.tokens[0]})` : s.judged?.answer;
       if (to === void 0 || to === KEEP) continue;
-      out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to });
+      out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to, span: s.span });
     }
+    const rename = f.rename;
+    if (rename) for (const line of rename.lines) out.push({ file: f.file, line, value: rename.from, to: rename.to });
   }
   return out;
 }
 function settledBy(findings, applied, kept = []) {
-  const at = (d) => `${d.file}\0${d.line}\0${d.prop}`;
+  const at = (d) => `${d.file}\0${d.line}\0${d.prop ?? ""}`;
   const done = new Set([...applied, ...kept].map(at));
   return findings.filter((f) => {
-    const parts = f.suggest ?? (f.decl ? [f.decl] : []);
-    return parts.length > 0 && parts.every((s) => done.has(at({ file: f.file, line: s.line ?? f.line, prop: s.prop })));
+    const parts = f.rename ? f.rename.lines.map((line) => ({ file: f.file, line })) : (f.suggest ?? (f.decl ? [f.decl] : [])).map((s) => ({ file: f.file, line: s.line ?? f.line, prop: s.prop }));
+    return parts.length > 0 && parts.every((p) => done.has(at(p)));
   }).length;
 }
+var QUOTES = "'\"`";
 function substituteOnLine(line, fix) {
+  const span = fix.span;
+  if (span) {
+    if (line.slice(span.col, span.col + span.text.length) !== span.text)
+      return { why: "the value is no longer where it was reported" };
+    if (/['"`\\]|\$\{/.test(fix.to)) return { why: "replacement is not writable as a JS string" };
+    const opener = span.text[0];
+    const quote = opener && QUOTES.includes(opener) ? opener : "'";
+    return `${line.slice(0, span.col)}${quote}${fix.to}${quote}${line.slice(span.col + span.text.length)}`;
+  }
+  if (fix.prop === void 0) {
+    const renamed = line.replace(new RegExp(`(var\\(\\s*)${escapeRe(fix.value)}(?![-\\w])`, "g"), `$1${fix.to}`);
+    if (renamed === line) return { why: "the token is not on its reported line" };
+    return renamed;
+  }
   const re = new RegExp(
-    `(^|[;{\\s])(${escapeRe(fix.prop)}\\s*:\\s*)${escapeRe(fix.value.trim())}(?=\\s*(?:!important)?\\s*(?:[;}]|$))`,
+    `(^|[;{\\s\`])(${escapeRe(fix.prop)}\\s*:\\s*)${escapeRe(fix.value.trim())}(?=\\s*(?:!important)?\\s*(?:[;}\`]|$))`,
     "gi"
   );
   const hits = line.match(re);
@@ -25812,7 +25927,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
     }
     const lines = text2.split("\n");
     let dirty = false;
-    for (const fix of group) {
+    for (const fix of [...group].sort((a, b) => b.line - a.line || (b.span?.col ?? 0) - (a.span?.col ?? 0))) {
       const i = fix.line - 1;
       const line = lines[i];
       if (line === void 0) {
@@ -25830,6 +25945,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
     }
     if (dirty && !dry) writeFileSync(abs, lines.join("\n"));
   }
+  applied.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
   return { applied, skipped };
 }
 function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } = {}) {
@@ -26388,6 +26504,20 @@ var patterns_default = {
           "weak"
         ],
         about: "For groups: whether the grouping needs a visible box or just rhythm."
+      },
+      structure: {
+        values: [
+          "fields",
+          "graph"
+        ],
+        about: "What a region edits: one thing's own fields, or several things and the connections between them."
+      },
+      placement: {
+        values: [
+          "derived",
+          "authored"
+        ],
+        about: "Whether where something sits is computed from the data every time, or put there by the author and kept."
       }
     },
     containers: {
@@ -26770,6 +26900,62 @@ var patterns_default = {
         },
         "form-screen": {
           summary: "The form is the screen."
+        }
+      }
+    },
+    {
+      id: "edit-graph",
+      intent: "enter",
+      scale: "region",
+      problem: "The user builds several things and the connections between them, and it is the connections that have to be read and changed.",
+      forces: [
+        "structure",
+        "placement"
+      ],
+      parts: [
+        {
+          role: "nodes",
+          note: "One card per thing, carrying what the reader needs at a glance. Its fields are edited elsewhere (edit-record.inspector), so the card holds no controls of its own."
+        },
+        {
+          role: "edges",
+          note: "The connections. The region routes them \u2014 where a line leaves and arrives is a decision about every other line, not one the author makes."
+        },
+        {
+          role: "bands",
+          note: "Optional: stretches of the canvas whose boundaries give a position meaning, so moving a card across one changes what that thing is."
+        },
+        {
+          role: "canvas-actions",
+          note: "The verbs that need no second thing to name them: add one here, delete this, lay it out again. A verb that needs one \u2014 where a connection goes \u2014 belongs in the inspector, against the read-out of the same setting."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            structure: "fields"
+          },
+          redirect: "edit-record",
+          because: "One thing's own fields are a form, however the region draws them."
+        },
+        {
+          when: {
+            placement: "authored"
+          },
+          variant: "canvas"
+        },
+        {
+          default: "auto-layout"
+        }
+      ],
+      variants: {
+        canvas: {
+          summary: "The author arranges the things and draws the connections: positions are theirs and are kept, and the layout only re-runs when asked for.",
+          consequences: "Every gesture has to say what it will do while it is still held, because a drop that silently does nothing is the failure this variant invites. A layout that re-runs on any edit undoes the arrangement the author just made."
+        },
+        "auto-layout": {
+          summary: "The structure is edited and the layout is computed from it every time, so there is nothing to arrange and nothing to reset.",
+          consequences: "Right while the shape is small or forced by the data; wrong the moment the author has a reason to put two things side by side, because nothing can keep it."
         }
       }
     },
@@ -28756,6 +28942,29 @@ function rangeFor(finding, lineText) {
   const end = valueAt === -1 ? text2.length : valueAt + decl2.value.trim().length;
   return { start: { line, character: at }, end: { line, character: Math.min(end, text2.length) } };
 }
+function deleteRule(lines, dead, cls) {
+  let first = dead.startLine - 1;
+  let last = dead.endLine - 1;
+  if (first < 0 || last < first || last >= lines.length) return null;
+  const slice = lines.slice(first, last + 1).join("\n");
+  const opens = (slice.match(/{/g) ?? []).length;
+  if (!opens || opens !== (slice.match(/}/g) ?? []).length) return null;
+  if (!/}[^\S\n]*$/.test(slice)) return null;
+  if (!new RegExp(`${escapeRe(cls)}(?![-\\w])`).test(slice)) return null;
+  const atEnd = last + 2 >= lines.length;
+  if (!atEnd && (lines[last + 1] ?? "").trim() === "") last++;
+  else if (atEnd && first > 0 && (lines[first - 1] ?? "").trim() === "") first--;
+  if (last + 1 < lines.length)
+    return { range: { start: { line: first, character: 0 }, end: { line: last + 1, character: 0 } }, newText: "" };
+  const prev = first > 0 ? (lines[first - 1] ?? "").length : 0;
+  return {
+    range: {
+      start: { line: first > 0 ? first - 1 : 0, character: prev },
+      end: { line: last, character: (lines[last] ?? "").length }
+    },
+    newText: ""
+  };
+}
 var commentFor = (file, body2) => /\.(css|scss|sass|less|pcss|postcss)$/i.test(file) ? `/* ${body2} */` : `// ${body2}`;
 function lsp(opts) {
   const { config, run, input, output, log = () => {
@@ -28876,7 +29085,7 @@ ${f.note}` : f.message
       for (const finding of at(uri, line)) {
         const text2 = lines(rel)[line] ?? "";
         for (const fix of tokenFixes([finding])) {
-          if (fix.line - 1 !== line) continue;
+          if (fix.prop === void 0 || fix.line - 1 !== line) continue;
           const rewritten = substituteOnLine(text2, fix);
           if (typeof rewritten !== "string") continue;
           const key2 = `${line}\0${fix.prop}\0${fix.to}`;
@@ -28897,6 +29106,40 @@ ${f.note}` : f.message
               }
             }
           });
+        }
+        const rename = finding.rename;
+        if (rename && !seen.has(`rename\0${rename.from}`)) {
+          seen.add(`rename\0${rename.from}`);
+          const edits = [];
+          for (const fix of tokenFixes([finding])) {
+            const on = lines(rel)[fix.line - 1];
+            if (on === void 0) continue;
+            const rewritten = substituteOnLine(on, fix);
+            if (typeof rewritten !== "string") continue;
+            edits.push({
+              range: { start: { line: fix.line - 1, character: 0 }, end: { line: fix.line - 1, character: on.length } },
+              newText: rewritten
+            });
+          }
+          if (edits.length)
+            actions.push({
+              title: `Rename ${rename.from} to ${rename.to} (${edits.length} occurrence(s))`,
+              kind: "quickfix",
+              isPreferred: true,
+              edit: { changes: { [uri]: edits } }
+            });
+        }
+        const dead = finding.dead;
+        if (dead && !seen.has(`dead\0${line}`)) {
+          const edit = deleteRule(lines(rel), dead, finding.code ?? finding.message);
+          if (edit) {
+            seen.add(`dead\0${line}`);
+            actions.push({
+              title: `Delete the dead rule ${finding.message}`,
+              kind: "quickfix",
+              edit: { changes: { [uri]: [edit] } }
+            });
+          }
         }
         const indent = /^[ \t]*/.exec(lines(rel)[line] ?? "")?.[0] ?? "";
         const key = `suppress\0${line}\0${finding.rule}`;
@@ -30374,7 +30617,7 @@ ${dim("  Ctrl-C to stop.")}
     let toFix;
     try {
       toFix = await analyze(config, { scope: fixScope });
-      const judgeable = toFix.findings.filter((f) => f.suggest?.length && CSS_FILE.test(f.file));
+      const judgeable = toFix.findings.filter((f) => f.suggest?.length);
       if (apiKey && toFix.tokens && judgeable.length)
         await judgeValues(root2, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
     } catch (err) {
@@ -30386,7 +30629,7 @@ ${dim("  Ctrl-C to stop.")}
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
     const kept = apiKey ? applyKeeps(root2, toFix.findings, config.suppression.keyword, { dry, directives: toFix.directives }) : { applied: [], skipped: [] };
     const verb = dry ? "would fix" : "fixed";
-    const decl2 = (f) => oneLine(`${f.prop}: ${f.value}`);
+    const decl2 = (f) => oneLine(f.prop === void 0 ? f.value : `${f.prop}: ${f.value}`);
     for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2192 ${green(f.to)}
 `);
     for (const k of kept.applied)
@@ -30401,7 +30644,7 @@ ${dim("  Ctrl-C to stop.")}
     const nSkipped = skipped.length + kept.skipped.length;
     process.stdout.write(
       `
-loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s)`)}${apiKey ? `, ${dry ? "would suppress" : "suppressed"} ${kept.applied.length}` : ""}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ""}. ${left} of ${toFix.findings.length} finding(s) left for review.
+loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(s)`)}${apiKey ? `, ${dry ? "would suppress" : "suppressed"} ${kept.applied.length}` : ""}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ""}. ${left} of ${toFix.findings.length} finding(s) left for review.
 `
     );
     return EXIT.OK;
