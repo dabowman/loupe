@@ -621,6 +621,51 @@ to a request this question scores 81% and finds 69% of the destinations, because
 every control in a batch shares one state with the other 39; alone it scores 93%
 and finds 97%.
 
+## Mapping one token set onto another
+
+Experimental, and the one command that reads design systems rather than a
+codebase. Given two DTCG token sets, it answers, for every token in the first,
+which token in the second is the same decision:
+
+```bash
+loupe map ./wpds/tokens ./primer/tokens            # the readable report
+loupe map ./a ./b --out map.json                   # and the map as a file
+loupe map ./a ./b --dry-run                        # the shortlists, asking nothing
+loupe map ./a ./b --tier semantic --type color     # one slice of it
+```
+
+Each side is a `.json` file or a directory of them. Both are assumed to be
+standard DTCG and to follow the base/semantic/component structure; **nothing
+else about them has to agree** — not naming, not grouping, not depth, not which
+draft of the spec they were authored against. Nothing is configured per system,
+because the sets worth mapping are the ones nobody has written a profile for.
+
+A row settles one of five ways: `exact` (the same path in both sets, so no
+question was put), `judged` (a counterpart above the floor), `none` (the second
+system models this differently or not at all), `unsure` (asked, came back under
+the floor — a row for a person, not a claim that the counterpart is missing) and
+`absent` (the second set has no tokens of that type at all, which needed no
+model either).
+
+The work splits the way every `--judge` question does. The engine narrows: it
+gates on `$type`, measures colour distance in OKLab and lengths on their scale,
+compares names as word sets with the tier and type words dropped, and weighs a
+tier agreement — leaving eight candidates. The model picks among those eight,
+reading each option's tier, value and `$description`, and may answer that there
+is no counterpart. Both spec drafts render to one value, so a set written
+`{ value: 16, unit: "px" }` and one written `"1rem"` measure as the same length,
+and a palette in `hsl` compares against one in `srgb`.
+
+`--dry-run` prints the shortlists and asks nothing, which is the first thing to
+run on a new pair: a shortlist that does not contain the right answer cannot be
+rescued by the model. Everything else needs `TYPESAFE_API_KEY`, and unlike
+`--judge` a missing key is a refusal rather than a degraded run — there is no
+deterministic verdict underneath this to fall back on.
+
+Sources must be strict JSON; a set authored in JSON5 (Primer's are) needs
+converting first. Design notes, and every number in here that has not been
+measured: [docs/design/map.md](../docs/design/map.md).
+
 ## Baseline
 
 The first run on an existing codebase is the adoption blocker. Record the

@@ -18,6 +18,7 @@ points at it.
 | [checks.md](checks.md) | each rule: why its verdict chain is ordered as it is, and what a simplification would break |
 | [cli.md](cli.md) | exit codes, the hook protocol, project detection and its budget, config resolution, profiles, state locations, building and distribution |
 | [judge.md](judge.md) | the `--judge` layer: each question, every floor, and the eval numbers behind them |
+| [map.md](map.md) | `loupe map`: reading DTCG sources, inferring tiers, ranking counterparts, and what is not yet measured about any of it |
 | [lsp.md](lsp.md) | the language server: on-save analysis, repo-wide diagnostics, the quick fix shared with `loupe fix`, JSON-RPC framing |
 | [report.md](report.md) | the agent format, message bounding, JSON/SARIF/HTML, baseline, the suppression grammar, `fix`, `loupe serve` |
 

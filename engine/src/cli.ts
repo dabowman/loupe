@@ -16,7 +16,11 @@ import { parseArgs as parseArgv } from 'node:util';
 import { analyze } from './analyze.ts';
 import { usableReplacement } from './checks/system/currency.ts';
 import { CSS_FILE, applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
-import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
+import { MODEL, judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
+import { readTokenDoc, isTier } from './dtcg.ts';
+import type { Tier, TokenDoc } from './dtcg.ts';
+import { CANDIDATES, askCounterparts, formatMap, formatPlan, mapPayload, planMap } from './mapping.ts';
+import type { Mapping } from './mapping.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
@@ -148,6 +152,10 @@ const VALUE_FLAGS = [
 	'profiles',
 	'profile',
 	'port',
+	'out',
+	'limit',
+	'tier',
+	'type',
 ] as const;
 
 type ValueFlag = (typeof VALUE_FLAGS)[number];
@@ -209,6 +217,8 @@ Commands:
   baseline              Record current findings as the accepted backlog
   suppressions          List every active suppression directive
   explain <rule>        Print a rule's guidance
+  map <a> <b>           Map one DTCG token set onto another: for each token in
+                        a, which token in b is its counterpart
   presets               List bundled presets
   version               Print the version, whether it runs from source or the bundle, and where
   detect                Show the config that would be inferred for this project
@@ -237,7 +247,8 @@ Options:
   --baseline <path>     Read/write the baseline here instead of the configured
                         path (default: .loupe-baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
-  --dry-run             Report what 'fix' would change without writing
+  --dry-run             Report what 'fix' would change without writing; with
+                        'map', print the shortlists without asking anything
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
                         pattern it was built as (patterns/judged-redirect), and
@@ -247,6 +258,11 @@ Options:
                         review them first. (TYPESAFE_API_KEY from the
                         environment or loupe's own .env)
   --port <n>            Port for 'serve' (default: 7331)
+  --out <path>          Write the map here as JSON (map)
+  --tier <t,...>        Only map tokens in these tiers: base, semantic,
+                        component (map)
+  --type <t,...>        Only map tokens of these DTCG $types (map)
+  --limit <n>           Only map the first n tokens in scope (map)
   --force               Overwrite an existing config (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
@@ -380,6 +396,133 @@ function resolveScope(
 	return null;
 }
 
+/** A comma-separated flag value as a trimmed list. */
+const listFlag = (value: string | undefined): string[] =>
+	(value ?? '')
+		.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean);
+
+/**
+ * What to call each set, in the report and in the question put to the model.
+ *
+ * The model is told it is mapping "wpds" onto "archer", and those names are
+ * doing work: they are most of what says the two sets are different systems
+ * rather than two halves of one. Two paths that read as the same name — a
+ * `tokens.json` in each of two checkouts — would describe the run as a system
+ * mapped onto itself, so the directory above breaks the tie.
+ */
+function mapLabels(a: string, b: string): [string, string] {
+	const base = (p: string): string => basename(p).replace(/\.json$/i, '');
+	if (base(a) !== base(b)) return [base(a), base(b)];
+	const withDir = (p: string): string => `${basename(dirname(resolve(p)))}/${base(p)}`;
+	return withDir(a) === withDir(b) ? [`${base(a)} (a)`, `${base(b)} (b)`] : [withDir(a), withDir(b)];
+}
+
+/**
+ * `map` — one DTCG token set onto another.
+ *
+ * The one command that reads design systems rather than a codebase: both sets
+ * are named on the command line, so there is no project, no config and no walk,
+ * and it returns before any of that is resolved.
+ *
+ * It is also the one command whose whole answer is a judgement — there is no
+ * deterministic verdict underneath it to fall back on — so unlike `--judge` a
+ * missing key is a refusal rather than a degraded run. `--dry-run` is the free
+ * half: the shortlists, which is what decides whether the right answer is even
+ * on offer.
+ *
+ * Design notes: docs/design/map.md
+ */
+async function runMap(args: Args): Promise<number> {
+	const [, fromPath, toPath] = args._;
+	if (!fromPath || !toPath) {
+		fail('loupe: map needs two token sets \u2014 `loupe map <from> <to>`, each a DTCG file or a directory of them\n');
+		return EXIT.CANNOT_RUN;
+	}
+	// `map` has no report to paint as SARIF or HTML; a run that accepted the flag
+	// and printed the readable report would look like it had honoured it.
+	const format = args.flags.format ?? 'agent';
+	if (format !== 'agent' && format !== 'json') {
+		fail(`loupe: map writes agent or json, not "${format}"\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	const tiers = listFlag(args.flags.tier);
+	const badTiers = tiers.filter((t) => !isTier(t));
+	if (badTiers.length) {
+		fail(`loupe: unknown tier(s) ${badTiers.join(', ')} \u2014 expected base, semantic, component\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	let from: TokenDoc;
+	let to: TokenDoc;
+	try {
+		const [fromLabel, toLabel] = mapLabels(fromPath, toPath);
+		from = readTokenDoc(fromPath, fromLabel);
+		to = readTokenDoc(toPath, toLabel);
+	} catch (err) {
+		fail(`loupe: ${messageOf(err)}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	// Checked against the set rather than against the spec's list: a set is free
+	// to carry types the spec never named, and a typo here would otherwise map
+	// nothing at all and report it as a clean run over zero tokens.
+	const types = listFlag(args.flags.type);
+	const present = new Set(from.tokens.map((t) => t.type).filter(Boolean));
+	const badTypes = types.filter((t) => !present.has(t));
+	if (badTypes.length) {
+		fail(
+			`loupe: ${from.label} has no ${badTypes.join(', ')} token(s) \u2014 it has ${[...present].sort().join(', ')}\n`,
+		);
+		return EXIT.CANNOT_RUN;
+	}
+
+	const plan = planMap(from, to, { tiers: tiers as Tier[], types, limit: Number(args.flags.limit ?? 0) || 0 });
+	process.stderr.write(
+		dim(
+			`loupe: ${from.label} ${from.tokens.length} token(s) from ${from.files.length} file(s), ` +
+				`${to.label} ${to.tokens.length} from ${to.files.length}\n`,
+		),
+	);
+
+	if (args.flags['dry-run']) {
+		process.stdout.write(formatPlan(plan, CANDIDATES));
+		return EXIT.OK;
+	}
+
+	const apiKey = judgeKey();
+	if (!apiKey) {
+		fail(`loupe: map needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE} \u2014 or use --dry-run\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	if (plan.jobs.length) process.stderr.write(dim(`loupe: asking ${MODEL} about ${plan.jobs.length} token(s)\u2026\n`));
+	let mappings: Mapping[];
+	try {
+		({ mappings } = await askCounterparts(plan, apiKey));
+	} catch (err) {
+		// Nothing partial is written: half a map read as a whole one would report
+		// every unasked token as having no counterpart.
+		fail(`loupe: ${messageOf(err)}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	const payload = mapPayload(plan, mappings, MODEL);
+	if (args.flags.out) writeFileSync(resolve(args.flags.out), `${JSON.stringify(payload, null, 2)}\n`);
+	if (format === 'json') process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+	else process.stdout.write(formatMap(plan, mappings));
+	// To stderr under --format json, where stdout is the map itself and a line of
+	// prose in it is corruption.
+	if (args.flags.out) {
+		const said = green(`loupe: map written to ${resolve(args.flags.out)}\n`);
+		if (format === 'json') process.stderr.write(said);
+		else process.stdout.write(`\n${said}`);
+	}
+	return EXIT.OK;
+}
+
 function filterSeverity<T extends AnalyzeResult>(result: T, min: string): T {
 	if (min !== 'error') return result;
 	const findings = result.findings.filter((f) => f.severity === 'error');
@@ -410,6 +553,9 @@ async function main(): Promise<number> {
 		process.stdout.write(`${listPresets().join('\n')}\n`);
 		return EXIT.OK;
 	}
+	// Before the root is resolved: both token sets are named on the command line,
+	// so there is no project here for `map` to need one of.
+	if (command === 'map') return runMap(args);
 
 	const isHook = command === 'hook';
 

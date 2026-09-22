@@ -1,0 +1,37 @@
+{
+	"$description": "The same decisions under different names: no tier words anywhere, the 2025 object spellings, scales named by adjective.",
+	"ink": {
+		"$type": "color",
+		"lightest": { "$value": { "colorSpace": "srgb", "components": [0.945, 0.961, 0.976] } },
+		"mid": { "$value": { "colorSpace": "srgb", "components": [0.392, 0.455, 0.545] } },
+		"darkest": { "$value": { "colorSpace": "srgb", "components": [0.059, 0.09, 0.165] } },
+		"accent": { "$value": { "colorSpace": "srgb", "components": [0.231, 0.51, 0.965] } }
+	},
+	"step": {
+		"$type": "dimension",
+		"xs": { "$value": { "value": 4, "unit": "px" } },
+		"sm": { "$value": { "value": 8, "unit": "px" } },
+		"md": { "$value": { "value": 16, "unit": "px" } }
+	},
+	"fg": {
+		"$type": "color",
+		"body": { "$value": "{ink.darkest}", "$description": "Default text: paragraphs, labels, values." },
+		"subdued": { "$value": "{ink.mid}", "$description": "Secondary text: descriptions, captions, timestamps." }
+	},
+	"bg": {
+		"$type": "color",
+		"canvas": { "$value": "{ink.lightest}", "$description": "The base layer of a screen." }
+	},
+	"interactive": {
+		"$type": "color",
+		"emphasis": { "$value": "{ink.accent}", "$description": "Primary buttons and links." }
+	},
+	"pad": {
+		"$type": "dimension",
+		"tight": { "$value": "{step.sm}" },
+		"comfortable": { "$value": "{step.md}" }
+	},
+	"control": {
+		"gutter": { "$type": "dimension", "$value": "{pad.comfortable}", "$description": "Horizontal padding inside a button." }
+	}
+}

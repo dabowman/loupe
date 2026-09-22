@@ -1,0 +1,460 @@
+/**
+ * A DTCG token set, read flat.
+ *
+ * `tokens.ts` reads the *other* kind of token set — the CSS custom properties a
+ * design system ships compiled, which is what a stylesheet can reference. This
+ * reads the authored source: the DTCG JSON the custom properties are generated
+ * from, where a token still carries its `$type`, its `$description` and the
+ * alias chain that says which tier it belongs to. `map` needs that, because what
+ * it compares is roles, and a compiled `--wpds-color-fg-primary: #1e1e1e` has
+ * lost every trace of the role but the name.
+ *
+ * Nothing here is specific to one system's naming. Two token sets that agree on
+ * nothing but the spec still read into the same shape, which is the whole
+ * premise of mapping one to the other.
+ *
+ * Design notes: docs/design/map.md#reading-a-token-set
+ */
+
+import { readFileSync, statSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import { readDir } from './discover.ts';
+
+/**
+ * Where a token sits in the three-tier architecture.
+ *
+ * `base` is a raw value the system owns (a palette entry, a step of the spacing
+ * scale); `semantic` gives one of those a role (`text.primary`, `surface.raised`);
+ * `component` binds a role to one component (`button.primary.background`).
+ * Counterparts live in the same tier far more often than not, which is why this
+ * is inferred at all — see {@link tierOf}.
+ */
+export type Tier = 'base' | 'semantic' | 'component';
+
+export const TIERS: readonly Tier[] = ['base', 'semantic', 'component'];
+
+export const isTier = (s: string): s is Tier => (TIERS as readonly string[]).includes(s);
+
+/** One token, flattened out of the tree it was authored in. */
+export interface Token {
+	/** Dot-joined path from the root of the set — a token's identity here. */
+	path: string;
+	segments: string[];
+	/** The last segment: the token's own name, apart from the groups above it. */
+	leaf: string;
+	/** `$type`, own or inherited from the nearest group that declares one, or inferred from the value. */
+	type: string;
+	/** Whether `type` was declared or guessed from the value's shape. */
+	typed: boolean;
+	/** `$value` exactly as authored — an alias string, a literal, or a composite object. */
+	value: unknown;
+	/** `$value` with aliases followed, so two sets can be compared on what they resolve to. */
+	resolved: unknown;
+	/** {@link resolved} rendered for comparison and for display: `#1e1e1e`, `16px`, `200ms`. */
+	literal: string;
+	description?: string | undefined;
+	/** The path this token aliases directly, if its whole value is one reference. */
+	alias?: string | undefined;
+	/** How many aliases were followed to reach a literal. 0 is a token that holds one. */
+	depth: number;
+	tier: Tier;
+	/** Whether the tier was read off a group name or inferred from the alias depth. */
+	tierFrom: 'named' | 'structural';
+	/** The other tokens in the same group, by leaf name. Bounded; it is context, not data. */
+	siblings: string[];
+	/** Which file in the set this token came from. */
+	file: string;
+}
+
+/** A whole set: its tokens, and what was read to get them. */
+export interface TokenDoc {
+	tokens: Token[];
+	/** The path the set was read from, as it was given. */
+	path: string;
+	files: string[];
+	/** A short name for the set, for report prose and for the question put to the model. */
+	label: string;
+}
+
+// ── reading ─────────────────────────────────────────────────────────────────
+
+/** A DTCG group or token: a plain JSON object. Everything else is a leaf value. */
+type Node = Record<string, unknown>;
+
+const isNode = (v: unknown): v is Node => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Every `.json` under a path, which may be a file or a directory.
+ *
+ * A set is as often a directory of files — one per family — as a single
+ * document, and which of the two it is says nothing about the tokens. Bounded
+ * for the same reason `cssFilesUnder` is: a path typed by hand can be anything.
+ */
+export function tokenFilesUnder(path: string, budget = 200): string[] {
+	let isDir: boolean;
+	try {
+		isDir = statSync(path).isDirectory();
+	} catch {
+		throw new Error(`no token set at ${path}`);
+	}
+	if (!isDir) return [path];
+	const out: string[] = [];
+	const walk = (dir: string): void => {
+		for (const e of readDir(dir)) {
+			if (out.length >= budget) return;
+			const full = join(dir, e.name);
+			if (e.isDirectory()) {
+				if (e.name !== 'node_modules') walk(full);
+			} else if (e.name.endsWith('.json') && !e.name.startsWith('.')) out.push(full);
+		}
+	};
+	walk(path);
+	if (!out.length) throw new Error(`no .json token files under ${path}`);
+	return out;
+}
+
+/**
+ * Whether a node is a token rather than a group.
+ *
+ * `$value` is the spec's own test and the only one that holds across drafts: a
+ * group may carry `$type` and `$description` too, and a token's value may be an
+ * object (a shadow, a typography composite), so neither the presence of other
+ * `$` keys nor the shape of the value tells them apart.
+ */
+const isToken = (n: Node): boolean => '$value' in n;
+
+/**
+ * Group names, so a path reads the way the set's own docs write it.
+ *
+ * A directory of files is one namespace, not one per file: `color.json` and
+ * `spacing.json` in the same set define `color.*` and `spacing.*`, and prefixing
+ * each with its filename would invent a level neither set has. A file whose
+ * top-level keys would collide with another's is the exception, and the loser
+ * keeps the first definition — the same rule `harvestTokenDefs` uses.
+ */
+function walkFile(raw: unknown, file: string, into: Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings'>>): void {
+	if (!isNode(raw)) return;
+	const walk = (node: Node, trail: string[], inheritedType: string | undefined): void => {
+		const declared = typeof node.$type === 'string' ? node.$type : inheritedType;
+		for (const [key, child] of Object.entries(node)) {
+			// `$`-prefixed keys are the spec's own; a group member can never be named
+			// one, so this needs no other test for metadata.
+			if (key.startsWith('$') || !isNode(child)) continue;
+			const trailNext = [...trail, key];
+			if (!isToken(child)) {
+				walk(child, trailNext, declared);
+				continue;
+			}
+			const path = trailNext.join('.');
+			if (into.has(path)) continue;
+			const own = typeof child.$type === 'string' ? child.$type : declared;
+			const value = child.$value;
+			into.set(path, {
+				path,
+				segments: trailNext,
+				leaf: key,
+				// Filled in by `resolve`, which is the only place that can see the
+				// whole set and therefore the only place an alias's type is knowable.
+				type: own ?? '',
+				typed: own !== undefined,
+				value,
+				resolved: value,
+				literal: '',
+				...(typeof child.$description === 'string' ? { description: child.$description } : {}),
+				depth: 0,
+				file,
+			});
+		}
+	};
+	walk(raw, [], undefined);
+}
+
+// ── aliases ─────────────────────────────────────────────────────────────────
+
+/** `{color.base.blue.500}` — a whole value that is one reference, per the spec. */
+const ALIAS = /^\{([^{}]+)\}$/;
+
+const aliasTarget = (value: unknown): string | undefined =>
+	typeof value === 'string' ? (ALIAS.exec(value.trim())?.[1] ?? undefined) : undefined;
+
+/**
+ * Follow every alias to the literal behind it, and record how far it was.
+ *
+ * The depth is the point: a set that names no tiers still declares them in its
+ * own structure, since a literal, a reference to a literal and a reference to a
+ * reference are exactly the three tiers. A chain that does not terminate — a
+ * cycle, or a reference to a token this set does not define — stops where it is,
+ * and the token keeps the alias as its value; it is still comparable by name.
+ */
+function resolve(tokens: Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings'>>): void {
+	for (const t of tokens.values()) {
+		const direct = aliasTarget(t.value);
+		if (direct !== undefined) t.alias = direct;
+		let at = t;
+		const seen = new Set<string>([t.path]);
+		let depth = 0;
+		for (;;) {
+			const next = aliasTarget(at.value);
+			if (next === undefined) break;
+			const to = tokens.get(next);
+			if (!to || seen.has(next)) break;
+			seen.add(next);
+			at = to;
+			depth++;
+		}
+		t.resolved = at.value;
+		t.depth = depth;
+		// A token's type is the first one declared along its own alias chain: a
+		// semantic token that omits `$type` and points at a colour is a colour.
+		if (!t.type) {
+			let hop = t;
+			const hops = new Set<string>([t.path]);
+			while (!hop.type) {
+				const next = aliasTarget(hop.value);
+				const to = next === undefined ? undefined : tokens.get(next);
+				if (!to || hops.has(to.path)) break;
+				hops.add(to.path);
+				hop = to;
+			}
+			t.type = hop.type || inferType(t.resolved);
+		}
+		t.literal = literalOf(t.resolved);
+	}
+}
+
+// ── values ──────────────────────────────────────────────────────────────────
+
+/**
+ * A DTCG value rendered as the string two sets are compared on.
+ *
+ * The spec has moved on the shape of the simple types — a dimension was `"16px"`
+ * and is now `{ value: 16, unit: "px" }`, a colour was a hex string and is now
+ * `{ colorSpace, components, alpha }` — and a real pair of sets is as likely to
+ * straddle that change as to sit on one side of it. Both forms render to the
+ * same string here, so the draft a set was authored against never reaches the
+ * comparison. A composite (a shadow, a typography block) has no one-line form,
+ * so it renders as its own JSON, which is still stable enough to compare and
+ * short enough to show.
+ */
+export function literalOf(value: unknown): string {
+	if (value === null || value === undefined) return '';
+	if (typeof value === 'string') return value.trim();
+	if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+	if (Array.isArray(value)) return JSON.stringify(value);
+	if (!isNode(value)) return String(value);
+	// `{ value, unit }` — dimension and duration.
+	if (typeof value.value === 'number' && typeof value.unit === 'string') return `${value.value}${value.unit}`;
+	// `{ colorSpace, components, alpha }` — the 2025 colour object.
+	if (Array.isArray(value.components) && typeof value.colorSpace === 'string') {
+		const alpha = typeof value.alpha === 'number' ? value.alpha : 1;
+		// A set that carries its own hex is taken at its word: it is the value the
+		// system publishes, and recomputing it from the components only introduces
+		// a rounding difference between this and the CSS the system ships.
+		if (typeof value.hex === 'string' && /^#[0-9a-f]{3,8}$/i.test(value.hex.trim())) return value.hex.trim();
+		const numbers = value.components.every((c) => typeof c === 'number') ? (value.components as number[]) : null;
+		const srgb = numbers && toSrgb(value.colorSpace, numbers);
+		if (srgb) return hexOf(srgb, alpha);
+		const parts = value.components.map((c) => (typeof c === 'number' ? round(c) : String(c)));
+		return `color(${value.colorSpace} ${parts.join(' ')}${alpha !== 1 ? ` / ${round(alpha)}` : ''})`;
+	}
+	return JSON.stringify(value);
+}
+
+const round = (n: number): string => String(Math.round(n * 1000) / 1000);
+
+/**
+ * A colour's components in whatever space it was authored in, as sRGB 0..1.
+ *
+ * Every space that can reach sRGB without a colour-science library does, and the
+ * rest render as `color(space …)` and compare on equality alone. This is not
+ * about display: it is what makes two sets comparable at all. Primer authors its
+ * palette in `hsl` and WPDS authors its own in `srgb`, and left in their own
+ * spaces the two never register as the same colour — every pair scores zero and
+ * the shortlist falls back to whatever sorts first.
+ *
+ * Null for a space this cannot convert, which is the honest answer: an `oklch`
+ * value converted by guesswork would rank *worse* than one left alone, because
+ * it would look like a measurement.
+ */
+export function toSrgb(space: string, components: readonly number[]): [number, number, number] | null {
+	const [a = 0, b = 0, c = 0] = components;
+	switch (space) {
+		case 'srgb':
+			return [a, b, c];
+		// Gamma-encode: the linear space holds the same colours on another curve.
+		case 'srgb-linear': {
+			const enc = (v: number): number => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
+			return [enc(a), enc(b), enc(c)];
+		}
+		// `[hue in degrees, saturation %, lightness %]`, per the spec.
+		case 'hsl':
+			return hslToSrgb(a, b / 100, c / 100);
+		// `[hue, whiteness %, blackness %]`: the fully saturated hue, then mixed
+		// toward white and black.
+		case 'hwb': {
+			const [w, bl] = [b / 100, c / 100];
+			if (w + bl >= 1) {
+				const grey = w / (w + bl);
+				return [grey, grey, grey];
+			}
+			const pure = hslToSrgb(a, 1, 0.5);
+			return [pure[0], pure[1], pure[2]].map((v) => v * (1 - w - bl) + w) as [number, number, number];
+		}
+		default:
+			return null;
+	}
+}
+
+/** Hue in degrees, saturation and lightness in 0..1, as sRGB 0..1. */
+export function hslToSrgb(hue: number, s: number, l: number): [number, number, number] {
+	const h = ((hue % 360) + 360) % 360;
+	const chroma = (1 - Math.abs(2 * l - 1)) * s;
+	const x = chroma * (1 - Math.abs(((h / 60) % 2) - 1));
+	const m = l - chroma / 2;
+	const [r, g, b]: [number, number, number] =
+		h < 60
+			? [chroma, x, 0]
+			: h < 120
+				? [x, chroma, 0]
+				: h < 180
+					? [0, chroma, x]
+					: h < 240
+						? [0, x, chroma]
+						: h < 300
+							? [x, 0, chroma]
+							: [chroma, 0, x];
+	return [r + m, g + m, b + m];
+}
+
+/** sRGB components in 0..1 as `#rrggbb`, which is how every set that predates the object writes them. */
+function hexOf(components: readonly number[], alpha: number): string {
+	const byte = (n: number): string =>
+		Math.max(0, Math.min(255, Math.round(n * 255)))
+			.toString(16)
+			.padStart(2, '0');
+	const [r = 0, g = 0, b = 0] = components;
+	return `#${byte(r)}${byte(g)}${byte(b)}${alpha < 1 ? byte(alpha) : ''}`;
+}
+
+/**
+ * The `$type` a value implies, for a set that leaves it off.
+ *
+ * `$type` is required by the current spec and optional in everything authored
+ * before it, and a set with no types at all would put every token in one
+ * undifferentiated pool — a colour compared against a duration. Guessing from
+ * the value recovers the distinction the file did not write down; where the
+ * shape says nothing, the type is empty and only tokens equally untyped are
+ * comparable to it.
+ */
+export function inferType(value: unknown): string {
+	if (isNode(value)) {
+		if (Array.isArray(value.components)) return 'color';
+		if (typeof value.value === 'number' && typeof value.unit === 'string')
+			return value.unit === 'ms' || value.unit === 's' ? 'duration' : 'dimension';
+		if ('fontFamily' in value || 'fontSize' in value) return 'typography';
+		if ('color' in value && 'offsetX' in value) return 'shadow';
+		return '';
+	}
+	if (Array.isArray(value)) return value.length === 4 && value.every((n) => typeof n === 'number') ? 'cubicBezier' : '';
+	if (typeof value === 'number') return 'number';
+	if (typeof value !== 'string') return '';
+	const v = value.trim().toLowerCase();
+	if (/^#[0-9a-f]{3,8}$/.test(v) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/.test(v)) return 'color';
+	if (/^-?[\d.]+(px|rem|em|%|vh|vw|pt)$/.test(v)) return 'dimension';
+	if (/^[\d.]+m?s$/.test(v)) return 'duration';
+	if (/^cubic-bezier\(/.test(v)) return 'cubicBezier';
+	if (/^(normal|bold|light|medium|semi-?bold|extra-?bold|black|thin)$/.test(v)) return 'fontWeight';
+	return '';
+}
+
+// ── tiers ───────────────────────────────────────────────────────────────────
+
+/**
+ * The words a set uses to name each tier, in every spelling seen in the wild.
+ *
+ * Read off the path rather than configured, because a set's tier names are the
+ * one part of its structure it always writes down somewhere — and the point of
+ * this utility is that nothing else about the two sets has to agree.
+ */
+const TIER_WORDS: Record<Tier, RegExp> = {
+	base: /^(primitives?|base|core|globals?|foundations?|refs?|reference|palettes?|raw|scales?)$/,
+	semantic: /^(semantics?|alias(es)?|system|sys|themes?|roles?|intent|decisions?)$/,
+	component: /^(components?|comps?|cmp|parts?|recipes?|patterns?)$/,
+};
+
+/**
+ * Which tier a token belongs to, and how that was decided.
+ *
+ * A named tier wins: a set that groups under `primitive/` has said outright what
+ * those tokens are, and no structural signal should overrule it. The name has to
+ * appear *above* the leaf to count — `color.background.base` is a semantic token
+ * whose own name happens to be `base`, and reading that as a tier would file
+ * every "base" and "core" variant of every scale as a primitive.
+ *
+ * Otherwise the alias depth answers, because a literal, a reference to a literal
+ * and a reference to a reference are the three tiers restated. It is a weaker
+ * signal — a set whose semantic tokens alias each other reads one tier too deep —
+ * which is why `map` treats the tier as evidence and not as a gate.
+ */
+/**
+ * Whether a word names a tier rather than describing a token.
+ *
+ * `mapping.ts` drops these before comparing two names: one set writing
+ * `primitive.color.blue` and another writing `color.blue` have said the same
+ * thing, and counting `primitive` as a word they disagree on would penalise the
+ * pair for how the two files are organised.
+ */
+export const isTierWord = (word: string): boolean => TIERS.some((t) => TIER_WORDS[t].test(word.toLowerCase()));
+
+export function tierOf(segments: readonly string[], depth: number): { tier: Tier; tierFrom: 'named' | 'structural' } {
+	const above = segments.slice(0, -1).map((s) => s.toLowerCase());
+	for (const tier of TIERS) if (above.some((s) => TIER_WORDS[tier].test(s))) return { tier, tierFrom: 'named' };
+	return { tier: depth === 0 ? 'base' : depth === 1 ? 'semantic' : 'component', tierFrom: 'structural' };
+}
+
+// ── the set ─────────────────────────────────────────────────────────────────
+
+/** How many sibling names a token carries as context. Enough to show a scale, not a whole palette. */
+const SIBLINGS = 12;
+
+/**
+ * Read a DTCG token set from a file or a directory of them.
+ *
+ * Throws when the path holds no tokens at all: a set that read as empty would
+ * map to nothing and report it as "no counterpart", which is a confident false
+ * statement about the design system rather than a failure to read it — the same
+ * reason `judgeValues` refuses an empty token set.
+ */
+export function readTokenDoc(path: string, label = basename(path).replace(/\.json$/, '')): TokenDoc {
+	const files = tokenFilesUnder(path);
+	const flat = new Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings'>>();
+	for (const file of files) {
+		let raw: unknown;
+		try {
+			raw = JSON.parse(readFileSync(file, 'utf8'));
+		} catch (err) {
+			throw new Error(`${file} is not readable JSON: ${err instanceof Error ? err.message : String(err)}`);
+		}
+		walkFile(raw, file, flat);
+	}
+	if (!flat.size) throw new Error(`${path} holds no DTCG tokens ($value was not found anywhere)`);
+	resolve(flat);
+
+	// Siblings are the group's other leaves, which is what says a token is one
+	// step of a scale rather than a value on its own.
+	const byGroup = new Map<string, string[]>();
+	for (const t of flat.values()) {
+		const group = t.segments.slice(0, -1).join('.');
+		byGroup.set(group, [...(byGroup.get(group) ?? []), t.leaf]);
+	}
+
+	const tokens = [...flat.values()].map((t): Token => {
+		const group = t.segments.slice(0, -1).join('.');
+		return {
+			...t,
+			...tierOf(t.segments, t.depth),
+			siblings: (byGroup.get(group) ?? []).filter((n) => n !== t.leaf).slice(0, SIBLINGS),
+		};
+	});
+	return { tokens, path, files, label };
+}

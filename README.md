@@ -328,6 +328,30 @@ advisory, never baselined and never run by the hook. A control that already
 carries `href` is not asked. See `engine/README.md` for how it decides and how
 it scored.
 
+### Mapping one token set onto another
+
+Experimental, and off to one side of everything above: the rest of loupe asks
+whether code conforms to *its* design system, and this asks a question with two
+systems in it. Given two DTCG token sets it answers, for every token in the
+first, which token in the second is the same decision — which is what makes two
+systems comparable at all.
+
+```bash
+loupe map ./wpds/tokens ./primer/tokens --out map.json
+loupe map ./a ./b --dry-run            # the shortlists, asking nothing
+```
+
+Both sides are assumed to be standard DTCG and three-tiered; nothing else about
+them has to agree, and nothing is configured per system. The engine narrows each
+token to eight candidates — `$type` as a hard gate, colour distance in OKLab,
+names as word sets with the organising words dropped — and the model picks among
+them or says the second system has no counterpart. `--dry-run` shows the
+shortlists for free, which is the first thing to run on a new pair.
+
+Nothing about it is measured yet: no eval, and the weights and floors are
+arguments rather than numbers. `docs/design/map.md` says which, and
+`engine/README.md` documents the flags.
+
 ### Composites
 
 The expensive drift is compositional: six page headers, four modal footers, each
