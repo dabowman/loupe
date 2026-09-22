@@ -188,10 +188,13 @@ interface Args {
 function parseArgs(args: string[]): Args {
 	const { values, positionals } = parseArgv({
 		args,
-		options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: 'string' }])),
+		options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: 'string', multiple: f === 'files' }])),
 		allowPositionals: true,
 		strict: false,
 	});
+	// `--files` may repeat; each occurrence is itself a comma list.
+	const files = [values.files ?? []].flat().filter((v) => typeof v === 'string');
+	values.files = files.length ? files.join(',') : undefined;
 	// A value flag given no value parses as `true`; treat it as not given.
 	for (const f of VALUE_FLAGS) if (typeof values[f] !== 'string') delete values[f];
 	// A switch is undeclared, so `--judge=false` arrives as the string 'false',
