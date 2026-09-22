@@ -5,10 +5,12 @@
  * system's own token definitions on-role. Every rule that flags a substitutable
  * declaration arrives carrying one `suggest` entry per declaration, and that
  * entry is the licence to substitute — nothing here needs a list of which rules
- * they are.
+ * they are. A `rename` is the same licence for a name nothing defines, written
+ * by the check that already holds the known token set.
  *
  * Only the unambiguous case is applied: two on-role tokens carrying the same
- * value is a semantic choice, not an array lookup.
+ * value is a semantic choice, not an array lookup, and a misspelling one
+ * keystroke from two real tokens is a question, not a typo.
  *
  * Design notes: docs/design/report.md#fixing
  */
@@ -30,7 +32,8 @@ export const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 
 /**
  * Every declaration with one rewrite for it: a single exact token, or — only
- * once `--judge` has written one — the judged replacement.
+ * once `--judge` has written one — the judged replacement. Plus every line of a
+ * token name the check settled on a single near miss for.
  *
  * A finding may be several declarations, each matched against its own line.
  * Where a declaration is one of several on-role tokens, or none, it is left
@@ -48,6 +51,11 @@ export function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
 			if (to === undefined || to === KEEP) continue;
 			out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to, span: s.span });
 		}
+		// A misspelled token is one finding across every line the file names it on.
+		// Fixing only the line it was reported at would leave the rest broken and
+		// the next run would report the same name again.
+		const rename = f.rename;
+		if (rename) for (const line of rename.lines) out.push({ file: f.file, line, value: rename.from, to: rename.to });
 	}
 	return out;
 }
@@ -57,18 +65,26 @@ export function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
  * actually cleared, as against how many declarations it acted on.
  *
  * Settled is rewritten or suppressed: a value `--judge` kept is as done with as
- * one it replaced.
+ * one it replaced. A renamed token is settled only once every line naming it
+ * was rewritten, for the same reason: the name is still wrong on the rest.
+ *
+ * The key is file, line and property. A rename has no property and takes the
+ * empty slot, which nothing else can occupy — every declaration a fix or a keep
+ * names came out of a parse, and a parse has no nameless property.
  */
 export function settledBy(
 	findings: readonly FixCandidate[],
 	applied: readonly TokenFix[],
 	kept: readonly KeptValue[] = [],
 ): number {
-	const at = (d: { file: string; line: number; prop: string }): string => `${d.file}\u0000${d.line}\u0000${d.prop}`;
+	const at = (d: { file: string; line: number; prop?: string | undefined }): string =>
+		`${d.file}\u0000${d.line}\u0000${d.prop ?? ''}`;
 	const done = new Set([...applied, ...kept].map(at));
 	return findings.filter((f) => {
-		const parts = f.suggest ?? (f.decl ? [f.decl] : []);
-		return parts.length > 0 && parts.every((s) => done.has(at({ file: f.file, line: s.line ?? f.line, prop: s.prop })));
+		const parts = f.rename
+			? f.rename.lines.map((line) => ({ file: f.file, line }))
+			: (f.suggest ?? (f.decl ? [f.decl] : [])).map((s) => ({ file: f.file, line: s.line ?? f.line, prop: s.prop }));
+		return parts.length > 0 && parts.every((p) => done.has(at(p)));
 	}).length;
 }
 
@@ -76,7 +92,8 @@ export function settledBy(
 const QUOTES = '\'"`';
 
 /**
- * One declaration rewritten on the line it sits on, or why it was not.
+ * One declaration rewritten on the line it sits on — or one token name renamed
+ * there — or why it was not.
  *
  * Shared by `loupe fix` and the language server's quick fix, so the two cannot
  * write different bytes for one finding.
@@ -110,6 +127,17 @@ export function substituteOnLine(
 		const opener = span.text[0];
 		const quote = opener && QUOTES.includes(opener) ? opener : "'";
 		return `${line.slice(0, span.col)}${quote}${fix.to}${quote}${line.slice(span.col + span.text.length)}`;
+	}
+	// A rename has no property around it. It replaces the name inside `var()`,
+	// every time this line names it — the same name is the same misspelling
+	// wherever it stands, so several on a line is not the ambiguity several
+	// declarations would be. Only inside `var()`, so `--name: …` keeps defining
+	// whatever it defines, and bounded on the right so `--space` does not match
+	// inside `--space-lg`.
+	if (fix.prop === undefined) {
+		const renamed = line.replace(new RegExp(`(var\\(\\s*)${escapeRe(fix.value)}(?![-\\w])`, 'g'), `$1${fix.to}`);
+		if (renamed === line) return { why: 'the token is not on its reported line' };
+		return renamed;
 	}
 	// The property boundary matters: `background` must not match inside
 	// `background-color`, and `border-radius` must not match inside

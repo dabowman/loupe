@@ -297,7 +297,7 @@ export function lsp(opts: {
 				const text = lines(rel)[line] ?? '';
 				// The same list `loupe fix` acts on, through the same function.
 				for (const fix of tokenFixes([finding])) {
-					if (fix.line - 1 !== line) continue;
+					if (fix.prop === undefined || fix.line - 1 !== line) continue;
 					const rewritten = substituteOnLine(text, fix);
 					if (typeof rewritten !== 'string') continue;
 					const key = `${line}\u0000${fix.prop}\u0000${fix.to}`;
@@ -318,6 +318,33 @@ export function lsp(opts: {
 							},
 						},
 					});
+				}
+				// A misspelled token is one finding across every line the file names it
+				// on, so its action carries every one of those edits. An editor fix
+				// clearing only the occurrence under the cursor would leave the file
+				// broken and the diagnostic standing — the same reason `loupe fix`
+				// rewrites them all. Same bytes, same function.
+				const rename = finding.rename;
+				if (rename && !seen.has(`rename\u0000${rename.from}`)) {
+					seen.add(`rename\u0000${rename.from}`);
+					const edits: TextEdit[] = [];
+					for (const fix of tokenFixes([finding])) {
+						const on = lines(rel)[fix.line - 1];
+						if (on === undefined) continue;
+						const rewritten = substituteOnLine(on, fix);
+						if (typeof rewritten !== 'string') continue;
+						edits.push({
+							range: { start: { line: fix.line - 1, character: 0 }, end: { line: fix.line - 1, character: on.length } },
+							newText: rewritten,
+						});
+					}
+					if (edits.length)
+						actions.push({
+							title: `Rename ${rename.from} to ${rename.to} (${edits.length} occurrence(s))`,
+							kind: 'quickfix',
+							isPreferred: true,
+							edit: { changes: { [uri]: edits } },
+						});
 				}
 				// The reason is left empty on purpose: a directive without one does not
 				// mute, it reports as `suppression/malformed`. See

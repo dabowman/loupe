@@ -96,6 +96,14 @@ write", and the two would be compared by nobody, since each looks correct read
 on its own. `engine/tests/lsp.ts` asserts the agreement against the CLI path
 rather than against a fixture string.
 
+A declaration fix is one action for one line, because that is what one is. A
+misspelled token is not: `tokens/unknown-token` reports once per file and name,
+so its action carries an edit for every line that names it. Offering the line
+under the cursor alone would clear one occurrence, leave the file broken and
+leave the diagnostic standing — a quick fix that visibly does nothing. Each of
+those edits is still the line `substituteOnLine` wrote, so the agreement with
+`loupe fix` holds per line as well as in total.
+
 ## Why the suppress quick fix leaves the reason blank
 
 A directive with no reason does not mute — `suppressions.ts` reports it as

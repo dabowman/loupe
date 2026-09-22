@@ -45,6 +45,13 @@ interface Fixture {
 	 * this path has.
 	 */
 	parseErrors: ParseError[];
+	/**
+	 * What a second run finds. A fix that settles what it reported and leaves the
+	 * rest of the file broken reports clean for one line and re-reports the same
+	 * name on the next run, which is indistinguishable from a fix that worked
+	 * until somebody runs it twice.
+	 */
+	remaining: Finding[];
 }
 
 /** Analyze a throwaway repo, apply fixes, hand back what the files now say. */
@@ -69,6 +76,7 @@ async function fixture(files: Record<string, string>): Promise<Fixture> {
 			},
 			findings: result.findings,
 			parseErrors: reread.diagnostics.parseErrors,
+			remaining: reread.findings,
 		};
 	} finally {
 		cleanup(root);
@@ -304,6 +312,128 @@ await check('a collapsed finding is cleared only once every declaration is settl
 	assert(applied.length === 2, `expected 2 fixes, got ${applied.length}`);
 	assert(settledBy(findings, applied) === 1, 'both declarations settled, so the finding is cleared');
 	assert(!/\b(12px|16px)\b/.test(read('styles/u.css')), `a literal survived:\n${read('styles/u.css')}`);
+});
+
+// ── tokens/unknown-token ────────────────────────────────────────────────────
+// A name nothing defines is usually a misspelling, and the known set is right
+// there. Every case below is one where the rename would be invisible if it were
+// wrong: the file parses, the report goes clean, and the element is now painted
+// from a token that means something else.
+
+/** `xs` and `xl` differ in one character, so `xm` is a near miss for both. */
+const NEAR = `:root {
+	--wpds-color-foreground: #1e1e1e;
+	--wpds-dimension-space-xs: 4px;
+	--wpds-dimension-space-xl: 24px;
+	--wpds-dimension-space-md: 8px;
+}`;
+
+const uses = (rel: string): string => `export const X = () => <div className="${rel}" />;`;
+
+await check('a misspelled token is renamed everywhere the file names it', async () => {
+	const { applied, read, findings, remaining, parseErrors } = await fixture({
+		'styles/tokens.css': NEAR,
+		'styles/v.css': [
+			'.wf-v {',
+			'\tcolor: var(--wpds-colr-foreground);',
+			'\tborder-color: var(--wpds-colr-foreground);',
+			'\tbackground: linear-gradient(var(--wpds-colr-foreground), var(--wpds-colr-foreground));',
+			'}',
+		].join('\n'),
+		'src/V.jsx': uses('wf-v'),
+	});
+	// One finding, because the rule reports once per file and name — and four
+	// references on three lines, because that is what has to change for it to
+	// stop being true.
+	const unknown = findings.filter((f) => f.rule === 'tokens/unknown-token');
+	assert(unknown.length === 1, `expected one finding, got ${unknown.length}`);
+	assert(applied.length === 3, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('styles/v.css');
+	assert(!out.includes('--wpds-colr-'), `an occurrence survived:\n${out}`);
+	assert(out.split('--wpds-color-foreground').length === 5, `not every occurrence was renamed:\n${out}`);
+	assert(settledBy(findings, applied) === 1, 'every line renamed, so the finding is cleared');
+	assert(!remaining.some((f) => f.rule === 'tokens/unknown-token'), 'the next run must not report it again');
+	assert(!parseErrors.length, `the stylesheet no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+await check('a name two known tokens are equally near is left alone', async () => {
+	const { applied, read, findings } = await fixture({
+		'styles/tokens.css': NEAR,
+		'styles/x.css': '.wf-x { padding: var(--wpds-dimension-space-xm); }',
+		'src/X.jsx': uses('wf-x'),
+	});
+	assert(!applied.length, `a coin toss was applied: ${JSON.stringify(applied)}`);
+	assert(read('styles/x.css').includes('--wpds-dimension-space-xm'), 'the name must be untouched');
+	assert(settledBy(findings, applied) === 0, 'an unrenamed finding is not cleared');
+});
+
+await check('a name near nothing is left alone', async () => {
+	const { applied, read } = await fixture({
+		'styles/tokens.css': NEAR,
+		'styles/y.css': '.wf-y { color: var(--wpds-color-brand); }',
+		'src/Y.jsx': uses('wf-y'),
+	});
+	assert(!applied.length, `an invented name was renamed: ${JSON.stringify(applied)}`);
+	assert(read('styles/y.css').includes('--wpds-color-brand'), 'the name must be untouched');
+});
+
+// The whole defence of a one-keystroke threshold: a scale step is one keystroke
+// from its neighbour and means a different amount. `20px` where `30px` was
+// asked for is the failure this path exists to prevent — right pixels, wrong
+// meaning, clean report.
+await check('a step on a scale is not a spelling, however near it sits', async () => {
+	const { applied, read } = await fixture({
+		'styles/tokens.css': ':root {\n\t--wpds-dimension-space-20: 20px;\n}',
+		'styles/z.css': '.wf-z { padding: var(--wpds-dimension-space-30); }',
+		'src/Z.jsx': uses('wf-z'),
+	});
+	assert(!applied.length, `a scale step was renamed: ${JSON.stringify(applied)}`);
+	assert(read('styles/z.css').includes('--wpds-dimension-space-30'), 'the name must be untouched');
+});
+
+// `--wpds-dimension-space-m` is a deletion away from `-md`, and `-md` is written
+// on the same line. A rename bounded only on the left would make it `-mdd`.
+await check('a rename stops at the name it was given, and never at a definition', async () => {
+	const { applied, read, parseErrors } = await fixture({
+		'styles/tokens.css': NEAR,
+		'styles/aa.css': [
+			'.wf-aa {',
+			'\t--wf-local: var(--wpds-dimension-space-m);',
+			'\tpadding: var(--wpds-dimension-space-m) var(--wpds-dimension-space-md);',
+			'}',
+		].join('\n'),
+		'src/AA.jsx': uses('wf-aa'),
+	});
+	assert(applied.length === 2, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('styles/aa.css');
+	assert(!out.includes('-mdd'), `the rename ran past its name:\n${out}`);
+	assert(out.includes('--wf-local: var(--wpds-dimension-space-md);'), `not renamed in a custom property:\n${out}`);
+	assert(
+		out.includes('padding: var(--wpds-dimension-space-md) var(--wpds-dimension-space-md);'),
+		`both references on one line should be renamed:\n${out}`,
+	);
+	assert(!parseErrors.length, `the stylesheet no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+// The other channel `var()` references are collected from. A template's text is
+// literal CSS, so the same match finds it there.
+await check('a misspelled token in a CSS-in-JS template is renamed too', async () => {
+	const { applied, read, findings, remaining, parseErrors } = await fixture({
+		'styles/tokens.css': NEAR,
+		'src/AB.jsx': [
+			"import styled from 'styled-components';",
+			'export const Card = styled.div`',
+			'\tcolor: var(--wpds-colr-foreground);',
+			'\tborder-color: var(--wpds-colr-foreground);',
+			'`;',
+		].join('\n'),
+	});
+	assert(applied.length === 2, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('src/AB.jsx');
+	assert(!out.includes('--wpds-colr-'), `an occurrence survived:\n${out}`);
+	assert(settledBy(findings, applied) === 1, 'every line renamed, so the finding is cleared');
+	assert(!remaining.some((f) => f.rule === 'tokens/unknown-token'), 'the next run must not report it again');
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
 });
 
 // ── fix --judge ─────────────────────────────────────────────────────────────

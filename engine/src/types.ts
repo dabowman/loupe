@@ -108,6 +108,21 @@ export interface Suggestion extends Hint {
 }
 
 /**
+ * A misspelled token name and the one known token it is a near miss for.
+ *
+ * A name, not a declaration: `tokens/unknown-token` reports once per file and
+ * name however many times the file writes it, so the fix it licenses is every
+ * one of `lines` — fixing the line it was reported at would leave the rest, and
+ * the next run would report the same name again.
+ */
+export interface TokenRename {
+	from: string;
+	to: string;
+	/** Every line of this file that references the name, first-seen order. */
+	lines: number[];
+}
+
+/**
  * One reported violation.
  *
  * `hints` and `suffix` are working state: the token pass reads them to rewrite
@@ -179,6 +194,12 @@ export interface Finding {
 	 * `judgeValues` writes an answer for.
 	 */
 	decl?: Hint | undefined;
+	/**
+	 * The rewrite `tokens/unknown-token` licenses, where exactly one known token
+	 * is a near miss for the name. Absent where nothing is, or where more than
+	 * one is — then the finding stands for a reader.
+	 */
+	rename?: TokenRename | undefined;
 }
 
 /**
@@ -801,15 +822,22 @@ export interface ReportPayload {
  * nothing else, and asking for a whole finding would mean a caller with a
  * candidate in hand had to invent a severity and a rank to be allowed to ask.
  */
-export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest' | 'decl' | 'judged'>;
+export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest' | 'decl' | 'judged' | 'rename'>;
 
-/** One substitution: this property, this value, rewritten `to` this. */
+/**
+ * One substitution: this property, this value, rewritten `to` this.
+ *
+ * A rename carries no `prop`, because it is not a `prop: value` substitution —
+ * `value` is the misspelled token name and `to` the name it becomes, replaced
+ * inside every `var()` on the line that names it.
+ */
 export interface TokenFix {
 	file: string;
 	line: number;
-	prop: string;
+	/** Absent on a token rename, which has no declaration around it. */
+	prop?: string | undefined;
 	value: string;
-	/** `var(--token)`, or one per part for a shorthand the judge settled. */
+	/** `var(--token)`, one per part for a shorthand the judge settled, or a token name for a rename. */
 	to: string;
 	/** Where to splice, for a declaration whose source text is not the CSS reported. */
 	span?: ValueSpan | undefined;

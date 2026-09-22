@@ -154,7 +154,8 @@ project is and read the same baseline. Pass `--root` when you mean the
 subdirectory itself. It needs nothing added to that project: the engine carries its own dependencies, so there is no config file to
 commit and nothing to install. Nothing appears unless you run the thing that
 writes it: `loupe baseline` records `.loupe-baseline.json`, and `loupe fix` rewrites the
-stylesheets whose findings it can settle without judgment. It also passes the
+declarations — and the misspelled token names — whose findings it can settle
+without judgment. It also passes the
 shipped pattern and component registries unless you name your own with
 `--patterns`/`--components`.
 
@@ -220,7 +221,9 @@ nothing on-role matches, the finding names no token rather than a plausible one.
 
 `tokens/unknown-token` catches the other direction — a `var()` naming nothing the
 design system defines. It stays silent when no definitions were found at all,
-because an empty token set proves nothing.
+because an empty token set proves nothing. A name that is one keystroke from
+exactly one real token is a misspelling the engine can settle, and `loupe fix`
+renames it wherever the file writes it.
 
 Because the engine resolved that substitution itself, it can also apply it:
 
@@ -228,8 +231,12 @@ Because the engine resolved that substitution itself, it can also apply it:
 loupe fix   # --dry-run to see it first
 ```
 
-Only where exactly one on-role token carries the value. Two candidates is a
-semantic choice, so it is left alone. All three channels are rewritten: a
+Only where exactly one on-role token carries the value — or, for a misspelled
+name, where exactly one known token is a single keystroke away and that
+keystroke is not a digit, since `--wpds-dimension-space-20` and
+`--wpds-dimension-space-30` are one edit apart and mean different amounts. Two
+candidates is a semantic choice, so it is left alone. All three channels are
+rewritten: a
 stylesheet and a CSS-in-JS template are matched as the CSS they are, and a
 `style={{ padding: 13 }}` object is spliced at the literal the scan recorded,
 since `padding-bottom: 13px` is a translation of what the file says rather than

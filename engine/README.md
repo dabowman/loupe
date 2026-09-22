@@ -401,6 +401,14 @@ is the failure the suggestion machinery exists to prevent. A type property in a
 stylesheet is where the rule's first remedy — use the text component — is not
 available, which is the case its second one is for.
 
+`tokens/unknown-token` is fixed on the same terms. A `var()` naming a token
+nothing defines is usually a misspelling, so where exactly **one** known token
+is one keystroke away — one insertion, deletion or substitution, and not a
+digit — the name is renamed on every line of the file that references it. Two
+candidates, or none, and the finding stands. A digit is excluded because
+`--wpds-dimension-space-20` and `--wpds-dimension-space-30` are one keystroke
+apart and mean different amounts: a step on a scale is not a spelling.
+
 All three channels are written, two ways. A stylesheet declaration and a
 CSS-in-JS one are matched as CSS on the line they were reported at: inside a
 template the text *is* CSS, and a declaration whose value comes from an
@@ -413,17 +421,20 @@ string, in the quote the value already used.
 A finding is not a substitution. `typography/untokenized` collapses a CSS rule's
 whole type block into one finding reported at the first declaration's line, and
 every other declaration in it carries the line it is actually written on, so
-each is matched against that. One settled beside one nobody could settle is a
-substitution made and a finding still standing, which is why the summary counts
-both:
+each is matched against that. `tokens/unknown-token` reports once per file and
+name however many lines reference it, and every one of them is rewritten. One
+part settled beside one nobody could settle is a substitution made and a finding
+still standing, which is why the summary counts both:
 
 ```
-loupe: fixed 79 declaration(s) in 54 finding(s). 258 left for review.
+loupe: fixed 79 substitution(s). 258 of 312 finding(s) left for review.
 ```
 
 A declaration that is not on its reported line exactly once is skipped and
 named: the file moved under the report, and substituting against a stale line
-number edits the wrong declaration. `!important` and the terminator survive.
+number edits the wrong declaration. `!important` and the terminator survive. A
+rename is matched only inside `var()`, and stops at the end of the name, so it
+touches neither a definition nor a longer name beside it.
 
 The baseline is ignored here. It exists to stop the gate blocking on an accepted
 backlog; burning that backlog down is what this command is for.

@@ -944,7 +944,9 @@ async function main(): Promise<number> {
 		// Flattened at the print site rather than at capture, because the raw value is
 		// what the substitution matches against. Not bounded: both lines exist to be
 		// acted on, and an elided value can be matched against neither.
-		const decl = (f: { prop: string; value: string }): string => oneLine(`${f.prop}: ${f.value}`);
+		// A rename has no property around it, so it prints as the bare name it is.
+		const decl = (f: { prop?: string | undefined; value: string }): string =>
+			oneLine(f.prop === undefined ? f.value : `${f.prop}: ${f.value}`);
 		for (const f of applied) process.stdout.write(`${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2192 ${green(f.to)}\n`);
 		for (const k of kept.applied)
 			process.stdout.write(
@@ -952,13 +954,14 @@ async function main(): Promise<number> {
 			);
 		for (const f of [...skipped, ...kept.skipped])
 			process.stdout.write(`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2014 ${f.why}\n`);
-		// A collapsed finding is several declarations, so a declaration acted on is
-		// not a finding cleared. What is counted as done is the finding every one
-		// of whose declarations was rewritten or suppressed.
+		// A collapsed finding is several declarations and a misspelled token is
+		// every line naming it, so a substitution written is not a finding cleared.
+		// What is counted as done is the finding every one of whose parts was
+		// rewritten or suppressed.
 		const left = toFix.findings.length - settledBy(toFix.findings, applied, kept.applied);
 		const nSkipped = skipped.length + kept.skipped.length;
 		process.stdout.write(
-			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} declaration(s)`)}${
+			`\nloupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(s)`)}${
 				apiKey ? `, ${dry ? 'would suppress' : 'suppressed'} ${kept.applied.length}` : ''
 			}${nSkipped ? yellow(`, skipped ${nSkipped}`) : ''}. ${left} of ${toFix.findings.length} finding(s) left for review.\n`,
 		);

@@ -38,9 +38,16 @@ export default () => (
 );
 `,
 	// One declaration the engine can settle on its own — that is the one a quick
-	// fix is offered for, and the one `loupe fix` would rewrite.
+	// fix is offered for, and the one `loupe fix` would rewrite. `.wf-hint`
+	// misspells the same token twice: one finding, and an action that has to
+	// carry an edit for each line, because clearing one would leave the
+	// diagnostic standing.
 	'styles/app.css': `.wf-note {
   color: #1e1e1e;
+}
+.wf-hint {
+  border-color: var(--wpds-color-foreground-content-neutra);
+  outline-color: var(--wpds-color-foreground-content-neutra);
 }
 `,
 };
@@ -229,6 +236,35 @@ await check('the quick fix writes exactly what `loupe fix` writes', () => {
 		edit.newText === cli,
 		`the editor would write ${JSON.stringify(edit.newText)}, the CLI writes ${JSON.stringify(cli)}`,
 	);
+});
+
+send({
+	id: 6,
+	method: 'textDocument/codeAction',
+	params: {
+		textDocument: { uri: cssUri },
+		range: { start: { line: 4, character: 0 }, end: { line: 4, character: 60 } },
+		context: { diagnostics: [] },
+	},
+});
+const renameActions = await until((m) => m.id === 6, 'the rename code action reply');
+
+await check('the rename quick fix carries every line, and writes what `loupe fix` writes', () => {
+	const list = renameActions.result as { title: string; edit: { changes: Record<string, { newText: string }[]> } }[];
+	const fix = first(
+		list.filter((a) => a.title.startsWith('Rename')),
+		'no rename action was offered',
+	);
+	const edits = fix.edit.changes[cssUri] ?? [];
+	assert(edits.length === 2, `the action carried ${edits.length} edit(s), expected one per line`);
+	for (const [i, edit] of edits.entries()) {
+		const cli = viaCli(appCss, 4 + i);
+		assert(
+			edit.newText === cli,
+			`the editor would write ${JSON.stringify(edit.newText)}, the CLI writes ${JSON.stringify(cli)}`,
+		);
+		assert(edit.newText.includes('var(--wpds-color-foreground-content-neutral)'), edit.newText);
+	}
 });
 
 send({ method: 'textDocument/didOpen', params: { textDocument: { uri: jsxUri, text: readFileSync(appJsx, 'utf8') } } });

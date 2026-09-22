@@ -442,10 +442,61 @@ inside `background-color`, `border-radius` must not match inside
 replacement that would have to be escaped to survive as a JS string is refused
 rather than escaped; a token substitution never is one.
 
+**A misspelled token is the same licence without a declaration around it.**
+`tokens/unknown-token` holds the known token set at the moment it fires, so
+where exactly one known token is a near miss for a name nothing defines, the
+check writes that rename onto the finding and `fix` applies it. It rides in a
+field of its own rather than in `suggest`, because a `Suggestion` is a
+`prop: value` pair and a name is neither half of one — but it is still data on
+the finding, resolved into the same `tokenFixes` list, so `loupe fix` and the
+editor are acting on one list and not on two fix paths.
+
+**The threshold is one keystroke, and never a digit.** A candidate has to be one
+insertion, deletion or substitution from the name as written — a slip, not a
+guess — and exactly one known token may be. Two is a question, and answering it
+by array order is how a rename lands on a real token with the wrong meaning. A
+transposition is two edits under this rule and so is not offered; it stays
+reported, which is the cheap half of the trade.
+
+The digit exclusion is the part that does the real work. Token systems are built
+on scales, and `--wpds-dimension-space-20` and `--wpds-dimension-space-30` are
+one keystroke apart and mean different amounts, as are `…-red-50` and
+`…-red-60`. So a known token counts as a near miss only if it still differs once
+every digit is dropped from both names, and a step on a scale is never read as a
+spelling. On a digit this failure is both the likeliest and the least visible:
+the value is plausible, the file parses, the report goes clean, and the element
+is a size nobody asked for.
+
+**The rename covers every line of the file that names it.** The rule reports
+once per file and name, however many references there are, so rewriting only the
+line it was reported at would leave the file broken and the next run would
+report the same name again. The check carries all of those lines; the fix is one
+line-substitution per line; the finding clears only once every one of them is
+written. In the editor it is one action carrying every edit, for the same
+reason — a quick fix that clears the occurrence under the cursor and leaves the
+diagnostic standing has not fixed anything.
+
+The match is bounded on both sides by what a reference is. Only inside `var()`,
+so a `--name: …` declaration keeps defining whatever it defines; and stopping at
+the end of the name, so renaming `--wpds-dimension-space-m` cannot reach into
+the `--wpds-dimension-space-md` sitting beside it. Several references on one
+line are all rewritten rather than refused as ambiguous: unlike two matching
+declarations, they are one misspelling, and the answer for one is the answer for
+every one of them.
+
+References are collected from stylesheets and from CSS-in-JS templates, the two
+channels that write `var()` as literal text on the line. A JSX style object
+contributes none — nothing scans its values for token references — so a rename
+is never spliced at a span.
+
 **Findings cleared, not fixes applied**, is what gets counted. A collapsed
 finding holding one settled declaration and one nobody could settle is still
-there. Settled means rewritten *or* suppressed: a value `--judge` kept is as
-done with as one it replaced.
+there, and so is a misspelled name still written on a line the rewrite could not
+reach. Settled means rewritten *or* suppressed: a value `--judge` kept is as
+done with as one it replaced. The tally keys on file, line and property; a
+rename has no property and takes the empty slot, which no declaration fix can
+collide with, because every declaration a fix or a keep names came out of a
+parse and a parse has no nameless property.
 
 Suppressions written for a kept value follow the grammar's own constraints. A
 directive mutes its whole next line, so one is written only where **every**
