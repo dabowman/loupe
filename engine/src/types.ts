@@ -400,6 +400,20 @@ export interface ComponentEntry {
 	package: string;
 	status: 'recommended' | 'legacy' | 'locked' | 'experimental';
 	supersededBy?: string;
+	/**
+	 * Set only where moving the import to the package `supersededBy` names
+	 * changes the specifier and nothing else: same exported name, every prop the
+	 * old component takes accepted with the same meaning, no prop the old one did
+	 * not require, same default element and same rendering — established by
+	 * reading both implementations, never inferred from the names matching.
+	 *
+	 * There is no `false`. Absent means "nobody established it", which is also
+	 * what a verified no leaves behind, because a fix must not fire on a guess
+	 * that happens to be recorded. No WPDS entry carries it.
+	 *
+	 * Design notes: docs/design/checks.md#a-same-name-move-is-not-a-drop-in-move
+	 */
+	dropIn?: true;
 	note?: string;
 	/** Variant name → what it is for. Read only by `check --judge`. */
 	variants?: Record<string, string>;

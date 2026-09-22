@@ -580,6 +580,41 @@ checks itself by matching what it is replacing; a deletion has no such match, so
 this stands in for it, and anything that no longer looks like the rule that was
 reported is offered nothing at all.
 
+### Moving an import is not a substitution
+
+`system/superseded-component` has no fix, in the CLI or the editor, and the
+reason is that the licence for one is empty rather than that the edit is hard.
+
+A `dropIn` entry would be the licence — the registry's recorded claim that
+moving a specifier to the package `supersededBy` names changes the import line
+and nothing else. None of the WPDS entries carries it; the eight that share a
+name across the two packages were each read against Gutenberg trunk and each
+one fails, on a renamed prop, a dropped prop, a component that became a
+namespace, or a margin that went away. See
+[checks.md](checks.md#a-same-name-move-is-not-a-drop-in-move) for the pair-by-pair
+verdicts and what it would take to add one.
+
+So the machinery is not built, and the shape of it is worth writing down so the
+absence is a decision rather than a gap. It is not a token substitution with a
+different name. Every fix above replaces bytes inside one line, and the whole
+reason it can be trusted is that it has to match what it is replacing before it
+writes. Pulling a specifier out of one import and into another is an edit to a
+file's import structure: the old declaration may have to go entirely, the target
+declaration may or may not exist, an alias has to survive into the JSX below,
+and a file already importing the name from both packages, or importing it as a
+default or a namespace, can only be refused. None of that is self-checking. And
+the blast radius is not one wrong colour on one line — it is a component
+rendering differently everywhere the file uses it, behind a diff that reads like
+an import tidy.
+
+That is the same asymmetry `css/dead-class` resolves by going to the editor
+alone: an edit whose failure is invisible in the diff is priced for someone
+looking at the code. A verified `dropIn` move is not that — it is a
+substitution again, just a two-line one, and it would belong in both paths
+through one function like every other. But it needs an entry that earns the
+claim first, and manufacturing one to give the feature something to do is
+exactly the failure the field is shaped to prevent.
+
 ## `loupe serve`
 
 Every other output in this codebase answers "where in the source". This one

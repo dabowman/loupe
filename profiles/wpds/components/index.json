@@ -4,8 +4,8 @@
     "@wordpress/ui"
   ],
   "version": 1,
-  "verifiedAgainst": "WordPress/gutenberg trunk, from each component's own Storybook `componentStatus` metadata, 2026-08-25",
-  "note": "Component currency, not props. `status` says whether a component is the current best-practice choice: `recommended` (use it), `legacy` (works, but a recommended replacement now covers the job -- see `supersededBy`), `locked` (a private API Gutenberg explicitly does not recommend outside core -- can break without notice on any update), `experimental` (real, documented, but WordPress's own Storybook metadata (`componentStatus.status: 'use-with-caution'`) flags it not-yet-safe to mix with @wordpress/components -- true of almost every real WP admin codebase today, so treat as informational, not a migration target, until that gate lifts). Two components can share a name across packages with different status -- `Button` in `@wordpress/components` is `recommended` today while the newer `Button` in `@wordpress/ui` is `experimental`; check `package` too. This file is the canonical answer to 'is this the current best practice' -- the design-system MCP is for prop/usage detail on a component you've already chosen, and does not carry this maturity signal at all (it presents `experimental`-status components with the same confidence as `recommended` ones, and is itself measurably behind trunk for several @wordpress/ui additions: Dialog, AlertDialog, Drawer, IconButton, LinkButton, and the current Menu all return nothing from `get_component_details`). Re-verify against trunk (`packages/ui/src/*/stories/index.story.tsx` -> `parameters.componentStatus`) before bumping this file's version -- do not guess a status.",
+  "verifiedAgainst": "WordPress/gutenberg trunk, from each component's own Storybook `componentStatus` metadata, 2026-08-25. `dropIn` is a separate, later check: trunk at 037f7ed (2026-09-19), reading both implementations' prop types and styles for the eight same-name `@wordpress/components` -> `@wordpress/ui` moves (Text, Card, Icon, Spinner, Tooltip, VisuallyHidden, TextareaControl, InputControl). None of the eight qualified, so no entry carries the field.",
+  "note": "Component currency, not props. `status` says whether a component is the current best-practice choice: `recommended` (use it), `legacy` (works, but a recommended replacement now covers the job -- see `supersededBy`), `locked` (a private API Gutenberg explicitly does not recommend outside core -- can break without notice on any update), `experimental` (real, documented, but WordPress's own Storybook metadata (`componentStatus.status: 'use-with-caution'`) flags it not-yet-safe to mix with @wordpress/components -- true of almost every real WP admin codebase today, so treat as informational, not a migration target, until that gate lifts). Two components can share a name across packages with different status -- `Button` in `@wordpress/components` is `recommended` today while the newer `Button` in `@wordpress/ui` is `experimental`; check `package` too. This file is the canonical answer to 'is this the current best practice' -- the design-system MCP is for prop/usage detail on a component you've already chosen, and does not carry this maturity signal at all (it presents `experimental`-status components with the same confidence as `recommended` ones, and is itself measurably behind trunk for several @wordpress/ui additions: Dialog, AlertDialog, Drawer, IconButton, LinkButton, and the current Menu all return nothing from `get_component_details`). Re-verify against trunk (`packages/ui/src/*/stories/index.story.tsx` -> `parameters.componentStatus`) before bumping this file's version -- do not guess a status. `dropIn` is a much narrower claim than `status`: that moving the import changes the specifier and nothing else. A matching name is not evidence for it -- see docs/design/checks.md#a-same-name-move-is-not-a-drop-in-move.",
   "components": [
     {
       "name": "Stack",
@@ -83,7 +83,7 @@
       "package": "@wordpress/components",
       "status": "legacy",
       "supersededBy": "Text (@wordpress/ui)",
-      "note": "Same name, different package and prop surface -- @wordpress/ui's Text has only `variant`, no size/weight/color/align."
+      "note": "Not a specifier swap: @wordpress/ui's Text has only `variant` -- no size/weight/color/align/truncate -- and its `variant` names a typographic scale (`body-md`, `heading-lg`) where the old one's only value was `muted`."
     },
     {
       "name": "Heading",
@@ -106,7 +106,8 @@
       "name": "Card",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "Card (@wordpress/ui)"
+      "supersededBy": "Card (@wordpress/ui)",
+      "note": "Not a specifier swap: @wordpress/ui exports Card as a namespace (`Card.Root`, `Card.Header`, `Card.Content`, `Card.Title`), and its Root takes no `size`, `elevation`, `isBorderless` or `isRounded`."
     },
     {
       "name": "Icon",
@@ -118,7 +119,8 @@
       "name": "Icon",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "Icon (@wordpress/ui)"
+      "supersededBy": "Icon (@wordpress/ui)",
+      "note": "Not a specifier swap: @wordpress/ui's Icon requires `icon` and accepts only an SVG element -- a Dashicon name, a component or `null` no longer renders, and a Dashicon name used to default to size 20."
     },
     {
       "name": "Spinner",
@@ -129,7 +131,8 @@
       "name": "Spinner",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "Spinner (@wordpress/ui)"
+      "supersededBy": "Spinner (@wordpress/ui)",
+      "note": "Same props, different rendering: @wordpress/ui's Spinner drops the `components-spinner` class, the `width`/`height` attributes and the `margin: 5px 11px 0`, and its arc is a fixed token rather than `currentColor`."
     },
     {
       "name": "Tooltip",
@@ -140,7 +143,8 @@
       "name": "Tooltip",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "Tooltip (@wordpress/ui)"
+      "supersededBy": "Tooltip (@wordpress/ui)",
+      "note": "Not a specifier swap: @wordpress/ui exports Tooltip as a namespace (`Tooltip.Root`, `Tooltip.Trigger`, `Tooltip.Popup`); `text`, `placement`, `delay`, `shortcut` and `hideOnClick` have no equivalent prop."
     },
     {
       "name": "VisuallyHidden",
@@ -151,7 +155,8 @@
       "name": "VisuallyHidden",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "VisuallyHidden (@wordpress/ui)"
+      "supersededBy": "VisuallyHidden (@wordpress/ui)",
+      "note": "Not a specifier swap: @wordpress/ui's VisuallyHidden replaces the polymorphic `as` prop with `render`, and hides through a class in `@layer components` rather than an inline style, so unlayered consumer CSS now wins."
     },
     {
       "name": "Badge",
@@ -464,7 +469,8 @@
       "name": "TextareaControl",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "TextareaControl (@wordpress/ui)"
+      "supersededBy": "TextareaControl (@wordpress/ui)",
+      "note": "Not a specifier swap: @wordpress/ui's TextareaControl requires `label`, renames `help` to `description`, takes the event rather than the value in `onChange`, and no longer defaults `rows` to 4."
     },
     {
       "name": "NumberControl",
@@ -476,7 +482,8 @@
       "name": "InputControl",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "InputControl (@wordpress/ui)"
+      "supersededBy": "InputControl (@wordpress/ui)",
+      "note": "Not a specifier swap: @wordpress/ui's InputControl requires `label`, takes the event rather than the value in `onChange`, and drops `labelPosition`, `size`, `prefix`, `suffix`, `isPressEnterToChange` and the drag props."
     },
     {
       "name": "BoxControl",

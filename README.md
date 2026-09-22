@@ -409,6 +409,14 @@ says those aren't yet safe to recommend for most codebases, so pushing
 migration would be wrong, not just premature. That call stays in
 `loupe-authoring`, as prose, for an agent to reason about contextually.
 
+Neither rule offers a fix. Eight `legacy` entries name a replacement carrying
+the same exported name in `@wordpress/ui`, which is what makes an automatic
+import swap look available — and all eight, read against Gutenberg trunk, turn
+out not to be one: `Card` and `Tooltip` are namespaces there, `Text` reuses the
+name `variant` for a different set of values, `Spinner` loses a margin at every
+call site. The registry records that verdict in a `dropIn` field, and today
+carries it on nothing.
+
 The MCP has no maturity signal at all — it presents an `experimental`
 component with the same confidence as a `recommended` one, and it's
 measurably behind trunk for several `@wordpress/ui` additions besides. Use it

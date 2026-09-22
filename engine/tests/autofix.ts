@@ -10,18 +10,31 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import postcss from 'postcss';
 import { analyze } from '../src/analyze.ts';
 import { applyKeeps, applyTokenFixes, settledBy, tokenFixes } from '../src/autofix.ts';
-import { loadConfig } from '../src/config.ts';
+import { loadComponents } from '../src/components.ts';
+import { loadConfig, setComponentRegistry } from '../src/config.ts';
 import { judgeValues } from '../src/judge.ts';
 import { KEEP, emptyTokenSet, harvestTokenDefs, planValue } from '../src/tokens.ts';
 import { messageParts } from '../src/text.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
-import type { Finding, FixCandidate, ParseError, SkippedFix, TokenFix } from '../src/types.ts';
+import type { ComponentEntry, Finding, FixCandidate, ParseError, SkippedFix, TokenFix } from '../src/types.ts';
 
 const CONFIG = JSON.stringify({ extends: 'wpds', namespaces: { project: ['wf-'] } });
+
+/** The shipped WPDS component registry, at the path the profile loader reads. */
+const COMPONENT_REGISTRY = join(
+	dirname(fileURLToPath(import.meta.url)),
+	'..',
+	'..',
+	'profiles',
+	'wpds',
+	'components',
+	'index.json',
+);
 
 const TOKENS = `:root {
 	--wpds-border-radius-md: 4px;
@@ -55,12 +68,14 @@ interface Fixture {
 }
 
 /** Analyze a throwaway repo, apply fixes, hand back what the files now say. */
-async function fixture(files: Record<string, string>): Promise<Fixture> {
+async function fixture(files: Record<string, string>, components?: Map<string, ComponentEntry>): Promise<Fixture> {
 	const root = scratch('dsh-fix-');
 	try {
 		const all = { 'loupe.config.json': CONFIG, 'styles/tokens.css': TOKENS, ...files };
 		writeAll(root, all);
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		// The registry rides on the profile, which only a `--profiles` run merges.
+		if (components) setComponentRegistry(config, components);
 		const result = await analyze(config, { scope: null });
 		const outcome = applyTokenFixes(root, result.findings);
 		const reread = await analyze(config, { scope: null });
@@ -901,5 +916,24 @@ await check(
 		}
 	},
 );
+
+// Moving an import is not a substitution, and the licence for one — `dropIn` on
+// a registry entry — is carried by nothing the shipped registry holds. `HStack`
+// needs a new prop to move at all, so it is the case a specifier swap would get
+// silently wrong. The registry is the real one, so this fails the day an entry
+// claims `dropIn` and a fix path starts reading it.
+// See docs/design/report.md#moving-an-import-is-not-a-substitution.
+await check('a superseded component import is reported and never rewritten', async () => {
+	const registry = loadComponents(JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')));
+	assert(![...registry.values()].some((e) => e.dropIn), 'no shipped entry may claim dropIn without a fix path');
+	const src = "import { HStack } from '@wordpress/components';\n\nexport const AC = () => <HStack />;\n";
+	const { applied, findings, read, parseErrors, remaining } = await fixture({ 'src/AC.jsx': src }, registry);
+	const superseded = (f: Finding): boolean => f.rule === 'system/superseded-component';
+	assert(findings.some(superseded), 'expected the import to be reported');
+	assert(applied.length === 0, `expected no fixes, got ${JSON.stringify(applied)}`);
+	assert(read('src/AC.jsx') === src, 'the import must be left byte-identical');
+	assert(parseErrors.length === 0, `expected a clean re-parse, got ${parseErrors[0]?.message}`);
+	assert(remaining.some(superseded), 'the finding must still stand afterwards');
+});
 
 finish();
