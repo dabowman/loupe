@@ -205,9 +205,12 @@ const JS = `
       input.oninput = function () { q = input.value; pinned = null; render(); input.focus(); };
       if (q) { input.focus(); input.setSelectionRange(q.length, q.length); }
     }
-    panel.querySelectorAll('.row').forEach(function (el) {
-      var i = Number(el.getAttribute('data-i'));
-      var row = rs.filter(function (r) { return r.i === i; })[0];
+    // The nodes were just rendered from \`rs\` in order, so the row is its
+    // position — not a scan of \`rs\` per node, which is quadratic on a render
+    // that already happens on every keystroke.
+    panel.querySelectorAll('.row').forEach(function (el, k) {
+      var row = rs[k];
+      var i = row.i;
       el.onmouseenter = function () { if (pinned === null) M.highlight(i); };
       el.onmouseleave = function () { if (pinned === null) M.clear(); };
       el.onclick = function () {
@@ -222,7 +225,15 @@ const JS = `
 
   // Marks are positioned against the viewport, so a scroll moves what they
   // should be over. Re-drawing is the whole of it — the answer has not changed.
-  function reposition() { if (pinned !== null) M.highlight(pinned); }
+  //
+  // Coalesced to one frame: this is bound in the capture phase, so every
+  // scrollable element on the page feeds it, and each call re-runs the finding's
+  // selector over the whole document and rebuilds a box per match.
+  var frame = null;
+  function reposition() {
+    if (pinned === null || frame !== null) return;
+    frame = requestAnimationFrame(function () { frame = null; if (pinned !== null) M.highlight(pinned); });
+  }
   // A resize changes the answers themselves: crossing a breakpoint turns findings
   // on and off, so the boxes move *and* the list is restated. Debounced, because
   // a drag fires this continuously and each render re-runs every selector.
@@ -245,6 +256,10 @@ const JS = `
     window.removeEventListener('scroll', reposition, true);
     window.removeEventListener('resize', onResize);
     if (resizeTimer) clearTimeout(resizeTimer);
+    // Before the teardown: a frame still queued would call \`highlight\`, and that
+    // rebuilds the marks layer this is about to take out of the page.
+    if (frame !== null) { cancelAnimationFrame(frame); frame = null; }
+    pinned = null;
     M.teardown();
     host.remove();
     delete window.__loupe;

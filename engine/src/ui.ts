@@ -43,12 +43,12 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { type FSWatcher, readFileSync, watch, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
-import { applyTokenFixes, tokenFixes } from './autofix.ts';
+import { CSS_FILE, applyTokenFixes, tokenFixes } from './autofix.ts';
 import { writeBaseline } from './baseline.ts';
 import { discover, toPosix } from './discover.ts';
-import { body } from './report-view.ts';
+import { body, embed } from './report-view.ts';
 import { reportPayload } from './report.ts';
-import { messageOf } from './text.ts';
+import { messageOf, oneLine } from './text.ts';
 import type { AnalyzeResult, BaselinedResult, Config, Finding, ReportPayload } from './types.ts';
 
 /** What a write presents to prove it came from the page this process served. */
@@ -57,8 +57,7 @@ export const TOKEN_HEADER = 'x-loupe-token';
 export const REV_HEADER = 'x-loupe-rev';
 
 /** The comment a suppression directive has to be written in, per file type. Mirrors the language server's. */
-const commentFor = (file: string, text: string): string =>
-	/\.(css|scss|sass|less|pcss|postcss)$/i.test(file) ? `/* ${text} */` : `// ${text}`;
+const commentFor = (file: string, text: string): string => (CSS_FILE.test(file) ? `/* ${text} */` : `// ${text}`);
 
 /**
  * How many directories the watcher will hold open.
@@ -188,7 +187,7 @@ const CLIENT = `
     say('');
     return fetch(path, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-loupe-token': TOKEN, 'x-loupe-rev': String(rev) },
+      headers: { 'content-type': 'application/json', '${TOKEN_HEADER}': TOKEN, '${REV_HEADER}': String(rev) },
       body: JSON.stringify(payload || {})
     }).then(function (r) {
       return r.json().then(function (b) { return { ok: r.ok, status: r.status, body: b }; });
@@ -265,7 +264,10 @@ function page(opts: { token: string; root: string; editor: string }): string {
 	// Doing it here rather than in the client keeps the one platform question in
 	// the one process that knows the answer.
 	const abs = toPosix(opts.root).replace(/^(?!\/)/, '/');
-	const host = JSON.stringify({ live: true, root: abs, editor: opts.editor });
+	// Through `embed` for the reason the artifact's payload goes through it: a
+	// `</script` in a root path or an `--editor` template would end this block
+	// early, and `JSON.stringify` does not escape `<`.
+	const host = embed(JSON.stringify({ live: true, root: abs, editor: opts.editor }));
 	const toolbar = `<div class="top">
   <span class="conn" id="conn"></span>
   <span id="status">connecting…</span>
@@ -415,6 +417,14 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 				w.on('error', () => {
 					w.close();
 					watchers.delete(dir);
+					// The count goes with it. A watcher that died after `rewatch` set
+					// the number — a directory removed under the reader, or inotify
+					// hitting its ceiling — would otherwise leave the page reporting a
+					// live watch it no longer has, which is the one thing this server
+					// promises never to do.
+					watching = watchers.size || null;
+					if (state) state.watching = watching;
+					push();
 				});
 				watchers.set(dir, w);
 			} catch {
@@ -480,11 +490,44 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 	 */
 	const guard = (req: import('node:http').IncomingMessage): { status: number; error: string } | null => {
 		const origin = req.headers.origin;
-		if (typeof origin === 'string' && origin !== url) return { status: 403, error: 'cross-origin request refused' };
-		const presented = req.headers['x-loupe-token'];
+		if (typeof origin === 'string' && !isOurs(origin)) return { status: 403, error: 'cross-origin request refused' };
+		const presented = req.headers[TOKEN_HEADER];
 		if (typeof presented !== 'string' || !secretEquals(presented, token))
 			return { status: 403, error: 'this page was not served by this process' };
-		const named = Number(req.headers['x-loupe-rev']);
+		return revCheck(req);
+	};
+
+	/**
+	 * Is this origin the page we served?
+	 *
+	 * By the bound port and a loopback hostname, not by string equality with our
+	 * own spelling of the URL. `localhost` and `127.0.0.1` are the same server and
+	 * different origins, and a reader who typed the other one is not an attacker —
+	 * they would otherwise load the page, watch it go live, and have every button
+	 * refused as cross-origin.
+	 */
+	// `[::1]` as `URL` spells it, brackets and all.
+	const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
+	const isOurs = (origin: string): boolean => {
+		try {
+			const them = new URL(origin);
+			const us = new URL(url);
+			return them.protocol === 'http:' && them.port === us.port && LOOPBACK.has(them.hostname);
+		} catch {
+			return false;
+		}
+	};
+
+	/**
+	 * The revision a write was aimed at, re-read at the moment it is used.
+	 *
+	 * Checked again after the body has been read, not only in {@link guard}: the
+	 * read is an await, and a re-analysis completing inside it swaps `shown` and
+	 * bumps `rev` after the first check passed — which is exactly the plausible,
+	 * wrong write the revision exists to refuse.
+	 */
+	const revCheck = (req: import('node:http').IncomingMessage): { status: number; error: string } | null => {
+		const named = Number(req.headers[REV_HEADER]);
 		if (!Number.isInteger(named) || named !== rev)
 			return { status: 409, error: 'the tree moved since this page was drawn — reloading' };
 		return null;
@@ -520,9 +563,12 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 
 		// Byte-for-byte what `--format json` writes, exactly as `loupe serve`
 		// answers it, so anything already pointed at that endpoint works here.
+		// The payload `state` is already holding for this revision, not a second
+		// build of it: `reportPayload` walks the findings four times and clones
+		// every one, and the answer for a given `rev` cannot differ.
 		'GET /findings.json': (_req, res) => {
-			if (!shown) return send(res, 503, { error: 'still analyzing' });
-			send(res, 200, reportPayload(shown, config));
+			if (!state) return send(res, 503, { error: 'still analyzing' });
+			send(res, 200, state.payload);
 		},
 
 		'GET /events': (_req, res) => {
@@ -567,8 +613,10 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 		},
 
 		'POST /fix': async (req, res) => {
-			const payload = (await readBody(req)) as { findings?: unknown };
-			const asked = Array.isArray(payload.findings) ? payload.findings : [];
+			const payload = (await readBody(req)) as { findings?: unknown } | null;
+			const stale = revCheck(req);
+			if (stale) return send(res, stale.status, { error: stale.error });
+			const asked = Array.isArray(payload?.findings) ? payload.findings : [];
 			const picked = asked.map(findingAt).filter((f): f is Finding => f !== null);
 			if (!picked.length) return send(res, 400, { error: 'no finding named' });
 			const { applied, skipped } = applyTokenFixes(root, picked);
@@ -599,21 +647,44 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 		 * rather than committing a silence nobody signed.
 		 */
 		'POST /suppress': async (req, res) => {
-			const payload = (await readBody(req)) as { finding?: unknown; reason?: unknown };
-			const finding = findingAt(payload.finding);
-			const reason = typeof payload.reason === 'string' ? payload.reason.trim() : '';
+			const payload = (await readBody(req)) as { finding?: unknown; reason?: unknown } | null;
+			const stale = revCheck(req);
+			if (stale) return send(res, stale.status, { error: stale.error });
+			const finding = findingAt(payload?.finding);
+			const reason = typeof payload?.reason === 'string' ? payload.reason.trim() : '';
 			if (!finding) return send(res, 400, { error: 'no finding named' });
 			if (!reason) return send(res, 400, { error: 'a suppression needs a reason' });
 			// A reason spanning lines would end the comment early on the first one.
-			const oneLine = reason.replace(/\s+/g, ' ');
+			const flat = oneLine(reason);
 			const full = join(root, finding.file);
 			try {
 				const lines = readFileSync(full, 'utf8').split('\n');
 				const target = lines[finding.line - 1];
 				if (target === undefined) return send(res, 409, { error: 'that line is no longer in the file' });
+				// The two refusals `applyKeeps` makes, made here for the same reasons —
+				// this endpoint writes the same directive into the same place, so it has
+				// to decline the same writes or the two surfaces disagree about what a
+				// mute means.
+				//
+				// A directive above a rule's opening line covers the rule's whole scope,
+				// so muting one row would mute every row in that rule.
+				if (/(?:^|[^#])\{/.test(target))
+					return send(res, 409, {
+						error: "on the rule's opening line, where a directive would mute the whole rule — suppress it by hand",
+					});
+				// Only the nearest line above is read, so splicing in front of a
+				// directive already there pushes it off what it names, and the finding
+				// somebody already accepted comes back.
+				if ((shown?.directives ?? []).some((d) => d.file === finding.file && d.line === finding.line - 1))
+					return send(res, 409, {
+						error: 'the line above already carries a directive — add the rule to it by hand',
+					});
+				// Spaces and tabs only, and the line's own ending, so a CRLF file stays
+				// one. Both as `applyKeeps` does it.
 				const indent = /^[ \t]*/.exec(target)?.[0] ?? '';
-				const directive = commentFor(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${oneLine}`);
-				lines.splice(finding.line - 1, 0, `${indent}${directive}`);
+				const eol = target.endsWith('\r') ? '\r' : '';
+				const directive = commentFor(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${flat}`);
+				lines.splice(finding.line - 1, 0, `${indent}${directive}${eol}`);
 				writeFileSync(full, lines.join('\n'));
 				send(res, 200, { file: finding.file, line: finding.line, rule: finding.rule });
 			} catch (err) {
@@ -628,7 +699,23 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 	const server = createServer((req, res) => {
 		// No `access-control-allow-origin`, anywhere, on purpose: this server
 		// rewrites files, and a reader on another origin has no business here.
-		const parsed = new URL(req.url ?? '/', url);
+		//
+		// The parse is guarded because a request target is not a URL: `GET //` is
+		// well-formed HTTP and `new URL('//', base)` throws, and a throw here is in
+		// the server's own callback — uncaught, which ends the process.
+		let parsed: URL;
+		try {
+			parsed = new URL(req.url ?? '/', url);
+		} catch {
+			return send(res, 400, { error: 'not a request this server can address' });
+		}
+		// Loopback by `Host`, not only by bind address. A name that resolves to
+		// 127.0.0.1 reaches this server and is a different origin to the browser, so
+		// an attacker page that rebinds its own hostname is same-origin with it and
+		// can read the answers — including `GET /`, which carries the write token.
+		// The GET surface has no other guard, so this is the one that covers it.
+		if (!isOurs(`http://${req.headers.host ?? ''}`))
+			return send(res, 403, { error: 'this server answers loopback only' });
 		const key = `${req.method ?? 'GET'} ${parsed.pathname}`;
 		const route = routes[key];
 		if (!route) {
@@ -664,21 +751,34 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 		});
 	});
 
+	const close = (): Promise<void> =>
+		new Promise((done) => {
+			clearInterval(beat);
+			if (timer) clearTimeout(timer);
+			for (const w of watchers.values()) w.close();
+			watchers.clear();
+			for (const res of clients) res.end();
+			clients.clear();
+			server.close(() => done());
+		});
+
 	// The first analysis runs before the URL is handed back, so the page a reader
 	// opens has something to draw rather than a spinner that may never resolve.
-	await runOnce();
+	//
+	// It is also the one `runOnce` outside `drain`'s catch, so its failure has to
+	// give the socket back by hand: the caller only reports what it is thrown, and
+	// a listening server nobody holds a handle to keeps the process alive — `loupe
+	// ui` would print that it could not start and then never exit, still serving
+	// the write token on a port the retry now cannot bind.
+	try {
+		await runOnce();
+	} catch (err) {
+		await close();
+		// Re-thrown without whatever `code` the analysis error carried: the caller
+		// reads that field to explain a *bind* failure, and an EACCES from reading a
+		// source file would otherwise be reported as a port it may not bind.
+		throw new Error(`the first analysis failed — ${messageOf(err)}`);
+	}
 
-	return {
-		url,
-		close: () =>
-			new Promise((done) => {
-				clearInterval(beat);
-				if (timer) clearTimeout(timer);
-				for (const w of watchers.values()) w.close();
-				watchers.clear();
-				for (const res of clients) res.end();
-				clients.clear();
-				server.close(() => done());
-			}),
-	};
+	return { url, close };
 }

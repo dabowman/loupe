@@ -28431,6 +28431,11 @@ var CSS = `
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
+/* The live host hides panels with the hidden attribute, and the rule that
+   honours it lives in the UA origin \u2014 so any author display declaration below
+   beats it. .kpis and .filters both have one, which without this leaves a clean
+   page showing the previous run's stat tiles above its "No findings" card. */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--plane);
@@ -28576,8 +28581,16 @@ var JS = `
   // both halves: the absolute root \u2014 already slash-led, so the result is a URI
   // path on every platform \u2014 and the template, because which scheme opens is the
   // reader's choice.
+  //
+  // Function replacements, not strings: a path containing \`$&\`, \`$\\\`\`, \`$'\` or
+  // \`$$\` is a substitution pattern to \`replace\`'s string form, so a SvelteKit
+  // \`$lib\` or a Remix \`$id\` segment would be silently rewritten before it ever
+  // reached the editor.
   function href(f) {
-    return String(HOST.editor || '').replace('{path}', (HOST.root || '') + '/' + f.file).replace('{line}', f.line);
+    var path = (HOST.root || '') + '/' + f.file;
+    return String(HOST.editor || '')
+      .replace('{path}', function () { return path; })
+      .replace('{line}', function () { return String(f.line); });
   }
 
   // The live row's third cell. Empty string in the artifact, where COLS is 2 and
@@ -28791,6 +28804,16 @@ var JS = `
     // the panels. A live page crosses that line in both directions.
     if (LIVE) {
       var none = data.findings.length === 0;
+      // Before the early return: nothing in an unparsed file was checked, so the
+      // clean page is the one that needs this said most.
+      var ban = document.getElementById('banner');
+      if (ban) {
+        var unread = (data.summary && data.summary.parseErrors) || 0;
+        ban.hidden = unread === 0;
+        document.getElementById('banner-n').textContent = String(unread);
+        document.getElementById('banner-why').textContent =
+          none ? ban.getAttribute('data-clean') : ban.getAttribute('data-dirty');
+      }
       var clean = document.getElementById('clean');
       if (clean) clean.hidden = !none;
       Array.prototype.forEach.call(document.querySelectorAll('[data-when="findings"]'), function (el) {
@@ -28848,9 +28871,17 @@ var JS = `
   window.__loupeView = { load: load, render: render, state: state };
 })();
 `;
+var embed = (json) => json.replace(/</g, "\\u003c");
+var WHY_CLEAN = "a clean result covers only what could be read";
+var WHY_DIRTY = "every number below is a floor, not a total";
+var bannerBody = (n, why) => `<b>${n} file(s) could not be parsed</b> and were skipped entirely \u2014 ${why}. See <code>stylesheet/unparsed</code>.`;
 function body(opts) {
   const { payload, clean, parseErrors, live = false } = opts;
-  const banner = parseErrors ? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely \u2014 ${clean ? "a clean result covers only what could be read" : "every number below is a floor, not a total"}. See <code>stylesheet/unparsed</code>.</div>
+  const banner = live ? `  <div class="banner" id="banner" hidden data-clean="${WHY_CLEAN}" data-dirty="${WHY_DIRTY}">${bannerBody(
+    '<span id="banner-n">0</span>',
+    '<span id="banner-why"></span>'
+  )}</div>
+` : parseErrors ? `  <div class="banner">${bannerBody(String(parseErrors), clean ? WHY_CLEAN : WHY_DIRTY)}</div>
 ` : "";
   const cleanCard = `  <div class="card clean" id="clean"${live ? " hidden" : ""}><div class="v">clean</div><p class="sub">No findings.</p></div>`;
   const panels = `  <div class="kpis" id="kpis" data-when="findings"></div>
@@ -28877,7 +28908,7 @@ function body(opts) {
     <div class="bars" id="paths"></div>
   </div>
 
-  <div class="card" id="clusters-section" hidden>
+  <div class="card" id="clusters-section" data-when="findings" hidden>
     <h2>Composites rebuilt across files</h2>
     <div id="clusters"></div>
   </div>
@@ -28907,7 +28938,6 @@ ${banner}${main2}
 }
 
 // src/report-html.ts
-var embed = (json) => json.replace(/</g, "\\u003c");
 function formatHtml(result, config) {
   const payload = embed(JSON.stringify(reportPayload(result, config)));
   return `<!doctype html>
@@ -29287,7 +29317,7 @@ import { dirname as dirname5, join as join10 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // src/dom-match.ts
-var MATCH_VERSION = 1;
+var MATCH_VERSION = 2;
 var MATCH_JS = `
 (function () {
   if (window.__loupeMatch && window.__loupeMatch.version === ${MATCH_VERSION}) return;
@@ -29321,15 +29351,60 @@ var MATCH_JS = `
   // one must not take the caller down. Pseudo-elements have no node to match,
   // and a state pseudo-class says *when* a rule applies, not what to.
   //
-  // The trailing lookahead, not \b: a word boundary sits happily between
+  // The trailing lookahead, not \\b: a word boundary sits happily between
   // 'focus' and the '-' of ':focus-visible', so \\b would leave '-visible'
   // welded to the class before it \u2014 a valid selector for an element that does
   // not exist.
   var STATE = /:(?:hover|focus-within|focus-visible|focus|active|visited|target|checked|disabled|enabled|indeterminate|placeholder-shown|autofill|default|read-only|read-write|link|any-link|user-invalid|user-valid|valid|invalid|required|optional)(?![\\w-])/g;
+  var PSEUDO_EL = /::[a-zA-Z-]+(\\([^)]*\\))?/g;
+
+  // Both passes below run at the top level only, because neither a comma nor a
+  // state pseudo-class means the same thing inside brackets:
+  //
+  //   .btn:not(:disabled)   stripping the argument leaves \`:not()\`, which the
+  //                         DOM refuses \u2014 so a rule that styles most of the
+  //                         page reports as reaching none of it
+  //   [title="a,b"]         splitting and rejoining rewrites the value
+  //
+  // A scanner rather than a regex: nesting is what is being tracked, and that is
+  // the one thing a regex cannot do.
+  function scan(s, at) {
+    var depth = 0, quote = null;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (quote) {
+        if (c === '\\\\') i++;
+        else if (c === quote) quote = null;
+      } else if (c === '"' || c === "'") quote = c;
+      else if (c === '(' || c === '[') depth++;
+      else if (c === ')' || c === ']') depth--;
+      else if (depth <= 0) at(i, c);
+    }
+  }
+  function splitTop(s) {
+    var out = [], from = 0;
+    scan(s, function (i, c) { if (c === ',') { out.push(s.slice(from, i)); from = i + 1; } });
+    out.push(s.slice(from));
+    return out;
+  }
+  function stripState(s) {
+    // Collected first, applied back to front, so an earlier removal does not move
+    // the offsets of a later one.
+    var cuts = [];
+    scan(s, function (i, c) {
+      if (c !== ':') return;
+      STATE.lastIndex = i;
+      var m = STATE.exec(s);
+      if (m && m.index === i) cuts.push([i, i + m[0].length]);
+    });
+    for (var k = cuts.length - 1; k >= 0; k--) s = s.slice(0, cuts[k][0]) + s.slice(cuts[k][1]);
+    return s;
+  }
   function domSelector(sel) {
-    var parts = String(sel).split(',').map(function (s) {
-      return s.replace(/::[a-zA-Z-]+(\\([^)]*\\))?/g, '').replace(STATE, '').trim();
-    }).filter(Boolean);
+    // Pseudo-elements first and everywhere: the pattern consumes its own
+    // parentheses, so what is left nests the same way at every depth.
+    var flat = String(sel).replace(PSEUDO_EL, '');
+    var parts = splitTop(flat).map(function (s) { return stripState(s).trim(); }).filter(Boolean);
     return parts.join(', ');
   }
 
@@ -29641,9 +29716,12 @@ var JS2 = `
       input.oninput = function () { q = input.value; pinned = null; render(); input.focus(); };
       if (q) { input.focus(); input.setSelectionRange(q.length, q.length); }
     }
-    panel.querySelectorAll('.row').forEach(function (el) {
-      var i = Number(el.getAttribute('data-i'));
-      var row = rs.filter(function (r) { return r.i === i; })[0];
+    // The nodes were just rendered from \`rs\` in order, so the row is its
+    // position \u2014 not a scan of \`rs\` per node, which is quadratic on a render
+    // that already happens on every keystroke.
+    panel.querySelectorAll('.row').forEach(function (el, k) {
+      var row = rs[k];
+      var i = row.i;
       el.onmouseenter = function () { if (pinned === null) M.highlight(i); };
       el.onmouseleave = function () { if (pinned === null) M.clear(); };
       el.onclick = function () {
@@ -29658,7 +29736,15 @@ var JS2 = `
 
   // Marks are positioned against the viewport, so a scroll moves what they
   // should be over. Re-drawing is the whole of it \u2014 the answer has not changed.
-  function reposition() { if (pinned !== null) M.highlight(pinned); }
+  //
+  // Coalesced to one frame: this is bound in the capture phase, so every
+  // scrollable element on the page feeds it, and each call re-runs the finding's
+  // selector over the whole document and rebuilds a box per match.
+  var frame = null;
+  function reposition() {
+    if (pinned === null || frame !== null) return;
+    frame = requestAnimationFrame(function () { frame = null; if (pinned !== null) M.highlight(pinned); });
+  }
   // A resize changes the answers themselves: crossing a breakpoint turns findings
   // on and off, so the boxes move *and* the list is restated. Debounced, because
   // a drag fires this continuously and each render re-runs every selector.
@@ -29681,6 +29767,10 @@ var JS2 = `
     window.removeEventListener('scroll', reposition, true);
     window.removeEventListener('resize', onResize);
     if (resizeTimer) clearTimeout(resizeTimer);
+    // Before the teardown: a frame still queued would call \`highlight\`, and that
+    // rebuilds the marks layer this is about to take out of the page.
+    if (frame !== null) { cancelAnimationFrame(frame); frame = null; }
+    pinned = null;
     M.teardown();
     host.remove();
     delete window.__loupe;
@@ -29796,7 +29886,9 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync as readFileSync11, watch, writeFileSync as writeFileSync3 } from "node:fs";
 import { createServer as createServer2 } from "node:http";
 import { dirname as dirname6, join as join11 } from "node:path";
-var commentFor2 = (file, text2) => /\.(css|scss|sass|less|pcss|postcss)$/i.test(file) ? `/* ${text2} */` : `// ${text2}`;
+var TOKEN_HEADER = "x-loupe-token";
+var REV_HEADER = "x-loupe-rev";
+var commentFor2 = (file, text2) => CSS_FILE.test(file) ? `/* ${text2} */` : `// ${text2}`;
 var WATCH_CAP = 2048;
 var DEBOUNCE_MS = 140;
 var BODY_LIMIT = 64 * 1024;
@@ -29850,7 +29942,7 @@ var CLIENT = `
     say('');
     return fetch(path, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-loupe-token': TOKEN, 'x-loupe-rev': String(rev) },
+      headers: { 'content-type': 'application/json', '${TOKEN_HEADER}': TOKEN, '${REV_HEADER}': String(rev) },
       body: JSON.stringify(payload || {})
     }).then(function (r) {
       return r.json().then(function (b) { return { ok: r.ok, status: r.status, body: b }; });
@@ -29916,7 +30008,7 @@ var CLIENT = `
 `;
 function page(opts) {
   const abs = toPosix(opts.root).replace(/^(?!\/)/, "/");
-  const host = JSON.stringify({ live: true, root: abs, editor: opts.editor });
+  const host = embed(JSON.stringify({ live: true, root: abs, editor: opts.editor }));
   const toolbar = `<div class="top">
   <span class="conn" id="conn"></span>
   <span id="status">connecting\u2026</span>
@@ -30046,6 +30138,9 @@ async function ui(opts) {
         w.on("error", () => {
           w.close();
           watchers.delete(dir);
+          watching = watchers.size || null;
+          if (state) state.watching = watching;
+          push();
         });
         watchers.set(dir, w);
       } catch {
@@ -30087,11 +30182,24 @@ async function ui(opts) {
   });
   const guard = (req) => {
     const origin = req.headers.origin;
-    if (typeof origin === "string" && origin !== url) return { status: 403, error: "cross-origin request refused" };
-    const presented = req.headers["x-loupe-token"];
+    if (typeof origin === "string" && !isOurs(origin)) return { status: 403, error: "cross-origin request refused" };
+    const presented = req.headers[TOKEN_HEADER];
     if (typeof presented !== "string" || !secretEquals(presented, token))
       return { status: 403, error: "this page was not served by this process" };
-    const named = Number(req.headers["x-loupe-rev"]);
+    return revCheck(req);
+  };
+  const LOOPBACK = /* @__PURE__ */ new Set(["127.0.0.1", "localhost", "[::1]"]);
+  const isOurs = (origin) => {
+    try {
+      const them = new URL(origin);
+      const us = new URL(url);
+      return them.protocol === "http:" && them.port === us.port && LOOPBACK.has(them.hostname);
+    } catch {
+      return false;
+    }
+  };
+  const revCheck = (req) => {
+    const named = Number(req.headers[REV_HEADER]);
     if (!Number.isInteger(named) || named !== rev)
       return { status: 409, error: "the tree moved since this page was drawn \u2014 reloading" };
     return null;
@@ -30113,9 +30221,12 @@ async function ui(opts) {
     },
     // Byte-for-byte what `--format json` writes, exactly as `loupe serve`
     // answers it, so anything already pointed at that endpoint works here.
+    // The payload `state` is already holding for this revision, not a second
+    // build of it: `reportPayload` walks the findings four times and clones
+    // every one, and the answer for a given `rev` cannot differ.
     "GET /findings.json": (_req, res) => {
-      if (!shown) return send(res, 503, { error: "still analyzing" });
-      send(res, 200, reportPayload(shown, config));
+      if (!state) return send(res, 503, { error: "still analyzing" });
+      send(res, 200, state.payload);
     },
     "GET /events": (_req, res) => {
       res.writeHead(200, {
@@ -30159,7 +30270,9 @@ async function ui(opts) {
     },
     "POST /fix": async (req, res) => {
       const payload = await readBody(req);
-      const asked = Array.isArray(payload.findings) ? payload.findings : [];
+      const stale = revCheck(req);
+      if (stale) return send(res, stale.status, { error: stale.error });
+      const asked = Array.isArray(payload?.findings) ? payload.findings : [];
       const picked = asked.map(findingAt).filter((f) => f !== null);
       if (!picked.length) return send(res, 400, { error: "no finding named" });
       const { applied, skipped } = applyTokenFixes(root2, picked);
@@ -30189,19 +30302,30 @@ async function ui(opts) {
      */
     "POST /suppress": async (req, res) => {
       const payload = await readBody(req);
-      const finding = findingAt(payload.finding);
-      const reason = typeof payload.reason === "string" ? payload.reason.trim() : "";
+      const stale = revCheck(req);
+      if (stale) return send(res, stale.status, { error: stale.error });
+      const finding = findingAt(payload?.finding);
+      const reason = typeof payload?.reason === "string" ? payload.reason.trim() : "";
       if (!finding) return send(res, 400, { error: "no finding named" });
       if (!reason) return send(res, 400, { error: "a suppression needs a reason" });
-      const oneLine2 = reason.replace(/\s+/g, " ");
+      const flat = oneLine(reason);
       const full = join11(root2, finding.file);
       try {
         const lines = readFileSync11(full, "utf8").split("\n");
         const target = lines[finding.line - 1];
         if (target === void 0) return send(res, 409, { error: "that line is no longer in the file" });
+        if (/(?:^|[^#])\{/.test(target))
+          return send(res, 409, {
+            error: "on the rule's opening line, where a directive would mute the whole rule \u2014 suppress it by hand"
+          });
+        if ((shown?.directives ?? []).some((d) => d.file === finding.file && d.line === finding.line - 1))
+          return send(res, 409, {
+            error: "the line above already carries a directive \u2014 add the rule to it by hand"
+          });
         const indent = /^[ \t]*/.exec(target)?.[0] ?? "";
-        const directive = commentFor2(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${oneLine2}`);
-        lines.splice(finding.line - 1, 0, `${indent}${directive}`);
+        const eol = target.endsWith("\r") ? "\r" : "";
+        const directive = commentFor2(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${flat}`);
+        lines.splice(finding.line - 1, 0, `${indent}${directive}${eol}`);
         writeFileSync3(full, lines.join("\n"));
         send(res, 200, { file: finding.file, line: finding.line, rule: finding.rule });
       } catch (err) {
@@ -30211,7 +30335,14 @@ async function ui(opts) {
     }
   };
   const server = createServer2((req, res) => {
-    const parsed = new URL(req.url ?? "/", url);
+    let parsed;
+    try {
+      parsed = new URL(req.url ?? "/", url);
+    } catch {
+      return send(res, 400, { error: "not a request this server can address" });
+    }
+    if (!isOurs(`http://${req.headers.host ?? ""}`))
+      return send(res, 403, { error: "this server answers loopback only" });
     const key = `${req.method ?? "GET"} ${parsed.pathname}`;
     const route = routes[key];
     if (!route) {
@@ -30238,19 +30369,22 @@ async function ui(opts) {
       done();
     });
   });
-  await runOnce();
-  return {
-    url,
-    close: () => new Promise((done) => {
-      clearInterval(beat);
-      if (timer) clearTimeout(timer);
-      for (const w of watchers.values()) w.close();
-      watchers.clear();
-      for (const res of clients) res.end();
-      clients.clear();
-      server.close(() => done());
-    })
-  };
+  const close = () => new Promise((done) => {
+    clearInterval(beat);
+    if (timer) clearTimeout(timer);
+    for (const w of watchers.values()) w.close();
+    watchers.clear();
+    for (const res of clients) res.end();
+    clients.clear();
+    server.close(() => done());
+  });
+  try {
+    await runOnce();
+  } catch (err) {
+    await close();
+    throw new Error(`the first analysis failed \u2014 ${messageOf(err)}`);
+  }
+  return { url, close };
 }
 
 // src/detect.ts
@@ -31245,6 +31379,14 @@ ${dim("  Ctrl-C to stop.")}
 `);
       return EXIT.CANNOT_RUN;
     }
+    const unhonored = ["severity", "files", "changed", "judge"].filter((f) => args.flags[f]);
+    if (unhonored.length) {
+      fail(
+        `loupe: ui does not take ${unhonored.map((f) => `--${f}`).join(" ")} \u2014 it shows the whole tree; filter in the page, or use \`check\` for a narrowed run
+`
+      );
+      return EXIT.CANNOT_RUN;
+    }
     const present = presenter(note);
     let handle;
     try {
@@ -31256,7 +31398,10 @@ ${dim("  Ctrl-C to stop.")}
         present,
         baselineTarget: baselinePath(root2, args.flags.baseline || config.baselinePath),
         baselineFound: () => findExistingBaseline(root2, args.flags.baseline, config.baselinePath).found,
-        editor: args.flags.editor ?? "vscode://file{path}:{line}",
+        // `||`, not `??`: an empty `--editor=` is not a template. Taken as
+        // nullish-only it reaches the page as '', and every location renders
+        // `href=""` — a link that reloads the report instead of opening a file.
+        editor: args.flags.editor || "vscode://file{path}:{line}",
         log: (line) => process.stderr.write(line)
       });
     } catch (err) {

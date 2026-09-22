@@ -26,8 +26,13 @@
  * Design notes: docs/design/report.md#resolving-a-finding-to-elements
  */
 
-/** Bumped when the shape of `window.__loupeMatch` changes. A reader checks it. */
-export const MATCH_VERSION = 1;
+/**
+ * Bumped when the shape of `window.__loupeMatch` — or the answer it gives —
+ * changes. A reader checks it, and the install guard below refuses to replace a
+ * copy that already matches, so this is the only thing that evicts a stale
+ * matcher from a page an older loupe already touched.
+ */
+export const MATCH_VERSION = 2;
 
 export const MATCH_JS = `
 (function () {
@@ -62,15 +67,60 @@ export const MATCH_JS = `
   // one must not take the caller down. Pseudo-elements have no node to match,
   // and a state pseudo-class says *when* a rule applies, not what to.
   //
-  // The trailing lookahead, not \b: a word boundary sits happily between
+  // The trailing lookahead, not \\b: a word boundary sits happily between
   // 'focus' and the '-' of ':focus-visible', so \\b would leave '-visible'
   // welded to the class before it — a valid selector for an element that does
   // not exist.
   var STATE = /:(?:hover|focus-within|focus-visible|focus|active|visited|target|checked|disabled|enabled|indeterminate|placeholder-shown|autofill|default|read-only|read-write|link|any-link|user-invalid|user-valid|valid|invalid|required|optional)(?![\\w-])/g;
+  var PSEUDO_EL = /::[a-zA-Z-]+(\\([^)]*\\))?/g;
+
+  // Both passes below run at the top level only, because neither a comma nor a
+  // state pseudo-class means the same thing inside brackets:
+  //
+  //   .btn:not(:disabled)   stripping the argument leaves \`:not()\`, which the
+  //                         DOM refuses — so a rule that styles most of the
+  //                         page reports as reaching none of it
+  //   [title="a,b"]         splitting and rejoining rewrites the value
+  //
+  // A scanner rather than a regex: nesting is what is being tracked, and that is
+  // the one thing a regex cannot do.
+  function scan(s, at) {
+    var depth = 0, quote = null;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (quote) {
+        if (c === '\\\\') i++;
+        else if (c === quote) quote = null;
+      } else if (c === '"' || c === "'") quote = c;
+      else if (c === '(' || c === '[') depth++;
+      else if (c === ')' || c === ']') depth--;
+      else if (depth <= 0) at(i, c);
+    }
+  }
+  function splitTop(s) {
+    var out = [], from = 0;
+    scan(s, function (i, c) { if (c === ',') { out.push(s.slice(from, i)); from = i + 1; } });
+    out.push(s.slice(from));
+    return out;
+  }
+  function stripState(s) {
+    // Collected first, applied back to front, so an earlier removal does not move
+    // the offsets of a later one.
+    var cuts = [];
+    scan(s, function (i, c) {
+      if (c !== ':') return;
+      STATE.lastIndex = i;
+      var m = STATE.exec(s);
+      if (m && m.index === i) cuts.push([i, i + m[0].length]);
+    });
+    for (var k = cuts.length - 1; k >= 0; k--) s = s.slice(0, cuts[k][0]) + s.slice(cuts[k][1]);
+    return s;
+  }
   function domSelector(sel) {
-    var parts = String(sel).split(',').map(function (s) {
-      return s.replace(/::[a-zA-Z-]+(\\([^)]*\\))?/g, '').replace(STATE, '').trim();
-    }).filter(Boolean);
+    // Pseudo-elements first and everywhere: the pattern consumes its own
+    // parentheses, so what is left nests the same way at every depth.
+    var flat = String(sel).replace(PSEUDO_EL, '');
+    var parts = splitTop(flat).map(function (s) { return stripState(s).trim(); }).filter(Boolean);
     return parts.join(', ');
   }
 

@@ -62,6 +62,7 @@ than using it.
 | `engine/` | `loupe` — the conformance engine |
 | `editors/vscode/` | The VS Code / Cursor launcher for `loupe lsp`. Other editors need no extension |
 | `integrations/wordpress/` | A dev mu-plugin that loads the `serve` overlay itself, so wp-admin is not a bookmarklet click per screen |
+| `integrations/devtools/` | A Chrome DevTools extension: a panel listing every finding resolved against the page, and an Elements sidebar saying what is wrong with the selected node |
 | `docs/design/` | Design notes: why the engine is built the way it is, and the measurements behind its tuned numbers |
 
 The three skills are design-system agnostic: each one starts at `loupe status`

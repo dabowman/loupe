@@ -23,7 +23,8 @@
  * A live affordance leaking into a file nobody can click is silent.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { request } from 'node:http';
 import { join } from 'node:path';
 import { analyze } from '../src/analyze.ts';
 import { tokenFixes } from '../src/autofix.ts';
@@ -52,8 +53,14 @@ export default () => (
   <Card className="wf-card"><Text className="wf-label">hi</Text></Card>
 );
 `,
+	// `.wf-label` is written open rather than on one line so its findings do not
+	// sit on the line that opens the rule. A directive there covers the rule's
+	// whole scope, which both `applyKeeps` and `POST /suppress` refuse — see the
+	// refusal this suite checks below.
 	'styles/app.css': `.wf-card { padding: 8px; border-radius: 4px; }
-.wf-label { margin-top: 13px; }
+.wf-label {
+	margin-top: 13px;
+}
 `,
 };
 
@@ -105,6 +112,29 @@ async function post(
 	if (opts.origin !== undefined) headers.origin = opts.origin;
 	const res = await fetch(`${U}${path}`, { method: 'POST', headers, body: JSON.stringify(payload) });
 	return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}
+
+const port = new URL(U).port;
+
+/**
+ * A GET with a `Host` of our choosing.
+ *
+ * `fetch` will not send one — `Host` is a forbidden header name — and the header
+ * is the whole point here: it is what a rebound name arrives as.
+ */
+function asHost(host: string, path: string): Promise<{ status: number; body: string }> {
+	return new Promise((done, bad) => {
+		const req = request({ host: '127.0.0.1', port, path, method: 'GET', headers: { host } }, (res) => {
+			let body = '';
+			res.setEncoding('utf8');
+			res.on('data', (c: string) => {
+				body += c;
+			});
+			res.on('end', () => done({ status: res.statusCode ?? 0, body }));
+		});
+		req.on('error', bad);
+		req.end();
+	});
 }
 
 const token = await pageToken();
@@ -229,6 +259,23 @@ await check('a write naming a stale revision is refused, and writes nothing', as
 	assert(read('styles/app.css') === before, 'the refusal had already written');
 });
 
+await check('a request for some other host is refused, on every method', async () => {
+	// Binding loopback stops packets from the network; it does not stop a name
+	// that resolves to 127.0.0.1. A page on such a name is same-origin with this
+	// server to the browser, and `GET /` carries the write token — so the host is
+	// checked before the route, and on reads as well as writes.
+	const rebound = await asHost('attacker.example', '/state');
+	assert(rebound.status === 403, `a foreign Host answered ${rebound.status}`);
+	const page = await asHost('attacker.example:1234', '/');
+	assert(page.status === 403, `the page answered ${page.status} to a foreign Host`);
+	assert(!page.body.includes('var TOKEN'), 'the refusal still handed over the secret');
+	// The spellings that are this server still work.
+	for (const h of [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]) {
+		const good = await asHost(h, '/state');
+		assert(good.status === 200, `Host ${h} answered ${good.status}`);
+	}
+});
+
 await check('a suppression with no reason is refused — the silence has to be signed', async () => {
 	const blank = await post('/suppress', { finding: 0, reason: '   ' }, { token, rev });
 	assert(blank.status === 400, `blank reason answered ${blank.status}`);
@@ -238,6 +285,45 @@ await check('a suppression with no reason is refused — the silence has to be s
 await check('an index outside the payload names nothing', async () => {
 	const res = await post('/fix', { findings: [9999] }, { token, rev });
 	assert(res.status === 400, `answered ${res.status}`);
+});
+
+await check('a suppression that would mute more than the row is refused', async () => {
+	// A directive above a rule's opening line covers the rule's whole scope, so
+	// muting one row would mute every row in it. `applyKeeps` refuses exactly this
+	// and says why; a second implementation that wrote it anyway would answer 200
+	// and silently retire findings nobody looked at.
+	const s = await state();
+	// Written here rather than relied on from the fixture, so the refusal is
+	// tested against a line that certainly opens a rule.
+	writeFileSync(join(root, 'styles/wide.css'), '.wf-card { margin-left: 11px; margin-right: 13px; }\n');
+	const withIt = await settled(s.rev);
+	const i = withIt.payload.findings.findIndex((f) => f.file === 'styles/wide.css');
+	assert(i >= 0, 'the new file produced no finding');
+	const before = read('styles/wide.css');
+	const res = await post('/suppress', { finding: i, reason: 'legacy' }, { token, rev: withIt.rev });
+	assert(res.status === 409, `answered ${res.status}: ${JSON.stringify(res.body)}`);
+	assert(String(res.body.error).includes('mute the whole rule'), `unexpected refusal: ${String(res.body.error)}`);
+	assert(read('styles/wide.css') === before, 'the refusal had already written');
+	rmSync(join(root, 'styles/wide.css'));
+	await settled(withIt.rev);
+});
+
+await check("a suppression keeps the file's own line ending", async () => {
+	// `applyKeeps` carries the line's `\r` onto the directive it inserts. A writer
+	// that split on `\n` and joined on `\n` leaves one LF-only line in a CRLF
+	// file — the one write path that would change a file's line-ending convention
+	// on the reader's behalf.
+	const s = await state();
+	writeFileSync(join(root, 'styles/crlf.css'), '.wf-card {\r\n\tmargin-left: 11px;\r\n}\r\n');
+	const withIt = await settled(s.rev);
+	const i = withIt.payload.findings.findIndex((f) => f.file === 'styles/crlf.css');
+	assert(i >= 0, 'the CRLF file produced no finding');
+	const res = await post('/suppress', { finding: i, reason: 'legacy' }, { token, rev: withIt.rev });
+	assert(res.status === 200, `answered ${res.status}: ${JSON.stringify(res.body)}`);
+	const text = read('styles/crlf.css');
+	assert(!/(^|[^\r])\n/.test(text), `a line lost its carriage return:\n${JSON.stringify(text)}`);
+	rmSync(join(root, 'styles/crlf.css'));
+	await settled(withIt.rev);
 });
 
 // ── the writes ──────────────────────────────────────────────────────────────
@@ -316,7 +402,11 @@ await check('baseline records the whole backlog, not the part still on screen', 
 	writeFileSync(join(root, 'styles/late.css'), '.wf-card { margin-top: 19px; }\n');
 	const withNew = await settled(quiet.rev);
 	assert(withNew.payload.summary.total > 0, 'the new file produced no finding to distinguish the two sets');
-	assert(withNew.payload.summary.total < accepted + withNew.payload.summary.total, 'setup is degenerate');
+	// (There was a `total < accepted + total` guard here. It reduces to
+	// `accepted > 0`, which is already asserted above, so it checked nothing. The
+	// degeneracy it meant to rule out — the new findings collapsing into entries
+	// the baseline already holds — is caught by the entry count at the end, which
+	// is where it belongs.)
 
 	const second = await post('/baseline', {}, { token, rev: withNew.rev });
 	assert(second.status === 200, `second baseline answered ${second.status}`);

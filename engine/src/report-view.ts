@@ -19,7 +19,8 @@
  *   present  the live host. It fetches, calls `load` on every re-analysis, and
  *            listens for the clicks the action cell emits.
  *
- * Design notes: docs/design/report.md#the-html-report
+ * Design notes: docs/design/report.md#loupe-ui — the argument for one renderer
+ * with two hosts. The artifact's own reasoning is #the-html-report.
  */
 
 /**
@@ -50,6 +51,11 @@ const CSS = `
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
+/* The live host hides panels with the hidden attribute, and the rule that
+   honours it lives in the UA origin — so any author display declaration below
+   beats it. .kpis and .filters both have one, which without this leaves a clean
+   page showing the previous run's stat tiles above its "No findings" card. */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--plane);
@@ -208,8 +214,16 @@ const JS = `
   // both halves: the absolute root — already slash-led, so the result is a URI
   // path on every platform — and the template, because which scheme opens is the
   // reader's choice.
+  //
+  // Function replacements, not strings: a path containing \`$&\`, \`$\\\`\`, \`$'\` or
+  // \`$$\` is a substitution pattern to \`replace\`'s string form, so a SvelteKit
+  // \`$lib\` or a Remix \`$id\` segment would be silently rewritten before it ever
+  // reached the editor.
   function href(f) {
-    return String(HOST.editor || '').replace('{path}', (HOST.root || '') + '/' + f.file).replace('{line}', f.line);
+    var path = (HOST.root || '') + '/' + f.file;
+    return String(HOST.editor || '')
+      .replace('{path}', function () { return path; })
+      .replace('{line}', function () { return String(f.line); });
   }
 
   // The live row's third cell. Empty string in the artifact, where COLS is 2 and
@@ -423,6 +437,16 @@ const JS = `
     // the panels. A live page crosses that line in both directions.
     if (LIVE) {
       var none = data.findings.length === 0;
+      // Before the early return: nothing in an unparsed file was checked, so the
+      // clean page is the one that needs this said most.
+      var ban = document.getElementById('banner');
+      if (ban) {
+        var unread = (data.summary && data.summary.parseErrors) || 0;
+        ban.hidden = unread === 0;
+        document.getElementById('banner-n').textContent = String(unread);
+        document.getElementById('banner-why').textContent =
+          none ? ban.getAttribute('data-clean') : ban.getAttribute('data-dirty');
+      }
       var clean = document.getElementById('clean');
       if (clean) clean.hidden = !none;
       Array.prototype.forEach.call(document.querySelectorAll('[data-when="findings"]'), function (el) {
@@ -491,6 +515,33 @@ export interface BodyOptions {
 }
 
 /**
+ * Make a JSON string safe to sit inside a `<script>` block.
+ *
+ * The block's content is raw text: the only thing that can end it early is the
+ * literal `</script`, and the only thing that can open a comment is `<!--`.
+ * Escaping every `<` closes both, and is safe wholesale because in JSON a `<`
+ * can only occur inside a string, where it means the same character.
+ *
+ * Here rather than in one host because both of them embed a block — the
+ * artifact its payload, the live page its `window.__loupe` bootstrap — and a
+ * rule only one of them applied is a rule the other was going to get wrong.
+ */
+export const embed = (json: string): string => json.replace(/</g, '\\u003c');
+
+/**
+ * The unparsed-files banner, in one place.
+ *
+ * Both hosts say this and both must say it the same way: the artifact writes it
+ * at generation, the live page writes it on every render from
+ * `summary.parseErrors`. The two clauses are constants because the live page
+ * reads them off the element rather than carrying its own copy.
+ */
+const WHY_CLEAN = 'a clean result covers only what could be read';
+const WHY_DIRTY = 'every number below is a floor, not a total';
+const bannerBody = (n: string, why: string): string =>
+	`<b>${n} file(s) could not be parsed</b> and were skipped entirely — ${why}. See <code>stylesheet/unparsed</code>.`;
+
+/**
  * The page body — everything between the markers, so a host that supplies its
  * own shell can lift it out whole.
  */
@@ -502,11 +553,19 @@ export function body(opts: BodyOptions): string {
 	//
 	// Unparsed files are named before anything else: nothing in them was checked,
 	// so every count below is a floor rather than a total.
-	const banner = parseErrors
-		? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely — ${
-				clean ? 'a clean result covers only what could be read' : 'every number below is a floor, not a total'
-			}. See <code>stylesheet/unparsed</code>.</div>\n`
-		: '';
+	//
+	// The artifact settles this once, at generation. A live page crosses between
+	// the two clauses and between having a banner and not, so it ships the shell
+	// hidden and carries both clauses as data — one copy of each sentence, read by
+	// `render` rather than written out a second time in the client.
+	const banner = live
+		? `  <div class="banner" id="banner" hidden data-clean="${WHY_CLEAN}" data-dirty="${WHY_DIRTY}">${bannerBody(
+				'<span id="banner-n">0</span>',
+				'<span id="banner-why"></span>',
+			)}</div>\n`
+		: parseErrors
+			? `  <div class="banner">${bannerBody(String(parseErrors), clean ? WHY_CLEAN : WHY_DIRTY)}</div>\n`
+			: '';
 	// A live page ships both and toggles, because it crosses between them; the
 	// artifact ships whichever one its run produced and never the other.
 	const cleanCard = `  <div class="card clean" id="clean"${live ? ' hidden' : ''}><div class="v">clean</div><p class="sub">No findings.</p></div>`;
@@ -534,7 +593,7 @@ export function body(opts: BodyOptions): string {
     <div class="bars" id="paths"></div>
   </div>
 
-  <div class="card" id="clusters-section" hidden>
+  <div class="card" id="clusters-section" data-when="findings" hidden>
     <h2>Composites rebuilt across files</h2>
     <div id="clusters"></div>
   </div>

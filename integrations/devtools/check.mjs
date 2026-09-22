@@ -158,25 +158,40 @@ const SHIM = (port) => `
 // Playwright is not a dependency of this repo — nothing else here needs a
 // browser — so it is resolved from wherever the runner has one and the failure
 // says how to provide it rather than reading as a bug in the extension.
+/** Everything started above this point, for the paths that fail before the `try` below. */
+const abandon = (why) => {
+	process.stderr.write(why);
+	serve.kill();
+	files.close();
+	rmSync(root, { recursive: true, force: true });
+	process.exit(2);
+};
+
 let chromium;
 try {
 	// LOUPE_PLAYWRIGHT names an install outside this tree — ESM resolution does
 	// not read NODE_PATH, so a path is the only way to point at one.
 	({ chromium } = await import(process.env.LOUPE_PLAYWRIGHT || 'playwright'));
 } catch {
-	process.stderr.write(
+	abandon(
 		'integrations/devtools/check.mjs needs Playwright, which this repo deliberately does not depend on.\n' +
 			'  npm i -g playwright   (or run with NODE_PATH pointed at an install)\n' +
 			'  Set LOUPE_CHROMIUM to a browser binary if Playwright cannot find one.\n',
 	);
-	serve.kill();
-	files.close();
-	rmSync(root, { recursive: true, force: true });
-	process.exit(2);
 }
-const browser = await chromium.launch(
-	process.env.LOUPE_CHROMIUM ? { executablePath: process.env.LOUPE_CHROMIUM } : {},
-);
+// Also guarded: Playwright resolving without a browser behind it is the ordinary
+// first-run state, and an unhandled rejection here skips the `finally` below —
+// leaving the spawned `loupe serve` reparented and still holding its port, and a
+// temp project behind, once per attempt.
+let browser;
+try {
+	browser = await chromium.launch(process.env.LOUPE_CHROMIUM ? { executablePath: process.env.LOUPE_CHROMIUM } : {});
+} catch (err) {
+	abandon(
+		`integrations/devtools/check.mjs could not start a browser: ${err.message}\n` +
+			'  npx playwright install chromium   (or set LOUPE_CHROMIUM to a binary)\n',
+	);
+}
 const errors = [];
 
 /**

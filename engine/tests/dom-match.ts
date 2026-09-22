@@ -57,7 +57,10 @@ await check('a state pseudo-class is stripped whole, never half', () => {
 		// lookahead over a mis-escaped class lets it match — leaving `.aed`.
 		['.a:hovered', '.a:hovered'],
 		['.a:focused', '.a:focused'],
-		['.a:activех', '.a:activех'],
+		// ASCII, deliberately: this case was once written with Cyrillic homoglyphs
+		// for `e` and `x`, which `STATE`'s alternation cannot match at all — so it
+		// passed without ever reaching the lookahead it exists to exercise.
+		['.a:activex', '.a:activex'],
 		// Not a state: it says what to match, not when.
 		['.a:not(.x)', '.a:not(.x)'],
 		['.a:nth-child(2)', '.a:nth-child(2)'],
@@ -70,7 +73,7 @@ await check('a state pseudo-class is stripped whole, never half', () => {
 });
 
 await check('a pseudo-element is stripped, with its argument', () => {
-	const PE = regexIn(/replace\((\/::[^/]*\/g),/, 'its pseudo-element pattern');
+	const PE = regexIn(/var PSEUDO_EL = (\/::[^/]*\/g);/, 'its pseudo-element pattern');
 	const cases: [string, string][] = [
 		['.a::before', '.a'],
 		['.a::after', '.a'],
@@ -81,6 +84,36 @@ await check('a pseudo-element is stripped, with its argument', () => {
 	for (const [input, want] of cases) {
 		PE.lastIndex = 0;
 		const got = input.replace(PE, '');
+		assert(got === want, `${input} -> ${got}, wanted ${want}`);
+	}
+});
+
+await check('a comma and a state pseudo-class are read at the top level only', () => {
+	// The failure this guards is silent and loud at once: `.btn:not(:disabled)`
+	// stripped naively becomes `.btn:not()`, which `querySelectorAll` refuses, and
+	// the refusal is caught and reported as "0 on page" — so a rule that styles
+	// most of the page is shown as reaching none of it.
+	//
+	// Run against the shipped source rather than a copy: the point is what the
+	// page will do, not what this file thinks it does.
+	const fn = new Function('window', 'document', `${MATCH_JS}; return window.__loupeMatch.domSelector;`);
+	const domSelector = fn({}, undefined) as (s: string) => string;
+	const cases: [string, string][] = [
+		['.btn:not(:disabled)', '.btn:not(:disabled)'],
+		['input:not(:checked)', 'input:not(:checked)'],
+		['.a:is(:hover, .b)', '.a:is(:hover, .b)'],
+		// Top-level state still goes, including alongside a nested one.
+		['.btn:not(.x):hover', '.btn:not(.x)'],
+		['.a:hover, .b:focus', '.a, .b'],
+		// A comma inside brackets is part of one selector, not a separator.
+		['[title="a,b"]', '[title="a,b"]'],
+		['.a:is(h1, h2) .b', '.a:is(h1, h2) .b'],
+		// Pseudo-elements still go, with their argument, at any depth.
+		['.a::before', '.a'],
+		['.a::part(label):hover', '.a'],
+	];
+	for (const [input, want] of cases) {
+		const got = domSelector(input);
 		assert(got === want, `${input} -> ${got}, wanted ${want}`);
 	}
 });

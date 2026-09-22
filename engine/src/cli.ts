@@ -917,6 +917,19 @@ async function main(): Promise<number> {
 			fail(`loupe: --port wants a port number, got ${args.flags.port}\n`);
 			return EXIT.CANNOT_RUN;
 		}
+		// Refused rather than ignored. This command re-analyzes the whole tree on
+		// every save and shows everything it finds, so a narrowing flag has nowhere
+		// to apply — and a page that silently showed 300 findings under
+		// `--severity error` would be reporting something other than what it was
+		// asked for. Filter in the page instead; the toolbar does both.
+		const unhonored = (['severity', 'files', 'changed', 'judge'] as const).filter((f) => args.flags[f]);
+		if (unhonored.length) {
+			fail(
+				`loupe: ui does not take ${unhonored.map((f) => `--${f}`).join(' ')} — it shows the whole tree; ` +
+					'filter in the page, or use `check` for a narrowed run\n',
+			);
+			return EXIT.CANNOT_RUN;
+		}
 		const present = presenter(note);
 		let handle: Awaited<ReturnType<typeof ui>>;
 		try {
@@ -928,7 +941,10 @@ async function main(): Promise<number> {
 				present,
 				baselineTarget: baselinePath(root, args.flags.baseline || config.baselinePath),
 				baselineFound: () => findExistingBaseline(root, args.flags.baseline, config.baselinePath).found,
-				editor: args.flags.editor ?? 'vscode://file{path}:{line}',
+				// `||`, not `??`: an empty `--editor=` is not a template. Taken as
+				// nullish-only it reaches the page as '', and every location renders
+				// `href=""` — a link that reloads the report instead of opening a file.
+				editor: args.flags.editor || 'vscode://file{path}:{line}',
 				log: (line) => process.stderr.write(line),
 			});
 		} catch (err) {

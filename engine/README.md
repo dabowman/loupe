@@ -990,16 +990,20 @@ off for everyone.
 ## Tests
 
 ```bash
-npm test        # typecheck, then all six suites
+npm test        # typecheck, then every suite
 ```
 
-Six suites, in the order `npm test` runs them: `tests/run.ts` (fixtures, one
+Eleven suites, in the order `npm test` runs them: `tests/run.ts` (fixtures, one
 directory per behaviour), `tests/detect.ts` (inference), `tests/regressions.ts`
 (failures that reported success), `tests/features.ts` (the three channels and the
 two cross-file rules), `tests/autofix.ts` (the fix path, where a wrong
-substitution is invisible), and `tests/multi-ds.ts` (registry scoping and profile
-selection — which design system answers for a file). `tests/harness.ts` is not a
-suite: it holds the `check`/`assert`/scratch-repo helpers the six share, typed
-once instead of copied six times.
+substitution is invisible), `tests/multi-ds.ts` (registry scoping and profile
+selection — which design system answers for a file), `tests/report.ts` (the
+formatters and the HTML artifact), `tests/dom-match.ts` (the shared matcher's
+escaping, and whether the extension's vendored copy has drifted),
+`tests/serve.ts` (the read-only overlay server), `tests/ui.ts` (the writing
+server, mostly its refusals), and `tests/lsp.ts` (the language server).
+`tests/harness.ts` is not a suite: it holds the `check`/`assert`/scratch-repo
+helpers they share, typed once instead of copied eleven times.
 Once behaviour is config-driven, these are the only thing standing between a
 preset edit and a rule silently switching itself off.

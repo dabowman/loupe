@@ -88,6 +88,20 @@ function render(answer) {
 }
 
 el('refresh').onclick = () => void load();
+// The panel owns the port box; this pane has none, so it follows the stored
+// value. Without this it keeps asking the port it read at startup and says the
+// server is missing, while the panel next to it is connected to the new one.
+try {
+	chrome.storage.onChanged.addListener((changes, area) => {
+		if (area !== 'local' || !changes.port) return;
+		const next = Number(changes.port.newValue) || DEFAULT_PORT;
+		if (next === port) return;
+		port = next;
+		void load();
+	});
+} catch {
+	/* a reader whose storage is unavailable still gets the default port */
+}
 chrome.devtools.panels.elements.onSelectionChanged.addListener(() => void show());
 // A navigation invalidates the installed matcher, and the selection with it.
 chrome.devtools.network.onNavigated.addListener(() => void show().catch(() => {}));

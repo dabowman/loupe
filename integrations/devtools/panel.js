@@ -44,15 +44,28 @@ async function load() {
 	setStatus('busy', 'loading…');
 	try {
 		payload = await fetchFindings(port);
-		pinned = null;
-		await resolve();
-		const s = payload.summary;
-		setStatus('on', `${s.error} error · ${s.warn} warn · ${s.filesScanned} files`);
 	} catch (err) {
 		payload = null;
 		snapshot = [];
 		setStatus('off', 'not connected');
 		el('rows').innerHTML = offlineHtml(port, err.message);
+		el('note').textContent = '';
+		return;
+	}
+	pinned = null;
+	// Separately, because a page that cannot be evaluated is not a server that is
+	// not there. `inspectedWindow.eval` refuses on a restricted origin and while a
+	// navigation is in flight, and reporting that as "no loupe server on port N"
+	// sends the reader to restart a server that answered — and nulls the payload,
+	// so `onNavigated` can no longer recover on its own.
+	try {
+		await resolve();
+		const s = payload.summary;
+		setStatus('on', `${s.error} error · ${s.warn} warn · ${s.filesScanned} files`);
+	} catch (err) {
+		snapshot = [];
+		setStatus('busy', 'cannot read the page');
+		el('rows').innerHTML = `<div class="empty">${esc(err.message)}<br><br><span class="status">The findings loaded; the page could not be asked about them. Reload the page, or press refresh.</span></div>`;
 		el('note').textContent = '';
 	}
 }
@@ -104,9 +117,11 @@ function render() {
 		(offwidth ? `, ${offwidth} more only at another width` : '') +
 		'. The rest are in source this page does not render — the terminal still has them all.';
 
-	for (const node of el('rows').querySelectorAll('.row')) {
-		const i = Number(node.dataset.i);
-		const row = rs.find((r) => r.i === i);
+	// Rendered from `rs` in order, so the row is its position — not a scan of `rs`
+	// per node, which is quadratic on a render that runs on every keystroke.
+	for (const [k, node] of [...el('rows').querySelectorAll('.row')].entries()) {
+		const row = rs[k];
+		const i = row.i;
 		node.onmouseenter = () => {
 			if (pinned === null) void evalInPage(`window.__loupeMatch.highlight(${i})`).catch(() => {});
 		};

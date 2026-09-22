@@ -27,7 +27,8 @@ Three other documents sit outside this set:
   for and what was deliberately left out.
 - [ui-options.md](../ui-options.md) — the option space for a UI past the static
   report, what each option unlocks and costs, and a staged recommendation.
-  Forward-looking: nothing in it has been built.
+  Stages 1 and 2 shipped — `loupe ui` and the DevTools extension; the rest is
+  still a decision document, and the Status block at its head says which is which.
 - [MIGRATION.md](../../engine/MIGRATION.md) — moving off the bash quality hook
   this replaced.
 

@@ -19,19 +19,9 @@
  * Design notes: docs/design/report.md#the-html-report
  */
 
-import { body } from './report-view.ts';
+import { body, embed } from './report-view.ts';
 import { reportPayload } from './report.ts';
 import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
-
-/**
- * Embed the payload in a `<script type="application/json">` block.
- *
- * The block's content is raw text: the only thing that can end it early is the
- * literal `</script`, and the only thing that can open a comment is `<!--`.
- * Escaping every `<` closes both, and is safe wholesale because in JSON a `<`
- * can only occur inside a string, where it means the same character.
- */
-const embed = (json: string): string => json.replace(/</g, '\\u003c');
 
 export function formatHtml(result: AnalyzeResult | BaselinedResult, config: Config): string {
 	const payload = embed(JSON.stringify(reportPayload(result, config)));
