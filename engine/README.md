@@ -590,8 +590,9 @@ widgets/site-preview/render.tsx:116  <Button> (represents: destination) → `nav
 An element with a prop from the detector's `unless` (`href`, `render`) already
 realizes the target and is not asked; neither is one with a spread, which might
 carry it. The finding is `warn`, written after the baseline so it never enters
-one, and the hook never runs it. Without `--judge` the scanner never sees the
-detector.
+one. Without `--judge` the scanner never sees the detector — and the hook passes
+`--judge`, so on a project with a key this runs at write time too, advisory as
+everywhere else.
 
 On Gutenberg that is 734 controls in about 20 seconds and 13 findings: six that
 navigate by `window.location`, a router call or a menu item and should be links

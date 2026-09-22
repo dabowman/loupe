@@ -27360,6 +27360,7 @@ var MODEL = "jev-1.13.0";
 var FLOOR = 0.5;
 var CONCURRENCY = 6;
 var RETRIES = 4;
+var REQUEST_TIMEOUT_MS = 2e4;
 async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
   const batches = [];
   for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
@@ -27373,7 +27374,8 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
       const res = await fetchImpl(ENDPOINT, {
         method: "POST",
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: body2
+        body: body2,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
       });
       if (res.ok) {
         const parsed = await res.json();
@@ -30152,6 +30154,10 @@ async function main() {
       `${dim("baseline:   ")}${base.path}${base.found && readBaseline(base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
       `${dim("options:    ")}${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
       `${dim("plugin:     ")}${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
+      // The hook passes `--judge` and then turns it off silently when there is no
+      // key. A report that quietly stopped asking and one that found nothing to
+      // ask read identically, so name which this is.
+      `${dim("judge:      ")}${judgeKey() ? "on \u2014 TYPESAFE_API_KEY found" : `off \u2014 no TYPESAFE_API_KEY (environment, or ${ENV_FILE})`}`,
       // Asked through the same predicate the gate uses: reporting on mere truthiness
       // meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
       ...off ? [yellow(`hook:       OFF \u2014 ${off}`)] : [],
@@ -30167,12 +30173,10 @@ async function main() {
       const def = RULES[id];
       const sev = config.severityOf(id);
       const judgeOnly = id === "patterns/judged-redirect";
-      const verdict = config.enabled[id] ? sev === "error" && gateBlocks && !judgeOnly ? red("BLOCKS") : judgeOnly ? yellow(`${sev === "error" ? "error" : "advisory"}, --judge only`) : sev === "error" ? yellow("advisory (would block if enabled)") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
+      const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red(judgeOnly ? "BLOCKS (--judge only)" : "BLOCKS") : judgeOnly ? yellow("advisory, --judge only") : sev === "error" ? yellow("advisory (would block if enabled)") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
       lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
     }
-    const blockers = RULE_IDS.filter(
-      (id) => config.enabled[id] && config.severityOf(id) === "error" && id !== "patterns/judged-redirect"
-    );
+    const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
     lines.push(
       "",
       gateBlocks && blockers.length ? `${red("Turns are blocked by:")} ${blockers.map((id) => magenta(id)).join(", ")}` : green("Nothing blocks turns; every finding is advisory.")
@@ -30308,8 +30312,8 @@ ${dim("  Ctrl-C to stop.")}
         );
     return EXIT.OK;
   }
-  const apiKey = args.flags.judge && !isHook ? judgeKey() : void 0;
-  if (args.flags.judge && !isHook && !apiKey) {
+  const apiKey = args.flags.judge ? judgeKey() : void 0;
+  if (args.flags.judge && !apiKey && !isHook) {
     fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}
 `);
     return EXIT.CANNOT_RUN;

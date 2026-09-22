@@ -1995,4 +1995,49 @@ await check('an elementMap entry with no component, and a three-level tag, are s
 	}
 });
 
+// Both hooks pass `--judge`. Typed by hand that flag refuses without a key, and
+// carrying that refusal into the hook would have been exit 2 — every write
+// blocked, in every project, over a key the user never asked for.
+await check('the hook runs --judge without a key instead of refusing', () => {
+	const root = tmpRepo({
+		'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '*' } }),
+		'src/App.jsx': "export const App = () => <div style={{ color: '#1d2327' }} />;",
+	});
+	// Set-but-empty, which `process.loadEnvFile` leaves alone: a `.env` beside a
+	// real checkout must not turn this test into a network call.
+	const noKey = env({ TYPESAFE_API_KEY: '' });
+	try {
+		let out: string;
+		try {
+			out = execFileSync('node', [CLI, 'hook', '--root', root, '--judge'], {
+				encoding: 'utf8',
+				input: '{"session_id":"x","tool_input":{"file_path":"src/App.jsx"}}',
+				env: noKey,
+			});
+		} catch (err) {
+			const f = execFailure(err);
+			throw new Error(`hook --judge exited ${f.status} with no key: ${f.stderr}`);
+		}
+		const parsed = JSON.parse(out) as { systemMessage?: string };
+		assert(parsed.systemMessage !== undefined, `unexpected output: ${out}`);
+		assert(!out.includes('TYPESAFE_API_KEY'), `the hook complained about the key: ${out}`);
+
+		// The other half: asked for by hand, a `--judge` that cannot judge is a
+		// mistake, not a quiet deterministic run.
+		let status = 0;
+		let stderr = '';
+		try {
+			execFileSync('node', [CLI, 'check', '--root', root, '--all', '--judge'], { encoding: 'utf8', env: noKey });
+		} catch (err) {
+			const f = execFailure(err);
+			status = f.status ?? 0;
+			stderr = f.stderr;
+		}
+		assert(status === 2, `check --judge without a key exited ${status}`);
+		assert(stderr.includes('TYPESAFE_API_KEY'), `unexpected refusal: ${stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();
