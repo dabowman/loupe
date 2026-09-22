@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import postcss from 'postcss';
 import { analyze } from '../src/analyze.ts';
-import { applyKeeps, applyTokenFixes, settledBy } from '../src/autofix.ts';
+import { applyKeeps, applyTokenFixes, settledBy, tokenFixes } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
 import { judgeValues } from '../src/judge.ts';
 import { KEEP, emptyTokenSet, harvestTokenDefs, planValue } from '../src/tokens.ts';
@@ -180,6 +180,29 @@ await check('an ambiguous inline value is left alone', async () => {
 	});
 	assert(!applied.length, `an ambiguous value was rewritten: ${JSON.stringify(applied)}`);
 	assert(read('src/G.jsx').includes("'#1e1e1e'"), 'value should be untouched');
+});
+
+// `css/dead-class` is the one finding with a quick fix that never runs here.
+// Every other fix on this page is a substitution: the old value is still in the
+// diff and the next run checks what replaced it. A deletion leaves nothing to
+// compare against, and the check over-collects references on purpose, so a
+// false "dead" is the failure it is priced to avoid — a price that only holds
+// for a reader who sees the rule. See docs/design/report.md#deleting-is-the-editors-alone.
+await check('`loupe fix` deletes nothing for a dead class', async () => {
+	const before = '/* gone with it, in the editor */\n.wf-dead {\n\tcolor: red;\n}\n';
+	const { applied, read, findings, remaining } = await fixture({ 'styles/dead.css': before });
+	const dead = findings.filter((f) => f.rule === 'css/dead-class');
+	assert(dead.length === 1, `the fixture reported ${dead.length} dead classes, expected 1`);
+	// The extent the editor deletes by is on the finding — this is the case the
+	// editor *does* offer, so the file below is untouched by choice, not by luck.
+	assert(dead[0]?.dead, 'the finding carried no extent, so this asserts nothing');
+	assert(!tokenFixes(dead).length, 'a dead class resolved into the shared fix list');
+	assert(!applied.length, `fix rewrote something: ${JSON.stringify(applied)}`);
+	assert(read('styles/dead.css') === before, `the stylesheet was edited:\n${read('styles/dead.css')}`);
+	assert(
+		remaining.some((f) => f.rule === 'css/dead-class'),
+		'the finding did not survive the fix pass',
+	);
 });
 
 // The quick fix and a second `fix` run both read a file that may have moved

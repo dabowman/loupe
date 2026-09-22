@@ -522,6 +522,64 @@ a comment line above a JSX element is not a comment at all — it is rendered
 text. So a value `--judge` kept outside a stylesheet is reported as skipped, for
 a reader to suppress where they can see what the line is.
 
+### Deleting is the editor's alone
+
+`css/dead-class` is the one finding with a quick fix that `loupe fix` will not
+apply, and the asymmetry is the design rather than an omission.
+
+Every other fix on this page is a **substitution**. The value that was there is
+still legible in the diff, the check that flagged it re-runs against whatever
+replaced it, and a wrong one shows up as a wrong colour on the next pass. A
+deletion has nothing to compare against afterwards. If the rule was live, the
+thing that tells you is a visual regression, in a browser, some weeks later.
+
+And this finding is deliberately the less certain half of a trade. The reference
+index over-collects on purpose (see [markup
+scanning](analysis.md#markup-scanning-two-passes-two-characters)): a false
+"referenced" costs one missed finding, a false "dead" recommends deleting live
+CSS. That price is set for a reader who has the rule in front of them — not for
+a batch pass rewriting a repo unattended, where nobody reads the diff and both
+failures cost the same to produce. So the deletion is offered where a person
+sees the code and accepts it, and nowhere else. The extent rides on the finding
+as `dead`, which `tokenFixes` does not read; `suggest` and `rename` remain the
+only licences the batch path has.
+
+**What is refused outright**, because a missing quick fix is invisible and a
+wrong one deletes code:
+
+- **A selector list where another selector does not name the class.**
+  `.wf-dead, .wf-live { … }` styles both, and removing the rule takes `.wf-live`
+  with it. Editing the prelude instead would be a substitution, with its own
+  question about what the remaining list should read as, so the finding stands
+  and a person removes the selector. `.wf-dead:hover, .wf-dead:focus` *is*
+  offered: every selector there is about the dead class, so nothing else can
+  lose its styling.
+- **The only child of an `@media`, a `@supports`, or a parent rule.** Deleting
+  it leaves an empty block behind, and deleting the parent as well is a bigger
+  edit than the finding claims.
+- **A rule sharing its first or last line with anything else** — a minified or
+  densely-written sheet. Whole lines are the only extent carried, and a
+  column-accurate splice into a line that also holds live CSS is exactly where a
+  stale position does the most damage.
+- **A class several rules in one file declare.** The finding is one per class per
+  file; its action has to be the rule it points at, and deleting three scattered
+  rules from one diagnostic is more than the diagnostic says.
+
+**What goes with the rule** is a comment directly above it with no blank line
+between, and one blank line after it. A comment glued to a rule describes that
+rule, and one describing a rule that is gone is its own small mess — and where
+the comment is a suppression directive, leaving it behind would silently mute
+whatever ends up beneath it. A blank line breaks the attachment, and then the
+comment stays. The blank line after keeps the deletion from leaving two where
+there was one; where the rule ends the file, the blank line before goes instead.
+
+**The recorded extent is checked against the buffer before the action is
+offered.** Braces have to balance across those lines, the last of them has to be
+the closing one, and the class has to still be named inside. A substitution
+checks itself by matching what it is replacing; a deletion has no such match, so
+this stands in for it, and anything that no longer looks like the rule that was
+reported is offered nothing at all.
+
 ## `loupe serve`
 
 Every other output in this codebase answers "where in the source". This one

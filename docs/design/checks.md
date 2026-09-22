@@ -172,6 +172,10 @@ The reference index over-collects on purpose (see
 [markup scanning](analysis.md#markup-scanning-two-passes-two-characters)): a false "referenced"
 costs one missed finding, a false "dead" tells an agent to delete live CSS.
 
+The remedy is a deletion, which is why it is the one finding the editor offers
+a quick fix for that `loupe fix` refuses — see [deleting is the editor's
+alone](report.md#deleting-is-the-editors-alone).
+
 The finding carries its selector, which is the verdict restated as a question a
 browser can answer. This rule's expensive failure — the reference index missing
 a class built at runtime — is invisible in the source and obvious in a page,

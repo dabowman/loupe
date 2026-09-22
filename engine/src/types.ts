@@ -123,6 +123,20 @@ export interface TokenRename {
 }
 
 /**
+ * The whole extent of a rule that declares nothing but a dead class, in lines.
+ *
+ * Carried only where the rule can be removed on its own — and read only by the
+ * language server, because deleting is not substituting and `loupe fix` does
+ * not do it. See docs/design/report.md#deleting-is-the-editors-alone.
+ */
+export interface DeadRule {
+	/** First line to remove: a comment attached above the rule, where there is one. */
+	startLine: number;
+	/** The line the rule's closing brace is on. */
+	endLine: number;
+}
+
+/**
  * One reported violation.
  *
  * `hints` and `suffix` are working state: the token pass reads them to rewrite
@@ -200,6 +214,11 @@ export interface Finding {
 	 * one is — then the finding stands for a reader.
 	 */
 	rename?: TokenRename | undefined;
+	/**
+	 * The rule a `css/dead-class` finding names, where deleting it is safe.
+	 * Absent where it is not — then no deletion is offered at all.
+	 */
+	dead?: DeadRule | undefined;
 }
 
 /**

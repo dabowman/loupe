@@ -823,7 +823,19 @@ every run re-indexes the whole repo regardless of `--files` scope.
 panel and the gutter, hover gives the rule's guidance, and where the engine
 settled an answer on its own the substitution is offered as a quick fix — the
 same one `loupe fix` writes, from the same function, so the editor cannot
-propose something the CLI would not.
+propose a substitution the CLI would not. A misspelled token is one action
+carrying every line that names it, since clearing one occurrence would leave the
+diagnostic standing.
+
+One action goes the other way: `css/dead-class` offers to delete the rule, and
+`loupe fix` will not. Every other fix replaces a value, which the next run
+checks; a deletion leaves nothing to compare against, and the reference index
+behind that check over-collects on purpose, because a false "dead" deletes live
+CSS. That trade is priced for someone looking at the rule, so the deletion is
+offered where a person accepts it and never in a batch pass over a repo. Where
+the rule cannot be lifted out cleanly — a selector list that also styles a live
+class, the only rule inside an `@media`, a class several rules declare — no
+action is offered and nothing says why.
 
 ```bash
 ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe

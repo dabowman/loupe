@@ -17,6 +17,7 @@ import { analyze } from '../src/analyze.ts';
 import { applyTokenFixes } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
 import { lsp } from '../src/lsp.ts';
+import { syntaxFor } from '../src/syntax.ts';
 import type { AnalyzeResult, Config } from '../src/types.ts';
 import { assert, check, cleanup, finish, first, scratch, writeAll } from './harness.ts';
 
@@ -50,6 +51,32 @@ export default () => (
   outline-color: var(--wpds-color-foreground-content-neutra);
 }
 `,
+	// The deletion the editor offers and `loupe fix` refuses. `.wf-gone` is the
+	// case that can be deleted: its own rule, alone on its lines, with a comment
+	// glued above it. `.wf-partly` shares a selector list with a class that is
+	// live, and `.wf-alone` is the only thing inside its `@media` — deleting
+	// either one would take something with it, so neither is offered.
+	'styles/dead.css': `/* the panel nobody renders any more */
+.wf-gone {
+  color: red;
+}
+
+.wf-partly, .wf-shown {
+  color: blue;
+}
+
+@media (min-width: 40em) {
+  .wf-alone { color: teal; }
+}
+`,
+	// A nested rule with a sibling: deleting it leaves its parent standing.
+	'styles/dead.scss': `.wf-panel {
+  color: red;
+  .wf-inner { color: blue; }
+}
+`,
+	// What keeps `.wf-shown` and `.wf-panel` out of the dead set.
+	'src/Shown.jsx': 'export const Shown = () => <section className="wf-panel wf-shown" />;\n',
 };
 
 const root = scratch('loupe-lsp-');
@@ -130,6 +157,10 @@ function send(msg: Record<string, unknown>, { split = false }: { split?: boolean
 
 const appCss = join(root, 'styles', 'app.css');
 const cssUri = `file://${appCss}`;
+const deadCss = join(root, 'styles', 'dead.css');
+const deadUri = `file://${deadCss}`;
+const deadScss = join(root, 'styles', 'dead.scss');
+const scssUri = `file://${deadScss}`;
 const appJsx = join(root, 'src', 'App.jsx');
 const jsxUri = `file://${appJsx}`;
 
@@ -307,6 +338,125 @@ await check('the suppress action leaves the reason for a person to write', () =>
 	// reports `suppression/malformed` rather than going quiet, which is the
 	// whole point of offering it this way.
 	assert(/--\s*\*\/\s*$/.test(text.trim()), `the suppress action pre-filled a reason: ${JSON.stringify(text)}`);
+});
+
+// ── deleting a dead rule ────────────────────────────────────────────────────
+// The one action the editor offers and `loupe fix` will not: a deletion has
+// nothing to compare against afterwards, so it is offered only where a person
+// is looking at the code. See docs/design/report.md#deleting-is-the-editors-alone.
+
+interface Position {
+	line: number;
+	character: number;
+}
+interface Action {
+	title: string;
+	edit?: { changes: Record<string, { range: { start: Position; end: Position }; newText: string }[]> };
+}
+
+let nextId = 20;
+async function actionsAt(uri: string, line: number): Promise<Action[]> {
+	const id = nextId++;
+	send({
+		id,
+		method: 'textDocument/codeAction',
+		params: {
+			textDocument: { uri },
+			range: { start: { line, character: 0 }, end: { line, character: 0 } },
+			context: { diagnostics: [] },
+		},
+	});
+	return ((await until((m) => m.id === id, `the code actions on line ${line}`)).result ?? []) as Action[];
+}
+
+/** What the buffer holds once the client has applied one edit. */
+function applyEdit(text: string, edit: { range: { start: Position; end: Position }; newText: string }): string {
+	const lines = text.split('\n');
+	const { start, end } = edit.range;
+	const head = (lines[start.line] ?? '').slice(0, start.character);
+	const tail = (lines[end.line] ?? '').slice(end.character);
+	return [...lines.slice(0, start.line), head + edit.newText + tail, ...lines.slice(end.line + 1)].join('\n');
+}
+
+/** The one edit of the one delete action, having checked the range is usable. */
+function deletion(
+	list: Action[],
+	text: string,
+	what: string,
+): { range: { start: Position; end: Position }; newText: string } {
+	const action = first(
+		list.filter((a) => a.title.startsWith('Delete')),
+		`no delete action was offered for ${what}`,
+	);
+	const edits = Object.values(action.edit?.changes ?? {}).flat();
+	assert(edits.length === 1, `the delete action carried ${edits.length} edits`);
+	const edit = first(edits, 'the delete action carried no edit');
+	// An invalid range is rejected by the client, and a rejected edit is a quick
+	// fix that silently does nothing.
+	const lines = text.split('\n');
+	for (const p of [edit.range.start, edit.range.end]) {
+		assert(p.line < lines.length, `the range names line ${p.line} of a ${lines.length}-line document`);
+		assert(p.character <= (lines[p.line] ?? '').length, `the range ends past the end of line ${p.line}`);
+	}
+	return edit;
+}
+
+/** A finding is standing here, whatever action was or was not offered for it. */
+function reported(list: Action[], where: string): void {
+	assert(
+		list.some((a) => a.title.startsWith('Suppress css/dead-class')),
+		`no css/dead-class finding was reported ${where} — the case is not being covered`,
+	);
+}
+
+const deadText = readFileSync(deadCss, 'utf8');
+send({ method: 'textDocument/didOpen', params: { textDocument: { uri: deadUri, text: deadText } } });
+send({
+	method: 'textDocument/didOpen',
+	params: { textDocument: { uri: scssUri, text: readFileSync(deadScss, 'utf8') } },
+});
+
+await check('a dead rule is deleted whole, with the comment above it and the blank line after', async () => {
+	const list = await actionsAt(deadUri, 1);
+	reported(list, 'for `.wf-gone`');
+	const edit = deletion(list, deadText, '`.wf-gone`');
+	const after = applyEdit(deadText, edit);
+	assert(!after.includes('.wf-gone'), `the rule survived:\n${after}`);
+	assert(!after.includes('nobody renders'), `the comment describing it was left dangling:\n${after}`);
+	// The rule that followed it keeps the blank line it had, rather than two.
+	assert(after.startsWith('.wf-partly'), `the deletion left a ragged hole:\n${JSON.stringify(after)}`);
+	assert(after.includes('color: blue'), `the next rule was eaten:\n${after}`);
+	// A stylesheet that parsed before parses after.
+	const syntax = await syntaxFor('styles/dead.css');
+	assert(syntax.parse, 'no parser for a .css file');
+	syntax.parse(after, { from: deadCss });
+});
+
+await check('a selector list that also styles a live class is not deleted', async () => {
+	const list = await actionsAt(deadUri, 5);
+	reported(list, 'for `.wf-partly`');
+	assert(
+		!list.some((a) => a.title.startsWith('Delete')),
+		'`.wf-partly, .wf-shown` was offered a deletion, which would take `.wf-shown` with it',
+	);
+});
+
+await check("an at-rule's only child is not deleted, because the empty block would stay", async () => {
+	const list = await actionsAt(deadUri, 10);
+	reported(list, 'for `.wf-alone`');
+	assert(!list.some((a) => a.title.startsWith('Delete')), 'the only rule inside an `@media` was offered a deletion');
+});
+
+await check('a nested rule is deleted without disturbing the rule it sits in', async () => {
+	const text = readFileSync(deadScss, 'utf8');
+	const list = await actionsAt(scssUri, 2);
+	reported(list, 'for `.wf-inner`');
+	const after = applyEdit(text, deletion(list, text, '`.wf-inner`'));
+	assert(!after.includes('.wf-inner'), `the nested rule survived:\n${after}`);
+	assert(after.includes('.wf-panel') && after.includes('color: red'), `the parent went with it:\n${after}`);
+	const syntax = await syntaxFor('styles/dead.scss');
+	assert(syntax.parse, 'postcss-scss is not installed, so this case went unchecked');
+	syntax.parse(after, { from: deadScss });
 });
 
 // ── hover ───────────────────────────────────────────────────────────────────

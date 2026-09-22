@@ -104,6 +104,27 @@ leave the diagnostic standing — a quick fix that visibly does nothing. Each of
 those edits is still the line `substituteOnLine` wrote, so the agreement with
 `loupe fix` holds per line as well as in total.
 
+## Why one quick fix has no `loupe fix` behind it
+
+`css/dead-class` offers to delete the rule, and the batch path does not. That
+is the one place the two deliberately write different bytes, and the reasoning
+is in [deleting is the editor's
+alone](report.md#deleting-is-the-editors-alone): a deletion cannot be checked
+against what replaced it, and this check over-collects references precisely
+because a false "dead" is its expensive failure. The editor is where a person
+sees the rule before accepting it; `loupe fix` is where nobody does.
+
+It is not marked `isPreferred`, unlike the substitutions — the action a client
+may apply on its own is not the one that removes code. The rule's own
+suppression action stays beside it, which is the answer for the case where the
+class is live and the index simply could not see it.
+
+Refusals are silent here, on purpose. Where the rule cannot be removed on its
+own — a selector list with a live class in it, the only child of an `@media`, a
+minified line, a class several rules declare — the finding is published with no
+delete action and nothing says why. A missing quick fix is invisible; a wrong
+one deletes code.
+
 ## Why the suppress quick fix leaves the reason blank
 
 A directive with no reason does not mute — `suppressions.ts` reports it as
