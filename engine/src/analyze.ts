@@ -527,7 +527,7 @@ export async function analyze(
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
 				for (const name of tokenRefsIn(decl.value, tokenPrefixes))
-					tokenRefs.push({ file: rel, line, name, scopeLines });
+					tokenRefs.push({ file: rel, line, name, prop, scopeLines });
 				if (finding) pending.push({ ...finding, line, scopeLines });
 			}
 
@@ -617,7 +617,7 @@ export async function analyze(
 			for (const d of group.decls) {
 				if (supp)
 					for (const name of tokenRefsIn(d.value, tokenPrefixes))
-						tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, scopeLines: [tpl.line] });
+						tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
 				const { finding } = classifyDeclaration(d, {
 					boundSystem: onTarget ? boundSystem : [],
 					boundText: onTarget ? boundText : [],

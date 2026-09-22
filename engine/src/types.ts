@@ -210,10 +210,16 @@ export interface Finding {
 	decl?: Hint | undefined;
 	/**
 	 * The rewrite `tokens/unknown-token` licenses, where exactly one known token
-	 * is a near miss for the name. Absent where nothing is, or where more than
-	 * one is — then the finding stands for a reader.
+	 * is a near miss for the name, or where `--judge` picked one. Absent
+	 * otherwise — then the finding stands for a reader.
 	 */
 	rename?: TokenRename | undefined;
+	/**
+	 * Where a `tokens/unknown-token` name with no settled rename is written: the
+	 * property of its first reference, and every line of the file naming it.
+	 * What `--judge` needs to ask which token was meant, and to rename it.
+	 */
+	unknown?: { prop: string; lines: number[] } | undefined;
 	/**
 	 * The rule a `css/dead-class` finding names, where deleting it is safe.
 	 * Absent where it is not — then no deletion is offered at all.

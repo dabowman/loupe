@@ -141,6 +141,55 @@ The floor is on the pick's confidence, not the class's own probability. That was
 scored as the gate too, on the same answers: at 0.90 it acts on one more
 destination and two more commands, one of them wrong. No reason to switch.
 
+## Which token was meant (`judge/token.ts`)
+
+`tokens/unknown-token` renames a name by spelling only where exactly one real
+token is a keystroke away. What it leaves is mostly not typos. An agent writing
+against a system it half-remembers names tokens in some other system's
+vocabulary — `--wpds-color-text-muted`, `--wpds-spacing-lg` — and nothing is a
+keystroke from those. Which token the author meant is plain from the name and
+the rule, and code cannot read either.
+
+- **The name outranks the rule.** The first wording asked the model to judge
+  "by the name and what the rule styles", and it overrode the name wherever the
+  descriptions disagreed: `--wpds-radius-md` on `.acme-card` came back
+  `border-radius-lg`, because WPDS says `lg` is for cards. That is the right
+  answer to a hardcoded value and the wrong one to a rename. The author wrote
+  `md`, and whether a card should be `lg` is a different finding. Telling it to
+  keep what the name already says (step, emphasis, state) and use the rule only
+  for what the name leaves open took the eval from **84% to 88%**, and stability
+  from 93% to 99%. Radius names still lean to the description, but they now
+  abstain (0.4) instead of acting.
+- **The options are the property's family**, by the role table the value
+  suggestions use, so `color` is offered foreground tokens and never a stroke. A
+  custom property answers as the longest property its name ends in. Sizes
+  (`width`, `min-height`, …) have a row in the table for this alone:
+  `hardcoded-value` never flags them, so the row is inert there. Without it, 8 of
+  the eval's names had no candidates at all.
+- **`none` is an answer**, the `not_text` lesson again. A name with no candidates
+  at all (`--wpds-z-index-modal`: WPDS has no z-index family and no token shares
+  the name's head) is never asked. That is 10 of the eval's 13 `none` items, all
+  left alone correctly, and none of them cost a request.
+
+### The rename floor is 0.80
+
+A wrong rename repaints an element from a token that means something else, under
+a clean report. That is the same cost as a wrong value, and it rewrites every
+line naming the name. Scored over three runs of `evals/renames`:
+
+| floor | renamed | right | wrong |
+|---|---|---|---|
+| 0.70 | 61% | 97% | 8 |
+| **0.80** | **49%** | **99%** | **3** |
+| 0.90 | 30% | 98% | 3 |
+
+The three wrong at 0.80 and 0.90 are one item, three times over:
+`--wpds-color-background-control-primary-weak-active` read as brand, where the
+label says neutral. "Primary" means brand in plenty of systems, so the label is
+as arguable as the pick. Below 0.80 the between-step typos start acting: `-xk`
+is one keystroke from `-xs` and `-xl`, and no reading of the rule tells which.
+At 0.80 none of them does.
+
 ## Reporting a judgement
 
 The answer goes where the reader would otherwise have had to put it: `<p> →
@@ -174,7 +223,7 @@ decoration.
 
 ## The evals
 
-Both live outside `npm test`: they cost tokens, need a key, and a model is
+All three live outside `npm test`: they cost tokens, need a key, and a model is
 allowed to drift in ways a build should not fail on. `tests/features.ts` pins
 what gets asked and what gets written; these pin whether the answers are any
 good, which only a live model and labelled code can say.
@@ -210,7 +259,22 @@ The two ways to be wrong cost differently: a wrong token changes the design, a
 wrong keep suppresses a mistake for good. Scoring mirrors how `fix --judge`
 acts, including the spacing-in-scale case it applies whatever the confidence.
 
-Both runners print where the model disagreed, so the labels stay auditable: on a
-real disagreement the label is as likely to be wrong as the model. And both
-report stability across three runs — a judgement that flips between runs cannot
+**`evals/renames`** — 158 names no WPDS token defines, each set in a real
+declaration from `site-foundry/src` or `gutenberg/packages` where a real token
+stood. Real code has almost none to label: Gutenberg's three are test fixtures.
+So the names are made, in three kinds. *Invented* (135) swaps the real name for
+an agent-style guess at another vocabulary. *Between* (10) typos a size suffix
+one keystroke from two steps. *None* (13) names what WPDS lacks, over a real
+hardcoded z-index, opacity, shadow or colour. A label accepts the token that
+stood there, plus any of its category with the same value, which the invented
+name cannot tell apart. Candidates are built live by `renameOptions`, and an
+item that is never asked counts as right only when it is labelled `none`.
+
+The names are synthetic, and a system as regular as WPDS makes the guesses easy
+to undo. Treat 99% as the ceiling on how well the question works, not a
+measurement of agent output, until real hook-time misses can be labelled.
+
+All three runners print where the model disagreed, so the labels stay
+auditable: on a real disagreement the label is as likely to be wrong as the
+model. And all three report stability across three runs — a judgement that flips between runs cannot
 be applied unattended.

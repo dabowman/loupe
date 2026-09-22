@@ -16,7 +16,7 @@ import { parseArgs as parseArgv } from 'node:util';
 import { analyze } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
-import { judgeRedirects, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
+import { judgeRedirects, judgeRenames, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
@@ -246,7 +246,8 @@ Options:
                         element needs, whether a control stands for the
                         pattern it was built as (patterns/judged-redirect), and
                         which token a hardcoded value should be, or whether it
-                        is deliberate. With fix, rewrites the values it settled
+                        is deliberate, and which real token an unknown one
+                        meant. With fix, rewrites the values it settled
                         and suppresses the ones it kept; add --dry-run to
                         review them first. (TYPESAFE_API_KEY from the
                         environment or loupe's own .env)
@@ -938,8 +939,10 @@ async function main(): Promise<number> {
 			// judged `keep` outside a stylesheet has nowhere to go, and that one is
 			// reported as a skip rather than paid for silently.
 			const judgeable = toFix.findings.filter((f) => f.suggest?.length);
-			if (apiKey && toFix.tokens && judgeable.length)
-				await judgeValues(root, judgeable, toFix.tokens, apiKey, tokenDescriptions(config.profiles?.active ?? []));
+			const about = tokenDescriptions(config.profiles?.active ?? []);
+			if (apiKey && toFix.tokens && judgeable.length) await judgeValues(root, judgeable, toFix.tokens, apiKey, about);
+			// A judged rename is written like a spelled one, every line naming it.
+			if (apiKey && toFix.tokens) await judgeRenames(root, toFix.findings, toFix.tokens, apiKey, about);
 		} catch (err) {
 			fail(`loupe: ${messageOf(err)}\n`);
 			return EXIT.CANNOT_RUN;
@@ -1066,6 +1069,18 @@ async function main(): Promise<number> {
 				);
 		} catch (err) {
 			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
+		}
+		try {
+			if (result.tokens && result.findings.some((f) => f.unknown))
+				await judgeRenames(
+					root,
+					result.findings,
+					result.tokens,
+					apiKey,
+					tokenDescriptions(config.profiles?.active ?? []),
+				);
+		} catch (err) {
+			note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
 		}
 		// Computed before the redirects above existed: one configured to `error`
 		// has to be able to fail the run it is reported in.

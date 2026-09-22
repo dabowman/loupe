@@ -50,6 +50,8 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	// the sizes (icons, buttons) and surface widths a system also ships under it.
 	[/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
 	[/^cursor$/, /cursor/],
+	// Never flagged as a hardcoded value; here for the token a name in one meant.
+	[/^(min-|max-)?(width|height|inline-size|block-size)$/, /(?<!font-)size|surface-width/],
 	// By role word, not by one system's spelling: WPDS writes `motion-duration-*`,
 	// Archer `duration-*`.
 	[/^transition-duration$|^animation-duration$/, /duration/],
@@ -148,7 +150,7 @@ export function readTokenSources(
 }
 
 /** The names that answer for `prop`: on-role, and the property's own family when the set has one. */
-function onRole(names: readonly string[], prop: string): string[] {
+export function onRole(names: readonly string[], prop: string): string[] {
 	const [, hint, own] = ROLE_HINTS.find(([p]) => p.test(prop)) ?? [];
 	if (!hint) return [];
 	const onRole = names.filter((n) => hint.test(n));
