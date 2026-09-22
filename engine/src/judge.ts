@@ -15,8 +15,8 @@
  *
  * None changes a deterministic verdict. A variant or a token is written into the
  * finding's suggestion; a redirect is its own advisory finding, written after
- * the baseline and never by the hook. Each records the answer as data on
- * `Finding.judged`. The gate stays deterministic and offline.
+ * the baseline. Each records the answer as data on `Finding.judged`. The
+ * verdicts stay deterministic; only the advice they carry is judged.
  *
  * Design notes, and every measurement behind the floors: docs/design/judge.md
  */
@@ -46,6 +46,13 @@ const FLOOR = 0.5;
 const CONCURRENCY = 6;
 // Overload is transient and a run is a hundred requests.
 const RETRIES = 4;
+// The hook runs this inside Claude Code's 60s timeout, and `fetch` has no
+// deadline of its own: one socket that never answers is otherwise a killed hook
+// on every write. An abort throws, the caller notes it, the run keeps the
+// deterministic findings it already has.
+// ponytail: per request, so a long full-repo run is still bounded only by its
+// item count. Give `ask` a whole-run deadline if that ever needs a ceiling too.
+const REQUEST_TIMEOUT_MS = 20_000;
 
 type Fetch = typeof fetch;
 
@@ -99,6 +106,7 @@ export async function ask<T>(
 				method: 'POST',
 				headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
 				body,
+				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 			});
 			if (res.ok) {
 				const parsed = (await res.json()) as { answers: Record<string, Choice> };

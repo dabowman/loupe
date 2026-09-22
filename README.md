@@ -266,9 +266,13 @@ The answer is written into the suggestion, confidence last, and what the model
 supplied is green in a terminal. Below 0.5 confidence the finding is left as it
 was, and no judgement changes a verdict. `--format json` carries the answer as
 data, `judged: { answer, confidence, spans }`, so a tool can act on a judgement
-without parsing the sentence. The hook never calls it, so the gate stays
-deterministic and offline. It needs `TYPESAFE_API_KEY`, from the environment
+without parsing the sentence. It needs `TYPESAFE_API_KEY`, from the environment
 or a `.env` beside the checkout (see `.env.example`).
+
+The hook passes `--judge` too, so the advice an agent is handed at write time is
+the same advice `loupe check --judge` gives. Without a key it judges nothing and
+reports as it always did — the verdicts were never the judged part. See
+[Judging in the hook](#judging-in-the-hook).
 
 ### Judged values
 
@@ -334,8 +338,8 @@ answer. A button that navigates is a link however it is styled, so:
 ```
 
 That is `patterns/judged-redirect`, reported only at 0.90 confidence or above,
-advisory, never baselined and never run by the hook. A control that already
-carries `href` is not asked. See `engine/README.md` for how it decides and how
+advisory and never baselined. A control that already carries `href` is not
+asked. See `engine/README.md` for how it decides and how
 it scored.
 
 ### Composites
@@ -687,6 +691,26 @@ Both switches take `1`, `true`, `yes` and `on`, case-insensitively. Anything
 else is read as not on, so `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence the
 hook. `loupe status` prints a `hook: OFF` line with the reason whenever the hook
 will say nothing.
+
+### Judging in the hook
+
+Both hooks run `--judge`, and the key is the switch. With `TYPESAFE_API_KEY` in
+the environment Claude Code launched from, a write-time report carries the same
+judged variants and judged token names `loupe check --judge` prints, and
+`patterns/judged-redirect` can fire. With no key the hook judges nothing and
+says nothing about it — the deterministic report is the whole report, which is
+what it was before. `loupe status` prints a `judge:` line either way, so a run
+that quietly stopped asking does not read as one that found nothing to ask.
+
+What this does not change: judging never moves a verdict. It fills in the
+suggestion a deterministic finding already carries, and adds one advisory rule
+of its own. A turn is still blocked by the same findings, decided the same way,
+with or without a key.
+
+The cost is a network round trip per flagged element, inside Claude Code's hook
+timeout — 60s on `PostToolUse`, 120s on `Stop`. Each request gives up after 20
+seconds and the run keeps the deterministic findings it already had. To stay
+offline, drop `--judge` from `hooks/hooks.json`, or just leave the key unset.
 
 ## Reading the report
 

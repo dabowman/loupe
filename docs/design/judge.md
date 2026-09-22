@@ -17,8 +17,19 @@ scores and calls `ask` with it, exactly as the check does.
 
 **None of it changes a deterministic verdict.** A variant or a token is written
 into a finding's suggestion; a redirect is its own advisory finding, written
-after the baseline and never by the hook. The gate stays deterministic and
-offline, and this runs only when asked.
+after the baseline. Verdicts stay deterministic; only the advice they carry is
+judged.
+
+The hook passes `--judge` as well, so write-time advice matches what
+`check --judge` gives — but only where a `TYPESAFE_API_KEY` reaches the hook
+process. Without one the hook judges nothing, silently, which is why `status`
+carries a `judge:` line: a gate that turned a question off has to say so. A
+missing key is a refusal when `--judge` was typed by hand and a no-op when it
+came from the plugin manifest, because in that case the user never asked.
+
+Each request gives up after 20s. `fetch` has no deadline of its own, and one
+socket that never answers is otherwise a hook killed by Claude Code's timeout on
+every write; an abort leaves the deterministic findings standing.
 
 ## The model is pinned to a version
 

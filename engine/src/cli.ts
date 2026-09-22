@@ -56,7 +56,8 @@ const messageOf = (err: unknown): string => (err instanceof Error ? err.message 
 /**
  * The TypeSafe key, from the environment or loupe's own `.env`, or undefined.
  * `--judge` is the one network call in the engine, so its callers check this
- * before the walk, and the hook never asks.
+ * before the walk. The hook asks too, but a missing key there is not an error:
+ * judging is what a key buys, not what the gate depends on.
  */
 function judgeKey(): string | undefined {
 	try {
@@ -696,6 +697,12 @@ async function main(): Promise<number> {
 						: 'none found — plugin defaults apply'
 			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
 			`${dim('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
+			// The hook passes `--judge` and then turns it off silently when there is no
+			// key. A report that quietly stopped asking and one that found nothing to
+			// ask read identically, so name which this is.
+			`${dim('judge:      ')}${
+				judgeKey() ? 'on \u2014 TYPESAFE_API_KEY found' : `off \u2014 no TYPESAFE_API_KEY (environment, or ${ENV_FILE})`
+			}`,
 			// Asked through the same predicate the gate uses: reporting on mere truthiness
 			// meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
 			...(off ? [yellow(`hook:       OFF \u2014 ${off}`)] : []),
@@ -720,22 +727,21 @@ async function main(): Promise<number> {
 			// error-severity rule under a gate that cannot block is advisory in practice,
 			// and the colour follows the words for the same reason. `gateBlocks` rather
 			// than `blockingAllowed`: a silenced hook blocks nothing.
-			// The hook never judges, so this one cannot stop a turn at any severity.
+			// This one only exists under `--judge`, which the hook now passes — so its
+			// severity counts like any other, and the suffix says what it costs.
 			const judgeOnly = id === 'patterns/judged-redirect';
 			const verdict = config.enabled[id]
-				? sev === 'error' && gateBlocks && !judgeOnly
-					? red('BLOCKS')
+				? sev === 'error' && gateBlocks
+					? red(judgeOnly ? 'BLOCKS (--judge only)' : 'BLOCKS')
 					: judgeOnly
-						? yellow(`${sev === 'error' ? 'error' : 'advisory'}, --judge only`)
+						? yellow('advisory, --judge only')
 						: sev === 'error'
 							? yellow('advisory (would block if enabled)')
 							: yellow('advisory')
 				: dim(`off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`);
 			lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
 		}
-		const blockers = RULE_IDS.filter(
-			(id) => config.enabled[id] && config.severityOf(id) === 'error' && id !== 'patterns/judged-redirect',
-		);
+		const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
 		lines.push(
 			'',
 			gateBlocks && blockers.length
@@ -903,10 +909,12 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
-	// The one network call in the engine, so the key is checked before the walk
-	// and the hook never makes it.
-	const apiKey = args.flags.judge && !isHook ? judgeKey() : undefined;
-	if (args.flags.judge && !isHook && !apiKey) {
+	// The one network call in the engine, so the key is checked before the walk.
+	// Typed by hand, a `--judge` that cannot judge is a mistake worth refusing.
+	// In the hook it is a flag the user never typed, so a missing key leaves the
+	// run deterministic instead of failing every write.
+	const apiKey = args.flags.judge ? judgeKey() : undefined;
+	if (args.flags.judge && !apiKey && !isHook) {
 		fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}\n`);
 		return EXIT.CANNOT_RUN;
 	}
