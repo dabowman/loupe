@@ -27370,11 +27370,18 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
       questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)]))
     });
     for (let attempt = 0; ; attempt++) {
-      const res = await fetchImpl(ENDPOINT, {
-        method: "POST",
-        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: body2
-      });
+      let res;
+      try {
+        res = await fetchImpl(ENDPOINT, {
+          method: "POST",
+          headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+          body: body2
+        });
+      } catch (err) {
+        if (attempt >= RETRIES) throw new Error(`TypeSafe unreachable: ${messageOf(err)}`);
+        await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+        continue;
+      }
       if (res.ok) {
         const parsed = await res.json();
         return batch.map((_, i) => parsed.answers[`e${i}`]);

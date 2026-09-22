@@ -30,6 +30,7 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
+import { messageOf } from './text.ts';
 import { KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
@@ -95,11 +96,22 @@ export async function ask<T>(
 			questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)])),
 		});
 		for (let attempt = 0; ; attempt++) {
-			const res = await fetchImpl(ENDPOINT, {
-				method: 'POST',
-				headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-				body,
-			});
+			let res: Response;
+			try {
+				res = await fetchImpl(ENDPOINT, {
+					method: 'POST',
+					headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+					body,
+				});
+			} catch (err) {
+				// A connection reset is as transient as a 503 and arrives as a throw
+				// rather than a status, so the retry budget has to cover both — a run
+				// is a hundred requests and `map` is a thousand, and one dropped socket
+				// used to discard every answer already paid for.
+				if (attempt >= RETRIES) throw new Error(`TypeSafe unreachable: ${messageOf(err)}`);
+				await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+				continue;
+			}
 			if (res.ok) {
 				const parsed = (await res.json()) as { answers: Record<string, Choice> };
 				return batch.map((_, i) => parsed.answers[`e${i}`]);

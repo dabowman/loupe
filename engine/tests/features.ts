@@ -1280,6 +1280,39 @@ await check('the force query sends one control per request, and keeps answers in
 	assert(answers[40]?.confidence === 0, `answer 40 was ${answers[40]?.confidence}`);
 });
 
+await check('a dropped connection is retried, not thrown away', async () => {
+	// A reset arrives as a throw rather than a status, so it has to be caught where
+	// the status retries are. A thousand-request `map` run used to lose every
+	// answer already paid for to one dropped socket.
+	let calls = 0;
+	const stub = (async () => {
+		if (++calls <= 2) throw new TypeError('fetch failed');
+		return new Response(JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }));
+	}) as unknown as typeof fetch;
+	const [a] = await ask(
+		forceQuery(represents),
+		[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+		'key',
+		stub,
+	);
+	assert(calls === 3 && a?.choice === 'command', `${calls} calls, answer ${JSON.stringify(a)}`);
+
+	// And a host that is simply gone still fails the run, once the budget is out.
+	let tries = 0;
+	const dead = (async () => {
+		tries++;
+		throw new TypeError('fetch failed');
+	}) as unknown as typeof fetch;
+	let threw = '';
+	try {
+		await ask(forceQuery(represents), [{ file: 'a.jsx', component: 'B', enclosing: 'C', source: '<B />' }], 'k', dead);
+	} catch (err) {
+		threw = err instanceof Error ? err.message : String(err);
+	}
+	assert(threw.includes('unreachable'), `an unreachable host reported: ${threw || 'nothing'}`);
+	assert(tries === 5, `retried ${tries} times, expected the budget of 5`);
+});
+
 await check('a 429 waits as long as retry-after says, then asks again', async () => {
 	let calls = 0;
 	const stub = (async () =>

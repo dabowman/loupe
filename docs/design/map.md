@@ -9,8 +9,8 @@ the request it posts is written out in full at the top of
 number in [judge.md](judge.md) has an eval behind it and a command that
 reproduces it. The weights and the floor here were chosen by argument. They are
 written down so the argument can be checked, not because they are right.
-[One real pair](#what-one-real-pair-looks-like) says the thing works and says
-nothing about how often it is right — see
+[Two real pairs](#what-two-real-pairs-look-like) say the thing works and that it
+is self-consistent, and say nothing about how often it is right — see
 [what is not settled](#what-is-not-settled).
 
 ## The question it answers
@@ -204,64 +204,84 @@ cannot be rescued by the model.** It is also what caught the `hsl` bug above:
 the ranking was visibly wrong on real data long before anything was spent asking
 about it.
 
-## What one real pair looks like
+## What two real pairs look like
 
-WPDS's own DTCG sources (334 tokens, 5 files) mapped onto Primer's (1,488
-tokens, 63 files) — two systems that share the spec and nothing else. The whole
-run took 14 seconds.
+Three runs, all on systems' own published sources. WPDS
+(`packages/theme/tokens`) and Primer (`@primer/primitives`) read as DTCG
+directly; Atlassian (`@atlaskit/tokens`) publishes Style Dictionary artifacts
+and was converted, keeping `original.value` as a DTCG alias so its palette and
+its roles stay two tiers rather than collapsing into one.
 
-| | judged | no counterpart | under the floor |
+| run | tokens | semantic tier judged | collisions |
 |---|---|---|---|
-| base (206) | 62 | 8 | 136 |
-| semantic (128) | 76 | 14 | 38 |
+| WPDS → Primer | 334 → 1,488 | 76 / 128 (59%) | 29 targets, 92 claims |
+| Primer → Atlassian | 1,488 → 463 | 215 / 547 (39%) | 109 targets, 458 claims |
+| Atlassian → Primer | 463 → 1,488 | 83 / 154 (54%) | 28 targets, 84 claims |
 
-Three things in that table are worth reading.
+**Size ratio moves the result more than naming does.** Atlassian and Primer have
+much more similar token models than WPDS and Primer — both name roles as
+foreground/background/border with subtle/subtlest gradations, where WPDS uses a
+tone × emphasis matrix — and yet mapping Primer *onto* Atlassian settles worst of
+the three. Mapping 1,488 tokens onto 463 forces a collapse: 109 Atlassian tokens
+absorb 458 Primer ones, `color.border` alone claiming 48. Reverse the same pair
+and the semantic tier goes from 39% to 54%. When comparing two systems, run the
+small one onto the large one, or read the collisions as the answer.
 
-**Semantic tokens map and base tokens mostly do not.** 59% of the semantic tier
-settled against 30% of the base tier, and the base colours alone are 27 of 155.
-This is the result behaving correctly rather than failing: WPDS primitives are
-`primary.surface1…5`, `error.surface1…5` — five near-identical tints per tone —
-and Primer's palette has dozens of entries equally close to each. The
-probability mass genuinely splits, and a confident answer there would be a
-worse outcome than an uncertain one. Two palettes mostly do not have
-counterparts; two sets of *roles* do, and the roles are what makes the systems
-comparable.
+**A tier the other system does not have is answered, not guessed at.** Primer
+has 276 component tokens and Atlassian has none; 84 came back `none` — including
+every `button.primary.*` — rather than being forced onto a semantic token.
 
-The temptation is to lower the floor to make the number look better. Don't
-without an eval: the median unsettled row sits at 0.27, and dropping the floor
-to 0.4 recovers 31 rows of the 174 while admitting every near-tie with it.
+**The base tier does not map, in any of the three runs** (24–31%). Two palettes
+of near-identical tints do not have counterparts; two sets of roles do. This is
+the floor working, not failing.
 
-**The model bridges naming gaps that nothing else could.** WPDS's `info`
-surface maps to Primer's `bgColor.accent.muted` and its `warning` to
-`bgColor.attention.muted` — right, and unreachable from either the names or the
-values alone.
+### The two directions agree where they can
 
-**The map is not one-to-one, and that is the interesting part.** 138 judged rows
-land on 75 distinct Primer tokens. 29 targets are claimed by more than one
-source, `bgColor.disabled` by nine: WPDS has a disabled background per tone and
-per emphasis where Primer has one. Likewise WPDS separates `warning` from
-`caution` and normal from `-weak`, and Primer's `attention.muted` absorbs three
-of those at once.
+Running a pair both ways is the only validation available without hand labels,
+and it is worth doing. Of 257 rows where both Primer → Atlassian and
+Atlassian → Primer settled on a counterpart:
 
-Every one of those rows is individually defensible, which is exactly why the
-collapse has to be reported rather than left to be noticed. A per-row report
-reads like a bijection. `collisionsIn` counts the claims, the report marks each
-shared row inline *and* lists the collisions under their own heading, and the
-JSON carries them. "This system draws a distinction the other one does not" is
-what someone comparing two systems came to find out.
+| | |
+|---|---|
+| agreed outright | 63 (25%) |
+| differed, target claimed by several | 192 (75%) |
+| **genuinely disagreed** | **2 (1%)** |
+
+**Read the 25% correctly.** The 192 are not contradictions: Atlassian has one
+`color.border` where Primer has dozens, so the reverse run can only name one of
+them and picks the canonical one. Where the relation really is one-to-one the
+two runs — independent, over different candidate pools, in opposite directions —
+agree on **63 of 65, 97%**. Both exceptions sit at 0.51 and 0.72, which is the
+floor being generous rather than the answer being wrong.
+
+So round-trip agreement is a good **precision** signal and a bad recall one. A
+mutually confirmed pair is close to certain:
+
+```
+borderColor.default                   <-> color.border                            0.99/0.99
+bgColor.disabled                      <-> color.background.disabled               0.99/0.98
+prettylights.syntax.markup.deleted.bg <-> color.background.code.removed.highlight 0.99/0.99
+borderRadius.default (6px)            <-> radius.medium (6px)                     0.96/0.96
+bgColor.attention.muted               <-> color.background.warning                0.98/0.93
+```
+
+Nothing in the tool does this yet — the two runs were diffed by hand. A
+`--confirm` that ran the reverse and marked the agreeing rows would turn it into
+a property of the map.
 
 ## What is not settled
 
 - **No eval.** `evals/` has labelled sets for `represents` and `values`; there
   is none for this, so the floor of 0.5, the eight candidates, the tier weight
   of 0.2 and the weight table are all arguments rather than measurements. The
-  WPDS/Primer run above says the thing works; it does not say how often it is
-  *right*, because nobody has labelled it. A few hundred hand-checked pairs
-  between those two sets is what would turn every number here into one.
-- **One direction only.** `map A B` does not imply `map B A`. Collisions show
-  where the relation collapses *into* B; nothing shows a token of B that no
-  token of A reached, which is the other half of the same question and needs the
-  reverse run. Diffing the two would also catch pairs that only agree one way.
+  runs above say the thing works, and round-trip agreement says it is
+  self-consistent; neither says how often it is *right*, because nobody has
+  labelled it. A few hundred hand-checked pairs is what would turn every number
+  here into one — and the 63 mutually confirmed pairs are the obvious seed.
+- **One direction only, and the reverse run is worth having.** Collisions show
+  where the relation collapses into B; nothing shows a token of B that no token
+  of A reached. The measurement above says the reverse run is also the best
+  precision signal there is, and it is not built in.
 - **Modes and themes are ignored.** A token's value is its first definition, and
   a set with light and dark variants contributes whichever it declares first.
   For Primer that means one theme's colours stand for all of them.
