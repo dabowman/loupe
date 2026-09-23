@@ -581,12 +581,18 @@ export interface ElementMapping {
 	component: string;
 	/** Only suggest the analog when the element is actually being styled. */
 	styledOnly: boolean;
+	/** An attribute whose static value picks the analog: `input` by `type`. */
+	attribute?: string;
+	/** That attribute's value → its analog; `null` means the element has none. */
+	values?: Record<string, string | null>;
 }
 
 /** The same mapping as authored, where `styledOnly` may simply be absent. */
 export interface AuthoredElementMapping {
 	component: string;
 	styledOnly?: boolean;
+	attribute?: string;
+	values?: Record<string, string | null>;
 }
 
 /**

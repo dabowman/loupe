@@ -103,6 +103,21 @@ component is sanctioned rather than an override.
 `variant="heading-*"` and `render` supplying the semantic element, a styled
 `<div>` → `Stack`, a styled `<span>` → `Text`.
 
+Interactive elements are flagged whether or not anything styles them, because
+the component carries the focus, labelling and state wiring the raw element
+lacks: `<button>` → `Button`, `<select>` → `SelectControl`, `<textarea>` →
+`TextareaControl`, `<table>` → `DataViews`, `<dialog>` → `Modal` (or
+`ConfirmDialog` for a yes/no), `<progress>` → `ProgressBar`, `<details>` →
+`Collapsible`. `<input>` is read by its `type`: `checkbox`, `radio`, `search`,
+`file` and `range` have their own controls, `submit`/`button`/`reset` are a
+`Button`, anything else is `InputControl`, and `hidden` is never flagged. The
+finding names the package to import from — `InputControl` and
+`TextareaControl` are in both, and only the `@wordpress/ui` one is current.
+
+"No design-system equivalent" is usually wrong; check before suppressing. A
+file input with `webkitdirectory`, which `FormFileUpload` cannot set, is the
+kind of exception worth a `wpds-allow`.
+
 WPDS's substitution props are `render`, `as` and `component`; an element handed
 to one of those on a WPDS text or layout component is not flagged. Markup
 nested inside such a prop still counts, as does an element handed to a genuine

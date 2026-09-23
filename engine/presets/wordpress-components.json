@@ -14,7 +14,27 @@
       "h1": "Heading", "h2": "Heading", "h3": "Heading",
       "h4": "Heading", "h5": "Heading", "h6": "Heading",
       "div": { "component": "Stack", "styledOnly": true },
-      "span": { "component": "Text", "styledOnly": true }
+      "span": { "component": "Text", "styledOnly": true },
+      "button": "Button",
+      "input": {
+        "component": "InputControl",
+        "attribute": "type",
+        "values": {
+          "hidden": null,
+          "checkbox": "CheckboxControl",
+          "radio": "RadioControl",
+          "search": "SearchControl",
+          "file": "FormFileUpload",
+          "range": "RangeControl",
+          "submit": "Button", "button": "Button", "reset": "Button"
+        }
+      },
+      "select": "SelectControl",
+      "textarea": "TextareaControl",
+      "table": "DataViews",
+      "dialog": "Modal",
+      "progress": "ProgressBar",
+      "details": "Collapsible"
     }
   },
   "namespaces": {

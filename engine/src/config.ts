@@ -243,10 +243,13 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		rules[id] = { severity: sev };
 	}
 
-	// Element map: "p": "Text" or "div": { component, styledOnly }.
+	// Element map: "p": "Text", "div": { component, styledOnly }, or
+	// "input": { component, attribute: "type", values: { checkbox: "CheckboxControl" } }.
 	const elementMap = new Map<string, ElementMapping>();
 	for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
 		const entry = typeof v === 'string' ? { component: v, styledOnly: false } : v;
+		if ((entry.values === undefined) !== (entry.attribute === undefined))
+			throw new Error(`elementMap.${tag}: attribute and values go together`);
 		elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
 	}
 

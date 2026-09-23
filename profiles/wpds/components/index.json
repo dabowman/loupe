@@ -1,7 +1,8 @@
 {
   "packages": [
     "@wordpress/components",
-    "@wordpress/ui"
+    "@wordpress/ui",
+    "@wordpress/dataviews"
   ],
   "version": 1,
   "verifiedAgainst": "WordPress/gutenberg trunk, from each component's own Storybook `componentStatus` metadata, 2026-08-25. `dropIn` is a separate, later check: trunk at 037f7ed (2026-09-19), reading both implementations' prop types and styles for the eight same-name `@wordpress/components` -> `@wordpress/ui` moves (Text, Card, Icon, Spinner, Tooltip, VisuallyHidden, TextareaControl, InputControl). None of the eight qualified, so no entry carries the field.",
@@ -442,6 +443,17 @@
       "name": "FormTokenField",
       "package": "@wordpress/components",
       "status": "recommended"
+    },
+    {
+      "name": "FormFileUpload",
+      "package": "@wordpress/components",
+      "status": "recommended"
+    },
+    {
+      "name": "DataViews",
+      "package": "@wordpress/dataviews",
+      "status": "recommended",
+      "note": "Its Storybook carries no `componentStatus`; recorded as recommended because it is a stable public package the design-system manifest lists (`tags: ['manifest']`, trunk 037f7ed)."
     },
     {
       "name": "Dropdown",

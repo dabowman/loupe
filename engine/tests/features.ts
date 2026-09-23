@@ -1007,6 +1007,68 @@ await check('a raw element is never sent to a component the registry supersedes'
 	assert(f.message.includes('@wordpress/ui'), `did not forward to the current analog: ${f.message}`);
 });
 
+// A hand-built <table> styled with tokens passes every token check; it just
+// isn't DataViews. Interactive elements are flagged whether or not CSS touches them.
+await check('a raw interactive element names its analog and the package to import it from', async () => {
+	const src = [
+		'export const A = ( { t } ) => (',
+		'\t<>',
+		'\t\t<button>Go</button>',
+		'\t\t<input />',
+		'\t\t<input type="checkbox" />',
+		'\t\t<input type={ "FILE" } />',
+		'\t\t<input type="submit" />',
+		'\t\t<input type={ t } />',
+		'\t\t<input type="hidden" name="nonce" />',
+		'\t\t<select />',
+		'\t\t<textarea />',
+		'\t\t<table />',
+		'\t\t<dialog />',
+		'\t\t<progress />',
+		'\t\t<details />',
+		'\t\t{ /* <table> in a comment */ }',
+		"\t\t{ '<button>' }",
+		'\t</>',
+		');',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const got = at(r, 'system/raw-element').map((f) => `${f.line} ${f.message}`);
+	const want = [
+		'3 <button> → <Button> (@wordpress/components)',
+		'4 <input> → <InputControl> (@wordpress/ui)',
+		'5 <input> → <CheckboxControl> (@wordpress/components)',
+		'6 <input> → <FormFileUpload> (@wordpress/components)',
+		'7 <input> → <Button> (@wordpress/components)',
+		'8 <input> → <InputControl> (@wordpress/ui)',
+		'10 <select> → <SelectControl> (@wordpress/components)',
+		'11 <textarea> → <TextareaControl> (@wordpress/ui)',
+		'12 <table> → <DataViews> (@wordpress/dataviews)',
+		'13 <dialog> → <Modal> (@wordpress/components)',
+		'14 <progress> → <ProgressBar> (@wordpress/components)',
+		'15 <details> → <Collapsible> (@wordpress/ui)',
+	];
+	assert(JSON.stringify(got) === JSON.stringify(want), `got:\n${got.join('\n')}`);
+});
+
+// The element map's advice is only as good as the names in it: a suggestion
+// the registry has never heard of is one nobody can import.
+await check('every element-map analog is a component the registry knows', async () => {
+	const root = scratch('dsh-map-');
+	try {
+		writeAll(root, { 'loupe.config.json': CONFIG() });
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const names = new Set([...componentRegistry.values()].map((e) => e.name));
+		const analogs = [...config.designSystem.elementMap.values()].flatMap((m) => [
+			m.component,
+			...Object.values(m.values ?? {}).filter((v): v is string => v !== null),
+		]);
+		const unknown = analogs.filter((n) => !names.has(n));
+		assert(!unknown.length, `not in the registry: ${unknown.join(', ')}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // ── library internals by stylesheet ───────────────────────────────────────────
 // An unprefixed system (`.field-label`, `.toast-viewport`) has no prefix for
 // `namespaces.external` to match, and the component renders those classes
