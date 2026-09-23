@@ -366,12 +366,38 @@ export interface Mapping {
 	toValue?: string | undefined;
 	/** The next most likely option, where the answer carried probabilities. Says how close the call was. */
 	runnerUp?: { to: string; confidence: number } | undefined;
+	/**
+	 * Which way an `unsure` row was leaning, `null` meaning toward no counterpart.
+	 *
+	 * The row's own `to` stays null either way — nothing under the floor is
+	 * written into the map as a counterpart, and nothing under it is written as a
+	 * gap in the target system. But throwing the pick away as well costs a reader
+	 * the part they can check in a second.
+	 */
+	leaning?: { to: string | null; value?: string | undefined } | undefined;
 	/** The shortlist the answer was chosen from, best first. */
 	considered: string[];
 }
 
-/** Below this a judgement is recorded as `unsure` rather than written into the map. */
-export const FLOOR = 0.5;
+/**
+ * Below this a judgement is recorded as `unsure` rather than written into the map.
+ *
+ * Swept against the labelled pairs — `evals/counterparts/floor.ts`, tables in
+ * docs/design/map.md#where-to-put-the-floor. Confidence is not smooth: answers
+ * at 0.70 and above are right **97%** of the time, and everything below is right
+ * 58–74% of the time whichever band it falls in. That is a step rather than a
+ * slope, and an answer at 0.55 is not meaningfully better evidence than one at
+ * 0.40, so a floor anywhere in that range is cutting a flat region rather than
+ * separating anything.
+ *
+ * 0.5 was inherited from `check --judge`, where a question offers a handful of
+ * options; it admitted the whole flat region and stated it as fact at 93%
+ * precision. The floor belongs at the step. That roughly halves what a map
+ * states — tolerable only because a withheld row now keeps its answer as
+ * {@link Mapping.leaning}, so the rows this excludes are moved from the map to
+ * a reader's desk rather than thrown away.
+ */
+export const FLOOR = 0.7;
 
 export interface PlanOptions {
 	tiers?: readonly Tier[] | undefined;
@@ -499,7 +525,21 @@ function rowFor(job: CounterpartItem, answer: Choice | undefined): Mapping {
 		considered: candidates.map((c) => c.path),
 	};
 	if (!answer || !(answer.confidence >= FLOOR)) {
-		return { ...row, to: null, confidence: answer?.confidence ?? 0, how: 'unsure' };
+		// Under the floor the answer is not written as a counterpart — but it is
+		// still shown. A row here is a question for a person, and `space.3xs, 0.41`
+		// is a question they can settle at a glance where a blank is one they have
+		// to start from scratch. `to` staying null is what keeps it a question.
+		const at = answer?.choice === NONE ? null : candidates.find((c) => c.path === answer?.choice);
+		return {
+			...row,
+			to: null,
+			confidence: answer?.confidence ?? 0,
+			how: 'unsure',
+			// `undefined` here is the third case, and the only one with nothing to
+			// say: no answer came back, or the one that did named an option that was
+			// never offered.
+			...(at !== undefined ? { leaning: at ? { to: at.path, value: at.literal } : { to: null } } : {}),
+		};
 	}
 	// The best option that is neither the pick nor `none`: how close the call was,
 	// which is the thing a reader of an uncalibrated map most wants to see.
@@ -650,7 +690,12 @@ function verdict(m: Mapping): string {
 	const sure = m.how === 'exact' ? dim('identical') : dim(`${m.confidence.toFixed(2)}`);
 	if (m.to) return `${green(m.to)}  ${dim(m.toValue ?? '')}  ${sure}`;
 	if (m.how === 'absent') return dim(`nothing of type ${m.type || 'unknown'} to compare`);
-	if (m.how === 'unsure') return `${yellow('unsettled')}  ${dim(`best was ${m.confidence.toFixed(2)}`)}`;
+	if (m.how === 'unsure') {
+		const lean = m.leaning
+			? ['leaning', m.leaning.to ?? 'no counterpart', m.leaning.value].filter(Boolean).join(' ')
+			: 'best was';
+		return `${yellow('unsettled')}  ${dim(`${lean}  ${m.confidence.toFixed(2)}`)}`;
+	}
 	return `${dim('no counterpart')}  ${sure}`;
 }
 

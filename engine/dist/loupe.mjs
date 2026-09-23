@@ -28038,7 +28038,7 @@ function rank(t, targets, gate = true) {
     };
   }).sort((a, b) => b.score - a.score || byBytes(a.token.path, b.token.path));
 }
-var FLOOR2 = 0.5;
+var FLOOR2 = 0.7;
 function planMap(from, to, opts = {}) {
   const size = opts.candidates ?? CANDIDATES;
   const byPath = new Map(to.tokens.map((t) => [t.path, t]));
@@ -28095,7 +28095,17 @@ function rowFor(job, answer) {
     considered: candidates.map((c) => c.path)
   };
   if (!answer || !(answer.confidence >= FLOOR2)) {
-    return { ...row, to: null, confidence: answer?.confidence ?? 0, how: "unsure" };
+    const at = answer?.choice === NONE ? null : candidates.find((c) => c.path === answer?.choice);
+    return {
+      ...row,
+      to: null,
+      confidence: answer?.confidence ?? 0,
+      how: "unsure",
+      // `undefined` here is the third case, and the only one with nothing to
+      // say: no answer came back, or the one that did named an option that was
+      // never offered.
+      ...at !== void 0 ? { leaning: at ? { to: at.path, value: at.literal } : { to: null } } : {}
+    };
   }
   const rest = Object.entries(answer.probabilities ?? {}).filter(([k]) => k !== answer.choice && k !== NONE).sort((a, b) => b[1] - a[1])[0];
   const runnerUp = rest ? { runnerUp: { to: rest[0], confidence: rest[1] } } : {};
@@ -28192,7 +28202,10 @@ function verdict(m) {
   const sure = m.how === "exact" ? dim("identical") : dim(`${m.confidence.toFixed(2)}`);
   if (m.to) return `${green(m.to)}  ${dim(m.toValue ?? "")}  ${sure}`;
   if (m.how === "absent") return dim(`nothing of type ${m.type || "unknown"} to compare`);
-  if (m.how === "unsure") return `${yellow("unsettled")}  ${dim(`best was ${m.confidence.toFixed(2)}`)}`;
+  if (m.how === "unsure") {
+    const lean = m.leaning ? ["leaning", m.leaning.to ?? "no counterpart", m.leaning.value].filter(Boolean).join(" ") : "best was";
+    return `${yellow("unsettled")}  ${dim(`${lean}  ${m.confidence.toFixed(2)}`)}`;
+  }
   return `${dim("no counterpart")}  ${sure}`;
 }
 function formatPlan(plan, show) {

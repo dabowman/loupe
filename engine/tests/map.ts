@@ -325,7 +325,30 @@ await check('an answer under the floor is unsettled, not a counterpart and not a
 	);
 	const judged = mappings.filter((m) => m.tier === 'semantic');
 	assert(judged.length > 0, 'nothing was judged');
-	for (const m of judged) assert(m.how === 'unsure' && m.to === null, `${m.from} came back ${m.how} → ${m.to}`);
+	for (const m of judged) {
+		assert(m.how === 'unsure' && m.to === null, `${m.from} came back ${m.how} → ${m.to}`);
+		// The claim is withheld; the answer behind it is not. A row a person has to
+		// settle by hand is a different job with a name on it than without one.
+		assert(m.leaning?.to === m.considered[0], `${m.from} lost the answer along with the claim`);
+	}
+});
+
+await check('an unsure row leaning toward no counterpart says which way, and is still unsure', async () => {
+	const plan = planMap(alpha, beta, { tiers: ['semantic'] });
+	const { mappings } = await askCounterparts(
+		plan,
+		'key',
+		stub([], () => ({ choice: 'none', confidence: FLOOR - 0.01 })),
+	);
+	const judged = mappings.filter((m) => m.tier === 'semantic');
+	assert(judged.length > 0, 'nothing was judged');
+	for (const m of judged) {
+		// `none` under the floor is not a gap in the target system. Admitting it as
+		// one on a reading the floor refused is the collapse the floor exists to stop.
+		assert(m.how === 'unsure' && m.to === null, `a none under the floor came back ${m.how}`);
+		assert(m.leaning !== undefined && m.leaning.to === null, `${m.from} did not say which way it leaned`);
+	}
+	assert(countBy(mappings).none === 0, 'an unsure none was counted as a token with no counterpart');
 });
 
 await check('an answer that is not one of the options is refused', async () => {
@@ -335,8 +358,12 @@ await check('an answer that is not one of the options is refused', async () => {
 		'key',
 		stub([], () => ({ choice: 'a.path.beta.never.had', confidence: 0.99 })),
 	);
-	for (const m of mappings.filter((x) => x.tier === 'semantic'))
+	for (const m of mappings.filter((x) => x.tier === 'semantic')) {
 		assert(m.how === 'unsure' && m.to === null, `${m.from} took an invented path: ${m.to}`);
+		// Not even as a leaning: a path the target set may not have is worse than a
+		// blank wherever it appears, and `leaning` is read by people too.
+		assert(m.leaning === undefined, `${m.from} leaned toward a path that was never offered`);
+	}
 });
 
 await check('a confident none is a token with no counterpart, and keeps its runner-up', async () => {

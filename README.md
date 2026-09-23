@@ -342,17 +342,22 @@ loupe map ./a ./b --dry-run            # the shortlists, asking nothing
 ```
 
 Both sides are assumed to be standard DTCG and three-tiered; nothing else about
-them has to agree, and nothing is configured per system. The engine narrows each
-token to eight candidates — `$type` as a hard gate, colour distance in OKLab,
-names as word sets with the organising words dropped — and the model picks among
-them or says the second system has no counterpart. Where several tokens land on
-one counterpart the report says so rather than reading like a bijection — which
-is often the finding: nine WPDS tokens map onto Primer's single
+them has to agree, and nothing is configured per system. `$type` is a hard gate;
+every token of a compatible type is then offered, and only where there are more
+of them than a question can carry is the list ranked down — colour distance in
+OKLab, names as word sets with the organising words dropped. The model picks
+among them or says the second system has no counterpart. Where several tokens
+land on one counterpart the report says so rather than reading like a bijection
+— which is often the finding: nine WPDS tokens map onto Primer's single
 `bgColor.disabled`. `--dry-run` shows the shortlists for free, which is the first
 thing to run on a new pair.
 
-Nothing about it is measured yet: no eval, and the weights and floors are
-arguments rather than numbers. `docs/design/map.md` says which, and
+Some of it is measured. `engine/evals/counterparts` builds labelled pairs by
+renaming a real set, and says what the question needs (the `$description`
+carries the meaning; a name alone declines 41% of the time when a counterpart
+exists) and where the confidence floor goes (0.70, the one point where precision
+steps — 97% above it, about 75% anywhere below). The ranking weights are still
+arguments rather than numbers. `docs/design/map.md` says which is which, and
 `engine/README.md` documents the flags.
 
 ### Composites

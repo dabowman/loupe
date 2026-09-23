@@ -647,12 +647,13 @@ the floor — a row for a person, not a claim that the counterpart is missing) a
 `absent` (the second set has no tokens of that type at all, which needed no
 model either).
 
-The work splits the way every `--judge` question does. The engine narrows: it
-gates on `$type`, measures colour distance in OKLab and lengths on their scale,
-compares names as word sets with the tier and type words dropped, and weighs a
-tier agreement — leaving eight candidates. The model picks among those eight,
-reading each option's tier, value and `$description`, and may answer that there
-is no counterpart. Both spec drafts render to one value, so a set written
+The work splits the way every `--judge` question does, but the engine's half is
+deliberately small: it gates on `$type` and then offers every token of a
+compatible type. Only where there are more of those than one question can carry
+does it rank them down — colour distance in OKLab, lengths on their scale, names
+as word sets with the tier and type words dropped, and a weight for tier
+agreement. The model picks among what it is given, reading each option's tier,
+value and `$description`, and may answer that there is no counterpart. Both spec drafts render to one value, so a set written
 `{ value: 16, unit: "px" }` and one written `"1rem"` measure as the same length,
 and a palette in `hsl` compares against one in `srgb`.
 
@@ -668,9 +669,17 @@ measured rather than chosen: `evals/counterparts` shows accuracy tracking the
 *ceiling* — whether the true counterpart is on the shortlist at all — almost
 exactly, so a short list loses answers the model would otherwise have found.
 Eight candidates scored 37% on one substrate where offering the whole set scored
-98%. The shortlist is now 200, which is what fits in one request; a smaller set
-is sent whole. Run `npm run eval:counterparts` (needs a key) or
+98%. The cap is now 254, which is what fits in one request; a smaller set is
+sent whole. Run `npm run eval:counterparts` (needs a key) or
 `node evals/counterparts/run.ts --ceilings` for the free half.
+
+The floor is measured the same way. `evals/counterparts/floor.ts` sweeps it and
+finds confidence steps rather than slopes: answers at 0.70 and above are right
+97% of the time, and answers anywhere between 0.25 and 0.70 are right about 75%
+of the time, so a floor inside that range separates nothing. It sits at 0.70.
+A row under it keeps the answer behind it — `unsettled  leaning radius.4  0.32`,
+or `leaning no counterpart` — without that answer being written into the map,
+so the rows a higher floor excludes become a reader's queue rather than blanks.
 
 `--dry-run` prints the shortlists and asks nothing, which is the first thing to
 run on a new pair: a shortlist that does not contain the right answer cannot be

@@ -2,3 +2,7 @@ node_modules/
 
 # Compiled executables: 60-100 MB each, built on demand and released, never committed.
 binaries/
+
+# An eval's own working file: `evals/counterparts/floor.ts` dumps its scored
+# rows so the sweep can be re-cut without paying for the answers again.
+evals/**/floor-rows.json
