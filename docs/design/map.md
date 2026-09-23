@@ -339,10 +339,11 @@ On the real WPDS-to-Archer pair the cost was plain: at eight options `map`
 reported **61 of 106** tokens as having no counterpart; at full choice, **18**.
 Forty-three false gaps, none of which the model ever had a chance to avoid.
 
-So the shortlist now exists only because a request has a size limit. 253 options
-fit in one question at the measured average option size, and {@link CANDIDATES}
-is 200 to leave room for longer descriptions. A set smaller than that is sent
-whole. The wider shortlist splits the probability mass, so more rows land under
+So the shortlist now exists only because a request has a limit — and it is a
+hard cap on the *number* of choices, not on their size: the API answers
+`Too many choices. Must have at most 255 choices.` `CANDIDATES` is 200, leaving
+room for the `none` option and for a batch carrying more than one question. A
+set smaller than that is sent whole. The wider shortlist splits the probability mass, so more rows land under
 the floor — on that pair, 34 `unsure` against 4. That is the honest trade: an
 unsettled row is a row for a person, where a false `none` is a wrong claim about
 the second system. The floor itself has not been re-measured against the wider

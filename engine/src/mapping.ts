@@ -291,10 +291,11 @@ const TIER_WEIGHT = 0.2;
  * counterpart against 18 at full choice — 43 false gaps, every one of them the
  * ranking discarding the answer before the model saw it.
  *
- * So the shortlist exists only because a request has a size limit, and the
- * number is that limit rather than a judgement. 253 options fit in one question
- * at the measured average option size; this leaves room for sets whose
- * descriptions run longer. A target set smaller than this is sent whole.
+ * So the shortlist exists only because a request has a limit, and the number is
+ * that limit rather than a judgement. The API caps a question at 255 choices —
+ * stated outright, as a count rather than a size — so 200 leaves room for the
+ * `none` option and for a batch to carry more than one question. A target set
+ * smaller than this is sent whole.
  *
  * docs/design/map.md#what-context-a-judgement-needs has the tables.
  */
