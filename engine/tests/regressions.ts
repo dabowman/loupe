@@ -1646,6 +1646,27 @@ await check('loupe suppressions names the rename behind an aliased directive', (
 	}
 });
 
+await check('loupe suppressions --group-by lists a two-rule directive under each rule', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'styles/a.css':
+			'/* wpds-allow tokens/hardcoded-value, layout/in-css -- signed off */\n.acme-a { color: #826200; }\n' +
+			'/* wpds-allow tokens/hardcoded-value -- also */\n.acme-b { color: #826200; }\n',
+	});
+	try {
+		const cli = (by: string): string =>
+			execFileSync('node', [CLI, 'suppressions', '--root', root, '--group-by', by], { encoding: 'utf8' });
+		const byRule = cli('rule');
+		assert(/^tokens\/hardcoded-value \(2\)$/m.test(byRule), `the rule heading lost its count:\n${byRule}`);
+		assert(/^layout\/in-css \(1\)$/m.test(byRule), `the second rule of a directive is missing:\n${byRule}`);
+		const byFile = cli('file');
+		assert(/^styles\/a\.css \(2\)$/m.test(byFile), `the file heading lost its count:\n${byFile}`);
+		assert(runCli(['suppressions', '--root', root, '--group-by', 'fil']).status === 2, 'a typo was accepted');
+	} finally {
+		cleanup(root);
+	}
+});
+
 // A `--profile` that matches nothing selected nothing, applied no preset and
 // said nothing — so a one-character typo checked strictly *less* than the same
 // command with no flag at all, and reported clean either way. The sibling case
