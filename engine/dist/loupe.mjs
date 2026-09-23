@@ -23496,6 +23496,7 @@ var require_lib2 = __commonJS({
 // src/cli.ts
 import { existsSync as existsSync9, writeFileSync as writeFileSync4 } from "node:fs";
 import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
+import { homedir as homedir2 } from "node:os";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
 
@@ -30176,9 +30177,13 @@ function emitBlocking(report) {
 var EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
 var messageOf2 = (err) => err instanceof Error ? err.message : String(err);
 function judgeKey() {
-  try {
-    if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(ENV_FILE);
-  } catch {
+  const option = process.env.CLAUDE_PLUGIN_OPTION_TYPESAFE_API_KEY;
+  if (!process.env.TYPESAFE_API_KEY && option) process.env.TYPESAFE_API_KEY = option;
+  for (const file of [ENV_FILE, USER_ENV_FILE]) {
+    try {
+      if (!process.env.TYPESAFE_API_KEY) process.loadEnvFile?.(file);
+    } catch {
+    }
   }
   return process.env.TYPESAFE_API_KEY;
 }
@@ -30192,6 +30197,8 @@ var confidence = (level) => (level === "high" ? green : level === "none" ? red :
 var HERE = dirname7(fileURLToPath4(import.meta.url));
 var SINGLE_FILE = !existsSync9(join14(HERE, "..", "package.json"));
 var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
+var USER_ENV_FILE = join14(process.env.XDG_CONFIG_HOME || join14(homedir2(), ".config"), "loupe", ".env");
+var KEY_SOURCES = `the environment, the plugin's API key option, ${ENV_FILE}, or ${USER_ENV_FILE}`;
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
   const entry = basename(HERE) === "src" ? "source" : "bundle";
@@ -30277,7 +30284,7 @@ Options:
                         meant. With fix, rewrites the values it settled
                         and suppresses the ones it kept; add --dry-run to
                         review them first. (TYPESAFE_API_KEY from the
-                        environment or loupe's own .env)
+                        environment or ~/.config/loupe/.env)
   --port <n>            Port for 'serve' (default: 7331)
   --force               Overwrite an existing config (init)
   --version             Same as the version command
@@ -30513,7 +30520,7 @@ async function main() {
       // The hook passes `--judge` and then turns it off silently when there is no
       // key. A report that quietly stopped asking and one that found nothing to
       // ask read identically, so name which this is.
-      `${dim("judge:      ")}${judgeKey() ? "on \u2014 TYPESAFE_API_KEY found" : `off \u2014 no TYPESAFE_API_KEY (environment, or ${ENV_FILE})`}`,
+      `${dim("judge:      ")}${judgeKey() ? "on \u2014 TYPESAFE_API_KEY found" : `off \u2014 no TYPESAFE_API_KEY (${KEY_SOURCES})`}`,
       // Asked through the same predicate the gate uses: reporting on mere truthiness
       // meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
       ...off ? [yellow(`hook:       OFF \u2014 ${off}`)] : [],
@@ -30670,7 +30677,7 @@ ${dim("  Ctrl-C to stop.")}
   }
   const apiKey = args.flags.judge ? judgeKey() : void 0;
   if (args.flags.judge && !apiKey && !isHook) {
-    fail(`loupe: --judge needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE}
+    fail(`loupe: --judge needs TYPESAFE_API_KEY, from ${KEY_SOURCES}
 `);
     return EXIT.CANNOT_RUN;
   }
