@@ -30309,7 +30309,8 @@ Options:
   --format <f>          agent | json | sarif | html  (default: agent)
                         html writes a self-contained page \u2014 redirect it to a file
   --group-by <g>        rule | file \u2014 what the agent format heads each block
-                        with; the other becomes the sub-heading (default: rule)
+                        with; the other becomes the sub-heading (default: rule).
+                        For suppressions, groups the list (default: ungrouped)
   --concise             Report only the group headings --group-by chose \u2014
                         rules or files, with counts \u2014 and the summary, not the
                         findings themselves (default: the full report)
@@ -30708,16 +30709,38 @@ ${dim("  Ctrl-C to stop.")}
     return EXIT.OK;
   }
   if (command === "suppressions") {
+    const by = args.flags["group-by"];
+    if (by !== void 0 && !isGroupBy(by)) {
+      fail(`loupe: unknown grouping "${by}" \u2014 expected ${GROUP_BYS.join(", ")}
+`);
+      return EXIT.CANNOT_RUN;
+    }
     const { directives } = await analyze(config, { scope: null });
     const kw = config.suppression.keyword;
+    const tail = (d) => `${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ""}`;
     if (args.flags.format === "json") process.stdout.write(`${JSON.stringify(directives, null, 2)}
 `);
-    else
+    else if (!by)
       for (const d of directives)
-        process.stdout.write(
-          `${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(","))}  ${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ""}
-`
-        );
+        process.stdout.write(`${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(","))}  ${tail(d)}
+`);
+    else {
+      const groups = /* @__PURE__ */ new Map();
+      for (const d of directives)
+        for (const key of by === "rule" ? d.rules : [d.file]) groups.set(key, [...groups.get(key) ?? [], d]);
+      const sorted = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+      const out = [];
+      for (const [key, group2] of sorted) {
+        out.push(`${by === "rule" ? magenta(key) : bold(key)} ${dim(`(${group2.length})`)}`);
+        const width = Math.max(...group2.map((d) => String(d.line).length));
+        for (const d of group2)
+          out.push(
+            by === "rule" ? `  ${dim(`${d.file}:${d.line}`)}  ${tail(d)}` : `  ${dim(String(d.line).padStart(width))}  ${magenta(d.rules.join(","))}  ${tail(d)}`
+          );
+        out.push("");
+      }
+      process.stdout.write(out.join("\n"));
+    }
     return EXIT.OK;
   }
   const apiKey = args.flags.judge ? judgeKey() : void 0;
