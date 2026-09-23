@@ -46,7 +46,7 @@ import {
 	resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
-import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
+import type { AnalyzeResult, BaselinedResult, Config, Directive } from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
@@ -185,6 +185,7 @@ type Flags = { [K in ValueFlag]?: string } & {
 	all?: boolean;
 	changed?: boolean;
 	'no-baseline'?: boolean;
+	'no-suppressions'?: boolean;
 	'dry-run'?: boolean;
 	judge?: boolean;
 	concise?: boolean;
@@ -244,7 +245,8 @@ Options:
   --format <f>          agent | json | sarif | html  (default: agent)
                         html writes a self-contained page — redirect it to a file
   --group-by <g>        rule | file — what the agent format heads each block
-                        with; the other becomes the sub-heading (default: rule)
+                        with; the other becomes the sub-heading (default: rule).
+                        For suppressions, groups the list (default: ungrouped)
   --concise             Report only the group headings --group-by chose —
                         rules or files, with counts — and the summary, not the
                         findings themselves (default: the full report)
@@ -253,6 +255,8 @@ Options:
   --baseline <path>     Read/write the baseline here instead of the configured
                         path (default: .loupe-baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
+  --no-suppressions     Report what suppression directives would mute; with
+                        --no-baseline, the full audit
   --dry-run             Report what 'fix' would change without writing
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
@@ -912,16 +916,38 @@ async function main(): Promise<number> {
 	// (One that carries the grammar's shape and breaks it still reports as
 	// `suppression/malformed`, whichever keyword it was written in.)
 	if (command === 'suppressions') {
+		const by = args.flags['group-by'];
+		if (by !== undefined && !isGroupBy(by)) {
+			fail(`loupe: unknown grouping "${by}" \u2014 expected ${GROUP_BYS.join(', ')}\n`);
+			return EXIT.CANNOT_RUN;
+		}
 		const { directives } = await analyze(config, { scope: null });
 		const kw = config.suppression.keyword;
+		const tail = (d: Directive): string => `${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ''}`;
 		if (args.flags.format === 'json') process.stdout.write(`${JSON.stringify(directives, null, 2)}\n`);
-		else
+		else if (!by)
 			for (const d of directives)
-				process.stdout.write(
-					`${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(','))}  ${d.reason}${
-						d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ''
-					}\n`,
-				);
+				process.stdout.write(`${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(','))}  ${tail(d)}\n`);
+		else {
+			// By rule, a directive naming two rules is listed under each.
+			const groups = new Map<string, Directive[]>();
+			for (const d of directives)
+				for (const key of by === 'rule' ? d.rules : [d.file]) groups.set(key, [...(groups.get(key) ?? []), d]);
+			const sorted = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+			const out: string[] = [];
+			for (const [key, group] of sorted) {
+				out.push(`${by === 'rule' ? magenta(key) : bold(key)} ${dim(`(${group.length})`)}`);
+				const width = Math.max(...group.map((d) => String(d.line).length));
+				for (const d of group)
+					out.push(
+						by === 'rule'
+							? `  ${dim(`${d.file}:${d.line}`)}  ${tail(d)}`
+							: `  ${dim(String(d.line).padStart(width))}  ${magenta(d.rules.join(','))}  ${tail(d)}`,
+					);
+				out.push('');
+			}
+			process.stdout.write(out.join('\n'));
+		}
 		return EXIT.OK;
 	}
 
@@ -1030,7 +1056,7 @@ async function main(): Promise<number> {
 
 	let result: AnalyzeResult | BaselinedResult;
 	try {
-		result = await analyze(config, { scope, judge: Boolean(apiKey) });
+		result = await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags['no-suppressions'] });
 	} catch (err) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
 		fail(`loupe: ${messageOf(err)}\n`);

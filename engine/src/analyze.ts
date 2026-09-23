@@ -295,7 +295,13 @@ export async function analyze(
 	config: Config,
 	// `judge` collects the controls a `judge` detector names, for `check --judge`
 	// to ask about. Off, the scanner never sees those detectors.
-	{ scope = null, judge = false }: { scope?: readonly string[] | null; judge?: boolean } = {},
+	// `suppress: false` reads directives (still listed, still checked for form)
+	// but mutes nothing: the full audit.
+	{
+		scope = null,
+		judge = false,
+		suppress = true,
+	}: { scope?: readonly string[] | null; judge?: boolean; suppress?: boolean } = {},
 ): Promise<AnalyzeResult> {
 	const ds = config.designSystem;
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
@@ -343,6 +349,7 @@ export async function analyze(
 		const cached = suppByFile.get(rel);
 		if (cached) return cached;
 		const parsed = parseSuppressions(text, rel);
+		if (!suppress) parsed.byLine.clear();
 		suppByFile.set(rel, parsed);
 		return parsed;
 	};
