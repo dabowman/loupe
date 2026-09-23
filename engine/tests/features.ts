@@ -40,7 +40,8 @@ async function run(
 		patterns,
 		components,
 		judge,
-	}: { patterns?: Pattern[]; components?: Map<string, ComponentEntry>; judge?: boolean } = {},
+		suppress,
+	}: { patterns?: Pattern[]; components?: Map<string, ComponentEntry>; judge?: boolean; suppress?: boolean } = {},
 ): Promise<AnalyzeResult> {
 	const root = scratch('dsh-feat-');
 	try {
@@ -48,7 +49,7 @@ async function run(
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		if (patterns) setPatterns(config, patterns);
 		if (components) setComponentRegistry(config, components);
-		return await analyze(config, { scope: null, judge: judge ?? false });
+		return await analyze(config, { scope: null, judge: judge ?? false, suppress: suppress ?? true });
 	} finally {
 		cleanup(root);
 	}
@@ -894,6 +895,20 @@ await check('a locked-component finding can be suppressed like any other', async
 	].join('\n');
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	assert(!at(r, 'system/locked-component').length, 'a well-formed suppression mutes the finding');
+});
+
+await check('--no-suppressions reports what a directive mutes, and still lists the directive', async () => {
+	const src = [
+		'/* wpds-allow system/locked-component -- reviewed, migrating later */',
+		"import { Badge } from '@wordpress/components';",
+		'export const A = () => <Badge>old</Badge>;',
+	].join('\n');
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
+		{ components: componentRegistry, suppress: false },
+	);
+	one(at(r, 'system/locked-component'), 'the suppressed finding is back');
+	assert(r.directives.length === 1, `the directive is still listed: ${r.directives.length}`);
 });
 
 // ── where a directive has to sit ──────────────────────────────────────────────

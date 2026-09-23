@@ -40,7 +40,8 @@ Then summarize for the user rather than pasting raw output:
    below the report means an accepted backlog is being filtered out, so what you
    are looking at is new drift rather than the state of the repo — re-run with
    `--no-baseline` for the real total. Unsaid, a near-empty report reads as a
-   clean codebase.
+   clean codebase. Suppression directives hide findings the same way: add
+   `--no-suppressions` for the full audit, with nothing muted.
 5. **Do not start fixing.** This command reports. Offer `/loupe-fix` as the next
    step, or ask which subset to take on.
 

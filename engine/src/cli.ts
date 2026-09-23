@@ -185,6 +185,7 @@ type Flags = { [K in ValueFlag]?: string } & {
 	all?: boolean;
 	changed?: boolean;
 	'no-baseline'?: boolean;
+	'no-suppressions'?: boolean;
 	'dry-run'?: boolean;
 	judge?: boolean;
 	concise?: boolean;
@@ -253,6 +254,8 @@ Options:
   --baseline <path>     Read/write the baseline here instead of the configured
                         path (default: .loupe-baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
+  --no-suppressions     Report what suppression directives would mute; with
+                        --no-baseline, the full audit
   --dry-run             Report what 'fix' would change without writing
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
@@ -1030,7 +1033,7 @@ async function main(): Promise<number> {
 
 	let result: AnalyzeResult | BaselinedResult;
 	try {
-		result = await analyze(config, { scope, judge: Boolean(apiKey) });
+		result = await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags['no-suppressions'] });
 	} catch (err) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
 		fail(`loupe: ${messageOf(err)}\n`);
