@@ -29,11 +29,17 @@ import { readDir } from './discover.ts';
  * Counterparts live in the same tier far more often than not, which is why this
  * is inferred at all — see {@link tierOf}.
  */
-export type Tier = 'base' | 'semantic' | 'component';
+export type Tier = 'base' | 'semantic' | 'component' | 'unknown';
 
-export const TIERS: readonly Tier[] = ['base', 'semantic', 'component'];
+/** A tier a set can actually declare. `unknown` is the absence of one, not a fourth. */
+export type DeclaredTier = Exclude<Tier, 'unknown'>;
 
-export const isTier = (s: string): s is Tier => (TIERS as readonly string[]).includes(s);
+export const TIERS: readonly DeclaredTier[] = ['base', 'semantic', 'component'];
+
+/** Every value a token's `tier` can take, in report order. */
+export const ALL_TIERS: readonly Tier[] = [...TIERS, 'unknown'];
+
+export const isTier = (s: string): s is Tier => (ALL_TIERS as readonly string[]).includes(s);
 
 /** One token, flattened out of the tree it was authored in. */
 export interface Token {
@@ -58,8 +64,8 @@ export interface Token {
 	/** How many aliases were followed to reach a literal. 0 is a token that holds one. */
 	depth: number;
 	tier: Tier;
-	/** Whether the tier was read off a group name or inferred from the alias depth. */
-	tierFrom: 'named' | 'structural';
+	/** Where the tier came from, or `unstated` when the set never said. */
+	tierFrom: 'named' | 'foldered' | 'unstated';
 	/** The other tokens in the same group, by leaf name. Bounded; it is context, not data. */
 	siblings: string[];
 	/** Which file in the set this token came from. */
@@ -394,9 +400,9 @@ export function inferType(value: unknown): string {
  * one part of its structure it always writes down somewhere — and the point of
  * this utility is that nothing else about the two sets has to agree.
  */
-const TIER_WORDS: Record<Tier, RegExp> = {
+const TIER_WORDS: Record<DeclaredTier, RegExp> = {
 	base: /^(primitives?|base|core|globals?|foundations?|refs?|reference|palettes?|raw|scales?)$/,
-	semantic: /^(semantics?|alias(es)?|system|sys|themes?|roles?|intent|decisions?)$/,
+	semantic: /^(semantics?|alias(es)?|system|sys|themes?|roles?|intent|decisions?|common|shared|functional|applied)$/,
 	component: /^(components?|comps?|cmp|parts?|recipes?|patterns?)$/,
 };
 
@@ -425,15 +431,57 @@ export const isTierWord = (word: string): boolean => TIERS.some((t) => TIER_WORD
  * signal — a set whose semantic tokens alias each other reads one tier too deep —
  * which is why `map` treats the tier as evidence and not as a gate.
  */
-export function tierOf(segments: readonly string[], depth: number): { tier: Tier; tierFrom: 'named' | 'structural' } {
+export function tierOf(
+	segments: readonly string[],
+	dirs: readonly string[] = [],
+): { tier: Tier; tierFrom: 'named' | 'foldered' | 'unstated' } {
+	// The folders the file sits in come first. A set organised as base/ common/
+	// component/ has made a deliberate statement about every file in it, whereas
+	// a word inside a token's path may be describing the token rather than
+	// placing it: Primer's `display.blue.scale.0` lives in `functional/` and is a
+	// scale *of* colours, not a declaration that it is a primitive. Reading the
+	// path first filed 190 of Primer's functional tokens as base on that one word.
+	for (const d of dirs) {
+		const tier = TIERS.find((t) => TIER_WORDS[t].test(d.toLowerCase()));
+		if (tier) return { tier, tierFrom: 'foldered' };
+	}
+	// Then what the token calls itself, which is all a single-file set has.
 	for (const s of segments.slice(0, -1)) {
 		const tier = TIERS.find((t) => TIER_WORDS[t].test(s.toLowerCase()));
 		if (tier) return { tier, tierFrom: 'named' };
 	}
-	return { tier: depth === 0 ? 'base' : depth === 1 ? 'semantic' : 'component', tierFrom: 'structural' };
+	// And otherwise it is not known, which is the honest answer.
+	//
+	// This used to fall back to the alias depth, on the reasoning that a literal,
+	// a reference to a literal and a reference to a reference are the three tiers
+	// restated. That measures plumbing rather than meaning, and it is wrong in
+	// both directions. A component token that reaches a base scale directly —
+	// `button.padding: {space.s}` — read a tier too shallow, which was 177 of
+	// Archer's 644 component tokens. And the inference has the case backwards:
+	// a component token that merely re-aliases a common one is barely a token at
+	// all, while the ones that *earn* their place are exactly those reaching for a
+	// different primitive than the common tier offers — the deepest chains by that
+	// reasoning, and the shallowest in fact.
+	//
+	// The tier is a fact about what a token means: whether it applies to one
+	// component or holds everywhere. Nothing in the file structure can settle that
+	// when the set has not said it, so the model is told it is unknown and reads
+	// the name and the description instead.
+	return { tier: 'unknown', tierFrom: 'unstated' };
 }
 
 // ── the set ─────────────────────────────────────────────────────────────────
+
+/**
+ * The directories a file sits in, relative to the set's own root.
+ *
+ * Only what is *inside* the set counts. A checkout that happens to live under
+ * `~/work/base/` would otherwise file every token in every set as a primitive.
+ */
+function dirsOf(root: string, file: string): string[] {
+	const rel = file.startsWith(root) ? file.slice(root.length) : file;
+	return rel.split(/[/\\]/).slice(0, -1).filter(Boolean);
+}
 
 /** How many sibling names a token carries as context. Enough to show a scale, not a whole palette. */
 const SIBLINGS = 12;
@@ -474,7 +522,7 @@ export function readTokenDoc(path: string, label = basename(path).replace(/\.jso
 		const group = t.segments.slice(0, -1).join('.');
 		return {
 			...t,
-			...tierOf(t.segments, t.depth),
+			...tierOf(t.segments, dirsOf(path, t.file)),
 			siblings: (byGroup.get(group) ?? []).filter((n) => n !== t.leaf).slice(0, SIBLINGS),
 		};
 	});

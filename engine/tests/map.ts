@@ -117,15 +117,21 @@ await check('tier comes off the group names where a set writes them', () => {
 	assert(base.tier === 'base' && base.tierFrom === 'named', `${base.tier}/${base.tierFrom}`);
 });
 
-await check('tier comes off the alias depth where a set writes no tier words', () => {
-	for (const [path, tier] of [
-		['ink.darkest', 'base'],
-		['fg.body', 'semantic'],
-		['control.gutter', 'component'],
-	] as const) {
+await check('a set that never states a tier gets no tier, rather than one guessed from alias depth', () => {
+	// `beta` writes no tier words and sits in no folders. Depth used to answer
+	// here — literal/one-hop/two-hop read as base/semantic/component — which
+	// measures the plumbing rather than the meaning, and gets the interesting
+	// case backwards: a component token that merely re-aliases a common one is
+	// the shallow chain, and the one that reaches past the common tier for a
+	// different primitive is the deep one.
+	for (const path of ['ink.darkest', 'fg.body', 'control.gutter']) {
 		const t = find(beta, path);
-		assert(t.tier === tier && t.tierFrom === 'structural', `${path} read as ${t.tier}/${t.tierFrom}`);
+		assert(t.tier === 'unknown' && t.tierFrom === 'unstated', `${path} read as ${t.tier}/${t.tierFrom}`);
 	}
+	// And an unknown tier is never agreement: two sets that both failed to say
+	// have not said the same thing.
+	const [top] = rank(find(alpha, 'semantic.text.muted'), beta.tokens);
+	assert(top && !top.sameTier, 'an unstated tier counted as a tier match');
 });
 
 await check('a tier word in the leaf is a name, not a tier', () => {
@@ -137,9 +143,9 @@ await check('a tier word in the leaf is a name, not a tier', () => {
 		color: { background: { base: { $value: '{ink.white}' } } },
 	});
 	const t = find(doc, 'color.background.base');
-	assert(t.tier === 'semantic' && t.tierFrom === 'structural', `${t.tier}/${t.tierFrom}`);
+	assert(t.tier === 'unknown' && t.tierFrom === 'unstated', `${t.tier}/${t.tierFrom}`);
 	// And above the leaf, the outermost group decides: `base` here is a variant.
-	const variant = tierOf(['component', 'button', 'base', 'padding'], 2);
+	const variant = tierOf(['component', 'button', 'base', 'padding']);
 	assert(variant.tier === 'component', `component.button.base.padding read as ${variant.tier}`);
 });
 
@@ -195,14 +201,19 @@ await check('names are compared on meaning, not on the words a file is organised
 });
 
 await check('the value carries a primitive and the name carries a role', () => {
-	// Every base colour in beta is one of alpha's, exactly. Value alone should put
-	// it first even though the names have nothing in common.
+	// Every base colour in beta is one of alpha's, exactly. Value alone has to
+	// carry them onto the shortlist, since the names have nothing in common —
+	// but not necessarily to the top of it: beta states no tier, so an exact
+	// value match against several candidates is a tie the ranking cannot break,
+	// and `evals/counterparts` says being *offered* is what decides the answer.
 	for (const [a, b] of [
 		['primitive.color.slate.900', 'ink.darkest'],
 		['primitive.color.blue.500', 'ink.accent'],
 	] as const) {
-		const top = rank(find(alpha, a), beta.tokens)[0];
-		assert(top?.token.path === b, `${a} ranked ${top?.token.path} first, not ${b}`);
+		const ranked = rank(find(alpha, a), beta.tokens);
+		const at = ranked.findIndex((c) => c.token.path === b);
+		assert(at >= 0 && at < 4, `${a} ranked ${b} at ${at}, outside the first four`);
+		assert(ranked[at]?.value === 1, `${a} did not measure as the same colour as ${b}`);
 	}
 	// A semantic token whose counterpart is spelled nothing like it still has to
 	// reach the shortlist, which is all the ranking owes it.
@@ -329,7 +340,9 @@ await check('an answer that is not one of the options is refused', async () => {
 });
 
 await check('a confident none is a token with no counterpart, and keeps its runner-up', async () => {
-	const plan = planMap(alpha, beta, { tiers: ['base'] });
+	// Scoped by type rather than tier: `brand.partner-badge` sits in no tier
+	// folder and carries no tier word, so its tier is unknown.
+	const plan = planMap(alpha, beta, { types: ['color'] });
 	const { mappings } = await askCounterparts(
 		plan,
 		'key',

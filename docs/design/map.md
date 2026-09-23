@@ -96,20 +96,46 @@ opaque.
 
 ### The tier
 
-A named tier wins. A set that groups under `primitive/` has said outright what
-those tokens are, and no structural signal should overrule it.
+**The tier is a fact about meaning, not about structure.** Does a token apply to
+one component, or does it hold everywhere? Nothing about how a file is wired can
+settle that, so this reads what the set *says* and otherwise answers `unknown`.
 
-The name has to appear **above the leaf** to count. `color.background.base` is a
-semantic token whose own name happens to be `base`, and reading that as a tier
-files every "base" and "core" variant of every scale as a primitive. Above the
-leaf the outermost tier word wins: in `component.button.base.padding` the set is
-organised by `component`, and `base` is a variant.
+Two things count as saying it. The folders the file sits in come first: a set
+laid out as `base/ common/ component/` has made a deliberate statement about
+every file in it. Then a tier word in the token's own path, which is all a
+single-file set has.
 
-Otherwise the alias depth answers, because a literal, a reference to a literal
-and a reference to a reference are the three tiers restated. It is the weaker
-signal — a set whose semantic tokens alias each other reads one tier too deep —
-which is why the tier is evidence and never a gate. It is worth 0.2 of the
-score, and a cross-tier candidate is still offered.
+Folders win over path words because a word in a path may be *describing* the
+token rather than placing it. Primer's `display.blue.scale.0` lives in
+`functional/` and is a scale of colours, not a declaration that it is a
+primitive; reading the path first filed 190 of Primer's functional tokens as
+base on that one word. A tier word in the leaf never counts at all —
+`color.background.base` is a semantic token whose own name happens to be `base`.
+
+On the three real systems this reads: Archer 954/954, Primer 1488/1488, and WPDS
+165 tokens named (it declares `primitive` in the path) with 169 unstated.
+
+#### Alias depth was a bad proxy and is gone
+
+This used to fall back to counting aliases — a literal, a reference to a literal
+and a reference to a reference as the three tiers restated. It was wrong in both
+directions.
+
+It read Archer's `button.padding: {space.s}` a tier too shallow, because spacing
+skips the common tier: 177 of Archer's 644 component tokens landed in the wrong
+tier, inside files whose every token is a component token.
+
+Worse, the inference has the interesting case backwards. A component token that
+merely re-aliases a common one is barely a token at all — if the common token is
+what gets used, the component token is not earning its place. The component
+tokens that *do* earn it are exactly the ones reaching past the common tier for a
+different primitive than it offers: the deepest chains by that reasoning, and
+often the shallowest in fact.
+
+So an unstated tier is now `unknown`, and `unknown` is never agreement — two sets
+that both failed to say have not said the same thing. The model is told the tier
+where the set declared one, and left to read the name and the description where
+it did not.
 
 ## Arithmetic first, judgement second
 

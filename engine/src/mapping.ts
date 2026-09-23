@@ -29,7 +29,7 @@ import { FULL_CONTEXT, NONE, counterpartQuery } from './judge/counterpart.ts';
 import type { Context, CounterpartItem } from './judge/counterpart.ts';
 import { bold, dim, green, yellow } from './color.ts';
 import { byBytes } from './discover.ts';
-import { TIERS, isTierWord, toSrgb } from './dtcg.ts';
+import { ALL_TIERS, isTierWord, toSrgb } from './dtcg.ts';
 import type { Tier, Token, TokenDoc } from './dtcg.ts';
 
 type Fetch = typeof fetch;
@@ -268,6 +268,9 @@ const WEIGHT: Record<Tier, { value: number; name: number }> = {
 	// have rounded it differently, and the value is the weaker signal of the two.
 	semantic: { value: 0.35, name: 0.65 },
 	component: { value: 0.3, name: 0.7 },
+	// The set never said which tier this is, so there is no reason to prefer
+	// either signal over the other.
+	unknown: { value: 0.5, name: 0.5 },
 };
 
 /** What agreeing on the tier is worth, out of the whole score. */
@@ -321,7 +324,9 @@ export function rank(t: Token, targets: readonly Token[], gate = true): Scored[]
 		.map((c): Scored => {
 			const value = valueScore(t, c);
 			const name = nameScore(t, c);
-			const sameTier = c.tier === t.tier;
+			// Two tokens neither of whose sets declared a tier have not agreed about
+			// anything, so an unknown never counts as a match — in either direction.
+			const sameTier = t.tier !== 'unknown' && c.tier === t.tier;
 			return {
 				token: c,
 				value,
@@ -598,7 +603,7 @@ export function formatMap(plan: MapPlan, mappings: readonly Mapping[]): string {
 	const shared = new Map(collisions.map((c) => [c.to, c.from.length]));
 
 	const out: string[] = [`${bold(`${plan.from.label} → ${plan.to.label}`)}\n`];
-	for (const tier of TIERS) {
+	for (const tier of ALL_TIERS) {
 		const rows = mappings.filter((m) => m.tier === tier);
 		if (!rows.length) continue;
 		out.push(`${bold(tier)} ${dim(`(${rows.length})`)}\n`);

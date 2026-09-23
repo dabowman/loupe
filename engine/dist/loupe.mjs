@@ -27600,7 +27600,8 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
 import { readFileSync as readFileSync7, statSync as statSync3 } from "node:fs";
 import { basename, join as join7 } from "node:path";
 var TIERS = ["base", "semantic", "component"];
-var isTier = (s) => TIERS.includes(s);
+var ALL_TIERS = [...TIERS, "unknown"];
+var isTier = (s) => ALL_TIERS.includes(s);
 var isNode = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 function tokenFilesUnder(path, budget = 200) {
   let isDir;
@@ -27774,16 +27775,24 @@ function inferType(value) {
 }
 var TIER_WORDS = {
   base: /^(primitives?|base|core|globals?|foundations?|refs?|reference|palettes?|raw|scales?)$/,
-  semantic: /^(semantics?|alias(es)?|system|sys|themes?|roles?|intent|decisions?)$/,
+  semantic: /^(semantics?|alias(es)?|system|sys|themes?|roles?|intent|decisions?|common|shared|functional|applied)$/,
   component: /^(components?|comps?|cmp|parts?|recipes?|patterns?)$/
 };
 var isTierWord = (word) => TIERS.some((t) => TIER_WORDS[t].test(word.toLowerCase()));
-function tierOf(segments, depth) {
+function tierOf(segments, dirs = []) {
+  for (const d of dirs) {
+    const tier = TIERS.find((t) => TIER_WORDS[t].test(d.toLowerCase()));
+    if (tier) return { tier, tierFrom: "foldered" };
+  }
   for (const s of segments.slice(0, -1)) {
     const tier = TIERS.find((t) => TIER_WORDS[t].test(s.toLowerCase()));
     if (tier) return { tier, tierFrom: "named" };
   }
-  return { tier: depth === 0 ? "base" : depth === 1 ? "semantic" : "component", tierFrom: "structural" };
+  return { tier: "unknown", tierFrom: "unstated" };
+}
+function dirsOf(root2, file) {
+  const rel = file.startsWith(root2) ? file.slice(root2.length) : file;
+  return rel.split(/[/\\]/).slice(0, -1).filter(Boolean);
 }
 var SIBLINGS = 12;
 function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
@@ -27810,7 +27819,7 @@ function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
     const group = t.segments.slice(0, -1).join(".");
     return {
       ...t,
-      ...tierOf(t.segments, t.depth),
+      ...tierOf(t.segments, dirsOf(path, t.file)),
       siblings: (byGroup.get(group) ?? []).filter((n) => n !== t.leaf).slice(0, SIBLINGS)
     };
   });
@@ -27998,7 +28007,10 @@ var WEIGHT = {
   // A role is a name. Two systems that both have a default text colour will
   // have rounded it differently, and the value is the weaker signal of the two.
   semantic: { value: 0.35, name: 0.65 },
-  component: { value: 0.3, name: 0.7 }
+  component: { value: 0.3, name: 0.7 },
+  // The set never said which tier this is, so there is no reason to prefer
+  // either signal over the other.
+  unknown: { value: 0.5, name: 0.5 }
 };
 var TIER_WEIGHT = 0.2;
 var CANDIDATES = 200;
@@ -28007,7 +28019,7 @@ function rank(t, targets, gate = true) {
   return targets.filter((c) => !gate || comparable(t.type, c.type)).map((c) => {
     const value = valueScore(t, c);
     const name = nameScore(t, c);
-    const sameTier = c.tier === t.tier;
+    const sameTier = t.tier !== "unknown" && c.tier === t.tier;
     return {
       token: c,
       value,
@@ -28130,7 +28142,7 @@ function formatMap(plan, mappings) {
   const shared = new Map(collisions.map((c) => [c.to, c.from.length]));
   const out = [`${bold(`${plan.from.label} \u2192 ${plan.to.label}`)}
 `];
-  for (const tier of TIERS) {
+  for (const tier of ALL_TIERS) {
     const rows = mappings.filter((m) => m.tier === tier);
     if (!rows.length) continue;
     out.push(`${bold(tier)} ${dim(`(${rows.length})`)}
