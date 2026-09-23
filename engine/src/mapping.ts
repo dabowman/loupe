@@ -25,7 +25,7 @@
 
 import { ask } from './judge.ts';
 import type { Choice } from './judge.ts';
-import { FULL_CONTEXT, NONE, counterpartQuery } from './judge/counterpart.ts';
+import { DEFAULT_CONTEXT, NONE, counterpartQuery } from './judge/counterpart.ts';
 import type { Context, CounterpartItem } from './judge/counterpart.ts';
 import { bold, dim, green, yellow } from './color.ts';
 import { byBytes } from './discover.ts';
@@ -474,7 +474,7 @@ export async function askCounterparts(
 	plan: MapPlan,
 	apiKey: string,
 	fetchImpl: Fetch = fetch,
-	ctx: Context = FULL_CONTEXT,
+	ctx: Context = DEFAULT_CONTEXT,
 ): Promise<{ mappings: Mapping[]; answers: (Choice | undefined)[] }> {
 	const answers = plan.jobs.length ? await ask(counterpartQuery(ctx), plan.jobs, apiKey, fetchImpl) : [];
 	const judged = plan.jobs.map((job, i): Mapping => rowFor(job, answers[i]));

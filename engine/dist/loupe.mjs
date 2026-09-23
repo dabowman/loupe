@@ -27833,8 +27833,17 @@ var FULL_CONTEXT = {
   element: { name: true, type: true, tier: true, value: true, alias: true, description: true, siblings: true },
   option: { tier: true, value: true, description: true }
 };
+var valueCarries = (type) => type === "dimension" || type === "duration" || type === "number" || type === "fontWeight";
+var DEFAULT_CONTEXT = {
+  element: { ...FULL_CONTEXT.element, value: "comparable" },
+  option: { ...FULL_CONTEXT.option, value: "comparable" }
+};
+var showValue = (flag, type) => flag === "comparable" ? valueCarries(type) : flag;
 var describe = (t, opt) => {
-  const head2 = [opt.tier && t.tier !== "unknown" ? t.tier : "", opt.value ? t.literal || "(no value)" : ""].filter(Boolean).join(" \xB7 ");
+  const head2 = [
+    opt.tier && t.tier !== "unknown" ? t.tier : "",
+    showValue(opt.value, t.type) ? t.literal || "(no value)" : ""
+  ].filter(Boolean).join(" \xB7 ");
   const desc = opt.description ? t.description : void 0;
   if (!head2) return desc ?? "(name only)";
   return desc ? `${head2} \u2014 ${desc}` : head2;
@@ -27842,20 +27851,20 @@ var describe = (t, opt) => {
 function optionShape(opt) {
   const said = [
     opt.tier ? "the tier it sits at" : "",
-    opt.value ? "its value" : "",
+    opt.value === true ? "its value" : "",
     opt.description ? "what that system says it is for" : ""
   ].filter(Boolean);
   if (!said.length) return "its name alone";
   if (said.length === 1) return said[0];
   return `${said.slice(0, -1).join(", ")} and ${said.at(-1)}`;
 }
-var counterpartQuery = (ctx = FULL_CONTEXT) => ({
+var counterpartQuery = (ctx = DEFAULT_CONTEXT) => ({
   element: ({ token, fromLabel }) => ({
     set: fromLabel,
     ...ctx.element.name ? { token: token.path } : {},
     ...ctx.element.type ? { type: token.type || "unknown" } : {},
     ...ctx.element.tier && token.tier !== "unknown" ? { tier: token.tier } : {},
-    ...ctx.element.value && token.literal ? { value: token.literal } : {},
+    ...showValue(ctx.element.value, token.type) && token.literal ? { value: token.literal } : {},
     ...ctx.element.alias && token.alias ? { aliases: token.alias } : {},
     ...ctx.element.description && token.description ? { description: token.description } : {},
     ...ctx.element.siblings && token.siblings.length ? { group_siblings: token.siblings } : {}
@@ -28067,7 +28076,7 @@ function planMap(from, to, opts = {}) {
   }
   return { jobs, shortlists, settled, skipped: from.tokens.length - capped.length, from, to };
 }
-async function askCounterparts(plan, apiKey, fetchImpl = fetch, ctx = FULL_CONTEXT) {
+async function askCounterparts(plan, apiKey, fetchImpl = fetch, ctx = DEFAULT_CONTEXT) {
   const answers = plan.jobs.length ? await ask(counterpartQuery(ctx), plan.jobs, apiKey, fetchImpl) : [];
   const judged = plan.jobs.map((job, i) => rowFor(job, answers[i]));
   const order = new Map(plan.from.tokens.map((t, i) => [t.path, i]));

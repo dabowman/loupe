@@ -172,6 +172,26 @@ function renameValue(literal: string, seed: number): string {
 	return literal || '#000000';
 }
 
+/**
+ * Deal each token a value belonging to a different token of the same type.
+ *
+ * The nudged pair keeps every target value a rounding away from its source's,
+ * which makes the value mildly *helpful* — and that is not what two real systems
+ * look like. Each picks its own palette and its own scale, so their values agree
+ * by coincidence more often than by design, and a coincidence is exactly what
+ * misled the ranking on WPDS against Archer.
+ *
+ * So this arm keeps a value that is present, plausible and wrong: same type,
+ * same shape, belonging to some other token. A constant or an empty value would
+ * be a weaker test, since the model could see at a glance that the field carries
+ * nothing.
+ */
+function dealWrongValues(values: readonly string[]): string[] {
+	// Rotate by one within each type: every token ends up with a neighbour's
+	// value, and none keeps its own.
+	return values.map((_, i) => values[(i + 1) % values.length] as string);
+}
+
 export interface Labelled {
 	source: TokenDoc;
 	target: TokenDoc;
@@ -190,7 +210,7 @@ export const NONE = 'none';
  * the same set always yields the same split. They are what `none` is scored on,
  * and without them an eval rewards a matcher that never declines.
  */
-export function labelledPair(setPath: string, holdOut = 0.2): Labelled {
+export function labelledPair(setPath: string, holdOut = 0.2, scramble = false): Labelled {
 	const source = readTokenDoc(setPath, 'alpha');
 	const tree: Record<string, unknown> = {};
 	const truth = new Map<string, string>();
@@ -218,6 +238,30 @@ export function labelledPair(setPath: string, holdOut = 0.2): Labelled {
 			$type: t.type || 'color',
 			...(t.description ? { $description: paraphrase(t.description) } : {}),
 		};
+	}
+
+	if (scramble) {
+		// Walk the tree once to collect each type's values, then write them back
+		// rotated. Done here rather than in the loop above because a token only
+		// knows its own type once the whole set is in hand.
+		const slots: { node: Record<string, unknown>; type: string }[] = [];
+		const walk = (n: Record<string, unknown>): void => {
+			for (const v of Object.values(n)) {
+				if (!v || typeof v !== 'object') continue;
+				const node = v as Record<string, unknown>;
+				if ('$value' in node) slots.push({ node, type: String(node.$type ?? '') });
+				else walk(node);
+			}
+		};
+		walk(tree);
+		const byType = new Map<string, typeof slots>();
+		for (const s of slots) byType.set(s.type, [...(byType.get(s.type) ?? []), s]);
+		for (const group of byType.values()) {
+			const dealt = dealWrongValues(group.map((g) => String(g.node.$value)));
+			group.forEach((g, i) => {
+				g.node.$value = dealt[i];
+			});
+		}
 	}
 
 	const dir = mkdtempSync(join(tmpdir(), 'loupe-eval-'));

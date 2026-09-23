@@ -91,7 +91,8 @@ export interface Context {
 		name: boolean;
 		type: boolean;
 		tier: boolean;
-		value: boolean;
+		/** See {@link valueCarries} for what `'comparable'` means. */
+		value: boolean | 'comparable';
 		/** What it points at — often the clearest statement of its role a set makes. */
 		alias: boolean;
 		description: boolean;
@@ -99,17 +100,63 @@ export interface Context {
 		siblings: boolean;
 	};
 	/** What the model reads about each option. */
-	option: { tier: boolean; value: boolean; description: boolean };
+	option: { tier: boolean; value: boolean | 'comparable'; description: boolean };
 }
 
+/** Every field on. The eval's reference point, not what `map` sends. */
 export const FULL_CONTEXT: Context = {
 	element: { name: true, type: true, tier: true, value: true, alias: true, description: true, siblings: true },
 	option: { tier: true, value: true, description: true },
 };
 
+/**
+ * Whether a value of this type means the same thing in both systems.
+ *
+ * A length does: `1px` is `1px` wherever it is written, and a step of a scale is
+ * *identified* by its measurement when the two systems name their steps
+ * differently — WPDS's `border.width.xs` and Archer's `borderWidth.1` are the
+ * same decision, and nothing but `1px` says so.
+ *
+ * A colour does not. `#e05300` means "the orange this brand picked", and two
+ * systems agree on one by coincidence. The same goes for a font stack or a
+ * composite.
+ */
+export const valueCarries = (type: string): boolean =>
+	type === 'dimension' || type === 'duration' || type === 'number' || type === 'fontWeight';
+
+/**
+ * What `map` sends: everything, with the value shown only where it transfers.
+ *
+ * `evals/counterparts` deals every target token a value belonging to another
+ * token of the same type — present, plausible and wrong, which is what two real
+ * systems look like to each other. Showing the value then costs the Archer
+ * substrate **29 points of accuracy (92% → 63%)**: the model believes a value
+ * when it sees one, and follows it to the wrong token.
+ *
+ * But hiding it everywhere is worse for the types where a value is the only
+ * bridge. On WPDS against Archer, hiding the value took colour from 94 judged
+ * rows to 127, and dimension from 31 down to 27 — losing exact matches like
+ * `border.width.md` (4px) onto `borderWidth.4` (4px), which no name aligns
+ * because one scale is named `xs/sm/md` and the other `1/2/4`.
+ *
+ * So it is per type, by {@link valueCarries}. The alias is shown either way,
+ * because it is a name rather than a value: a token pointing at
+ * `{color.brand.500}` has said something about its role that `#e05300` has not.
+ */
+export const DEFAULT_CONTEXT: Context = {
+	element: { ...FULL_CONTEXT.element, value: 'comparable' },
+	option: { ...FULL_CONTEXT.option, value: 'comparable' },
+};
+
 /** `semantic · #6b7280 — Lower-emphasis text beside a primary label.`, minus whatever is switched off. */
+const showValue = (flag: boolean | 'comparable', type: string): boolean =>
+	flag === 'comparable' ? valueCarries(type) : flag;
+
 const describe = (t: Token, opt: Context['option']): string => {
-	const head = [opt.tier && t.tier !== 'unknown' ? t.tier : '', opt.value ? t.literal || '(no value)' : '']
+	const head = [
+		opt.tier && t.tier !== 'unknown' ? t.tier : '',
+		showValue(opt.value, t.type) ? t.literal || '(no value)' : '',
+	]
 		.filter(Boolean)
 		.join(' \u00b7 ');
 	const desc = opt.description ? t.description : undefined;
@@ -121,7 +168,7 @@ const describe = (t: Token, opt: Context['option']): string => {
 function optionShape(opt: Context['option']): string {
 	const said = [
 		opt.tier ? 'the tier it sits at' : '',
-		opt.value ? 'its value' : '',
+		opt.value === true ? 'its value' : '',
 		opt.description ? 'what that system says it is for' : '',
 	].filter(Boolean);
 	if (!said.length) return 'its name alone';
@@ -138,13 +185,13 @@ function optionShape(opt: Context['option']): string {
  * token record the same kind of decision at different scopes, so the tier is
  * offered as one more fact about meaning rather than as a filter.
  */
-export const counterpartQuery = (ctx: Context = FULL_CONTEXT): Query<CounterpartItem> => ({
+export const counterpartQuery = (ctx: Context = DEFAULT_CONTEXT): Query<CounterpartItem> => ({
 	element: ({ token, fromLabel }) => ({
 		set: fromLabel,
 		...(ctx.element.name ? { token: token.path } : {}),
 		...(ctx.element.type ? { type: token.type || 'unknown' } : {}),
 		...(ctx.element.tier && token.tier !== 'unknown' ? { tier: token.tier } : {}),
-		...(ctx.element.value && token.literal ? { value: token.literal } : {}),
+		...(showValue(ctx.element.value, token.type) && token.literal ? { value: token.literal } : {}),
 		...(ctx.element.alias && token.alias ? { aliases: token.alias } : {}),
 		...(ctx.element.description && token.description ? { description: token.description } : {}),
 		...(ctx.element.siblings && token.siblings.length ? { group_siblings: token.siblings } : {}),

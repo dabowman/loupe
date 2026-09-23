@@ -377,6 +377,53 @@ themselves comparably, and the pairs worth mapping are the ones that do not.
 So the shortlist is now every compatible token, and the ranking runs only when
 the pool is too big to send.
 
+### The value is shown only where it transfers
+
+A value has no bearing on what a token *means*, and the model believes one when
+it sees it. `evals/counterparts` deals every target token a value belonging to
+another token of the same type — present, plausible and wrong, which is what two
+real systems look like to each other, since each picks its own palette:
+
+| archer-common | value shown | value hidden |
+|---|---|---|
+| values agree | 100% | 90% |
+| **values disagree** | **63%** | **92%** |
+
+Twenty-nine points. On the real WPDS-to-Archer pair, hiding the value took
+colour from 94 judged rows to 127.
+
+But hiding it everywhere is worse where a value is the only bridge between two
+scales. WPDS names its border widths `xs/sm/md` and Archer names its `1/2/4`;
+nothing but the measurement says which step is which. Over the four tokens whose
+counterpart is an exact measurement match, repeated three times:
+
+| | correct |
+|---|---|
+| value shown | **12/12** |
+| value hidden | 6/12 |
+
+`border.width.sm` (2px) went to `borderWidth.1` and `border.width.focus` (2px)
+to `none`, the same way on every run.
+
+So it is per type, by `valueCarries`: a length is a length in both systems and a
+scale step is *identified* by its measurement, while `#e05300` only ever means
+"the orange this brand picked". The alias is shown either way — it is a name
+rather than a value, and a token pointing at `{color.brand.500}` has said
+something about its role.
+
+### How much of this is noise
+
+Enough to matter. Asking the same 60 dimension tokens three times, with the
+request byte-identical, 4 to 6 of them come back with a different answer each
+time — around 8%. Differences of a few rows in the tables above are inside that,
+and the ones quoted are not: the colour effect is +33 rows, and the exact-match
+table was 3/3 identical in every cell.
+
+Anything measured here at single-digit rows should be repeated before it is
+believed. This note has one finding that was: an earlier reading had the value
+hurting dimension by 4 rows, which repetition dissolved — the real dimension
+effect is the exact-match table, not the aggregate count.
+
 ### The description carries the meaning; most of the rest is inert
 
 `primer-semantic`, 92 tokens, whose ceiling is 97% at eight options so the
