@@ -73,7 +73,23 @@ weaker model can run forever.
 
 Forwarding happens only when *every* package carrying the name is stale, so a
 component that is legacy in one package and recommended in another (WPDS has
-several) keeps the bare name and lets the import rule speak to the package.
+several) keeps its name, and the finding names the package whose entry is
+`recommended`: `<input> → <InputControl> (@wordpress/ui)`, not a bare name that
+is equally the legacy `@wordpress/components` import. With no single
+recommended entry the name stays bare.
+
+**An element can be keyed by an attribute.** `<input>` is a dozen controls, and
+the tag alone would send a checkbox to `InputControl` and flag
+`type="hidden"`, which has no visual analog. A mapping may name an `attribute`
+and a `values` table (`null` = no analog); only a value the source states
+outright is read, so a computed `type={ t }` falls back to the element's own
+analog. This is what a parser buys over a tag regex: wpds-guard, the
+regex-based check this coverage came from, flags hidden inputs and offers every
+input control at once.
+
+**Every analog must be in the registry.** A test fails when an element-map
+name is not a registry component, so a suggestion cannot outlive the component
+it names. Keeping the registry current against trunk is the other half.
 
 The variant is left to `--judge`; see [judge.md](judge.md#which-variant).
 

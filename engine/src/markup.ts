@@ -701,6 +701,24 @@ export function scanMarkup(
 			const lower = tag.toLowerCase();
 			const mapped = ds.elementMap.get(lower);
 			if (!mapped) return;
+			// `<input type="checkbox">` has its own analog and `type="hidden"` has
+			// none. A computed or absent value falls back to the element's own.
+			let suggest: string | null = mapped.component;
+			if (mapped.attribute && mapped.values) {
+				const attr = node.attributes.find(
+					(a) => a.type === 'JSXAttribute' && a.name.type === 'JSXIdentifier' && a.name.name === mapped.attribute,
+				);
+				const v = attr?.type === 'JSXAttribute' ? attr.value : null;
+				const raw =
+					v?.type === 'StringLiteral'
+						? v.value
+						: v?.type === 'JSXExpressionContainer' && v.expression.type !== 'JSXEmptyExpression'
+							? staticString(v.expression)
+							: null;
+				const value = raw?.trim().toLowerCase();
+				if (value !== undefined && Object.hasOwn(mapped.values, value)) suggest = mapped.values[value] ?? null;
+				if (suggest === null) return;
+			}
 			// An inline style is styling too: a bare <div> laid out with
 			// style={{ display: 'flex' }} and no className is the shape agents write most.
 			if (mapped.styledOnly && !classes.length && !style?.present) return;
@@ -709,7 +727,7 @@ export function scanMarkup(
 				classes,
 				file: relPath,
 				line,
-				suggest: mapped.component,
+				suggest,
 				styledOnly: mapped.styledOnly,
 				inlineStyled: Boolean(style?.present),
 				inlineLayout: Boolean(style?.decls?.some(isLayoutDecl)),

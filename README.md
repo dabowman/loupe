@@ -268,8 +268,11 @@ The answer is written into the suggestion, confidence last, and what the model
 supplied is green in a terminal. Below 0.5 confidence the finding is left as it
 was, and no judgement changes a verdict. `--format json` carries the answer as
 data, `judged: { answer, confidence, spans }`, so a tool can act on a judgement
-without parsing the sentence. It needs `TYPESAFE_API_KEY`, from the environment
-or a `.env` beside the checkout (see `.env.example`).
+without parsing the sentence. It needs `TYPESAFE_API_KEY`, found in this order:
+the environment, the plugin's *TypeSafe API key* option (hooks only), a `.env`
+beside the checkout, then `~/.config/loupe/.env` (see `.env.example`). As a
+plugin, the option covers the hooks and the user-level `.env` covers everything
+else; the checkout's `.env` is inside the plugin cache, which updates replace.
 
 The hook passes `--judge` too, so the advice an agent is handed at write time is
 the same advice `loupe check --judge` gives. Without a key it judges nothing and
@@ -696,8 +699,9 @@ will say nothing.
 
 ### Judging in the hook
 
-Both hooks run `--judge`, and the key is the switch. With `TYPESAFE_API_KEY` in
-the environment Claude Code launched from, a write-time report carries the same
+Both hooks run `--judge`, and the key is the switch. With a key — the plugin's
+*TypeSafe API key* option, asked for when the plugin is enabled, or any of the
+places listed under `--judge` above — a write-time report carries the same
 judged variants and judged token names `loupe check --judge` prints, and
 `patterns/judged-redirect` can fire. With no key the hook judges nothing and
 says nothing about it — the deterministic report is the whole report, which is

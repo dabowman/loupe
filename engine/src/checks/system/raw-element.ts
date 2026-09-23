@@ -29,7 +29,11 @@ import { supersededEverywhere } from './currency.ts';
  * legacy in one package and recommended in another keeps the bare name.
  */
 function currentAnalog(registry: ReadonlyMap<string, ComponentEntry>, suggest: string): string {
-	if (!supersededEverywhere(registry, suggest)) return `<${suggest}>`;
+	if (!supersededEverywhere(registry, suggest)) {
+		// `InputControl` is in two packages; name the one to import from.
+		const current = [...registry.values()].filter((e) => e.name === suggest && e.status === 'recommended');
+		return current.length === 1 ? `<${suggest}> (${current[0]?.package})` : `<${suggest}>`;
+	}
 	const remedy = [...registry.values()].find((e) => e.name === suggest && e.supersededBy)?.supersededBy;
 	return remedy || `<${suggest}>`;
 }
