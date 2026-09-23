@@ -109,7 +109,9 @@ export const FULL_CONTEXT: Context = {
 
 /** `semantic · #6b7280 — Lower-emphasis text beside a primary label.`, minus whatever is switched off. */
 const describe = (t: Token, opt: Context['option']): string => {
-	const head = [opt.tier ? t.tier : '', opt.value ? t.literal || '(no value)' : ''].filter(Boolean).join(' \u00b7 ');
+	const head = [opt.tier && t.tier !== 'unknown' ? t.tier : '', opt.value ? t.literal || '(no value)' : '']
+		.filter(Boolean)
+		.join(' \u00b7 ');
 	const desc = opt.description ? t.description : undefined;
 	if (!head) return desc ?? '(name only)';
 	return desc ? `${head} \u2014 ${desc}` : head;
@@ -141,7 +143,7 @@ export const counterpartQuery = (ctx: Context = FULL_CONTEXT): Query<Counterpart
 		set: fromLabel,
 		...(ctx.element.name ? { token: token.path } : {}),
 		...(ctx.element.type ? { type: token.type || 'unknown' } : {}),
-		...(ctx.element.tier ? { tier: token.tier } : {}),
+		...(ctx.element.tier && token.tier !== 'unknown' ? { tier: token.tier } : {}),
 		...(ctx.element.value && token.literal ? { value: token.literal } : {}),
 		...(ctx.element.alias && token.alias ? { aliases: token.alias } : {}),
 		...(ctx.element.description && token.description ? { description: token.description } : {}),

@@ -279,27 +279,29 @@ const TIER_WEIGHT = 0.2;
 /**
  * How many candidates a question offers.
  *
- * It was eight, on the reasoning that a shortlist is what makes the question
- * answerable. `evals/counterparts` says that was wrong, and expensively so.
- * Accuracy tracks the *ceiling* — how often the true counterpart is on the
- * shortlist at all — almost exactly, in every arm of both substrates: the model
- * picks correctly essentially whenever the answer is in front of it, and more
- * options do not confuse it. On the Archer substrate eight candidates held the
- * answer 37% of the time and scored 37%; offering the whole set scored 98%.
+ * The API caps a question at 255 choices, so this is 254 and the last slot is
+ * `none`. It is a limit, not a judgement: **every token of a compatible type is
+ * offered whenever they fit**, and the ranking below only runs when they do not.
  *
- * On the real WPDS-to-Archer pair, eight reported 61 of 106 tokens as having no
- * counterpart against 18 at full choice — 43 false gaps, every one of them the
- * ranking discarding the answer before the model saw it.
+ * Narrowing further actively costs answers. On WPDS against Archer, cutting 255
+ * dimension candidates to 200 turned 10 `none` answers into 24 and dropped the
+ * median confidence, because the ranking cut the *right* answers: Archer's
+ * spacing scale is authored as `clamp()`, which no arithmetic can measure, so
+ * `wpds-dimension.padding.xs` scored `space.3xs` at value 0.00 / name 0.00 and
+ * ranked it 235th of 255 — behind `autocomplete.item-radius` and
+ * `checkbox.radius`, which scored 0.40 apiece for sharing a pixel value by
+ * coincidence.
  *
- * So the shortlist exists only because a request has a limit, and the number is
- * that limit rather than a judgement. The API caps a question at 255 choices —
- * stated outright, as a count rather than a size — so 200 leaves room for the
- * `none` option and for a batch to carry more than one question. A target set
- * smaller than this is sent whole.
+ * That is the general shape of it. A ranking built on value distance and name
+ * overlap is only as good as the two sets happening to express themselves
+ * comparably, and two systems worth mapping are exactly the ones that do not.
+ * `evals/counterparts` says the same thing from the other side: accuracy tracks
+ * whether the answer was *offered*, and the model is not confused by more
+ * options.
  *
  * docs/design/map.md#what-context-a-judgement-needs has the tables.
  */
-export const CANDIDATES = 200;
+export const CANDIDATES = 254;
 
 /** One candidate and why it ranked where it did. */
 export interface Scored {
@@ -439,7 +441,13 @@ export function planMap(from: TokenDoc, to: TokenDoc, opts: PlanOptions = {}): M
 			settled.push({ ...row, to: twin.path, toValue: twin.literal, confidence: 1, how: 'exact', considered: [] });
 			continue;
 		}
-		const ranked = rank(t, to.tokens, opts.typeGate !== false).slice(0, size);
+		// Everything of a compatible type, in the order the set authored it. The
+		// ranking is a last resort for a pool too big to send, not a filter.
+		const pool = to.tokens.filter((c) => opts.typeGate === false || comparable(t.type, c.type));
+		const ranked =
+			pool.length <= size
+				? pool.map((token): Scored => ({ token, score: 0, value: 0, name: 0, sameTier: false }))
+				: rank(t, to.tokens, opts.typeGate !== false).slice(0, size);
 		if (!ranked.length) {
 			settled.push({ ...row, to: null, confidence: 1, how: 'absent', considered: [] });
 			continue;

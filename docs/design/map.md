@@ -349,6 +349,34 @@ unsettled row is a row for a person, where a false `none` is a wrong claim about
 the second system. The floor itself has not been re-measured against the wider
 list, and should be.
 
+### The ranking was worse than no ranking
+
+Offering every token of a compatible type, and nothing cleverer, beats the
+scored shortlist. On WPDS against Archer, over the 73 tokens whose whole type
+fits in one question:
+
+| | `none` answers | at or above 0.50 | median confidence |
+|---|---|---|---|
+| every same-type token | **10** | 50 | **0.60** |
+| ranked, cut to 200 | 24 | 41 | 0.53 |
+
+The two agree on only 67% of rows, and cutting 55 options out of 255 is what
+does it. Turning the tier off changes almost nothing either way (95% agreement),
+so the tier is inert and the *ranking* is the whole effect.
+
+It fails because it cuts the right answers. `wpds-dimension.padding.xs` should
+reach Archer's `space.3xs`; the ranking put it **235th of 255**, at value 0.00
+and name 0.00, behind `autocomplete.item-radius` and `checkbox.radius` on 0.40
+apiece — which earned that score by sharing a pixel value with it by
+coincidence. Archer authors its spacing scale as `clamp()`, which no arithmetic
+can measure, so the one real signal scored zero and the coincidences won.
+
+That is the general shape rather than one system's quirk. A ranking built on
+value distance and name overlap is only as good as two sets happening to express
+themselves comparably, and the pairs worth mapping are the ones that do not.
+So the shortlist is now every compatible token, and the ranking runs only when
+the pool is too big to send.
+
 ### The description carries the meaning; most of the rest is inert
 
 `primer-semantic`, 92 tokens, whose ceiling is 97% at eight options so the

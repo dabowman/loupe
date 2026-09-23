@@ -27834,7 +27834,7 @@ var FULL_CONTEXT = {
   option: { tier: true, value: true, description: true }
 };
 var describe = (t, opt) => {
-  const head2 = [opt.tier ? t.tier : "", opt.value ? t.literal || "(no value)" : ""].filter(Boolean).join(" \xB7 ");
+  const head2 = [opt.tier && t.tier !== "unknown" ? t.tier : "", opt.value ? t.literal || "(no value)" : ""].filter(Boolean).join(" \xB7 ");
   const desc = opt.description ? t.description : void 0;
   if (!head2) return desc ?? "(name only)";
   return desc ? `${head2} \u2014 ${desc}` : head2;
@@ -27854,7 +27854,7 @@ var counterpartQuery = (ctx = FULL_CONTEXT) => ({
     set: fromLabel,
     ...ctx.element.name ? { token: token.path } : {},
     ...ctx.element.type ? { type: token.type || "unknown" } : {},
-    ...ctx.element.tier ? { tier: token.tier } : {},
+    ...ctx.element.tier && token.tier !== "unknown" ? { tier: token.tier } : {},
     ...ctx.element.value && token.literal ? { value: token.literal } : {},
     ...ctx.element.alias && token.alias ? { aliases: token.alias } : {},
     ...ctx.element.description && token.description ? { description: token.description } : {},
@@ -28013,7 +28013,7 @@ var WEIGHT = {
   unknown: { value: 0.5, name: 0.5 }
 };
 var TIER_WEIGHT = 0.2;
-var CANDIDATES = 200;
+var CANDIDATES = 254;
 function rank(t, targets, gate = true) {
   const w = WEIGHT[t.tier];
   return targets.filter((c) => !gate || comparable(t.type, c.type)).map((c) => {
@@ -28051,7 +28051,8 @@ function planMap(from, to, opts = {}) {
       settled.push({ ...row, to: twin.path, toValue: twin.literal, confidence: 1, how: "exact", considered: [] });
       continue;
     }
-    const ranked = rank(t, to.tokens, opts.typeGate !== false).slice(0, size);
+    const pool = to.tokens.filter((c) => opts.typeGate === false || comparable(t.type, c.type));
+    const ranked = pool.length <= size ? pool.map((token) => ({ token, score: 0, value: 0, name: 0, sameTier: false })) : rank(t, to.tokens, opts.typeGate !== false).slice(0, size);
     if (!ranked.length) {
       settled.push({ ...row, to: null, confidence: 1, how: "absent", considered: [] });
       continue;
