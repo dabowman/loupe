@@ -24847,13 +24847,24 @@ function scanMarkup(text2, relPath, ds, rules = []) {
       const lower = tag.toLowerCase();
       const mapped = ds.elementMap.get(lower);
       if (!mapped) return;
+      let suggest = mapped.component;
+      if (mapped.attribute && mapped.values) {
+        const attr = node.attributes.find(
+          (a) => a.type === "JSXAttribute" && a.name.type === "JSXIdentifier" && a.name.name === mapped.attribute
+        );
+        const v = attr?.type === "JSXAttribute" ? attr.value : null;
+        const raw = v?.type === "StringLiteral" ? v.value : v?.type === "JSXExpressionContainer" && v.expression.type !== "JSXEmptyExpression" ? staticString(v.expression) : null;
+        const value = raw?.trim().toLowerCase();
+        if (value !== void 0 && Object.hasOwn(mapped.values, value)) suggest = mapped.values[value] ?? null;
+        if (suggest === null) return;
+      }
       if (mapped.styledOnly && !classes.length && !style?.present) return;
       rawEls.push({
         tag: lower,
         classes,
         file: relPath,
         line,
-        suggest: mapped.component,
+        suggest,
         styledOnly: mapped.styledOnly,
         inlineStyled: Boolean(style?.present),
         inlineLayout: Boolean(style?.decls?.some(isLayoutDecl))
@@ -25336,7 +25347,10 @@ function libraryOverride(keyClasses, isLibrary, isProject) {
 
 // src/checks/system/raw-element.ts
 function currentAnalog(registry, suggest) {
-  if (!supersededEverywhere(registry, suggest)) return `<${suggest}>`;
+  if (!supersededEverywhere(registry, suggest)) {
+    const current = [...registry.values()].filter((e) => e.name === suggest && e.status === "recommended");
+    return current.length === 1 ? `<${suggest}> (${current[0]?.package})` : `<${suggest}>`;
+  }
   const remedy = [...registry.values()].find((e) => e.name === suggest && e.supersededBy)?.supersededBy;
   return remedy || `<${suggest}>`;
 }
@@ -25547,7 +25561,11 @@ function collapsePerRule(pending) {
   }
   return out;
 }
-async function analyze(config, { scope = null, judge = false } = {}) {
+async function analyze(config, {
+  scope = null,
+  judge = false,
+  suppress = true
+} = {}) {
   const ds = config.designSystem;
   const ruleIsLive = (rule2) => config.enabled[rule2];
   const parseSuppressions = makeSuppressionParser(config.suppression);
@@ -25583,6 +25601,7 @@ async function analyze(config, { scope = null, judge = false } = {}) {
     const cached = suppByFile.get(rel);
     if (cached) return cached;
     const parsed = parseSuppressions(text2, rel);
+    if (!suppress) parsed.byLine.clear();
     suppByFile.set(rel, parsed);
     return parsed;
   };
@@ -26232,7 +26251,29 @@ var wordpress_components_default = {
       h5: "Heading",
       h6: "Heading",
       div: { component: "Stack", styledOnly: true },
-      span: { component: "Text", styledOnly: true }
+      span: { component: "Text", styledOnly: true },
+      button: "Button",
+      input: {
+        component: "InputControl",
+        attribute: "type",
+        values: {
+          hidden: null,
+          checkbox: "CheckboxControl",
+          radio: "RadioControl",
+          search: "SearchControl",
+          file: "FormFileUpload",
+          range: "RangeControl",
+          submit: "Button",
+          button: "Button",
+          reset: "Button"
+        }
+      },
+      select: "SelectControl",
+      textarea: "TextareaControl",
+      table: "DataViews",
+      dialog: "Modal",
+      progress: "ProgressBar",
+      details: "Collapsible"
     }
   },
   namespaces: {
@@ -28115,6 +28156,8 @@ function normalize(raw, { root: root2 }) {
   const elementMap = /* @__PURE__ */ new Map();
   for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
     const entry = typeof v === "string" ? { component: v, styledOnly: false } : v;
+    if (entry.values === void 0 !== (entry.attribute === void 0))
+      throw new Error(`elementMap.${tag}: attribute and values go together`);
     elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
   }
   const substitutionProps = ds.substitutionProps ?? DEFAULTS.designSystem.substitutionProps;
@@ -30275,6 +30318,8 @@ Options:
   --baseline <path>     Read/write the baseline here instead of the configured
                         path (default: .loupe-baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
+  --no-suppressions     Report what suppression directives would mute; with
+                        --no-baseline, the full audit
   --dry-run             Report what 'fix' would change without writing
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
@@ -30754,7 +30799,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   }
   let result;
   try {
-    result = await analyze(config, { scope, judge: Boolean(apiKey) });
+    result = await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags["no-suppressions"] });
   } catch (err) {
     if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf2(err)}`);
     fail(`loupe: ${messageOf2(err)}
