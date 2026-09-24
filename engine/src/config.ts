@@ -53,6 +53,7 @@ export const DEFAULTS: MergedConfig = {
 		// and Base UI, `as` and `component` elsewhere. The element in one of these is
 		// an argument naming a tag, not markup being rendered. `[]` turns it off.
 		substitutionProps: ['render', 'as', 'component'],
+		allowedInlineStyles: {},
 	},
 	namespaces: { project: [], external: [], neverDead: [] },
 	sources: {
@@ -271,6 +272,15 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	if (!Array.isArray(styleSources) || styleSources.some((p) => typeof p !== 'string' || p === ''))
 		throw new Error(`designSystem.styleSources must be an array of paths, got: ${JSON.stringify(styleSources)}`);
 
+	const allowedInlineStyles: unknown = ds.allowedInlineStyles ?? {};
+	if (
+		!isObj(allowedInlineStyles) ||
+		Object.values(allowedInlineStyles).some((v) => !Array.isArray(v) || v.some((p) => typeof p !== 'string'))
+	)
+		throw new Error(
+			`designSystem.allowedInlineStyles must map component names to arrays of CSS properties, got: ${JSON.stringify(allowedInlineStyles)}`,
+		);
+
 	const layoutComponents = ds.components?.layout ?? [];
 	const textComponents = ds.components?.text ?? [];
 
@@ -324,6 +334,12 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 			knownComponents: new Set([...layoutComponents, ...textComponents]),
 			elementMap,
 			substitutionProps: new Set(substitutionProps as string[]),
+			allowedInlineStyles: new Map(
+				Object.entries(allowedInlineStyles as Record<string, string[]>).map(([c, props]) => [
+					c,
+					new Set(props.map((p) => p.toLowerCase())),
+				]),
+			),
 		},
 		patterns,
 		componentRegistry,

@@ -582,6 +582,7 @@ await check('a rule title names a token namespace only when there is one', () =>
 		knownComponents: new Set(),
 		elementMap: new Map(),
 		substitutionProps: new Set(),
+		allowedInlineStyles: new Map(),
 	});
 	const several = renderTitle('tokens/hardcoded-value', ds(['--color-', '--space-']), 'k');
 	assert(!several.includes('--color-*'), `several prefixes must not be reported as the namespace: ${several}`);
@@ -611,6 +612,7 @@ await check('guidance names the canonical component, never a superseded spelling
 		knownComponents: new Set(),
 		elementMap: new Map(),
 		substitutionProps: new Set(),
+		allowedInlineStyles: new Map(),
 	});
 	const flex = renderTitle('layout/in-css', ds(['Stack', 'HStack', 'VStack'], []), 'k');
 	assert(flex.includes('<Stack>'), `the canonical primitive should be named: ${flex}`);

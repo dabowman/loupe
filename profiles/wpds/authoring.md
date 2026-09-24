@@ -145,9 +145,11 @@ other.
 own docs set color via `style` when a variant alone can't express it (e.g.
 `style={{ color: 'var(--wpds-color-foreground-content-warning)' }}`), which
 makes this the one sanctioned case for `style` on a WPDS component rather than
-an override. If the codebase's `system/inline-style` rule doesn't yet know that
-exception, suppress it with that reason rather than inventing a `color` prop
-that does not exist.
+an override. The `wpds` preset knows the exception
+(`designSystem.allowedInlineStyles`): a `style` on `Text` carrying only `color`
+is not `system/inline-style`, and needs no suppression. The value is still
+checked, so it has to be a token — a raw colour there is
+`tokens/hardcoded-value`. Don't invent a `color` prop that does not exist.
 
 Raw `<p>` and `<h1>`–`<h6>` both have a `Text` analog. Use it.
 

@@ -275,6 +275,12 @@ export interface Directive {
 	reason: string;
 	/** The read alias it was written with, when that is not the active keyword. */
 	alias?: string;
+	/**
+	 * The rule ids it names that muted nothing on this run: dead weight, or a
+	 * typo. Set only by a run that applied suppressions to the directive's file,
+	 * and absent when every id it names is live.
+	 */
+	stale?: string[];
 }
 
 /** A suppression comment that names no rule, or gives no reason. */
@@ -287,6 +293,8 @@ export interface MalformedDirective {
 
 export interface Suppressions {
 	byLine: Map<number, Set<string>>;
+	/** The directives covering each line of `byLine`, for crediting a mute to the one that did it. */
+	owners: Map<number, Directive[]>;
 	directives: Directive[];
 	malformed: MalformedDirective[];
 }
@@ -368,10 +376,18 @@ export interface RawElement {
 
 export interface InlineStyleElement {
 	tag: string;
+	/** The canonical name of a design-system component, however the file imported it. */
+	component: string | null;
 	isSystem: boolean;
 	isText: boolean;
 	decls: Decl[];
 	dynamic: number;
+	/**
+	 * The CSS property of each dynamic entry whose key is static
+	 * (`color: isError ? a : b`). An entry with no knowable key — a spread,
+	 * `style={obj}` — has none, which is how the two are told apart.
+	 */
+	dynamicProps: string[];
 	file: string;
 	line: number;
 }
@@ -458,6 +474,11 @@ export interface PatternNode {
 	name: string;
 	pkg: string | null;
 	children: PatternNode[];
+	/**
+	 * A registry node written `>Name`: it must be a direct child of the node
+	 * above it, not anywhere beneath. Only pattern nodes carry it.
+	 */
+	direct?: boolean;
 	line?: number;
 }
 
@@ -626,6 +647,14 @@ export interface MergedConfig {
 		components: { layout: string[]; text: string[] };
 		elementMap: Record<string, string | AuthoredElementMapping>;
 		substitutionProps: string[];
+		/**
+		 * The inline-style declarations a component's own API sanctions, by
+		 * component and CSS property: WPDS `Text` has no color prop, so its docs
+		 * set color through `style`. Only a `style` made entirely of these is not
+		 * `system/inline-style`; its declarations still go through the ordinary
+		 * checks, so a raw colour there is still a hardcoded value.
+		 */
+		allowedInlineStyles: Record<string, string[]>;
 	};
 	namespaces: { project: string[]; external: string[]; neverDead: string[] };
 	sources: SourceGlobs;
@@ -671,6 +700,8 @@ export interface DesignSystem {
 	elementMap: Map<string, ElementMapping>;
 	/** Props whose value names the element a component should render. */
 	substitutionProps: Set<string>;
+	/** Canonical component → the CSS properties its `style` may carry. */
+	allowedInlineStyles: Map<string, Set<string>>;
 }
 
 export interface RuleSetting {

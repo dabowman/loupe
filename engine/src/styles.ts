@@ -11,6 +11,37 @@
 import type { ChildNode, Container, Declaration, Rule } from 'postcss';
 import type { DeadRule, Decl, MarginKind } from './types.ts';
 
+/**
+ * Shorthands whose colour part has a token, whatever their other parts are.
+ * Exported for the token pass, which offers a border colour for the colour and
+ * leaves the width and style as written.
+ */
+export const COLOR_SHORTHANDS = new Set([
+	'border',
+	'border-top',
+	'border-right',
+	'border-bottom',
+	'border-left',
+	'border-block',
+	'border-block-start',
+	'border-block-end',
+	'border-inline',
+	'border-inline-start',
+	'border-inline-end',
+	'border-block-color',
+	'border-inline-color',
+	'border-block-start-color',
+	'border-block-end-color',
+	'border-inline-start-color',
+	'border-inline-end-color',
+	'outline',
+	'column-rule',
+	'column-rule-color',
+	'text-decoration',
+	'text-shadow',
+	'background-image',
+]);
+
 /** Token-backed props whose literal values duplicate a design token. */
 const COLOR_PROPS = new Set([
 	'color',
@@ -119,7 +150,35 @@ const ZERO = /^0([a-z%]*)$/i;
 
 export const usesToken = (value: string): boolean => /var\(\s*--/.test(value);
 const isLiteralColor = (v: string): boolean =>
-	/#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|oklch|lab|color)\(/i.test(v);
+	/#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|hwb|oklch|oklab|lab|lch|color)\(/i.test(v);
+
+/**
+ * The value with every `var()` and `url()` cut out, nested parentheses and all.
+ *
+ * A token beside a literal does not make the literal a token: `border:
+ * var(--border-width-xs) solid #dcdcde` still carries a raw colour. A `var()`
+ * fallback goes with it — the token is what renders — and a `url()` is cut so
+ * `icon.svg#face` is not read as a hex.
+ */
+export function withoutRefs(value: string): string {
+	let out = '';
+	for (let i = 0; i < value.length; ) {
+		const m = /^(var|url)\(/i.exec(value.slice(i));
+		if (!m) {
+			out += value[i++];
+			continue;
+		}
+		let depth = 0;
+		let j = i + m[0].length - 1;
+		for (; j < value.length; j++) {
+			if (value[j] === '(') depth++;
+			else if (value[j] === ')' && --depth === 0) break;
+		}
+		out += ' ';
+		i = j + 1;
+	}
+	return out;
+}
 const isLiteralLength = (v: string): boolean =>
 	/(^|\s|,)-?\d*\.?\d+(px|rem|em|%|vh|vw|vmin|vmax|pt|ch)\b/.test(v) || /(^|\s)-?\d+(\s|$)/.test(v);
 const isLiteralDuration = (v: string): boolean => /^-?\d*\.?\d+m?s$/i.test(v.trim());
@@ -181,9 +240,13 @@ export const isInertValue = (value: string): boolean => {
 /** A token-backed prop carrying a raw literal instead of a token reference. */
 export function isHardcodedTokenValue(prop: string, value: string): boolean {
 	const v = value.trim();
+	// Colour first, and past the token bail-out: a colour is one part of a
+	// shorthand, and the token beside it says nothing about it.
+	// Only the colour of a shorthand is judged here: `border: 1px solid #dcdcde`
+	// is flagged for the hex, not the width.
+	if (COLOR_PROPS.has(prop) || COLOR_SHORTHANDS.has(prop)) return isLiteralColor(withoutRefs(value));
 	if (usesToken(value) || KEYWORD.test(v)) return false;
 	if (v.split(/\s+/).every((part) => ZERO.test(part))) return false;
-	if (COLOR_PROPS.has(prop)) return isLiteralColor(value);
 	if (SPACING_PROPS.has(prop) || RADIUS_PROPS.has(prop) || BORDER_WIDTH_PROPS.has(prop)) return isLiteralLength(value);
 	if (MOTION_PROPS.has(prop)) return isLiteralDuration(value) || isLiteralEasing(value);
 	// Cursor has no length/color shape to check — anything left after the var()

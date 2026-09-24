@@ -186,6 +186,7 @@ type Flags = { [K in ValueFlag]?: string } & {
 	changed?: boolean;
 	'no-baseline'?: boolean;
 	'no-suppressions'?: boolean;
+	stale?: boolean;
 	'dry-run'?: boolean;
 	judge?: boolean;
 	concise?: boolean;
@@ -257,6 +258,9 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --no-suppressions     Report what suppression directives would mute; with
                         --no-baseline, the full audit
+  --stale               For suppressions, list only the directives naming a
+                        rule that muted nothing — no finding left, the rule
+                        off, or an id that is not a rule — and exit 1 if any
   --dry-run             Report what 'fix' would change without writing
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
@@ -921,9 +925,19 @@ async function main(): Promise<number> {
 			fail(`loupe: unknown grouping "${by}" \u2014 expected ${GROUP_BYS.join(', ')}\n`);
 			return EXIT.CANNOT_RUN;
 		}
-		const { directives } = await analyze(config, { scope: null });
+		const all = (await analyze(config, { scope: null })).directives;
+		const staleOnly = Boolean(args.flags.stale);
+		const directives = staleOnly ? all.filter((d) => d.stale) : all;
 		const kw = config.suppression.keyword;
-		const tail = (d: Directive): string => `${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ''}`;
+		// Why an id muted nothing, where the config can say: otherwise the finding
+		// it was written for is simply gone.
+		const why = (id: string): string =>
+			!isRuleId(id) ? 'not a rule' : !config.enabled[id] ? 'rule off' : 'mutes nothing';
+		const staleNote = (d: Directive): string =>
+			d.stale ? yellow(`  [stale: ${d.stale.map((id) => `${id} \u2014 ${why(id)}`).join('; ')}]`) : '';
+		const tail = (d: Directive): string =>
+			`${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ''}${staleNote(d)}`;
+		const exit = staleOnly && directives.length ? EXIT.BLOCKED : EXIT.OK;
 		if (args.flags.format === 'json') process.stdout.write(`${JSON.stringify(directives, null, 2)}\n`);
 		else if (!by)
 			for (const d of directives)
@@ -948,7 +962,13 @@ async function main(): Promise<number> {
 			}
 			process.stdout.write(out.join('\n'));
 		}
-		return EXIT.OK;
+		if (staleOnly && args.flags.format !== 'json')
+			process.stderr.write(
+				directives.length
+					? `loupe: ${directives.length} stale suppression(s) of ${all.length}\n`
+					: `loupe: no stale suppressions (${all.length} checked)\n`,
+			);
+		return exit;
 	}
 
 	// The one network call in the engine, so the key is checked before the walk.

@@ -180,15 +180,17 @@ function classesFrom(strings: readonly string[]): string[] {
 function readStyleAttr(value: JSXAttribute['value']): {
 	decls: Decl[];
 	dynamic: number;
+	dynamicProps: string[];
 	present: boolean;
 } {
 	const decls: Decl[] = [];
+	const dynamicProps: string[] = [];
 	let dynamic = 0;
 	const container = value?.type === 'JSXExpressionContainer' ? value.expression : value;
-	if (!container) return { decls, dynamic, present: false };
+	if (!container) return { decls, dynamic, dynamicProps, present: false };
 	if (container.type !== 'ObjectExpression') {
 		// `style={someObject}` — present, entirely opaque.
-		return { decls, dynamic: 1, present: true };
+		return { decls, dynamic: 1, dynamicProps, present: true };
 	}
 	for (const prop of container.properties) {
 		if (prop.type !== 'ObjectProperty') {
@@ -204,12 +206,13 @@ function readStyleAttr(value: JSXAttribute['value']): {
 		const cssValue = toCssValue(cssProp, prop.value);
 		if (cssValue === null) {
 			dynamic++;
+			dynamicProps.push(cssProp);
 			continue;
 		}
 		const line = prop.loc?.start?.line ?? null;
 		decls.push({ prop: cssProp, value: cssValue, line, span: valueSpan(prop.value, line) });
 	}
-	return { decls, dynamic, present: true };
+	return { decls, dynamic, dynamicProps, present: true };
 }
 
 function walkAst(node: unknown, visit: (n: Node) => void): void {
@@ -681,10 +684,12 @@ export function scanMarkup(
 		if (style?.present)
 			inlineStyles.push({
 				tag: isComponent ? root : tag.toLowerCase(),
+				component: isSystem ? (canonicals.get(root) ?? root) : null,
 				isSystem,
 				isText: isSystem && textLike.has(root),
 				decls: style.decls,
 				dynamic: style.dynamic,
+				dynamicProps: style.dynamicProps,
 				file: relPath,
 				line,
 			});
