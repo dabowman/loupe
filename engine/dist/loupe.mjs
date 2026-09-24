@@ -23836,6 +23836,7 @@ function makeSuppressionParser({
   const anyHead = [...heads, ...blanket];
   return function scan(text2, relPath) {
     const byLine = /* @__PURE__ */ new Map();
+    const owners = /* @__PURE__ */ new Map();
     const directives = [];
     const malformed = [];
     const lines = text2.split("\n");
@@ -23849,13 +23850,7 @@ function makeSuppressionParser({
       if (m?.[2] !== void 0 && m[3] !== void 0) {
         const ids = m[2].split(",").map((s) => canonicalRuleId(s.trim()));
         const used = m[1] ?? keyword;
-        byLine.set(line, new Set(ids));
-        for (const l of spannedLines(lines, i, raw, stripped)) {
-          const set = byLine.get(l) ?? /* @__PURE__ */ new Set();
-          for (const id of ids) set.add(id);
-          byLine.set(l, set);
-        }
-        directives.push({
+        const directive = {
           file: relPath,
           line,
           rules: ids,
@@ -23863,7 +23858,14 @@ function makeSuppressionParser({
           // Carried only when it is not the keyword the config asks for, so
           // `loupe suppressions` can name the rename.
           ...used === keyword ? {} : { alias: used }
-        });
+        };
+        directives.push(directive);
+        for (const l of [line, ...spannedLines(lines, i, raw, stripped)]) {
+          const set = byLine.get(l) ?? /* @__PURE__ */ new Set();
+          for (const id of ids) set.add(id);
+          byLine.set(l, set);
+          owners.set(l, [...owners.get(l) ?? [], directive]);
+        }
       } else if (written.test(stripped) || shaped.test(stripped)) {
         malformed.push({
           rule: "suppression/malformed",
@@ -23877,16 +23879,34 @@ function makeSuppressionParser({
         });
       }
     }
-    return { byLine, directives, malformed };
+    return { byLine, owners, directives, malformed };
   };
 }
-function isSuppressed(byLine, line, ruleId, scopeLines = []) {
+function mutingLine(byLine, line, ruleId, scopeLines = []) {
   for (const L of [line, line - 1, ...scopeLines]) {
     const s = byLine.get(L);
-    if (s?.has(ruleId)) return true;
+    if (s?.has(ruleId)) return L;
   }
-  return false;
+  return null;
 }
+var MuteLedger = class {
+  used = /* @__PURE__ */ new Map();
+  /** Mute `ruleId` at `line` if a directive covers it, crediting that directive. */
+  mute(supp, line, ruleId, scopeLines = []) {
+    const L = mutingLine(supp.byLine, line, ruleId, scopeLines);
+    if (L === null) return false;
+    for (const d of supp.owners.get(L) ?? [])
+      if (d.rules.includes(ruleId)) this.used.set(d, (this.used.get(d) ?? /* @__PURE__ */ new Set()).add(ruleId));
+    return true;
+  }
+  /** Set `stale` on each directive naming a rule that muted nothing; `skip` names rules this run could not exercise. */
+  settle(directives, skip = /* @__PURE__ */ new Set()) {
+    for (const d of directives) {
+      const stale = d.rules.filter((r) => !skip.has(r) && !this.used.get(d)?.has(r));
+      if (stale.length) d.stale = stale;
+    }
+  }
+};
 
 // src/markup.ts
 var import_parser = __toESM(require_lib(), 1);
@@ -23985,6 +24005,31 @@ function keyName(node) {
 }
 
 // src/styles.ts
+var COLOR_SHORTHANDS = /* @__PURE__ */ new Set([
+  "border",
+  "border-top",
+  "border-right",
+  "border-bottom",
+  "border-left",
+  "border-block",
+  "border-block-start",
+  "border-block-end",
+  "border-inline",
+  "border-inline-start",
+  "border-inline-end",
+  "border-block-color",
+  "border-inline-color",
+  "border-block-start-color",
+  "border-block-end-color",
+  "border-inline-start-color",
+  "border-inline-end-color",
+  "outline",
+  "column-rule",
+  "column-rule-color",
+  "text-decoration",
+  "text-shadow",
+  "background-image"
+]);
 var COLOR_PROPS = /* @__PURE__ */ new Set([
   "color",
   "background",
@@ -24080,7 +24125,26 @@ var APPEARANCE_PROPS = /* @__PURE__ */ new Set([
 var KEYWORD = /^(inherit|initial|unset|revert|revert-layer|none|auto|transparent|currentcolor|normal)$/i;
 var ZERO = /^0([a-z%]*)$/i;
 var usesToken = (value) => /var\(\s*--/.test(value);
-var isLiteralColor = (v) => /#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|oklch|lab|color)\(/i.test(v);
+var isLiteralColor = (v) => /#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|hwb|oklch|oklab|lab|lch|color)\(/i.test(v);
+function withoutRefs(value) {
+  let out = "";
+  for (let i = 0; i < value.length; ) {
+    const m = /^(var|url)\(/i.exec(value.slice(i));
+    if (!m) {
+      out += value[i++];
+      continue;
+    }
+    let depth = 0;
+    let j = i + m[0].length - 1;
+    for (; j < value.length; j++) {
+      if (value[j] === "(") depth++;
+      else if (value[j] === ")" && --depth === 0) break;
+    }
+    out += " ";
+    i = j + 1;
+  }
+  return out;
+}
 var isLiteralLength = (v) => /(^|\s|,)-?\d*\.?\d+(px|rem|em|%|vh|vw|vmin|vmax|pt|ch)\b/.test(v) || /(^|\s)-?\d+(\s|$)/.test(v);
 var isLiteralDuration = (v) => /^-?\d*\.?\d+m?s$/i.test(v.trim());
 var isLiteralEasing = (v) => /^(linear|ease|ease-in|ease-out|ease-in-out|step-start|step-end)$/i.test(v.trim()) || /^(cubic-bezier|steps)\(/i.test(v.trim());
@@ -24102,9 +24166,9 @@ var isInertValue = (value) => {
 };
 function isHardcodedTokenValue(prop, value) {
   const v = value.trim();
+  if (COLOR_PROPS.has(prop) || COLOR_SHORTHANDS.has(prop)) return isLiteralColor(withoutRefs(value));
   if (usesToken(value) || KEYWORD.test(v)) return false;
   if (v.split(/\s+/).every((part) => ZERO.test(part))) return false;
-  if (COLOR_PROPS.has(prop)) return isLiteralColor(value);
   if (SPACING_PROPS.has(prop) || RADIUS_PROPS.has(prop) || BORDER_WIDTH_PROPS.has(prop)) return isLiteralLength(value);
   if (MOTION_PROPS.has(prop)) return isLiteralDuration(value) || isLiteralEasing(value);
   if (CURSOR_PROPS.has(prop)) return true;
@@ -24258,9 +24322,12 @@ function parseTemplate(cssText, startLine) {
 }
 
 // src/patterns.ts
-var split = (spec) => {
+var split = (raw) => {
+  const direct = raw.startsWith(">");
+  const spec = direct ? raw.slice(1).trimStart() : raw;
   const i = spec.indexOf("::");
-  return i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
+  const named = i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
+  return direct ? { ...named, direct } : named;
 };
 function toNode(spec) {
   if (typeof spec === "string") return { ...split(spec), children: [] };
@@ -24286,12 +24353,15 @@ function matches(pattern, tree) {
   if (pattern.pkg && tree.pkg && pattern.pkg !== tree.pkg) return false;
   if (!pattern.children.length) return true;
   const pool = descendants(tree);
+  const own = new Set(tree.children);
   const used = /* @__PURE__ */ new Set();
-  const wanted = [...pattern.children].sort((a, b) => nodeCount(b) - nodeCount(a));
+  const wanted = [...pattern.children].sort(
+    (a, b) => Number(Boolean(b.direct)) - Number(Boolean(a.direct)) || nodeCount(b) - nodeCount(a)
+  );
   for (const want of wanted) {
-    const idx = pool.findIndex((n, i) => !used.has(i) && matches(want, n));
-    if (idx === -1) return false;
-    used.add(idx);
+    const hit = pool.find((n) => !used.has(n) && (!want.direct || own.has(n)) && matches(want, n));
+    if (!hit) return false;
+    used.add(hit);
   }
   return true;
 }
@@ -24494,11 +24564,12 @@ function classesFrom(strings) {
 }
 function readStyleAttr(value) {
   const decls = [];
+  const dynamicProps = [];
   let dynamic = 0;
   const container = value?.type === "JSXExpressionContainer" ? value.expression : value;
-  if (!container) return { decls, dynamic, present: false };
+  if (!container) return { decls, dynamic, dynamicProps, present: false };
   if (container.type !== "ObjectExpression") {
-    return { decls, dynamic: 1, present: true };
+    return { decls, dynamic: 1, dynamicProps, present: true };
   }
   for (const prop of container.properties) {
     if (prop.type !== "ObjectProperty") {
@@ -24514,12 +24585,13 @@ function readStyleAttr(value) {
     const cssValue = toCssValue(cssProp, prop.value);
     if (cssValue === null) {
       dynamic++;
+      dynamicProps.push(cssProp);
       continue;
     }
     const line = prop.loc?.start?.line ?? null;
     decls.push({ prop: cssProp, value: cssValue, line, span: valueSpan(prop.value, line) });
   }
-  return { decls, dynamic, present: true };
+  return { decls, dynamic, dynamicProps, present: true };
 }
 function walkAst(node, visit) {
   if (!node || typeof node !== "object") return;
@@ -24831,10 +24903,12 @@ function scanMarkup(text2, relPath, ds, rules = []) {
     if (style?.present)
       inlineStyles.push({
         tag: isComponent ? root2 : tag.toLowerCase(),
+        component: isSystem ? canonicals.get(root2) ?? root2 : null,
         isSystem,
         isText: isSystem && textLike.has(root2),
         decls: style.decls,
         dynamic: style.dynamic,
+        dynamicProps: style.dynamicProps,
         file: relPath,
         line
       });
@@ -24923,8 +24997,13 @@ var ROLE_HINTS = [
   [/^color$/, /colou?r-(fg|text|content|foreground)/],
   [/^background(-color)?$|^background-image$/, /colou?r-(bg|background|surface)/],
   [/border.*-color$|^border-color$|^outline-color$/, /colou?r-(border|line|stroke)/],
+  // A shorthand's token is its colour's: the width and style stay as written.
+  [
+    /^(border|outline|column-rule)(-(top|right|bottom|left|block|inline)(-(start|end))?)?(-color)?$/,
+    /colou?r-(border|line|stroke)/
+  ],
   [/shadow/, /shadow/],
-  [/^fill$|^stroke$|caret-color|accent-color|text-decoration-color/, /colou?r/],
+  [/^fill$|^stroke$|caret-color|accent-color|^text-decoration(-color)?$/, /colou?r/],
   [/^font-size$/, /font-size/],
   [/^font-weight$/, /font-weight/],
   [/^line-height$/, /line-height/],
@@ -25088,6 +25167,7 @@ function planValue(set, prop, value) {
   for (const [at, part] of parts.entries()) {
     if (measurable && /^(calc|min|max|clamp)\(/i.test(part)) return null;
     if (measurable && !isLiteralPart(part)) continue;
+    if (COLOR_SHORTHANDS.has(prop) && measure(part)?.kind !== "color") continue;
     const [only, ...more] = tokensFor(set, prop, part);
     if (only !== void 0 && !more.length) {
       slots.push({ at, part, token: only });
@@ -25327,10 +25407,15 @@ function currency(imports, registry, enabled2) {
 }
 
 // src/checks/system/inline-style.ts
-function inlineStyle(el) {
+function inlineStyle(el, allowed = /* @__PURE__ */ new Map()) {
   if (!el.isSystem) return null;
-  const shown = el.decls.map((d) => d.prop).slice(0, 3).join(", ");
-  const extra = el.decls.length + el.dynamic - Math.min(el.decls.length, 3);
+  const ok = el.component && allowed.get(el.component) || /* @__PURE__ */ new Set();
+  const opaque = el.dynamic - el.dynamicProps.length;
+  const decls = el.decls.map((d) => d.prop).filter((p) => !ok.has(p));
+  const dynamic = el.dynamicProps.filter((p) => !ok.has(p)).length + opaque;
+  if (!decls.length && !dynamic) return null;
+  const shown = decls.slice(0, 3).join(", ");
+  const extra = decls.length + dynamic - Math.min(decls.length, 3);
   return {
     rule: "system/inline-style",
     message: `<${el.tag}> style={{ ${shown || "\u2026"}${extra > 0 ? `, +${extra}` : ""} }}`,
@@ -25595,6 +25680,7 @@ async function analyze(config, {
     tokensKnown: tokenSet.known.size
   };
   const suppByFile = /* @__PURE__ */ new Map();
+  const ledger = new MuteLedger();
   const inScope = scope ? new Set(scope) : null;
   const reports = (rel) => !inScope || inScope.has(rel);
   const suppressionsFor = (rel, text2) => {
@@ -25608,7 +25694,7 @@ async function analyze(config, {
   const report = ({ scopeLines, rule: rule2, file, line, message, ...f }) => {
     if (!config.enabled[rule2] || !reports(file)) return;
     const supp = suppByFile.get(file);
-    if (supp && isSuppressed(supp.byLine, line, rule2, scopeLines)) return;
+    if (supp && ledger.mute(supp, line, rule2, scopeLines)) return;
     findings.push({ rule: rule2, severity: config.severityOf(rule2), file, line, message, ...f, rank: RULES[rule2].rank });
   };
   const referenced = /* @__PURE__ */ new Set();
@@ -25763,7 +25849,7 @@ async function analyze(config, {
   for (const el of inlineStyles) {
     if (!reports(el.file)) continue;
     const scopeLines = [el.line, el.line - 1];
-    const whole = ruleIsLive("system/inline-style") ? inlineStyle(el) : null;
+    const whole = ruleIsLive("system/inline-style") ? inlineStyle(el, ds.allowedInlineStyles) : null;
     if (whole) {
       report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
       continue;
@@ -25874,6 +25960,15 @@ async function analyze(config, {
   }
   unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
   directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  const liveControls = judge && config.enabled["patterns/judged-redirect"] ? controls.filter((c) => {
+    const supp = suppByFile.get(c.file);
+    return reports(c.file) && !(supp && ledger.mute(supp, c.line, "patterns/judged-redirect"));
+  }) : null;
+  if (suppress)
+    ledger.settle(
+      directives.filter((d) => reports(d.file)),
+      new Set(judge ? [] : ["patterns/judged-redirect"])
+    );
   return {
     findings: unique,
     directives,
@@ -25882,12 +25977,7 @@ async function analyze(config, {
     tokens: tokenSet,
     // Scoped and suppressed here, where the scope and the comments are: the
     // finding a control becomes is written later, by the judge.
-    ...judge && config.enabled["patterns/judged-redirect"] ? {
-      controls: controls.filter((c) => {
-        const supp = suppByFile.get(c.file);
-        return reports(c.file) && !(supp && isSuppressed(supp.byLine, c.line, "patterns/judged-redirect"));
-      })
-    } : {}
+    ...liveControls ? { controls: liveControls } : {}
   };
 }
 var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.message))}`;
@@ -26355,6 +26445,11 @@ var wpds_default = {
         "Text",
         "Heading",
         "Truncate"
+      ]
+    },
+    allowedInlineStyles: {
+      Text: [
+        "color"
       ]
     },
     tokenSources: [
@@ -28027,7 +28122,8 @@ var DEFAULTS = {
     // Props that hand a component the element it should render — `render` in WPDS
     // and Base UI, `as` and `component` elsewhere. The element in one of these is
     // an argument naming a tag, not markup being rendered. `[]` turns it off.
-    substitutionProps: ["render", "as", "component"]
+    substitutionProps: ["render", "as", "component"],
+    allowedInlineStyles: {}
   },
   namespaces: { project: [], external: [], neverDead: [] },
   sources: {
@@ -28168,6 +28264,11 @@ function normalize(raw, { root: root2 }) {
   const styleSources = ds.styleSources ?? [];
   if (!Array.isArray(styleSources) || styleSources.some((p) => typeof p !== "string" || p === ""))
     throw new Error(`designSystem.styleSources must be an array of paths, got: ${JSON.stringify(styleSources)}`);
+  const allowedInlineStyles = ds.allowedInlineStyles ?? {};
+  if (!isObj(allowedInlineStyles) || Object.values(allowedInlineStyles).some((v) => !Array.isArray(v) || v.some((p) => typeof p !== "string")))
+    throw new Error(
+      `designSystem.allowedInlineStyles must map component names to arrays of CSS properties, got: ${JSON.stringify(allowedInlineStyles)}`
+    );
   const layoutComponents = ds.components?.layout ?? [];
   const textComponents = ds.components?.text ?? [];
   const shipped = shippedVocabulary();
@@ -28205,7 +28306,13 @@ function normalize(raw, { root: root2 }) {
       textComponents,
       knownComponents: /* @__PURE__ */ new Set([...layoutComponents, ...textComponents]),
       elementMap,
-      substitutionProps: new Set(substitutionProps)
+      substitutionProps: new Set(substitutionProps),
+      allowedInlineStyles: new Map(
+        Object.entries(allowedInlineStyles).map(([c, props]) => [
+          c,
+          new Set(props.map((p) => p.toLowerCase()))
+        ])
+      )
     },
     patterns,
     componentRegistry,
@@ -30321,6 +30428,9 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --no-suppressions     Report what suppression directives would mute; with
                         --no-baseline, the full audit
+  --stale               For suppressions, list only the directives naming a
+                        rule that muted nothing \u2014 no finding left, the rule
+                        off, or an id that is not a rule \u2014 and exit 1 if any
   --dry-run             Report what 'fix' would change without writing
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
@@ -30715,9 +30825,14 @@ ${dim("  Ctrl-C to stop.")}
 `);
       return EXIT.CANNOT_RUN;
     }
-    const { directives } = await analyze(config, { scope: null });
+    const all = (await analyze(config, { scope: null })).directives;
+    const staleOnly = Boolean(args.flags.stale);
+    const directives = staleOnly ? all.filter((d) => d.stale) : all;
     const kw = config.suppression.keyword;
-    const tail = (d) => `${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ""}`;
+    const why = (id) => !isRuleId(id) ? "not a rule" : !config.enabled[id] ? "rule off" : "mutes nothing";
+    const staleNote = (d) => d.stale ? yellow(`  [stale: ${d.stale.map((id) => `${id} \u2014 ${why(id)}`).join("; ")}]`) : "";
+    const tail = (d) => `${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ""}${staleNote(d)}`;
+    const exit = staleOnly && directives.length ? EXIT.BLOCKED : EXIT.OK;
     if (args.flags.format === "json") process.stdout.write(`${JSON.stringify(directives, null, 2)}
 `);
     else if (!by)
@@ -30741,7 +30856,13 @@ ${dim("  Ctrl-C to stop.")}
       }
       process.stdout.write(out.join("\n"));
     }
-    return EXIT.OK;
+    if (staleOnly && args.flags.format !== "json")
+      process.stderr.write(
+        directives.length ? `loupe: ${directives.length} stale suppression(s) of ${all.length}
+` : `loupe: no stale suppressions (${all.length} checked)
+`
+      );
+    return exit;
   }
   const apiKey = args.flags.judge ? judgeKey() : void 0;
   if (args.flags.judge && !apiKey && !isHook) {
