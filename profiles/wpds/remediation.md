@@ -93,9 +93,11 @@ Map each declaration to a prop — `Text` has only `variant`; `Stack` has
 `direction`, `gap`, `align`, `justify`, `wrap`. Spacing between children moves
 to the parent's `gap`.
 
-A declaration `variant`/layout props genuinely can't express — most often
-`color`, which `Text` has no prop for — is the one case where `style` on a WPDS
-component is sanctioned rather than an override.
+`color` on `Text`, which has no prop for it, is the one case where `style` on a
+WPDS component is sanctioned rather than an override — the preset already
+exempts it, so a finding here names some other property. Remove any
+`wpds-allow system/inline-style` left on a color-only `Text` style;
+`loupe suppressions --stale` lists them.
 
 ## `system/raw-element`
 

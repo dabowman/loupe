@@ -19,6 +19,7 @@ import { join } from 'node:path';
 import { readDir } from './discover.ts';
 import postcss from 'postcss';
 import type { Root } from 'postcss';
+import { COLOR_SHORTHANDS } from './styles.ts';
 import { messageParts, snippet } from './text.ts';
 import type { Suggestion, TokenSet } from './types.ts';
 
@@ -35,8 +36,13 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	[/^color$/, /colou?r-(fg|text|content|foreground)/],
 	[/^background(-color)?$|^background-image$/, /colou?r-(bg|background|surface)/],
 	[/border.*-color$|^border-color$|^outline-color$/, /colou?r-(border|line|stroke)/],
+	// A shorthand's token is its colour's: the width and style stay as written.
+	[
+		/^(border|outline|column-rule)(-(top|right|bottom|left|block|inline)(-(start|end))?)?(-color)?$/,
+		/colou?r-(border|line|stroke)/,
+	],
 	[/shadow/, /shadow/],
-	[/^fill$|^stroke$|caret-color|accent-color|text-decoration-color/, /colou?r/],
+	[/^fill$|^stroke$|caret-color|accent-color|^text-decoration(-color)?$/, /colou?r/],
 	[/^font-size$/, /font-size/],
 	[/^font-weight$/, /font-weight/],
 	[/^line-height$/, /line-height/],
@@ -331,6 +337,8 @@ export function planValue(
 		// rest to `var()` would exempt the whole value from the rule.
 		if (measurable && /^(calc|min|max|clamp)\(/i.test(part)) return null;
 		if (measurable && !isLiteralPart(part)) continue;
+		// A shorthand is flagged for its colour alone; its width is not this rule's.
+		if (COLOR_SHORTHANDS.has(prop) && measure(part)?.kind !== 'color') continue;
 		const [only, ...more] = tokensFor(set, prop, part);
 		if (only !== undefined && !more.length) {
 			slots.push({ at, part, token: only });

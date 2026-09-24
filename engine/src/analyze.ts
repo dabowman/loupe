@@ -40,7 +40,7 @@ import type { Root } from 'postcss';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
 import { discover, toPosix } from './discover.ts';
-import { makeSuppressionParser, isSuppressed } from './suppressions.ts';
+import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
 import { messageLine, messageOf, oneLine, snippet } from './text.ts';
@@ -342,6 +342,7 @@ export async function analyze(
 		tokensKnown: tokenSet.known.size,
 	};
 	const suppByFile = new Map<string, Suppressions>();
+	const ledger = new MuteLedger();
 	const inScope = scope ? new Set(scope) : null;
 	const reports = (rel: string): boolean => !inScope || inScope.has(rel);
 
@@ -362,7 +363,7 @@ export async function analyze(
 	const report = ({ scopeLines, rule, file, line, message, ...f }: Candidate): void => {
 		if (!config.enabled[rule] || !reports(file)) return;
 		const supp = suppByFile.get(file);
-		if (supp && isSuppressed(supp.byLine, line, rule, scopeLines)) return;
+		if (supp && ledger.mute(supp, line, rule, scopeLines)) return;
 		// Keys in one order whichever channel built the candidate, so `--format json` reads alike.
 		findings.push({ rule, severity: config.severityOf(rule), file, line, message, ...f, rank: RULES[rule].rank });
 	};
@@ -577,7 +578,7 @@ export async function analyze(
 		// from classifying every inline style in the repo on every edit.
 		if (!reports(el.file)) continue;
 		const scopeLines = [el.line, el.line - 1];
-		const whole = ruleIsLive('system/inline-style') ? inlineStyle(el) : null;
+		const whole = ruleIsLive('system/inline-style') ? inlineStyle(el, ds.allowedInlineStyles) : null;
 		if (whole) {
 			report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
 			continue;
@@ -736,6 +737,26 @@ export async function analyze(
 	unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
 	directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
 
+	// Controls are muted here, before the ledger settles, so a directive for
+	// `patterns/judged-redirect` is credited on a `--judge` run.
+	const liveControls =
+		judge && config.enabled['patterns/judged-redirect']
+			? controls.filter((c) => {
+					const supp = suppByFile.get(c.file);
+					return reports(c.file) && !(supp && ledger.mute(supp, c.line, 'patterns/judged-redirect'));
+				})
+			: null;
+
+	// What each directive muted, once every finding has been offered to it. Only
+	// where this run applied suppressions: with them off, or outside the scope,
+	// nothing was offered and everything would read as stale. A judged rule is
+	// only exercised under `--judge`.
+	if (suppress)
+		ledger.settle(
+			directives.filter((d) => reports(d.file)),
+			new Set(judge ? [] : ['patterns/judged-redirect']),
+		);
+
 	return {
 		findings: unique,
 		directives,
@@ -744,14 +765,7 @@ export async function analyze(
 		tokens: tokenSet,
 		// Scoped and suppressed here, where the scope and the comments are: the
 		// finding a control becomes is written later, by the judge.
-		...(judge && config.enabled['patterns/judged-redirect']
-			? {
-					controls: controls.filter((c) => {
-						const supp = suppByFile.get(c.file);
-						return reports(c.file) && !(supp && isSuppressed(supp.byLine, c.line, 'patterns/judged-redirect'));
-					}),
-				}
-			: {}),
+		...(liveControls ? { controls: liveControls } : {}),
 	};
 }
 

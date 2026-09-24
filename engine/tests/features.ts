@@ -519,13 +519,44 @@ await check('a registered child must claim a distinct node', () => {
 const composite = (n: string): string =>
 	[
 		"import { Stack, Text, Button } from '@wordpress/ui';",
+		"import { TextControl } from '@wordpress/components';",
 		`export const Panel${n} = () => (`,
 		'\t<Stack>',
 		'\t\t<Stack><Text>Details</Text><Button>Close</Button></Stack>',
-		'\t\t<div className="acme-body"><Stack><Text>body</Text></Stack></div>',
+		'\t\t<div className="acme-body"><Stack><TextControl label="Title" /></Stack></div>',
 		'\t</Stack>',
 		');',
 	].join('\n');
+
+// Written in layout primitives, Text and Button alone and matched at any depth,
+// these two fired on whole screens: the outer Stack held a label and a button
+// somewhere, and two Texts in one place and a Button in another.
+await check('a panel with no field is not an inspector', () => {
+	const inspector = registry.find((p) => p.id === 'edit-record.inspector');
+	assert(inspector?.node, 'the shipped registry should carry edit-record.inspector');
+	const card = node(['Stack', ['Stack', 'Text', 'Button'], ['Stack', 'Text']]);
+	assert(!matches(inspector.node, card), 'a header row over body text is a card, not an inspector');
+	const panel = node(['Stack', ['Stack', 'Text', 'Button'], ['Stack', ['Stack', 'TextControl']]]);
+	assert(matches(inspector.node, panel), 'a header row over a field is');
+});
+
+await check('a pinned child must be a direct child, not a descendant', () => {
+	const inspector = registry.find((p) => p.id === 'edit-record.inspector');
+	assert(inspector?.node, 'the shipped registry should carry edit-record.inspector');
+	// A screen whose header row sits three levels down, beside an unrelated form.
+	const screen = node(['Stack', ['Stack', ['Stack', ['Stack', 'Text', 'Button']]], ['Stack', 'TextControl']]);
+	assert(!matches(inspector.node, screen), 'the header row has to be a child of the panel itself');
+	const header = registry.find((p) => p.id === 'screen.page#header');
+	assert(header?.node, 'the shipped registry should carry screen.page#header');
+	const page = node(['HStack', ['VStack', 'Text', 'Text'], ['HStack', 'Button']]);
+	assert(matches(header.node, page), 'a title stack beside an actions stack is a page header');
+	const scattered = node([
+		'VStack',
+		['VStack', ['Card', ['VStack', 'Text', 'Text']]],
+		['VStack', ['HStack', 'Button']],
+	]);
+	assert(!matches(header.node, scattered), 'two Texts deep in one branch and a Button in another is not');
+});
 
 await check('a registered pattern rebuilt in two files is reported in both', async () => {
 	const r = await run(
@@ -1455,5 +1486,91 @@ await check(
 		assert(plain.controls === undefined, 'collected controls without --judge');
 	},
 );
+
+// ── the feedback from a wpds audit ─────────────────────────────────────────────
+
+// WPDS `Text` has no color prop, and its own docs set color through `style`. A
+// suppression on every one of those was a quarter of one project's directives.
+await check('color on Text is the sanctioned inline style, and its value is still checked', async () => {
+	const src = (style: string): string =>
+		[
+			"import { Text, Stack } from '@wordpress/ui';",
+			`export const A = ({ tone, rest }) => <Text variant="body-md" style={ ${style} }>x</Text>;`,
+		].join('\n');
+	const clean = await run({
+		'loupe.config.json': CONFIG(),
+		'src/A.jsx': src("{ color: 'var(--wpds-color-foreground-content-warning)' }"),
+	});
+	assert(!at(clean, 'system/inline-style').length, 'a token color on Text is sanctioned');
+	assert(!at(clean, 'tokens/hardcoded-value').length, 'and a token is a token');
+	const dynamic = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src('{ color: tone }') });
+	assert(!at(dynamic, 'system/inline-style').length, 'an expression for color is still color');
+	const raw = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src("{ color: '#d63638' }") });
+	assert(!at(raw, 'system/inline-style').length, 'the sanction is about the property');
+	one(at(raw, 'tokens/hardcoded-value'), 'a raw colour there is still a hardcoded value');
+	const mixed = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src("{ color: 'var(--x)', marginTop: 4 }") });
+	const f = one(at(mixed, 'system/inline-style'), 'anything beside color is the old finding');
+	assert(f.message.includes('margin-top') && !f.message.includes('color'), `named the sanctioned one: ${f.message}`);
+	const spread = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src("{ color: 'var(--x)', ...rest }") });
+	one(at(spread, 'system/inline-style'), 'a spread could carry anything');
+	const stack = await run({
+		'loupe.config.json': CONFIG(),
+		'src/A.jsx': [
+			"import { Stack } from '@wordpress/ui';",
+			"export const A = () => <Stack style={ { color: 'var(--x)' } }>x</Stack>;",
+		].join('\n'),
+	});
+	one(at(stack, 'system/inline-style'), 'the sanction is Text-only');
+});
+
+// Both of these were found by a reviewer by hand, after the check ran clean.
+await check('a raw colour inside a border shorthand is a hardcoded value', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': [
+			'.acme-a { border: 1px solid #dcdcde; }',
+			'.acme-b { border-top: var(--wpds-border-width-xs) solid rgba(214,54,56,.3); }',
+			'.acme-c { outline: 2px solid hsl(0 0% 50%); }',
+			'.acme-ok { border: 1px solid var(--wpds-color-stroke-surface-neutral); }',
+			'.acme-fallback { border-bottom: 1px solid var(--wpds-color-stroke-surface-neutral, #ccc); }',
+			'.acme-url { background-image: url(icons.svg#face); }',
+		].join('\n'),
+		'src/A.jsx': [
+			'export const A = () => (<>',
+			'\t<div className="acme-a acme-b acme-c acme-ok acme-fallback acme-url" />',
+			"\t<div style={ { borderBottom: '1px solid #dcdcde' } } />",
+			'</>);',
+		].join('\n'),
+	});
+	const lines = at(r, 'tokens/hardcoded-value').map((f) => `${f.file}:${f.line}`);
+	for (const want of ['styles/a.css:1', 'styles/a.css:2', 'styles/a.css:3', 'src/A.jsx:3'])
+		assert(lines.includes(want), `missed ${want}: ${lines.join(', ')}`);
+	assert(lines.length === 4, `flagged a token, a fallback or a url: ${lines.join(', ')}`);
+});
+
+await check('a directive that mutes nothing is reported stale', async () => {
+	const src = [
+		'/* wpds-allow system/locked-component -- reviewed, migrating later */',
+		"import { Badge } from '@wordpress/components';",
+		'export const A = () => <Badge>old</Badge>;',
+		'// wpds-allow system/raw-element -- nothing here any more',
+		'export const B = () => null;',
+		'// wpds-allow system/raw-element, system/locked-compnent -- one live, one typo',
+		'export const C = () => <p>x</p>;',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const [live, dead, half] = r.directives;
+	assert(live && !live.stale, `a directive that muted a finding is live: ${JSON.stringify(live)}`);
+	assert(dead?.stale?.join() === 'system/raw-element', `the dead one: ${JSON.stringify(dead)}`);
+	assert(half?.stale?.join() === 'system/locked-compnent', `only the typo is stale: ${JSON.stringify(half)}`);
+	const off = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
+		{ components: componentRegistry, suppress: false },
+	);
+	assert(
+		off.directives.every((d) => !d.stale),
+		'with suppressions off nothing was offered to them, so nothing is stale',
+	);
+});
 
 finish();

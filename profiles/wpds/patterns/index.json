@@ -296,16 +296,19 @@
       "signature": [
         "Stack|VStack|HStack|Flex",
         [
-          "Stack|VStack|HStack|Flex",
-          "Text",
-          "Button"
+          ">Stack|VStack|HStack|Flex",
+          ">Text",
+          ">Button"
         ],
-        "Stack|VStack|HStack|Flex"
+        [
+          ">Stack|VStack|HStack|Flex",
+          "TextControl|TextareaControl|SelectControl|ToggleControl|CheckboxControl|RadioControl|NumberControl|RangeControl|ComboboxControl|ToggleGroupControl|InputControl|UnitControl|FormTokenField|DataForm"
+        ]
       ],
       "instead_of": [
         "One-off panel layouts with bespoke headers"
       ],
-      "note": "Not shipped. Extract the project's own the first time a second screen needs it and fill `canonical` in."
+      "note": "Not shipped. Extract the project's own the first time a second screen needs it and fill `canonical` in. A header row (title Text + a Button) and a body holding at least one field, both as the panel's own children: written with layout primitives, Text and Button alone, and matched at any depth, this signature fired on whole screens whose outer Stack held some row with a label and a button somewhere."
     },
     {
       "pattern": "edit-graph.canvas",
@@ -652,19 +655,19 @@
           "signature": [
             "Stack|VStack|HStack|Flex",
             [
-              "Stack|VStack|HStack|Flex",
-              "Text",
-              "Text"
+              ">Stack|VStack|HStack|Flex",
+              ">Text",
+              ">Text"
             ],
             [
-              "Stack|VStack|HStack|Flex",
+              ">Stack|VStack|HStack|Flex",
               "Button"
             ]
           ],
           "instead_of": [
             "An ad-hoc row Stack + heading Text + buttons rebuilt per screen"
           ],
-          "note": "Page ships this: title, headingLevel, optional breadcrumbs and icon, an `actions` slot, and hasPadding for the body. The site editor's Styles and Identity panes are both <Page title actions> with no hand-built header."
+          "note": "Page ships this: title, headingLevel, optional breadcrumbs and icon, an `actions` slot, and hasPadding for the body. The site editor's Styles and Identity panes are both <Page title actions> with no hand-built header. The title stack and the actions stack are pinned (`>`) to the header row itself: matched at any depth, a screen's outer Stack holding two Texts in one place and a Button in another read as a hand-built page header."
         },
         "aside": {
           "canonical": null,

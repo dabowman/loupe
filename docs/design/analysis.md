@@ -326,9 +326,17 @@ Demanding equality on either axis meant the rules only ever fired on code that
 had already been generated from the pattern — the one case where there is
 nothing to report.
 
+**`>Name` pins a child to its parent's direct children** (in the system tree —
+raw elements between are still transparent). Anywhere-beneath is right for a
+shape with a distinctive component in it; for one written only in layout
+primitives, `Text` and `Button` it is wrong, because a whole screen's outer
+`Stack` contains a row with a label and a button *somewhere*. `screen.page#header`
+and `edit-record.inspector` both fired on whole screens that way until their
+inner stacks were pinned.
+
 Each registered child must claim a distinct node, so `["VStack","Text","Text"]`
-needs two Texts rather than matching one twice. Assignment is greedy, largest
-child first; a registered pattern is a handful of nodes, so the cases where
+needs two Texts rather than matching one twice. Assignment is greedy, pinned
+children first, then largest child first; a registered pattern is a handful of nodes, so the cases where
 greedy loses to a smarter assignment do not arise in practice.
 
 **Alternations** (`"Stack|VStack|HStack"`) exist because one shape often has more

@@ -617,7 +617,10 @@ being skipped in silence — a clean run should mean *checked and clean*, never
 
 Rule id and reason are both mandatory; anything looser is its own finding. That
 inversion keeps the escape hatch available and legible. Audit with
-`loupe suppressions`.
+`loupe suppressions`; `loupe suppressions --stale` lists only the directives
+naming a rule that muted nothing on the run — the finding fixed, the rule off,
+or an id that is not a rule — and exits 1 if there are any, so CI can keep them
+from piling up.
 
 The keyword comes from the preset — `generic` asks for `ds-allow`, `wpds` for
 `wpds-allow`, `archer` for `archer-allow`; `loupe status` prints the active one
