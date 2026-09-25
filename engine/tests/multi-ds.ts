@@ -565,6 +565,35 @@ await check('a styled system on a headless library keeps its override rules', as
 	}
 });
 
+await check("the vip profile reaches a VIP project, and NewDialog's style prop is its sizing API", async () => {
+	const root = repo({
+		'package.json': JSON.stringify({ dependencies: { '@automattic/vip-design-system': '^2.23.0' } }),
+		'src/A.jsx': `import { Box, NewDialog } from '@automattic/vip-design-system';
+export const A = () => (
+  <>
+    <NewDialog.Root title="t" description="d" style={{ maxWidth: 600, overflowY: 'visible' }} />
+    <Box style={{ background: '#c24300' }} />
+  </>
+);
+`,
+	});
+	try {
+		assert(detectPreset(root).preset === 'vip', `expected vip, got ${detectPreset(root).preset}`);
+		const on = selectProfiles(readProfiles(PROFILES), {
+			designSystem: { packages: ['@automattic/vip-design-system'] },
+		});
+		assert(on.length === 1 && on[0]?.id === 'vip', 'vip should select on its own package');
+		const config = await loadConfig({ root, preset: 'vip' });
+		const inline = (await analyze(config, { scope: null })).findings.filter((f) => f.rule === 'system/inline-style');
+		assert(
+			inline.length === 1 && inline[0]?.line === 5,
+			`only the Box's inline style should report: ${inline.map((f) => f.line)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // A title interpolates one token namespace. With seventeen prefixes there is no
 // "the" prefix, and naming the first told agents to fix `font-size: 18px` with
 // "a --color-* type token" — a namespace that has no type tokens in it.
@@ -626,7 +655,7 @@ await check('guidance names the canonical component, never a superseded spelling
 	// The data half: whatever each shipped preset puts first is a name that
 	// system's own registry still recommends. Reordering a list silently turns
 	// every one of these titles into a recommendation to write the old name.
-	for (const id of ['wpds', 'archer']) {
+	for (const id of ['wpds', 'archer', 'vip']) {
 		const preset = JSON.parse(readFileSync(join(PRESET_DIR, `${id}.json`), 'utf8')) as {
 			designSystem?: { components?: Record<string, string[]> };
 		};

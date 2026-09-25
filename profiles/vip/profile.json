@@ -1,0 +1,8 @@
+{
+  "id": "vip",
+  "name": "VIP Design System",
+  "preset": "vip",
+  "packages": ["@automattic/vip-design-system"],
+  "patterns": "./patterns/index.json",
+  "components": "./components/index.json"
+}

@@ -14,9 +14,10 @@ None of it is an error. All of it is drift, and it is expensive to unwind once
 the pattern is load-bearing — because by then every argument for keeping it is
 locally true.
 
-Two design systems ship with it — the WordPress Design System and
-[Archer](#profiles), a Base UI–based system — and a third is a directory
-rather than a fork: nothing about either is compiled into the engine.
+Three design systems ship with it — the WordPress Design System,
+[Archer](#profiles), a Base UI–based system, and the
+[VIP Design System](#profiles), built on Theme UI — and a fourth is a directory
+rather than a fork: nothing about any of them is compiled into the engine.
 
 This plugin works at two moments: **before** the code is written (skills that
 set the rules and the sanctioned compositions) and **as** it is written (hooks
@@ -57,6 +58,7 @@ than using it.
 | `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
 | `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, its two registries and its three authoring docs |
 | `profiles/archer/` | The Archer profile — the same, for a styled system built on Base UI, with its own layout and text components |
+| `profiles/vip/` | The VIP Design System profile — the same, for `@automattic/vip-design-system` on Theme UI |
 | `profiles/*/patterns/index.json` | The composite registry |
 | `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
 | `engine/` | `loupe` — the conformance engine |
@@ -492,7 +494,15 @@ instead of `Dialog.Root`, and unprefixed tokens in seventeen families. It exists
 every place the plugin still assumed WordPress showed up as something Archer
 could not express.
 
-Adding a third is adding a directory here plus a preset in `engine/presets/` —
+The third is the **VIP Design System** (`@automattic/vip-design-system`), and
+it is the first on Theme UI. Its components are styled through an `sx` prop of
+theme keys, which the engine does not read — so on a VIP codebase the value
+rules see only stylesheets, `style` and CSS-in-JS, and the profile earns its
+keep on component currency (`Dialog`, `ConfirmationDialog` and `Tooltip` are
+deprecated), raw elements and composites. Its `authoring.md` carries the theme
+scales so an agent holds the `sx` half by hand.
+
+Adding a fourth is adding a directory here plus a preset in `engine/presets/` —
 see **Adding a design system** in the
 [engine README](engine/README.md#adding-a-design-system).
 
@@ -516,6 +526,7 @@ see **Adding a design system** in the
 Presets: `wpds` (WPDS tokens + a severity policy that actually blocks),
 `wordpress-components` (the older admin surface), `wordpress-block-theme`,
 `archer` (a styled system on Base UI, with its own layout and text components),
+`vip` (the VIP Design System, on Theme UI),
 `base-ui` (a starting point for any system built on Base UI), `generic`.
 
 `base-ui` is a parent, the way `wordpress-components` is: Base UI is headless,
@@ -623,7 +634,7 @@ or an id that is not a rule — and exits 1 if there are any, so CI can keep the
 from piling up.
 
 The keyword comes from the preset — `generic` asks for `ds-allow`, `wpds` for
-`wpds-allow`, `archer` for `archer-allow`; `loupe status` prints the active one
+`wpds-allow`, `archer` for `archer-allow`, `vip` for `vip-allow`; `loupe status` prints the active one
 under `suppress:` — and every preset's keyword is *read* whichever one is active, so
 switching preset never orphans the directives already written.
 `loupe suppressions` names the keyword such a directive was written with. It is

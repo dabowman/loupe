@@ -261,6 +261,11 @@ author wrote, with an analog to convert to.
   unprefixed tokens in seventeen families, and the
   override rules back on, because a consumer of a styled system is not supposed
   to restyle its components from outside
+- `vip` — `@automattic/vip-design-system`, on Theme UI: `Flex`/`Grid`/`Box`
+  and `Text`/`Heading`, `--theme-ui-colors-*` for stylesheets, `vip-allow`.
+  Theme UI styles through the `sx` prop, which the engine does not read, so on a
+  VIP codebase the value rules see only stylesheets, `style` and CSS-in-JS;
+  component currency, raw elements and composites are where it earns its keep
 - `generic` — namespaces and token prefixes only
 
 `base-ui` and `archer` are the two halves of the same lesson. A library that

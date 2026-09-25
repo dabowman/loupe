@@ -26406,6 +26406,98 @@ var wordpress_components_default = {
   }
 };
 
+// presets/vip.json
+var vip_default = {
+  extends: "generic",
+  detect: {
+    priority: 40,
+    confidence: "high",
+    dependencies: ["@automattic/vip-design-system"]
+  },
+  designSystem: {
+    name: "VIP Design System",
+    packages: ["@automattic/vip-design-system"],
+    tokenPrefixes: ["--theme-ui-colors-"],
+    components: {
+      layout: ["Flex", "Grid", "Box"],
+      text: ["Text", "Heading"]
+    },
+    allowedInlineStyles: {
+      NewDialog: [
+        "width",
+        "min-width",
+        "max-width",
+        "height",
+        "min-height",
+        "max-height",
+        "overflow",
+        "overflow-x",
+        "overflow-y",
+        "top",
+        "right",
+        "bottom",
+        "left",
+        "transform"
+      ]
+    },
+    elementMap: {
+      p: "Text",
+      h1: "Heading",
+      h2: "Heading",
+      h3: "Heading",
+      h4: "Heading",
+      h5: "Heading",
+      h6: "Heading",
+      div: { component: "Box", styledOnly: true },
+      span: { component: "Text", styledOnly: true },
+      a: "Link",
+      button: "Button",
+      input: {
+        component: "Form.Input",
+        attribute: "type",
+        values: {
+          hidden: null,
+          checkbox: "Checkbox",
+          radio: "Radio",
+          submit: "ButtonSubmit",
+          button: "Button",
+          reset: "Button"
+        }
+      },
+      label: "Label",
+      textarea: "Textarea",
+      select: "Form.Select",
+      table: "Table",
+      hr: "Hr",
+      code: "Code",
+      dialog: "NewDialog.Root",
+      progress: "Progress"
+    }
+  },
+  suppression: {
+    keyword: "vip-allow",
+    blanket: ["vip-disable", "ds-disable"]
+  },
+  rules: {
+    "stylesheet/unparsed": "error",
+    "suppression/malformed": "error",
+    "system/inline-style": "error",
+    "layout/margin-on-child": "warn",
+    "system/override": "warn",
+    "layout/negative-margin": "warn",
+    "layout/in-css": "warn",
+    "typography/in-css": "warn",
+    "typography/untokenized": "warn",
+    "system/raw-element": "warn",
+    "tokens/hardcoded-value": "warn",
+    "tokens/unknown-token": "warn",
+    "css/dead-class": "warn",
+    "patterns/duplicate-composite": "warn",
+    "patterns/superseded-composite": "warn",
+    "patterns/unregistered-composite": "warn"
+  }
+};
+
 // presets/wpds.json
 var wpds_default = {
   extends: "wordpress-components",
@@ -27615,6 +27707,7 @@ var EMBEDDED_PRESETS = Object.assign(/* @__PURE__ */ Object.create(null), {
   generic: generic_default,
   "wordpress-block-theme": wordpress_block_theme_default,
   "wordpress-components": wordpress_components_default,
+  vip: vip_default,
   wpds: wpds_default
 });
 var EMBEDDED_VERSION = package_default.version;
