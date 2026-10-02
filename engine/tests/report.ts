@@ -124,6 +124,19 @@ await check('the page is one file — no external requests', () => {
 	assert(!/<(script|link|img)[^>]+(src|href)=/i.test(html), 'the page loads something over the network');
 });
 
+await check('the palette has a plain value under every light-dark() one', () => {
+	// A custom property accepts any value, so an unguarded `light-dark()` wins in
+	// a browser that cannot compute it, and every colour reading it is lost.
+	const css = /<style>([\s\S]*?)<\/style>/.exec(formatHtml(result, config))?.[1] ?? '';
+	const at = css.indexOf('@supports (color: light-dark(#000, #000))');
+	assert(at > 0, 'no @supports guard around the light-dark() palette');
+	const plain = css.slice(0, at);
+	assert(!plain.includes('light-dark('), 'a light-dark() value sits outside the @supports guard');
+	const themed = [...css.slice(at).matchAll(/(--[\w-]+): light-dark\(/g)].map((m) => m[1] ?? '');
+	assert(themed.length > 0, 'the guard declares no themed properties');
+	for (const name of themed) assert(plain.includes(`${name}: `), `${name} has no plain fallback`);
+});
+
 await check('summary.baselined is absent when no baseline step ran', () => {
 	const bare = reportPayload(result, config);
 	assert(!('baselined' in bare.summary), 'an un-baselined run reported a baselined count');

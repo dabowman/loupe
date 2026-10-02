@@ -32,29 +32,47 @@ const embed = (json: string): string => json.replace(/</g, '\\u003c');
  * Palette and chrome.
  *
  * Every themed value is `light-dark(light, dark)`: `color-scheme` follows the OS
- * setting, and a `data-theme` stamp on the root overrides it either way.
+ * setting, and a `data-theme` stamp on the root overrides it either way. The
+ * light values are declared plainly first, and the `light-dark()` ones only
+ * under `@supports`: a custom property takes any value, so unguarded they would
+ * win in a browser that cannot compute them, and every `var()` reading one would
+ * fall back to nothing. Such a browser gets the light page instead.
  * Severity uses the reserved status colors, because severity is a state, not an
  * identity — and on the light surface the advisory amber falls below 3:1, so
  * every severity is rendered with its glyph and the word, never colour alone.
  */
 const CSS = `
 :root {
-  color-scheme: light dark;
-  --surface: light-dark(#fcfcfb, #1a1a19);
-  --plane: light-dark(#f9f9f7, #0d0d0d);
-  --ink: light-dark(#0b0b0b, #ffffff);
-  --ink-2: light-dark(#52514e, #c3c2b7);
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
   --ink-muted: #898781;
-  --grid: light-dark(#e1e0d9, #2c2c2a);
-  --axis: light-dark(#c3c2b7, #383835);
-  --hairline: light-dark(rgba(11,11,11,0.10), rgba(255,255,255,0.10));
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --hairline: rgba(11,11,11,0.10);
   --sev-error: #d03b3b;
   --sev-warn: #fab219;
-  --seq: light-dark(#2a78d6, #3987e5);
-  --track: light-dark(rgba(11,11,11,0.06), rgba(255,255,255,0.08));
+  --seq: #2a78d6;
+  --track: rgba(11,11,11,0.06);
 }
-:root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"] { color-scheme: dark; }
+@supports (color: light-dark(#000, #000)) {
+  :root {
+    color-scheme: light dark;
+    --surface: light-dark(#fcfcfb, #1a1a19);
+    --plane: light-dark(#f9f9f7, #0d0d0d);
+    --ink: light-dark(#0b0b0b, #ffffff);
+    --ink-2: light-dark(#52514e, #c3c2b7);
+    --grid: light-dark(#e1e0d9, #2c2c2a);
+    --axis: light-dark(#c3c2b7, #383835);
+    --hairline: light-dark(rgba(11,11,11,0.10), rgba(255,255,255,0.10));
+    --seq: light-dark(#2a78d6, #3987e5);
+    --track: light-dark(rgba(11,11,11,0.06), rgba(255,255,255,0.08));
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+}
 * { box-sizing: border-box; }
 body {
   margin: 0;
