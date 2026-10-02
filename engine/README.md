@@ -453,8 +453,8 @@ loupe check --judge
 
 This covers the `system/raw-element` findings whose analog has `variants` in
 the component registry: `Text (@wordpress/ui)` in the WPDS profile. It sends
-each element's source and parent lines to TypeSafe in one request per 40
-elements, and asks which variant fits, or `not_<name>` when the element is not
+each element's source and parent lines to TypeSafe in a request of its own, six
+in flight, and asks which variant fits, or `not_<name>` when the element is not
 that component's content. A pick at 0.5 confidence or above is written into
 the suggestion — `<p> → <Text variant="body-sm"> (judged 0.80)`, a
 `variant="heading-*"` placeholder filled, or `no analog, not Text content` in

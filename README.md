@@ -252,8 +252,8 @@ usually the highest-volume rule in a report.
 
 `<p> → <Text>` names the component, not the variant, and sometimes the
 component is wrong too: a `<span>` that is a colour swatch, or a `<p>` that
-only wraps a button. `loupe check --judge` sends those elements to
-[TypeSafe](https://docs.typesafe.ai) in one request. It picks from the
+only wraps a button. `loupe check --judge` sends each of those elements to
+[TypeSafe](https://docs.typesafe.ai) in a request of its own. It picks from the
 `variants` the profile's component registry declares for the analog, or says
 the element is not text at all:
 
