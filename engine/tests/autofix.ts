@@ -8,7 +8,7 @@
  * reader, so it is the whole of this suite.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +24,13 @@ import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from '.
 import type { ComponentEntry, Finding, FixCandidate, ParseError, SkippedFix, TokenFix } from '../src/types.ts';
 
 const CONFIG = JSON.stringify({ extends: 'wpds', namespaces: { project: ['wf-'] } });
+
+/**
+ * Where the `wpds` preset's `tokenSources` reads the design system's tokens. A
+ * fixture's tokens go here, not into the project's own stylesheets: what a
+ * project defines under the same prefix is not the design system's.
+ */
+const DS_TOKENS = 'node_modules/@wordpress/theme/prebuilt/css/design-tokens.css';
 
 /** The shipped WPDS component registry, at the path the profile loader reads. */
 const COMPONENT_REGISTRY = join(
@@ -791,6 +798,35 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 			.map((f) => f.decl?.prop)
 			.sort();
 		assert(hard.join() === 'background,border-radius,border-radius', `left: ${hard.join()}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A run with one value to judge and everything else exact wrote nothing at all
+// when the one request failed. `fetch` is replaced before the CLI loads, so the
+// outage is the command's own call, not a stub handed to it.
+await check('fix --judge still writes what needed no model when the judge cannot be reached', () => {
+	const root = scratch('dsh-judge-down-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			[DS_TOKENS]: JUDGE_TOKENS,
+			// 4px is exactly one radius; 6px sits between two padding steps and is a question.
+			'styles/a.css': '.wf-a {\n\tborder-radius: 4px;\n\tpadding: 6px;\n}',
+		});
+		const outage = `data:text/javascript,${encodeURIComponent(
+			"globalThis.fetch = async () => { throw new TypeError('fetch failed (simulated outage)'); };",
+		)}`;
+		const r = spawnSync(process.execPath, ['--import', outage, CLI, 'fix', '--judge', '--root', root], {
+			encoding: 'utf8',
+			env: { ...process.env, TYPESAFE_API_KEY: 'key' },
+		});
+		assert(r.status === 0, `exited ${r.status}: ${r.stderr}`);
+		assert(r.stderr.includes('simulated outage'), `the failure was not noted: ${r.stderr}`);
+		const css = readFileSync(join(root, 'styles/a.css'), 'utf8');
+		assert(css.includes('border-radius: var(--wpds-border-radius-md);'), `the exact token was not written:\n${css}`);
+		assert(css.includes('padding: 6px;'), `an unjudged value was rewritten:\n${css}`);
 	} finally {
 		cleanup(root);
 	}

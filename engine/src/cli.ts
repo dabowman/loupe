@@ -993,17 +993,28 @@ async function main(): Promise<number> {
 		let toFix: AnalyzeResult;
 		try {
 			toFix = await analyze(config, { scope: fixScope });
+		} catch (err) {
+			fail(`loupe: ${messageOf(err)}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		// Each judgement in its own `try`, as in `check`: a failed request leaves
+		// those findings unjudged, and every fix that needed no model is still
+		// written below.
+		const about = tokenDescriptions(config.profiles?.active ?? []);
+		try {
 			// Every channel: a judged replacement is written in all three. Only a
 			// judged `keep` outside a stylesheet has nowhere to go, and that one is
 			// reported as a skip rather than paid for silently.
 			const judgeable = toFix.findings.filter((f) => f.suggest?.length);
-			const about = tokenDescriptions(config.profiles?.active ?? []);
 			if (apiKey && toFix.tokens && judgeable.length) await judgeValues(root, judgeable, toFix.tokens, apiKey, about);
+		} catch (err) {
+			note(`loupe: --judge left hardcoded values unjudged — ${messageOf(err)}\n`);
+		}
+		try {
 			// A judged rename is written like a spelled one, every line naming it.
 			if (apiKey && toFix.tokens) await judgeRenames(root, toFix.findings, toFix.tokens, apiKey, about);
 		} catch (err) {
-			fail(`loupe: ${messageOf(err)}\n`);
-			return EXIT.CANNOT_RUN;
+			note(`loupe: --judge left unknown tokens unjudged — ${messageOf(err)}\n`);
 		}
 		const dry = Boolean(args.flags['dry-run']);
 		const { applied, skipped } = applyTokenFixes(root, toFix.findings, { dry });

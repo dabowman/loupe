@@ -522,7 +522,9 @@ someone would accept. Past the end of the scale spacing may still be kept:
 An empty token set is refused outright rather than read as "no token for
 anything". Every family would come back empty, and `fix --judge` would
 suppress every value as tokenless, so `check --judge` leaves values unjudged
-and says so, and `fix --judge` stops. A negative length, a `%` or an `hsl()` on
+and says so. So does `fix --judge`, and a failed request is handled the same
+way: what the judge could not settle is left alone, and every fix that needed
+no model is still written. A negative length, a `%` or an `hsl()` on
 a px or colour family is a literal no token can stand for. That value is not
 asked about, since rewriting the rest would leave the finding standing. A property whose family is empty
 (`box-shadow` in WPDS) is settled without a model, as kept.
