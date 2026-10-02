@@ -78,24 +78,36 @@ function normalizeValue(value: unknown): string {
 /** An empty set, in the shape `read` returns. */
 export const emptyTokenSet = (): TokenSet => ({ known: new Set(), byValue: new Map(), sources: 0 });
 
+/**
+ * Record one custom-property definition. A token's value is its first
+ * definition: later ones are modes — `[data-wpds-corner-radius="moderate"]`
+ * makes `radius-md` 12px — and indexing them offers `12px` as "md or xl" when
+ * the default md is 4px.
+ */
+export function addTokenDef(into: TokenSet, name: string, value: string): void {
+	if (into.known.has(name)) return;
+	into.known.add(name);
+	const v = normalizeValue(value);
+	// A token defined as another token tells us nothing about literal values.
+	if (!v || v.includes('var(')) return;
+	const names = into.byValue.get(v) ?? [];
+	if (!names.includes(name)) names.push(name);
+	into.byValue.set(v, names);
+}
+
+/** Every `--prefix-*: value` declaration in a parsed stylesheet, in source order. */
+export function tokenDefsIn(root: Root, prefixes: readonly string[]): [string, string][] {
+	const out: [string, string][] = [];
+	if (!prefixes.length) return out;
+	root.walkDecls((decl) => {
+		if (decl.prop.startsWith('--') && prefixes.some((p) => decl.prop.startsWith(p))) out.push([decl.prop, decl.value]);
+	});
+	return out;
+}
+
 /** Record every `--prefix-*: value` declaration in a parsed stylesheet. */
 export function harvestTokenDefs(root: Root, prefixes: readonly string[], into: TokenSet): TokenSet {
-	if (!prefixes.length) return into;
-	root.walkDecls((decl) => {
-		const name = decl.prop;
-		if (!name.startsWith('--') || !prefixes.some((p) => name.startsWith(p))) return;
-		// A token's value is its first definition. Later ones are modes —
-		// `[data-wpds-corner-radius="moderate"]` makes `radius-md` 12px — and
-		// indexing them offers `12px` as "md or xl" when the default md is 4px.
-		if (into.known.has(name)) return;
-		into.known.add(name);
-		const v = normalizeValue(decl.value);
-		// A token defined as another token tells us nothing about literal values.
-		if (!v || v.includes('var(')) return;
-		const names = into.byValue.get(v) ?? [];
-		if (!names.includes(name)) names.push(name);
-		into.byValue.set(v, names);
-	});
+	for (const [name, value] of tokenDefsIn(root, prefixes)) addTokenDef(into, name, value);
 	return into;
 }
 

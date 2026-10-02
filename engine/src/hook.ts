@@ -18,7 +18,7 @@ import { dirname, isAbsolute, join, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { text } from 'node:stream/consumers';
 import { toPosix } from './discover.ts';
-import { attemptsPath, ensureDir } from './paths.ts';
+import { attemptsPath, ensureDir, isOn } from './paths.ts';
 
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
@@ -84,6 +84,12 @@ export function bumpAttempts(root: string, sessionId: string | undefined): numbe
 	return next;
 }
 
+/** The count {@link bumpAttempts} would start from, without spending a pass. */
+export function peekAttempts(root: string, sessionId: string | undefined): number {
+	if (!sessionId) return 0;
+	return readState(root).sessions[sessionId]?.count ?? 0;
+}
+
 export function clearAttempts(root: string, sessionId: string | undefined): void {
 	if (!sessionId) return;
 	const state = readState(root);
@@ -127,12 +133,7 @@ export function hookRoot(): string {
 	return process.cwd();
 }
 
-/**
- * One spelling of "on" for every switch this tool reads. Written out per door,
- * it let `status` disagree with the gate: `LOUPE_OFF=0` reported the hook OFF
- * while the hook went right on blocking.
- */
-export const isOn = (v: string | undefined): boolean => v !== undefined && /^(1|true|yes|on)$/i.test(v);
+export { isOn };
 
 /**
  * Whether this project turned the gate on.

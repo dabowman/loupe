@@ -421,6 +421,63 @@ exists to close.
 **No writable state directory just means no retry-budget tracking.** Bookkeeping
 failure never takes down the gate.
 
+## Caches
+
+Two caches live beside the retry counter, in the same per-user, per-project
+state directory (`projectStateDir` in `paths.ts`). Both are optimisations and
+nothing else: a missing, corrupt or unwritable cache file costs time and changes
+no answer, and `--no-cache` or `LOUPE_NO_CACHE=1` bypasses both. `status` prints
+where they are and what they hold.
+
+**The index cache** (`index-cache.ts`) keeps each file's contribution to the
+index: its markup scan, the class names a reference file mentions, a
+stylesheet's rules reduced to plain data. A hook run reports on one file but
+indexes every one, and before this three quarters of every run was re-parsing
+files nothing had touched — 3.8s per edit on a Gutenberg-sized tree, now about
+0.8s from the bundle, about half of that Node starting up and the cache file
+loading. The cross-file half (bindings against rules, dead classes, composites)
+always runs live; it is cheap, and it is the half no single file can answer.
+
+- **Per file**, an entry is trusted on `stat` alone when mtime and size match and
+  the mtime is more than two seconds older than the read that produced the
+  entry: a later write landing in the same mtime tick is the only way past that,
+  and a tick that old had already ended. Otherwise the bytes are hashed and
+  compared. This is git's racy-index rule, and the same limit applies: a tool
+  that rewrites a file with identical size and puts the old mtime back is not
+  seen. `--no-cache` is the remedy.
+- **Per cache**, the file is named by a fingerprint of the engine's own code (the
+  bundle's stat, or every `src/` file's while someone is editing it) and of
+  every config input a scan reads. A different config is a different file, so
+  switching presets does not thrash one; files unused for a week are deleted.
+- A cached file with no suppression directive is never opened. One with a
+  directive is read for it, because a ledger of mutes is per run.
+- Whether a Sass or Less syntax plugin is installed is asked even of a cached
+  sheet: that is about the machine now, not about the bytes.
+- **`tests/index-cache.ts` is the contract.** Every fixture, cold and warm, with
+  fresh and aged mtimes, after an edit, a same-size edit with the mtime put
+  back, a new directive, an added and a deleted file, a judged run and a config
+  change, must produce a result byte-identical to an uncached run.
+
+**Scan workers** (`scan-pool.ts`) spread the misses of a cold run — a first run,
+CI, an audit after a branch switch — across worker threads. Below 150 files or
+600 kB of markup they are not started: a worker's start-up is a module load,
+about 100ms from the bundle. The worker is the same module loaded again (from
+the bundle, the bundle itself, whose CLI entry stands aside off the main
+thread), and results are consumed in discovery order, so where a scan was made
+never shows in the report. Anything going wrong with a worker falls back to
+scanning in-process; `LOUPE_DEBUG_SCAN=1` says which happened, which is what
+the tests and CI check, since a silent fallback would pass every comparison.
+Compiled binaries never start workers, and `LOUPE_NO_WORKERS=1` turns them off.
+
+What the workers buy depends on the machine more than anything here. On the
+4-vCPU cloud VM this was built on, a cold Gutenberg run went from 3.8s to 3.1s
+and no further — and separate *processes* scaled no better there, so the limit
+is that machine's memory bandwidth, not threads. Parsing is allocation-heavy;
+expect more on a laptop with real cores, and measure before quoting a number.
+
+**The answer cache** is `judge.ts`'s, described in
+[the judge notes](judge.md#what-a-judged-run-spends).
+
 ## Turning the gate on
 
 **Off by default.** A gate that fires in every repo the plugin is installed for

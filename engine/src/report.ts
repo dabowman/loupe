@@ -222,6 +222,42 @@ const byWeight = (a: Group, b: Group): number => {
 const groupsOf = (findings: readonly Finding[], by: GroupBy): Group[] =>
 	by === 'rule' ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
 
+/**
+ * How many of each group's findings a report capped at `maxFindings` prints.
+ *
+ * Spent round-robin across the groups: filling the budget first-come buries
+ * every other group behind whichever one sorts highest.
+ */
+function quotas(groups: readonly Group[], maxFindings: number): Map<string, number> {
+	const quota = new Map<string, number>(groups.map(([key]) => [key, 0]));
+	let budget = maxFindings > 0 ? maxFindings : Infinity;
+	let progress = true;
+	while (budget > 0 && progress) {
+		progress = false;
+		for (const [key, all] of groups) {
+			if (budget <= 0) break;
+			const taken = quota.get(key) ?? 0;
+			if (taken >= all.length) continue;
+			quota.set(key, taken + 1);
+			budget--;
+			progress = true;
+		}
+	}
+	return quota;
+}
+
+/**
+ * The findings {@link formatAgent} prints under the same cap and grouping — the
+ * ones worth a paid judgement when nothing else will be read. Judging rewrites
+ * a message, never a rule, file or order, so the pick is the same either side
+ * of it.
+ */
+export function shownFindings(findings: readonly Finding[], maxFindings: number, group: GroupBy = 'rule'): Finding[] {
+	const groups = groupsOf(findings, group);
+	const quota = quotas(groups, maxFindings);
+	return groups.flatMap(([key, all]) => all.slice(0, quota.get(key) ?? 0));
+}
+
 /** `✗ layout/margin-on-child (3) blocking — margin — move spacing to the parent…` */
 function ruleHeading(id: string, group: readonly Finding[], title: (id: RuleId) => string): string {
 	const sev = group[0]?.severity ?? 'warn';
@@ -297,23 +333,7 @@ export function formatAgent(
 	} else if (findings.length) {
 		const sub: GroupBy = group === 'rule' ? 'file' : 'rule';
 		const groups = groupsOf(findings, group);
-
-		// Spend the budget round-robin across the groups being shown: filling it
-		// first-come buries every other group behind whichever one sorts highest.
-		const quota = new Map<string, number>(groups.map(([key]) => [key, 0]));
-		let budget = maxFindings > 0 ? maxFindings : Infinity;
-		let progress = true;
-		while (budget > 0 && progress) {
-			progress = false;
-			for (const [key, all] of groups) {
-				if (budget <= 0) break;
-				const taken = quota.get(key) ?? 0;
-				if (taken >= all.length) continue;
-				quota.set(key, taken + 1);
-				budget--;
-				progress = true;
-			}
-		}
+		const quota = quotas(groups, maxFindings);
 
 		let hidden = 0;
 		for (const [key, all] of groups) {
