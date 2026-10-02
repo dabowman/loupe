@@ -15,9 +15,14 @@
  * Design notes: docs/design/report.md#bounding
  */
 
-/** First line of an unknown throw — a parser may reject with anything. */
-export const messageOf = (err: unknown): string =>
-	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
+/** The message of an unknown throw. Anything can be thrown; only Errors carry a message. */
+export const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * The first line of the same, for a message that has to fit on one — a parser
+ * may reject with anything, a code frame included.
+ */
+export const messageLineOf = (err: unknown): string => messageOf(err).split('\n')[0] ?? 'parse failed';
 
 /** `s` as a literal inside a regex. */
 export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

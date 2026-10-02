@@ -26,6 +26,7 @@ import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
 import { setComponentRegistry, setPatterns } from './config.ts';
 import { declaredPackages, registryApplies } from './registry.ts';
+import { messageOf } from './text.ts';
 import type { ComponentEntry, Config, Pattern, Profile, RegistryNote, SkippedRegistry } from './types.ts';
 
 export type { Profile, RegistryNote, SkippedRegistry };
@@ -186,7 +187,7 @@ export function applyRegistries(
 				saw[kind] = used = true;
 				if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
 			} catch (err) {
-				errors.push(`could not read ${src.label} ${kind} — ${err instanceof Error ? err.message : String(err)}`);
+				errors.push(`could not read ${src.label} ${kind} — ${messageOf(err)}`);
 			}
 		}
 		if (used) applied.push(src.label);

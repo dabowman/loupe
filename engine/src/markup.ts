@@ -24,7 +24,7 @@ import type {
 } from '@babel/types';
 import { keyName, toCssProp, toCssValue, valueSpan } from './inline.ts';
 import { isLayoutDecl } from './styles.ts';
-import { messageOf } from './text.ts';
+import { messageLineOf } from './text.ts';
 import { cssInJsLocals, fromPackage, importedName, parseTemplate, templateText } from './cssinjs.ts';
 import { depthOf, nodeCount, signatureOf, systemTree } from './patterns.ts';
 import { confirmPair } from './checks/detectors/confirm-pair.ts';
@@ -414,7 +414,7 @@ export function scanMarkup(
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return { ...result, parseError: messageOf(err) };
+		return { ...result, parseError: messageLineOf(err) };
 	}
 
 	const { text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
