@@ -24922,6 +24922,7 @@ function scanMarkup(text2, relPath, ds, rules = []) {
       const mapped = ds.elementMap.get(lower);
       if (!mapped) return;
       let suggest = mapped.component;
+      let render = mapped.render;
       if (mapped.attribute && mapped.values) {
         const attr = node.attributes.find(
           (a) => a.type === "JSXAttribute" && a.name.type === "JSXIdentifier" && a.name.name === mapped.attribute
@@ -24929,7 +24930,10 @@ function scanMarkup(text2, relPath, ds, rules = []) {
         const v = attr?.type === "JSXAttribute" ? attr.value : null;
         const raw = v?.type === "StringLiteral" ? v.value : v?.type === "JSXExpressionContainer" && v.expression.type !== "JSXEmptyExpression" ? staticString(v.expression) : null;
         const value = raw?.trim().toLowerCase();
-        if (value !== void 0 && Object.hasOwn(mapped.values, value)) suggest = mapped.values[value] ?? null;
+        if (value !== void 0 && Object.hasOwn(mapped.values, value)) {
+          suggest = mapped.values[value] ?? null;
+          render = void 0;
+        }
         if (suggest === null) return;
       }
       if (mapped.styledOnly && !classes.length && !style?.present) return;
@@ -24939,6 +24943,7 @@ function scanMarkup(text2, relPath, ds, rules = []) {
         file: relPath,
         line,
         suggest,
+        render,
         styledOnly: mapped.styledOnly,
         inlineStyled: Boolean(style?.present),
         inlineLayout: Boolean(style?.decls?.some(isLayoutDecl))
@@ -25431,10 +25436,11 @@ function libraryOverride(keyClasses, isLibrary, isProject) {
 }
 
 // src/checks/system/raw-element.ts
-function currentAnalog(registry, suggest) {
+function currentAnalog(registry, suggest, render) {
   if (!supersededEverywhere(registry, suggest)) {
+    const open = render ? `<${suggest} render={ <${render} /> }>` : `<${suggest}>`;
     const current = [...registry.values()].filter((e) => e.name === suggest && e.status === "recommended");
-    return current.length === 1 ? `<${suggest}> (${current[0]?.package})` : `<${suggest}>`;
+    return current.length === 1 ? `${open} (${current[0]?.package})` : open;
   }
   const remedy = [...registry.values()].find((e) => e.name === suggest && e.supersededBy)?.supersededBy;
   return remedy || `<${suggest}>`;
@@ -25457,7 +25463,7 @@ function rawElements(els, {
         rule: "system/raw-element",
         file: el.file,
         line: el.line,
-        message: `<${el.tag}> \u2192 ${currentAnalog(registry, el.suggest)}`,
+        message: `<${el.tag}> \u2192 ${currentAnalog(registry, el.suggest, el.render)}`,
         code: `<${el.tag}>`
       }
     ];
@@ -26334,12 +26340,12 @@ var wordpress_components_default = {
     },
     elementMap: {
       p: "Text",
-      h1: "Heading",
-      h2: "Heading",
-      h3: "Heading",
-      h4: "Heading",
-      h5: "Heading",
-      h6: "Heading",
+      h1: { component: "Text", render: "h1" },
+      h2: { component: "Text", render: "h2" },
+      h3: { component: "Text", render: "h3" },
+      h4: { component: "Text", render: "h4" },
+      h5: { component: "Text", render: "h5" },
+      h6: { component: "Text", render: "h6" },
       div: { component: "Stack", styledOnly: true },
       span: { component: "Text", styledOnly: true },
       button: "Button",
@@ -27877,10 +27883,10 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
     const arrow = f.message.indexOf(" \u2192 ");
     const element = f.message.slice(0, arrow);
     const analog = f.message.slice(arrow + 3);
-    const tag = `<${target.name}>`;
+    const tag = new RegExp(`<${target.name.replace(/[.$]/g, "\\$&")}(?=[ >])`);
     const not = a.choice === notKey(target);
     const span = not ? `no analog, not ${target.name} content` : `variant="${a.choice}"`;
-    const suggestion = not ? span : /variant="[^"]*"/.test(analog) ? analog.replace(/variant="[^"]*"/, span) : analog.includes(tag) ? analog.replace(tag, `<${target.name} ${span}>`) : `${analog} with ${span}`;
+    const suggestion = not ? span : /variant="[^"]*"/.test(analog) ? analog.replace(/variant="[^"]*"/, span) : tag.test(analog) ? analog.replace(tag, `<${target.name} ${span}`) : `${analog} with ${span}`;
     const tail = judgedTail(a.confidence);
     f.message = `${element} \u2192 ${suggestion} ${tail}`;
     f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
@@ -28347,6 +28353,10 @@ function normalize(raw, { root: root2 }) {
     const entry = typeof v === "string" ? { component: v, styledOnly: false } : v;
     if (entry.values === void 0 !== (entry.attribute === void 0))
       throw new Error(`elementMap.${tag}: attribute and values go together`);
+    if (entry.render !== void 0 && !(typeof entry.render === "string" && /^[a-z][a-z0-9-]*$/i.test(entry.render)))
+      throw new Error(
+        `elementMap.${tag}.render must be an element name like "h4", got: ${JSON.stringify(entry.render)}`
+      );
     elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
   }
   const substitutionProps = ds.substitutionProps ?? DEFAULTS.designSystem.substitutionProps;
