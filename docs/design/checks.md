@@ -87,9 +87,20 @@ analog. This is what a parser buys over a tag regex: wpds-guard, the
 regex-based check this coverage came from, flags hidden inputs and offers every
 input control at once.
 
-**Every analog must be in the registry.** A test fails when an element-map
-name is not a registry component, so a suggestion cannot outlive the component
-it names. Keeping the registry current against trunk is the other half.
+**An element can keep its semantics.** A heading's analog is not `Text`
+alone: on WPDS it is `Text` rendered as the heading, and a bare component name
+leaves the agent to research the rest. A mapping may name a `render` element,
+and the suggestion carries it — `<h4> → <Text render={ <h4 /> }>`. The variant
+is deliberately not mapped: WPDS separates the tag (structure) from `variant`
+(visual size), and pinning one to the other would re-couple them.
+
+**Every analog must be one the registry recommends.** A test fails, per shipped
+profile against its own preset, when an element-map name is unknown to the
+registry or only `legacy` there, so a suggestion cannot outlive the component
+it names. Forwarding hid the drift rather than preventing it: `h1`–`h6` →
+`Heading` read fine with the registry loaded and sent a preset-only project to
+`__experimentalHeading`, a private API. Keeping the registry current against
+trunk is the other half.
 
 The variant is left to `--judge`; see [judge.md](judge.md#which-variant).
 

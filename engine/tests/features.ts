@@ -15,6 +15,7 @@ import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
+import { readProfiles } from '../src/profiles.ts';
 import { LANGUAGE, ask, judgeRedirects, judgeVariants } from '../src/judge.ts';
 import { forceQuery } from '../src/judge/force.ts';
 import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
@@ -1053,6 +1054,44 @@ await check('a raw element is never sent to a component the registry supersedes'
 	assert(f.message.includes('@wordpress/ui'), `did not forward to the current analog: ${f.message}`);
 });
 
+// `Text` alone loses what the `<h3>` was for. The mapping names the element the
+// analog renders as, so the suggestion is the whole conversion.
+await check('a heading is sent to Text rendered as that heading', async () => {
+	const src = 'export const A = () => (\n\t<>\n\t\t<h3>title</h3>\n\t\t<H6 />\n\t\t<h6>small</h6>\n\t</>\n);';
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const got = at(r, 'system/raw-element').map((f) => `${f.line} ${f.message}`);
+	const want = [
+		'3 <h3> → <Text render={ <h3 /> }> (@wordpress/ui)',
+		'5 <h6> → <Text render={ <h6 /> }> (@wordpress/ui)',
+	];
+	assert(JSON.stringify(got) === JSON.stringify(want), `got:\n${got.join('\n')}`);
+	// Without a registry the preset alone still says it, minus the package.
+	const bare = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': '<h2>x</h2>' });
+	const b = one(at(bare, 'system/raw-element'), 'expected the heading finding without a registry');
+	assert(b.message === '<h2> → <Text render={ <h2 /> }>', b.message);
+});
+
+// `render` is printed into the suggestion as JSX; anything but a tag name would
+// hand the agent a remedy that does not parse.
+await check('an element-map render that is not an element name is refused', async () => {
+	const root = scratch('dsh-render-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': JSON.stringify({
+				extends: 'wpds',
+				designSystem: { elementMap: { h4: { component: 'Text', render: '<h4 />' } } },
+			}),
+		});
+		const err = await loadConfig({ root, configPath: join(root, 'loupe.config.json') }).then(
+			() => null,
+			(e: Error) => e,
+		);
+		assert(err?.message.includes('elementMap.h4.render') ?? false, `accepted: ${err?.message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // A hand-built <table> styled with tokens passes every token check; it just
 // isn't DataViews. Interactive elements are flagged whether or not CSS touches them.
 await check('a raw interactive element names its analog and the package to import it from', async () => {
@@ -1097,23 +1136,38 @@ await check('a raw interactive element names its analog and the package to impor
 });
 
 // The element map's advice is only as good as the names in it: a suggestion
-// the registry has never heard of is one nobody can import.
-await check('every element-map analog is a component the registry knows', async () => {
-	const root = scratch('dsh-map-');
-	try {
-		writeAll(root, { 'loupe.config.json': CONFIG() });
-		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const names = new Set([...componentRegistry.values()].map((e) => e.name));
-		const analogs = [...config.designSystem.elementMap.values()].flatMap((m) => [
-			m.component,
-			...Object.values(m.values ?? {}).filter((v): v is string => v !== null),
-		]);
-		const unknown = analogs.filter((n) => !names.has(n));
-		assert(!unknown.length, `not in the registry: ${unknown.join(', ')}`);
-	} finally {
-		cleanup(root);
-	}
-});
+// the registry has never heard of is one nobody can import, and one it marks
+// `legacy` is advice another rule then reports. `h1`–`h6` → `Heading` stayed in
+// the map after the registry superseded `Heading`. Every shipped
+// profile, against its own preset, so the next drift fails here rather than in
+// someone's backlog.
+for (const profile of readProfiles(join(HERE, '..', '..', 'profiles'))) {
+	if (!profile.preset || !profile.components) continue;
+	const { preset, components } = profile;
+	await check(`every ${preset} element-map analog is one the ${profile.id} registry recommends`, async () => {
+		const root = scratch('dsh-map-');
+		try {
+			writeAll(root, { 'loupe.config.json': JSON.stringify({ extends: preset }) });
+			const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+			const registry = loadComponents(JSON.parse(readFileSync(components, 'utf8')));
+			const map = [...config.designSystem.elementMap];
+			assert(map.length > 0, `${preset} maps no elements — nothing was checked`);
+			const stale = map.flatMap(([tag, m]) =>
+				[[tag, m.component] as const, ...Object.entries(m.values ?? {}).map(([v, c]) => [`${tag}[${v}]`, c] as const)]
+					// A dotted subcomponent's currency is its root's, as for an import.
+					.filter(([, c]) => c !== null && c !== undefined)
+					.filter(([, c]) => {
+						const name = String(c).split('.')[0];
+						return ![...registry.values()].some((e) => e.name === name && e.status === 'recommended');
+					})
+					.map(([t, c]) => `${t} → ${c}`),
+			);
+			assert(!stale.length, `not recommended by the registry: ${stale.join(', ')}`);
+		} finally {
+			cleanup(root);
+		}
+	});
+}
 
 // ── library internals by stylesheet ───────────────────────────────────────────
 // An unprefixed system (`.field-label`, `.toast-viewport`) has no prefix for
@@ -1329,6 +1383,38 @@ await check(
 		}
 	},
 );
+
+// A heading's suggestion already carries `render`; the variant goes into the
+// same tag rather than trailing it as prose.
+await check('--judge writes the variant into a suggestion that carries render', async () => {
+	const root = scratch('dsh-judge-render-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<h4>Site details</h4>' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'heading-md': 'A heading.' } },
+		]);
+		const f: Finding = {
+			rule: 'system/raw-element',
+			severity: 'warn',
+			rank: 0,
+			file: 'src/A.jsx',
+			line: 1,
+			code: '<h4>',
+			message: '<h4> → <Text render={ <h4 /> }> (@wordpress/ui)',
+		};
+		const stub = (async () =>
+			new Response(
+				JSON.stringify({ answers: { e0: { choice: 'heading-md', confidence: 0.7 } } }),
+			)) as unknown as typeof fetch;
+		assert((await judgeVariants(root, [f], registry, 'key', stub)) === 1, 'nothing was written');
+		assert(
+			f.message === '<h4> → <Text variant="heading-md" render={ <h4 /> }> (@wordpress/ui) (judged 0.70)',
+			f.message,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
 
 // ── --judge: forces and redirects ───────────────────────────────────────────
 

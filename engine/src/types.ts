@@ -369,6 +369,8 @@ export interface RawElement {
 	file: string;
 	line: number;
 	suggest: string;
+	/** The element `suggest` should render as, from the mapping's `render`. */
+	render?: string | undefined;
 	styledOnly: boolean;
 	inlineStyled: boolean;
 	inlineLayout: boolean;
@@ -606,6 +608,12 @@ export interface ElementMapping {
 	attribute?: string;
 	/** That attribute's value → its analog; `null` means the element has none. */
 	values?: Record<string, string | null>;
+	/**
+	 * The element the analog renders as, through its `render` prop: a heading
+	 * keeps its semantics as `<Text render={ <h4 /> }>`. Applies to `component`
+	 * only, never to an analog `values` picked.
+	 */
+	render?: string;
 }
 
 /** The same mapping as authored, where `styledOnly` may simply be absent. */
@@ -614,6 +622,7 @@ export interface AuthoredElementMapping {
 	styledOnly?: boolean;
 	attribute?: string;
 	values?: Record<string, string | null>;
+	render?: string;
 }
 
 /**
