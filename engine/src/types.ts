@@ -106,6 +106,13 @@ export interface Suggestion extends Hint {
 	 * answers rendered for a reader.
 	 */
 	judged?: Judged | undefined;
+	/**
+	 * Why the one token in `tokens` is not applied unattended: the profile scopes
+	 * it to a kind of element this declaration is not shown to style, or is shown
+	 * not to. An off-role candidate is a question, the way two on-role ones are,
+	 * so `fix` leaves it and the report says what to check.
+	 */
+	review?: string | undefined;
 }
 
 /**
@@ -201,6 +208,12 @@ export interface Finding {
 	rank: number;
 	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
+	/**
+	 * Working state, like `hints`: what the markup and the selector say this
+	 * finding's declarations land on — `button`, `Modal` — for the token pass to
+	 * hold a suggestion against its declared scope. Dropped there.
+	 */
+	elements?: string[] | undefined;
 	suggest?: Suggestion[] | undefined;
 	/**
 	 * The declaration `tokens/hardcoded-value` flagged, as written — what a
@@ -249,6 +262,7 @@ export interface PendingFinding extends ClassifiedFinding {
 	scopeLines?: number[] | undefined;
 	selector?: string | undefined;
 	media?: string | undefined;
+	elements?: string[] | undefined;
 }
 
 export interface ParseError {

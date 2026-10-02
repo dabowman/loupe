@@ -389,7 +389,9 @@ const stated = (s: Suggestion): string => {
 	// spend the whole line, and a remedy the reader is meant to act on has to
 	// arrive whole.
 	const decl = snippet(`${s.prop}: ${s.value}`);
-	return s.judged ? `${decl} → ${s.judged.spans.join(' ')}` : `${decl}${remedyFor(s.tokens)}`;
+	if (s.judged) return `${decl} → ${s.judged.spans.join(' ')}`;
+	// A token held back for review says why, so the reader checks the right thing.
+	return `${decl}${remedyFor(s.tokens)}${s.review ? ` (review: ${s.review})` : ''}`;
 };
 
 /**

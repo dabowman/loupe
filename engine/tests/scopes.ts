@@ -9,14 +9,18 @@
  * reports a guess as a finding.
  */
 
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { analyze } from '../src/analyze.ts';
+import { tokenFixes } from '../src/autofix.ts';
+import { loadConfig } from '../src/config.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { parseTokenScopes, place } from '../src/scopes.ts';
 import { GENERIC_ROLES, onRole } from '../src/tokens.ts';
-import { CLI, assert, check, cleanup, finish, first, scratch, writeAll } from './harness.ts';
+import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
+import type { Finding, Profile } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROFILES = join(HERE, '..', '..', 'profiles');
@@ -265,6 +269,164 @@ await check('WPDS scopes narrow only where the system says, and leave every othe
 	assert(
 		onRole(WPDS_NAMES, 'fill', WPDS).every((n) => n.includes('-foreground-')),
 		'fill is a foreground colour under WPDS',
+	);
+});
+
+// ── fix, and the suggestion path ────────────────────────────────────────────
+
+const TOKENS = `:root {
+	--wpds-border-radius-xs: 1px;
+	--wpds-border-radius-sm: 2px;
+	--wpds-border-radius-md: 4px;
+	--wpds-border-radius-lg: 8px;
+	--wpds-border-radius-xl: 12px;
+	--wpds-border-width-xs: 1px;
+	--wpds-color-background-surface-neutral-strong: #ffffff;
+	--wpds-color-background-interactive-neutral: #fefefe;
+	--wpds-color-foreground-content-neutral: #1e1e1e;
+	--wpds-color-stroke-surface-neutral: #dddddd;
+	--wpds-color-stroke-focus: #3858e9;
+	--wpds-dimension-padding-md: 12px;
+	--wpds-dimension-primitive-space-10: 4px;
+	--wpds-cursor-control: pointer;
+}`;
+
+/** Analyze a throwaway WPDS repo, with the given profiles active — the shipped WPDS one by default. */
+async function run(files: Record<string, string>, active: Profile[] = [wpds]): Promise<{ findings: Finding[] }> {
+	const root = scratch('loupe-scope-run-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['rp-'] } }),
+			'styles/tokens.css': TOKENS,
+			...files,
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		config.profiles = { available: shipped, active, applied: [], skipped: [], notes: [], errors: [] };
+		const { findings } = await analyze(config, { scope: null });
+		return { findings };
+	} finally {
+		cleanup(root);
+	}
+}
+
+const hardcoded = (fs: readonly Finding[], file: string, line: number): Finding =>
+	one(
+		fs.filter((f) => f.rule === 'tokens/hardcoded-value' && f.file === file && f.line === line),
+		`one hardcoded-value at ${file}:${line}`,
+	);
+
+// The issue's example, verbatim: both declarations resolved to one token by
+// value, both applied unattended, both role-wrong.
+const ISSUE = `/* a dialog surface — WPDS role scale says lg */
+.rp-dialog { border-radius: 4px; }
+/* a standalone button — WPDS role scale says sm */
+.rp-button { border-radius: 4px; }
+`;
+
+await check('without scopes, the issue’s two radii are both applied as md — the behaviour being fixed', async () => {
+	const { findings } = await run({ 'src/a.scss': ISSUE }, []);
+	const fixes = tokenFixes(findings);
+	assert(fixes.length === 2 && fixes.every((f) => f.to === 'var(--wpds-border-radius-md)'), JSON.stringify(fixes));
+});
+
+await check(
+	'with scopes and no markup, neither radius is applied: md is for overlays, and nothing shows either is one',
+	async () => {
+		const { findings } = await run({ 'src/a.scss': ISSUE });
+		assert(!tokenFixes(findings).length, `nothing should be applied: ${JSON.stringify(tokenFixes(findings))}`);
+		const dialog = hardcoded(findings, 'src/a.scss', 2);
+		const s = first(dialog.suggest ?? [], 'the declaration keeps its suggestion');
+		assert(s.tokens.join() === '--wpds-border-radius-md', `the candidate is still named: ${s.tokens}`);
+		assert(s.review?.includes('for overlay'), `the reason is carried: ${s.review}`);
+		assert(dialog.message.includes('(review: for overlay'), `and shown: ${dialog.message}`);
+	},
+);
+
+await check(
+	'with the markup bound, md is off-role on the dialog and on the button, and sm on a button is applied',
+	async () => {
+		const { findings } = await run({
+			'src/a.scss': `${ISSUE}.rp-chip { border-radius: 2px; }\n`,
+			'src/A.jsx': `export const A = () => (
+	<dialog className="rp-dialog">
+		<button className="rp-button">Go</button>
+		<button className="rp-chip">x</button>
+	</dialog>
+);
+`,
+		});
+		const fixes = tokenFixes(findings);
+		const fix = one(fixes, 'only the on-role radius is applied');
+		assert(fix.line === 5 && fix.to === 'var(--wpds-border-radius-sm)', JSON.stringify(fix));
+		assert(hardcoded(findings, 'src/a.scss', 2).suggest?.[0]?.review?.includes('<dialog>'), 'the dialog is named');
+		assert(hardcoded(findings, 'src/a.scss', 4).suggest?.[0]?.review?.includes('<button>'), 'the button is named');
+	},
+);
+
+await check('a step no markup can confirm — xs, nested inside a control — is never applied unattended', async () => {
+	const { findings } = await run({
+		'src/a.css': '.rp-x { border-radius: 1px; }\n',
+		'src/A.jsx': 'export const A = () => <button className="rp-x" />;\n',
+	});
+	assert(!tokenFixes(findings).length, 'xs should not apply');
+	assert(hardcoded(findings, 'src/a.css', 1).suggest?.[0]?.review, 'xs is held for review');
+});
+
+await check('a token with nothing declared about where it sits is applied as before', async () => {
+	const { findings } = await run({ 'src/a.css': '.rp-a { padding-top: 12px; outline-color: #3858e9; }\n' });
+	const to = tokenFixes(findings)
+		.map((f) => f.to)
+		.sort();
+	assert(
+		to.join() === 'var(--wpds-color-stroke-focus),var(--wpds-dimension-padding-md)',
+		`expected both applied: ${to}`,
+	);
+});
+
+await check('fix --dry-run names what it held back, and why', () => {
+	const root = scratch('loupe-scope-cli-');
+	try {
+		writeAll(root, {
+			'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '*' } }),
+			'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['rp-'] } }),
+			'styles/tokens.css': TOKENS,
+			'src/a.scss': ISSUE,
+		});
+		const out = execFileSync('node', [CLI, 'fix', '--dry-run', '--root', root, '--profiles', PROFILES], {
+			encoding: 'utf8',
+		});
+		const review = out.split('\n').filter((l) => l.startsWith('review'));
+		assert(review.length === 2, `expected two review lines:\n${out}`);
+		assert(
+			review.every((l) => l.includes('border-radius: 4px → --wpds-border-radius-md — for overlay')),
+			`review lines: ${review.join('\n')}`,
+		);
+		assert(out.includes('would fix 0 substitution(s)'), out);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a profile with no scopes leaves suggestions and fixes exactly as they were', async () => {
+	const plain: Profile = { ...wpds, tokenScopes: null };
+	const files = {
+		'src/a.scss': `${ISSUE}.rp-c { color: #1e1e1e; background: #ffffff; cursor: pointer; }\n`,
+		'src/A.jsx': 'export const A = () => <button className="rp-button" />;\n',
+	};
+	const none = await run(files, []);
+	const blank = await run(files, [plain]);
+	const show = (fs: readonly Finding[]): string =>
+		fs
+			.map((f) => `${f.rule} ${f.file}:${f.line} ${f.message}`)
+			.sort()
+			.join('\n');
+	assert(
+		show(blank.findings) === show(none.findings),
+		`findings differ:\n${show(blank.findings)}\n---\n${show(none.findings)}`,
+	);
+	assert(
+		JSON.stringify(tokenFixes(blank.findings)) === JSON.stringify(tokenFixes(none.findings)),
+		'the fixes should be the same',
 	);
 });
 

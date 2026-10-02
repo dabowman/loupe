@@ -10,7 +10,9 @@
  *
  * Only the unambiguous case is applied: two on-role tokens carrying the same
  * value is a semantic choice, not an array lookup, and a misspelling one
- * keystroke from two real tokens is a question, not a typo.
+ * keystroke from two real tokens is a question, not a typo. So is one token the
+ * profile scopes to another kind of element — the menu radius on a dialog — or
+ * to a kind nothing shows this element to be.
  *
  * Design notes: docs/design/report.md#fixing
  */
@@ -47,7 +49,9 @@ export function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
 		for (const s of f.suggest ?? []) {
 			// The exact token first: `--judge` is never asked about a declaration
 			// code already settled, so at most one of these is ever there.
-			const to = s.tokens.length === 1 ? `var(${s.tokens[0]})` : s.judged?.answer;
+			// A single token held for `review` is outside its declared scope here, or
+			// not shown to be inside it — a question, as two candidates are.
+			const to = s.tokens.length === 1 && !s.review ? `var(${s.tokens[0]})` : s.judged?.answer;
 			if (to === undefined || to === KEEP) continue;
 			out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to, span: s.span });
 		}

@@ -81,7 +81,7 @@ import { rawElements } from './checks/system/raw-element.ts';
 import { hardcodedValue } from './checks/tokens/hardcoded-value.ts';
 import { unknownTokens as unknownTokenFindings } from './checks/tokens/unknown-token.ts';
 import type { TokenRef } from './checks/tokens/unknown-token.ts';
-import { mergeScopes } from './scopes.ts';
+import { fitOf, mergeScopes } from './scopes.ts';
 import { typographyInCss } from './checks/typography/in-css.ts';
 import { untokenizedType } from './checks/typography/untokenized.ts';
 import type {
@@ -129,6 +129,9 @@ const realPath = (path: string): string | null => {
  */
 const partClass = (sel: string): string | undefined =>
 	keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, '')).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+
+/** The element a compound selector names, lowercased: `button.primary:hover` → `button`. */
+const tagOf = (compound: string): string | null => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
 
 /**
  * The design system's own stylesheets: the parts they style, and where they are.
@@ -327,6 +330,7 @@ export async function analyze(
 	// What the active profiles say each token is for. Absent, every suggestion
 	// below is made from the generic table exactly as before.
 	tokenSet.scopes = mergeScopes((config.profiles?.active ?? []).map((p) => p.tokenScopes));
+	const scopes = tokenSet.scopes;
 	// Real paths on both sides: the walk never follows a symlink below the root,
 	// so the root is the only link a discovered path can have come through.
 	const realRoot = realPath(config.root) ?? config.root;
@@ -421,6 +425,35 @@ export async function analyze(
 		for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
 		suppressionsFor(rel, text);
 	}
+
+	// class -> the raw elements carrying it, for the token pass to know what a
+	// rule lands on. Only collected where a profile declares scopes to check.
+	const rawByClass = new Map<string, string[]>();
+	if (scopes)
+		for (const el of rawEls) for (const c of el.classes) rawByClass.set(c, [...(rawByClass.get(c) ?? []), el.tag]);
+	/**
+	 * What a stylesheet rule lands on: the element its key compound names, or
+	 * every design-system component and raw element the markup puts its key
+	 * classes on. Empty when any one of its selectors says nothing — a scope is
+	 * only held against what is shown.
+	 */
+	const elementsOf = (selectors: readonly string[]): string[] => {
+		if (!scopes) return [];
+		const out = new Set<string>();
+		for (const sel of selectors) {
+			const key = keySelector(sel);
+			const tag = tagOf(key);
+			const found = tag
+				? [tag]
+				: classesIn(key).flatMap((c) => [
+						...(bindings.get(c) ?? []).flatMap((b) => (b.tag ? [b.tag] : [])),
+						...(rawByClass.get(c) ?? []),
+					]);
+			if (!found.length) return [];
+			for (const e of found) out.add(e);
+		}
+		return [...out];
+	};
 
 	for (const { abs } of files.references) {
 		if (tooBig(abs)) continue;
@@ -521,6 +554,7 @@ export async function analyze(
 			// rather than `''`, so the field is absent when a rule is unconditional.
 			const selector = selectors.join(', ');
 			const media = mediaQuery(cssRule) || undefined;
+			const elements = elementsOf(selectors);
 			let touchesStyle = false;
 			let touchesLayout = false;
 
@@ -553,7 +587,7 @@ export async function analyze(
 					? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject)
 					: null;
 			if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
-			else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media });
+			else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
 
 			const cut = deletableRule(cssRule, srcLines);
 			for (const cls of keyClasses)
@@ -590,6 +624,8 @@ export async function analyze(
 
 		const isGrid = el.decls.some((d) => isGridDecl(d.prop, d.value));
 		const pending: PendingFinding[] = [];
+		// An inline style is on exactly the element it is written on.
+		const elements = [el.tag];
 		for (const d of el.decls) {
 			const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
 			if (finding)
@@ -604,7 +640,14 @@ export async function analyze(
 				});
 		}
 		for (const f of collapsePerRule(pending))
-			report({ ...f, file: el.file, message: `${f.message}${f.suffix ?? ''}`, code: f.code ?? f.message, scopeLines });
+			report({
+				...f,
+				file: el.file,
+				message: `${f.message}${f.suffix ?? ''}`,
+				code: f.code ?? f.message,
+				scopeLines,
+				elements,
+			});
 	}
 
 	// ── CSS-in-JS template literals ───────────────────────────────────────────
@@ -626,6 +669,9 @@ export async function analyze(
 		for (const group of tpl.groups) {
 			const onTarget = group.onTarget;
 			const pending: PendingFinding[] = [];
+			// The styled element itself, or whatever a nested selector's key compound names.
+			const tag = onTarget ? tpl.target : group.selector ? tagOf(keySelector(group.selector)) : null;
+			const elements = scopes && tag ? [tag] : [];
 			for (const d of group.decls) {
 				if (supp)
 					for (const name of tokenRefsIn(d.value, tokenPrefixes))
@@ -651,6 +697,7 @@ export async function analyze(
 					code: `css-in-js:${f.code ?? f.message}`,
 					suffix: `${where} (css-in-js)`,
 					scopeLines: [tpl.line, tpl.line - 1],
+					elements,
 				});
 		}
 	}
@@ -692,6 +739,8 @@ export async function analyze(
 
 	// Name the replacement instead of the namespace.
 	for (const f of findings) {
+		const elements = f.elements ?? [];
+		delete f.elements;
 		// An empty array is still working state — `collapsePerRule` produces one
 		// whenever it merges a group where nothing carried a hint. Dropped here too,
 		// or `"hints": []` rides out into `--format json`.
@@ -703,7 +752,16 @@ export async function analyze(
 		// rendering of what `fix` acts on rather than a second account of it. One
 		// entry per flagged declaration, matched or not: an entry with no tokens is
 		// how `fix` knows a declaration was never substituted.
-		f.suggest = f.hints.map((h) => ({ ...h, tokens: tokensFor(tokenSet, h.prop, h.value) }));
+		//
+		// One token is applied unattended only where it is in its declared scope on
+		// what this styles. Off it — or scoped to a kind of element nothing here
+		// shows this to be — it is a question, the way two on-role tokens are.
+		f.suggest = f.hints.map((h) => {
+			const tokens = tokensFor(tokenSet, h.prop, h.value);
+			const [only] = tokens;
+			const fit = scopes && only !== undefined && tokens.length === 1 ? fitOf(scopes, only, elements) : null;
+			return fit && (fit.fit === 'off' || fit.fit === 'unknown') ? { ...h, tokens, review: fit.why } : { ...h, tokens };
+		});
 		// Replaces what the classifier bounded rather than appending to it.
 		// `declarationMessage` is the single place that decides how it reads.
 		f.message = declarationMessage(f.suggest, f.suffix ?? '');
