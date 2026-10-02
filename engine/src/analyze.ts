@@ -28,6 +28,7 @@
  *     checks/patterns/composites.ts     patterns/duplicate-, superseded-, unregistered-composite
  *     checks/system/currency.ts         system/locked-component, system/superseded-component
  *     checks/tokens/unknown-token.ts    tokens/unknown-token
+ *     checks/tokens/misapplied-token.ts tokens/misapplied-token
  *   run by the scanner, per JSX element (`markup.ts`):
  *     checks/detectors/*.ts             the pattern registry's detectors
  *
@@ -81,6 +82,8 @@ import { rawElements } from './checks/system/raw-element.ts';
 import { hardcodedValue } from './checks/tokens/hardcoded-value.ts';
 import { unknownTokens as unknownTokenFindings } from './checks/tokens/unknown-token.ts';
 import type { TokenRef } from './checks/tokens/unknown-token.ts';
+import { misappliedTokens } from './checks/tokens/misapplied-token.ts';
+import type { ScopedRef } from './checks/tokens/misapplied-token.ts';
 import { fitOf, mergeScopes } from './scopes.ts';
 import { typographyInCss } from './checks/typography/in-css.ts';
 import { untokenizedType } from './checks/typography/untokenized.ts';
@@ -341,6 +344,8 @@ export async function analyze(
 	};
 	/** Resolved after the walk: an empty token set proves nothing. */
 	const tokenRefs: TokenRef[] = [];
+	/** The same references, with what each lands on — and the inline channel's too — for `tokens/misapplied-token`. */
+	const scopedRefs: ScopedRef[] = [];
 
 	const findings: Finding[] = [];
 	const directives: Directive[] = [];
@@ -572,8 +577,11 @@ export async function analyze(
 				);
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
-				for (const name of tokenRefsIn(decl.value, tokenPrefixes))
-					tokenRefs.push({ file: rel, line, name, prop, scopeLines });
+				for (const name of tokenRefsIn(decl.value, tokenPrefixes)) {
+					const ref = { file: rel, line, name, prop, scopeLines };
+					tokenRefs.push(ref);
+					if (scopes) scopedRefs.push({ ...ref, value: decl.value, elements });
+				}
 				if (finding) pending.push({ ...finding, line, scopeLines });
 			}
 
@@ -627,6 +635,17 @@ export async function analyze(
 		// An inline style is on exactly the element it is written on.
 		const elements = [el.tag];
 		for (const d of el.decls) {
+			if (scopes)
+				for (const name of tokenRefsIn(d.value, tokenPrefixes))
+					scopedRefs.push({
+						file: el.file,
+						line: d.line ?? el.line,
+						name,
+						prop: d.prop,
+						scopeLines,
+						value: d.value,
+						elements,
+					});
 			const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
 			if (finding)
 				pending.push({
@@ -674,8 +693,11 @@ export async function analyze(
 			const elements = scopes && tag ? [tag] : [];
 			for (const d of group.decls) {
 				if (supp)
-					for (const name of tokenRefsIn(d.value, tokenPrefixes))
-						tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
+					for (const name of tokenRefsIn(d.value, tokenPrefixes)) {
+						const ref = { file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] };
+						tokenRefs.push(ref);
+						if (scopes) scopedRefs.push({ ...ref, value: d.value, elements });
+					}
 				const { finding } = classifyDeclaration(d, {
 					boundSystem: onTarget ? boundSystem : [],
 					boundText: onTarget ? boundText : [],
@@ -772,6 +794,7 @@ export async function analyze(
 	}
 
 	for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
+	for (const f of misappliedTokens(scopedRefs, scopes, tokenSet.known)) report(f);
 
 	// Dedupe: nesting and multi-selector rules can legitimately reach the same
 	// declaration twice. Keyed on identity AND display, and run BEFORE the line

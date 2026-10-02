@@ -41,6 +41,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `stylesheet/unparsed` | A stylesheet the parser could not read, so nothing in it was checked |
 | `css/dead-class` | A project-namespaced class referenced in no markup or reference file |
 | `tokens/unknown-token` | A `var()` naming no token any known source defines |
+| `tokens/misapplied-token` | A real token used outside the scope the profile declares for it — another property, or another kind of element |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the file that built it |
 | `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere |
@@ -350,7 +351,8 @@ it, and the registries describing its components and composites:
 ```
 profiles/
   acme/
-    profile.json       { id, name, packages, preset, patterns, components, tokenDescriptions }
+    profile.json       { id, name, packages, preset, patterns, components,
+                         tokenDescriptions, tokenScopes }
     patterns/index.json
     components/index.json
     authoring.md       read by the plugin's skills, not by this engine
@@ -393,6 +395,69 @@ checked by the rules that need no registry at all. `loupe status` prints which
 profile is active, and a registry passed but not applied says so on stderr
 rather than looking like a registry that found nothing.
 
+### Token scopes
+
+A profile can say what each of its tokens is *for*, which a token's type does
+not: a stroke colour and a text colour are both colours. `tokenScopes` — inline
+in `profile.json`, or a profile-relative path to a JSON file holding it — is a
+naming grammar plus what its segments mean, and an explicit list for any scale
+whose role is not in the name. WPDS's is `profiles/wpds/token-scopes.json`:
+
+```jsonc
+{
+  "kinds": {                                   // what markup can show an element to be
+    "interactive": ["a", "button", "input", "Button", "Link"],
+    "control": ["button", "input", "Button"],
+    "overlay": ["Popover"],
+    "nested-in-control": []                    // empty: no markup can show it
+  },
+  "grammars": [
+    {
+      "pattern": "--wpds-color-{property}-{target}...",
+      "property": {                            // segment → the CSS properties it sets
+        "background": ["background", "background-color", "background-image"],
+        "stroke": { "sets": ["border-color", "border-*-color", "outline-color"], "also": ["box-shadow"] }
+      },
+      "target": {                              // segment → where it may sit
+        "surface": { "not": ["interactive"] },
+        "interactive": { "requires": ["interactive"] }
+      }
+    },
+    { "pattern": "--wpds-cursor-{target}", "properties": ["cursor"], "target": { "control": { "requires": ["control"] } } }
+  ],
+  "scales": { "--wpds-border-radius-md": { "on": ["overlay"] } }
+}
+```
+
+- **`pattern`** is a custom-property name with placeholders. `{property}`
+  matches one of the segments the entry maps (so `surface-width` and `font-size`
+  can be one segment); every other placeholder is one word; a trailing `...`
+  allows any further segments. The first grammar that matches a token places it.
+- **`property`** maps each segment to the CSS properties it `sets` — what the
+  token is suggested for — and optionally those it may `also` appear in without
+  being what it is for (a stroke inside a focus-ring `box-shadow`). A list is
+  `sets` alone. `*` matches within a name: `padding-*`, `border-*-radius`. A
+  pattern with no `{property}` names its family's properties under `properties`.
+- **`target`** maps a segment to the kinds of element it `requires` or must
+  `not` sit on. **`kinds`** names those kinds by tag (lowercase) and component
+  (capitalised). **`scales`** gives a token with no role in its name the kinds it
+  is `on`.
+- Keys beginning with `$` are comments.
+
+What it changes. Wherever a declared segment `sets` a property, the declared
+grammar — not the engine's generic table — decides which tokens are suggested
+for it; everywhere else, and for a profile declaring nothing, the generic table
+answers exactly as before. A single suggested token scoped to a kind of element
+is applied by `loupe fix` only where the declaration is shown to style that kind
+(see [Fixing](#fixing)), and `tokens/misapplied-token` reports a real token used
+off its declared property or kind. Where nothing shows what an element is, a
+scope is never reported and never applied unattended.
+
+It is validated as the profile loads, and refused whole if any of it is wrong:
+`loupe` names every problem on stderr and the profile falls back to the generic
+table, its registries still applied. Design notes:
+[token scopes](../docs/design/analysis.md#token-scopes).
+
 ## Fixing
 
 ```bash
@@ -405,6 +470,17 @@ candidate tokens is a semantic choice — the right pixels with the wrong meanin
 is the failure the suggestion machinery exists to prevent. A type property in a
 stylesheet is where the rule's first remedy — use the text component — is not
 available, which is the case its second one is for.
+
+So is one token outside the scope its profile declares. `border-radius: 4px` is
+`--wpds-border-radius-md` by value on a dialog and on a button alike, and `md`
+is the radius for menus and popovers. Where the [token scopes](#token-scopes)
+tie the one candidate to a kind of element and the declaration is not shown to
+style that kind, the finding names it with `(review: …)` and the reason, and
+`fix` prints a `review` line instead of writing it:
+
+```
+review src/a.scss:2  border-radius: 4px → --wpds-border-radius-md — for overlay; this styles <dialog>
+```
 
 `tokens/unknown-token` is fixed on the same terms. A `var()` naming a token
 nothing defines is usually a misspelling, so where exactly **one** known token
@@ -983,7 +1059,10 @@ directory per behaviour), `tests/detect.ts` (inference), `tests/regressions.ts`
 (failures that reported success), `tests/features.ts` (the three channels and the
 two cross-file rules), `tests/autofix.ts` (the fix path, where a wrong
 substitution is invisible), and `tests/multi-ds.ts` (registry scoping and profile
-selection — which design system answers for a file). `tests/harness.ts` is not a
+selection — which design system answers for a file). `tests/scopes.ts` covers
+token scopes: the schema's validation, the generic table's parity with what it
+replaced, `fix` holding back an off-role token, and `tokens/misapplied-token`.
+`tests/harness.ts` is not a
 suite: it holds the `check`/`assert`/scratch-repo helpers the six share, typed
 once instead of copied six times.
 Once behaviour is config-driven, these are the only thing standing between a

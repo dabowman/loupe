@@ -186,6 +186,16 @@ Other families, all `--wpds-` prefixed:
 | Corners, borders | `border-radius-{xs…xl}`, `border-width-{xs…lg,focus}` |
 | Animation | `motion-duration-{xs…xl}`, `motion-easing-{subtle,balanced,expressive}` |
 
+**Radius is by role, not by size**, and nothing in the name says which: `xs`
+for elements nested inside controls, `sm` standalone buttons, inputs and
+compact controls, `md` menus, popovers and small overlays, `lg` cards, dialogs
+and notices, `xl` the page and app shell. A dialog's corner is `lg` even where
+the design measured 4px.
+
+`token-scopes.json` beside this file is that grammar and that scale as data:
+Loupe holds a suggested token to it before `loupe fix` applies one, and
+`tokens/misapplied-token` reports a real token used off its property or target.
+
 The set is role-based, not a full matrix. A combination that does not exist
 usually should not — that is a signal to re-examine the design, not to invent a
 token or fall back to a literal.

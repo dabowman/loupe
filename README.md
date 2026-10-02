@@ -184,6 +184,7 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `tokens/hardcoded-value` | A literal colour or length where a token exists | warn |
 | `css/dead-class` | A namespaced class referenced in no markup or reference file | warn |
 | `tokens/unknown-token` | A `var()` naming no token the design system defines | warn |
+| `tokens/misapplied-token` | A real token used outside its declared scope — a `surface` background on a button | warn |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in more than one file | warn |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the one file that built it | warn |
 | `patterns/unregistered-composite` | The same composite built in three or more files, registered in none | warn |
@@ -213,7 +214,7 @@ project defines itself is added to the set. Findings then name the token:
 ```
 • tokens/hardcoded-value (1) advisory — hardcoded value — replace with a --wpds-* token
   styles/card.scss (1)
-      12  border-radius: 4px → --wpds-border-radius-md
+      12  padding: 12px → --wpds-dimension-padding-md
 ```
 
 Only an on-role token is offered. `1px` is both `--wpds-border-radius-xs` and
@@ -239,7 +240,8 @@ Only where exactly one on-role token carries the value — or, for a misspelled
 name, where exactly one known token is a single keystroke away and that
 keystroke is not a digit, since `--wpds-dimension-space-20` and
 `--wpds-dimension-space-30` are one edit apart and mean different amounts. Two
-candidates is a semantic choice, so it is left alone. All three channels are
+candidates is a semantic choice, so it is left alone — and so is one the profile
+scopes to another kind of element, below. All three channels are
 rewritten: a
 stylesheet and a CSS-in-JS template are matched as the CSS they are, and a
 `style={{ padding: 13 }}` object is spliced at the literal the scan recorded,
@@ -247,6 +249,43 @@ since `padding-bottom: 13px` is a translation of what the file says rather than
 a copy of it. Paying a model to read a file back and retype an answer nothing
 had to reason about is the expensive way to apply a substitution, and this is
 usually the highest-volume rule in a report.
+
+### Token scopes
+
+A token's type says what kind of value it is, not what it is *for*. The WPDS
+radius scale is role-based — xs nested inside controls, sm standalone buttons
+and inputs, md menus and popovers, lg cards and dialogs, xl the page shell — so
+`border-radius: 4px` is `md` by value on a dialog and on a button alike, and
+wrong on both. Matching by value alone applied it to both, unattended.
+
+So a profile declares its system's naming grammar and what each segment means
+(`profiles/wpds/token-scopes.json`, from WPDS's own published grammar,
+`--wpds-color-<property>-<target>-<tone>…`), plus an explicit list for a scale
+whose role is not in the name. A single suggested token scoped to a kind of
+element is now applied only where the markup shows the declaration styles that
+kind; otherwise it is held for review, with the reason:
+
+```
+$ loupe fix --dry-run
+review src/a.scss:2  border-radius: 4px → --wpds-border-radius-md — for overlay; what this styles is not known
+review src/a.scss:4  border-radius: 4px → --wpds-border-radius-md — for overlay; this styles <button>
+```
+
+And `tokens/misapplied-token` (advisory) catches a real token used off its
+scope — the case only a reader of the token docs caught before:
+
+```
+• tokens/misapplied-token (2) advisory — misapplied token — it exists, but WordPress scopes it to another property or another kind of element; use the token whose role matches
+  src/preflight-card.scss (2)
+      63  background: --wpds-color-background-surface-neutral-strong — not for interactive; this styles <input>
+      71  color: --wpds-color-background-interactive-neutral — a background token sets background, background-color, background-image
+```
+
+A profile that declares no scopes behaves exactly as before, and so does every
+token its grammar does not place. See
+[token scopes](engine/README.md#token-scopes) for the schema. Archer and VIP
+declare their colour roles (`--color-text-*`, `--theme-ui-colors-texts-*`); their
+other families carry no role in the name and stay on the generic table.
 
 ### Judged variants
 

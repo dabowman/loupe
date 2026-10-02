@@ -132,6 +132,79 @@ judgement that lets a one-off survive every pass. Past the end of the scale it
 may still be kept — 48px of page padding snapped to a 32px top step is a
 different layout.
 
+## Token scopes
+
+A token's type says what kind of value it is; it does not say what the value is
+*for*. A stroke colour and a text colour are both `color`, and applying one where
+the other belongs gives the right pixels with the wrong meaning — which survives
+review precisely because it looks correct, and moves the wrong way the next time
+the system moves. The role filter above used to be a table of regex pairs in the
+engine (`ROLE_HINTS`), guessing at several systems' spellings at once
+(`fg|text|content|foreground`). That table is a system's data, so a profile now
+states it, and adding a design system stays a directory rather than an engine
+patch.
+
+**A grammar plus segment meanings, not a per-token table.** A well-built system
+writes the role into the name, and WPDS publishes the grammar:
+`--wpds-color-<property>-<target>-<tone>[-<emphasis>][-<state>]`. A profile's
+`tokenScopes` declares that pattern, which CSS properties each `property` segment
+sets, and which kinds of element each `target` segment may or may not sit on —
+and stays correct as the system adds tokens. A scale whose role is *not* in the
+name is enumerated instead: nothing in `--wpds-border-radius-md` says "menus and
+popovers", so each radius step names the kind of element it belongs on.
+
+```jsonc
+"tokenScopes": {
+  "kinds": { "interactive": ["button", "a", "Button", …], "overlay": ["Popover"], "nested-in-control": [] },
+  "grammars": [{
+    "pattern": "--wpds-color-{property}-{target}...",
+    "property": {
+      "background": ["background", "background-color", "background-image"],
+      "stroke": { "sets": ["border-color", "outline-color", …], "also": ["box-shadow"] }
+    },
+    "target": { "surface": { "not": ["interactive"] }, "interactive": { "requires": ["interactive"] } }
+  }],
+  "scales": { "--wpds-border-radius-md": { "on": ["overlay"] } }
+}
+```
+
+`sets` is what the token is *for* — the properties it is suggested for. `also` is
+where it may appear without being what it is for: the stroke colour inside a
+focus-ring `box-shadow`, a width inside a `border` shorthand. Keeping the two
+apart is what stops a shorthand's family filling up with the wrong kind of value:
+the border-width tokens may sit in `border`, but `border: 1px solid #ddd` is
+still offered only stroke colours for the hex.
+
+**The engine keeps the old table as the fallback, verbatim.** A profile that
+declares nothing, and every property no declared segment `sets`, is answered by
+the generic table exactly as before — a test holds the two equal. Where a
+profile does cover a property, it decides alone: a token its grammar does not
+place is not on-role there. Fail safe in both directions — a token with no
+declared scope keeps today's matching and is never reported as misapplied.
+
+**What an element is comes from what the engine already correlates.** A
+stylesheet rule's key compound naming a tag (`.card button`), the design-system
+components the markup binds its key classes to, the raw elements carrying them,
+an inline style's own element, a CSS-in-JS template's target. Kinds are the
+profile's: `interactive` is `button`, `a`, `Button`, `Link`…; a component is
+listed only where its `className` lands on that element (`Dropdown`'s lands on
+the toggle's wrapper, so it is not an overlay). A kind declared empty is one no
+markup can show — "nested inside a control", "the app shell".
+
+**A constraint is only held against what is shown.** `requires` (and a scale
+step's `on`) is satisfied when every element shown is one of the kinds; it is
+violated when every element is shown to be none of them; anything else —
+nothing shown, elements that disagree, a kind no markup can show — is unknown.
+`not` is violated only when every element is shown to be the forbidden kind.
+Unknown is never reported. It is also never applied unattended, which is where
+this meets [fixing](report.md#fixing): one candidate whose scope is off, or
+unconfirmed, is held for review the way two on-role candidates already were.
+
+The schema is validated as the profile loads, all or nothing: one malformed
+entry refuses the whole block with every problem named, and `loupe` prints them.
+A half-read declaration would put some of a system's tokens in scope and leave
+their siblings on the generic table, which is worse than either.
+
 ## Markup scanning: two passes, two characters
 
 1. **Structure — bindings, raw elements, composites — comes from a real AST.**

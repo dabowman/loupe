@@ -132,6 +132,23 @@ a plausible shape; `--wpds-font-size-13` is the classic invented token and it
 resolves to nothing. Body text is `--wpds-color-foreground-content-neutral`
 because of what it is, not because the hex lines up.
 
+A suggestion ending `(review: …)` is a token held back by `token-scopes.json`
+beside this file. Radius is the common one: the scale is by role, not size —
+`xs` elements nested inside controls, `sm` standalone buttons and inputs, `md`
+menus and popovers, `lg` cards, dialogs and notices, `xl` the page shell — so
+`4px` on a dialog is `lg` (8px), not the `md` the value matches.
+
+## `tokens/misapplied-token`
+
+The grammar is `--wpds-color-<property>-<target>-<tone>[-<emphasis>][-<state>]`.
+`property` is the CSS property it sets — `background`, `foreground` (`color`,
+`fill`, icons), `stroke` (borders, outlines). `target` is what it sits on:
+`surface` is for static containers and "not for clickable parts", `content` for
+static text and icons, `interactive` for buttons, inputs, links. So a radio,
+button or link takes `background-interactive-*`, `foreground-interactive-*` and
+`stroke-interactive-*`, matching tone and emphasis across the three; and
+`--wpds-cursor-control` is for controls that are not links.
+
 ## `patterns/*`
 
 The registry is `patterns/index.json` beside this file, and `loupe-patterns`

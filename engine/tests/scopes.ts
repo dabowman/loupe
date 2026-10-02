@@ -17,7 +17,8 @@ import { analyze } from '../src/analyze.ts';
 import { tokenFixes } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
 import { readProfiles } from '../src/profiles.ts';
-import { parseTokenScopes, place } from '../src/scopes.ts';
+import { fitOf, parseTokenScopes, place } from '../src/scopes.ts';
+import type { TokenScopes } from '../src/scopes.ts';
 import { GENERIC_ROLES, onRole } from '../src/tokens.ts';
 import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { Finding, Profile } from '../src/types.ts';
@@ -292,7 +293,10 @@ const TOKENS = `:root {
 }`;
 
 /** Analyze a throwaway WPDS repo, with the given profiles active — the shipped WPDS one by default. */
-async function run(files: Record<string, string>, active: Profile[] = [wpds]): Promise<{ findings: Finding[] }> {
+async function run(
+	files: Record<string, string>,
+	active: Profile[] = [wpds],
+): Promise<{ findings: Finding[]; misapplied: Finding[] }> {
 	const root = scratch('loupe-scope-run-');
 	try {
 		writeAll(root, {
@@ -303,7 +307,7 @@ async function run(files: Record<string, string>, active: Profile[] = [wpds]): P
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		config.profiles = { available: shipped, active, applied: [], skipped: [], notes: [], errors: [] };
 		const { findings } = await analyze(config, { scope: null });
-		return { findings };
+		return { findings, misapplied: findings.filter((f) => f.rule === 'tokens/misapplied-token') };
 	} finally {
 		cleanup(root);
 	}
@@ -424,10 +428,118 @@ await check('a profile with no scopes leaves suggestions and fixes exactly as th
 		show(blank.findings) === show(none.findings),
 		`findings differ:\n${show(blank.findings)}\n---\n${show(none.findings)}`,
 	);
+	assert(!blank.misapplied.length, 'no scopes, no misapplied tokens');
 	assert(
 		JSON.stringify(tokenFixes(blank.findings)) === JSON.stringify(tokenFixes(none.findings)),
 		'the fixes should be the same',
 	);
+});
+
+// ── tokens/misapplied-token ─────────────────────────────────────────────────
+
+await check('a token on a property its segment does not set is misapplied', async () => {
+	const { misapplied } = await run({
+		'src/a.css': '.rp-a { color: var(--wpds-color-background-surface-neutral-strong); }\n',
+	});
+	const f = one(misapplied, 'one misapplied token');
+	assert(f.severity === 'warn', `advisory: ${f.severity}`);
+	assert(
+		f.message.startsWith('color: --wpds-color-background-surface-neutral-strong — a background token sets background'),
+		f.message,
+	);
+});
+
+await check(
+	'a surface background on a clickable control is misapplied, in every channel that shows the element',
+	async () => {
+		const { misapplied } = await run({
+			'src/A.jsx': `export const A = () => (
+	<>
+		<input className="rp-radio" type="radio" />
+		<button style={{ background: 'var(--wpds-color-background-surface-neutral-strong)' }} />
+	</>
+);
+`,
+			'src/a.css': `.rp-radio { background: var(--wpds-color-background-surface-neutral-strong); }
+.rp-card button { background-color: var(--wpds-color-background-surface-neutral-strong); }
+`,
+		});
+		const where = misapplied.map((f) => `${f.file}:${f.line}`).sort();
+		assert(where.join() === 'src/A.jsx:4,src/a.css:1,src/a.css:2', `got ${where}`);
+		assert(
+			misapplied.every((f) => f.message.includes('not for interactive')),
+			misapplied.map((f) => f.message).join('\n'),
+		);
+	},
+);
+
+await check('a scale step on the wrong kind of element is misapplied; on the right one it is not', async () => {
+	const { misapplied } = await run({
+		'src/A.jsx': 'export const A = () => <dialog className="rp-d"><button className="rp-b" /></dialog>;\n',
+		'src/a.css': `.rp-d { border-radius: var(--wpds-border-radius-lg); }
+.rp-b { border-radius: var(--wpds-border-radius-md); }
+.rp-d a { cursor: var(--wpds-cursor-control); }
+.rp-b { cursor: var(--wpds-cursor-control); border-radius: var(--wpds-border-radius-sm); }
+`,
+	});
+	const lines = misapplied.map((f) => f.line).sort();
+	assert(lines.join() === '2,3', `expected md on the button and the control cursor on the link: ${lines}`);
+	assert(
+		misapplied.some((f) => f.message.includes('for overlay; this styles <button>')),
+		'md names its role',
+	);
+	assert(
+		misapplied.some((f) => f.message.includes('for control; this styles <a>')),
+		'cursor names its role',
+	);
+});
+
+await check('nothing is misapplied where nothing declares a scope, or nothing shows the element', async () => {
+	const { misapplied } = await run({
+		'src/a.css': `.rp-a {
+	--rp-ring: var(--wpds-color-background-surface-neutral-strong);
+	padding: var(--wpds-dimension-primitive-space-10);
+	margin: calc(-1 * var(--wpds-dimension-padding-md));
+	width: calc(100% - var(--wpds-color-stroke-focus));
+	box-shadow: 0 0 0 var(--wpds-border-width-xs) var(--wpds-color-stroke-focus);
+	border: var(--wpds-border-width-xs) solid var(--wpds-color-stroke-surface-neutral);
+	border-radius: var(--wpds-border-radius-md);
+	background: var(--wpds-color-background-interactive-neutral);
+	color: var(--wpds-color-foreground-content-neutral);
+	outline-color: var(--wpds-color-made-up-token);
+}
+`,
+	});
+	assert(!misapplied.length, misapplied.map((f) => f.message).join('\n'));
+});
+
+await check('elements that disagree, or a kind no markup can show, are never reported', () => {
+	assert(WPDS, 'wpds scopes loaded');
+	const mixed = fitOf(WPDS, '--wpds-color-background-surface-neutral', ['button', 'div']);
+	assert(mixed.fit === 'unknown', `a class on a button and a div is not every element: ${mixed.fit}`);
+	const nested = fitOf(WPDS, '--wpds-border-radius-xs', ['button', 'Button']);
+	assert(nested.fit === 'unknown', `nesting inside a control cannot be shown: ${nested.fit}`);
+	const surface = fitOf(WPDS, '--wpds-color-background-surface-neutral', []);
+	assert(surface.fit === 'on', `"not interactive" holds by default where nothing is shown: ${surface.fit}`);
+	const on = fitOf(WPDS, '--wpds-border-radius-lg', ['Modal']);
+	assert(on.fit === 'on', `a Modal is a container: ${on.fit}`);
+});
+
+await check('profile kinds of one name pool when two profiles are active', async () => {
+	const extra = parseTokenScopes({
+		kinds: { container: ['Sheet'] },
+		scales: { '--acme-radius-lg': { on: ['container'] } },
+	}).scopes as TokenScopes;
+	assert(extra, 'the extra scopes parse');
+	const other: Profile = { ...wpds, id: 'acme', tokenScopes: extra };
+	const { misapplied } = await run(
+		{
+			'src/A.jsx': 'export const A = () => <dialog className="rp-d" />;\n',
+			'src/a.css': '.rp-d { border-radius: var(--wpds-border-radius-sm); }\n',
+		},
+		[wpds, other],
+	);
+	assert(one(misapplied, 'still one finding').message.includes('<dialog>'), 'the merged scopes still check');
 });
 
 finish();
