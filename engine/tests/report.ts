@@ -27,7 +27,7 @@ import { formatHtml } from '../src/report-html.ts';
 import { CLI, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-import type { AnalyzeResult, Config } from '../src/types.ts';
+import type { AnalyzeResult, Config, Finding } from '../src/types.ts';
 
 async function run(files: Record<string, string>): Promise<{ result: AnalyzeResult; config: Config; root: string }> {
 	const root = scratch('loupe-report-');
@@ -253,6 +253,96 @@ await check('an unknown --group-by is rejected, not silently treated as rule', (
 		const e = execFailure(err);
 		assert(e.status === 2, `expected exit 2 (cannot run), got ${String(e.status)}`);
 		assert(e.stderr.includes('fil') && e.stderr.includes('file'), `stderr did not name the valid axes: ${e.stderr}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// ── --rule ──────────────────────────────────────────────────────────────────
+// Batch remediation is one rule across the repo, and the way an agent narrowed to
+// one was piping `--format json` through an inline script. A flag now, scoping
+// `check` and `fix` alike.
+
+const RULED = {
+	'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'error' } }),
+	'styles/a.css': '.a { margin-bottom: 8px; padding: 13px; }\n.b { margin-bottom: 8px; }',
+	'styles/b.css': '.c { margin-top: 2px; padding: 7px; }',
+};
+
+/** Exit code and both streams, whichever way the run ended. */
+function cli(dir: string, ...argv: string[]): { status: number | null; stdout: string; stderr: string } {
+	const r = spawnSync(process.execPath, [CLI, ...argv], { cwd: dir, encoding: 'utf8' });
+	return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+await check('--rule scopes check to the rules it names, and may repeat', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		const rules = (...argv: string[]): string[] =>
+			(JSON.parse(cli(dir, 'check', '--all', '--format', 'json', ...argv).stdout) as { findings: Finding[] }).findings
+				.map((f) => f.rule)
+				.sort();
+		const all = rules();
+		assert(new Set(all).size === 2, `fixture should fire two rules: ${all.join(', ')}`);
+		const scoped = rules('--rule', 'layout/margin-on-child');
+		assert(
+			scoped.length === 3 && scoped.every((r) => r === 'layout/margin-on-child'),
+			`scoped to: ${scoped.join(', ')}`,
+		);
+		// The same two ways `--files` takes a list, and the legacy alias.
+		assert(
+			rules('--rule', 'layout/margin-on-child', '--rule', 'tokens/hardcoded-value').join() === all.join(),
+			'a repeat dropped a rule',
+		);
+		assert(
+			rules('--rule', 'layout/margin-on-child,tokens/hardcoded-value').join() === all.join(),
+			'a comma list dropped a rule',
+		);
+		assert(rules('--rule', 'R3').join() === scoped.join(), 'the alias did not resolve');
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// The gate answers for what was reported: a run scoped away from the only
+// blocking rule has nothing blocking in it.
+await check('--rule decides the exit code from what it kept', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'check', '--all').status === 1, 'the fixture should block unscoped');
+		const advisory = cli(dir, 'check', '--all', '--rule', 'tokens/hardcoded-value');
+		assert(advisory.status === 0, `advisory-only exited ${String(advisory.status)}:\n${advisory.stdout}`);
+		assert(!/margin/.test(advisory.stdout), `the scoped report kept another rule:\n${advisory.stdout}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// A misspelled id filters every finding out, and the report would say `clean`.
+await check('an unknown --rule is rejected before the walk, not read as clean', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		for (const command of ['check', 'fix']) {
+			const r = cli(dir, command, '--all', '--rule', 'layout/margin-on-chld');
+			assert(r.status === 2, `${command}: expected exit 2 (cannot run), got ${String(r.status)}`);
+			assert(r.stderr.includes('layout/margin-on-chld'), `${command}: stderr did not name the id: ${r.stderr}`);
+			assert(!r.stdout, `${command} reported anyway:\n${r.stdout}`);
+		}
+	} finally {
+		cleanup(dir);
+	}
+});
+
+await check('--rule scopes fix to the findings it names', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		const r = cli(dir, 'fix', '--all', '--dry-run', '--rule', 'tokens/hardcoded-value');
+		assert(r.status === 0, `fix exited ${String(r.status)}: ${r.stderr}`);
+		assert(/ of 2 finding\(s\) left/.test(r.stdout), `fix counted findings outside the rule:\n${r.stdout}`);
 	} finally {
 		cleanup(dir);
 	}
@@ -699,11 +789,11 @@ await check('the budget counts printed lines, so duplicates do not eat it', () =
 	assert(/×5/.test(two) && /×2/.test(two), `the budget did not reach both batches:\n${two}`);
 	assert(/2 finding\(s\) not shown/.test(two), `two lines did not stand for seven findings:\n${two}`);
 	// One line: the largest batch is the one that tells the reader the most.
-	const one = formatAgent(dupes.result, dupes.config, { maxFindings: 1 });
-	assert(/×5/.test(one), `the largest batch was not the one shown:\n${one}`);
-	assert(one.split('\n').filter((l) => NUMBERED.test(l)).length === 1, `the cap of one printed more:\n${one}`);
-	assert(/… 4 more/.test(one), `the count of what the cap hid is not in findings:\n${one}`);
-	assert(/4 finding\(s\) not shown/.test(one), `the total hidden is not in findings:\n${one}`);
+	const single = formatAgent(dupes.result, dupes.config, { maxFindings: 1 });
+	assert(/×5/.test(single), `the largest batch was not the one shown:\n${single}`);
+	assert(single.split('\n').filter((l) => NUMBERED.test(l)).length === 1, `the cap of one printed more:\n${single}`);
+	assert(/… 4 more/.test(single), `the count of what the cap hid is not in findings:\n${single}`);
+	assert(/4 finding\(s\) not shown/.test(single), `the total hidden is not in findings:\n${single}`);
 });
 
 await check('json and sarif stay one entry per finding', () => {

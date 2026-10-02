@@ -46,7 +46,7 @@ import {
 	resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
-import type { AnalyzeResult, BaselinedResult, Config, Directive } from './types.ts';
+import type { AnalyzeResult, BaselinedResult, Config, Directive, RuleId } from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
@@ -153,6 +153,7 @@ const VALUE_FLAGS = [
 	'root',
 	'preset',
 	'files',
+	'rule',
 	'max-findings',
 	'severity',
 	'baseline',
@@ -173,6 +174,9 @@ type ValueFlag = (typeof VALUE_FLAGS)[number];
 const FORMATS = ['agent', 'json', 'sarif', 'html'] as const;
 type Format = (typeof FORMATS)[number];
 const isFormat = (f: string): f is Format => (FORMATS as readonly string[]).includes(f);
+
+/** The value flags that may repeat; each occurrence is itself a comma list. */
+const LIST_FLAGS: readonly ValueFlag[] = ['files', 'rule'];
 
 /**
  * Parsed command-line flags. Written out rather than left as a string-keyed
@@ -202,13 +206,15 @@ interface Args {
 function parseArgs(args: string[]): Args {
 	const { values, positionals } = parseArgv({
 		args,
-		options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: 'string', multiple: f === 'files' }])),
+		options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: 'string', multiple: LIST_FLAGS.includes(f) }])),
 		allowPositionals: true,
 		strict: false,
 	});
-	// `--files` may repeat; each occurrence is itself a comma list.
-	const files = [values.files ?? []].flat().filter((v) => typeof v === 'string');
-	values.files = files.length ? files.join(',') : undefined;
+	// `--files` and `--rule` may repeat; each occurrence is itself a comma list.
+	for (const f of LIST_FLAGS) {
+		const given = [values[f] ?? []].flat().filter((v) => typeof v === 'string');
+		values[f] = given.length ? given.join(',') : undefined;
+	}
 	// A value flag given no value parses as `true`; treat it as not given.
 	for (const f of VALUE_FLAGS) if (typeof values[f] !== 'string') delete values[f];
 	// A switch is undeclared, so `--judge=false` arrives as the string 'false',
@@ -243,6 +249,8 @@ Options:
   --changed             Only report findings in files changed vs. HEAD (default for hook)
   --all                 Report across the whole repo (default for check)
   --files a,b           Only report findings in these files
+  --rule <id>           Only report (check) or fix (fix) this rule's findings;
+                        repeat it, or give a comma list, for more than one
   --format <f>          agent | json | sarif | html  (default: agent)
                         html writes a self-contained page — redirect it to a file
   --group-by <g>        rule | file — what the agent format heads each block
@@ -403,6 +411,30 @@ function resolveScope(
 		return [...changed];
 	}
 	return null;
+}
+
+/**
+ * The rules `--rule` named, canonical, or the first one that is not a rule.
+ *
+ * Refused rather than ignored: a misspelled id filters every finding out, and
+ * the report that follows says `clean`.
+ */
+function ruleScope(list: string | undefined): Set<RuleId> | null | { error: string } {
+	if (list === undefined) return null;
+	const out = new Set<RuleId>();
+	for (const given of list.split(',').map((r) => r.trim())) {
+		const id = canonicalRuleId(given);
+		if (!isRuleId(id)) return { error: `unknown rule "${given}" \u2014 \`loupe status\` lists them` };
+		out.add(id);
+	}
+	return out;
+}
+
+/** Only the named rules' findings, and whether what is left still blocks. */
+function filterRules<T extends AnalyzeResult>(result: T, rules: ReadonlySet<RuleId> | null): T {
+	if (!rules) return result;
+	const findings = result.findings.filter((f) => rules.has(f.rule));
+	return { ...result, findings, blocking: findings.some((f) => f.severity === 'error') };
 }
 
 function filterSeverity<T extends AnalyzeResult>(result: T, min: string): T {
@@ -971,6 +1003,18 @@ async function main(): Promise<number> {
 		return exit;
 	}
 
+	// Before the walk, like `--format` below: a misspelled id would filter every
+	// finding out and report clean.
+	const rules = ruleScope(args.flags.rule);
+	if (rules && !(rules instanceof Set)) {
+		fail(`loupe: ${rules.error}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// A real id for a rule this config switched off is not a mistake, and its
+	// silence is not a clean bill either.
+	for (const id of rules ?? [])
+		if (!config.enabled[id]) note(`loupe: ${id} is off in this config \u2014 it reports nothing.\n`);
+
 	// The one network call in the engine, so the key is checked before the walk.
 	// Typed by hand, a `--judge` that cannot judge is a mistake worth refusing.
 	// In the hook it is a flag the user never typed, so a missing key leaves the
@@ -992,7 +1036,8 @@ async function main(): Promise<number> {
 		}
 		let toFix: AnalyzeResult;
 		try {
-			toFix = await analyze(config, { scope: fixScope });
+			// Before the judgements, so a rule left out costs no paid question.
+			toFix = filterRules(await analyze(config, { scope: fixScope }), rules);
 			// Every channel: a judged replacement is written in all three. Only a
 			// judged `keep` outside a stylesheet has nowhere to go, and that one is
 			// reported as a skip rather than paid for silently.
@@ -1076,7 +1121,11 @@ async function main(): Promise<number> {
 
 	let result: AnalyzeResult | BaselinedResult;
 	try {
-		result = await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags['no-suppressions'] });
+		// Before the baseline, so the count of what it hides is this rule's too.
+		result = filterRules(
+			await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags['no-suppressions'] }),
+			rules,
+		);
 	} catch (err) {
 		if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
 		fail(`loupe: ${messageOf(err)}\n`);
@@ -1109,7 +1158,11 @@ async function main(): Promise<number> {
 		try {
 			// The same filter, for the findings this adds.
 			const redirectSeverity = config.severityOf('patterns/judged-redirect');
-			if (result.controls?.length && (args.flags.severity !== 'error' || redirectSeverity === 'error'))
+			if (
+				result.controls?.length &&
+				(args.flags.severity !== 'error' || redirectSeverity === 'error') &&
+				(!rules || rules.has('patterns/judged-redirect'))
+			)
 				result.findings.push(...(await judgeRedirects(result.controls, apiKey, redirectSeverity)));
 			await judgeVariants(root, result.findings, config.componentRegistry, apiKey);
 		} catch (err) {

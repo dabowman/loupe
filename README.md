@@ -139,6 +139,8 @@ concentrate:
 
 `×7` in one file says write a script; eleven singletons say read each one. The
 budget counts printed lines, so duplicates stretch it rather than spend it.
+`--rule <id>` scopes `check` or `fix` to one rule — repeat it for more — so
+`loupe check --rule layout/margin-on-child --format json` is the whole batch.
 
 `--concise` keeps the tally and the headings of whichever axis you grouped on,
 and drops the findings underneath them — the shape of the report when the
