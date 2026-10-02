@@ -786,6 +786,12 @@ edits to `src/` silently doing nothing until a rebuild, a gate reporting
 yesterday's verdict on today's code — and `--check` re-bundles and compares,
 which is what CI runs to reject a commit whose `dist/` no longer matches.
 
+"Installed" means the repo checkout, not just `node_modules/picomatch` beside
+the engine. Node strips no types under `node_modules`, and `src/` imports the
+pattern language from `../../patterns/`, outside the engine package, so an npm
+install or a vendored copy of `engine/` runs the bundle even with every
+dependency present.
+
 esbuild transpiles TypeScript itself; it strips types, it does not check them.
 Type checking is `npm run typecheck`, and both run in CI: a bundle that builds
 is not a bundle that type-checks, and neither substitutes for the other.

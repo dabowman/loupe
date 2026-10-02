@@ -13,7 +13,7 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
@@ -2116,6 +2116,47 @@ await check('the PATH shim finds the engine through either symlink, with no real
 			assert(r.status === 0, `${route}: exit ${r.status}\n${r.stderr}`);
 			assert(/\bwpds\b/.test(r.stdout), `${route}: no presets listed:\n${r.stdout}`);
 		}
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// The bin chose `src/` whenever picomatch resolved beside it. Outside the repo
+// that is wrong twice: `src/` imports `../../patterns/index.json`, which a
+// vendored copy of the engine does not have, and Node strips no types under
+// `node_modules`. Either way the bundle sat there unused while the bin said
+// there was none — or, under `node_modules`, dumped a raw Node stack trace.
+await check('an engine copied out of the repo runs its bundle, not its source', () => {
+	const engine = join(HERE, '..');
+	const dir = scratch('dsh-vendor-');
+	const copy = (to: string, parts: readonly string[]): string => {
+		for (const part of parts) cpSync(join(engine, part), join(to, part), { recursive: true });
+		mkdirSync(join(to, 'node_modules'), { recursive: true });
+		symlinkSync(join(engine, 'node_modules', 'picomatch'), join(to, 'node_modules', 'picomatch'));
+		return to;
+	};
+	const run = (at: string) =>
+		spawnSync(process.execPath, [join(at, 'bin', 'loupe.mjs'), 'version'], { encoding: 'utf8', env: env() });
+	try {
+		const whole = ['bin', 'src', 'dist', 'presets', 'package.json'];
+		for (const at of [
+			copy(join(dir, 'vendor', 'loupe-engine'), whole),
+			copy(join(dir, 'node_modules', '@dvdbwmn', 'loupe'), whole),
+		]) {
+			const r = run(at);
+			assert(r.status === 0, `${at}: exit ${r.status}\n${r.stderr}`);
+			assert(/\(bundle,/.test(r.stdout), `${at}: did not run the bundle:\n${r.stdout}${r.stderr}`);
+		}
+
+		// With no bundle to fall back on, the failure says so in a sentence.
+		const bare = copy(
+			join(dir, 'node_modules', '@dvdbwmn', 'bare'),
+			whole.filter((part) => part !== 'dist'),
+		);
+		const r = run(bare);
+		assert(r.status === 2, `no bundle, yet exit ${r.status}`);
+		assert(/has no bundle/.test(r.stderr), `unexpected message:\n${r.stderr}`);
+		assert(!/node:internal/.test(r.stderr), `a raw stack trace reached the user:\n${r.stderr}`);
 	} finally {
 		cleanup(dir);
 	}
