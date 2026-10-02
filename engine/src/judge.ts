@@ -364,17 +364,19 @@ function restate(f: Finding): void {
 export async function judgeValues(
 	root: string,
 	findings: readonly Finding[],
-	set: TokenSet,
+	set: TokenSet | undefined,
 	apiKey: string,
 	about: ReadonlyMap<string, string> = new Map(),
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
 	// An empty set proves nothing about the system: with nothing read, every
 	// property's family is empty, and "no padding token in the design system" would
-	// be said of every value and suppressed by `fix --judge` as fact.
+	// be said of every value and suppressed by `fix --judge` as fact. `analyze`
+	// hands back no set at all when the design system's sources yielded nothing,
+	// so a set the project's own definitions alone filled never reaches here.
 	// ponytail: a set read only partly passes this; a per-family check is the
 	// upgrade if a token source that half-resolves turns up.
-	if (!set.known.size)
+	if (!set?.known.size)
 		throw new Error(
 			'no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships',
 		);

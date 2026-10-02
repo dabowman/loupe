@@ -520,7 +520,9 @@ someone would accept. Past the end of the scale spacing may still be kept:
 48px of page padding snapped to 32px is a different layout.
 
 An empty token set is refused outright rather than read as "no token for
-anything". Every family would come back empty, and `fix --judge` would
+anything". Empty means the design system's `tokenSources` yielded nothing;
+tokens the project defines under the same prefix do not fill it. Every family
+would come back empty, and `fix --judge` would
 suppress every value as tokenless, so `check --judge` leaves values unjudged
 and says so. So does `fix --judge`, and a failed request is handled the same
 way: what the judge could not settle is left alone, and every fix that needed

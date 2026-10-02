@@ -78,7 +78,7 @@ interface Fixture {
 async function fixture(files: Record<string, string>, components?: Map<string, ComponentEntry>): Promise<Fixture> {
 	const root = scratch('dsh-fix-');
 	try {
-		const all = { 'loupe.config.json': CONFIG, 'styles/tokens.css': TOKENS, ...files };
+		const all = { 'loupe.config.json': CONFIG, [DS_TOKENS]: TOKENS, ...files };
 		writeAll(root, all);
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		// The registry rides on the profile, which only a `--profiles` run merges.
@@ -130,7 +130,7 @@ await check('an ambiguous value is left alone', async () => {
 // var(--wpds-dimension-gap-3xl)` on every `padding: 40px`.
 await check("a value only a sibling family carries is not the property's token", async () => {
 	const { applied, read } = await fixture({
-		'styles/tokens.css': ':root {\n\t--wpds-dimension-padding-sm: 8px;\n\t--wpds-dimension-gap-3xl: 40px;\n}',
+		[DS_TOKENS]: ':root {\n\t--wpds-dimension-padding-sm: 8px;\n\t--wpds-dimension-gap-3xl: 40px;\n}',
 		'styles/g.css': '.wf-g {\n\tpadding: 40px;\n\tpadding-top: 8px;\n}',
 	});
 	const out = read('styles/g.css');
@@ -324,7 +324,7 @@ await check('a skipped multi-line declaration is reported on one line', async ()
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
-			'styles/tokens.css': ':root { --wpds-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08); }',
+			[DS_TOKENS]: ':root { --wpds-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08); }',
 			'styles/s.css': '.wf-s {\n\tbox-shadow: 0 1px 2px rgba(0, 0, 0, 0.12),\n\t\t0 4px 12px rgba(0, 0, 0, 0.08);\n}',
 			'src/S.jsx': 'export const S = () => <div className="wf-s" />;',
 		});
@@ -391,7 +391,7 @@ const uses = (rel: string): string => `export const X = () => <div className="${
 
 await check('a misspelled token is renamed everywhere the file names it', async () => {
 	const { applied, read, findings, remaining, parseErrors } = await fixture({
-		'styles/tokens.css': NEAR,
+		[DS_TOKENS]: NEAR,
 		'styles/v.css': [
 			'.wf-v {',
 			'\tcolor: var(--wpds-colr-foreground);',
@@ -417,7 +417,7 @@ await check('a misspelled token is renamed everywhere the file names it', async 
 
 await check('a name two known tokens are equally near is left alone', async () => {
 	const { applied, read, findings } = await fixture({
-		'styles/tokens.css': NEAR,
+		[DS_TOKENS]: NEAR,
 		'styles/x.css': '.wf-x { padding: var(--wpds-dimension-space-xm); }',
 		'src/X.jsx': uses('wf-x'),
 	});
@@ -428,7 +428,7 @@ await check('a name two known tokens are equally near is left alone', async () =
 
 await check('a name near nothing is left alone', async () => {
 	const { applied, read } = await fixture({
-		'styles/tokens.css': NEAR,
+		[DS_TOKENS]: NEAR,
 		'styles/y.css': '.wf-y { color: var(--wpds-color-brand); }',
 		'src/Y.jsx': uses('wf-y'),
 	});
@@ -442,7 +442,7 @@ await check('a name near nothing is left alone', async () => {
 // meaning, clean report.
 await check('a step on a scale is not a spelling, however near it sits', async () => {
 	const { applied, read } = await fixture({
-		'styles/tokens.css': ':root {\n\t--wpds-dimension-space-20: 20px;\n}',
+		[DS_TOKENS]: ':root {\n\t--wpds-dimension-space-20: 20px;\n}',
 		'styles/z.css': '.wf-z { padding: var(--wpds-dimension-space-30); }',
 		'src/Z.jsx': uses('wf-z'),
 	});
@@ -454,7 +454,7 @@ await check('a step on a scale is not a spelling, however near it sits', async (
 // on the same line. A rename bounded only on the left would make it `-mdd`.
 await check('a rename stops at the name it was given, and never at a definition', async () => {
 	const { applied, read, parseErrors } = await fixture({
-		'styles/tokens.css': NEAR,
+		[DS_TOKENS]: NEAR,
 		'styles/aa.css': [
 			'.wf-aa {',
 			'\t--wf-local: var(--wpds-dimension-space-m);',
@@ -478,7 +478,7 @@ await check('a rename stops at the name it was given, and never at a definition'
 // literal CSS, so the same match finds it there.
 await check('a misspelled token in a CSS-in-JS template is renamed too', async () => {
 	const { applied, read, findings, remaining, parseErrors } = await fixture({
-		'styles/tokens.css': NEAR,
+		[DS_TOKENS]: NEAR,
 		'src/AB.jsx': [
 			"import styled from 'styled-components';",
 			'export const Card = styled.div`',
@@ -502,7 +502,7 @@ await check('fix --judge renames what the judgement settled, and nothing under t
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
-			'styles/tokens.css': NEAR,
+			[DS_TOKENS]: NEAR,
 			'styles/x.css': [
 				'.wf-x {',
 				'\tpadding: var(--wpds-dimension-space-xm);',
@@ -676,6 +676,42 @@ await check('--judge refuses an empty token set rather than calling every value 
 	assert(!called && findings[0]?.judged === undefined && findings[0]?.message === 'padding: 10px', 'judged anyway');
 });
 
+// The same failure behind one token of the project's own: the walk adds what a
+// project stylesheet defines under the prefix to the set it judges against, so
+// the set was not empty and every value with no token was suppressed as tokenless.
+await check("--judge refuses a token set only the project's own definitions filled", async () => {
+	const root = scratch('dsh-judge-project-tokens-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': JSON.stringify({
+				extends: 'wpds',
+				namespaces: { project: ['wf-'] },
+				designSystem: { tokenSources: ['vendor/empty'] },
+			}),
+			'vendor/empty/.keep': '',
+			'styles/a.css': ':root {\n\t--wpds-brand-color: #123456;\n}\n.wf-a {\n\tpadding: 13px;\n}',
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const result = await analyze(config, { scope: null });
+		assert(result.diagnostics.tokensKnown === 0, `the design system read ${result.diagnostics.tokensKnown} tokens`);
+		assert(result.tokens === undefined, `handed back ${result.tokens?.known.size} of the project's own tokens`);
+		const stub = (async () => {
+			throw new Error('asked a model with no design-system tokens');
+		}) as unknown as typeof fetch;
+		let threw = '';
+		try {
+			await judgeValues(root, result.findings, result.tokens, 'key', new Map(), stub);
+		} catch (err) {
+			threw = err instanceof Error ? err.message : String(err);
+		}
+		assert(/no design tokens were read/.test(threw), `did not refuse: ${threw || 'no throw'}`);
+		const padding = result.findings.find((f) => f.decl?.prop === 'padding');
+		assert(padding && !padding.suggest?.some((s) => s.judged), 'padding was judged tokenless');
+	} finally {
+		cleanup(root);
+	}
+});
+
 // Offline: the stub answers by what each question offers, so the check is on
 // what gets asked, what gets written, and what `fix --judge` does with it.
 await check('fix --judge rewrites what it settled, suppresses what it kept, and leaves the rest', async () => {
@@ -683,7 +719,7 @@ await check('fix --judge rewrites what it settled, suppresses what it kept, and 
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
-			'styles/tokens.css': JUDGE_TOKENS,
+			[DS_TOKENS]: JUDGE_TOKENS,
 			'styles/card.css': [
 				'.wf-card {',
 				'\tpadding: 10px 12px;',
@@ -871,7 +907,7 @@ await check('a collapsed typography finding is judged and fixed declaration by d
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
-			'styles/tokens.css': `${JUDGE_TOKENS}\n:root {\n\t--wpds-typography-font-size-sm: 12px;\n\t--wpds-typography-font-size-md: 13px;\n\t--wpds-typography-font-weight-default: 400;\n\t--wpds-typography-font-weight-emphasis: 600;\n}`,
+			[DS_TOKENS]: `${JUDGE_TOKENS}\n:root {\n\t--wpds-typography-font-size-sm: 12px;\n\t--wpds-typography-font-size-md: 13px;\n\t--wpds-typography-font-weight-default: 400;\n\t--wpds-typography-font-weight-emphasis: 600;\n}`,
 			'styles/type.css': [
 				'.wf-t {',
 				'\tfont-size: 12px;',

@@ -1005,16 +1005,18 @@ async function main(): Promise<number> {
 			// Every channel: a judged replacement is written in all three. Only a
 			// judged `keep` outside a stylesheet has nowhere to go, and that one is
 			// reported as a skip rather than paid for silently.
+			// With no design-system tokens, `judgeValues` is the one to refuse, and
+			// the refusal is noted like any other failure.
 			const judgeable = toFix.findings.filter((f) => f.suggest?.length);
-			if (apiKey && toFix.tokens && judgeable.length) await judgeValues(root, judgeable, toFix.tokens, apiKey, about);
+			if (apiKey && judgeable.length) await judgeValues(root, judgeable, toFix.tokens, apiKey, about);
 		} catch (err) {
-			note(`loupe: --judge left hardcoded values unjudged — ${messageOf(err)}\n`);
+			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
 		}
 		try {
 			// A judged rename is written like a spelled one, every line naming it.
 			if (apiKey && toFix.tokens) await judgeRenames(root, toFix.findings, toFix.tokens, apiKey, about);
 		} catch (err) {
-			note(`loupe: --judge left unknown tokens unjudged — ${messageOf(err)}\n`);
+			note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
 		}
 		const dry = Boolean(args.flags['dry-run']);
 		const { applied, skipped } = applyTokenFixes(root, toFix.findings, { dry });
@@ -1132,7 +1134,7 @@ async function main(): Promise<number> {
 		}
 		// Its own note: the judgements above stand when this one cannot run.
 		try {
-			if (result.tokens && result.findings.some((f) => f.suggest?.length))
+			if (result.findings.some((f) => f.suggest?.length))
 				await judgeValues(
 					root,
 					result.findings,

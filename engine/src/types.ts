@@ -310,7 +310,11 @@ export interface AnalyzeResult {
 	 * `check --judge` asks about it.
 	 */
 	controls?: Control[];
-	/** The token set the run read, which `--judge` chooses from. */
+	/**
+	 * The token set the run read, which `--judge` chooses from. Absent when the
+	 * design system's own sources yielded nothing (`diagnostics.tokensKnown` is
+	 * 0), whatever the project defines under the same prefix.
+	 */
 	tokens?: TokenSet;
 }
 

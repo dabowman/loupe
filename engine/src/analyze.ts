@@ -751,7 +751,11 @@ export async function analyze(
 		directives,
 		diagnostics,
 		blocking: unique.some((f) => f.severity === 'error'),
-		tokens: tokenSet,
+		// Only when the design system's own sources yielded tokens. The walk adds
+		// whatever the project defines under the same prefix to this same set, and
+		// one `--wpds-brand-color` of the project's own would otherwise pass for a
+		// design system read, with every value judged tokenless against it.
+		...(diagnostics.tokensKnown ? { tokens: tokenSet } : {}),
 		// Scoped and suppressed here, where the scope and the comments are: the
 		// finding a control becomes is written later, by the judge.
 		...(liveControls ? { controls: liveControls } : {}),
