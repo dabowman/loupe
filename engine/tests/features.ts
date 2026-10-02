@@ -1662,6 +1662,33 @@ await check('a property the component owns still blocks, and the message names t
 	);
 });
 
+await check('a component that sets a property with no prop for it says so, and still blocks', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-field { font-size: 14px; border: 1px solid #ccc; border-radius: 2px; }',
+			'src/A.tsx': [
+				"import { TextControl } from '@wordpress/components';",
+				'export const A = () => <TextControl className="acme-field" label="x" value="" onChange={ () => {} } />;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/override'), 'only the font-size is the wrapper’s own');
+	assert(
+		f.message === '<TextControl> ← font-size — it sets this itself and has no prop for it',
+		`message: ${f.message}`,
+	);
+	assert(f.severity === 'error', 'owned with no prop is still an override');
+	// The class lands on the wrapper around label, input and help, which sets no
+	// border: that is the box `className` hands you, styled as any other.
+	const plain = at(r, 'tokens/hardcoded-value').map((f) => f.message);
+	assert(
+		plain.includes('border: 1px solid #ccc') && plain.includes('border-radius: 2px'),
+		`the unowned declarations fall through to the plain verdict: ${plain.join('; ')}`,
+	);
+});
+
 await check('a component with no recorded surface is advisory, and promises no prop', async () => {
 	const r = await run(
 		{
@@ -1735,8 +1762,10 @@ await check('a shorthand and its longhands overlap; neighbouring families do not
 // provenance is a guess.
 await check('every shipped surface is sourced, and lists only properties the rules read', () => {
 	const raw = JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')) as {
+		scope?: { covers?: unknown; absent?: unknown };
 		components: { name: string; package: string; surface?: unknown }[];
 	};
+	assert(Array.isArray(raw.scope?.covers) && typeof raw.scope?.absent === 'string', 'the file declares its scope');
 	const surfaced = raw.components.filter((c) => c.surface !== undefined);
 	assert(surfaced.length > 0, 'no entry carries a surface');
 	for (const c of surfaced) {
@@ -1746,6 +1775,20 @@ await check('every shipped surface is sourced, and lists only properties the rul
 		const unread = Object.keys(s.properties).filter((p) => !APPEARANCE_PROPS.has(p));
 		assert(!unread.length, `${c.package}::${c.name} lists properties no rule reads: ${unread.join(', ')}`);
 	}
+	// Issue #21's family: each control's surface is a recorded answer, even
+	// where the answer is that it owns nothing a class can reach.
+	for (const name of [
+		'TextControl',
+		'SelectControl',
+		'ToggleControl',
+		'CheckboxControl',
+		'RadioControl',
+		'TextareaControl',
+		'ComboboxControl',
+		'RangeControl',
+		'SearchControl',
+	])
+		assert(componentRegistry.get(`@wordpress/components::${name}`)?.surface, `${name} has no surface`);
 });
 
 finish();

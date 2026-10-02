@@ -435,7 +435,9 @@ on a property a surface lists, and names the prop — `<Text> ← font-size — 
 via its variant prop` — or says there is none. A class setting anything else is
 `className` doing its job, and gets the verdict it would get on a plain
 element. An entry with no `surface` has not been read for one, so it fails safe
-to that advisory verdict too.
+to that advisory verdict too; the registry's `scope` field says which component
+families the file covers at all, so a missing entry reads as unreviewed rather
+than fine.
 
 The MCP has no maturity signal at all — it presents an `experimental`
 component with the same confidence as a `recommended` one, and it's

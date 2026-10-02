@@ -86,12 +86,15 @@ Prefer converting to `Text`. If it must stay CSS, move to
 Only a property the component owns reports per declaration, and the message
 says what controls it. `set via its variant prop` (`Text`), `intent` (`Badge`),
 `variant`/`tone` (`Button` in `@wordpress/ui`): use that prop. `it sets this
-itself and has no prop for it` — `Card.Root`'s border and background — means
-there is nothing to move to: keep the default, or suppress with the reason the
-design needs it.
+itself and has no prop for it` — `Card.Root`'s border and background, the
+`@wordpress/components` controls' font size — means there is nothing to move
+to: keep the default, or suppress with the reason the design needs it.
 
-A component the registry records no surface for gets the plain-element
-verdict, advisory.
+A class on a `*Control` lands on the wrapper around label, input and help, not
+on the input, so `border` there frames the whole field and is not an override.
+CSS that reaches the input itself goes through `.components-*-control__input`
+— a library internal, below. A component the registry records no surface for
+gets the plain-element verdict, advisory.
 
 For a library internal
 (`.components-*`, `.block-editor-*`, `.dataviews-*`) there is no supported fix:
