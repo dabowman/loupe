@@ -454,19 +454,26 @@ await check('the hook is off until the project opts in', () => {
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
 	let session = 0;
-	const hook = (extra: NodeJS.ProcessEnv): number => {
+	// The exit code alone cannot tell "off" from "ran and passed": an advisory run
+	// exits 0 too, with its report on stdout. Off is exit 0 *and* nothing said.
+	const hook = (extra: NodeJS.ProcessEnv, content?: string): { status: number; stdout: string } => {
 		try {
-			execFileSync('node', [CLI, 'hook', '--root', root], {
+			const stdout = execFileSync('node', [CLI, 'hook', '--root', root], {
 				encoding: 'utf8',
-				input: JSON.stringify({ session_id: `optin-${++session}`, tool_input: { file_path: 'styles/a.css' } }),
+				input: JSON.stringify({
+					session_id: `optin-${++session}`,
+					tool_input: { file_path: 'styles/a.css', ...(content === undefined ? {} : { content }) },
+				}),
 				env: env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true', ...extra }),
 				stdio: ['pipe', 'pipe', 'pipe'],
 			});
-			return 0;
+			return { status: 0, stdout };
 		} catch (err) {
-			return execFailure(err).status ?? -1;
+			const f = execFailure(err);
+			return { status: f.status ?? -1, stdout: f.stdout };
 		}
 	};
+	const silent = (r: { status: number; stdout: string }): boolean => r.status === 0 && r.stdout === '';
 	const status = (): string =>
 		execFileSync('node', [CLI, 'status', '--root', root], {
 			encoding: 'utf8',
@@ -474,14 +481,21 @@ await check('the hook is off until the project opts in', () => {
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 	try {
-		assert(hook({ LOUPE: 'on' }) === 2, 'fixture does not block, so silence proves nothing');
-		assert(hook({ LOUPE: undefined }) === 0, 'the hook ran in a project that never opted in');
+		assert(hook({ LOUPE: 'on' }).status === 2, 'fixture does not block, so silence proves nothing');
+		assert(silent(hook({ LOUPE: undefined })), 'the hook ran in a project that never opted in');
+		// Off still drains the payload, as under LOUPE_OFF: a Write's whole file
+		// body arrives on this pipe, and one past the pipe buffer is the one that
+		// proves it was read.
+		assert(silent(hook({ LOUPE: undefined }, 'x'.repeat(512 * 1024))), 'a large payload was not drained before opt-in');
 		assert(/hook:\s+OFF/.test(status()), 'status did not report the hook off before opt-in');
 
 		writeAll(root, { '.claude/settings.local.json': JSON.stringify({ env: { LOUPE: 'on' } }) });
-		assert(hook({ LOUPE: undefined }) === 2, 'opting in through .claude/settings.local.json did not turn the hook on');
+		assert(
+			hook({ LOUPE: undefined }).status === 2,
+			'opting in through .claude/settings.local.json did not turn the hook on',
+		);
 		assert(!/hook:\s+OFF/.test(status()), 'status reports OFF for an opted-in project');
-		assert(hook({ LOUPE: 'off' }) === 0, 'the environment did not outrank the settings file');
+		assert(silent(hook({ LOUPE: 'off' })), 'the environment did not outrank the settings file');
 	} finally {
 		cleanup(root);
 	}
