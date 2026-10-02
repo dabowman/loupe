@@ -329,9 +329,11 @@ await check('status reports the blocking switch it cannot see in the environment
 await check('the hook blocks when the setting says it should', () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		// A type declaration on a text component: it blocks with or without a
+		// registry surface, where a colour on one blocks only if a surface says so.
 		'src/A.jsx':
 			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
-		'styles/a.css': '.acme-t { color: #f00; }',
+		'styles/a.css': '.acme-t { font-size: 13px; }',
 	});
 	try {
 		execFileSync('node', [CLI, 'hook', '--root', root], {
@@ -451,7 +453,7 @@ await check('the hook is off until the project opts in', () => {
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
 			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
-		'styles/a.css': '.acme-t { color: #f00; }',
+		'styles/a.css': '.acme-t { font-size: 13px; }',
 	});
 	let session = 0;
 	const hook = (extra: NodeJS.ProcessEnv): number => {
@@ -495,7 +497,7 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
 			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
-		'styles/a.css': '.acme-t { color: #f00; }',
+		'styles/a.css': '.acme-t { font-size: 13px; }',
 	});
 	// A fresh session id per run. The gate budgets retries per session and stands
 	// down once the budget is spent, so reusing one id makes the fourth blocking
@@ -576,7 +578,7 @@ await check('an unreadable baseline is named, not silently ignored', () => {
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
 			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
-		'styles/a.css': '.acme-t { color: #f00; }',
+		'styles/a.css': '.acme-t { font-size: 13px; }',
 	});
 	const baseline = join(root, '.loupe-baseline.json');
 	try {

@@ -60,7 +60,7 @@ than using it.
 | `profiles/archer/` | The Archer profile — the same, for a styled system built on Base UI, with its own layout and text components |
 | `profiles/vip/` | The VIP Design System profile — the same, for `@automattic/vip-design-system` on Theme UI |
 | `profiles/*/patterns/index.json` | The composite registry |
-| `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
+| `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package, and the styling surface each verified component owns |
 | `engine/` | `loupe` — the conformance engine |
 | `editors/vscode/` | The VS Code / Cursor launcher for `loupe lsp`. Other editors need no extension |
 | `integrations/wordpress/` | A dev mu-plugin that loads the `serve` overlay itself, so wp-admin is not a bookmarklet click per screen |
@@ -174,7 +174,7 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `layout/margin-on-child` | Spacing margin, which belongs on the parent's `gap` | error |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own | error |
 | `typography/in-css` | A text component typed in CSS instead of via props | error |
-| `system/override` | CSS restyling a design-system component, or reaching into a library's internals | error |
+| `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals | error |
 | `system/inline-style` | `style={{ … }}` on a design-system component — it overrides the props | error |
 | `system/locked-component` | A private API the design system does not recommend outside its own core | error |
 | `layout/negative-margin` | A bleed — confirm it is deliberate | warn |
@@ -427,6 +427,15 @@ out not to be one: `Card` and `Tooltip` are namespaces there, `Text` reuses the
 name `variant` for a different set of values, `Spinner` loses a margin at every
 call site. The registry records that verdict in a `dropIn` field, and today
 carries it on nothing.
+
+An entry can also carry a styling `surface`: the CSS properties the component
+styles itself on the element its `className` reaches, each mapped to the prop
+that controls it, or to `null` where no prop does. `system/override` blocks only
+on a property a surface lists, and names the prop — `<Text> ← font-size — set
+via its variant prop` — or says there is none. A class setting anything else is
+`className` doing its job, and gets the verdict it would get on a plain
+element. An entry with no `surface` has not been read for one, so it fails safe
+to that advisory verdict too.
 
 The MCP has no maturity signal at all — it presents an `experimental`
 component with the same confidence as a `recommended` one, and it's
@@ -974,10 +983,11 @@ Known limits, in rough priority order:
    plugins, so any React-based design system works and Vue SFCs, Svelte and
    Angular templates do not — their markup never parses, so the correlation
    rules have nothing to bind a class to. The stylesheet-only rules still run.
-2. **Prop maps.** A finding can now name the token that replaces a value, but
-   not the *prop* that replaces a declaration: `system/override` says "restyle
-   via its props" without naming which one. That needs a per-component prop map,
-   which the WPDS MCP could generate.
+2. **Styling surfaces are hand-read.** `system/override` names the prop that
+   owns a declaration, or says there is none, only for components whose
+   registry entry records a `surface` — read from the package source, per
+   component. Everything else gets the plain-element verdict, advisory. The
+   VIP and Archer registries record none yet.
 3. **Structural interpolation.** A template whose shape depends on an
    interpolation (``styled.div`${mixin}` ``) parses only when the interpolation
    sits where a whole statement would. Anything else is recorded as a parse

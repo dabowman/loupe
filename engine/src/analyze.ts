@@ -43,6 +43,7 @@ import { discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
+import { surfaceFor } from './components.ts';
 import { messageLine, messageOf, oneLine, snippet } from './text.ts';
 import {
 	cssFilesUnder,
@@ -104,6 +105,7 @@ import type {
 	RawElement,
 	RuleHit,
 	RuleId,
+	StylingSurface,
 	Suppressions,
 	TokenSet,
 } from './types.ts';
@@ -227,7 +229,7 @@ const DECLARATIONS: readonly DeclarationCheck[] = [
  */
 function classifyDeclaration(
 	{ prop, value }: Decl,
-	{ boundSystem = [], boundText = [], isGrid = false, enabled }: ClassifyContext,
+	{ boundSystem = [], boundText = [], isGrid = false, surfaceOf = () => undefined, enabled }: ClassifyContext,
 ): { finding: ClassifiedFinding | null; styling: boolean } {
 	const styling =
 		isMarginProp(prop) ||
@@ -236,7 +238,7 @@ function classifyDeclaration(
 		TYPE_PROPS.has(prop) ||
 		isHardcodedTokenValue(prop, value) ||
 		APPEARANCE_PROPS.has(prop);
-	const ctx = { boundSystem, boundText, isGrid, enabled };
+	const ctx = { boundSystem, boundText, isGrid, surfaceOf, enabled };
 	// Deliberately unbounded: `message` is part of what the dedupe tells two
 	// findings apart by. The line is bounded once, at the end of `analyze`.
 	for (const check of DECLARATIONS) {
@@ -305,6 +307,8 @@ export async function analyze(
 ): Promise<AnalyzeResult> {
 	const ds = config.designSystem;
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
+	const surfaceOf = (b: Binding): StylingSurface | undefined =>
+		surfaceFor(config.componentRegistry, b.package, b.component);
 	const parseSuppressions = makeSuppressionParser(config.suppression);
 	const files = discover({ root: config.root, sources: config.sources });
 
@@ -530,7 +534,7 @@ export async function analyze(
 				const line = decl.source?.start?.line ?? ruleLine;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, enabled: ruleIsLive },
+					{ boundSystem, boundText, isGrid, surfaceOf, enabled: ruleIsLive },
 				);
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
@@ -616,8 +620,12 @@ export async function analyze(
 			continue;
 		}
 
-		const boundSystem: Binding[] = tpl.isSystem ? [{ tag: tpl.target, isSystem: true }] : [];
-		const boundText: Binding[] = tpl.isText ? [{ tag: tpl.target, isSystem: true, isText: true }] : [];
+		const key = {
+			...(tpl.component ? { component: tpl.component } : {}),
+			...(tpl.package ? { package: tpl.package } : {}),
+		};
+		const boundSystem: Binding[] = tpl.isSystem ? [{ tag: tpl.target, isSystem: true, ...key }] : [];
+		const boundText: Binding[] = tpl.isText ? [{ tag: tpl.target, isSystem: true, isText: true, ...key }] : [];
 
 		for (const group of tpl.groups) {
 			const onTarget = group.onTarget;
@@ -630,6 +638,7 @@ export async function analyze(
 					boundSystem: onTarget ? boundSystem : [],
 					boundText: onTarget ? boundText : [],
 					isGrid: group.isGrid,
+					surfaceOf,
 					enabled: ruleIsLive,
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });

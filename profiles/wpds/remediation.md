@@ -68,10 +68,12 @@ stay a plain container, keep the CSS but drive values from
 
 The class is on a `Text`. Delete the type declarations and use `variant`
 (`heading-2xl`…`body-sm`) — that is `Text`'s whole styling surface, headings
-included via `render`. `variant` has no color axis; if the finding is on
-`color`, that is a system gap — set it via `style` with a
-`--wpds-color-foreground-content-*` token (the one sanctioned inline-style case
-on a WPDS component) and leave a comment naming the missing prop.
+included via `render`: family, size, line height and weight. `letter-spacing`
+is not part of it, so it reports as `typography/untokenized` instead. `variant`
+has no color axis; if a finding is on `color`, that is a system gap — set it
+via `style` with a `--wpds-color-foreground-content-*` token (the one
+sanctioned inline-style case on a WPDS component) and leave a comment naming
+the missing prop.
 
 ## `typography/untokenized`
 
@@ -81,7 +83,17 @@ Prefer converting to `Text`. If it must stay CSS, move to
 
 ## `system/override`
 
-For a WPDS component, restyle through props. For a library internal
+Only a property the component owns reports per declaration, and the message
+says what controls it. `set via its variant prop` (`Text`), `intent` (`Badge`),
+`variant`/`tone` (`Button` in `@wordpress/ui`): use that prop. `it sets this
+itself and has no prop for it` — `Card.Root`'s border and background — means
+there is nothing to move to: keep the default, or suppress with the reason the
+design needs it.
+
+A component the registry records no surface for gets the plain-element
+verdict, advisory.
+
+For a library internal
 (`.components-*`, `.block-editor-*`, `.dataviews-*`) there is no supported fix:
 the selector depends on markup that will change without notice. Find the
 supported API, or accept the default. If you must keep it, the suppression

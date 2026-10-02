@@ -15,6 +15,7 @@ import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
+import { APPEARANCE_PROPS, propsOverlap } from '../src/styles.ts';
 import { LANGUAGE, ask, judgeRedirects, judgeVariants } from '../src/judge.ts';
 import { forceQuery } from '../src/judge/force.ts';
 import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
@@ -168,7 +169,18 @@ await check('styled.div declarations are classified and located exactly', async 
 });
 
 await check('styled(Component) inherits that component’s verdict', async () => {
-	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED });
+	// An override needs a surface saying the component owns the property; a
+	// text component's type declarations need only its being one.
+	const button: ComponentEntry = {
+		name: 'Button',
+		package: '@wordpress/components',
+		status: 'recommended',
+		surface: { properties: { background: 'variant' } },
+	};
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED },
+		{ components: new Map([['@wordpress/components::Button', button]]) },
+	);
 	const override = at(r, 'system/override');
 	const typo = at(r, 'typography/in-css');
 	assert(
@@ -1571,6 +1583,169 @@ await check('a directive that mutes nothing is reported stale', async () => {
 		off.directives.every((d) => !d.stale),
 		'with suppressions off nothing was offered to them, so nothing is stale',
 	);
+});
+
+// ── styling surfaces ────────────────────────────────────────────────────────
+// `system/override` used to fire on any appearance property on any class bound
+// to a component, so converting a raw element as `system/raw-element` asks
+// turned the same unchanged CSS from advisory to blocking — with a remedy, "use
+// its props", naming props that do not exist. It now blocks only where the
+// registry records that the component owns the property.
+
+const blocking = (r: AnalyzeResult): Finding[] => r.findings.filter((f) => f.severity === 'error');
+
+await check('converting a raw element to Text does not promote its CSS to blocking', async () => {
+	const css = '.acme-title { color: #826200; text-transform: uppercase; letter-spacing: 0.05em; }';
+	const before = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': css,
+			'src/A.tsx': 'export const A = () => <h4 className="acme-title">Hi</h4>;',
+		},
+		{ components: componentRegistry },
+	);
+	const after = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': css,
+			'src/A.tsx': [
+				"import { Text } from '@wordpress/ui';",
+				'export const A = () => <Text variant="heading-md" render={ <h4 /> } className="acme-title">Hi</Text>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const css_ = (r: AnalyzeResult) =>
+		r.findings
+			.filter((f) => f.file.endsWith('.scss'))
+			.map((f) => `${f.severity} ${f.rule} ${f.message}`)
+			.sort();
+	assert(!blocking(after).length, `the conversion added blocking findings: ${JSON.stringify(blocking(after))}`);
+	assert(
+		JSON.stringify(css_(after)) === JSON.stringify(css_(before)),
+		`the same CSS classified differently on the component:\n${css_(before).join('\n')}\n---\n${css_(after).join('\n')}`,
+	);
+	assert(!at(after, 'system/raw-element').length, 'the converted element still reports as raw');
+});
+
+await check('a property the component owns still blocks, and the message names the prop', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-t { font-size: 14px; }\n.acme-b { background: #f00; border-color: #00f; }',
+			'src/A.tsx': [
+				"import { Text } from '@wordpress/ui';",
+				"import { Button } from '@wordpress/components';",
+				'export const A = () => <><Text className="acme-t">x</Text><Button className="acme-b">y</Button></>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const type = one(at(r, 'typography/in-css'), 'font-size on Text is the variant’s');
+	assert(type.message === 'font-size on <Text> — set via its variant prop', `message: ${type.message}`);
+	assert(type.severity === 'error', 'an owned property is blocking');
+	const overrides = at(r, 'system/override').map((f) => f.message);
+	assert(
+		overrides.includes('<Button> ← background — set via its variant prop'),
+		`background on Button: ${overrides.join('; ')}`,
+	);
+	// `border-color` is a longhand of the `border` the surface lists.
+	assert(
+		overrides.includes('<Button> ← border-color — set via its variant prop'),
+		`a longhand of an owned shorthand is owned: ${overrides.join('; ')}`,
+	);
+	// The explanation is not part of the finding's identity: a baseline taken
+	// before the message said why must still recognise it.
+	assert(
+		at(r, 'system/override').every((f) => f.code === f.message.split(' — ')[0]),
+		'the code stays the component and the property',
+	);
+});
+
+await check('a component with no recorded surface is advisory, and promises no prop', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-n { color: #333; text-transform: uppercase; }',
+			'src/A.tsx': [
+				"import { Notice } from '@wordpress/components';",
+				'export const A = () => <Notice className="acme-n">x</Notice>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	assert(!componentRegistry.get('@wordpress/components::Notice')?.surface, 'the fixture needs a surface-less entry');
+	assert(!at(r, 'system/override').length, `no surface, no override: ${JSON.stringify(at(r, 'system/override'))}`);
+	assert(!blocking(r).length, `nothing blocks: ${JSON.stringify(blocking(r))}`);
+	one(at(r, 'tokens/hardcoded-value'), 'the raw colour still owes its token');
+});
+
+await check('a compound part is its own element: Card.Root owns its surface, Card.Content does not', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-card { background-color: #eee; }\n.acme-body { background-color: #eee; }',
+			'src/A.tsx': [
+				"import { Card } from '@wordpress/ui';",
+				'export const A = () => <Card.Root className="acme-card"><Card.Content className="acme-body">x</Card.Content></Card.Root>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/override'), 'Card.Root sets its own background');
+	assert(f.line === 1, `the override is the root's: line ${f.line}`);
+	assert(
+		at(r, 'tokens/hardcoded-value').some((h) => h.line === 2),
+		'the content part has no surface, so its colour is a plain hardcoded value',
+	);
+});
+
+await check('a malformed surface is dropped rather than half-read', () => {
+	const loaded = loadComponents([
+		{ name: 'A', package: 'p', status: 'recommended', surface: { properties: { color: 3 } } },
+		{ name: 'B', package: 'p', status: 'recommended', surface: { properties: [] } },
+		{ name: 'C', package: 'p', status: 'recommended', surface: { properties: { 'Font-Size': ['variant'] } } },
+		{ name: 'D', package: 'p', status: 'recommended', surface: { properties: {} } },
+	]);
+	assert(!loaded.get('p::A')?.surface, 'a non-prop value invalidates the surface');
+	assert(!loaded.get('p::B')?.surface, 'properties must be an object');
+	assert(loaded.get('p::C')?.surface?.properties['font-size']?.[0] === 'variant', 'property names are lower-cased');
+	assert(loaded.get('p::D')?.surface !== undefined, 'an empty surface is a verified answer, and is kept');
+});
+
+await check('a shorthand and its longhands overlap; neighbouring families do not', () => {
+	const yes: [string, string][] = [
+		['border', 'border-top-color'],
+		['border-color', 'border'],
+		['font', 'font-size'],
+		['background', 'background-color'],
+		['border-radius', 'border-top-left-radius'],
+	];
+	const no: [string, string][] = [
+		['border', 'border-radius'],
+		['font-size', 'font-weight'],
+		['color', 'background-color'],
+	];
+	for (const [a, b] of yes) assert(propsOverlap(a, b) && propsOverlap(b, a), `${a} / ${b} should overlap`);
+	for (const [a, b] of no) assert(!propsOverlap(a, b), `${a} / ${b} should not overlap`);
+});
+
+// What the shipped surfaces claim is checked against what the rules can see: a
+// property neither rule reads is data nobody acts on, and a surface with no
+// provenance is a guess.
+await check('every shipped surface is sourced, and lists only properties the rules read', () => {
+	const raw = JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')) as {
+		components: { name: string; package: string; surface?: unknown }[];
+	};
+	const surfaced = raw.components.filter((c) => c.surface !== undefined);
+	assert(surfaced.length > 0, 'no entry carries a surface');
+	for (const c of surfaced) {
+		const s = componentRegistry.get(`${c.package}::${c.name}`)?.surface;
+		assert(s, `${c.package}::${c.name}: the surface did not load`);
+		assert(/\d{4}-\d{2}-\d{2}/.test(s.verifiedAgainst ?? ''), `${c.name}: no dated verifiedAgainst`);
+		const unread = Object.keys(s.properties).filter((p) => !APPEARANCE_PROPS.has(p));
+		assert(!unread.length, `${c.package}::${c.name} lists properties no rule reads: ${unread.join(', ')}`);
+	}
 });
 
 finish();

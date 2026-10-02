@@ -332,6 +332,11 @@ export interface ClassifyContext {
 	boundText?: readonly Binding[];
 	isGrid?: boolean;
 	/**
+	 * The styling surface the registry records for a bound component, if any.
+	 * `undefined` is "nobody recorded one", which is not "it owns nothing".
+	 */
+	surfaceOf?: (binding: Binding) => StylingSurface | undefined;
+	/**
 	 * Whether a rule is live in this run. Two branches of the classifier
 	 * *supersede* the ordinary verdict rather than adding to it, so a
 	 * superseding rule that is off has to step aside and let the ordinary one
@@ -359,6 +364,12 @@ export interface Binding {
 	tag: string | null;
 	isSystem: boolean;
 	isText?: boolean;
+	/**
+	 * The canonical name and the package it was imported from, which together
+	 * key the component registry. Absent where the channel cannot say.
+	 */
+	component?: string;
+	package?: string;
 	file?: string;
 	line?: number;
 }
@@ -439,6 +450,33 @@ export interface ComponentEntry {
 	note?: string;
 	/** Variant name → what it is for. Read only by `check --judge`. */
 	variants?: Record<string, string>;
+	/**
+	 * What the component styles itself, on the element its `className` lands
+	 * on, and what controls each. Read by `system/override` and
+	 * `typography/in-css`. Absent means nobody has recorded it, and those rules
+	 * fail safe — see `StylingSurface`.
+	 */
+	surface?: StylingSurface;
+}
+
+/**
+ * A component's styling surface: the CSS properties it owns on the element its
+ * `className` reaches, each mapped to the prop (or props) that controls it, or
+ * to `null` where the component sets it and exposes no prop for it.
+ *
+ * A property not listed is one the component has no opinion about, so a class
+ * setting it is the sanctioned styling channel rather than an override.
+ * `properties: {}` is a verified answer — it owns nothing there — which is not
+ * the same as the field being absent. A shorthand and its longhands overlap:
+ * owning `border` owns `border-color`, and `font` reaches `font-size`.
+ *
+ * Design notes: docs/design/checks.md#systemoverride
+ */
+export interface StylingSurface {
+	properties: Record<string, string | string[] | null>;
+	/** Package, version and date the surface was read from — never inferred. */
+	verifiedAgainst?: string;
+	note?: string;
 }
 
 // ── css-in-js ───────────────────────────────────────────────────────────────
@@ -457,6 +495,9 @@ export interface CssInJsTemplate {
 	target: string | null;
 	isSystem: boolean;
 	isText: boolean;
+	/** Registry key parts for a design-system target, as on a `Binding`. */
+	component?: string;
+	package?: string;
 	groups: TemplateGroup[];
 	error: string | null;
 }

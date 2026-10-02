@@ -145,6 +145,48 @@ export const APPEARANCE_PROPS = new Set([
 	'backdrop-filter',
 ]);
 
+const SIDES = ['top', 'right', 'bottom', 'left'];
+const LOGICAL = ['block', 'inline', 'block-start', 'block-end', 'inline-start', 'inline-end'];
+const BORDER_PARTS = ['width', 'style', 'color'];
+
+/** The longhands one level below a shorthand. Only the appearance families. */
+const LONGHANDS: ReadonlyMap<string, readonly string[]> = new Map<string, string[]>([
+	['font', ['font-size', 'font-weight', 'font-family', 'line-height', 'font-style', 'font-variant', 'font-stretch']],
+	['background', ['background-color', 'background-image']],
+	['outline', ['outline-color', 'outline-width', 'outline-style']],
+	['text-decoration', ['text-decoration-color', 'text-decoration-line', 'text-decoration-style']],
+	['border', [...[...SIDES, ...LOGICAL].map((s) => `border-${s}`), ...BORDER_PARTS.map((p) => `border-${p}`)]],
+	...[...SIDES, ...LOGICAL].map((s): [string, string[]] => [
+		`border-${s}`,
+		BORDER_PARTS.map((p) => `border-${s}-${p}`),
+	]),
+	...BORDER_PARTS.map((p): [string, string[]] => [`border-${p}`, SIDES.map((s) => `border-${s}-${p}`)]),
+	[
+		'border-radius',
+		['border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius'],
+	],
+]);
+
+/** A property and every longhand beneath it, however deep. */
+function withLonghands(prop: string): Set<string> {
+	const out = new Set([prop]);
+	for (const p of out) for (const l of LONGHANDS.get(p) ?? []) out.add(l);
+	return out;
+}
+
+/**
+ * Do two properties set any of the same thing? A shorthand overlaps each of
+ * its longhands in both directions — `border` resets `border-top-color`, and a
+ * component owning `border-color` owns what `border` would overwrite — while
+ * `border` and `border-radius` share a prefix and nothing else.
+ */
+export function propsOverlap(a: string, b: string): boolean {
+	if (a === b) return true;
+	const below = withLonghands(a);
+	for (const p of withLonghands(b)) if (below.has(p)) return true;
+	return false;
+}
+
 const KEYWORD = /^(inherit|initial|unset|revert|revert-layer|none|auto|transparent|currentcolor|normal)$/i;
 const ZERO = /^0([a-z%]*)$/i;
 
