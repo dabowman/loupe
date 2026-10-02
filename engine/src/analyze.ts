@@ -39,7 +39,7 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import type { Root } from 'postcss';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
-import { discover, toPosix } from './discover.ts';
+import { TreeTooLarge, analyzeEntryBudget, discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
@@ -315,7 +315,13 @@ export async function analyze(
 	const ds = config.designSystem;
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
 	const parseSuppressions = makeSuppressionParser(config.suppression);
-	const files = discover({ root: config.root, sources: config.sources });
+	// Bounded, and loud when the bound trips: the index is repo-wide whatever the
+	// scope, so a hook on one file under a home directory with a `package.json`
+	// in it walked the whole home directory. Stopping short and carrying on would
+	// report "clean" for everything past the ceiling.
+	const limit = analyzeEntryBudget();
+	const files = discover({ root: config.root, sources: config.sources, limit });
+	if (files.truncated) throw new TreeTooLarge(limit);
 
 	// Nothing a person wrote is this big, and a generated blob costs more to
 	// parse than every finding it could produce.

@@ -17,7 +17,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
-import { isSource } from '../src/discover.ts';
+import { TreeTooLarge, isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
 import { RULES } from '../src/rules.ts';
 import { analyze } from '../src/analyze.ts';
@@ -1513,6 +1513,66 @@ await check('the hook stands aside on a non-project root instead of indexing it'
 			parsed.systemMessage?.includes('not a git worktree'),
 			`the hook analyzed a root that is not a project: ${out}`,
 		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The guard above answers "is this a project?", and one `npm init` in $HOME
+// answers yes — after which `analyze` indexed the whole home directory to report
+// on one touched file: 30s of a 60s PostToolUse timeout on a 1.66M-file tree.
+// The walk is bounded now, and a bound that trips refuses rather than reporting
+// "clean" for the part it never read. The issue's repro, scaled down by lowering
+// the ceiling rather than by building the tree.
+await check('a walk that hits the ceiling refuses instead of reporting clean', async () => {
+	const root = scratch('dsh-huge-');
+	const build = (dir: string, depth: number): void => {
+		mkdirSync(dir, { recursive: true });
+		for (let i = 0; i < 25; i++) writeFileSync(join(dir, `f${i}.${i % 10 ? 'txt' : 'css'}`), '.pj-a{color:#111}\n');
+		if (depth) for (let b = 0; b < 9; b++) build(join(dir, `d${depth}_${b}`), depth - 1);
+	};
+	const ceiling = { LOUPE_MAX_ENTRIES: '500' };
+	try {
+		build(root, 2); // 2,275 files in 91 directories
+		writeFileSync(join(root, 'package.json'), '{"name":"x"}');
+
+		// The hook stands down, visibly, and says why and what to do about it.
+		const hook = runCli(['hook', '--root', root], ceiling, '{"session_id":"t","tool_input":{"file_path":"f10.css"}}');
+		assert(hook.status === 0, `the hook exited ${hook.status} at the ceiling: ${hook.stderr}`);
+		const message = (JSON.parse(hook.stdout) as { systemMessage?: string }).systemMessage ?? '';
+		assert(/skipped/.test(message) && /too large to index/.test(message), `no stand-down message: ${hook.stdout}`);
+		assert(/500 entries/.test(message) && /sources\.ignore/.test(message), `no count or remedy: ${message}`);
+		assert(!/loupe: clean|\d+ (blocking|advisory)/.test(message), `the hook reported on a partial index: ${message}`);
+
+		// Typed, it is "could not run" — and the commands that write or list from an
+		// index refuse too, rather than recording a backlog from part of the tree.
+		for (const argv of [['check', '--all'], ['baseline'], ['suppressions']]) {
+			const r = runCli([...argv, '--root', root], ceiling);
+			assert(r.status === 2, `${argv[0]} exited ${r.status} at the ceiling:\n${r.stdout}`);
+			assert(/too large to index/.test(r.stderr), `${argv[0]} did not say why:\n${r.stderr}`);
+			assert(r.stdout === '', `${argv[0]} reported from a partial index:\n${r.stdout}`);
+			assert(!/\n\s+at /.test(r.stderr), `${argv[0]} printed a stack for a refusal:\n${r.stderr}`);
+		}
+
+		// And in-process, where nothing formats the result: no result at all.
+		const prior = process.env.LOUPE_MAX_ENTRIES;
+		process.env.LOUPE_MAX_ENTRIES = '500';
+		let result: unknown = null;
+		let thrown: unknown = null;
+		try {
+			result = await analyze(await loadConfig({ root, preset: 'generic' }), { scope: ['f10.css'] });
+		} catch (err) {
+			thrown = err;
+		} finally {
+			if (prior === undefined) delete process.env.LOUPE_MAX_ENTRIES;
+			else process.env.LOUPE_MAX_ENTRIES = prior;
+		}
+		assert(result === null, 'analyze returned a result from a truncated walk');
+		assert(thrown instanceof TreeTooLarge, `analyze failed some other way: ${String(thrown)}`);
+
+		// Under the ceiling nothing changes.
+		const whole = runCli(['check', '--all', '--root', root, '--preset', 'generic'], { LOUPE_MAX_ENTRIES: '5000' });
+		assert(whole.status !== 2, `a tree under the ceiling did not run: ${whole.stderr}`);
 	} finally {
 		cleanup(root);
 	}

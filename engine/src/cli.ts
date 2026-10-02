@@ -22,7 +22,7 @@ import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
-import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
+import { TreeTooLarge, changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
@@ -295,6 +295,9 @@ Environment:
                         Code as 'LOUPE_OFF=1 claude'.
                         Both read 1/true/yes/on as on; anything else — 0 and
                         false included — as not set.
+  LOUPE_MAX_ENTRIES=<n> How many entries analysis walks before it refuses to
+                        report at all (default 200,000), rather than calling
+                        the part of the tree it never read clean.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
@@ -1264,6 +1267,8 @@ main()
 		process.exitCode = code;
 	})
 	.catch((err: unknown) => {
-		fail(`loupe: ${err instanceof Error ? err.stack : String(err)}\n`);
+		// A refusal is a message, not a crash: `baseline` and `suppressions` reach
+		// the tree ceiling here rather than through a catch of their own.
+		fail(`loupe: ${err instanceof TreeTooLarge ? err.message : err instanceof Error ? err.stack : String(err)}\n`);
 		process.exitCode = EXIT.CANNOT_RUN;
 	});

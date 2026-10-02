@@ -895,6 +895,13 @@ returns before indexing, and any file over 1.5MB is skipped as generated (a
 stylesheet skipped this way still reports `stylesheet/unparsed`, so the hole is
 never silent).
 
+And a ceiling bounds the walk itself: past 200,000 entries (pruned directories
+not counted) analysis refuses rather than reporting on part of the tree, since
+a partial index calls everything it never reached clean. The hook stands aside
+with a `skipped` message naming the count; a typed command exits 2. Point
+`--root` at the project, or narrow `sources` / extend `sources.ignore`;
+`LOUPE_MAX_ENTRIES` raises the ceiling for a project that really is that large.
+
 ## Source and bundle
 
 `src/` is the engine, in TypeScript. `dist/loupe.mjs` is the same code

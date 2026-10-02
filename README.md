@@ -966,6 +966,12 @@ reports as `stylesheet/unparsed`; a skipped markup file just contributes
 nothing. Gutenberg — 6,100 markup files, 1,300 stylesheets — indexes in about
 five seconds.
 
+Past 200,000 entries the walk stops and the hook stands aside with a `skipped`
+message saying so, rather than reporting "clean" for the part it never read —
+the case is a home directory with a stray `package.json`, not a project. Point
+the root at the project, or narrow `sources` in `loupe.config.json`;
+`LOUPE_MAX_ENTRIES` raises the ceiling.
+
 ## Status
 
 Working: all three channels (stylesheets, `style={{ … }}`, CSS-in-JS template

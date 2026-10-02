@@ -227,8 +227,30 @@ pruned against the ignore globs *during* traversal rather than filtered
 afterwards, so a large `node_modules` is never enumerated.
 
 **The walk is unbounded by default**, because a scan that quietly stopped
-halfway would report "clean" for the half it never read. Only a caller that is
-merely guessing passes a `limit`, and it reads `truncated` back.
+halfway would report "clean" for the half it never read. A caller that is
+merely guessing — inference — passes a `limit`, reads `truncated` back, and
+carries on with a guess it labels as one.
+
+**Analysis is bounded too, and refuses at the bound.** The index is repo-wide
+whatever the scope, so a `PostToolUse` on one file indexed the whole tree first
+— and the project-shape guard is one `npm init` wide: a `package.json` in a home
+directory says "project", after which a hook run on a 1.66M-file tree took 30s
+of its 60s timeout (38s from source). Passing inference's ceiling down would
+not have done: a truncated *analysis* reports "clean" for what it never read,
+which is the one failure a gate must not have. So `analyze` walks to
+`ANALYZE_ENTRY_BUDGET` (200,000 entries, four times the inference budget, about
+two seconds of walking) and, if the walk has not finished, throws `TreeTooLarge`
+instead of returning anything. Under the hook that is a `skipped` system message
+naming the count and the remedy — point `--root` at the project, or narrow
+`sources` / extend `sources.ignore` — and typed it is exit 2. On the same tree
+the hook now stands down in about 4s. `LOUPE_MAX_ENTRIES` raises the ceiling for
+a project that is genuinely larger, and is how the tests trip it without
+building the tree.
+
+The other options were weighed and left for later: stat-ing a known file list
+instead of walking (the cross-file rules — `css/dead-class`, the composites —
+are why the index is repo-wide, and which of them stay meaningful on a partial
+index is its own question), and keeping an index between hook runs.
 
 **Dot-directories are pruned unless a glob names one.** With picomatch's `dot:
 false`, nothing inside `.venv`, `.cache`, `.cargo`, `.yarn/cache` or a pnpm
