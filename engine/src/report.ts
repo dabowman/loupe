@@ -439,7 +439,7 @@ function fingerprints(findings: readonly Finding[]): string[] {
 export function reportPayload(result: AnalyzeResult | BaselinedResult, config: Config): ReportPayload {
 	const title = titleFor(config);
 	return {
-		version: 1,
+		version: 2,
 		tool: 'loupe',
 		blocking: result.blocking,
 		summary: {

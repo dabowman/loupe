@@ -144,6 +144,18 @@ await check('summary.baselined is absent when no baseline step ran', () => {
 	assert(withBaseline.summary.baselined === 4, 'the baselined count did not survive');
 });
 
+await check('the payload version names the shape config.rules has', () => {
+	// Version 2 is the one without `options`: a shape change that ships under an
+	// unchanged version is one no consumer can detect.
+	const payload = reportPayload(result, config);
+	assert(payload.version === 2, `the payload is version ${payload.version}`);
+	for (const [id, setting] of Object.entries(payload.config.rules))
+		assert(
+			JSON.stringify(Object.keys(setting)) === '["severity"]',
+			`${id} carries ${JSON.stringify(setting)} — a new shape needs a new version`,
+		);
+});
+
 await check('the rules roster resolves title placeholders', () => {
 	const payload = reportPayload(result, config);
 	assert(payload.rules.length > 0, 'no rules in the roster');
