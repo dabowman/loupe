@@ -670,6 +670,23 @@ async function main(): Promise<number> {
 			process.stdout.write(
 				`  ${dim(`A remedy naming ${bundled.join(', ')} carries "bundling required" until the project imports it: ${delivery.host} does not provide ${bundled.length > 1 ? 'them' : 'it'}, so the build compiles ${bundled.length > 1 ? 'them' : 'it'} in.`)}\n`,
 			);
+		// The rule runs what the profile declares, so the declaration is the
+		// explanation: what counts as delivery, and what to do about none.
+		if (id === 'tokens/undelivered') {
+			const t = delivery?.tokens;
+			const lines = t
+				? [
+						`Tokens come from ${t.stylesheet}${t.handle ? `, the ${t.handle} handle` : ''}. Any one of these is delivery:`,
+						...t.evidence.map(
+							(e) =>
+								`  ${e.kind === 'enqueue-dependency' ? `${e.calls.join('/')} listing ${e.handles.join(', ')}` : e.kind === 'import' ? `an import of ${e.specifiers.join(' or ')}` : `/${e.pattern.source}/`} in ${e.files.join(', ')}`,
+						),
+						'It reports only when enqueues were found, every one was read, and none qualifies; anything it cannot read is not a finding.',
+						...(t.note ? [t.note] : []),
+					]
+				: ['No active profile declares how its tokens are delivered, so this reports nothing.'];
+			for (const l of lines) process.stdout.write(`  ${dim(l)}\n`);
+		}
 		return EXIT.OK;
 	}
 

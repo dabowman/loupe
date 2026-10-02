@@ -41,6 +41,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `stylesheet/unparsed` | A stylesheet the parser could not read, so nothing in it was checked |
 | `css/dead-class` | A project-namespaced class referenced in no markup or reference file |
 | `tokens/unknown-token` | A `var()` naming no token any known source defines |
+| `tokens/undelivered` | Tokens used with no evidence their stylesheet reaches the page — from the profile's delivery block |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the file that built it |
 | `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere |

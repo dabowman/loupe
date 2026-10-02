@@ -231,6 +231,53 @@ written instead, and `--judge` asks which real token was meant — see
 a reader. The defence of that threshold — and why a scale step is
 never read as a spelling — is in [fixing](report.md#fixing).
 
+## `tokens/undelivered`
+
+The token half of [delivery](#delivery). Neither `tokens/hardcoded-value` nor
+`tokens/unknown-token` can see it: every `var()` names a real token, and the page
+still renders without one of them, because the sheet defining them never loaded.
+
+**The profile says what counts as evidence; the engine only runs it.** Three
+kinds, each a bounded, literal read of the files its globs name, none a parser:
+
+| kind | evidence | can it say "no"? |
+|---|---|---|
+| `enqueue-dependency` | a call in `calls` whose dependency argument (`argument`, 0-based, or a named `deps:`) lists one of `handles` — or an `enqueues` call whose own handle is one | yes: calls found, every one read, none qualifies |
+| `import` | an `@import`/`@use`/`import`/`require` of one of `specifiers` | no |
+| `pattern` | any match of `pattern` | no |
+
+```jsonc
+{ "kind": "enqueue-dependency", "files": ["**/*.php"],
+  "calls": ["wp_enqueue_style", "wp_register_style"], "enqueues": ["wp_enqueue_style"],
+  "argument": 2, "handles": ["wp-theme", "wp-components", …] }
+```
+
+The PHP read is the smallest thing that answers the question: comments blanked
+(a commented-out `'wp-theme'` is not a dependency), the call's argument list
+split at top-level commas with strings and brackets respected, and the
+dependency argument accepted as complete only when it is a literal `array( … )`
+or `[ … ]` of plain strings. `$deps`, `array_merge( … )` or a list holding a
+variable could name anything, so a run that meets one cannot conclude.
+
+**One finding per project, and only on a positive "no".** Any evidence →
+silent. Anything unreadable — a walk past 50,000 entries, more than 4,000
+candidate files, a file over 1.5MB, a list that does not close or is not a
+literal → silent. No enqueue at all → silent: nothing shows this project is the
+one that delivers the sheet (a component library's consumer does that). Only
+enqueues found, every one read, none qualifying, reports — at the first `var()`
+of the namespace, in byte order of path, so the anchor and the key
+(`tokens/undelivered:<handle>`) are stable across runs. A token the project's own
+stylesheets define is excluded: it arrives with the sheet that defines it.
+
+The evidence walk is the rule's only cost, so it runs only when the anchor is in
+the run's scope — a scoped hook run that cannot report the finding does not pay
+for it.
+
+Starts at `warn`. The evidence list is WPDS's best statement of how a page gets
+`wp-theme`, and a page can also get it from WordPress itself — the block
+editor's content iframe loads it through `wp-edit-blocks`. A plugin whose CSS
+only ever renders there suppresses the finding with that reason.
+
 ## `css/dead-class`
 
 The reference index over-collects on purpose (see

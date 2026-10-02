@@ -29,6 +29,7 @@
  *     checks/system/currency.ts         system/locked-component, system/superseded-component
  *     delivery.ts                       a reachability note on those and system/raw-element
  *     checks/tokens/unknown-token.ts    tokens/unknown-token
+ *     checks/tokens/undelivered.ts      tokens/undelivered, from the profile's delivery block
  *   run by the scanner, per JSX element (`markup.ts`):
  *     checks/detectors/*.ts             the pattern registry's detectors
  *
@@ -49,6 +50,7 @@ import { messageLine, messageOf, oneLine, snippet } from './text.ts';
 import {
 	cssFilesUnder,
 	declarationMessage,
+	emptyTokenSet,
 	harvestTokenDefs,
 	readTokenSources,
 	tokensFor,
@@ -81,6 +83,7 @@ import { inlineStyle } from './checks/system/inline-style.ts';
 import { libraryOverride, systemOverride } from './checks/system/override.ts';
 import { rawElements } from './checks/system/raw-element.ts';
 import { hardcodedValue } from './checks/tokens/hardcoded-value.ts';
+import { undelivered } from './checks/tokens/undelivered.ts';
 import { unknownTokens as unknownTokenFindings } from './checks/tokens/unknown-token.ts';
 import type { TokenRef } from './checks/tokens/unknown-token.ts';
 import { typographyInCss } from './checks/typography/in-css.ts';
@@ -337,6 +340,8 @@ export async function analyze(
 	};
 	/** Resolved after the walk: an empty token set proves nothing. */
 	const tokenRefs: TokenRef[] = [];
+	/** The tokens the project's own stylesheets define. Read only by `tokens/undelivered`. */
+	const projectTokens: TokenSet = emptyTokenSet();
 
 	const findings: Finding[] = [];
 	const directives: Directive[] = [];
@@ -493,6 +498,9 @@ export async function analyze(
 		const emit = (f: PendingFinding): void => report({ ...f, file: rel, code: f.code ?? f.message });
 
 		harvestTokenDefs(root, tokenPrefixes, tokenSet);
+		// Kept apart as well: a token the project defines itself arrives with its
+		// own stylesheet, and is no evidence about the design system's.
+		if (delivery?.tokens) harvestTokenDefs(root, tokenPrefixes, projectTokens);
 
 		// What a rule's own lines say, for the deletion `css/dead-class` offers in
 		// the editor: an extent in lines is only safe if it is the whole of them.
@@ -723,6 +731,17 @@ export async function analyze(
 	}
 
 	for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
+	if (ruleIsLive('tokens/undelivered'))
+		for (const f of undelivered({
+			root: config.root,
+			ignore: config.sources.ignore ?? [],
+			tokens: delivery?.tokens ?? null,
+			refs: tokenRefs,
+			prefixes: tokenPrefixes,
+			projectDefined: projectTokens.known,
+			reports,
+		}))
+			report(f);
 
 	// Dedupe: nesting and multi-selector rules can legitimately reach the same
 	// declaration twice. Keyed on identity AND display, and run BEFORE the line

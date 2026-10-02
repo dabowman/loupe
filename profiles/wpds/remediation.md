@@ -153,6 +153,24 @@ a plausible shape; `--wpds-font-size-13` is the classic invented token and it
 resolves to nothing. Body text is `--wpds-color-foreground-content-neutral`
 because of what it is, not because the hex lines up.
 
+## `tokens/undelivered`
+
+Add `'wp-theme'` to the dependency array of the `wp_enqueue_style` (or
+`wp_register_style`) that loads the CSS using the tokens:
+
+```php
+wp_enqueue_style( 'my-plugin-admin', $url, array( 'wp-theme' ), $version );
+```
+
+A dependency on `wp-components` does the same, since it depends on `wp-theme`
+wherever `wp-theme` exists — but only take it if the screen also uses
+`@wordpress/components`' own styles. Do not bundle
+`@wordpress/theme/design-tokens.css` into the plugin; the package's README asks
+plugins to enqueue the handle so the tokens follow the site's theme. On a core
+older than 7.1 without Gutenberg there is no `wp-theme` handle at all: say so,
+and treat build-time fallbacks (`@wordpress/build` applies them when
+`@wordpress/theme` is installed) as the way the declarations survive.
+
 ## `patterns/*`
 
 The registry is `patterns/index.json` beside this file, and `loupe-patterns`

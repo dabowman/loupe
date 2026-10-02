@@ -16,6 +16,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findingKey } from '../src/analyze.ts';
+import { argumentsAt, dependencyList, stripComments } from '../src/checks/tokens/undelivered.ts';
 import { loadDelivery, reachNote, remedyPackages } from '../src/delivery.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { assert, CLI, check, cleanup, finish, one, scratch, writeAll } from './harness.ts';
@@ -285,6 +286,137 @@ await check('what a remedy names is read after the arrow, and unknown is not a c
 	);
 	// No profile says, and there is no package.json to ask: say nothing.
 	assert(reachNote('@acme/ui', { delivery: null, imported, dependencies: null }) === null, 'unknown');
+});
+
+// ── B: tokens/undelivered ───────────────────────────────────────────────────
+
+const TOKENS_CSS = '.card {\n  background: var(--wpds-color-background-surface-neutral-strong);\n}\n';
+
+/** The plugin from #26: tokens in its CSS, and an enqueue that never names wp-theme. */
+const enqueue = (deps: string): string => `<?php
+wp_enqueue_style(
+	'site-foundry-admin',
+	SITE_FOUNDRY_PLUGIN_URL . 'build/index.css',
+	${deps},
+	$asset['version']
+);
+`;
+
+const undeliveredIn = (files: Record<string, string>, profiles = true): Finding[] => {
+	const root = scratch('loupe-undeliv-');
+	try {
+		writeAll(root, {
+			'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '^30.0.0' } }),
+			...files,
+		});
+		return checkJson(root, profiles).filter((f) => f.rule === 'tokens/undelivered');
+	} finally {
+		cleanup(root);
+	}
+};
+
+await check('tokens used, and the only enqueue does not depend on wp-theme: one finding, at the first use', () => {
+	const f = one(
+		undeliveredIn({
+			'src/b.css': TOKENS_CSS,
+			'src/a.css': '.x {\n  color: var(--wpds-color-foreground-content-neutral);\n}\n',
+			'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+		}),
+		'expected one finding for the project',
+	);
+	assert(f.file === 'src/a.css' && f.line === 2, `anchored at the first use: ${f.file}:${f.line}`);
+	assert(f.severity === 'warn', `advisory: ${f.severity}`);
+	assert(f.code === 'tokens/undelivered:wp-theme', `a key that survives edits: ${f.code}`);
+	assert(
+		f.message.includes('used in 2 file(s)') && f.message.includes('includes/admin.php:2'),
+		`it says how many files and where the enqueue is: ${f.message}`,
+	);
+	assert(f.note?.includes("'wp-theme'"), `the note names the handle to add: ${f.note}`);
+});
+
+await check('a commented-out dependency is not one', () => {
+	const php = `${enqueue("array( /* 'wp-theme', */ 'site-spec-styles' )")}// wp_enqueue_style( 'x', 'y', array( 'wp-theme' ) );\n`;
+	one(undeliveredIn({ 'src/a.css': TOKENS_CSS, 'includes/admin.php': php }), 'a comment delivers nothing');
+});
+
+await check('an enqueue listing wp-theme, or a style that depends on it, is delivery', () => {
+	const cases: [string, string][] = [
+		['wp-theme in the deps', enqueue("array( 'site-spec-styles', 'wp-theme' )")],
+		['short array syntax', enqueue('[ "wp-theme" ]')],
+		['wp-components, which depends on it', enqueue("array( 'wp-components' )")],
+		['the handle enqueued itself', `<?php\nwp_enqueue_style( 'wp-theme' );\n${enqueue('array()')}`],
+		[
+			'a registered style that lists it',
+			`<?php\nwp_register_style( 'mine', 'a.css', array( 'wp-theme' ) );\n${enqueue("array( 'mine' )")}`,
+		],
+		['a named deps argument', "<?php\nwp_enqueue_style( handle: 'a', src: 'a.css', deps: array( 'wp-theme' ) );\n"],
+	];
+	for (const [label, php] of cases) {
+		const found = undeliveredIn({ 'src/a.css': TOKENS_CSS, 'includes/admin.php': php });
+		assert(!found.length, `${label} should count as delivery: ${found.map((f) => f.message)}`);
+	}
+});
+
+await check('other evidence the profile names is delivery too', () => {
+	const imported = undeliveredIn({
+		'src/a.css': `@import '@wordpress/theme/design-tokens.css';\n${TOKENS_CSS}`,
+		'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+	});
+	assert(!imported.length, 'bundling the sheet into the CSS delivers it');
+	const block = undeliveredIn({
+		'src/a.css': TOKENS_CSS,
+		'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+		'blocks/card/block.json': JSON.stringify({ name: 'x/card', editorStyle: ['wp-components', 'file:./index.css'] }),
+	});
+	assert(!block.length, 'a block.json naming the handle delivers it');
+});
+
+await check('no tokens used: nothing to deliver', () => {
+	const found = undeliveredIn({
+		'src/a.css': '.card { background: #fff; }\n',
+		'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+	});
+	assert(!found.length, `no tokens, no finding: ${found.map((f) => f.message)}`);
+});
+
+await check('what cannot be read is not a finding', () => {
+	const cases: [string, Record<string, string>][] = [
+		['a dependency list in a variable', { 'includes/admin.php': enqueue('$deps') }],
+		['a list holding a variable', { 'includes/admin.php': enqueue("array( 'a', $more )") }],
+		['no enqueue at all', { 'src/index.js': 'export {};\n' }],
+		['an argument list that never closes', { 'includes/admin.php': "<?php\nwp_enqueue_style( 'a', 'b', array( 'c'" }],
+	];
+	for (const [label, files] of cases) {
+		const found = undeliveredIn({ 'src/a.css': TOKENS_CSS, ...files });
+		assert(!found.length, `${label} should report nothing: ${found.map((f) => f.message)}`);
+	}
+	// Tokens the project defines itself arrive with its own stylesheet.
+	const own = undeliveredIn({
+		'src/a.css': `:root { --wpds-color-background-surface-neutral-strong: #fff; }\n${TOKENS_CSS}`,
+		'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+	});
+	assert(!own.length, 'a self-defined token is delivered with the sheet defining it');
+	// No profile, no declared check: nothing to run.
+	const bare = undeliveredIn(
+		{ 'src/a.css': TOKENS_CSS, 'includes/admin.php': enqueue("array( 'site-spec-styles' )") },
+		false,
+	);
+	assert(!bare.length, 'without a delivery block the rule is silent');
+});
+
+await check('the PHP reading is literal and bounded', () => {
+	const args = argumentsAt(`f( 'a, b', array( 'c', "d" ), [ 'e' ] ) // x`, 1);
+	assert(args?.length === 3, `three top-level arguments: ${JSON.stringify(args)}`);
+	assert(dependencyList(args?.[1]).handles.join() === 'c,d', 'a literal list is read');
+	assert(dependencyList(args?.[1]).complete, 'and is complete');
+	assert(!dependencyList('$deps').complete, 'a variable is not');
+	assert(!dependencyList("array_merge( $a, array( 'x' ) )").complete, 'a call is not');
+	assert(dependencyList(undefined).complete, 'no argument is an empty list');
+	assert(argumentsAt(`f( ${'x'.repeat(6000)}`, 1) === null, 'an unclosed list is unreadable');
+	const stripped = stripComments("a(); // b()\n# c()\n#[Attr]\n/* d()\n */ e('//f');");
+	assert(!/b\(|c\(|d\(/.test(stripped), `comments are blanked: ${stripped}`);
+	assert(stripped.includes("e('//f')") && stripped.includes('#[Attr]'), `strings and attributes kept: ${stripped}`);
+	assert(stripped.split('\n').length === 5, 'lines are kept');
 });
 
 finish();
