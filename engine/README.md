@@ -724,6 +724,11 @@ directory of this user's own, keyed by project — so running the engine directl
 from `.claude/settings.local.json` leaves no `.loupe/` in your tree. `loupe
 status` prints the location on its `state:` line.
 
+`loupe baseline` ends by saying to commit the file: until it is tracked, CI and
+every other clone run with no baseline at all. When the path is ignored it says
+that instead, with the number of findings those runs will report; outside a
+repository it does not ask.
+
 A committed `.loupe-baseline.json` the config has since pointed away from is
 still read. 0.1.x baseline locations (`.loupe/baseline.json`, the plugin data
 directory) are not: re-run `loupe baseline` to record one in the project.

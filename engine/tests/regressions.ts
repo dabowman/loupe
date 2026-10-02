@@ -978,6 +978,51 @@ await check('baseline --dry-run shows what would be recorded, new and fixed, and
 	}
 });
 
+// Whether the baseline is tracked decides whether the gate means anything to
+// anyone else: untracked, CI and every other clone run with none. `baseline`
+// said only where it wrote. It now says to commit the file, and when git
+// ignores it says that instead — a combination that guarantees the divergence.
+// Outside a repository there is nothing to ask, and it must not crash asking.
+await check('baseline says to commit the file, and warns when git ignores it', () => {
+	const files = { 'loupe.config.json': JSON.stringify({ extends: 'wpds' }), 'styles/a.css': '.a { color: #f00; }' };
+	const record = (root: string, dryRun = false): string =>
+		execFileSync('node', [CLI, 'baseline', ...(dryRun ? ['--dry-run'] : []), '--root', root], {
+			encoding: 'utf8',
+			env: env(),
+		});
+	const gitIn = (dir: string, args: string[]): void => {
+		execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'ignore', 'ignore'] });
+	};
+	const plain = tmpRepo(files);
+	const tracked = tmpRepo(files);
+	const ignored = tmpRepo({ ...files, '.gitignore': '.loupe-baseline.json\n' });
+	try {
+		const outside = record(plain);
+		assert(/Commit this file/.test(outside), `no commit reminder outside git:\n${outside}`);
+		assert(!/gitignored/.test(outside), `warned about git outside a repository:\n${outside}`);
+
+		gitIn(tracked, ['init']);
+		const inRepo = record(tracked);
+		assert(/Commit this file/.test(inRepo), `no commit reminder:\n${inRepo}`);
+		assert(!/gitignored/.test(inRepo), `warned about a file git does not ignore:\n${inRepo}`);
+
+		gitIn(ignored, ['init']);
+		const warned = record(ignored);
+		assert(
+			/Warning: \.loupe-baseline\.json is gitignored/.test(warned),
+			`no warning for an ignored baseline:\n${warned}`,
+		);
+		assert(/report all 1 finding\(s\)/.test(warned), `the warning does not say what it costs:\n${warned}`);
+		assert(!/Commit this file/.test(warned), `told to commit a file git will not take:\n${warned}`);
+		// Before writing too: the dry run is where the decision is made.
+		assert(/is gitignored/.test(record(ignored, true)), 'the dry run did not warn about an ignored baseline');
+	} finally {
+		cleanup(plain);
+		cleanup(tracked);
+		cleanup(ignored);
+	}
+});
+
 // SARIF and JSON read `RULES[id].title` straight out of the table, while the
 // agent format ran it through `renderTitle`. So a GitHub code-scanning alert
 // said "replace with a {tokenPrefix} token" where the terminal said

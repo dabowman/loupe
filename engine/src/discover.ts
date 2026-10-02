@@ -188,6 +188,24 @@ export function hasGitDir(root: string): boolean {
 }
 
 /**
+ * Does git ignore `path`? `true`/`false` when git answers; `null` when it cannot
+ * — no repository, no `git`, or a path outside the repository — so a caller
+ * warns on a real yes and says nothing otherwise.
+ *
+ * `check-ignore` answers in its exit code: 0 ignored, 1 not, 128 for everything
+ * it could not decide. A tracked file is never reported, which is right: one
+ * already committed reaches every clone whatever `.gitignore` says.
+ */
+export function gitIgnores(root: string, path: string): boolean | null {
+	try {
+		git(root, ['check-ignore', '-q', '--', path]);
+		return true;
+	} catch (err) {
+		return (err as { status?: unknown }).status === 1 ? false : null;
+	}
+}
+
+/**
  * Files changed relative to HEAD, plus untracked ones. Returns null when this
  * isn't a git worktree — callers map that to the "couldn't run" exit code
  * rather than silently analyzing everything.

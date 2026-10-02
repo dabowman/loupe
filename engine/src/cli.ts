@@ -22,7 +22,7 @@ import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './base
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
-import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
+import { changedFiles, gitIgnores, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
@@ -921,6 +921,17 @@ async function main(): Promise<number> {
 				? `${findings} finding(s)`
 				: `${findings} finding(s) as ${entries} ${entries === 1 ? 'entry' : 'entries'}`;
 
+		// The baseline is only a gate for everyone once it is committed. Gitignored,
+		// CI and every other clone run with none and report the whole accepted
+		// backlog — a divergence nothing else would mention. Silent outside git.
+		const ignoredWarning = (findings: number): string | null =>
+			gitIgnores(root, target)
+				? yellow(
+						`  Warning: ${relative(root, target) || target} is gitignored. It will not reach CI or other clones,\n` +
+							`  which will run without it and report all ${findings} finding(s). Un-ignore it, or \`git add -f\` it.`,
+					)
+				: null;
+
 		// What recording would change, written nowhere. `check` cannot answer this:
 		// it applies the existing baseline, so on a repo that has one it reports
 		// nothing to confirm, and `--no-baseline` answers "everything", not "what
@@ -955,12 +966,23 @@ async function main(): Promise<number> {
 				if (!rules.some((r) => r.added || r.removed))
 					lines.push(dim('Nothing would change: recording now rewrites the same entries.'));
 			}
+			const ignored = ignoredWarning(result.findings.length);
+			if (ignored) lines.push('', ignored);
 			process.stdout.write(`${lines.join('\n')}\n`);
 			return EXIT.OK;
 		}
 
 		const { path, findings, entries } = writeBaseline(target, result);
 		process.stdout.write(green(`loupe: baselined ${counted(findings, entries)} \u2192 ${path}\n`));
+		// Said at the moment of writing, because it is the moment the user is looking:
+		// whether the file is tracked decides whether the gate means anything to
+		// anyone else.
+		process.stdout.write(
+			`\n${
+				ignoredWarning(findings) ??
+				dim('  Commit this file \u2014 until it is tracked, the gate applies only to this working copy.')
+			}\n`,
+		);
 		return EXIT.OK;
 	}
 
