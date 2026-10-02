@@ -12,6 +12,27 @@ MCP is for prop/usage detail on a component already chosen — it carries no
 maturity signal at all, so it is the wrong tool for "is this still the right
 component." That question is `components/index.json`'s job.
 
+## What a remedy costs here
+
+`delivery.json` beside this file records how WPDS reaches a WordPress page, with
+its sources:
+
+- `@wordpress/components` is an external — `wp-components`, provided by
+  WordPress — so moving within it costs the bundle nothing.
+- `@wordpress/ui` (and `@wordpress/dataviews`, `@wordpress/admin-ui`,
+  `@wordpress/global-styles-ui`, `@wordpress/icons`) is in
+  `@wordpress/dependency-extraction-webpack-plugin`'s `BUNDLED_PACKAGES`: no
+  `wp-ui` handle exists, webpack compiles it into the plugin's own bundle. The
+  first `Stack` or `Text` from it is a new runtime dependency, a larger bundle, a
+  `react` entry in the asset manifest, and often a Jest mapping for its ESM
+  build. A finding carrying `bundling required: @wordpress/ui …` is proposing
+  that; say so before converting a plugin that does not already ship it.
+- `--wpds-*` tokens are defined only by the `wp-theme` stylesheet. A page that
+  does not load it resolves every one of them to nothing. List `'wp-theme'` in
+  the dependency array of the `wp_enqueue_style` that loads the plugin's CSS
+  before substituting any token — WordPress core registers the handle from 7.1,
+  the Gutenberg plugin before that.
+
 ## `system/locked-component`
 
 The import is a private API — WordPress does not recommend using it outside

@@ -350,13 +350,20 @@ it, and the registries describing its components and composites:
 ```
 profiles/
   acme/
-    profile.json       { id, name, packages, preset, patterns, components, tokenDescriptions }
+    profile.json       { id, name, packages, preset, patterns, components, tokenDescriptions, delivery }
     patterns/index.json
     components/index.json
+    delivery.json      how its packages and tokens reach a page
     authoring.md       read by the plugin's skills, not by this engine
     patterns.md
     remediation.md
 ```
+
+`delivery.json` says what adopting the system costs a project: which packages
+the host provides at runtime (`external`, with its handle) and which the build
+compiles in (`bundled`), and which stylesheet defines the tokens. `loupe status`
+prints it as `delivery:`. See
+[delivery](../docs/design/checks.md#delivery).
 
 The three `.md` files are the design system's own authoring prose. The engine
 never opens them — it prints the profile's directory in `loupe status`, and the

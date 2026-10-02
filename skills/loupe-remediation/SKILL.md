@@ -39,6 +39,32 @@ exist.
   `<profile dir>/remediation.md`** — it carries the system-specific half of
   every rule below, and `<profile dir>/authoring.md` carries the token families
   a value has to come from.
+- `delivery:` says how the system reaches a page: which packages the host
+  provides, which get bundled into the project's own build, and which
+  stylesheet defines the tokens. Absent means the profile declares nothing —
+  not that everything is free. `<profile dir>/delivery.json` carries the same
+  facts with their sources.
+
+## Before converting or tokenizing: state the cost
+
+A remedy is a proposal to *this* project, and two of them can cost more than
+the finding is worth. Say so before the edit, not after it:
+
+- **A component from a bundled package.** A remedy naming a package that
+  `delivery:` lists as bundled is asking the project to take its first runtime
+  dependency on it, unless it already imports it: a bigger bundle, the
+  package's own dependencies with it, and possibly test config for its ESM
+  build. The engine cannot measure the bundle, so it does not claim a number.
+  Check whether the project already ships that package and whether it is
+  deliberately dependency-free; when the cost is new, state it to the user and
+  let them choose before converting.
+- **Tokens whose stylesheet never loads.** A `var()` naming a token the page
+  never defines is invalid at computed-value time: the declaration drops, it
+  does not fall back. Before substituting tokens, confirm the stylesheet
+  `delivery:` names reaches the page the CSS styles — for a WordPress plugin, a
+  dependency on its handle in the enqueue that loads the CSS. Until it does,
+  every token substitution is dead on the page, and "rendering change: none" is
+  false.
 
 When the finding rather than the fix is what needs explaining, `loupe explain
 <ruleId>` prints the rule's guidance and whether it is live in this config — and

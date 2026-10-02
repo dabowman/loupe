@@ -31,6 +31,7 @@ import { serve } from './serve.ts';
 import { oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
+import { deliverySummary, mergeDeliveries } from './delivery.ts';
 import type { RegistrySource } from './profiles.ts';
 import { baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
 import {
@@ -684,6 +685,7 @@ async function main(): Promise<number> {
 		// Empty fields are printed as such: "no layout primitive" is a fact about the
 		// system, and inferring it from a missing line recommends one that isn't there.
 		const ds = config.designSystem;
+		const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
 		// `layout:`/`text:` get read as "what should I write", but they are
 		// recognition lists and carry the superseded spellings too. Mark those, so
@@ -741,6 +743,11 @@ async function main(): Promise<number> {
 						? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(', ')}`
 						: 'none available'
 			}`,
+			// What adopting the system costs this project: which packages the host
+			// provides and which get bundled, and which sheet carries the tokens. A
+			// remedy naming a bundled package is a new runtime dependency, and a token
+			// whose sheet never loads resolves to nothing — both read here first.
+			...(delivery ? [`${dim('delivery:   ')}${deliverySummary(delivery)}`] : []),
 			'',
 			bold('rules:'),
 		];

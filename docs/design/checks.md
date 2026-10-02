@@ -298,3 +298,51 @@ as big as the tree it describes — a five-column card runs past the line bound 
 its own. The remedy goes in `suffix`, which that bound is built to spare: eliding
 the shape still names the file count and what to do about it, where eliding the
 end left neither. See [message bounding](report.md#bounding).
+
+## Delivery
+
+Two of the cheapest remedies to write are the most expensive to ship. A
+`system/raw-element` finding that names `Stack (@wordpress/ui)` reads like an
+advisory nit, and in a plugin that has never imported `@wordpress/ui` it is the
+plugin's first bundled runtime dependency: WordPress registers no `wp-ui` script
+handle, so `@wordpress/dependency-extraction-webpack-plugin` keeps the package in
+`BUNDLED_PACKAGES` and webpack compiles it in. And a `var(--wpds-*)`
+substitution is correct CSS that does nothing on a page that never loads the
+`wp-theme` stylesheet — an unresolvable `var()` makes its declaration invalid at
+computed-value time, so it drops instead of falling back.
+
+Neither fact generalizes. "The token sheet is delivered" is a
+`wp_enqueue_style` dependency in WordPress, a CSS import in a Vite app, a
+provider component somewhere else; "this package is reachable" depends on an
+externals list a build plugin owns. An engine rule would need a delivery model
+per ecosystem, which is the thing profiles exist to avoid — so the profile
+declares it, in `delivery.json` beside its registries:
+
+```jsonc
+{
+  "host": "WordPress",
+  "packages": {
+    "@wordpress/ui":         { "provided": "bundled" },
+    "@wordpress/components": { "provided": "external", "handle": "wp-components" }
+  },
+  "tokens": {
+    "stylesheet": "@wordpress/theme/design-tokens.css",
+    "handle": "wp-theme",
+    "prefixes": ["--wpds-"],
+    "evidence": [ /* see tokens/undelivered */ ]
+  }
+}
+```
+
+It carries `verifiedAgainst` the way the component registry does — which
+release of which file each fact was read from — because `BUNDLED_PACKAGES` moves
+between releases and a stale entry is worse than none.
+
+**Read strictly, per field.** A package entry whose `provided` is neither
+`external` nor `bundled`, or a check missing a field its kind runs on, is
+dropped; a block with nothing usable left is no block. A profile whose delivery
+file is missing or broken still loads — its registries do not depend on it.
+
+`loupe status` prints it as `delivery:`, the line the remediation skill reads
+before it converts anything: what the host provides, what gets bundled, and
+which sheet the tokens come from.
