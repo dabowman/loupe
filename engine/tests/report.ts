@@ -507,7 +507,7 @@ await check('a registry note keeps its last clause on screen and ships whole in 
 	const out = formatAgent(noted, config);
 	assert(/not Grid\.\)/.test(out), `the actionable end of the note was cut:\n${out}`);
 	assert(
-		/\(\d+\) (blocking|advisory) \u2014/.test(out),
+		/\(\d+(?: in \d+ files?)?(?:, \d+ distinct)?\) (blocking|advisory) \u2014/.test(out),
 		`a rule group that only says its severity in a glyph:\n${out}`,
 	);
 	const shipped = reportPayload(noted, config).findings[0]?.note;
@@ -570,7 +570,8 @@ await check('a prefix with no tokens behind it is said out loud, not failed open
 // The axes swap and nothing else about the report does — which is the half that
 // is easy to break, so it is the half asserted hardest.
 
-const RULE_HEAD = /^([✗•]) (\S+\/\S+) \((\d+)\) (blocking|advisory) — /;
+/** The count, and how it concentrates once there is more than one. */
+const RULE_HEAD = /^([✗•]) (\S+\/\S+) \((\d+)(?:(?: in \d+ files?)?, \d+ distinct)?\) (blocking|advisory) — /;
 const FILE_HEAD = /^(\S+\.(?:css|jsx)) \((\d+)\)$/;
 /** A finding line: six spaces, a right-aligned line number, the message. */
 const NUMBERED = /^ {6} *\d+ {2}\S/;
@@ -644,6 +645,74 @@ await check('a capped report spreads its budget across the axis it groups on', (
 	assert(/… \d+ more/.test(capped), `nothing said what the cap hid:\n${capped}`);
 	assert(/\d+ finding\(s\) not shown/.test(capped), `no way back to the full list:\n${capped}`);
 });
+
+// ── collapsing ──────────────────────────────────────────────────────────────
+// The same declaration seven times in one file is the ordinary case, and listed
+// one by one it spent seven of the hook's twelve lines on one decision. One line
+// with a count now, and the heading says how concentrated the rule is.
+
+const dupes = await run({
+	'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'warn' } }),
+	'styles/step.css': [
+		'.a { margin-bottom: 8px; }',
+		'.b { margin-top: 2px; }',
+		'.c { margin-bottom: 8px; }',
+		'.d { margin-top: 12px; }',
+		'.e { margin-bottom: 8px; }',
+		'.f { margin-bottom: 8px; }',
+		'.g { margin-bottom: 8px; }',
+	].join('\n'),
+	'styles/other.css': '.x { margin-bottom: 8px; }\n.y { margin-bottom: 8px; }',
+});
+const margins = dupes.result.findings.filter((f) => f.rule === 'layout/margin-on-child');
+
+await check('identical findings print once, with a count and every line they stand for', () => {
+	assert(margins.length === 9, `fixture produced ${margins.length} margin findings, not 9`);
+	const out = formatAgent(dupes.result, dupes.config);
+	assert(
+		/layout\/margin-on-child \(9 in 2 files, 3 distinct\)/.test(out),
+		`the heading did not say how the rule concentrates:\n${out}`,
+	);
+	assert(
+		/ {6}1 {2}margin-bottom: 8px {2}×5 \(lines 1, 3, 5, 6, 7\)$/m.test(out),
+		`five became one line badly:\n${out}`,
+	);
+	assert(
+		/ {6}1 {2}margin-bottom: 8px {2}×2 \(lines 1, 2\)$/m.test(out),
+		`the other file's pair did not collapse:\n${out}`,
+	);
+	// `code` is the property alone for a margin, so these share it — and are still
+	// two declarations, which a line printing one under the other's count would hide.
+	assert(/ {6}2 {2}margin-top: 2px$/m.test(out), `a singleton was folded into something:\n${out}`);
+	assert(/ {6}4 {2}margin-top: 12px$/m.test(out), `a different value collapsed by its code:\n${out}`);
+	const numbered = out.split('\n').filter((l) => NUMBERED.test(l));
+	assert(numbered.length === 4, `expected 4 lines for 9 findings, got ${numbered.length}:\n${out}`);
+	// Grouped by file the rule is the sub-heading, and its file is the heading.
+	const byFile = formatAgent(dupes.result, dupes.config, { group: 'file' });
+	assert(/^ {2}• layout\/margin-on-child \(7, 3 distinct\) advisory/m.test(byFile), `nested heading:\n${byFile}`);
+});
+
+// Collapsing makes the budget go further; it does not change what it is.
+await check('the budget counts printed lines, so duplicates do not eat it', () => {
+	const two = formatAgent(dupes.result, dupes.config, { maxFindings: 2 });
+	// Two lines of budget, seven findings on them: the two singletons are what is left.
+	assert(/×5/.test(two) && /×2/.test(two), `the budget did not reach both batches:\n${two}`);
+	assert(/2 finding\(s\) not shown/.test(two), `two lines did not stand for seven findings:\n${two}`);
+	// One line: the largest batch is the one that tells the reader the most.
+	const one = formatAgent(dupes.result, dupes.config, { maxFindings: 1 });
+	assert(/×5/.test(one), `the largest batch was not the one shown:\n${one}`);
+	assert(one.split('\n').filter((l) => NUMBERED.test(l)).length === 1, `the cap of one printed more:\n${one}`);
+	assert(/… 4 more/.test(one), `the count of what the cap hid is not in findings:\n${one}`);
+	assert(/4 finding\(s\) not shown/.test(one), `the total hidden is not in findings:\n${one}`);
+});
+
+await check('json and sarif stay one entry per finding', () => {
+	const { result, config } = dupes;
+	assert(reportPayload(result, config).findings.length === result.findings.length, 'json collapsed findings');
+	const sarif = JSON.parse(formatSarif(result, config)) as { runs: { results: unknown[] }[] };
+	assert(sarif.runs[0]?.results.length === result.findings.length, 'sarif collapsed findings');
+});
+cleanup(dupes.root);
 
 // ── concise ─────────────────────────────────────────────────────────────────
 // Defined by subtraction: every finding line gone, every heading and the tally

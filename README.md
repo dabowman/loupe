@@ -110,7 +110,7 @@ line. `--group-by` picks which of the two heads a block — the other becomes th
 sub-heading, and the findings under it are bare line numbers:
 
 ```
-• tokens/hardcoded-value (4) advisory — hardcoded value — replace with a --wpds-* token
+• tokens/hardcoded-value (4 in 2 files, 3 distinct) advisory — hardcoded value — replace with a --wpds-* token
   styles/card.css (3)
        2  color: #1e1e1e → --wpds-color-foreground-content-neutral
        3  border-radius: 4px → --wpds-border-radius-md
@@ -125,6 +125,20 @@ swaps the two — path at the margin, rule indented under it, files that block
 the gate first — which is the shape of the work when you are already in an
 editor rather than auditing a repo. Nothing else about the report changes, and
 `--max-findings` spreads its budget across whichever axis you grouped on.
+
+Identical findings — the same rule, file and text — print once, with a count
+and every line they stand for, and a rule's heading says how its findings
+concentrate:
+
+```
+✗ layout/margin-on-child (25 in 9 files, 11 distinct) blocking — margin — move spacing to the parent layout primitive's gap prop
+  src/components/step-row.scss (8)
+      31  margin-bottom: 8px  ×7 (lines 31, 44, 58, 77, 91, 104, 118)
+      62  margin-top: 12px
+```
+
+`×7` in one file says write a script; eleven singletons say read each one. The
+budget counts printed lines, so duplicates stretch it rather than spend it.
 
 `--concise` keeps the tally and the headings of whichever axis you grouped on,
 and drops the findings underneath them — the shape of the report when the
@@ -258,7 +272,7 @@ only wraps a button. `loupe check --judge` sends those elements to
 the element is not text at all:
 
 ```
-• system/raw-element (3) advisory — raw element — use its design-system analog
+• system/raw-element (3 in 2 files, 3 distinct) advisory — raw element — use its design-system analog
   src/components/build-summary.tsx (2)
       131  <h3> → Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.66)
       142  <p> → <Text variant="body-sm"> (judged 0.80)
@@ -290,7 +304,7 @@ for `tokens/hardcoded-value` and for the type properties of
 `typography/untokenized`:
 
 ```
-• tokens/hardcoded-value (4) advisory — hardcoded value — replace with a --wpds-* token
+• tokens/hardcoded-value (4 in 3 files, 4 distinct) advisory — hardcoded value — replace with a --wpds-* token
   assets/css/admin-panels.css (2)
        33  color: #1d2327 → --wpds-color-foreground-content-neutral (judged 0.77)
        85  background: #fcf0f1 → --wpds-color-background-surface-error-weak (judged 0.81)

@@ -222,14 +222,54 @@ const byWeight = (a: Group, b: Group): number => {
 const groupsOf = (findings: readonly Finding[], by: GroupBy): Group[] =>
 	by === 'rule' ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
 
-/** `✗ layout/margin-on-child (3) blocking — margin — move spacing to the parent…` */
-function ruleHeading(id: string, group: readonly Finding[], title: (id: RuleId) => string): string {
+/**
+ * What makes two findings one line of the report: the same rule, in the same
+ * file, printing the same text.
+ *
+ * The printed text rather than `code`: `code` is the baselining identity, and
+ * for a margin it is the property alone — `margin-top: 2px` and `margin-top:
+ * 12px` share it, and a line that printed one of them under the other's count
+ * would be stating something false about the file.
+ */
+const sameLine = (f: Finding): string => `${f.rule}\u0000${f.file}\u0000${painted(f)}`;
+
+/**
+ * Identical findings, one entry each, largest first and then first-seen. Each
+ * entry is sorted by line.
+ *
+ * Duplicates are the ordinary case in a real stylesheet — the same declaration
+ * seven times in one file — and listed one by one they spend the budget seven
+ * times on one decision. The count is also the signal: `×7` in one file says
+ * "write a script", eleven singletons say "read each one".
+ */
+const collapse = (findings: readonly Finding[]): Finding[][] =>
+	bucket(findings, sameLine)
+		.map(([, run]) => run.sort((a, b) => a.line - b.line))
+		.sort((a, b) => b.length - a.length);
+
+/**
+ * How concentrated a rule's findings are: `25 in 9 files, 11 distinct`.
+ *
+ * The total alone cannot say whether 25 is 25 decisions or the same three
+ * repeated, and those want different remedies. Distinct counts the text, repo
+ * wide, so one declaration copied into nine files is one. Under a file heading
+ * the file count is that heading, and is left off.
+ */
+function concentration(group: readonly Finding[], nested: boolean): string {
+	if (group.length < 2) return String(group.length);
+	const files = new Set(group.map((f) => f.file)).size;
+	const distinct = new Set(group.map(painted)).size;
+	return `${group.length}${nested ? '' : ` in ${files} ${files === 1 ? 'file' : 'files'}`}, ${distinct} distinct`;
+}
+
+/** `✗ layout/margin-on-child (25 in 9 files, 11 distinct) blocking — margin — move spacing to the parent…` */
+function ruleHeading(id: string, group: readonly Finding[], title: (id: RuleId) => string, nested: boolean): string {
 	const sev = group[0]?.severity ?? 'warn';
 	// Spans, not one paint: severity carries the mark and the word beside it, the
 	// id carries the colour rules wear everywhere else, and the count is
 	// arithmetic.
 	return (
-		`${SEV_PAINT[sev](SEV_MARK[sev] ?? '•')} ${magenta(id)} ${dim(`(${group.length})`)} ` +
+		`${SEV_PAINT[sev](SEV_MARK[sev] ?? '•')} ${magenta(id)} ${dim(`(${concentration(group, nested)})`)} ` +
 		`${SEV_PAINT[sev](SEV_WORD[sev] ?? 'advisory')} — ${title(id as RuleId)}`
 	);
 }
@@ -237,21 +277,37 @@ function ruleHeading(id: string, group: readonly Finding[], title: (id: RuleId) 
 /** `styles/card.css (3)` */
 const fileHeading = (file: string, group: readonly Finding[]): string => `${bold(file)} ${dim(`(${group.length})`)}`;
 
-const heading = (by: GroupBy, key: string, group: readonly Finding[], title: (id: RuleId) => string): string =>
-	by === 'rule' ? ruleHeading(key, group, title) : fileHeading(key, group);
+/** A heading on either axis; `nested` when it is the sub-heading, under the other one. */
+const heading = (
+	by: GroupBy,
+	key: string,
+	group: readonly Finding[],
+	title: (id: RuleId) => string,
+	nested = false,
+): string => (by === 'rule' ? ruleHeading(key, group, title, nested) : fileHeading(key, group));
+
+/** How many line numbers a collapsed line lists before it stops; the count is already said. */
+const MAX_LINES = 10;
 
 /**
- * The findings of one group, by line.
+ * The findings of one group, by line, identical ones collapsed onto the first.
  *
  * The number alone: the path is the heading in either mode. Right-aligned so a
  * three-digit line does not push a two-digit one out of column — the message is
- * what the eye is scanning down.
+ * what the eye is scanning down. A collapsed line carries its count and every
+ * line it stands for, so the batch can be found without a second run.
  */
 function findingLines(group: readonly Finding[]): string[] {
-	const width = Math.max(...group.map((f) => String(f.line).length));
-	return [...group]
-		.sort((a, b) => a.line - b.line)
-		.map((f) => `      ${dim(String(f.line).padStart(width))}  ${painted(f)}`);
+	const runs = collapse(group).sort((a, b) => (a[0]?.line ?? 0) - (b[0]?.line ?? 0));
+	const width = Math.max(...runs.map((run) => String(run[0]?.line).length));
+	return runs.map((run) => {
+		const [f] = run as [Finding, ...Finding[]];
+		const at = run.map((g) => g.line);
+		const more = at.length > MAX_LINES ? ', \u2026' : '';
+		const times =
+			run.length > 1 ? `  \u00d7${run.length} ${dim(`(lines ${at.slice(0, MAX_LINES).join(', ')}${more})`)}` : '';
+		return `      ${dim(String(f.line).padStart(width))}  ${painted(f)}${times}`;
+	});
 }
 
 /**
@@ -300,15 +356,18 @@ export function formatAgent(
 
 		// Spend the budget round-robin across the groups being shown: filling it
 		// first-come buries every other group behind whichever one sorts highest.
+		// What it counts is printed lines, so identical findings collapsed onto one
+		// cost one: duplicates make the budget go further rather than eat it.
+		const runs = new Map<string, Finding[][]>(groups.map(([key, all]) => [key, collapse(all)]));
 		const quota = new Map<string, number>(groups.map(([key]) => [key, 0]));
 		let budget = maxFindings > 0 ? maxFindings : Infinity;
 		let progress = true;
 		while (budget > 0 && progress) {
 			progress = false;
-			for (const [key, all] of groups) {
+			for (const [key] of groups) {
 				if (budget <= 0) break;
 				const taken = quota.get(key) ?? 0;
-				if (taken >= all.length) continue;
+				if (taken >= (runs.get(key)?.length ?? 0)) continue;
 				quota.set(key, taken + 1);
 				budget--;
 				progress = true;
@@ -319,10 +378,10 @@ export function formatAgent(
 		for (const [key, all] of groups) {
 			lines.push('');
 			lines.push(heading(group, key, all, title));
-			const show = all.slice(0, quota.get(key) ?? 0);
+			const show = (runs.get(key) ?? []).slice(0, quota.get(key) ?? 0).flat();
 			hidden += all.length - show.length;
 			for (const [subKey, subGroup] of groupsOf(show, sub)) {
-				lines.push(`  ${heading(sub, subKey, subGroup, title)}`);
+				lines.push(`  ${heading(sub, subKey, subGroup, title, true)}`);
 				lines.push(...findingLines(subGroup));
 			}
 			if (all.length > show.length) lines.push(dim(`  \u2026 ${all.length - show.length} more`));
