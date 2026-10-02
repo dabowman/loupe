@@ -23761,7 +23761,8 @@ function changedFiles(root2) {
 }
 
 // src/text.ts
-var messageOf = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
+var messageOf = (err) => err instanceof Error ? err.message : String(err);
+var messageLineOf = (err) => messageOf(err).split("\n")[0] ?? "parse failed";
 var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 var flatten = (text2) => text2.replace(/\s+/g, " ");
 var oneLine = (text2) => flatten(text2).trim();
@@ -24291,7 +24292,7 @@ function parseTemplate(cssText, startLine) {
     root2 = postcss_default.parse(`.dsh-root{${cssText}
 }`, { from: void 0 });
   } catch (err) {
-    return { groups: [], error: messageOf(err) };
+    return { groups: [], error: messageLineOf(err) };
   }
   const groups = [];
   const at = (node) => startLine + ((node.source?.start?.line ?? 1) - 1);
@@ -24704,7 +24705,7 @@ function scanMarkup(text2, relPath, ds, rules = []) {
   try {
     ast = (0, import_parser.parse)(text2, { sourceType: "unambiguous", errorRecovery: true, plugins: PLUGINS });
   } catch (err) {
-    return { ...result, parseError: messageOf(err) };
+    return { ...result, parseError: messageLineOf(err) };
   }
   const { text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
   const tags = cssInJsLocals(ast, ds.cssInJsPackages);
@@ -25573,7 +25574,7 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
       try {
         sheet = syntax.parse(readFileSync2(file, "utf8"), { from: file });
       } catch (err) {
-        unread.push({ file: shown, message: messageOf(err) });
+        unread.push({ file: shown, message: messageLineOf(err) });
         continue;
       }
       harvestTokenDefs(sheet, tokenPrefixes, tokenSet);
@@ -25787,7 +25788,7 @@ async function analyze(config, {
     try {
       root2 = syntax.parse(text2, { from: abs });
     } catch (err) {
-      unparsed(messageOf(err));
+      unparsed(messageLineOf(err));
       continue;
     }
     const emit = (f) => report({ ...f, file: rel, code: f.code ?? f.message });
@@ -26047,7 +26048,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
     try {
       text2 = readFileSync3(abs, "utf8");
     } catch (err) {
-      const why = err instanceof Error ? err.message : String(err);
+      const why = messageLineOf(err);
       for (const fix of group) skipped.push({ ...fix, why });
       continue;
     }
@@ -26108,7 +26109,7 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
     try {
       text2 = readFileSync3(abs, "utf8");
     } catch (err) {
-      const why = err instanceof Error ? err.message : String(err);
+      const why = messageLineOf(err);
       for (const k of group) skipped.push({ ...k, why });
       continue;
     }
@@ -29325,7 +29326,7 @@ function lsp(opts) {
     try {
       result = await run();
     } catch (err) {
-      log(`analysis failed: ${err instanceof Error ? err.message : String(err)}`);
+      log(`analysis failed: ${messageOf(err)}`);
       return;
     }
     const next = /* @__PURE__ */ new Map();
@@ -29881,7 +29882,7 @@ function serve(opts) {
         }).catch((err) => {
           res.statusCode = 500;
           res.setHeader("content-type", "application/json; charset=utf-8");
-          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+          res.end(JSON.stringify({ error: messageOf(err) }));
         });
         return;
       }
@@ -30240,7 +30241,7 @@ function applyRegistries(config, sources) {
         saw[kind] = used = true;
         if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
       } catch (err) {
-        errors.push(`could not read ${src.label} ${kind} \u2014 ${err instanceof Error ? err.message : String(err)}`);
+        errors.push(`could not read ${src.label} ${kind} \u2014 ${messageOf(err)}`);
       }
     }
     if (used) applied.push(src.label);
@@ -30418,7 +30419,6 @@ function emitBlocking(report) {
 
 // src/cli.ts
 var EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
-var messageOf2 = (err) => err instanceof Error ? err.message : String(err);
 function judgeKey() {
   const option = process.env.CLAUDE_PLUGIN_OPTION_TYPESAFE_API_KEY;
   if (!process.env.TYPESAFE_API_KEY && option) process.env.TYPESAFE_API_KEY = option;
@@ -30667,8 +30667,8 @@ async function main() {
       inferred: Boolean(detected)
     });
   } catch (err) {
-    if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf2(err)}`);
-    fail(`loupe: config error \u2014 ${messageOf2(err)}
+    if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf(err)}`);
+    fail(`loupe: config error \u2014 ${messageOf(err)}
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -30978,7 +30978,7 @@ ${dim("  Ctrl-C to stop.")}
       if (apiKey && toFix.tokens && judgeable.length) await judgeValues(root2, judgeable, toFix.tokens, apiKey, about);
       if (apiKey && toFix.tokens) await judgeRenames(root2, toFix.findings, toFix.tokens, apiKey, about);
     } catch (err) {
-      fail(`loupe: ${messageOf2(err)}
+      fail(`loupe: ${messageOf(err)}
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -31038,8 +31038,8 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   try {
     result = await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags["no-suppressions"] });
   } catch (err) {
-    if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf2(err)}`);
-    fail(`loupe: ${messageOf2(err)}
+    if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
+    fail(`loupe: ${messageOf(err)}
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -31058,7 +31058,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
         result.findings.push(...await judgeRedirects(result.controls, apiKey, redirectSeverity));
       await judgeVariants(root2, result.findings, config.componentRegistry, apiKey);
     } catch (err) {
-      note(`loupe: --judge skipped \u2014 ${messageOf2(err)}
+      note(`loupe: --judge skipped \u2014 ${messageOf(err)}
 `);
     }
     try {
@@ -31071,7 +31071,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
           tokenDescriptions(config.profiles?.active ?? [])
         );
     } catch (err) {
-      note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf2(err)}
+      note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
 `);
     }
     try {
@@ -31084,7 +31084,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
           tokenDescriptions(config.profiles?.active ?? [])
         );
     } catch (err) {
-      note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf2(err)}
+      note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
 `);
     }
     result.blocking = result.findings.some((f) => f.severity === "error");
