@@ -761,10 +761,15 @@ nearest `.claude/` above `--root` or the working directory, looking no further
 than the repository's top — so `status` run from inside a monorepo package reads
 the same file the hook does.
 
-Set `LOUPE_OFF=1` in the hook's environment to silence an opted-in hook for a session —
-`LOUPE_OFF=1 claude`. It produces no output at all rather than downgrading to
-advisory, because an advisory finding still reaches the agent and an agent that
-sees a finding starts fixing it. `loupe` run by hand ignores the switch.
+To silence an opted-in hook, turn on the plugin's `off` option (every project),
+put `"env": { "LOUPE_OFF": "1" }` in the project's `.claude/settings.local.json`
+(one project, read on every run, so it takes effect mid-session), or start a
+session as `LOUPE_OFF=1 claude`. All three feed the same option. The hook then
+checks nothing and says only `loupe: skipped — silenced by …` to the user,
+rather than downgrading to advisory, because an advisory finding still reaches
+the agent and an agent that sees a finding starts fixing it. `loupe status`
+reports the switch on its `options:` line with where it was set. `loupe` run by
+hand ignores it.
 
 Both read the same on/off spelling as every plugin option: `1`, `true`, `yes`,
 `on`, case-insensitively. `LOUPE_OFF=0` is not one of them and leaves the hook

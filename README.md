@@ -705,7 +705,18 @@ To silence a project that has opted in, for one session:
 LOUPE_OFF=1 claude
 ```
 
-The hook says nothing — not advisory, silent. Advisory mode does not solve this:
+Or for one project, mid-session — the hook reads this file on every run:
+
+```jsonc
+// .claude/settings.local.json
+{ "env": { "LOUPE": "on", "LOUPE_OFF": "1" } }
+```
+
+Or everywhere, with the plugin's *Silence the hook* option. All three set the
+same switch, and `loupe status` names which one did it on its `options:` line.
+
+The hook checks nothing — not advisory, silent to the agent; the user sees one
+`loupe: skipped — silenced by …` line. Advisory mode does not solve this:
 an advisory finding still lands in the agent's context, and an agent that sees a
 finding starts fixing it, which is usually the thing you were trying to avoid.
 `loupe` typed by hand still reports normally; the switch is only for the hook.

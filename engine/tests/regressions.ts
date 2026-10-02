@@ -575,7 +575,7 @@ await check('status reads the opt-in from the Claude Code project, not the packa
 
 // Advisory mode is not an off switch: an advisory finding still reaches the
 // agent's context, and an agent that sees a finding starts fixing it. The
-// escape hatch has to produce nothing at all.
+// escape hatch checks nothing, and tells only the user that it was skipped.
 await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
@@ -613,7 +613,13 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 		})();
 		assert(blocked?.status === 2, `fixture does not block, so silence proves nothing: ${blocked?.status}`);
 
-		assert(run({ LOUPE_OFF: '1' }) === '', 'LOUPE_OFF=1 did not silence the hook');
+		// Said, not silent: a stale `export LOUPE_OFF=1` in a shell profile left no
+		// trace but a `loupe status` nobody had a reason to run.
+		const skipped = (out: string): boolean => {
+			const parsed = JSON.parse(out) as { systemMessage?: string; hookSpecificOutput?: unknown };
+			return /skipped .*LOUPE_OFF/.test(parsed.systemMessage ?? '') && parsed.hookSpecificOutput === undefined;
+		};
+		assert(skipped(run({ LOUPE_OFF: '1' })), 'LOUPE_OFF=1 did not silence the hook, or did not say so');
 
 		// The values that look like an off switch but are not. A gate that goes
 		// quiet on `LOUPE_OFF=0` is worse than one that ignores it: three docs and
@@ -633,7 +639,7 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 		// that write on a pipe with no reader, and the parent takes an EPIPE on
 		// every large edit of the session. A small payload fits the pipe buffer and
 		// proves nothing, so this one is deliberately past it.
-		assert(run({ LOUPE_OFF: '1' }, 'x'.repeat(512 * 1024)) === '', 'a large payload was not drained under LOUPE_OFF');
+		assert(skipped(run({ LOUPE_OFF: '1' }, 'x'.repeat(512 * 1024))), 'a large payload was not drained under LOUPE_OFF');
 
 		// `status` has to reach the same conclusion the gate does. Unifying the
 		// predicate is not the same as unifying what is concluded from it: with the
@@ -648,6 +654,81 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 		assert(!/Turns are blocked by/.test(silenced), `status says the gate blocks while it is silenced:\n${silenced}`);
 		assert(!/BLOCKS/.test(silenced), `status marks rules BLOCKS while the gate is silenced:\n${silenced}`);
 	} finally {
+		cleanup(root);
+	}
+});
+
+// `LOUPE_OFF` was a second settings channel: process-wide, so not settable per
+// project or mid-session, and reported on a line of its own. The switch is now
+// the `off` plugin option, and `LOUPE_OFF` — from the environment or the
+// project's own Claude Code settings — feeds that same field.
+await check('the off switch is a plugin option, settable per project, reported with its source', () => {
+	const home = scratch('dsh-home-');
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	let session = 0;
+	const hook = (extra: NodeJS.ProcessEnv = {}): { status: number | null; message: string } => {
+		const r = runCli(
+			['hook', '--root', root],
+			{ HOME: home, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true', ...extra },
+			JSON.stringify({ session_id: `opt-off-${++session}`, tool_input: { file_path: 'styles/a.css' } }),
+		);
+		return {
+			status: r.status,
+			message: r.status === 0 ? ((JSON.parse(r.stdout) as { systemMessage?: string }).systemMessage ?? '') : '',
+		};
+	};
+	const status = (extra: NodeJS.ProcessEnv = {}): string =>
+		runCli(['status', '--root', root], { HOME: home, ...extra }).stdout;
+	try {
+		assert(hook().status === 2, 'fixture does not block, so silence proves nothing');
+
+		// From the hook's environment, as Claude Code exports the option.
+		const fromEnv = hook({ CLAUDE_PLUGIN_OPTION_OFF: 'true' });
+		assert(
+			fromEnv.status === 0 && /skipped .*"off" option/.test(fromEnv.message),
+			`the off option did not silence: ${JSON.stringify(fromEnv)}`,
+		);
+
+		// From the settings file a terminal reads, and reported on the options line.
+		mkdirSync(join(home, '.claude'), { recursive: true });
+		writeFileSync(
+			join(home, '.claude', 'settings.json'),
+			JSON.stringify({ pluginConfigs: { 'loupe@somewhere': { options: { off: true } } } }),
+		);
+		assert(hook().status === 0, 'the off option in settings did not silence the hook');
+		const fromFile = status();
+		assert(
+			/options:.*off yes \(~\/\.claude\/settings\.json\)/.test(fromFile),
+			`status did not report the option:\n${fromFile}`,
+		);
+		assert(/hook:\s+OFF/.test(fromFile), `status did not report the hook off:\n${fromFile}`);
+		// The environment still wins its key, as for every other option.
+		assert(
+			hook({ CLAUDE_PLUGIN_OPTION_OFF: 'false' }).status === 2,
+			'the environment did not outrank the settings file',
+		);
+		writeFileSync(join(home, '.claude', 'settings.json'), '{}');
+
+		// Per project, where the opt-in lives — read from the file, so it takes
+		// effect mid-session without relaunching Claude Code.
+		writeAll(root, { '.claude/settings.local.json': JSON.stringify({ env: { LOUPE_OFF: '1' } }) });
+		const project = hook();
+		assert(
+			project.status === 0 && /LOUPE_OFF in \.claude\/settings\.local\.json/.test(project.message),
+			`a project's LOUPE_OFF did not silence: ${JSON.stringify(project)}`,
+		);
+		const perProject = status();
+		assert(
+			/off yes \(LOUPE_OFF in \.claude\/settings\.local\.json\)/.test(perProject),
+			`status did not name the project switch:\n${perProject}`,
+		);
+	} finally {
+		cleanup(home);
 		cleanup(root);
 	}
 });

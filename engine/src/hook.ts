@@ -47,6 +47,12 @@ export interface PluginOptions {
 	blocking: boolean | undefined;
 	maxAttempts: number | undefined;
 	maxFindings: number | undefined;
+	/**
+	 * Silence an opted-in hook. The same axis as `blocking` — block, advise, say
+	 * nothing — so it lives in the same struct, with a source like every other
+	 * option, rather than in a raw environment read nothing else could see.
+	 */
+	off: boolean | undefined;
 }
 
 export const readStdin = async (): Promise<string> => (process.stdin.isTTY ? '' : text(process.stdin));
@@ -201,13 +207,18 @@ function optedIn(projectDir: string): boolean {
  * saying the hook is off is one that watched the same values the hook did.
  * `projectDir` is `claudeProjectDir()`'s answer, never the run's root.
  */
-export function hookOff(projectDir: string): string | null {
-	// Per-session off switch: `LOUPE_OFF=1 claude` silences an opted-in project.
-	if (isOn(process.env.LOUPE_OFF)) return 'LOUPE_OFF is set for this session';
+export function hookOff(projectDir: string, resolved: ResolvedOptions = resolvedOptions(projectDir)): string | null {
+	if (hookSilenced(resolved)) {
+		const from = resolved.sources.off ?? '';
+		return `silenced by ${from.startsWith('LOUPE_OFF') ? from : `the plugin's "off" option (${from})`}`;
+	}
 	if (!optedIn(projectDir))
 		return 'this project has not opted in; add "env": { "LOUPE": "on" } to .claude/settings.local.json';
 	return null;
 }
+
+/** Opted in, then switched off — as opposed to never switched on. */
+export const hookSilenced = (resolved: ResolvedOptions): boolean => resolved.options.off === true;
 
 /** Each `userConfig` key, as `plugin.json` spells it, and the field it fills. */
 const FIELDS = {
@@ -216,6 +227,7 @@ const FIELDS = {
 	blocking: 'blocking',
 	max_attempts: 'maxAttempts',
 	max_findings: 'maxFindings',
+	off: 'off',
 } as const satisfies Record<string, keyof PluginOptions>;
 
 export type OptionKey = keyof typeof FIELDS;
@@ -250,8 +262,13 @@ const isOurs = (key: string): boolean => key === 'loupe' || key.startsWith('loup
  * exported key discard every other option the file carried, so the hook and a
  * terminal resolved different options for the same project. Each key keeps its
  * source, so a stale answer is recognizable as one.
+ *
+ * `off` has one more door: `LOUPE_OFF`, from the environment or the Claude Code
+ * project's settings `env` — the per-project, per-person place the opt-in
+ * lives. It can only switch the hook off, and it feeds the same field, so
+ * nothing downstream has to know which door was used.
  */
-export function resolvedOptions(): ResolvedOptions {
+export function resolvedOptions(projectDir: string): ResolvedOptions {
 	const options = coerce({});
 	const sources: Partial<Record<OptionKey, string>> = {};
 	const overlay = (layer: PluginOptions, from: string): void => {
@@ -292,6 +309,11 @@ export function resolvedOptions(): ResolvedOptions {
 		coerce(Object.fromEntries(OPTION_KEYS.map((k) => [k, process.env[`CLAUDE_PLUGIN_OPTION_${k.toUpperCase()}`]]))),
 		'environment',
 	);
+	const silence = settingsEnv(projectDir, 'LOUPE_OFF');
+	if (silence && isOn(silence.value)) {
+		options.off = true;
+		sources.off = silence.from;
+	}
 	return { options, sources, unmatched: matched ? [] : seen };
 }
 
@@ -302,7 +324,8 @@ export function resolvedOptions(): ResolvedOptions {
 export function describeOptions({ options, sources, unmatched }: ResolvedOptions): string {
 	const value = (k: OptionKey): string => {
 		const v = options[FIELDS[k]];
-		if (typeof v === 'boolean') return v ? 'on' : 'off';
+		// `off on` says the opposite of what it means.
+		if (typeof v === 'boolean') return k === 'off' ? (v ? 'yes' : 'no') : v ? 'on' : 'off';
 		return Array.isArray(v) ? v.join(', ') : String(v);
 	};
 	const set = OPTION_KEYS.filter((k) => sources[k] !== undefined).map((k) => `${k} ${value(k)} (${sources[k]})`);
@@ -338,6 +361,7 @@ function coerce(opts: Record<string, unknown>): PluginOptions {
 		blocking: str(opts.blocking) === undefined ? undefined : isOn(String(opts.blocking)),
 		maxAttempts: num(opts.max_attempts),
 		maxFindings: num(opts.max_findings),
+		off: str(opts.off) === undefined ? undefined : isOn(String(opts.off)),
 	};
 }
 

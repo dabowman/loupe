@@ -614,10 +614,24 @@ with nothing the agent could do about it.
 
 ### Silence, not advisory mode
 
-`LOUPE_OFF` makes the hook say nothing at all. An advisory finding still lands
+The `off` switch makes the hook check nothing. An advisory finding still lands
 in the agent's context, and an agent that sees a finding starts fixing it —
 which is the whole complaint. Deliberately hook-only: `loupe check` typed by
 hand is someone asking, and answering "nothing" would be a lie.
+
+It tells the user, though — a `skipped` systemMessage, the path every other
+stand-down takes. When it said nothing at all, a stale `export LOUPE_OFF=1` in
+a shell profile disabled the gate in every project with no trace but a
+`loupe status` nobody had a reason to run.
+
+**One switch, several doors.** `off` is a plugin option like `blocking`, the
+same axis — block, advise, say nothing — so it is resolved, sourced and
+reported with the others. `LOUPE_OFF` stays as an escape hatch feeding the same
+field, from the environment (`LOUPE_OFF=1 claude`) or from a project's own
+`.claude/settings.local.json` `env`, which is read on every run — the
+per-project, mid-session switch a process environment cannot be. A project
+that never opted in still hears nothing: that is every repo the plugin is
+installed for.
 
 ### The payload is drained before anything can return
 

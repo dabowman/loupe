@@ -43,6 +43,12 @@
       "title": "Project class prefixes",
       "description": "Comma-separated CSS class prefixes your projects own, e.g. 'vip-workflow-, wf-'. Leave empty to infer per project. Only these can be reported dead."
     },
+    "off": {
+      "type": "boolean",
+      "title": "Silence the hook",
+      "description": "When on, the hook checks nothing in any project, even one that opted in, and says only that it was skipped. To silence one project instead, put \"env\": { \"LOUPE_OFF\": \"1\" } in its .claude/settings.local.json. `loupe` typed by hand is unaffected.",
+      "default": false
+    },
     "max_attempts": {
       "type": "number",
       "title": "Fix attempts before standing down",

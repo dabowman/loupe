@@ -42,6 +42,7 @@ import {
 	emitClean,
 	hookRoot,
 	hookOff,
+	hookSilenced,
 	parsePayload,
 	payloadFile,
 	readStdin,
@@ -292,8 +293,12 @@ Environment:
   LOUPE=on              Turn the hook on. It is off until a project opts in:
                         "env": { "LOUPE": "on" } in .claude/settings.local.json.
                         'loupe' typed by hand always reports.
-  LOUPE_OFF=1           Silence an opted-in hook for this session. Start Claude
-                        Code as 'LOUPE_OFF=1 claude'.
+  LOUPE_OFF=1           Silence an opted-in hook: for one session as
+                        'LOUPE_OFF=1 claude', or for one project as
+                        "env": { "LOUPE_OFF": "1" } in .claude/settings.local.json,
+                        read on every run. The plugin's "off" option does the
+                        same for every project. The hook says it was skipped;
+                        'loupe status' names which switch did it.
                         Both read 1/true/yes/on as on; anything else — 0 and
                         false included — as not set.
 
@@ -446,16 +451,25 @@ async function main(): Promise<number> {
 	// below is downstream of this line, the off switch most of all.
 	const payload: HookPayload = isHook ? parsePayload(await readStdin()) : {};
 
-	// Off unless the project opted in, or silenced for the session.
-	//
-	// Silence, not advisory mode: an advisory finding still lands in the agent's
-	// context, and an agent that sees a finding starts fixing it. Hook-only —
-	// `loupe check` typed by hand is someone asking.
-	//
+	// Resolved for every command, not just the hook. `status` exists to say what
+	// the gate will do, and it cannot do that without the settings the gate reads.
 	// Read from the Claude Code project, not the run's root: in a monorepo package
 	// the two differ, and `status` must land where the hook does.
 	const projectDir = claudeProjectDir(args.flags.root);
-	if (isHook && hookOff(projectDir)) return EXIT.OK;
+	const resolved = resolvedOptions(projectDir);
+	const { options } = resolved;
+
+	// Off unless the project opted in, or silenced.
+	//
+	// Silence, not advisory mode: an advisory finding still lands in the agent's
+	// context, and an agent that sees a finding starts fixing it. Hook-only —
+	// `loupe check` typed by hand is someone asking. A project that never opted in
+	// hears nothing; one that opted in and was switched off is told so, like every
+	// other stand-down, or a stale switch disables the gate with no trace.
+	if (isHook) {
+		const off = hookOff(projectDir, resolved);
+		if (off) return hookSilenced(resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
+	}
 
 	// The project, not the directory you happen to be standing in: the hook roots
 	// at CLAUDE_PROJECT_DIR, and a typed command rooting at the cwd gave the same
@@ -469,11 +483,6 @@ async function main(): Promise<number> {
 		fail(`loupe: root does not exist: ${root}\n`);
 		return EXIT.CANNOT_RUN;
 	}
-
-	// Resolved for every command, not just the hook. `status` exists to say what
-	// the gate will do, and it cannot do that without the settings the gate reads.
-	const resolved = resolvedOptions();
-	const { options } = resolved;
 
 	// Read before the config rather than with the other registry work below: a
 	// profile names the preset that configures its design system, and that has
@@ -675,7 +684,7 @@ async function main(): Promise<number> {
 		// One conclusion, asked once. `blockingAllowed` answers "do the severities
 		// permit blocking", which is not "will this gate stop a turn" — a silenced hook
 		// stops nothing.
-		const off = hookOff(projectDir);
+		const off = hookOff(projectDir, resolved);
 		const gateBlocks = blockingAllowed && !off;
 		const src =
 			config.source.kind === 'file'
