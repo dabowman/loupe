@@ -623,6 +623,12 @@ async function main(): Promise<number> {
 	if (options.maxAttempts) config.hook.maxAttempts = options.maxAttempts;
 	if (options.maxFindings) config.hook.maxFindings = options.maxFindings;
 
+	// The baseline this run was told to use, or null for the configured one. Said
+	// once, here: `--baseline=` arrives as an empty string, and the writer and
+	// every reader must agree that it names nothing — one of them taking it as a
+	// path records the backlog in a file the others never open.
+	const namedBaseline = args.flags.baseline || null;
+
 	if (command === 'explain') {
 		const id = canonicalRuleId(args._[1] ?? '');
 		if (!isRuleId(id)) {
@@ -678,7 +684,7 @@ async function main(): Promise<number> {
 					: config.source.kind === 'inferred'
 						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
-		const base = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+		const base = findExistingBaseline(root, namedBaseline, config.baselinePath);
 		// What design system this run thinks it is checking, in the terms the rules are
 		// written against — the half a skill has to read before it writes a line of UI.
 		// Empty fields are printed as such: "no layout primitive" is a fact about the
@@ -849,7 +855,7 @@ async function main(): Promise<number> {
 		return async () => {
 			const fresh = await analyze(config, { scope: null });
 			if (args.flags['no-baseline']) return fresh;
-			const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+			const { path: bPath, found } = findExistingBaseline(root, namedBaseline, config.baselinePath);
 			const baseline = found ? readBaseline(bPath) : null;
 			// Once, not per request: a long-lived process would repeat it until the
 			// line meant nothing.
@@ -899,12 +905,8 @@ async function main(): Promise<number> {
 	// the hook, which is a different process with a different environment.
 	if (command === 'baseline') {
 		const result = await analyze(config, { scope: null });
-		// `||`, not `??`: an empty `--baseline=` is not a path. `findExistingBaseline`
-		// reads it as "unnamed" and falls through to the configured path, so a
-		// writer that took it as nullish-only would record the backlog somewhere
-		// the next `check` never looks.
-		const target = baselinePath(root, args.flags.baseline || config.baselinePath);
-		const { path, findings, entries } = writeBaseline(root, target, result);
+		const target = baselinePath(root, namedBaseline ?? config.baselinePath);
+		const { path, findings, entries } = writeBaseline(target, result);
 		// Nothing collapsed means nothing to reconcile, and saying the same number
 		// twice invents a distinction the reader then has to go and check.
 		const recorded =
@@ -1084,10 +1086,9 @@ async function main(): Promise<number> {
 	}
 
 	if (!args.flags['no-baseline']) {
-		// The lookup already stat'd it. Most projects have no baseline, and this
-		// runs on every write, so don't pay a second stat inside `readBaseline`
-		// just to be told the same thing.
-		const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+		// `found` is what lets the warning below tell an absent baseline from a
+		// broken one: `readBaseline` answers null for both.
+		const { path: bPath, found } = findExistingBaseline(root, namedBaseline, config.baselinePath);
 		const baseline = found ? readBaseline(bPath) : null;
 		// A file that is present and unparseable is not the same as no file, and
 		// treating it as one puts the whole backlog back with the gate blocking on all

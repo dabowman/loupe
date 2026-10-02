@@ -682,6 +682,27 @@ await check('--baseline names the same file for the writer and the readers', () 
 	}
 });
 
+// The config's own empty `baseline` is the other way to name nothing. It is
+// normalized in `loadConfig` rather than at each reader, so the writer and the
+// readers have to land on the default name together — joined to the root as
+// given, it names the project directory itself.
+await check('an empty config `baseline` means the default name, for the writer and the readers', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, baseline: '' }),
+		'src/A.jsx':
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	try {
+		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
+		assert(recorded.includes(join(root, '.loupe-baseline.json')), `wrote somewhere else:\n${recorded}`);
+		const read = checkAll(root);
+		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(read), `readers missed the default name:\n${read}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // When a configured baseline path is not there yet, the project's own default
 // file answers — and `status` says so, rather than calling a file already in
 // the project an old location.

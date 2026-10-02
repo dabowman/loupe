@@ -345,7 +345,8 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		componentRegistry,
 		sources: cfg.sources,
 		suppression,
-		baselinePath: cfg.baseline,
+		// An empty `baseline` names nothing, as an empty `--baseline=` does.
+		baselinePath: cfg.baseline || DEFAULT_BASELINE,
 		hook: cfg.hook,
 		rules,
 		severityOf: (id: RuleId) => rules[id].severity,

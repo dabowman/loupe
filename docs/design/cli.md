@@ -413,10 +413,13 @@ project's own `.loupe-baseline.json` answers instead and the fallback is
 reported: dropping it lost every accepted finding in the window between a config
 change landing and the file actually moving.
 
-A `--baseline=` that reaches the resolver as an empty string is treated as
-"nobody named one" — falsy, not nullish. A writer taking it as a path would put
-the backlog somewhere the readers never look, which is the same split the module
-exists to close.
+A `--baseline=` arrives as an empty string and means "nobody named one" —
+falsy, not nullish. A writer taking it as a path would put the backlog somewhere
+the readers never look, which is the same split the module exists to close. So
+it is normalized once, at the top of `main()`, and the writer and every reader
+are handed the same `string | null`; an empty config `baseline` is normalized to
+the default name once, in `loadConfig`. Nothing downstream re-derives either
+rule, so none of them can drift to `??` on its own.
 
 **No writable state directory just means no retry-budget tracking.** Bookkeeping
 failure never takes down the gate.

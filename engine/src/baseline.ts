@@ -10,7 +10,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 import { findingKey } from './analyze.ts';
 import { ensureDir } from './paths.ts';
 import type { AnalyzeResult, Baseline, BaselineFile, BaselinedResult } from './types.ts';
@@ -46,16 +46,14 @@ export function readBaseline(path: string): Baseline | null {
  * findings it hid, not the entries that hid them.
  */
 export function writeBaseline(
-	root: string,
 	full: string,
 	result: AnalyzeResult,
 ): { path: string; findings: number; entries: number } {
-	// A *configured* baseline may name a directory that doesn't exist yet; the
-	// default one sits in a project root the caller already proved exists.
-	// `ensureDir` rather than a bare `mkdirSync` so a bad path fails on the write
-	// that wanted it, naming ENOTDIR rather than `EEXIST ... a.css`.
-	const dir = dirname(full);
-	if (dir !== resolve(root)) ensureDir(dir);
+	// A *configured* baseline may name a directory that doesn't exist yet; for
+	// the default one this is a no-op on the project root. `ensureDir` rather than
+	// a bare `mkdirSync` so a bad path fails on the write that wanted it, naming
+	// ENOTDIR rather than `EEXIST ... a.css`.
+	ensureDir(dirname(full));
 	const entries = [...new Set(result.findings.map(findingKey))].sort();
 	// Re-recording the same backlog rewrites the same bytes. A fresh timestamp made
 	// this file — which the project is asked to commit — differ from itself, and a
