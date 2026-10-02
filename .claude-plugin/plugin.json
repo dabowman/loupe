@@ -29,7 +29,7 @@
     "blocking": {
       "type": "boolean",
       "title": "Block turns on findings",
-      "description": "When on, error-severity findings stop the turn and hand the report back. When off, the gate reports only. A project with no loupe.config.json is always advisory unless this is on.",
+      "description": "Governs the hook only. When on, error-severity findings stop the turn and hand the report back. When off, the hook reports only. A project with no loupe.config.json is always advisory in the hook unless this is on. `loupe check` exits 1 on error-severity findings either way, so CI and pre-commit still gate.",
       "default": false
     },
     "preset": {

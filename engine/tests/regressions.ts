@@ -447,6 +447,42 @@ await check('the hook blocks when the setting says it should', () => {
 	}
 });
 
+// `blocking` is the hook's: it decides whether a turn stops. `check` keeps
+// following rule severity, so CI and pre-commit gate whatever the plugin says —
+// and `status`, which printed "Nothing blocks turns; every finding is advisory"
+// a moment before `check` exited 1, has to say which of the two it is describing.
+await check('with blocking off, check still exits 1 and status says so', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	const off = { CLAUDE_PLUGIN_OPTION_BLOCKING: 'false' };
+	try {
+		const hook = runCli(
+			['hook', '--root', root],
+			off,
+			'{"session_id":"adv","tool_input":{"file_path":"styles/a.css"}}',
+		);
+		assert(hook.status === 0, `the hook blocked with blocking off: exit ${hook.status}`);
+		assert(/advisory/.test(hook.stdout), `the hook did not report advisory: ${hook.stdout}`);
+
+		const check = runCli(['check', '--all', '--root', root], off);
+		assert(check.status === 1, `check stopped gating on error severity: exit ${check.status}`);
+
+		const { stdout } = runCli(['status', '--root', root], off);
+		assert(/Nothing blocks turns/.test(stdout), `status claims the hook blocks:\n${stdout}`);
+		assert(
+			/`loupe check` still exits 1 on: .*system\/override/.test(stdout),
+			`status did not say check still fails:\n${stdout}`,
+		);
+		assert(!/every finding is advisory\./.test(stdout), `status called the whole tool advisory:\n${stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `loupe baseline` from a shell has no CLAUDE_PLUGIN_DATA; the Stop hook always
 // has one. State keyed off that variable meant the two processes read different
 // files, so a recorded backlog was invisible to the gate that was supposed to

@@ -788,17 +788,27 @@ async function main(): Promise<number> {
 					: judgeOnly
 						? yellow('advisory, --judge only')
 						: sev === 'error'
-							? yellow('advisory (would block if enabled)')
+							? yellow('advisory in the hook (would block if enabled); fails `check`')
 							: yellow('advisory')
 				: dim(`off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`);
 			lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
 		}
 		const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
+		// `blocking` is the hook's: it decides whether a turn stops, not whether a
+		// finding is an error. `check` still exits 1 on error severity, so CI and a
+		// pre-commit hook gate on the config whatever the plugin setting says — and
+		// "nothing blocks" said of the tool, not the hook, was contradicted by the
+		// very next `check`.
+		const quiet = off
+			? 'Nothing blocks turns: the hook is off.'
+			: 'Nothing blocks turns; the hook reports every finding as advisory.';
 		lines.push(
 			'',
 			gateBlocks && blockers.length
 				? `${red('Turns are blocked by:')} ${blockers.map((id) => magenta(id)).join(', ')}`
-				: green('Nothing blocks turns; every finding is advisory.'),
+				: blockers.length
+					? `${green(quiet)}\n${yellow('`loupe check` still exits 1 on:')} ${blockers.map((id) => magenta(id)).join(', ')} — ${off ? 'the hook being off does not change that' : '"Block turns on findings" governs the hook, not `check`'}.`
+					: green(`${quiet} No rule is at error severity, so \`loupe check\` exits 0 too.`),
 		);
 		if (off) {
 			lines.push(`The gate is off: ${off}.`);
@@ -807,10 +817,10 @@ async function main(): Promise<number> {
 			if (detected?.truncated) lines.push(`Inference stopped at the ${CEILING}: ${CEILING_WHY}.`);
 			if (!blockingAllowed)
 				lines.push(
-					'The gate reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.',
+					'The hook reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.',
 				);
 		} else if (!blockingAllowed) {
-			lines.push('The gate reports only: "Block turns on findings" is off in the plugin settings.');
+			lines.push('The hook reports only: "Block turns on findings" is off in the plugin settings.');
 		}
 		process.stdout.write(`${lines.join('\n')}\n`);
 		return EXIT.OK;

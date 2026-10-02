@@ -944,7 +944,8 @@ Configured where you enable the plugin, read by the hook from the environment:
 
 | | |
 | --- | --- |
-| **Block turns on findings** | Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. |
+| **Block turns on findings** | Governs the hook only. Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. `loupe check` is unaffected — it exits 1 on error-severity findings either way, so CI and pre-commit still gate. |
+| **Silence the hook** | Off by default. On, the hook checks nothing in any project and says only that it was skipped. `"env": { "LOUPE_OFF": "1" }` in a project's `.claude/settings.local.json` does the same for that project. |
 | **Preset** | `auto` infers per project. A project's own `loupe.config.json` always wins over both. |
 | **Project class prefixes** | Comma-separated, e.g. `vip-workflow-, wf-`. Empty infers them. Only these can be reported dead. |
 | **Fix attempts** / **Findings shown** | The retry budget and the per-report cap. |
