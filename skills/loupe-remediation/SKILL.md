@@ -53,14 +53,20 @@ findings say:
 
 1. `stylesheet/unparsed` — a file nobody read, so its findings do not exist yet
 2. `suppression/malformed` — a broken directive is muting nothing
-3. `system/locked-component`, `system/superseded-component` — is this even the
+3. `css/dead-class`, pruning — delete what is already dead. Nothing below can
+   revive a class no markup references today, and every later stage gets a
+   smaller input instead of tokenizing rules about to be deleted. Still a
+   cross-file call: a class can be assembled at runtime, in PHP or a template
+   string, so confirm it is not before deleting
+4. `system/locked-component`, `system/superseded-component` — is this even the
    right component; swapping it can change what every finding below says
-4. `system/override`, `system/inline-style`, `typography/in-css` — the
+5. `system/override`, `system/inline-style`, `typography/in-css` — the
    component is being fought
-5. `layout/*` — structure
-6. `patterns/*` — composites, once individual components are conformant
-7. `tokens/hardcoded-value`, `tokens/unknown-token`, `typography/untokenized` — values
-8. `css/dead-class` — once the rest has settled
+6. `layout/*` — structure
+7. `patterns/*` — composites, once individual components are conformant
+8. `tokens/hardcoded-value`, `tokens/unknown-token`, `typography/untokenized` — values
+9. `css/dead-class`, sweep — what the work above left dead, once the rest has
+   settled. The same cross-file check applies
 
 Re-run between stages rather than fixing from a stale list.
 

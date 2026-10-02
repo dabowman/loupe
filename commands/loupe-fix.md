@@ -48,9 +48,12 @@ If `$ARGUMENTS` names a rule id or a path, narrow to that; add `--severity error
 to cut the run down to what the hook actually blocks on, which is the subset to
 clear first when the backlog is too large for one pass. Otherwise work upward
 through the layers, because lower fixes change what the higher findings say:
-unparsed files, then malformed suppressions, then component overrides, then
-layout, then values, then dead classes. Re-run between stages rather than
-working from a stale list.
+unparsed files, then malformed suppressions, then the classes already dead —
+pruned first so no later stage tokenizes a rule about to be deleted — then
+component overrides, then layout, then values, then a last sweep for what that
+work left dead. Both dead-class passes are cross-file and yours to make, never
+dispatched (see below). Re-run between stages rather than working from a stale
+list.
 
 ## 3. Fix — inline, or fan out
 
