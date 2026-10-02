@@ -193,10 +193,13 @@ const JS = `
       return true;
     });
   }
+  // Code-unit order, as \`byBytes\` in discover.ts: a collating compare answers
+  // differently in a different locale, and the server-side tallies do not.
+  function byBytes(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
   function tally(rows, keyOf) {
     var m = new Map();
     rows.forEach(function (r) { var k = keyOf(r); m.set(k, (m.get(k) || 0) + 1); });
-    return Array.from(m.entries()).sort(function (a, b) { return b[1] - a[1] || String(a[0]).localeCompare(String(b[0])); });
+    return Array.from(m.entries()).sort(function (a, b) { return b[1] - a[1] || byBytes(String(a[0]), String(b[0])); });
   }
 
   var tip = document.getElementById('tip');

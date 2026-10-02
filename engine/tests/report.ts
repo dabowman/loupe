@@ -233,6 +233,42 @@ await check('an unparsed stylesheet is keyed without the path it was read from',
 	}
 });
 
+await check('findings, directives and tallies are in byte order, not the locale’s', async () => {
+	// `localeCompare` puts `a` before `B` and may skip the `-`, and answers
+	// differently under another `LANG`: the same run would print in a different
+	// order on a CI box than on a laptop.
+	const sheet =
+		'.wf-x { color: #757575; }\n/* wpds-allow tokens/hardcoded-value -- kept */\n.wf-y { color: #757575; }\n';
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'styles/a.css': sheet,
+		'styles/B.css': sheet,
+		'styles/-c.css': sheet,
+	});
+	try {
+		const expected = ['styles/-c.css', 'styles/B.css', 'styles/a.css'];
+		const order = (files: readonly string[]): string[] => files.filter((f, i) => files.indexOf(f) === i);
+		const first = result.findings[0];
+		assert(first, 'the fixture produced no findings');
+		const findings = order(result.findings.filter((f) => f.rule === first.rule).map((f) => f.file));
+		assert(JSON.stringify(findings) === JSON.stringify(expected), `findings ran ${findings.join(', ')}`);
+		const directives = order(result.directives.map((d) => d.file));
+		assert(JSON.stringify(directives) === JSON.stringify(expected), `directives ran ${directives.join(', ')}`);
+		const byFile = Object.keys(reportPayload(result, config).summary.byFile);
+		assert(JSON.stringify(byFile) === JSON.stringify(expected), `the tally ran ${byFile.join(', ')}`);
+		assert(!formatHtml(result, config).includes('localeCompare'), 'the page sorts by the reader’s locale');
+		const grouped = execFileSync(process.execPath, [CLI, 'suppressions', '--group-by', 'file'], {
+			cwd: root,
+			encoding: 'utf8',
+			env: { ...process.env, NO_COLOR: '1' },
+		});
+		const heads = grouped.split('\n').flatMap((l) => /^(\S+\.css) \(\d+\)$/.exec(l)?.[1] ?? []);
+		assert(JSON.stringify(heads) === JSON.stringify(expected), `suppressions --group-by ran ${heads.join(', ')}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('composite findings carry the key their cluster is grouped on', async () => {
 	// Three files assembling the same shape: one defect, reported three times,
 	// and only `group` puts the three back together.
