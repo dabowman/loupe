@@ -297,11 +297,20 @@ export async function analyze(
 	// to ask about. Off, the scanner never sees those detectors.
 	// `suppress: false` reads directives (still listed, still checked for form)
 	// but mutes nothing: the full audit.
+	// `contents` stands in for what is on disk, by repo-relative path: the hook
+	// asks what a file's findings were before the edit it is looking at the
+	// result of, and the file now holds the edit.
 	{
 		scope = null,
 		judge = false,
 		suppress = true,
-	}: { scope?: readonly string[] | null; judge?: boolean; suppress?: boolean } = {},
+		contents,
+	}: {
+		scope?: readonly string[] | null;
+		judge?: boolean;
+		suppress?: boolean;
+		contents?: ReadonlyMap<string, string>;
+	} = {},
 ): Promise<AnalyzeResult> {
 	const ds = config.designSystem;
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
@@ -311,13 +320,16 @@ export async function analyze(
 	// Nothing a person wrote is this big, and a generated blob costs more to
 	// parse than every finding it could produce.
 	const MAX_BYTES = 1_500_000;
-	const tooBig = (abs: string): boolean => {
+	const tooBig = (abs: string, rel: string): boolean => {
+		const given = contents?.get(rel);
+		if (given !== undefined) return Buffer.byteLength(given) > MAX_BYTES;
 		try {
 			return statSync(abs).size > MAX_BYTES;
 		} catch {
 			return false;
 		}
 	};
+	const read = (abs: string, rel: string): string => contents?.get(rel) ?? readFileSync(abs, 'utf8');
 
 	// Seeded from the design system's shipped token stylesheet, then topped up
 	// with anything the project defines itself.
@@ -389,10 +401,10 @@ export async function analyze(
 	const componentImports: ComponentImport[] = [];
 
 	for (const { abs, rel } of files.markup) {
-		if (tooBig(abs)) continue;
+		if (tooBig(abs, rel)) continue;
 		let text: string;
 		try {
-			text = readFileSync(abs, 'utf8');
+			text = read(abs, rel);
 		} catch {
 			continue;
 		}
@@ -418,10 +430,10 @@ export async function analyze(
 		suppressionsFor(rel, text);
 	}
 
-	for (const { abs } of files.references) {
-		if (tooBig(abs)) continue;
+	for (const { abs, rel } of files.references) {
+		if (tooBig(abs, rel)) continue;
 		try {
-			harvestTokens(readFileSync(abs, 'utf8'), referenced);
+			harvestTokens(read(abs, rel), referenced);
 			diagnostics.filesScanned++;
 		} catch {
 			/* unreadable reference file just contributes nothing */
@@ -445,7 +457,7 @@ export async function analyze(
 		if (isLibrarySheet(rel)) continue; // the design system's own sheet, not the project's
 		let text: string;
 		try {
-			text = readFileSync(abs, 'utf8');
+			text = read(abs, rel);
 		} catch {
 			continue;
 		}
@@ -467,7 +479,7 @@ export async function analyze(
 				});
 		};
 
-		if (tooBig(abs)) {
+		if (tooBig(abs, rel)) {
 			unparsed(`stylesheet over ${Math.round(MAX_BYTES / 1000)}kB — skipped as generated`);
 			continue;
 		}

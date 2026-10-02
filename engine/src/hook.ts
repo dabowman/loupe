@@ -37,6 +37,8 @@ export interface HookPayload {
 	session_id?: string;
 	stop_hook_active?: boolean;
 	tool_input?: { file_path?: string };
+	/** PostToolUse only: what the tool returned. Edit and Write both carry `originalFile`. */
+	tool_response?: unknown;
 	[key: string]: unknown;
 }
 
@@ -118,6 +120,28 @@ export function payloadFile(payload: HookPayload | null | undefined, root: strin
 	// Outside the project: nothing to say about it.
 	if (!rel || rel.startsWith('..')) return null;
 	return toPosix(rel);
+}
+
+/**
+ * The touched file as it stood before the edit, or null when there is nothing
+ * to compare against — a file the write created, or a payload that does not say.
+ *
+ * Claude Code hands PostToolUse the tool's own result, and Edit and Write both
+ * return the file they replaced as `originalFile` (null when Write created it).
+ * Read from there rather than snapshotted by a PreToolUse hook into the state
+ * directory: a snapshot is a second process on every edit, paid before the tool
+ * runs (~0.35s bundled, ~1s from source, just to start), where this costs nothing
+ * until an edit would block. Nor reconstructed from `old_string`/`new_string`:
+ * reversing an edit is ambiguous wherever the new text occurs twice, and
+ * impossible for a Write.
+ *
+ * Design notes: docs/design/cli.md#the-hook-gates-what-an-edit-introduced
+ */
+export function preEditContent(payload: HookPayload | null | undefined): string | null {
+	const response = payload?.tool_response;
+	if (!response || typeof response !== 'object') return null;
+	const original = (response as { originalFile?: unknown }).originalFile;
+	return typeof original === 'string' ? original : null;
 }
 
 /** Where the project lives, in order of trustworthiness. */

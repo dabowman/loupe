@@ -748,6 +748,61 @@ its retry budget on findings nobody asked it to fix.
 judged finding never enters a baseline, since its confidence moves between runs
 and a baselined finding that comes and goes is noise in both directions.
 
+## The hook gates what an edit introduced
+
+The two hooks answer different questions. **PostToolUse asks whether this edit
+made the file worse**, and blocks only on findings the edit introduced. **Stop
+asks whether the turn's work is conformant**, absolutely, unchanged.
+
+Blocking PostToolUse on the touched file's absolute state interrupted every
+multi-step remediation partway through. Converting `<div className="x">` to
+`<Stack>` and *then* moving the CSS off `.x` is two edits, and the state between
+them is genuinely non-conformant — so the gate blocked the first edit on
+findings that predated it, with feedback that was true but premature. The retry
+budget kept it from being fatal, but it is per file, so a seven-file conversion
+paid for three interruptions in each. It also meant every edit to a legacy file
+in a repo with no baseline blocked. Stop is the right place for "you converted
+the JSX and left the CSS behind": by then it is an omission, not an
+intermediate state.
+
+**The "before" comes from the payload.** Claude Code hands PostToolUse the
+tool's own result, and Edit and Write both return the content they replaced as
+`tool_response.originalFile` — `null` when Write created the file. The hook
+analyzes that content in the touched file's place (`analyze`'s `contents`
+option) and subtracts its findings. Two alternatives were weighed and passed
+over:
+
+- *A PreToolUse hook snapshotting the file into the state directory.* A second
+  process on every Edit and Write, paid before the tool runs, whether or not
+  anything is wrong: about 0.35s just to start the bundle and 1s from source,
+  plus a full analysis if it recorded findings rather than bytes.
+- *Reconstructing the file by reversing `old_string`/`new_string`.* Ambiguous
+  wherever the new text occurs more than once — a deletion's empty
+  `new_string` occurs everywhere — and impossible for a Write.
+
+**Only when it would block.** The "before" is analyzed only when the "after"
+has a blocking finding, so an edit that leaves the file clean pays nothing for
+the question. One that would block pays a second analysis: on a synthetic
+2,460-file project, a blocking hook run went from 0.94s to 1.41s, and a clean
+one stayed at 1.0s.
+
+**Keyed like the baseline**: rule + file + normalized code, not line. An edit
+above a finding moves it down the file, and a key with the line in it would
+call that finding new.
+
+**No "before", no subtraction.** A file the write created, a payload that does
+not carry `originalFile`, or a pre-edit analysis that fails compares against
+nothing — the absolute check, the gate as it was. A judged redirect is written
+after analysis from a control the analysis collected, so the control standing
+before the edit counts as the finding standing before it; the judge is never
+asked about content the edit has already replaced.
+
+**What it walked past is said, not dropped.** A PostToolUse that passes over
+standing findings says how many in its message, and a blocking report names the
+count beneath the new ones — the agent should know what Stop will hold it to.
+The retry budget is untouched: it counts the runs that blocked, keyed as before
+on session and file.
+
 ## The stand-down latches
 
 Clearing the retry counter when the gate stands down reset the budget, so "gate

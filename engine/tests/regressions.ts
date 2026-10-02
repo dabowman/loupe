@@ -752,6 +752,80 @@ await check('a gate that stood down stays down until the finding goes', () => {
 	}
 });
 
+// PostToolUse asked "is this file conformant?" and so blocked a refactor partway
+// through, on findings that predated the edit and were not what it was about —
+// once per file, three attempts each. It asks "did this edit make the file
+// worse?" now, against the `originalFile` Claude Code hands it; Stop still asks
+// the absolute question, which is where a half-finished conversion belongs.
+await check('PostToolUse blocks on what the edit introduced; Stop on everything', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.b { margin-bottom: 16px; }\n',
+	});
+	const css = join(root, 'styles', 'a.css');
+	const fire = (payload: object): { status: number; stdout: string; stderr: string } => {
+		try {
+			const stdout = execFileSync('node', [CLI, 'hook', '--root', root], {
+				encoding: 'utf8',
+				input: JSON.stringify(payload),
+				env: env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+				stdio: ['pipe', 'pipe', 'pipe'],
+			});
+			return { status: 0, stdout, stderr: '' };
+		} catch (err) {
+			const f = execFailure(err);
+			return { status: f.status ?? -1, stdout: f.stdout, stderr: f.stderr };
+		}
+	};
+	const edit = (session: string, originalFile: string | null): object => ({
+		session_id: session,
+		hook_event_name: 'PostToolUse',
+		tool_name: 'Edit',
+		tool_input: { file_path: 'styles/a.css' },
+		tool_response: { filePath: css, originalFile },
+	});
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		const before = readFileSync(css, 'utf8');
+
+		// An edit that walks past a finding — and moves it down a line, which a key
+		// on line numbers would call new.
+		writeFileSync(css, `/* spacing moves to the Stack next */\n${before}`);
+		const past = fire(edit('walk', before));
+		assert(past.status === 0, `blocked on a finding the edit did not introduce:\n${past.stderr}`);
+		assert(
+			/added no blocking findings/.test(past.stdout) &&
+				/1 blocking finding\(s\) already in styles\/a\.css/.test(past.stdout),
+			`the pre-existing finding was not named as context:\n${past.stdout}`,
+		);
+
+		// An edit that adds one blocks on that one alone, and says what it walked past.
+		const middle = readFileSync(css, 'utf8');
+		writeFileSync(css, `${middle}.c { display: flex; gap: 8px; }\n`);
+		const added = fire(edit('add', middle));
+		assert(added.status === 2, `an edit that added a finding did not block: ${added.status}\n${added.stdout}`);
+		assert(/layout\/in-css/.test(added.stderr), `the new finding is missing:\n${added.stderr}`);
+		assert(!/margin-on-child/.test(added.stderr), `blocked on the pre-existing finding too:\n${added.stderr}`);
+		assert(/1 blocking finding\(s\) already in/.test(added.stderr), `no word on the standing one:\n${added.stderr}`);
+
+		// Nothing to compare against is the absolute check, as it always was: a file
+		// the write created, and a payload that does not carry the original.
+		writeFileSync(css, middle);
+		assert(fire(edit('created', null)).status === 2, 'a created file did not get the absolute check');
+		assert(
+			fire({ session_id: 'bare', tool_input: { file_path: 'styles/a.css' } }).status === 2,
+			'a payload without tool_response did not get the absolute check',
+		);
+
+		// And Stop holds the turn to the finding PostToolUse let past.
+		const stop = fire({ session_id: 'walk', hook_event_name: 'Stop', stop_hook_active: false });
+		assert(stop.status === 2, `Stop did not block on the pre-existing finding: ${stop.status}\n${stop.stdout}`);
+		assert(/margin-on-child/.test(stop.stderr), `Stop blocked on something else:\n${stop.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `--changed` is the hook's default scope. `git diff --name-only` answers from
 // the repository root while `ls-files` answers from the cwd, so a project rooted
 // in a subdirectory of the worktree built a scope Set in two coordinate systems

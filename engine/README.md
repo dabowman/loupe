@@ -731,6 +731,15 @@ directory) are not: re-run `loupe baseline` to record one in the project.
 Hook mode reads the payload on stdin, scopes to changed files, and emits the
 hook protocol directly — no `jq`, no wrapper script.
 
+A `PostToolUse` payload names the file just written, and there the hook asks
+whether *this edit* made it worse: it blocks only on findings the edit
+introduced, compared by baseline key against the content Claude Code hands back
+as `tool_response.originalFile`. Findings the file already had are named in the
+message, not blocked on — a refactor passes through states that are worse before
+they are better. `Stop` keeps the absolute check over everything changed. With
+no pre-edit content to compare against (a file the write created, or an older
+payload), `PostToolUse` checks absolutely too.
+
 On blocking findings it exits 2 and hands a budgeted report back to the agent:
 guidance printed once per rule, a sample of each rule rather than a flood of
 the first one. On a clean run it exits 0 with a one-line tally.
