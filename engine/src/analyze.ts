@@ -43,7 +43,7 @@ import { discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
-import { messageLine, messageOf, oneLine, snippet } from './text.ts';
+import { messageLine, oneLine, parseMessageOf, snippet } from './text.ts';
 import {
 	cssFilesUnder,
 	declarationMessage,
@@ -162,7 +162,7 @@ async function readLibrary(
 			try {
 				sheet = syntax.parse(readFileSync(file, 'utf8'), { from: file });
 			} catch (err) {
-				unread.push({ file: shown, message: messageOf(err) });
+				unread.push({ file: shown, message: parseMessageOf(err, file) });
 				continue;
 			}
 			harvestTokenDefs(sheet, tokenPrefixes, tokenSet);
@@ -482,7 +482,7 @@ export async function analyze(
 		try {
 			root = syntax.parse(text, { from: abs });
 		} catch (err) {
-			unparsed(messageOf(err));
+			unparsed(parseMessageOf(err, abs));
 			continue;
 		}
 

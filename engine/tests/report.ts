@@ -187,6 +187,27 @@ await check('sarif rules carry a namespace tag and a pointer to the guidance', (
 
 cleanup(root);
 
+await check('an unparsed stylesheet is keyed without the path it was read from', async () => {
+	// postcss opens its error with the absolute path it was handed, and `code`
+	// is part of the baseline key: left in, the key holds one machine's checkout
+	// and a committed baseline matches on no other.
+	const { result, root } = await run({
+		'loupe.config.json': CONFIG,
+		'styles/broken.css': '.wf-row { color: #757575;',
+	});
+	try {
+		const f = one(
+			result.findings.filter((x) => x.rule === 'stylesheet/unparsed'),
+			'stylesheet/unparsed finding',
+		);
+		assert(f.file === 'styles/broken.css', `the finding names ${f.file}`);
+		for (const text of [f.message, f.code ?? '', ...result.diagnostics.parseErrors.map((e) => e.message)])
+			assert(!text.includes('broken.css') && /^\d+:\d+: /.test(text), `a parse error kept its path: ${text}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('composite findings carry the key their cluster is grouped on', async () => {
 	// Three files assembling the same shape: one defect, reported three times,
 	// and only `group` puts the three back together.
