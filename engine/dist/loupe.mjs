@@ -28592,15 +28592,31 @@ var byWeight = (a, b) => {
   return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]);
 };
 var groupsOf = (findings, by) => by === "rule" ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
-function ruleHeading(id, group, title) {
+var sameLine = (f) => `${f.rule}\0${f.file}\0${painted(f)}`;
+var collapse = (findings) => bucket(findings, sameLine).map(([, run]) => run.sort((a, b) => a.line - b.line)).sort((a, b) => b.length - a.length);
+function concentration(group, nested) {
+  if (group.length < 2) return String(group.length);
+  const files = new Set(group.map((f) => f.file)).size;
+  const distinct = new Set(group.map(painted)).size;
+  return `${group.length}${nested ? "" : ` in ${files} ${files === 1 ? "file" : "files"}`}, ${distinct} distinct`;
+}
+function ruleHeading(id, group, title, nested) {
   const sev = group[0]?.severity ?? "warn";
-  return `${SEV_PAINT[sev](SEV_MARK[sev] ?? "\u2022")} ${magenta(id)} ${dim(`(${group.length})`)} ${SEV_PAINT[sev](SEV_WORD[sev] ?? "advisory")} \u2014 ${title(id)}`;
+  return `${SEV_PAINT[sev](SEV_MARK[sev] ?? "\u2022")} ${magenta(id)} ${dim(`(${concentration(group, nested)})`)} ${SEV_PAINT[sev](SEV_WORD[sev] ?? "advisory")} \u2014 ${title(id)}`;
 }
 var fileHeading = (file, group) => `${bold(file)} ${dim(`(${group.length})`)}`;
-var heading = (by, key, group, title) => by === "rule" ? ruleHeading(key, group, title) : fileHeading(key, group);
+var heading = (by, key, group, title, nested = false) => by === "rule" ? ruleHeading(key, group, title, nested) : fileHeading(key, group);
+var MAX_LINES = 10;
 function findingLines(group) {
-  const width = Math.max(...group.map((f) => String(f.line).length));
-  return [...group].sort((a, b) => a.line - b.line).map((f) => `      ${dim(String(f.line).padStart(width))}  ${painted(f)}`);
+  const runs = collapse(group).sort((a, b) => (a[0]?.line ?? 0) - (b[0]?.line ?? 0));
+  const width = Math.max(...runs.map((run) => String(run[0]?.line).length));
+  return runs.map((run) => {
+    const [f] = run;
+    const at = run.map((g) => g.line);
+    const more = at.length > MAX_LINES ? ", \u2026" : "";
+    const times = run.length > 1 ? `  \xD7${run.length} ${dim(`(lines ${at.slice(0, MAX_LINES).join(", ")}${more})`)}` : "";
+    return `      ${dim(String(f.line).padStart(width))}  ${painted(f)}${times}`;
+  });
 }
 function formatAgent(result, config, {
   maxFindings = 0,
@@ -28620,15 +28636,16 @@ function formatAgent(result, config, {
   } else if (findings.length) {
     const sub = group === "rule" ? "file" : "rule";
     const groups = groupsOf(findings, group);
+    const runs = new Map(groups.map(([key, all]) => [key, collapse(all)]));
     const quota = new Map(groups.map(([key]) => [key, 0]));
     let budget = maxFindings > 0 ? maxFindings : Infinity;
     let progress = true;
     while (budget > 0 && progress) {
       progress = false;
-      for (const [key, all] of groups) {
+      for (const [key] of groups) {
         if (budget <= 0) break;
         const taken = quota.get(key) ?? 0;
-        if (taken >= all.length) continue;
+        if (taken >= (runs.get(key)?.length ?? 0)) continue;
         quota.set(key, taken + 1);
         budget--;
         progress = true;
@@ -28638,10 +28655,10 @@ function formatAgent(result, config, {
     for (const [key, all] of groups) {
       lines.push("");
       lines.push(heading(group, key, all, title));
-      const show = all.slice(0, quota.get(key) ?? 0);
+      const show = (runs.get(key) ?? []).slice(0, quota.get(key) ?? 0).flat();
       hidden += all.length - show.length;
       for (const [subKey, subGroup] of groupsOf(show, sub)) {
-        lines.push(`  ${heading(sub, subKey, subGroup, title)}`);
+        lines.push(`  ${heading(sub, subKey, subGroup, title, true)}`);
         lines.push(...findingLines(subGroup));
       }
       if (all.length > show.length) lines.push(dim(`  \u2026 ${all.length - show.length} more`));
@@ -30456,6 +30473,7 @@ var VALUE_FLAGS = [
   "root",
   "preset",
   "files",
+  "rule",
   "max-findings",
   "severity",
   "baseline",
@@ -30467,15 +30485,18 @@ var VALUE_FLAGS = [
 ];
 var FORMATS = ["agent", "json", "sarif", "html"];
 var isFormat = (f) => FORMATS.includes(f);
+var LIST_FLAGS = ["files", "rule"];
 function parseArgs(args) {
   const { values, positionals } = parseArgv({
     args,
-    options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: "string", multiple: f === "files" }])),
+    options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: "string", multiple: LIST_FLAGS.includes(f) }])),
     allowPositionals: true,
     strict: false
   });
-  const files = [values.files ?? []].flat().filter((v) => typeof v === "string");
-  values.files = files.length ? files.join(",") : void 0;
+  for (const f of LIST_FLAGS) {
+    const given = [values[f] ?? []].flat().filter((v) => typeof v === "string");
+    values[f] = given.length ? given.join(",") : void 0;
+  }
   for (const f of VALUE_FLAGS) if (typeof values[f] !== "string") delete values[f];
   for (const [k, v] of Object.entries(values))
     if (typeof v === "string" && !VALUE_FLAGS.includes(k)) values[k] = v !== "false";
@@ -30506,6 +30527,8 @@ Options:
   --changed             Only report findings in files changed vs. HEAD (default for hook)
   --all                 Report across the whole repo (default for check)
   --files a,b           Only report findings in these files
+  --rule <id>           Only report (check) or fix (fix) this rule's findings;
+                        repeat it, or give a comma list, for more than one
   --format <f>          agent | json | sarif | html  (default: agent)
                         html writes a self-contained page \u2014 redirect it to a file
   --group-by <g>        rule | file \u2014 what the agent format heads each block
@@ -30585,6 +30608,21 @@ function resolveScope(config, args, { defaultChanged = false }) {
     return [...changed];
   }
   return null;
+}
+function ruleScope(list2) {
+  if (list2 === void 0) return null;
+  const out = /* @__PURE__ */ new Set();
+  for (const given of list2.split(",").map((r) => r.trim())) {
+    const id = canonicalRuleId(given);
+    if (!isRuleId(id)) return { error: `unknown rule "${given}" \u2014 \`loupe status\` lists them` };
+    out.add(id);
+  }
+  return out;
+}
+function filterRules(result, rules) {
+  if (!rules) return result;
+  const findings = result.findings.filter((f) => rules.has(f.rule));
+  return { ...result, findings, blocking: findings.some((f) => f.severity === "error") };
 }
 function filterSeverity(result, min) {
   if (min !== "error") return result;
@@ -30957,6 +30995,15 @@ ${dim("  Ctrl-C to stop.")}
       );
     return exit;
   }
+  const rules = ruleScope(args.flags.rule);
+  if (rules && !(rules instanceof Set)) {
+    fail(`loupe: ${rules.error}
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  for (const id of rules ?? [])
+    if (!config.enabled[id]) note(`loupe: ${id} is off in this config \u2014 it reports nothing.
+`);
   const apiKey = args.flags.judge ? judgeKey() : void 0;
   if (args.flags.judge && !apiKey && !isHook) {
     fail(`loupe: --judge needs TYPESAFE_API_KEY, from ${KEY_SOURCES}
@@ -30972,7 +31019,7 @@ ${dim("  Ctrl-C to stop.")}
     }
     let toFix;
     try {
-      toFix = await analyze(config, { scope: fixScope });
+      toFix = filterRules(await analyze(config, { scope: fixScope }), rules);
       const judgeable = toFix.findings.filter((f) => f.suggest?.length);
       const about = tokenDescriptions(config.profiles?.active ?? []);
       if (apiKey && toFix.tokens && judgeable.length) await judgeValues(root2, judgeable, toFix.tokens, apiKey, about);
@@ -31036,7 +31083,10 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   }
   let result;
   try {
-    result = await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags["no-suppressions"] });
+    result = filterRules(
+      await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags["no-suppressions"] }),
+      rules
+    );
   } catch (err) {
     if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf2(err)}`);
     fail(`loupe: ${messageOf2(err)}
@@ -31054,7 +31104,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   if (apiKey) {
     try {
       const redirectSeverity = config.severityOf("patterns/judged-redirect");
-      if (result.controls?.length && (args.flags.severity !== "error" || redirectSeverity === "error"))
+      if (result.controls?.length && (args.flags.severity !== "error" || redirectSeverity === "error") && (!rules || rules.has("patterns/judged-redirect")))
         result.findings.push(...await judgeRedirects(result.controls, apiKey, redirectSeverity));
       await judgeVariants(root2, result.findings, config.componentRegistry, apiKey);
     } catch (err) {
