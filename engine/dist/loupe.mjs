@@ -30029,6 +30029,16 @@ function detectPreset(root2) {
     packageDir: ""
   };
 }
+var STYLE_FILE_BUDGET = 600;
+var STYLE_MAX_BYTES = 15e5;
+function generatedPrefix(cls) {
+  const mod = /^([A-Za-z]\w*?[-_]module_)/.exec(cls);
+  if (mod?.[1]) return { prefix: mod[1], reason: "CSS-module output" };
+  const hashed = /^([A-Za-z][A-Za-z0-9]*_)[A-Za-z][\w-]*__(?=[\w-]*\d)[\w-]{5,}$/.exec(cls) ?? /^((?:css|jsx)-)(?=[a-z0-9]*\d)[a-z0-9]{5,}$/.exec(cls);
+  if (hashed?.[1]) return { prefix: hashed[1], reason: "hashed class names" };
+  return null;
+}
+var EXTERNAL_LIMIT = 8;
 var CLASS_RE = /\.(-?[_a-zA-Z][\w-]*)/g;
 var prefixOf = (cls) => {
   const i = cls?.indexOf("-") ?? -1;
@@ -30066,6 +30076,57 @@ function libraryPrefixes(dirs, candidates) {
   for (const dir of dirs) if (existsSync6(dir)) walk(dir, 0);
   return found;
 }
+var IMPORT_RE = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](@[\w.-]+\/[\w.-]+)/g;
+function presetEvidence(root2, imports) {
+  const marker = /* @__PURE__ */ new Map();
+  const scopes = /* @__PURE__ */ new Set();
+  for (const name of presetNames()) {
+    const p = preset(name);
+    for (const dep of [...p.detect?.dependencies ?? [], ...p.designSystem?.packages ?? []]) {
+      if (p.detect?.dependencies?.includes(dep) && !marker.has(dep)) marker.set(dep, name);
+      if (dep.startsWith("@")) scopes.add(dep.slice(0, dep.indexOf("/") + 1));
+    }
+  }
+  const known = (pkg) => marker.has(pkg) || [...scopes].some((s) => pkg.startsWith(s));
+  const named = (pkg) => marker.has(pkg) ? `${pkg} [a ${marker.get(pkg)} marker]` : pkg;
+  const out = [];
+  const imported = [...imports].filter(([pkg]) => known(pkg)).sort((a, b) => b[1] - a[1]);
+  if (imported.length)
+    out.push(
+      `source imports: ${imported.slice(0, 5).map(([pkg, n]) => `${named(pkg)} \xD7${n}`).join(", ")}${imported.length > 5 ? `, +${imported.length - 5} more` : ""}`
+    );
+  for (const { rel } of manifests(root2)) {
+    const pkg = readJson(join11(root2, rel, "package.json")) ?? {};
+    const typed = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).map((dep) => /^@types\/([\w.-]+)__([\w.-]+)$/.exec(dep)).filter((m) => m !== null && known(`@${m[1]}/${m[2]}`)).map((m) => `${m[0]} \u2192 ${named(`@${m[1]}/${m[2]}`)}`);
+    if (typed.length) out.push(`${rel ? `${rel}/package.json` : "package.json"}: ${typed.join(", ")}`);
+  }
+  for (const { dir, rel } of probeDirs(root2)) {
+    const build = join11(dir, "build");
+    const assets = readDir(build).filter((e) => e.isFile() && e.name.endsWith(".asset.php")).slice(0, 3);
+    for (const e of assets) {
+      let text2;
+      try {
+        text2 = readFileSync11(join11(build, e.name), "utf8");
+      } catch {
+        continue;
+      }
+      const list2 = /['"]dependencies['"]\s*=>\s*(?:array\s*\(|\[)([^)\]]*)/.exec(text2)?.[1] ?? "";
+      const deps = [...list2.matchAll(/['"]([^'"]+)['"]/g)].map((m) => m[1]);
+      if (deps.length) out.push(`${rel ? `${rel}/` : ""}build/${e.name} dependencies: ${deps.join(", ")}`);
+    }
+  }
+  if (existsSync6(join11(root2, ".wp-env.json"))) out.push(".wp-env.json (a WordPress development environment)");
+  const composer = readJson(join11(root2, "composer.json"));
+  if (composer) {
+    const requires = Object.keys(composer.require ?? {}).filter((r) => r !== "php");
+    const what = [
+      ...composer.type ? [`type ${composer.type}`] : [],
+      ...requires.length ? [`requires ${requires.slice(0, 4).join(", ")}`] : []
+    ];
+    out.push(`composer.json${what.length ? ` (${what.join("; ")})` : ""}`);
+  }
+  return out;
+}
 function resolvePreset(name, seen = /* @__PURE__ */ new Set()) {
   if (seen.has(name)) return {};
   seen.add(name);
@@ -30086,9 +30147,17 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   ]);
   const isExcluded = (cls) => external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
   const cssCounts = /* @__PURE__ */ new Map();
-  for (const { abs } of files.styles) {
+  const cssClasses = /* @__PURE__ */ new Map();
+  const generated = /* @__PURE__ */ new Map();
+  const read = files.styles.slice(0, STYLE_FILE_BUDGET);
+  let oversized = 0;
+  for (const { abs } of read) {
     let text2;
     try {
+      if (statSync3(abs).size > STYLE_MAX_BYTES) {
+        oversized++;
+        continue;
+      }
       text2 = readFileSync11(abs, "utf8");
     } catch {
       continue;
@@ -30096,7 +30165,16 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
     for (const m of text2.matchAll(CLASS_RE)) {
       const cls = m[1];
       const prefix = prefixOf(cls);
-      if (cls === void 0 || !prefix || isExcluded(cls)) continue;
+      if (cls === void 0 || isExcluded(cls)) continue;
+      const gen = generatedPrefix(cls);
+      if (gen) {
+        const entry = generated.get(gen.prefix) ?? { classes: /* @__PURE__ */ new Set(), reason: gen.reason };
+        entry.classes.add(cls);
+        generated.set(gen.prefix, entry);
+        continue;
+      }
+      if (!prefix) continue;
+      cssClasses.set(prefix, (cssClasses.get(prefix) ?? /* @__PURE__ */ new Set()).add(cls));
       cssCounts.set(prefix, (cssCounts.get(prefix) ?? 0) + 1);
     }
   }
@@ -30108,6 +30186,8 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
     }
   }
   const haystack = markupText.join("\n");
+  const imports = /* @__PURE__ */ new Map();
+  for (const m of haystack.matchAll(IMPORT_RE)) if (m[1]) imports.set(m[1], (imports.get(m[1]) ?? 0) + 1);
   const candidates = [...cssCounts.entries()].filter(([prefix, count]) => count >= 3 && haystack.includes(prefix)).sort((a, b) => b[1] - a[1]);
   const vendored = libraryPrefixes(
     [join11(root2, "node_modules"), ...packageDir ? [join11(root2, packageDir, "node_modules")] : []],
@@ -30120,18 +30200,36 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
     accepted.push([prefix, count]);
     if (accepted.length >= 5) break;
   }
+  const owned = (prefix) => accepted.some(([p]) => prefix.startsWith(p));
+  const distinct = (prefix) => cssClasses.get(prefix)?.size ?? 0;
+  const foreign = [
+    ...[...generated].map(([prefix, g]) => ({ prefix, classes: g.classes.size, reason: g.reason })).sort((a, b) => b.classes - a.classes),
+    ...[...vendored].map((prefix) => ({ prefix, classes: distinct(prefix), reason: "defined in node_modules" })),
+    ...[...cssCounts].filter(([prefix, count]) => count >= 3 && !haystack.includes(prefix) && !owned(prefix)).map(([prefix]) => ({
+      prefix,
+      classes: distinct(prefix),
+      reason: "no markup or reference names it \u2014 vendored, or dead"
+    })).sort((a, b) => b.classes - a.classes)
+  ].slice(0, EXTERNAL_LIMIT);
   const total = [...cssCounts.values()].reduce((a, b) => a + b, 0);
   const covered = accepted.reduce((a, [, c]) => a + c, 0);
   const coverage = total ? covered / total : 0;
+  const notes = [
+    ...files.styles.length > read.length ? [`read the first ${read.length} of ${files.styles.length} stylesheets`] : [],
+    ...oversized ? [`skipped ${oversized} stylesheet(s) over ${Math.round(STYLE_MAX_BYTES / 1e3)}kB as generated`] : []
+  ];
   return {
     project: accepted.map(([p]) => p),
     coverage,
     // A truncated walk read part of a tree, so `high` is a claim it cannot make.
     // It demotes `high` only: `none` is the different and still-true claim that
     // nothing was found.
-    confidence: accepted.length === 0 ? "none" : files.truncated ? "low" : coverage >= 0.5 ? "high" : "low",
+    confidence: accepted.length === 0 ? "none" : files.truncated || notes.length ? "low" : coverage >= 0.5 ? "high" : "low",
     sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
-    truncated: files.truncated
+    truncated: files.truncated,
+    notes,
+    external: foreign,
+    imports
   };
 }
 function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } = {}) {
@@ -30154,6 +30252,9 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
     coverage: ns.coverage,
     sampled: ns.sampled,
     truncated: ns.truncated,
+    namespaceNotes: ns.notes,
+    possibleExternal: ns.external,
+    presetEvidence: presetConfidence === "low" || presetConfidence === "none" ? presetEvidence(root2, ns.imports) : [],
     config
   };
 }
@@ -30437,6 +30538,7 @@ var note = (msg) => {
   process.stderr.write(yellow(msg));
 };
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
+var guessedPreset = (level) => level === "low" || level === "none";
 var HERE = dirname7(fileURLToPath4(import.meta.url));
 var SINGLE_FILE = !existsSync9(join14(HERE, "..", "package.json"));
 var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
@@ -30493,7 +30595,9 @@ Commands:
   presets               List bundled presets
   version               Print the version, whether it runs from source or the bundle, and where
   detect                Show the config that would be inferred for this project
-  init                  Write the inferred config to loupe.config.json
+  init                  Write the inferred config to loupe.config.json. Refuses
+                        when no design system was recognised: name one with
+                        --preset, or pass --force to write the guess anyway
   status                Show the effective config: rules, severities, what blocks
   serve                 Serve the findings to the running app, so a stylesheet
                         finding can be resolved to the elements it styles
@@ -30535,7 +30639,8 @@ Options:
                         review them first. (TYPESAFE_API_KEY from the
                         environment or ~/.config/loupe/.env)
   --port <n>            Port for 'serve' (default: 7331)
-  --force               Overwrite an existing config (init)
+  --force               Overwrite an existing config, or write a guessed design
+                        system (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
                         is a terminal; NO_COLOR and FORCE_COLOR are honoured)
@@ -30635,8 +30740,8 @@ async function main() {
   let config;
   let detected = null;
   let profilePreset = null;
-  const runDetection = () => {
-    const d = detectConfig(root2, { preset: profilePreset });
+  const runDetection = (preset2 = profilePreset) => {
+    const d = detectConfig(root2, { preset: preset2 });
     if (options.projectPrefixes?.length)
       d.config.namespaces = { ...d.config.namespaces, project: options.projectPrefixes };
     return d;
@@ -30810,7 +30915,8 @@ async function main() {
     return EXIT.OK;
   }
   if (command === "detect" || command === "init") {
-    const info = detected ?? runDetection();
+    const named = args.flags.preset ? presetKey(args.flags.preset) : profilePreset;
+    const info = detected ?? runDetection(named);
     if (!detected && info.truncated) note(TRUNCATED_NOTE);
     if (args.flags.format === "json") {
       process.stdout.write(`${JSON.stringify(info, null, 2)}
@@ -30822,9 +30928,20 @@ async function main() {
       dim(`            ${info.presetReasons.join("; ")}`),
       // What inference concluded is still reported; it is just no longer what the
       // run uses, and `init` writes the config below verbatim.
-      ...profilePreset ? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`] : [],
+      ...named ? [
+        `            ${args.flags.preset ? `--preset ${args.flags.preset}` : `--profile ${forced?.id}`} overrides that: the config below extends ${named}`
+      ] : [],
       `${dim("namespaces: ")}${info.namespaces.project.join(", ") || "(none found)"}  ${confidence(info.namespaceConfidence)}`,
       dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
+      // Why the confidence above is lower than the coverage alone would make it.
+      ...info.namespaceNotes.map((n) => dim(`            ${n}`)),
+      // Listed, never written: `init` leaves `external` for somebody to confirm.
+      ...info.possibleExternal.length ? [
+        ...info.possibleExternal.map(
+          (c, i) => `${dim(i === 0 ? "possible external:  " : "                    ")}${c.prefix}  ${dim(`(${c.classes} class${c.classes === 1 ? "" : "es"}, ${c.reason})`)}`
+        ),
+        dim("                    confirm with `namespaces.external` in loupe.config.json")
+      ] : [],
       dim(
         `scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` + (info.truncated ? `  (stopped at the ${CEILING})` : "")
       )
@@ -30841,6 +30958,22 @@ async function main() {
       fail(
         "loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. Point --root at the project, or pass --force to write it anyway.\n"
       );
+      return EXIT.CANNOT_RUN;
+    }
+    if (guessedPreset(info.presetConfidence) && !named && !args.flags.force) {
+      const evidence = info.presetEvidence.length ? ["  Evidence that was not conclusive:", ...info.presetEvidence.map((e) => `    ${e}`)] : ["  Nothing else in the project points at a design system either."];
+      lines.push(
+        "",
+        `  Cannot infer the design system. Available presets: ${listPresets().join(", ")}.`,
+        "",
+        ...evidence,
+        "",
+        `  Pick one and re-run:  ${cyan("loupe init --preset <name>")}`,
+        dim(`  or write ${info.preset} anyway:  loupe init --force`)
+      );
+      process.stdout.write(`${lines.join("\n")}
+`);
+      fail("loupe: refusing to write a guessed design system to a config.\n");
       return EXIT.CANNOT_RUN;
     }
     if (existsSync9(target) && !args.flags.force) {
@@ -31126,6 +31259,16 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
       process.stdout.write(dim(`
 ${result.baselined} baselined finding(s) hidden.
 `));
+    if (detected?.config.extends === "generic" && guessedPreset(detected.presetConfidence)) {
+      const off = RULE_IDS.filter((id) => !config.enabled[id]).length;
+      process.stdout.write(
+        dim(
+          `
+loupe: no config, and no design system recognised \u2014 ran as generic, with ${off} of ${RULE_IDS.length} rules off. Run \`loupe init\` to choose one.
+`
+        )
+      );
+    }
   }
   return result.blocking ? EXIT.BLOCKED : EXIT.OK;
 }
