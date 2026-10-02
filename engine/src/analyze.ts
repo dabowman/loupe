@@ -711,16 +711,9 @@ export async function analyze(
 
 	for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
 
-	// Dedupe: nesting and multi-selector rules can legitimately reach the same
-	// declaration twice. Keyed on identity AND display, and run BEFORE the line
-	// bound below, so a cap cannot decide whether a finding survives.
-	const seen = new Set<string>();
-	const unique = findings.filter((f) => {
-		const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ''}|${f.message}`;
-		if (seen.has(k)) return false;
-		seen.add(k);
-		return true;
-	});
+	// Run BEFORE the line bound below, so a cap cannot decide whether a finding
+	// survives.
+	const unique = dedupe(findings);
 
 	// One report line per finding, bounded once — here, because the token pass
 	// above is the last of several writers of `message`. Each captured snippet is
@@ -767,6 +760,25 @@ export async function analyze(
 		// finding a control becomes is written later, by the judge.
 		...(liveControls ? { controls: liveControls } : {}),
 	};
+}
+
+/**
+ * The findings with each repeat dropped, first one kept. Nesting and
+ * multi-selector rules can legitimately reach the same declaration twice, and
+ * two controls on one line can be judged the same redirect. Keyed on identity
+ * AND display.
+ *
+ * Exported for `check --judge`, whose redirects are written after `analyze`
+ * has returned and so never passed through it here.
+ */
+export function dedupe(findings: readonly Finding[]): Finding[] {
+	const seen = new Set<string>();
+	return findings.filter((f) => {
+		const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ''}|${f.message}`;
+		if (seen.has(k)) return false;
+		seen.add(k);
+		return true;
+	});
 }
 
 /** Stable identity for baselining: survives reformatting and unrelated edits. */

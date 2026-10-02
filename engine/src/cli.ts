@@ -14,7 +14,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
-import { analyze } from './analyze.ts';
+import { analyze, dedupe } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import { judgeRedirects, judgeRenames, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
@@ -1120,8 +1120,12 @@ async function main(): Promise<number> {
 		try {
 			// The same filter, for the findings this adds.
 			const redirectSeverity = config.severityOf('patterns/judged-redirect');
-			if (result.controls?.length && (args.flags.severity !== 'error' || redirectSeverity === 'error'))
+			if (result.controls?.length && (args.flags.severity !== 'error' || redirectSeverity === 'error')) {
 				result.findings.push(...(await judgeRedirects(result.controls, apiKey, redirectSeverity)));
+				// Written after `analyze` returned, so past its dedupe: two controls on
+				// one line judged alike are one finding, as every other rule's are.
+				result.findings = dedupe(result.findings);
+			}
 			await judgeVariants(root, result.findings, config.componentRegistry, apiKey);
 		} catch (err) {
 			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);

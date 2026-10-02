@@ -8,6 +8,7 @@
  * *fewer* findings, which no failing build ever reveals.
  */
 
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, symlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +18,7 @@ import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
 import { LANGUAGE, ask, judgeRedirects, judgeVariants } from '../src/judge.ts';
 import { forceQuery } from '../src/judge/force.ts';
-import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
+import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, ComponentEntry, Finding, Pattern, PatternNode, RuleId } from '../src/types.ts';
 
 /** `toNode` is nullable by contract; a signature written in a test is not. */
@@ -1486,6 +1487,41 @@ await check(
 		assert(plain.controls === undefined, 'collected controls without --judge');
 	},
 );
+
+// Redirects are written after `analyze` returns, so its dedupe never saw them:
+// two Buttons on one line judged alike came out as two identical findings.
+// Through the CLI, with `fetch` replaced before it loads, because the push it
+// has to dedupe is the command's own.
+await check('two controls on one line judged alike are one redirect', () => {
+	const root = scratch('dsh-judge-dedupe-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG(),
+			'src/A.jsx': [
+				"import { Button } from '@wordpress/components';",
+				'export function Screen() {',
+				"	return (<><Button onClick={ () => go( '/a' ) }>A</Button><Button onClick={ () => go( '/a' ) }>A</Button></>);",
+				'}',
+			].join('\n'),
+		});
+		const destination = `data:text/javascript,${encodeURIComponent(
+			"globalThis.fetch = async () => new Response(JSON.stringify({ answers: { e0: { choice: 'destination', confidence: 0.99 } } }));",
+		)}`;
+		// The pattern registry rides on the profile, which only `--profiles` merges.
+		const argv = ['check', '--root', root, '--all', '--judge', '--profiles', dirname(PROFILE), '--format', 'json'];
+		const r = spawnSync(process.execPath, ['--import', destination, CLI, ...argv], {
+			encoding: 'utf8',
+			env: { ...process.env, TYPESAFE_API_KEY: 'key' },
+		});
+		assert(r.status === 0, `exited ${r.status}: ${r.stderr}`);
+		const found = (JSON.parse(r.stdout) as { findings: Finding[] }).findings.filter(
+			(f) => f.rule === 'patterns/judged-redirect',
+		);
+		one(found, 'one redirect for two controls on line 3');
+	} finally {
+		cleanup(root);
+	}
+});
 
 // ── the feedback from a wpds audit ─────────────────────────────────────────────
 
