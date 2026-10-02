@@ -1409,6 +1409,37 @@ await check('a 429 waits as long as retry-after says, then asks again', async ()
 	assert(Date.now() - started < 400, `waited ${Date.now() - started}ms for a 10ms retry-after`);
 });
 
+// Honoured verbatim, one `retry-after: 3600` held the run for an hour. The
+// waits are recorded rather than slept, so this costs nothing.
+await check('a retry-after of an hour is capped at a few seconds', async () => {
+	let calls = 0;
+	const stub = (async () =>
+		++calls === 1
+			? new Response('slow down', { status: 429, headers: { 'retry-after': '3600' } })
+			: new Response(
+					JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }),
+				)) as unknown as typeof fetch;
+	const waits: number[] = [];
+	const real = globalThis.setTimeout;
+	globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+		waits.push(ms ?? 0);
+		return real(fn, 0);
+	}) as typeof setTimeout;
+	try {
+		await ask(
+			forceQuery(represents),
+			[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+			'key',
+			stub,
+		);
+	} finally {
+		globalThis.setTimeout = real;
+	}
+	assert(calls === 2, `${calls} calls`);
+	const wait = one(waits, 'one wait between the two attempts');
+	assert(wait > 0 && wait <= 5_000, `waited ${wait}ms for a retry-after of 3600s`);
+});
+
 await check('resolve runs on known forces, and stops at a row it cannot decide', async () => {
 	const table = [
 		{ when: { represents: 'command' }, redirect: 'menu' },

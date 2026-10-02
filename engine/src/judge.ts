@@ -50,6 +50,10 @@ const FLOOR = 0.5;
 const CONCURRENCY = 6;
 // Overload is transient and a run is a hundred requests.
 const RETRIES = 4;
+// The longest a server's `retry-after` is honoured for: the longest wait the
+// doubling picks on its own. A proxy answering `retry-after: 3600` would
+// otherwise hold the whole run, hook included, for an hour.
+const RETRY_WAIT_MAX_MS = 500 * 2 ** (RETRIES - 1);
 // The hook runs this inside Claude Code's 60s timeout, and `fetch` has no
 // deadline of its own: one socket that never answers is otherwise a killed hook
 // on every write. An abort throws, the caller notes it, the run keeps the
@@ -119,10 +123,11 @@ export async function ask<T>(
 			const transient = res.status === 429 || res.status >= 500;
 			if (!transient || attempt >= RETRIES)
 				throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
-			// The server's own wait when it names one, in seconds; a date or
-			// nothing falls back to doubling.
+			// The server's own wait when it names one, in seconds and capped; a
+			// date or nothing falls back to doubling.
 			const after = Number(res.headers.get('retry-after'));
-			await new Promise((r) => setTimeout(r, after > 0 ? after * 1000 : 500 * 2 ** attempt));
+			const wait = after > 0 ? Math.min(after * 1000, RETRY_WAIT_MAX_MS) : 500 * 2 ** attempt;
+			await new Promise((r) => setTimeout(r, wait));
 		}
 	};
 
