@@ -14,7 +14,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { text } from 'node:stream/consumers';
 import { toPosix } from './discover.ts';
@@ -135,39 +135,76 @@ export function hookRoot(): string {
 export const isOn = (v: string | undefined): boolean => v !== undefined && /^(1|true|yes|on)$/i.test(v);
 
 /**
- * Whether this project turned the gate on.
+ * The Claude Code project whose `.claude/` settings switch the hook.
  *
- * Off by default: a gate firing in every repo the plugin is installed for lands
- * findings in sessions that are about something else. A project opts in at
- * `.claude/settings.local.json` → `"env": { "LOUPE": "on" }`, which Claude Code
- * hands the hook as an environment variable a terminal never sees — so the same
- * files are read when the environment has nothing to say.
+ * The hook roots at CLAUDE_PROJECT_DIR. `status` typed in a monorepo package
+ * roots at the config that governs it, which is not where `.claude/` lives —
+ * so reading the switch from the run's root reported the hook OFF while the
+ * hook, reading the real file, was on. Everything that asks goes through here:
+ * an explicit root, else CLAUDE_PROJECT_DIR, else the cwd, walked up to the
+ * nearest `.claude/`. The walk stops at the repository's top and below the home
+ * directory, whose `.claude/` is the user's settings, not a project's.
  */
-function optedIn(root: string): boolean {
-	if (process.env.LOUPE !== undefined) return isOn(process.env.LOUPE);
-	for (const file of [
-		join(root, '.claude', 'settings.local.json'),
-		join(root, '.claude', 'settings.json'),
-		join(homedir(), '.claude', 'settings.json'),
-	]) {
+export function claudeProjectDir(explicit?: string | null): string {
+	if (!explicit) {
+		const fromEnv = process.env.CLAUDE_PROJECT_DIR;
+		if (fromEnv && existsSync(fromEnv)) return fromEnv;
+	}
+	const start = resolve(explicit ?? process.cwd());
+	const home = resolve(homedir());
+	for (let dir = start; dir !== home; dir = dirname(dir)) {
+		if (existsSync(join(dir, '.claude'))) return dir;
+		if (existsSync(join(dir, '.git')) || dirname(dir) === dir) break;
+	}
+	return start;
+}
+
+/**
+ * A switch a project sets in its Claude Code settings' `env`, with where it was
+ * read. Claude Code hands it to the hook as an environment variable a terminal
+ * never sees — so the same files are read when the environment has nothing to
+ * say, and `status` agrees with the hook.
+ */
+function settingsEnv(projectDir: string, name: string): { value: string; from: string } | undefined {
+	const fromEnv = process.env[name];
+	if (fromEnv !== undefined) return { value: fromEnv, from: `${name} in the environment` };
+	const files: [path: string, label: string][] = [
+		[join(projectDir, '.claude', 'settings.local.json'), '.claude/settings.local.json'],
+		[join(projectDir, '.claude', 'settings.json'), '.claude/settings.json'],
+		[join(homedir(), '.claude', 'settings.json'), '~/.claude/settings.json'],
+	];
+	for (const [file, label] of files) {
 		try {
-			const v = (JSON.parse(readFileSync(file, 'utf8')) as { env?: Record<string, unknown> }).env?.LOUPE;
-			if (v !== undefined) return isOn(String(v));
+			const v = (JSON.parse(readFileSync(file, 'utf8')) as { env?: Record<string, unknown> }).env?.[name];
+			if (v !== undefined) return { value: String(v), from: `${name} in ${label}` };
 		} catch {
 			/* no settings file */
 		}
 	}
-	return false;
+	return undefined;
+}
+
+/**
+ * Whether this project turned the gate on.
+ *
+ * Off by default: a gate firing in every repo the plugin is installed for lands
+ * findings in sessions that are about something else. A project opts in at
+ * `.claude/settings.local.json` → `"env": { "LOUPE": "on" }`.
+ */
+function optedIn(projectDir: string): boolean {
+	const v = settingsEnv(projectDir, 'LOUPE');
+	return v !== undefined && isOn(v.value);
 }
 
 /**
  * Why the hook says nothing, or null when it runs. Asked once, so a diagnostic
  * saying the hook is off is one that watched the same values the hook did.
+ * `projectDir` is `claudeProjectDir()`'s answer, never the run's root.
  */
-export function hookOff(root: string): string | null {
+export function hookOff(projectDir: string): string | null {
 	// Per-session off switch: `LOUPE_OFF=1 claude` silences an opted-in project.
 	if (isOn(process.env.LOUPE_OFF)) return 'LOUPE_OFF is set for this session';
-	if (!optedIn(root))
+	if (!optedIn(projectDir))
 		return 'this project has not opted in; add "env": { "LOUPE": "on" } to .claude/settings.local.json';
 	return null;
 }

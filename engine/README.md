@@ -755,7 +755,11 @@ which Claude Code supplies from `"env": { "LOUPE": "on" }` in the project's
 `.claude/settings.local.json`. When the environment doesn't set `LOUPE`, the
 engine reads that same key from `.claude/settings.local.json`,
 `.claude/settings.json` and `~/.claude/settings.json`, in that order, so that
-`loupe status` in a terminal agrees with the hook.
+`loupe status` in a terminal agrees with the hook. `.claude/` is the Claude Code
+project's, not the run's root: `CLAUDE_PROJECT_DIR` when it is set, otherwise the
+nearest `.claude/` above `--root` or the working directory, looking no further
+than the repository's top — so `status` run from inside a monorepo package reads
+the same file the hook does.
 
 Set `LOUPE_OFF=1` in the hook's environment to silence an opted-in hook for a session —
 `LOUPE_OFF=1 claude`. It produces no output at all rather than downgrading to

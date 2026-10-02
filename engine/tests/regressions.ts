@@ -527,6 +527,52 @@ await check('the hook is off until the project opts in', () => {
 	}
 });
 
+// The opt-in lives in the Claude Code project's `.claude/`, which in a monorepo
+// is not the package whose config governs the run. `status` typed in the
+// package read the switch from the package, found nothing, and reported OFF
+// while the hook — rooted at CLAUDE_PROJECT_DIR — was gating every turn.
+await check('status reads the opt-in from the Claude Code project, not the package', () => {
+	const root = tmpRepo({
+		'.claude/settings.local.json': JSON.stringify({ env: { LOUPE: 'on' } }),
+		'packages/app/loupe.config.json': JSON.stringify({ extends: 'generic' }),
+		'packages/app/src/A.jsx': 'export const A = () => <div />;',
+	});
+	mkdirSync(join(root, '.git'));
+	const status = (extra: NodeJS.ProcessEnv = {}): string => {
+		const e = env({ LOUPE: undefined, ...extra });
+		if (!('CLAUDE_PROJECT_DIR' in extra)) delete e.CLAUDE_PROJECT_DIR;
+		return execFileSync('node', [CLI, 'status'], {
+			encoding: 'utf8',
+			cwd: join(root, 'packages', 'app', 'src'),
+			env: e,
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+	};
+	try {
+		const walked = status();
+		assert(
+			/config:\s+\S*packages\/app\/loupe\.config\.json/.test(walked),
+			`status did not root at the package:\n${walked}`,
+		);
+		assert(!/hook:\s+OFF/.test(walked), `status read the opt-in from the package:\n${walked}`);
+		assert(!/hook:\s+OFF/.test(status({ CLAUDE_PROJECT_DIR: root })), 'status ignored CLAUDE_PROJECT_DIR');
+
+		// The walk is bounded by the repository: a `.claude/` above it is not this
+		// project's, and Claude Code would not read it either.
+		const nested = join(root, 'vendor', 'inner');
+		writeAll(nested, { 'loupe.config.json': JSON.stringify({ extends: 'generic' }), 'a.css': '' });
+		mkdirSync(join(nested, '.git'));
+		const inner = execFileSync('node', [CLI, 'status', '--root', nested], {
+			encoding: 'utf8',
+			env: env({ LOUPE: undefined }),
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		assert(/hook:\s+OFF/.test(inner), `the opt-in leaked across a repository boundary:\n${inner}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // Advisory mode is not an off switch: an advisory finding still reaches the
 // agent's context, and an agent that sees a finding starts fixing it. The
 // escape hatch has to produce nothing at all.

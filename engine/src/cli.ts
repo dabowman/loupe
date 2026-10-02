@@ -35,6 +35,7 @@ import type { RegistrySource } from './profiles.ts';
 import { baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
 import {
 	bumpAttempts,
+	claudeProjectDir,
 	clearAttempts,
 	describeOptions,
 	emitBlocking,
@@ -450,7 +451,11 @@ async function main(): Promise<number> {
 	// Silence, not advisory mode: an advisory finding still lands in the agent's
 	// context, and an agent that sees a finding starts fixing it. Hook-only —
 	// `loupe check` typed by hand is someone asking.
-	if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
+	//
+	// Read from the Claude Code project, not the run's root: in a monorepo package
+	// the two differ, and `status` must land where the hook does.
+	const projectDir = claudeProjectDir(args.flags.root);
+	if (isHook && hookOff(projectDir)) return EXIT.OK;
 
 	// The project, not the directory you happen to be standing in: the hook roots
 	// at CLAUDE_PROJECT_DIR, and a typed command rooting at the cwd gave the same
@@ -670,7 +675,7 @@ async function main(): Promise<number> {
 		// One conclusion, asked once. `blockingAllowed` answers "do the severities
 		// permit blocking", which is not "will this gate stop a turn" — a silenced hook
 		// stops nothing.
-		const off = hookOff(root);
+		const off = hookOff(projectDir);
 		const gateBlocks = blockingAllowed && !off;
 		const src =
 			config.source.kind === 'file'
