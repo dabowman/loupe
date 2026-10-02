@@ -714,130 +714,136 @@ await check("--judge refuses a token set only the project's own definitions fill
 
 // Offline: the stub answers by what each question offers, so the check is on
 // what gets asked, what gets written, and what `fix --judge` does with it.
-await check('fix --judge rewrites what it settled, suppresses what it kept, and leaves the rest', async () => {
-	const root = scratch('dsh-judge-fix-');
-	try {
-		writeAll(root, {
-			'loupe.config.json': CONFIG,
-			[DS_TOKENS]: JUDGE_TOKENS,
-			'styles/card.css': [
-				'.wf-card {',
-				'\tpadding: 10px 12px;',
-				'\tbackground: #f0c;',
-				'\tbox-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);',
-				'\tborder-radius: 3px;',
-				'}',
-				'.wf-row { background: #f0c; border-radius: 3px; }',
-			].join('\n'),
-			'src/A.jsx': "export const A = () => <div style={{ background: '#f0c' }} />;",
-		});
-		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		const result = await analyze(config, { scope: null });
-		assert(result.tokens, 'analyze did not hand back its token set');
-		const asked: { instructions: string; criteria: Record<string, string> }[] = [];
-		const stub = (async (_url: string, init: { body: string }) => {
-			const questions = JSON.parse(init.body).questions as Record<
-				string,
-				{ instructions: string; criteria: Record<string, string> }
-			>;
-			const answers = Object.fromEntries(
-				Object.entries(questions).map(([k, q]) => {
-					asked.push(q);
-					const offers = Object.keys(q.criteria);
-					// Under the floor, and applied anyway: in-scale spacing only snaps.
-					const pick = offers.includes('--wpds-dimension-padding-sm')
-						? { choice: '--wpds-dimension-padding-sm', confidence: 0.3 }
-						: offers.includes('--wpds-border-radius-md')
-							? { choice: '--wpds-border-radius-md', confidence: 0.3 }
-							: { choice: 'keep', confidence: 0.7 };
-					return [k, pick];
-				}),
+await check(
+	'fix --judge rewrites what it settled, suppresses what has no token at all, and leaves the rest',
+	async () => {
+		const root = scratch('dsh-judge-fix-');
+		try {
+			writeAll(root, {
+				'loupe.config.json': CONFIG,
+				[DS_TOKENS]: JUDGE_TOKENS,
+				'styles/card.css': [
+					'.wf-card {',
+					'\tpadding: 10px 12px;',
+					'\tbackground: #f0c;',
+					'\tbox-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);',
+					'\tborder-radius: 3px;',
+					'}',
+					'.wf-row { background: #f0c; border-radius: 3px; }',
+				].join('\n'),
+				'src/A.jsx': "export const A = () => <div style={{ background: '#f0c' }} />;",
+			});
+			const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+			const result = await analyze(config, { scope: null });
+			assert(result.tokens, 'analyze did not hand back its token set');
+			const asked: { instructions: string; criteria: Record<string, string> }[] = [];
+			const stub = (async (_url: string, init: { body: string }) => {
+				const questions = JSON.parse(init.body).questions as Record<
+					string,
+					{ instructions: string; criteria: Record<string, string> }
+				>;
+				const answers = Object.fromEntries(
+					Object.entries(questions).map(([k, q]) => {
+						asked.push(q);
+						const offers = Object.keys(q.criteria);
+						// Under the floor, and applied anyway: in-scale spacing only snaps.
+						const pick = offers.includes('--wpds-dimension-padding-sm')
+							? { choice: '--wpds-dimension-padding-sm', confidence: 0.3 }
+							: offers.includes('--wpds-border-radius-md')
+								? { choice: '--wpds-border-radius-md', confidence: 0.3 }
+								: { choice: 'keep', confidence: 0.7 };
+						return [k, pick];
+					}),
+				);
+				return new Response(JSON.stringify({ answers }));
+			}) as unknown as typeof fetch;
+			const about = new Map([['--wpds-color-background-surface-neutral', 'Surfaces with normal emphasis.']]);
+			const written = await judgeValues(root, result.findings, result.tokens, 'key', about, stub);
+
+			// 10px, the card's pink, both radii, the row's pink and the inline pink:
+			// 12px was exact and box-shadow has no family, so neither is a question.
+			assert(asked.length === 6, `asked ${asked.length} questions, expected 6`);
+			// 10px of padding sits inside the scale, so it can only snap.
+			const offersKeep = (q: { criteria: Record<string, string> }): boolean => 'keep' in q.criteria;
+			const tenAsk = asked.find((q) => '--wpds-dimension-padding-sm' in q.criteria);
+			assert(tenAsk && !offersKeep(tenAsk), 'in-scale padding was offered keep');
+			assert(
+				asked.filter((q) => q !== tenAsk).every(offersKeep),
+				'a question off the spacing scale offered no way to keep the value',
 			);
-			return new Response(JSON.stringify({ answers }));
-		}) as unknown as typeof fetch;
-		const about = new Map([['--wpds-color-background-surface-neutral', 'Surfaces with normal emphasis.']]);
-		const written = await judgeValues(root, result.findings, result.tokens, 'key', about, stub);
+			const pinkAsk = asked.find((q) => '--wpds-color-background-surface-neutral' in q.criteria);
+			assert(
+				pinkAsk?.criteria['--wpds-color-background-surface-neutral']?.includes('Surfaces with normal emphasis.'),
+				'the description was not sent',
+			);
+			assert(written === 5, `wrote ${written}, expected 5 (padding, three pinks, box-shadow)`);
 
-		// 10px, the card's pink, both radii, the row's pink and the inline pink:
-		// 12px was exact and box-shadow has no family, so neither is a question.
-		assert(asked.length === 6, `asked ${asked.length} questions, expected 6`);
-		// 10px of padding sits inside the scale, so it can only snap.
-		const offersKeep = (q: { criteria: Record<string, string> }): boolean => 'keep' in q.criteria;
-		const tenAsk = asked.find((q) => '--wpds-dimension-padding-sm' in q.criteria);
-		assert(tenAsk && !offersKeep(tenAsk), 'in-scale padding was offered keep');
-		assert(
-			asked.filter((q) => q !== tenAsk).every(offersKeep),
-			'a question off the spacing scale offered no way to keep the value',
-		);
-		const pinkAsk = asked.find((q) => '--wpds-color-background-surface-neutral' in q.criteria);
-		assert(
-			pinkAsk?.criteria['--wpds-color-background-surface-neutral']?.includes('Surfaces with normal emphasis.'),
-			'the description was not sent',
-		);
-		assert(written === 5, `wrote ${written}, expected 5 (padding, three pinks, box-shadow)`);
+			const at = (file: string, line: number, prop: string) => {
+				const f = result.findings.find((x) => x.file === file && x.line === line && x.decl?.prop === prop);
+				assert(f, `no finding for ${prop} at ${file}:${line}`);
+				return f;
+			};
+			const padding = at('styles/card.css', 2, 'padding');
+			assert(
+				padding.message ===
+					'padding: 10px 12px → --wpds-dimension-padding-sm --wpds-dimension-padding-md (judged 0.30)',
+				padding.message,
+			);
+			// The message names the tokens; the answer stays the CSS `fix` writes.
+			assert(
+				padding.judged?.answer === 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md)',
+				`judged answer is not the replacement value: ${padding.judged?.answer}`,
+			);
+			assert(
+				padding.judged?.spans.every((s) => padding.message.includes(s)),
+				'a span is not in the message',
+			);
+			assert(
+				at('styles/card.css', 3, 'background').message === 'background: #f0c → deliberate, no token fits (judged 0.70)',
+				'pink not kept',
+			);
+			assert(
+				at('styles/card.css', 4, 'box-shadow').message.endsWith('→ no box-shadow token in the design system'),
+				'box-shadow',
+			);
+			assert(at('styles/card.css', 5, 'border-radius').judged === undefined, 'a sub-floor pick was recorded');
+			// The channel marker stays last.
+			const inline = at('src/A.jsx', 1, 'background');
+			assert(inline.message === 'background: #f0c → deliberate, no token fits (judged 0.70) (inline)', inline.message);
 
-		const at = (file: string, line: number, prop: string) => {
-			const f = result.findings.find((x) => x.file === file && x.line === line && x.decl?.prop === prop);
-			assert(f, `no finding for ${prop} at ${file}:${line}`);
-			return f;
-		};
-		const padding = at('styles/card.css', 2, 'padding');
-		assert(
-			padding.message === 'padding: 10px 12px → --wpds-dimension-padding-sm --wpds-dimension-padding-md (judged 0.30)',
-			padding.message,
-		);
-		// The message names the tokens; the answer stays the CSS `fix` writes.
-		assert(
-			padding.judged?.answer === 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md)',
-			`judged answer is not the replacement value: ${padding.judged?.answer}`,
-		);
-		assert(
-			padding.judged?.spans.every((s) => padding.message.includes(s)),
-			'a span is not in the message',
-		);
-		assert(
-			at('styles/card.css', 3, 'background').message === 'background: #f0c → deliberate, no token fits (judged 0.70)',
-			'pink not kept',
-		);
-		assert(
-			at('styles/card.css', 4, 'box-shadow').message.endsWith('→ no box-shadow token in the design system'),
-			'box-shadow',
-		);
-		assert(at('styles/card.css', 5, 'border-radius').judged === undefined, 'a sub-floor pick was recorded');
-		// The channel marker stays last.
-		const inline = at('src/A.jsx', 1, 'background');
-		assert(inline.message === 'background: #f0c → deliberate, no token fits (judged 0.70) (inline)', inline.message);
+			const fixes = applyTokenFixes(root, result.findings);
+			assert(fixes.applied.length === 1 && fixes.applied[0]?.line === 2, `fixes: ${JSON.stringify(fixes.applied)}`);
+			const kept = applyKeeps(root, result.findings, config.suppression.keyword);
+			// Only box-shadow, which has no token at all. The pinks were judged
+			// deliberate, and what they are is a reason only a reader can write.
+			assert(kept.applied.map((k) => k.line).join() === '4', `kept: ${JSON.stringify(kept.applied)}`);
+			const why = Object.fromEntries(kept.skipped.map((k) => [`${k.file}:${k.line}`, k.why]));
+			for (const at of ['styles/card.css:3', 'styles/card.css:7', 'src/A.jsx:1'])
+				assert(why[at]?.startsWith('judged deliberate'), `${at}: ${JSON.stringify(why)}`);
 
-		const fixes = applyTokenFixes(root, result.findings);
-		assert(fixes.applied.length === 1 && fixes.applied[0]?.line === 2, `fixes: ${JSON.stringify(fixes.applied)}`);
-		const kept = applyKeeps(root, result.findings, config.suppression.keyword);
-		assert(kept.applied.map((k) => k.line).join() === '3,4', `kept: ${JSON.stringify(kept.applied)}`);
-		const why = Object.fromEntries(kept.skipped.map((k) => [`${k.file}:${k.line}`, k.why]));
-		// A directive mutes a whole line, and the row's radius was never settled.
-		assert(why['styles/card.css:7']?.includes('shares its line'), JSON.stringify(why));
-		assert(why['src/A.jsx:1'] === 'not a stylesheet', JSON.stringify(why));
-
-		const css = readFileSync(join(root, 'styles/card.css'), 'utf8');
-		assert(css.includes('\tpadding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);'), css);
-		assert(
-			css.includes(
-				`\t/* ${config.suppression.keyword} tokens/hardcoded-value -- deliberate, no token fits (judged 0.70) */\n\tbackground: #f0c;`,
-			),
-			css,
-		);
-		// The directives parse and mute exactly what they were written for.
-		const after = await analyze(config, { scope: ['styles/card.css'] });
-		const left = after.findings.map((f) => `${f.rule}:${f.line}`);
-		assert(!left.includes('suppression/malformed'), `a directive was malformed: ${left.join(', ')}`);
-		const hard = after.findings
-			.filter((f) => f.rule === 'tokens/hardcoded-value')
-			.map((f) => f.decl?.prop)
-			.sort();
-		assert(hard.join() === 'background,border-radius,border-radius', `left: ${hard.join()}`);
-	} finally {
-		cleanup(root);
-	}
-});
+			const css = readFileSync(join(root, 'styles/card.css'), 'utf8');
+			assert(css.includes('\tpadding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);'), css);
+			assert(
+				css.includes(
+					`\t/* ${config.suppression.keyword} tokens/hardcoded-value -- no box-shadow token in the design system */\n\tbox-shadow:`,
+				),
+				css,
+			);
+			assert(!css.includes('deliberate, no token fits'), `a judgement was written as a reason:\n${css}`);
+			// The directives parse and mute exactly what they were written for.
+			const after = await analyze(config, { scope: ['styles/card.css'] });
+			const left = after.findings.map((f) => `${f.rule}:${f.line}`);
+			assert(!left.includes('suppression/malformed'), `a directive was malformed: ${left.join(', ')}`);
+			const hard = after.findings
+				.filter((f) => f.rule === 'tokens/hardcoded-value')
+				.map((f) => f.decl?.prop)
+				.sort();
+			assert(hard.join() === 'background,background,border-radius,border-radius', `left: ${hard.join()}`);
+		} finally {
+			cleanup(root);
+		}
+	},
+);
 
 // A run with one value to judge and everything else exact wrote nothing at all
 // when the one request failed. `fetch` is replaced before the CLI loads, so the
@@ -1075,7 +1081,7 @@ await check(
 						prop: 'background',
 						value: '#f0c',
 						tokens: [],
-						judged: { answer: 'keep', confidence: 0.9, spans: ['deliberate, no token fits'] },
+						judged: { answer: 'keep', confidence: 1, spans: ['no background token in the design system'] },
 					},
 				],
 			});
@@ -1099,7 +1105,7 @@ await check(
 			const crlf = readFileSync(join(root, 'styles/crlf.css'), 'utf8');
 			assert(
 				crlf ===
-					'.wf-b {\r\n\t/* ds-allow tokens/hardcoded-value -- deliberate, no token fits */\r\n\tbackground: #f0c;\r\n}\r\n',
+					'.wf-b {\r\n\t/* ds-allow tokens/hardcoded-value -- no background token in the design system */\r\n\tbackground: #f0c;\r\n}\r\n',
 				JSON.stringify(crlf),
 			);
 		} finally {
@@ -1107,6 +1113,44 @@ await check(
 		}
 	},
 );
+
+// The skill tells an agent to suppress a deliberate value with what it is, not
+// with the judgement, and `fix --judge` used to write the judgement. A
+// directive mutes its whole line, so a tokenless value beside one left for
+// review is left too.
+await check('a value judged deliberate is left for review, and so is anything on its line', () => {
+	const root = scratch('dsh-keeps-deliberate-');
+	try {
+		writeAll(root, {
+			'styles/a.css': '.wf-a {\n\tbackground: #f0c;\n\tbox-shadow: 0 1px 2px #000; color: #0cf;\n}\n',
+		});
+		const keep = (line: number, prop: string, value: string, spans: string[]): FixCandidate => ({
+			rule: 'tokens/hardcoded-value',
+			file: 'styles/a.css',
+			line,
+			suggest: [{ prop, value, tokens: [], judged: { answer: KEEP, confidence: 0.8, spans } }],
+		});
+		const { applied, skipped } = applyKeeps(
+			root,
+			[
+				keep(2, 'background', '#f0c', ['deliberate, no token fits', '(judged 0.80)']),
+				keep(3, 'box-shadow', '0 1px 2px #000', ['no box-shadow token in the design system']),
+				keep(3, 'color', '#0cf', ['deliberate, no token fits', '(judged 0.80)']),
+			],
+			'ds-allow',
+		);
+		assert(!applied.length, `suppressed: ${JSON.stringify(applied)}`);
+		const why = skipped.map((k) => `${k.line}:${k.prop}:${k.why.split(' ')[0]}`).join();
+		assert(why === '2:background:judged,3:box-shadow:shares,3:color:judged', why);
+		assert(
+			readFileSync(join(root, 'styles/a.css'), 'utf8') ===
+				'.wf-a {\n\tbackground: #f0c;\n\tbox-shadow: 0 1px 2px #000; color: #0cf;\n}\n',
+			'a directive was written',
+		);
+	} finally {
+		cleanup(root);
+	}
+});
 
 // Moving an import is not a substitution, and the licence for one — `dropIn` on
 // a registry entry — is carried by nothing the shipped registry holds. `HStack`

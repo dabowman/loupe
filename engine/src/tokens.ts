@@ -307,6 +307,15 @@ const isLiteralPart = (p: string): boolean =>
 /** What `check --judge` answers for a value that should stay as written. */
 export const KEEP = 'keep';
 
+/**
+ * What a `keep` the model chose says. It is a judgement, not a reason: what the
+ * value actually is (a scrim, a pill, a brand colour) is for a reader to write,
+ * so `fix --judge` leaves these unsuppressed. A `keep` written without a model,
+ * for a property the design system has no token for at all, states a fact and
+ * is suppressed with it.
+ */
+export const DELIBERATE = 'deliberate, no token fits';
+
 /** One literal in a flagged value: settled by a single exact token, or put to a judgement. */
 export type Slot = { at: number; part: string } & ({ token: string } | { candidates: Candidates });
 

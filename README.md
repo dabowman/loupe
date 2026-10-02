@@ -317,16 +317,18 @@ Then apply it:
 
 ```bash
 loupe fix --judge --dry-run   # review what it would write
-loupe fix --judge             # rewrite the settled values, suppress the kept ones
+loupe fix --judge             # rewrite the settled values, suppress the tokenless ones
 ```
 
 Only picks at 0.5 confidence or above are applied. The exception is spacing
 (padding, gap, `top`/`left`/…) that falls between two steps of the scale:
 it always snaps to one of them, and is never judged deliberate. Settled values
-are rewritten in place. Kept ones get a `wpds-allow` directive naming the rule
-they were reported under, with a reason that says a model made the call.
-Everything else is left for review. On an un-remediated WPDS plugin that
-rewrote 156 declarations and wrote 20 suppressions, taking
+are rewritten in place. A value whose property has no token in the design
+system at all gets a `wpds-allow` directive naming the rule it was reported
+under, with that as its reason. One the model judged deliberate is left for
+review, since what it actually is — a scrim, a pill — is a reason only a reader
+can write. Everything else is left for review too. On an un-remediated WPDS
+plugin, before deliberate values were left for review, that rewrote 156 declarations and wrote 20 suppressions, taking
 `tokens/hardcoded-value` from 183 findings to 70 and `typography/untokenized`
 from 43 to 12. See `engine/README.md` for how it scored.
 

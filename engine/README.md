@@ -545,17 +545,23 @@ the replacement text — `var()` and all, since that is what `fix --judge`
 writes — or `keep`. The message names the tokens without it.
 
 `fix --judge` applies a replacement through the same substitution as `fix`, in
-whichever channel the declaration came from. A kept value gets a directive on
-its own line above the declaration, with the judgement as its reason:
+whichever channel the declaration came from. A value kept because the design
+system has no token for its property at all gets a directive on its own line
+above the declaration, with that as its reason:
 
 ```css
-	/* wpds-allow tokens/hardcoded-value -- deliberate, no token fits (judged 0.98) */
-	background: rgba(0, 0, 0, 0.55);
+	/* wpds-allow tokens/hardcoded-value -- no box-shadow token in the design system */
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 ```
 
+A value the model judged deliberate is not suppressed. `deliberate, no token
+fits` is the judgement, not a reason: what the value is (a scrim, a pill, a
+brand colour) is for a reader to write, so `fix --judge` reports it as skipped
+and the finding stays.
+
 A directive mutes its whole next line. So one is written only where every
-flagged value on that line was kept, and otherwise the value is reported as
-skipped. It names the rules the kept declarations on that line were reported
+flagged value on that line was kept without a judgement, and otherwise the
+value is reported as skipped. It names the rules the kept declarations on that line were reported
 under, which on a minified stylesheet is not always one. Suppressions are
 stylesheets only: a substitution replaces bytes already there, while a directive
 adds a line, and a comment line above a JSX element is rendered text rather than
@@ -591,8 +597,9 @@ measurements shaped the design:
   buttons. Offering the sizes had the model put `size-5xs` on `top: 4px`, and
   took the score from 97% to 95%.
 
-Applied to that plugin, `fix --judge` rewrites 156 declarations and writes 20
-suppressions, taking `tokens/hardcoded-value` from 183 findings to 70 and
+Applied to that plugin, `fix --judge` rewrote 156 declarations and wrote 20
+suppressions (measured while a value judged deliberate was still suppressed
+too; those are now left for review), taking `tokens/hardcoded-value` from 183 findings to 70 and
 `typography/untokenized` from 43 to 12, with no other finding moved. What is
 left is mostly the coin-flips — `10px` between 8 and 12, `3px` between 2 and
 4 — and the unitless line heights nobody is asked about.

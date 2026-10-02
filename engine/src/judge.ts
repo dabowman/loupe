@@ -34,7 +34,7 @@ import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
 import { boundMessage } from './text.ts';
-import { KEEP, declarationMessage, planValue } from './tokens.ts';
+import { DELIBERATE, KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
 
@@ -442,9 +442,8 @@ export async function judgeValues(
 		// the rest would exempt the kept literal. Left for review.
 		if (kept && got.some((a) => a?.choice !== KEEP)) continue;
 		if (kept) {
-			const why = 'deliberate, no token fits';
 			const tail = judgedTail(kept.confidence);
-			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [DELIBERATE, tail] };
 		} else {
 			const out = [...parts];
 			const named = [...parts];
