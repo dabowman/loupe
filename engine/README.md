@@ -199,10 +199,23 @@ error-severity findings, so CI behaviour does not depend on this.
 
   "rules": {
     "css/dead-class": "error",
-    "layout/margin-on-child": "off"
+    "layout/margin-on-child": "off",
+    "system/raw-element": {
+      "severity": "off",
+      "reason": "Stack/Text require bundling @wordpress/ui; this plugin ships zero runtime deps by design"
+    }
   }
 }
 ```
+
+A rule takes a bare severity, or `{ "severity", "reason" }` to say why; any
+other key is a config error. Turning a rule off in config is a suppression of
+the whole rule, everywhere, so `loupe suppressions` lists it beside the inline
+directives — `loupe.config.json  system/raw-element  (rule off)  <reason>`, or
+`no reason given` — and `loupe status` prints the reason beside the rule. A
+preset's setting is replaced whole by the project's, so a preset's reason never
+outlives the setting it explained, and one a preset turned off is listed under
+`preset <name>` rather than your config file.
 
 Defaults are `DEFAULTS` in `src/config.ts`; `presets/generic.json` adds the
 ignore globs and CSS-in-JS packages every shipped preset inherits. The
@@ -774,7 +787,7 @@ no reader.
 loupe check --all --format json     # stable, versioned schema
 loupe check --all --format sarif    # GitHub code scanning
 loupe check --changed --max-findings 20
-loupe suppressions                  # audit every active directive
+loupe suppressions                  # audit every active directive, and every rule off in config
 loupe suppressions --stale          # only the ones muting nothing; exit 1 if any
 ```
 

@@ -46,7 +46,7 @@ import {
 	resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
-import type { AnalyzeResult, BaselinedResult, Config, Directive } from './types.ts';
+import type { AnalyzeResult, BaselinedResult, Config, ConfigSuppression, Directive } from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
@@ -225,7 +225,8 @@ Commands:
   fix                   Apply the fixes the engine can make without judgement;
                         with --judge, also the ones TypeSafe settles
   baseline              Record current findings as the accepted backlog
-  suppressions          List every active suppression directive
+  suppressions          List every active suppression directive, and every
+                        rule turned off in config, with its reason
   explain <rule>        Print a rule's guidance
   presets               List bundled presets
   version               Print the version, whether it runs from source or the bundle, and where
@@ -763,7 +764,10 @@ async function main(): Promise<number> {
 							? yellow('advisory (would block if enabled)')
 							: yellow('advisory')
 				: dim(`off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`);
-			lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
+			// The reason a config gave, beside what it set — for `off` above all, where
+			// it is the only record of why a rule is not running.
+			const reason = config.rules[id].reason;
+			lines.push(`  ${magenta(id.padEnd(32))} ${verdict}${reason ? dim(` \u2014 ${reason}`) : ''}`);
 		}
 		const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
 		lines.push(
@@ -937,26 +941,55 @@ async function main(): Promise<number> {
 			d.stale ? yellow(`  [stale: ${d.stale.map((id) => `${id} \u2014 ${why(id)}`).join('; ')}]`) : '';
 		const tail = (d: Directive): string =>
 			`${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ''}${staleNote(d)}`;
+		// A rule turned off in config is the broadest suppression there is, so it is
+		// listed, first, with its reason or the lack of one. Not under `--stale`:
+		// nothing was offered to it to mute, so there is nothing to call stale.
+		const offs: ConfigSuppression[] = staleOnly
+			? []
+			: RULE_IDS.flatMap((id) => {
+					const from = config.ruleFrom[id];
+					return from !== undefined && config.rules[id].severity === 'off'
+						? [
+								{
+									scope: 'config' as const,
+									file: from,
+									rules: [id] as [typeof id],
+									reason: config.rules[id].reason ?? null,
+								},
+							]
+						: [];
+				});
+		const offTail = (o: ConfigSuppression): string => `${dim('(rule off)')}  ${o.reason ?? yellow('no reason given')}`;
+		const listed: (ConfigSuppression | Directive)[] = [...offs, ...directives];
 		const exit = staleOnly && directives.length ? EXIT.BLOCKED : EXIT.OK;
-		if (args.flags.format === 'json') process.stdout.write(`${JSON.stringify(directives, null, 2)}\n`);
+		if (args.flags.format === 'json') process.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
 		else if (!by)
-			for (const d of directives)
-				process.stdout.write(`${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(','))}  ${tail(d)}\n`);
+			for (const d of listed)
+				process.stdout.write(
+					'scope' in d
+						? `${dim(d.file)}  ${magenta(d.rules[0])}  ${offTail(d)}\n`
+						: `${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(','))}  ${tail(d)}\n`,
+				);
 		else {
-			// By rule, a directive naming two rules is listed under each.
-			const groups = new Map<string, Directive[]>();
-			for (const d of directives)
+			// By rule, a directive naming two rules is listed under each. By file, a
+			// rule turned off in config is listed under the file that turned it off.
+			const groups = new Map<string, (ConfigSuppression | Directive)[]>();
+			for (const d of listed)
 				for (const key of by === 'rule' ? d.rules : [d.file]) groups.set(key, [...(groups.get(key) ?? []), d]);
 			const sorted = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
 			const out: string[] = [];
 			for (const [key, group] of sorted) {
 				out.push(`${by === 'rule' ? magenta(key) : bold(key)} ${dim(`(${group.length})`)}`);
-				const width = Math.max(...group.map((d) => String(d.line).length));
+				const width = Math.max(...group.map((d) => ('scope' in d ? 0 : String(d.line).length)));
 				for (const d of group)
 					out.push(
-						by === 'rule'
-							? `  ${dim(`${d.file}:${d.line}`)}  ${tail(d)}`
-							: `  ${dim(String(d.line).padStart(width))}  ${magenta(d.rules.join(','))}  ${tail(d)}`,
+						'scope' in d
+							? by === 'rule'
+								? `  ${dim(d.file)}  ${offTail(d)}`
+								: `  ${magenta(d.rules[0])}  ${offTail(d)}`
+							: by === 'rule'
+								? `  ${dim(`${d.file}:${d.line}`)}  ${tail(d)}`
+								: `  ${dim(String(d.line).padStart(width))}  ${magenta(d.rules.join(','))}  ${tail(d)}`,
 					);
 				out.push('');
 			}

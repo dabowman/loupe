@@ -334,7 +334,25 @@ A good reason names the constraint that makes the finding wrong here. "Legacy
 code", "intentional", "matches existing style" are not reasons — the first two
 describe nothing and the third is the drift restating itself.
 
-Audit them periodically; constraints expire:
+When the reason is a property of the project rather than of a line — the only
+conformant target needs a library the project deliberately does not ship — turn
+the rule off in config instead of writing the same directive thirty times, and
+record the reason there, once:
+
+```json
+"rules": {
+  "system/raw-element": {
+    "severity": "off",
+    "reason": "Stack/Text require bundling @wordpress/ui; this plugin ships zero runtime deps by design"
+  }
+}
+```
+
+The same bar applies: a config-scope off silences every finding of the rule,
+everywhere, so it needs the reason more than a directive does, not less.
+
+Audit them periodically; constraints expire. This lists the inline directives
+and every rule turned off in config, with its reason or `no reason given`:
 
 ```bash
 loupe suppressions

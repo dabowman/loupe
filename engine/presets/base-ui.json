@@ -11,7 +11,13 @@
     "substitutionProps": ["render"]
   },
   "rules": {
-    "system/override": "off",
-    "system/inline-style": "off"
+    "system/override": {
+      "severity": "off",
+      "reason": "Base UI is headless and ships no CSS: styling its parts from outside is the intended API, not an override"
+    },
+    "system/inline-style": {
+      "severity": "off",
+      "reason": "Base UI is headless and ships no CSS: a style on its parts is how it is styled, not a bypass"
+    }
   }
 }

@@ -659,7 +659,7 @@ export interface MergedConfig {
 	namespaces: { project: string[]; external: string[]; neverDead: string[] };
 	sources: SourceGlobs;
 	suppression: SuppressionConfig;
-	rules: Record<string, Severity>;
+	rules: Record<string, AuthoredRuleSetting>;
 	patterns: string | unknown[] | null;
 	componentRegistry: string | unknown[] | null;
 	baseline: string;
@@ -678,7 +678,7 @@ export interface AuthoredConfig {
 	namespaces?: Partial<MergedConfig['namespaces']>;
 	sources?: Partial<SourceGlobs>;
 	suppression?: Partial<SuppressionConfig>;
-	rules?: Record<string, Severity>;
+	rules?: Record<string, AuthoredRuleSetting>;
 	patterns?: string | unknown[] | null;
 	componentRegistry?: string | unknown[] | null;
 	baseline?: string;
@@ -706,6 +706,33 @@ export interface DesignSystem {
 
 export interface RuleSetting {
 	severity: Severity;
+	/**
+	 * Why the config set it, when it says. Turning a rule off in config is a
+	 * suppression of the whole rule, everywhere, so it can carry a reason the way
+	 * a directive does, and `loupe suppressions` lists it beside them.
+	 */
+	reason?: string;
+}
+
+/**
+ * A rule setting as written: a bare severity, or the object form that can also
+ * say why. The `[severity, options]` array form is gone, and fails with a
+ * message naming the fix.
+ */
+export type AuthoredRuleSetting = Severity | { severity: Severity; reason?: string };
+
+/**
+ * A rule turned off in config, listed by `loupe suppressions` beside the inline
+ * directives. Shaped like a {@link Directive} where the two overlap, so a
+ * consumer reading `file`, `rules` and `reason` reads either; there is no line.
+ */
+export interface ConfigSuppression {
+	scope: 'config';
+	/** The config file that turned it off, relative to the root, or `preset <name>`. */
+	file: string;
+	rules: [RuleId];
+	/** Null when the setting gives none. */
+	reason: string | null;
 }
 
 /** One design system, as a directory: what it is, and what describes it. */
@@ -772,6 +799,11 @@ export interface Config {
 	baselinePath: string;
 	hook: HookConfig;
 	rules: Record<RuleId, RuleSetting>;
+	/**
+	 * Where each rule setting the config wrote came from: a path relative to the
+	 * root, or `preset <name>`. A rule left at its default is absent.
+	 */
+	ruleFrom: Partial<Record<RuleId, string>>;
 	enabled: Record<RuleId, boolean>;
 	severityOf: (id: RuleId) => Severity;
 	isProject: (cls: string) => boolean;

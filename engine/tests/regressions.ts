@@ -1667,6 +1667,136 @@ await check('loupe suppressions --group-by lists a two-rule directive under each
 	}
 });
 
+// A rule turned off in config silences every finding of it, everywhere, and
+// recorded no reason and appeared nowhere in `loupe suppressions` — the narrow
+// escape hatch demanded a reason and the broad one demanded nothing (#19).
+const RAW_OFF_REASON = 'Stack/Text require bundling @wordpress/ui; this plugin ships zero runtime deps';
+const offConfig = (rules: Record<string, unknown>): string =>
+	JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, rules });
+
+await check('a rule setting can carry a reason, and anything else in it is a config error', async () => {
+	const load = async (rules: Record<string, unknown>) => {
+		const root = tmpRepo({ 'loupe.config.json': offConfig(rules) });
+		try {
+			return await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		} finally {
+			cleanup(root);
+		}
+	};
+	const refused = (rules: Record<string, unknown>): Promise<string> =>
+		load(rules).then(
+			() => 'accepted',
+			(e: unknown) => (e instanceof Error ? e.message : String(e)),
+		);
+
+	const config = await load({
+		'system/raw-element': { severity: 'off', reason: RAW_OFF_REASON },
+		'layout/in-css': { severity: 'warn', reason: 'harmless on a rule that runs' },
+		'layout/negative-margin': { severity: 'off' },
+	});
+	assert(config.rules['system/raw-element'].severity === 'off', 'the object form lost its severity');
+	assert(!config.enabled['system/raw-element'], 'off in the object form still runs the rule');
+	assert(config.rules['system/raw-element'].reason === RAW_OFF_REASON, 'the reason was dropped');
+	assert(config.rules['layout/in-css'].reason !== undefined, 'a reason on a running rule was dropped');
+	assert(config.rules['layout/negative-margin'].reason === undefined, 'a reason appeared from nowhere');
+	assert(config.ruleFrom['system/raw-element'] === 'loupe.config.json', `${config.ruleFrom['system/raw-element']}`);
+
+	const typo = await refused({ 'system/raw-element': { severity: 'off', reasn: 'x' } });
+	assert(/unknown key.*reasn.*severity and reason/.test(typo), `a misspelled key was not refused: ${typo}`);
+	const noSeverity = await refused({ 'system/raw-element': { reason: 'x' } });
+	assert(/bad severity for system\/raw-element/.test(noSeverity), `got: ${noSeverity}`);
+	const notText = await refused({ 'system/raw-element': { severity: 'off', reason: 3 } });
+	assert(/reason for system\/raw-element must be a non-empty string/.test(notText), `got: ${notText}`);
+	const array = await refused({ 'system/raw-element': ['off', { reason: 'x' }] });
+	assert(/rule options are no longer supported/.test(array), `the array form is accepted again: ${array}`);
+});
+
+// Presets merge `rules`. Merged field by field, a preset's reason for turning a
+// rule off would survive the project turning it back on — a why for a setting
+// that is no longer there.
+await check('a rule setting from a preset is replaced whole, reason and all', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'base-ui', rules: { 'system/override': { severity: 'warn' } } }),
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const override = config.rules['system/override'];
+		assert(override.severity === 'warn' && override.reason === undefined, `merged: ${JSON.stringify(override)}`);
+		assert(config.ruleFrom['system/override'] === 'loupe.config.json', `${config.ruleFrom['system/override']}`);
+		// The one the project left alone is still the preset's, and says so.
+		assert(config.rules['system/inline-style'].reason, 'the preset gave system/inline-style a reason');
+		assert(config.ruleFrom['system/inline-style'] === 'preset base-ui', `${config.ruleFrom['system/inline-style']}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('loupe suppressions lists a rule turned off in config, with its reason or the lack of one', () => {
+	const root = tmpRepo({
+		'loupe.config.json': offConfig({
+			'system/raw-element': { severity: 'off', reason: RAW_OFF_REASON },
+			'layout/negative-margin': 'off',
+			'layout/in-css': { severity: 'warn', reason: 'not a suppression' },
+		}),
+		'styles/a.css': '/* wpds-allow tokens/hardcoded-value -- signed off */\n.acme-a { color: #826200; }\n',
+	});
+	try {
+		const cli = (...extra: string[]): string => runCli(['suppressions', '--root', root, ...extra]).stdout;
+		const flat = cli();
+		const line = (re: RegExp): boolean => flat.split('\n').some((l) => re.test(l));
+		assert(
+			line(/^loupe\.config\.json {2}system\/raw-element {2}\(rule off\) {2}Stack\/Text require bundling/),
+			`the rule off in config is missing, or lost its reason:\n${flat}`,
+		);
+		assert(
+			line(/^loupe\.config\.json {2}layout\/negative-margin {2}\(rule off\) {2}no reason given$/),
+			`an off with no reason must still be listed, and say so:\n${flat}`,
+		);
+		assert(!/layout\/in-css/.test(flat), `a rule that still runs is not a suppression:\n${flat}`);
+		assert(line(/^styles\/a\.css:1 {2}tokens\/hardcoded-value/), `the inline directive went missing:\n${flat}`);
+
+		const byRule = cli('--group-by', 'rule');
+		assert(
+			/^system\/raw-element \(1\)\n {2}loupe\.config\.json {2}\(rule off\) {2}Stack/m.test(byRule),
+			`--group-by rule lost the config scope:\n${byRule}`,
+		);
+		const byFile = cli('--group-by', 'file');
+		assert(
+			/^loupe\.config\.json \(2\)$/m.test(byFile) && /^ {2}system\/raw-element {2}\(rule off\)/m.test(byFile),
+			`--group-by file does not group under the config file:\n${byFile}`,
+		);
+
+		const json = JSON.parse(cli('--format', 'json')) as { scope?: string; rules: string[]; reason: string | null }[];
+		const raw = json.find((d) => d.scope === 'config' && d.rules[0] === 'system/raw-element');
+		assert(raw?.reason === RAW_OFF_REASON, `json: ${JSON.stringify(json)}`);
+		assert(json.find((d) => d.rules[0] === 'layout/negative-margin')?.reason === null, 'json: no reason is null');
+
+		// Nothing was offered to a rule that does not run, so it is not stale.
+		assert(!/rule off/.test(cli('--stale')), 'a rule off in config was listed as stale');
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('loupe status gives the reason beside a rule the config set', () => {
+	const root = tmpRepo({
+		'loupe.config.json': offConfig({
+			'system/raw-element': { severity: 'off', reason: RAW_OFF_REASON },
+			'layout/in-css': { severity: 'warn', reason: 'advisory until the migration lands' },
+		}),
+	});
+	try {
+		const { stdout } = runCli(['status', '--root', root]);
+		assert(
+			/system\/raw-element +off \(disabled in config\) — Stack\/Text require bundling/.test(stdout),
+			`the reason for an off rule is missing:\n${stdout}`,
+		);
+		assert(/layout\/in-css +.* — advisory until the migration lands$/m.test(stdout), `got:\n${stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // A `--profile` that matches nothing selected nothing, applied no preset and
 // said nothing — so a one-character typo checked strictly *less* than the same
 // command with no flag at all, and reported clean either way. The sibling case

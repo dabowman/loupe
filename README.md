@@ -628,7 +628,9 @@ being skipped in silence — a clean run should mean *checked and clean*, never
 
 Rule id and reason are both mandatory; anything looser is its own finding. That
 inversion keeps the escape hatch available and legible. Audit with
-`loupe suppressions`; `loupe suppressions --stale` lists only the directives
+`loupe suppressions`, which also lists every rule turned off in config, with
+the reason its setting gives (`"<rule>": { "severity": "off", "reason": "..." }`)
+or `no reason given`; `loupe suppressions --stale` lists only the directives
 naming a rule that muted nothing on the run — the finding fixed, the rule off,
 or an id that is not a rule — and exits 1 if there are any, so CI can keep them
 from piling up.
