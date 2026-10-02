@@ -56,6 +56,8 @@ interface NamespaceDetection {
 	/** What the stylesheet budgets left unread, as sentences; empty when nothing was. */
 	notes: string[];
 	external: ExternalCandidate[];
+	/** Scoped packages the markup imports, by count: evidence a manifest may not carry. */
+	imports: Map<string, number>;
 }
 
 /**
@@ -93,6 +95,13 @@ export interface DetectedConfig {
 	 * only somebody who can read the enqueue code can tell the two apart.
 	 */
 	possibleExternal: ExternalCandidate[];
+	/**
+	 * When the preset is a weak guess, what the project shows that the markers
+	 * could not rank: imports no manifest declares, type packages, build
+	 * manifests. Detection surfaces it; whoever runs `init` decides. Empty when
+	 * the preset matched outright.
+	 */
+	presetEvidence: string[];
 	config: AuthoredConfig;
 }
 
@@ -356,6 +365,94 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 	return found;
 }
 
+/** A scoped package named by `import`, `import()`, `require()` or `export … from`. */
+const IMPORT_RE = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](@[\w.-]+\/[\w.-]+)/g;
+
+/**
+ * What a project shows about its design system that the preset markers could
+ * not rank.
+ *
+ * The case this exists for is `@wordpress/scripts`' externals: `@wordpress/*`
+ * imports are rewritten to `wp.*` globals at build time, so nothing lands in
+ * `dependencies` and no preset matches — while the source, the type packages
+ * and the build's asset manifests all say plainly what the project is built on.
+ * Deciding from these is a judgement this does not make; it only gathers them,
+ * cheaply, for whoever runs `init`.
+ *
+ * Which packages count is read off the presets — every package a preset
+ * detects or declares, and anything else in those scopes — so a new preset's
+ * evidence is surfaced with no change here.
+ */
+function presetEvidence(root: string, imports: ReadonlyMap<string, number>): string[] {
+	const marker = new Map<string, string>();
+	const scopes = new Set<string>();
+	for (const name of presetNames()) {
+		const p = preset(name);
+		for (const dep of [...(p.detect?.dependencies ?? []), ...(p.designSystem?.packages ?? [])]) {
+			if (p.detect?.dependencies?.includes(dep) && !marker.has(dep)) marker.set(dep, name);
+			if (dep.startsWith('@')) scopes.add(dep.slice(0, dep.indexOf('/') + 1));
+		}
+	}
+	const known = (pkg: string): boolean => marker.has(pkg) || [...scopes].some((s) => pkg.startsWith(s));
+	const named = (pkg: string): string => (marker.has(pkg) ? `${pkg} [a ${marker.get(pkg)} marker]` : pkg);
+	const out: string[] = [];
+
+	const imported = [...imports].filter(([pkg]) => known(pkg)).sort((a, b) => b[1] - a[1]);
+	if (imported.length)
+		out.push(
+			`source imports: ${imported
+				.slice(0, 5)
+				.map(([pkg, n]) => `${named(pkg)} \u00d7${n}`)
+				.join(', ')}${imported.length > 5 ? `, +${imported.length - 5} more` : ''}`,
+		);
+
+	// `@types/wordpress__components` types `@wordpress/components`: the project
+	// writes against the library even where the build supplies it at runtime.
+	for (const { rel } of manifests(root)) {
+		const pkg =
+			(readJson(join(root, rel, 'package.json')) as {
+				dependencies?: Record<string, string>;
+				devDependencies?: Record<string, string>;
+			} | null) ?? {};
+		const typed = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })
+			.map((dep) => /^@types\/([\w.-]+)__([\w.-]+)$/.exec(dep))
+			.filter((m): m is RegExpExecArray => m !== null && known(`@${m[1]}/${m[2]}`))
+			.map((m) => `${m[0]} \u2192 ${named(`@${m[1]}/${m[2]}`)}`);
+		if (typed.length) out.push(`${rel ? `${rel}/package.json` : 'package.json'}: ${typed.join(', ')}`);
+	}
+
+	// `@wordpress/scripts` writes the script handles a bundle needs beside it.
+	for (const { dir, rel } of probeDirs(root)) {
+		const build = join(dir, 'build');
+		const assets = readDir(build)
+			.filter((e) => e.isFile() && e.name.endsWith('.asset.php'))
+			.slice(0, 3);
+		for (const e of assets) {
+			let text: string;
+			try {
+				text = readFileSync(join(build, e.name), 'utf8');
+			} catch {
+				continue;
+			}
+			const list = /['"]dependencies['"]\s*=>\s*(?:array\s*\(|\[)([^)\]]*)/.exec(text)?.[1] ?? '';
+			const deps = [...list.matchAll(/['"]([^'"]+)['"]/g)].map((m) => m[1]);
+			if (deps.length) out.push(`${rel ? `${rel}/` : ''}build/${e.name} dependencies: ${deps.join(', ')}`);
+		}
+	}
+
+	if (existsSync(join(root, '.wp-env.json'))) out.push('.wp-env.json (a WordPress development environment)');
+	const composer = readJson(join(root, 'composer.json')) as { type?: string; require?: Record<string, string> } | null;
+	if (composer) {
+		const requires = Object.keys(composer.require ?? {}).filter((r) => r !== 'php');
+		const what = [
+			...(composer.type ? [`type ${composer.type}`] : []),
+			...(requires.length ? [`requires ${requires.slice(0, 4).join(', ')}`] : []),
+		];
+		out.push(`composer.json${what.length ? ` (${what.join('; ')})` : ''}`);
+	}
+	return out;
+}
+
 /** Resolve a shipped preset's `extends` chain, merged the way `loadConfig` merges it. */
 function resolvePreset(name: string, seen = new Set<string>()): PresetFile {
 	if (seen.has(name)) return {};
@@ -443,6 +540,8 @@ function detectNamespaces(
 		}
 	}
 	const haystack = markupText.join('\n');
+	const imports = new Map<string, number>();
+	for (const m of haystack.matchAll(IMPORT_RE)) if (m[1]) imports.set(m[1], (imports.get(m[1]) ?? 0) + 1);
 
 	const candidates = [...cssCounts.entries()]
 		.filter(([prefix, count]) => count >= 3 && haystack.includes(prefix))
@@ -510,6 +609,7 @@ function detectNamespaces(
 		truncated: files.truncated,
 		notes,
 		external: foreign,
+		imports,
 	};
 }
 
@@ -557,6 +657,7 @@ export function detectConfig(
 		truncated: ns.truncated,
 		namespaceNotes: ns.notes,
 		possibleExternal: ns.external,
+		presetEvidence: presetConfidence === 'low' || presetConfidence === 'none' ? presetEvidence(root, ns.imports) : [],
 		config,
 	};
 }

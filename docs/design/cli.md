@@ -656,6 +656,20 @@ by default and lifts the `css/dead-class` demotion. A namespace list drawn from
 part of a tree would then block turns and tell an agent to delete classes it
 never read the stylesheet for.
 
+**Nor write the fallback down as a decision.** When no preset's markers match,
+detection answers `generic` at low confidence, and that is the absence of an
+answer. Written, it is worse than no config: once the file exists inference never
+runs again, so the day the project gains a dependency detection would recognise,
+nothing notices — and `generic` has most rules off, which only `status` says.
+So `init` refuses it unless `--preset` names the design system or `--force`
+accepts the guess, and prints the evidence it could not rank instead (imports no
+manifest declares, `@types/*` packages, build asset manifests, `.wp-env.json`,
+`composer.json`). Detection does not have to decide from those; it only has to
+surface them, which is the half that does not need to catch every project shape.
+`/loupe-init` is the agent-side half of the same idea. Until a config is
+written, `check` ends its agent-format report with one line saying it ran on the
+guess — not in JSON or SARIF, which are parsed.
+
 ### A silently-ignored registry looks exactly like a clean one
 
 Registries reach the engine two ways — named directly, or carried by a profile

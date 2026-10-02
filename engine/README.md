@@ -175,6 +175,21 @@ false, blocking comes back on by default and `css/dead-class` returns to its
 configured severity — so persisting a namespace list drawn from part of a tree
 turns a guess into a rule that deletes code.
 
+It refuses the `generic` fallback the same way. When no preset's markers match,
+`init` prints what it determined, the available presets, and the evidence it
+saw but could not rank — `@wordpress/*` imports no manifest declares,
+`@types/wordpress__*` packages, `build/*.asset.php` dependencies, `.wp-env.json`,
+`composer.json` — and writes nothing. Name the design system with
+`init --preset <name>` (which keeps the inferred namespaces), or pass `--force`
+to write the guess anyway. Until a config exists, `check` ends its report with a
+line saying it ran on that guess.
+
+`detect` also lists **possible external** prefixes: CSS-module and hashed class
+names, prefixes an installed dependency defines, and prefixes only stylesheets
+mention. They are never written — a prefix nothing references is also what dead
+CSS looks like — so confirm them into `namespaces.external` by hand, or let
+`/loupe-init` ask.
+
 ```bash
 loupe detect   # what would be inferred, and why
 loupe init     # write it to loupe.config.json

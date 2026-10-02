@@ -7,9 +7,10 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DETECT_ENTRY_BUDGET, STYLE_FILE_BUDGET, STYLE_MAX_BYTES, detectConfig } from '../src/detect.ts';
+import { listPresets } from '../src/config.ts';
 import { discover } from '../src/discover.ts';
 import { CLI, assert, check, cleanup, fail, finish, scratch, write } from './harness.ts';
 
@@ -443,6 +444,109 @@ await check('detect reports the possible external list in text and in JSON', () 
 			json.possibleExternal?.some((c) => c.prefix === 'ChatFooter-module_'),
 			`not in the JSON: ${JSON.stringify(json.possibleExternal)}`,
 		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// ── init on a guess ─────────────────────────────────────────────────────────
+// `init` wrote whatever detection returned, the `generic` fallback included —
+// and once the file exists inference never runs again, so a WordPress plugin
+// built on `@wordpress/scripts`' externals was pinned to a ruleset with most
+// rules off, silently, for good.
+
+/** The externals shape: WordPress everywhere except `dependencies`. */
+const externalsPlugin = (root: string): void => {
+	write(
+		root,
+		'package.json',
+		JSON.stringify({ devDependencies: { '@wordpress/scripts': '*', '@types/wordpress__components': '*' } }),
+	);
+	write(
+		root,
+		'src/A.jsx',
+		'import { Button } from \'@wordpress/components\';\nexport const A = () => <Button className="own-box own-card own-hero" />;',
+	);
+	write(root, 'src/a.css', '.own-box{color:#111}\n.own-card{color:#222}\n.own-hero{color:#333}');
+	write(root, 'build/index.asset.php', "<?php return array('dependencies' => array('wp-components', 'wp-element'));");
+	write(root, '.wp-env.json', '{}');
+	write(root, 'composer.json', JSON.stringify({ type: 'wordpress-plugin' }));
+};
+
+await check('init refuses a guessed design system, and says what it saw instead', () => {
+	const root = scratch('dsh-init-guess-');
+	try {
+		externalsPlugin(root);
+		const { status, stdout } = cli(['init', '--root', root, '--no-color']);
+		assert(status === 2, `init on a guess exited ${status}:\n${stdout}`);
+		assert(!existsSync(join(root, 'loupe.config.json')), 'init wrote the guess anyway');
+		// Read from the presets directory, so a new preset shows up unasked.
+		for (const name of listPresets()) assert(stdout.includes(name), `available presets omit ${name}:\n${stdout}`);
+		for (const evidence of [
+			/source imports: @wordpress\/components \[a wpds marker\]/,
+			/@types\/wordpress__components/,
+			/build\/index\.asset\.php dependencies: wp-components, wp-element/,
+			/\.wp-env\.json/,
+			/composer\.json \(type wordpress-plugin\)/,
+		])
+			assert(evidence.test(stdout), `missing evidence ${evidence}:\n${stdout}`);
+		assert(/loupe init --preset <name>/.test(stdout), `no re-run command:\n${stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('init --preset names the design system and writes it; --force writes the guess', () => {
+	const root = scratch('dsh-init-named-');
+	try {
+		externalsPlugin(root);
+		const named = cli(['init', '--root', root, '--preset', 'wpds']);
+		assert(named.status === 0, `init --preset exited ${named.status}:\n${named.stdout}${named.stderr}`);
+		const cfg = JSON.parse(readFileSync(join(root, 'loupe.config.json'), 'utf8')) as {
+			extends?: string;
+			namespaces?: { project?: string[] };
+		};
+		assert(cfg.extends === 'wpds', `init --preset wrote the guess instead: ${JSON.stringify(cfg)}`);
+		assert(cfg.namespaces?.project?.join(',') === 'own-', `the namespaces were lost: ${JSON.stringify(cfg)}`);
+
+		const forced = cli(['init', '--root', root, '--force']);
+		assert(forced.status === 0, `init --force exited ${forced.status}`);
+		const guessed = JSON.parse(readFileSync(join(root, 'loupe.config.json'), 'utf8')) as { extends?: string };
+		assert(guessed.extends === 'generic', `--force writes what detection found: ${JSON.stringify(guessed)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a recognised design system is written without being asked twice', () => {
+	const root = scratch('dsh-init-sure-');
+	try {
+		externalsPlugin(root);
+		write(root, 'package.json', JSON.stringify({ dependencies: { '@wordpress/components': '*' } }));
+		const { status } = cli(['init', '--root', root]);
+		assert(status === 0, `init on a high-confidence match exited ${status}`);
+		assert(existsSync(join(root, 'loupe.config.json')), 'nothing was written');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The other half: with no config, that same guess ran on every check, and the
+// only place it said so was `status`.
+await check('check on a guessed generic config points at init, in the agent format only', () => {
+	const root = scratch('dsh-init-hint-');
+	try {
+		externalsPlugin(root);
+		const agent = cli(['check', '--all', '--root', root, '--no-color']).stdout;
+		assert(/no design system recognised .* Run `loupe init`/.test(agent), `no init hint:\n${agent}`);
+		// JSON is parsed: a trailing line would break every consumer.
+		const json = cli(['check', '--all', '--root', root, '--format', 'json']).stdout;
+		JSON.parse(json);
+		assert(!json.includes('loupe init'), 'the hint leaked into the JSON report');
+
+		write(root, 'loupe.config.json', JSON.stringify({ extends: 'generic' }));
+		const written = cli(['check', '--all', '--root', root, '--no-color']).stdout;
+		assert(!written.includes('loupe init'), `a written config is a decision, not a guess:\n${written}`);
 	} finally {
 		cleanup(root);
 	}

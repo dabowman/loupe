@@ -19,7 +19,7 @@ import { supersededEverywhere, usableReplacement } from './checks/system/currenc
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import { judgeRedirects, judgeRenames, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
 import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
-import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
+import { EMBEDDED_VERSION, hasPreset, presetKey } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
 import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
@@ -92,6 +92,9 @@ const note = (msg: string): void => {
  */
 const confidence = (level: string): string =>
 	(level === 'high' ? green : level === 'none' ? red : yellow)(`[${level} confidence]`);
+
+/** A preset answer too weak to write down: the fallback, not a match. */
+const guessedPreset = (level: string): boolean => level === 'low' || level === 'none';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -230,7 +233,9 @@ Commands:
   presets               List bundled presets
   version               Print the version, whether it runs from source or the bundle, and where
   detect                Show the config that would be inferred for this project
-  init                  Write the inferred config to loupe.config.json
+  init                  Write the inferred config to loupe.config.json. Refuses
+                        when no design system was recognised: name one with
+                        --preset, or pass --force to write the guess anyway
   status                Show the effective config: rules, severities, what blocks
   serve                 Serve the findings to the running app, so a stylesheet
                         finding can be resolved to the elements it styles
@@ -272,7 +277,8 @@ Options:
                         review them first. (TYPESAFE_API_KEY from the
                         environment or ~/.config/loupe/.env)
   --port <n>            Port for 'serve' (default: 7331)
-  --force               Overwrite an existing config (init)
+  --force               Overwrite an existing config, or write a guessed design
+                        system (init)
   --version             Same as the version command
   --no-color            Never colour the output (colour is on only when stdout
                         is a terminal; NO_COLOR and FORCE_COLOR are honoured)
@@ -491,8 +497,8 @@ async function main(): Promise<number> {
 	// Detection plus everything that outranks it. Reads `profilePreset` at call
 	// time, which is what lets `detect` and `init` below reuse it after the
 	// resolution above has settled.
-	const runDetection = (): DetectedConfig => {
-		const d = detectConfig(root, { preset: profilePreset });
+	const runDetection = (preset: string | null = profilePreset): DetectedConfig => {
+		const d = detectConfig(root, { preset });
 		if (options.projectPrefixes?.length)
 			d.config.namespaces = { ...d.config.namespaces, project: options.projectPrefixes };
 		return d;
@@ -789,7 +795,10 @@ async function main(): Promise<number> {
 	}
 
 	if (command === 'detect' || command === 'init') {
-		const info = detected ?? runDetection();
+		// `--preset` names the design system outright, the way `--profile` does —
+		// and skipped detection to do it, so this pass is the one that applies it.
+		const named = args.flags.preset ? presetKey(args.flags.preset) : profilePreset;
+		const info = detected ?? runDetection(named);
 		// `detected` is null only when a config file already exists, in which case
 		// the note above never ran and this is the run that has to carry it.
 		if (!detected && info.truncated) note(TRUNCATED_NOTE);
@@ -802,8 +811,10 @@ async function main(): Promise<number> {
 			dim(`            ${info.presetReasons.join('; ')}`),
 			// What inference concluded is still reported; it is just no longer what the
 			// run uses, and `init` writes the config below verbatim.
-			...(profilePreset
-				? [`            --profile ${forced?.id} overrides that: the config below extends ${profilePreset}`]
+			...(named
+				? [
+						`            ${args.flags.preset ? `--preset ${args.flags.preset}` : `--profile ${forced?.id}`} overrides that: the config below extends ${named}`,
+					]
 				: []),
 			`${dim('namespaces: ')}${info.namespaces.project.join(', ') || '(none found)'}  ${confidence(info.namespaceConfidence)}`,
 			dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
@@ -841,6 +852,27 @@ async function main(): Promise<number> {
 				'loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. ' +
 					'Point --root at the project, or pass --force to write it anyway.\n',
 			);
+			return EXIT.CANNOT_RUN;
+		}
+		// The fallback is not an answer, and writing it down makes it permanent: once
+		// the file exists inference never runs again, so the day the project gains a
+		// dependency detection would have recognised, nothing notices. Hand the
+		// question over instead, with what detection saw but could not rank.
+		if (guessedPreset(info.presetConfidence) && !named && !args.flags.force) {
+			const evidence = info.presetEvidence.length
+				? ['  Evidence that was not conclusive:', ...info.presetEvidence.map((e) => `    ${e}`)]
+				: ['  Nothing else in the project points at a design system either.'];
+			lines.push(
+				'',
+				`  Cannot infer the design system. Available presets: ${listPresets().join(', ')}.`,
+				'',
+				...evidence,
+				'',
+				`  Pick one and re-run:  ${cyan('loupe init --preset <name>')}`,
+				dim(`  or write ${info.preset} anyway:  loupe init --force`),
+			);
+			process.stdout.write(`${lines.join('\n')}\n`);
+			fail('loupe: refusing to write a guessed design system to a config.\n');
 			return EXIT.CANNOT_RUN;
 		}
 		if (existsSync(target) && !args.flags.force) {
@@ -1198,6 +1230,16 @@ async function main(): Promise<number> {
 		process.stdout.write(`${formatAgent(result, config, { maxFindings, group, concise: !!args.flags.concise })}\n`);
 		if ('baselined' in result && result.baselined)
 			process.stdout.write(dim(`\n${result.baselined} baselined finding(s) hidden.\n`));
+		// The fallback ruleset turns most rules off, and on an inferred config that
+		// was otherwise invisible on every run.
+		if (detected?.config.extends === 'generic' && guessedPreset(detected.presetConfidence)) {
+			const off = RULE_IDS.filter((id) => !config.enabled[id]).length;
+			process.stdout.write(
+				dim(
+					`\nloupe: no config, and no design system recognised \u2014 ran as generic, with ${off} of ${RULE_IDS.length} rules off. Run \`loupe init\` to choose one.\n`,
+				),
+			);
+		}
 	}
 	return result.blocking ? EXIT.BLOCKED : EXIT.OK;
 }

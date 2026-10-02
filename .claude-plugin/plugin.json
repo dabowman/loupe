@@ -20,6 +20,7 @@
     "./skills/loupe-remediation"
   ],
   "commands": [
+    "./commands/loupe-init.md",
     "./commands/loupe-audit.md",
     "./commands/loupe-fix.md",
     "./commands/loupe-baseline.md",
