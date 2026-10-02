@@ -23762,6 +23762,10 @@ function changedFiles(root2) {
 
 // src/text.ts
 var messageOf = (err) => (err instanceof Error ? err.message : String(err)).split("\n")[0] ?? "parse failed";
+var parseMessageOf = (err, abs) => {
+  const message = messageOf(err);
+  return message.startsWith(`${abs}:`) ? message.slice(abs.length + 1) : message;
+};
 var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 var flatten = (text2) => text2.replace(/\s+/g, " ");
 var oneLine = (text2) => flatten(text2).trim();
@@ -25573,7 +25577,7 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
       try {
         sheet = syntax.parse(readFileSync2(file, "utf8"), { from: file });
       } catch (err) {
-        unread.push({ file: shown, message: messageOf(err) });
+        unread.push({ file: shown, message: parseMessageOf(err, file) });
         continue;
       }
       harvestTokenDefs(sheet, tokenPrefixes, tokenSet);
@@ -25787,7 +25791,7 @@ async function analyze(config, {
     try {
       root2 = syntax.parse(text2, { from: abs });
     } catch (err) {
-      unparsed(messageOf(err));
+      unparsed(parseMessageOf(err, abs));
       continue;
     }
     const emit = (f) => report({ ...f, file: rel, code: f.code ?? f.message });
@@ -25958,8 +25962,8 @@ async function analyze(config, {
     const body2 = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
     f.message = messageLine(body2, tail);
   }
-  unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
-  directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  unique.sort((a, b) => b.rank - a.rank || byBytes(a.file, b.file) || a.line - b.line);
+  directives.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
   const liveControls = judge && config.enabled["patterns/judged-redirect"] ? controls.filter((c) => {
     const supp = suppByFile.get(c.file);
     return reports(c.file) && !(supp && ledger.mute(supp, c.line, "patterns/judged-redirect"));
@@ -28559,7 +28563,7 @@ function nearMisses(result) {
 var tally = (keys) => {
   const counts = /* @__PURE__ */ new Map();
   for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
-  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return [...counts].sort((a, b) => b[1] - a[1] || byBytes(a[0], b[0]));
 };
 var TOP = 3;
 function densestLine(findings) {
@@ -28589,7 +28593,7 @@ function bucket(findings, key) {
 var byRank = (a, b) => RULES[b[0]].rank - RULES[a[0]].rank;
 var byWeight = (a, b) => {
   const blocking = (g) => g.filter((f) => f.severity === "error").length;
-  return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]);
+  return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || byBytes(a[0], b[0]);
 };
 var groupsOf = (findings, by) => by === "rule" ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
 function ruleHeading(id, group, title) {
@@ -28716,7 +28720,7 @@ function fingerprints(findings) {
 function reportPayload(result, config) {
   const title = titleFor(config);
   return {
-    version: 1,
+    version: 2,
     tool: "loupe",
     blocking: result.blocking,
     summary: {
@@ -28795,22 +28799,36 @@ function formatSarif(result, config) {
 var embed = (json) => json.replace(/</g, "\\u003c");
 var CSS = `
 :root {
-  color-scheme: light dark;
-  --surface: light-dark(#fcfcfb, #1a1a19);
-  --plane: light-dark(#f9f9f7, #0d0d0d);
-  --ink: light-dark(#0b0b0b, #ffffff);
-  --ink-2: light-dark(#52514e, #c3c2b7);
+  color-scheme: light;
+  --surface: #fcfcfb;
+  --plane: #f9f9f7;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
   --ink-muted: #898781;
-  --grid: light-dark(#e1e0d9, #2c2c2a);
-  --axis: light-dark(#c3c2b7, #383835);
-  --hairline: light-dark(rgba(11,11,11,0.10), rgba(255,255,255,0.10));
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --hairline: rgba(11,11,11,0.10);
   --sev-error: #d03b3b;
   --sev-warn: #fab219;
-  --seq: light-dark(#2a78d6, #3987e5);
-  --track: light-dark(rgba(11,11,11,0.06), rgba(255,255,255,0.08));
+  --seq: #2a78d6;
+  --track: rgba(11,11,11,0.06);
 }
-:root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"] { color-scheme: dark; }
+@supports (color: light-dark(#000, #000)) {
+  :root {
+    color-scheme: light dark;
+    --surface: light-dark(#fcfcfb, #1a1a19);
+    --plane: light-dark(#f9f9f7, #0d0d0d);
+    --ink: light-dark(#0b0b0b, #ffffff);
+    --ink-2: light-dark(#52514e, #c3c2b7);
+    --grid: light-dark(#e1e0d9, #2c2c2a);
+    --axis: light-dark(#c3c2b7, #383835);
+    --hairline: light-dark(rgba(11,11,11,0.10), rgba(255,255,255,0.10));
+    --seq: light-dark(#2a78d6, #3987e5);
+    --track: light-dark(rgba(11,11,11,0.06), rgba(255,255,255,0.08));
+  }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+}
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -28925,10 +28943,13 @@ var JS = `
       return true;
     });
   }
+  // Code-unit order, as \`byBytes\` in discover.ts: a collating compare answers
+  // differently in a different locale, and the server-side tallies do not.
+  function byBytes(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
   function tally(rows, keyOf) {
     var m = new Map();
     rows.forEach(function (r) { var k = keyOf(r); m.set(k, (m.get(k) || 0) + 1); });
-    return Array.from(m.entries()).sort(function (a, b) { return b[1] - a[1] || String(a[0]).localeCompare(String(b[0])); });
+    return Array.from(m.entries()).sort(function (a, b) { return b[1] - a[1] || byBytes(String(a[0]), String(b[0])); });
   }
 
   var tip = document.getElementById('tip');
@@ -30936,7 +30957,7 @@ ${dim("  Ctrl-C to stop.")}
       const groups = /* @__PURE__ */ new Map();
       for (const d of directives)
         for (const key of by === "rule" ? d.rules : [d.file]) groups.set(key, [...groups.get(key) ?? [], d]);
-      const sorted = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+      const sorted = [...groups].sort((a, b) => b[1].length - a[1].length || byBytes(a[0], b[0]));
       const out = [];
       for (const [key, group2] of sorted) {
         out.push(`${by === "rule" ? magenta(key) : bold(key)} ${dim(`(${group2.length})`)}`);
