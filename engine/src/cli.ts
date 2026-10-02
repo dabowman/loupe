@@ -1167,7 +1167,7 @@ async function main(): Promise<number> {
 		// backlog it accepted, with no reason given. `emitBlocking` already writes to
 		// stderr, and Claude Code feeds that back on exit 2.
 		if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
-		result = applyBaseline(result, baseline);
+		result = applyBaseline(result, baseline, { scoped: scope !== null });
 	}
 	// Before the judgements: a finding the filter drops is not worth a paid question.
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);

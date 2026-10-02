@@ -813,6 +813,10 @@ SARIF results carry a `partialFingerprints` entry derived from the same identity
 the baseline ratchets on: rule, file, and normalized code, deliberately not the
 line number. An edit above a finding moves its line without re-opening its alert.
 
+Findings your baseline accepted are uploaded too, as results marked suppressed
+(`kind: external`, "accepted in the loupe baseline"), so code scanning shows the
+backlog as suppressed alerts rather than reading it as a clean repository.
+
 #### Without Node
 
 The reusable workflow needs neither an npm install nor a published package, but

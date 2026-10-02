@@ -125,26 +125,36 @@ export function writeBaseline(
 
 /**
  * Split findings against a baseline.
+ *
+ * The accepted findings come back whole, not just counted: SARIF lists them as
+ * suppressed results, which is what its suppression model is for, and a count
+ * alone cannot be listed.
+ *
  * `fixed` is only meaningful on a whole-repo run — on a scoped run the absent
- * entries are mostly just out of scope, so callers suppress that number.
+ * entries are mostly just out of scope — so it is null there, and with no
+ * baseline to compare against.
  */
-export function applyBaseline(result: AnalyzeResult, baseline: Baseline | null): BaselinedResult {
-	if (!baseline) return { ...result, baselined: 0, fixed: 0 };
+export function applyBaseline(
+	result: AnalyzeResult,
+	baseline: Baseline | null,
+	{ scoped = false }: { scoped?: boolean } = {},
+): BaselinedResult {
+	if (!baseline) return { ...result, baselined: 0, baselinedFindings: [], fixed: null };
 	const seen = new Set<string>();
 	const kept = [];
-	let baselined = 0;
+	const accepted = [];
 	for (const f of result.findings) {
 		const key = findingKey(f);
 		seen.add(key);
-		if (baseline.set.has(key)) baselined++;
+		if (baseline.set.has(key)) accepted.push(f);
 		else kept.push(f);
 	}
-	const fixed = [...baseline.set].filter((k) => !seen.has(k)).length;
 	return {
 		...result,
 		findings: kept,
 		blocking: kept.some((f) => f.severity === 'error'),
-		baselined,
-		fixed,
+		baselined: accepted.length,
+		baselinedFindings: accepted,
+		fixed: scoped ? null : [...baseline.set].filter((k) => !seen.has(k)).length,
 	};
 }

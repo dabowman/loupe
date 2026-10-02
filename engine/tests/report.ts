@@ -19,7 +19,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze } from '../src/analyze.ts';
+import { analyze, findingKey } from '../src/analyze.ts';
+import { applyBaseline } from '../src/baseline.ts';
 import { setColor } from '../src/color.ts';
 import { loadConfig } from '../src/config.ts';
 import { formatAgent, formatSarif, reportPayload } from '../src/report.ts';
@@ -27,7 +28,7 @@ import { formatHtml } from '../src/report-html.ts';
 import { CLI, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-import type { AnalyzeResult, Config } from '../src/types.ts';
+import type { AnalyzeResult, Baseline, Config } from '../src/types.ts';
 
 async function run(files: Record<string, string>): Promise<{ result: AnalyzeResult; config: Config; root: string }> {
 	const root = scratch('loupe-report-');
@@ -129,6 +130,76 @@ await check('summary.baselined is absent when no baseline step ran', () => {
 	assert(!('baselined' in bare.summary), 'an un-baselined run reported a baselined count');
 	const withBaseline = reportPayload({ ...result, baselined: 4, fixed: 0 }, config);
 	assert(withBaseline.summary.baselined === 4, 'the baselined count did not survive');
+});
+
+// A repo whose whole backlog is accepted printed `total: 0` and `results: []`,
+// with nothing to tell it from a clean one. The counts go in the JSON summary;
+// SARIF lists the accepted findings as suppressed, which is what its
+// suppression model is for.
+/** The run above with its first finding accepted, plus one entry nothing matches any more. */
+const baselineOf = (keys: string[]): Baseline => {
+	const entries = [...keys, 'tokens/hardcoded-value|styles/gone.css|.wf-gone { color: #000; }'];
+	return { createdAt: '', entries, set: new Set(entries) };
+};
+
+await check('json carries the baselined finding count and the fixed entry count', () => {
+	const accepted = result.findings[0];
+	assert(accepted, 'no findings to baseline');
+	const baseline = baselineOf([findingKey(accepted)]);
+	const whole = reportPayload(applyBaseline(result, baseline), config);
+	const hidden = result.findings.filter((f) => findingKey(f) === findingKey(accepted)).length;
+	assert(whole.summary.baselined === hidden, `baselined ${whole.summary.baselined}, expected ${hidden}`);
+	assert(whole.summary.total === result.findings.length - hidden, 'the accepted findings are still in the total');
+	assert(whole.summary.fixed === 1, `fixed ${whole.summary.fixed}, expected the one entry nothing matched`);
+	// A scoped run cannot tell fixed from out of scope, so it does not guess.
+	const scoped = reportPayload(applyBaseline(result, baseline, { scoped: true }), config);
+	assert(!('fixed' in scoped.summary), 'a scoped run reported a fixed count');
+	assert(!('fixed' in reportPayload(applyBaseline(result, null), config).summary), 'no baseline, yet a fixed count');
+});
+
+await check('sarif lists baselined findings as externally suppressed results', () => {
+	const accepted = result.findings[0];
+	assert(accepted, 'no findings to baseline');
+	const applied = applyBaseline(result, baselineOf([findingKey(accepted)]));
+	const sarif = JSON.parse(formatSarif(applied, config)) as {
+		runs: {
+			tool: { driver: { rules: { id: string }[] } };
+			results: {
+				ruleId: string;
+				partialFingerprints: { loupeCode: string };
+				suppressions?: { kind: string; justification: string }[];
+			}[];
+			properties?: { baselined: number; fixed?: number };
+		}[];
+	};
+	const runOut = sarif.runs[0];
+	assert(runOut, 'no sarif run');
+	const suppressed = runOut.results.filter((r) => r.suppressions);
+	assert(runOut.results.length === result.findings.length, 'baselined findings were dropped, not listed');
+	assert(suppressed.length === applied.baselined, `${suppressed.length} suppressed, ${applied.baselined} baselined`);
+	for (const r of suppressed) {
+		const [s] = r.suppressions ?? [];
+		assert(s?.kind === 'external' && /baseline/.test(s.justification), `wrong suppression: ${JSON.stringify(s)}`);
+		assert(
+			runOut.tool.driver.rules.some((d) => d.id === r.ruleId),
+			`${r.ruleId} is suppressed but not in the driver`,
+		);
+	}
+	assert(
+		runOut.results.slice(0, applied.findings.length).every((r) => !r.suppressions),
+		'a live finding was marked suppressed',
+	);
+	assert(
+		new Set(runOut.results.map((r) => r.partialFingerprints.loupeCode)).size === runOut.results.length,
+		'a suppressed result shares a fingerprint',
+	);
+	assert(
+		runOut.properties?.baselined === applied.baselined && runOut.properties.fixed === 1,
+		`run properties: ${JSON.stringify(runOut.properties)}`,
+	);
+	// Unbaselined output is unchanged: no suppressions, no run properties.
+	const plain = JSON.parse(formatSarif(result, config)) as typeof sarif;
+	assert(!plain.runs[0]?.properties, 'a run with no baseline step carries baseline counts');
 });
 
 await check('the rules roster resolves title placeholders', () => {

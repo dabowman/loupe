@@ -800,6 +800,17 @@ loupe suppressions --stale          # only the ones muting nothing; exit 1 if an
 Exit codes are a contract: `0` clean or advisory-only, `1` blocking findings,
 `2` could not run.
 
+A baseline hides findings from `findings`, not from the record. The JSON
+`summary` carries `baselined` — findings the baseline hid — whenever a baseline
+step ran, and `fixed` — baseline *entries* nothing matches any more, the unit a
+baseline stores and the same `-N fixed` `baseline --dry-run` prints — on a
+whole-repo run that read a baseline file. Both are additive: absent rather than
+0 when the question was not asked. SARIF lists each baselined finding as a
+result carrying `suppressions: [{ "kind": "external", "justification":
+"accepted in the loupe baseline" }]`, after the live ones, so code scanning
+shows it as suppressed rather than as fixed, and puts the same two counts in the
+run's `properties`.
+
 JSON findings that flag a declaration carry `suggest`: `[{ prop, value, tokens,
 line? }]`, one entry per declaration, tokens most specific first. `tokens` is
 empty where nothing matched — the entry is still there, so "no token for this"

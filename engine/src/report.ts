@@ -455,6 +455,7 @@ export function reportPayload(result: AnalyzeResult | BaselinedResult, config: C
 			// format prints has no counterpart here, and a consumer cannot tell a
 			// clean repo from one whose whole backlog is accepted.
 			...('baselined' in result ? { baselined: result.baselined } : {}),
+			...('fixed' in result && result.fixed !== null ? { fixed: result.fixed } : {}),
 		},
 		rules: usedRules(result, config),
 		// `rank` orders the report and `suffix` carries the channel marker; both are
@@ -466,9 +467,23 @@ export function reportPayload(result: AnalyzeResult | BaselinedResult, config: C
 	};
 }
 
+/**
+ * How a baselined finding is marked in SARIF. `external`: the decision lives in
+ * the baseline file, not in a directive beside the code. No `status`, which the
+ * spec reads as `accepted` when absent.
+ */
+const BASELINE_SUPPRESSION = { kind: 'external', justification: 'accepted in the loupe baseline' } as const;
+
 export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Config): string {
 	const title = titleFor(config);
-	const fps = fingerprints(result.findings);
+	// Listed, not just counted: code scanning shows a suppressed result as
+	// suppressed, where a backlog that is simply absent reads as a clean repo.
+	// After the live findings, so their order is untouched; fingerprinted
+	// together, which changes nothing — a baselined finding never shares a key
+	// with a live one.
+	const accepted = 'baselinedFindings' in result ? result.baselinedFindings : [];
+	const all = [...result.findings, ...accepted];
+	const fps = fingerprints(all);
 	return JSON.stringify(
 		{
 			$schema: 'https://json.schemastore.org/sarif-2.1.0.json',
@@ -479,7 +494,7 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 						driver: {
 							name: 'Loupe',
 							informationUri: 'https://github.com/dvdbwmn/loupe',
-							rules: usedRules(result, config).map((r) => ({
+							rules: usedRules({ ...result, findings: all }, config).map((r) => ({
 								id: r.id,
 								shortDescription: { text: r.title },
 								// No `fullDescription`: the catalog holds one line of guidance per
@@ -493,7 +508,7 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 							})),
 						},
 					},
-					results: result.findings.map((f, i) => ({
+					results: all.map((f, i) => ({
 						ruleId: f.rule,
 						level: f.severity === 'error' ? 'error' : 'warning',
 						message: { text: `${f.message} \u2014 ${title(f.rule)}` },
@@ -506,7 +521,17 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 								},
 							},
 						],
+						...(i >= result.findings.length ? { suppressions: [BASELINE_SUPPRESSION] } : {}),
 					})),
+					// The same counts `--format json` carries in its summary.
+					...('baselined' in result
+						? {
+								properties: {
+									baselined: result.baselined,
+									...(result.fixed !== null ? { fixed: result.fixed } : {}),
+								},
+							}
+						: {}),
 				},
 			],
 		},
