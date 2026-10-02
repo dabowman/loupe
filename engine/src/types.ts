@@ -13,6 +13,7 @@
 
 import type { Rule as PostcssRule } from 'postcss';
 import type { RULES } from './rules.ts';
+import type { TokenScopes } from './scopes.ts';
 
 // ── rules ───────────────────────────────────────────────────────────────────
 
@@ -349,6 +350,12 @@ export interface TokenSet {
 	/** normalized value -> token names carrying it */
 	byValue: Map<string, string[]>;
 	sources: number;
+	/**
+	 * What the active profiles declare each token is for. Absent: the generic
+	 * property→token table decides everything, as it did before profiles could
+	 * say.
+	 */
+	scopes?: TokenScopes | undefined;
 }
 
 // ── markup ──────────────────────────────────────────────────────────────────
@@ -718,6 +725,14 @@ export interface Profile {
 	components: string | null;
 	/** `{ token: description }`, the design system's own words for what each token is for. */
 	tokenDescriptions: string | null;
+	/**
+	 * What each token is for, as the system's naming grammar says it — read and
+	 * validated from `profile.json`. Null where the profile declares none, or
+	 * declares it wrong: the engine then falls back to its generic table.
+	 */
+	tokenScopes: TokenScopes | null;
+	/** What was wrong with the profile's own declarations, for the CLI to say. Empty when nothing was. */
+	problems: string[];
 	dir: string;
 }
 

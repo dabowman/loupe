@@ -19,16 +19,26 @@ import { join } from 'node:path';
 import { readDir } from './discover.ts';
 import postcss from 'postcss';
 import type { Root } from 'postcss';
+import { scopedFamily } from './scopes.ts';
+import type { TokenScopes } from './scopes.ts';
 import { COLOR_SHORTHANDS } from './styles.ts';
 import { messageParts, snippet } from './text.ts';
 import type { Suggestion, TokenSet } from './types.ts';
 
 /**
- * Which token names could plausibly answer for this property. Naming the wrong
- * one is worse advice than naming none: `1px` is both `--wpds-border-radius-xs`
- * and `--wpds-border-width-xs`, and the agent applies whichever it is given.
+ * Which token names could plausibly answer for this property, when no profile
+ * says. Naming the wrong one is worse advice than naming none: `1px` is both
+ * `--wpds-border-radius-xs` and `--wpds-border-width-xs`, and the agent applies
+ * whichever it is given.
+ *
+ * This is the fallback, not the source of truth. Its alternate spellings
+ * (`fg|text|content|foreground`) are a guess at several systems' conventions at
+ * once; a profile's `tokenScopes` states its own system's, and wherever it
+ * declares what a property's tokens are, it decides instead — see `scopes.ts`.
+ * A profile declaring nothing, and every property it does not cover, gets
+ * exactly this table.
  */
-const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
+export const GENERIC_ROLES: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	[/^border-radius|radius$/, /radius/],
 	[/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
 	// Colour roles are split finer than the rest: a background token suggested for
@@ -155,9 +165,15 @@ export function readTokenSources(
 	return set;
 }
 
-/** The names that answer for `prop`: on-role, and the property's own family when the set has one. */
-export function onRole(names: readonly string[], prop: string): string[] {
-	const [, hint, own] = ROLE_HINTS.find(([p]) => p.test(prop)) ?? [];
+/**
+ * The names that answer for `prop`: on-role, and the property's own family when
+ * the set has one. Declared scopes decide wherever they cover the property; the
+ * generic table everywhere else.
+ */
+export function onRole(names: readonly string[], prop: string, scopes?: TokenScopes | undefined): string[] {
+	const scoped = scopes ? scopedFamily(scopes, names, prop) : null;
+	if (scoped) return scoped;
+	const [, hint, own] = GENERIC_ROLES.find(([p]) => p.test(prop)) ?? [];
 	if (!hint) return [];
 	const onRole = names.filter((n) => hint.test(n));
 	const preferred = own ? onRole.filter((n) => own.test(n)) : [];
@@ -172,7 +188,7 @@ export function tokensFor(set: TokenSet, prop: string, value: string): string[] 
 	// The role is decided over the whole set, not over the tokens that happen to
 	// carry the value: a padding scale that stops at 32px makes `padding: 40px`
 	// a question, not `gap-3xl` because only a gap step is 40px.
-	const family = new Set(onRole([...set.known], prop));
+	const family = new Set(onRole([...set.known], prop, set.scopes));
 	return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
 }
 
@@ -183,6 +199,7 @@ function familyFor(set: TokenSet, prop: string): [string, string][] {
 		onRole(
 			all.map(([n]) => n),
 			prop,
+			set.scopes,
 		),
 	);
 	return all.filter(([n]) => keep.has(n));
@@ -326,7 +343,7 @@ export function planValue(
 	const family = familyFor(set, prop);
 	// A token defined as another token has no literal to offer, but it is still a
 	// token for this property: "none" would be a false statement about the system.
-	if (!family.length) return onRole([...set.known], prop).length ? null : 'none';
+	if (!family.length) return onRole([...set.known], prop, set.scopes).length ? null : 'none';
 	// A family the engine can measure takes a value apart; one it cannot —
 	// shadows, easings — is matched whole.
 	const measurable = family.some(([, fv]) => measure(fv));

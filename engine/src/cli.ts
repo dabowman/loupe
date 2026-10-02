@@ -584,6 +584,10 @@ async function main(): Promise<number> {
 	config.profiles = { available: profiles, active, ...registries };
 	if (!isHook) {
 		for (const err of registries.errors) fail(`loupe: ${err}\n`);
+		// A scope declaration refused at load leaves its profile on the generic token
+		// table, which reads exactly like one that declared nothing — so it says so.
+		for (const p of active)
+			for (const problem of p.problems) fail(`loupe: profile ${p.id} ${problem} \u2014 its token scopes are ignored\n`);
 		// A registry handed over and then ignored has to say so: silently dropping
 		// it is indistinguishable from running it and finding nothing.
 		for (const s of registries.skipped)

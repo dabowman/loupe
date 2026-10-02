@@ -1,0 +1,120 @@
+{
+  "$source": "The naming grammar, segment meanings and target table are WPDS's own, from gutenberg packages/theme/docs/tokens.md (trunk, read 2026-10-02): --wpds-color-<property>-<target>-<tone>[-<emphasis>][-<state>], --wpds-dimension-<property>-<size>, --wpds-border-<property>-<size-or-target>, --wpds-typography-<property>-<role-or-size>, --wpds-motion-<property>-<scale-or-intent>, --wpds-cursor-<target>. The radius roles are the descriptions of the --wpds-border-radius-* tokens in that file and in @wordpress/theme 2.2.0 (xs 1px, sm 2px, md 4px, lg 8px, xl 12px under the default subtle corner radius).",
+  "$kinds": "What markup can show an element to be. A tag is lowercase, a component capitalised; a component is listed only where its className lands on the element the kind names (Dropdown's lands on the toggle's wrapper, so it is not an overlay). An empty kind is one no markup can show — nested-in-control, the app shell — so a token scoped to it is never applied unattended and never reported.",
+  "kinds": {
+    "interactive": ["a", "button", "input", "select", "textarea", "summary", "Button", "IconButton", "LinkButton", "Link", "ExternalLink", "MenuItem"],
+    "control": ["button", "input", "select", "textarea", "summary", "Button", "IconButton", "LinkButton", "MenuItem"],
+    "overlay": ["Popover"],
+    "container": ["dialog", "Modal", "ConfirmDialog", "Card", "CollapsibleCard", "Notice", "Panel"],
+    "nested-in-control": [],
+    "shell": []
+  },
+  "grammars": [
+    {
+      "$comment": "--wpds-color-stroke-focus has no target/tone; it places as target `focus`, which declares nothing.",
+      "pattern": "--wpds-color-{property}-{target}...",
+      "property": {
+        "background": {
+          "sets": ["background", "background-color", "background-image"],
+          "also": ["box-shadow", "scrollbar-color", "accent-color"]
+        },
+        "foreground": {
+          "sets": ["color", "fill", "stroke", "caret-color", "text-decoration-color", "text-decoration", "-webkit-text-fill-color"],
+          "also": ["box-shadow", "text-shadow", "accent-color", "column-rule-color"]
+        },
+        "stroke": {
+          "sets": [
+            "border-color", "border-*-color", "outline-color",
+            "border", "border-top", "border-right", "border-bottom", "border-left",
+            "border-block", "border-block-start", "border-block-end",
+            "border-inline", "border-inline-start", "border-inline-end",
+            "outline", "column-rule", "column-rule-color", "stroke"
+          ],
+          "also": ["box-shadow", "background-image", "text-decoration-color"]
+        }
+      },
+      "target": {
+        "surface": { "not": ["interactive"] },
+        "content": { "not": ["interactive"] },
+        "interactive": { "requires": ["interactive"] }
+      }
+    },
+    {
+      "pattern": "--wpds-dimension-{property}-{size}",
+      "property": {
+        "padding": {
+          "sets": ["padding", "padding-*", "inset", "inset-*", "top", "right", "bottom", "left"],
+          "also": ["margin", "margin-*", "scroll-padding", "scroll-padding-*", "scroll-margin", "scroll-margin-*"]
+        },
+        "gap": {
+          "sets": ["gap", "row-gap", "column-gap", "grid-gap", "grid-row-gap", "grid-column-gap", "inset", "inset-*", "top", "right", "bottom", "left"],
+          "also": ["margin", "margin-*", "scroll-margin", "scroll-margin-*"]
+        },
+        "size": {
+          "sets": [
+            "width", "height", "min-width", "min-height", "max-width", "max-height",
+            "inline-size", "block-size", "min-inline-size", "min-block-size", "max-inline-size", "max-block-size"
+          ],
+          "also": ["flex-basis"]
+        },
+        "surface-width": {
+          "sets": ["width", "min-width", "max-width", "inline-size", "min-inline-size", "max-inline-size"],
+          "also": ["flex-basis"]
+        }
+      }
+    },
+    {
+      "$comment": "--wpds-border-width-focus places as size `focus`.",
+      "pattern": "--wpds-border-{property}-{size}",
+      "property": {
+        "radius": ["border-radius", "border-*-radius"],
+        "width": {
+          "sets": ["border-width", "border-*-width", "outline-width"],
+          "also": [
+            "border", "border-top", "border-right", "border-bottom", "border-left",
+            "border-block", "border-block-start", "border-block-end",
+            "border-inline", "border-inline-start", "border-inline-end",
+            "outline", "outline-offset", "box-shadow", "column-rule", "column-rule-width"
+          ]
+        }
+      }
+    },
+    {
+      "pattern": "--wpds-typography-{property}-{size}",
+      "property": {
+        "font-family": ["font-family", "font"],
+        "font-size": { "sets": ["font-size"], "also": ["font"] },
+        "font-weight": { "sets": ["font-weight"], "also": ["font"] },
+        "line-height": { "sets": ["line-height"], "also": ["font"] }
+      }
+    },
+    {
+      "pattern": "--wpds-motion-{property}-{size}",
+      "property": {
+        "duration": {
+          "sets": ["transition-duration", "animation-duration"],
+          "also": ["transition", "animation", "transition-delay", "animation-delay"]
+        },
+        "easing": {
+          "sets": ["transition-timing-function", "animation-timing-function"],
+          "also": ["transition", "animation"]
+        }
+      }
+    },
+    {
+      "pattern": "--wpds-cursor-{target}",
+      "properties": ["cursor"],
+      "target": {
+        "control": { "requires": ["control"] }
+      }
+    }
+  ],
+  "$scales": "Radius is role-based, not size-based, and nothing in the name says which role: each step names the kind of element it is for.",
+  "scales": {
+    "--wpds-border-radius-xs": { "on": ["nested-in-control"] },
+    "--wpds-border-radius-sm": { "on": ["control"] },
+    "--wpds-border-radius-md": { "on": ["overlay"] },
+    "--wpds-border-radius-lg": { "on": ["container"] },
+    "--wpds-border-radius-xl": { "on": ["shell"] }
+  }
+}

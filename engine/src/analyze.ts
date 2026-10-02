@@ -81,6 +81,7 @@ import { rawElements } from './checks/system/raw-element.ts';
 import { hardcodedValue } from './checks/tokens/hardcoded-value.ts';
 import { unknownTokens as unknownTokenFindings } from './checks/tokens/unknown-token.ts';
 import type { TokenRef } from './checks/tokens/unknown-token.ts';
+import { mergeScopes } from './scopes.ts';
 import { typographyInCss } from './checks/typography/in-css.ts';
 import { untokenizedType } from './checks/typography/untokenized.ts';
 import type {
@@ -323,6 +324,9 @@ export async function analyze(
 	// with anything the project defines itself.
 	const tokenPrefixes = ds.tokenPrefixes ?? [];
 	const tokenSet: TokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
+	// What the active profiles say each token is for. Absent, every suggestion
+	// below is made from the generic table exactly as before.
+	tokenSet.scopes = mergeScopes((config.profiles?.active ?? []).map((p) => p.tokenScopes));
 	// Real paths on both sides: the walk never follows a symlink below the root,
 	// so the root is the only link a discovered path can have come through.
 	const realRoot = realPath(config.root) ?? config.root;

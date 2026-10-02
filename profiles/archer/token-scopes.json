@@ -1,0 +1,28 @@
+{
+  "$source": "Archer's common-tier colour roles, from this profile's authoring.md: --color-text-*, --color-background-*, --color-border-*. Only the colour family is declared — it is the one whose role is the segment after the type. The base palette (--color-neutral-600), the brand action (--color-primary-*) and every other family (--space-*, --radius-1…6, --size-*) carry no role segment, so they stay on the engine's generic table and are never reported as misapplied.",
+  "grammars": [
+    {
+      "pattern": "--color-{property}...",
+      "property": {
+        "text": {
+          "sets": ["color", "caret-color", "text-decoration-color", "-webkit-text-fill-color"],
+          "also": ["fill", "stroke", "text-decoration", "text-shadow", "box-shadow"]
+        },
+        "background": {
+          "sets": ["background", "background-color", "background-image"],
+          "also": ["box-shadow", "scrollbar-color", "accent-color"]
+        },
+        "border": {
+          "sets": [
+            "border-color", "border-*-color", "outline-color",
+            "border", "border-top", "border-right", "border-bottom", "border-left",
+            "border-block", "border-block-start", "border-block-end",
+            "border-inline", "border-inline-start", "border-inline-end",
+            "outline", "column-rule", "column-rule-color"
+          ],
+          "also": ["box-shadow", "background-image", "fill", "stroke", "text-decoration-color"]
+        }
+      }
+    }
+  ]
+}
