@@ -203,6 +203,13 @@ project's own namespace appears nowhere in `node_modules`.
   less than was found is a guess from part of the evidence, so it demotes `high`
   and says what it skipped under the namespace line. It is not `truncated`,
   though: the walk saw the whole tree, so `init` does not refuse over it.
+- **External prefixes are proposed, never written.** `namespaces.external` used
+  to come only from presets, so a vendored bundle no preset knew read as project
+  code. `detect` now lists candidates as `possible external`: a generated shape
+  (`Name-module_thing`, `Name_local__hash`), a prefix an installed dependency
+  defines, and a prefix only stylesheets mention. The last is also exactly what
+  dead CSS looks like, which is why the list is a question for whoever can read
+  the enqueue code — `/loupe-init` asks it — and `init` writes none of them.
 - **`--profile <id>` beats a guess.** Inference's own verdict is still returned
   as `preset` so `status` and `init` can report it, but the config extends what
   the flag named — and everything derived from the preset has to follow, or the

@@ -6,11 +6,12 @@
  * regression here silently changes behaviour in every project at once.
  */
 
+import { spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { DETECT_ENTRY_BUDGET, STYLE_FILE_BUDGET, STYLE_MAX_BYTES, detectConfig } from '../src/detect.ts';
 import { discover } from '../src/discover.ts';
-import { assert, check, cleanup, fail, finish, scratch, write } from './harness.ts';
+import { CLI, assert, check, cleanup, fail, finish, scratch, write } from './harness.ts';
 
 /** One detection scenario: a repo to build, and what should come back. */
 interface Case {
@@ -363,6 +364,84 @@ await check('stylesheets past the count cap are not read, and the confidence say
 		assert(
 			got.namespaceNotes.some((n) => n.includes(`first ${STYLE_FILE_BUDGET} of ${STYLE_FILE_BUDGET + 1}`)),
 			`the cap has to be said: ${JSON.stringify(got.namespaceNotes)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// ── possible external prefixes ──────────────────────────────────────────────
+// `namespaces.external` only ever came from presets, so a vendored bundle no
+// preset knows read as project code: `.ChatFooter-module_container` drew a
+// hardcoded-value finding, and `loupe fix` staged a substitution into a remote
+// widget's CSS-module internals.
+
+/** `own-` in CSS and markup, plus three kinds of somebody else's CSS. */
+const vendoredProject = (root: string): void => {
+	ownProject(root);
+	write(
+		root,
+		'chat-mount.scss',
+		'.ChatFooter-module_container{background:#fff}\n.ChatFooter-module_input{color:#111}\n.ChatFooter-module_send{color:#222}\n' +
+			'.Header_nav__3xYz9{color:#333}\n',
+	);
+	write(root, 'ghost.css', '.ghost-a{color:#444}\n.ghost-b{color:#555}\n.ghost-c{color:#666}');
+	for (let i = 0; i < 3; i++) write(root, `cal${i}.css`, `.rbc-event{color:#777}\n.rbc-e${i}{color:#888}`);
+	write(root, 'Cal.jsx', 'export const Cal = () => <div className="rbc-event" />;');
+	write(root, 'node_modules/react-big-calendar/lib/css/react-big-calendar.css', '.rbc-event{padding:2px}');
+};
+
+await check('detection proposes external prefixes, and writes none of them', () => {
+	const root = scratch('dsh-external-');
+	try {
+		vendoredProject(root);
+		const got = detectConfig(root);
+		const reasonOf = (prefix: string): string | undefined =>
+			got.possibleExternal.find((c) => c.prefix === prefix)?.reason;
+		const listed = JSON.stringify(got.possibleExternal);
+		assert(/CSS-module/.test(reasonOf('ChatFooter-module_') ?? ''), `the CSS-module bundle is not listed: ${listed}`);
+		assert(
+			got.possibleExternal.find((c) => c.prefix === 'ChatFooter-module_')?.classes === 3,
+			`three distinct module classes: ${listed}`,
+		);
+		assert(/hashed/.test(reasonOf('Header_') ?? ''), `the hashed class is not listed: ${listed}`);
+		assert(/node_modules/.test(reasonOf('rbc-') ?? ''), `the vendored dependency is not listed: ${listed}`);
+		assert(/no markup/.test(reasonOf('ghost-') ?? ''), `the unreferenced prefix is not listed: ${listed}`);
+		assert(reasonOf('own-') === undefined, `the project's own namespace is not external: ${listed}`);
+		assert(JSON.stringify(got.namespaces.project) === '["own-"]', `namespaces: ${JSON.stringify(got.namespaces)}`);
+		assert(got.config.namespaces?.external === undefined, `a guess was written: ${JSON.stringify(got.config)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+/** The CLI, isolated from the developer's own plugin settings. */
+const cli = (argv: readonly string[]): { status: number | null; stdout: string; stderr: string } => {
+	const home = scratch('dsh-home-');
+	try {
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
+		const r = spawnSync(process.execPath, [CLI, ...argv], { encoding: 'utf8', env });
+		if (r.error) throw r.error;
+		return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+	} finally {
+		cleanup(home);
+	}
+};
+
+await check('detect reports the possible external list in text and in JSON', () => {
+	const root = scratch('dsh-external-cli-');
+	try {
+		vendoredProject(root);
+		const text = cli(['detect', '--root', root, '--no-color']).stdout;
+		assert(/possible external:\s+ChatFooter-module_/.test(text), `not in the text report:\n${text}`);
+		assert(/confirm with `namespaces.external`/.test(text), `no hint to confirm:\n${text}`);
+		const json = JSON.parse(cli(['detect', '--root', root, '--format', 'json']).stdout) as {
+			possibleExternal?: { prefix: string }[];
+		};
+		assert(
+			json.possibleExternal?.some((c) => c.prefix === 'ChatFooter-module_'),
+			`not in the JSON: ${JSON.stringify(json.possibleExternal)}`,
 		);
 	} finally {
 		cleanup(root);

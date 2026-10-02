@@ -809,6 +809,16 @@ async function main(): Promise<number> {
 			dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
 			// Why the confidence above is lower than the coverage alone would make it.
 			...info.namespaceNotes.map((n) => dim(`            ${n}`)),
+			// Listed, never written: `init` leaves `external` for somebody to confirm.
+			...(info.possibleExternal.length
+				? [
+						...info.possibleExternal.map(
+							(c, i) =>
+								`${dim(i === 0 ? 'possible external:  ' : '                    ')}${c.prefix}  ${dim(`(${c.classes} class${c.classes === 1 ? '' : 'es'}, ${c.reason})`)}`,
+						),
+						dim('                    confirm with `namespaces.external` in loupe.config.json'),
+					]
+				: []),
 			dim(
 				`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` +
 					(info.truncated ? `  (stopped at the ${CEILING})` : ''),

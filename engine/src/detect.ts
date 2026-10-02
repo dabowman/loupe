@@ -55,6 +55,18 @@ interface NamespaceDetection {
 	truncated: boolean;
 	/** What the stylesheet budgets left unread, as sentences; empty when nothing was. */
 	notes: string[];
+	external: ExternalCandidate[];
+}
+
+/**
+ * A class prefix that looks like somebody else's: reported for a person to
+ * confirm, never written into a config on inference's say-so.
+ */
+export interface ExternalCandidate {
+	prefix: string;
+	/** Distinct class names under it in the project's stylesheets. */
+	classes: number;
+	reason: string;
 }
 
 /** Everything inference concluded, with the config it produced. */
@@ -75,6 +87,12 @@ export interface DetectedConfig {
 	 * walk saw the whole tree, it just declined to read all of what it found.
 	 */
 	namespaceNotes: string[];
+	/**
+	 * Prefixes that look vendored rather than owned. Reported, not written: a
+	 * prefix nothing references is also exactly what dead CSS looks like, and
+	 * only somebody who can read the enqueue code can tell the two apart.
+	 */
+	possibleExternal: ExternalCandidate[];
 	config: AuthoredConfig;
 }
 
@@ -262,6 +280,30 @@ export function detectPreset(root: string): PresetMatch {
 export const STYLE_FILE_BUDGET = 600;
 export const STYLE_MAX_BYTES = 1_500_000;
 
+/**
+ * The prefix a build tool's generated class name carries, or null.
+ *
+ * A project's own source never spells these: its `Foo.module.css` says
+ * `.container`, and the bundler writes `Foo-module_container`. So a stylesheet
+ * that does spell one is styling compiled output, nearly always a bundle that
+ * belongs to someone else — a widget served from another origin, say.
+ */
+function generatedPrefix(cls: string): { prefix: string; reason: string } | null {
+	// CSS Modules' `[name]-module_[local]`, or `_module_`.
+	const mod = /^([A-Za-z]\w*?[-_]module_)/.exec(cls);
+	if (mod?.[1]) return { prefix: mod[1], reason: 'CSS-module output' };
+	// `[name]_[local]__[hash]` (Next.js), and emotion's or styled-jsx's bare hash.
+	// The hash has to carry a digit, which is what keeps BEM's `block__element` out.
+	const hashed =
+		/^([A-Za-z][A-Za-z0-9]*_)[A-Za-z][\w-]*__(?=[\w-]*\d)[\w-]{5,}$/.exec(cls) ??
+		/^((?:css|jsx)-)(?=[a-z0-9]*\d)[a-z0-9]{5,}$/.exec(cls);
+	if (hashed?.[1]) return { prefix: hashed[1], reason: 'hashed class names' };
+	return null;
+}
+
+/** How many candidates `detect` lists: a shortlist to confirm, not an inventory. */
+const EXTERNAL_LIMIT = 8;
+
 const CLASS_RE = /\.(-?[_a-zA-Z][\w-]*)/g;
 
 /** A class's namespace — everything up to and including its first `-` — or null when it has none. */
@@ -356,6 +398,8 @@ function detectNamespaces(
 		external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
 
 	const cssCounts = new Map<string, number>();
+	const cssClasses = new Map<string, Set<string>>();
+	const generated = new Map<string, { classes: Set<string>; reason: string }>();
 	// Shallowest first, which is the order the walk found them in: the project's
 	// own stylesheets sit nearer the root than whatever generated the rest.
 	const read = files.styles.slice(0, STYLE_FILE_BUDGET);
@@ -374,7 +418,18 @@ function detectNamespaces(
 		for (const m of text.matchAll(CLASS_RE)) {
 			const cls = m[1];
 			const prefix = prefixOf(cls);
-			if (cls === undefined || !prefix || isExcluded(cls)) continue;
+			if (cls === undefined || isExcluded(cls)) continue;
+			// Generated names are nobody's namespace, the project's least of all, so
+			// they are set aside before they can count towards one.
+			const gen = generatedPrefix(cls);
+			if (gen) {
+				const entry = generated.get(gen.prefix) ?? { classes: new Set<string>(), reason: gen.reason };
+				entry.classes.add(cls);
+				generated.set(gen.prefix, entry);
+				continue;
+			}
+			if (!prefix) continue;
+			cssClasses.set(prefix, (cssClasses.get(prefix) ?? new Set<string>()).add(cls));
 			cssCounts.set(prefix, (cssCounts.get(prefix) ?? 0) + 1);
 		}
 	}
@@ -409,6 +464,25 @@ function detectNamespaces(
 		if (accepted.length >= 5) break;
 	}
 
+	// What might be somebody else's, most certain first: a generated shape, then a
+	// prefix an installed dependency defines, then one only stylesheets mention.
+	const owned = (prefix: string): boolean => accepted.some(([p]) => prefix.startsWith(p));
+	const distinct = (prefix: string): number => cssClasses.get(prefix)?.size ?? 0;
+	const foreign: ExternalCandidate[] = [
+		...[...generated]
+			.map(([prefix, g]) => ({ prefix, classes: g.classes.size, reason: g.reason }))
+			.sort((a, b) => b.classes - a.classes),
+		...[...vendored].map((prefix) => ({ prefix, classes: distinct(prefix), reason: 'defined in node_modules' })),
+		...[...cssCounts]
+			.filter(([prefix, count]) => count >= 3 && !haystack.includes(prefix) && !owned(prefix))
+			.map(([prefix]) => ({
+				prefix,
+				classes: distinct(prefix),
+				reason: 'no markup or reference names it \u2014 vendored, or dead',
+			}))
+			.sort((a, b) => b.classes - a.classes),
+	].slice(0, EXTERNAL_LIMIT);
+
 	const total = [...cssCounts.values()].reduce((a, b) => a + b, 0);
 	const covered = accepted.reduce((a, [, c]) => a + c, 0);
 	const coverage = total ? covered / total : 0;
@@ -435,6 +509,7 @@ function detectNamespaces(
 		sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
 		truncated: files.truncated,
 		notes,
+		external: foreign,
 	};
 }
 
@@ -481,6 +556,7 @@ export function detectConfig(
 		sampled: ns.sampled,
 		truncated: ns.truncated,
 		namespaceNotes: ns.notes,
+		possibleExternal: ns.external,
 		config,
 	};
 }
