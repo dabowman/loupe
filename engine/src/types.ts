@@ -808,7 +808,12 @@ export type Discovered = Record<SourceKind, DiscoveredFile[]> & { truncated: boo
 export interface BaselineFile {
 	version: number;
 	createdAt: string;
-	/** Entries, not findings — kept under this name because 0.1.x files use it. */
+	/**
+	 * Entries, not findings — kept under this name because 0.1.x files use it.
+	 * Nothing here reads it; it is written for engines that predate `findings`.
+	 * Remove it in 0.9.0, the minor after 0.8.0: the 0.1.x locations that were
+	 * its only other reason to stay were dropped in 0.8.0 (#42).
+	 */
 	count: number;
 	/**
 	 * Findings recorded, which is >= `count` whenever several shared a key.

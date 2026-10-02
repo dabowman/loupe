@@ -65,7 +65,8 @@ export function writeBaseline(
 	const unchanged =
 		prior !== null && prior.entries.length === entries.length && prior.entries.every((e, i) => e === entries[i]);
 	// Both numbers: `count` is entries, `findings` is what collapsed into them.
-	// `count` keeps its meaning so 0.1.x files still parse.
+	// `count` keeps its meaning so 0.1.x files still parse — until 0.9.0, when it
+	// goes (see `BaselineFile.count`).
 	const file: BaselineFile = {
 		version: 1,
 		createdAt: unchanged && prior.createdAt ? prior.createdAt : new Date().toISOString(),

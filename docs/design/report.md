@@ -313,7 +313,10 @@ collapse into one entry whenever they share a key, and `check` reports the
 findings it hid, not the entries that hid them. A file reporting only entries
 under a name a reader hears as "findings" is how 194 came to be quoted against
 `check`'s 253. `count` keeps its meaning so 0.1.x files still parse; `findings`
-says the rest.
+says the rest. Nothing reads `count` any more, and it is removed in 0.9.0: the
+0.1.x baseline locations, its other reason to stay, are already gone — they are
+not read, so a deleted baseline cannot be replaced by one an older version
+wrote.
 
 A *configured* baseline may name a directory that doesn't exist yet; the default
 one sits in the project root, which the caller already proved exists. The
