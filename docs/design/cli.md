@@ -195,6 +195,14 @@ project's own namespace appears nowhere in `node_modules`.
   against what was read — which is why it can look convincing and still be
   wrong. `none` is a different and still-true claim, and swallowing it printed
   "(none found) [low confidence]".
+- **Stylesheets are read on a budget, and a tripped budget demotes the same
+  way.** The walk ceiling bounds entries visited, not bytes read, and a tree can
+  be nothing but large generated CSS. Inference reads the first 600 stylesheets
+  the walk found (the same count `libraryPrefixes` allows itself) and skips any
+  over 1.5MB (the size `analyze` treats as generated). Either one answering from
+  less than was found is a guess from part of the evidence, so it demotes `high`
+  and says what it skipped under the namespace line. It is not `truncated`,
+  though: the walk saw the whole tree, so `init` does not refuse over it.
 - **`--profile <id>` beats a guess.** Inference's own verdict is still returned
   as `preset` so `status` and `init` can report it, but the config extends what
   the flag named — and everything derived from the preset has to follow, or the

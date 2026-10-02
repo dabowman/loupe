@@ -53,6 +53,8 @@ interface NamespaceDetection {
 	sampled: { styles: number; markup: number; references: number };
 	/** The walk hit {@link DETECT_ENTRY_BUDGET} and stopped: this is part of the tree. */
 	truncated: boolean;
+	/** What the stylesheet budgets left unread, as sentences; empty when nothing was. */
+	notes: string[];
 }
 
 /** Everything inference concluded, with the config it produced. */
@@ -68,6 +70,11 @@ export interface DetectedConfig {
 	sampled: NamespaceDetection['sampled'];
 	/** Inference stopped at the file ceiling — the caller has to say so. */
 	truncated: boolean;
+	/**
+	 * Stylesheets the read budgets skipped, said in words. Not `truncated`: the
+	 * walk saw the whole tree, it just declined to read all of what it found.
+	 */
+	namespaceNotes: string[];
 	config: AuthoredConfig;
 }
 
@@ -242,6 +249,19 @@ export function detectPreset(root: string): PresetMatch {
 	};
 }
 
+/**
+ * How many stylesheets namespace inference reads, and how large one may be.
+ *
+ * The walk ceiling bounds how many entries inference *visits*, not how much it
+ * reads, and a tree can be nothing but large generated stylesheets — a token
+ * dump, a checked-in `build-style/` a preset's ignore globs miss. The count
+ * matches {@link libraryPrefixes}'s budget; the size matches `analyze`, which
+ * skips anything bigger as generated, so a file the check never reads does not
+ * get to name the project's namespace either.
+ */
+export const STYLE_FILE_BUDGET = 600;
+export const STYLE_MAX_BYTES = 1_500_000;
+
 const CLASS_RE = /\.(-?[_a-zA-Z][\w-]*)/g;
 
 /** A class's namespace — everything up to and including its first `-` — or null when it has none. */
@@ -336,9 +356,17 @@ function detectNamespaces(
 		external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
 
 	const cssCounts = new Map<string, number>();
-	for (const { abs } of files.styles) {
+	// Shallowest first, which is the order the walk found them in: the project's
+	// own stylesheets sit nearer the root than whatever generated the rest.
+	const read = files.styles.slice(0, STYLE_FILE_BUDGET);
+	let oversized = 0;
+	for (const { abs } of read) {
 		let text: string;
 		try {
+			if (statSync(abs).size > STYLE_MAX_BYTES) {
+				oversized++;
+				continue;
+			}
 			text = readFileSync(abs, 'utf8');
 		} catch {
 			continue;
@@ -385,15 +413,28 @@ function detectNamespaces(
 	const covered = accepted.reduce((a, [, c]) => a + c, 0);
 	const coverage = total ? covered / total : 0;
 
+	// Either budget answering from less than was found is the same claim as a
+	// truncated walk, and said the same way: in the confidence, and in words.
+	const notes = [
+		...(files.styles.length > read.length
+			? [`read the first ${read.length} of ${files.styles.length} stylesheets`]
+			: []),
+		...(oversized
+			? [`skipped ${oversized} stylesheet(s) over ${Math.round(STYLE_MAX_BYTES / 1000)}kB as generated`]
+			: []),
+	];
+
 	return {
 		project: accepted.map(([p]) => p),
 		coverage,
 		// A truncated walk read part of a tree, so `high` is a claim it cannot make.
 		// It demotes `high` only: `none` is the different and still-true claim that
 		// nothing was found.
-		confidence: accepted.length === 0 ? 'none' : files.truncated ? 'low' : coverage >= 0.5 ? 'high' : 'low',
+		confidence:
+			accepted.length === 0 ? 'none' : files.truncated || notes.length ? 'low' : coverage >= 0.5 ? 'high' : 'low',
 		sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
 		truncated: files.truncated,
+		notes,
 	};
 }
 
@@ -439,6 +480,7 @@ export function detectConfig(
 		coverage: ns.coverage,
 		sampled: ns.sampled,
 		truncated: ns.truncated,
+		namespaceNotes: ns.notes,
 		config,
 	};
 }

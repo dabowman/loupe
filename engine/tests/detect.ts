@@ -8,7 +8,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { DETECT_ENTRY_BUDGET, detectConfig } from '../src/detect.ts';
+import { DETECT_ENTRY_BUDGET, STYLE_FILE_BUDGET, STYLE_MAX_BYTES, detectConfig } from '../src/detect.ts';
 import { discover } from '../src/discover.ts';
 import { assert, check, cleanup, fail, finish, scratch, write } from './harness.ts';
 
@@ -300,6 +300,69 @@ await check('a truncated walk that found nothing still answers none', () => {
 		assert(
 			bounded.namespaceConfidence === 'none',
 			`nothing was found, so the confidence is none — got ${bounded.namespaceConfidence}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// ── the read budgets ────────────────────────────────────────────────────────
+// The walk ceiling bounds entries visited, not bytes read: markup was capped at
+// 2000 files and stylesheets at nothing, so a tree of large generated CSS was
+// read in full before inference answered. A budget that trips is a guess from
+// less than was found, and has to read as one.
+
+/** A project inference can name with high confidence: `own-` in CSS and markup. */
+const ownProject = (root: string): void => {
+	write(root, 'package.json', '{}');
+	write(root, 'App.jsx', 'export const App = () => <div className="own-box own-card own-hero" />;');
+	write(root, 'a.css', '.own-box{color:#111}\n.own-card{color:#222}\n.own-hero{color:#333}');
+};
+
+await check('a stylesheet over the size cap is skipped, and the confidence says so', () => {
+	const root = scratch('dsh-budget-bytes-');
+	try {
+		ownProject(root);
+		const whole = detectConfig(root);
+		assert(whole.namespaceConfidence === 'high', `baseline should be high, got ${whole.namespaceConfidence}`);
+		assert(whole.namespaceNotes.length === 0, `nothing was skipped: ${JSON.stringify(whole.namespaceNotes)}`);
+
+		// One generated blob over the cap, full of a prefix the markup also names —
+		// read, it would outvote the project's own CSS.
+		const rule = '.gen-x{color:#000}\n';
+		write(root, 'styles/tokens.css', rule.repeat(Math.ceil((STYLE_MAX_BYTES + 1) / rule.length)));
+		write(root, 'Gen.jsx', 'export const G = () => <div className="gen-x" />;');
+		const capped = detectConfig(root);
+		assert(
+			!capped.namespaces.project.includes('gen-'),
+			`an oversized stylesheet named a namespace: ${JSON.stringify(capped.namespaces)}`,
+		);
+		assert(
+			capped.namespaceConfidence === 'low',
+			`a skipped stylesheet cannot leave a high-confidence answer — got ${capped.namespaceConfidence}`,
+		);
+		assert(
+			capped.namespaceNotes.some((n) => /skipped 1 stylesheet\(s\) over \d+kB/.test(n)),
+			`the skip has to be said: ${JSON.stringify(capped.namespaceNotes)}`,
+		);
+		assert(!capped.truncated, 'a skipped file is not a truncated walk; init must not refuse over it');
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('stylesheets past the count cap are not read, and the confidence says so', () => {
+	const root = scratch('dsh-budget-count-');
+	try {
+		ownProject(root);
+		// Deeper than the project's own stylesheet, so the walk finds it first.
+		for (let i = 0; i < STYLE_FILE_BUDGET; i++) write(root, `gen/g${i}.css`, `.own-g${i}{color:#000}`);
+		const got = detectConfig(root);
+		assert(got.namespaces.project.includes('own-'), `the root's stylesheet is read first: ${JSON.stringify(got)}`);
+		assert(got.namespaceConfidence === 'low', `a capped read cannot be high — got ${got.namespaceConfidence}`);
+		assert(
+			got.namespaceNotes.some((n) => n.includes(`first ${STYLE_FILE_BUDGET} of ${STYLE_FILE_BUDGET + 1}`)),
+			`the cap has to be said: ${JSON.stringify(got.namespaceNotes)}`,
 		);
 	} finally {
 		cleanup(root);

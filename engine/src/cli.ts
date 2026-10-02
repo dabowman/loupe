@@ -807,6 +807,8 @@ async function main(): Promise<number> {
 				: []),
 			`${dim('namespaces: ')}${info.namespaces.project.join(', ') || '(none found)'}  ${confidence(info.namespaceConfidence)}`,
 			dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
+			// Why the confidence above is lower than the coverage alone would make it.
+			...info.namespaceNotes.map((n) => dim(`            ${n}`)),
 			dim(
 				`scanned:    ${info.sampled.styles} style, ${info.sampled.markup} markup, ${info.sampled.references} reference file(s)` +
 					(info.truncated ? `  (stopped at the ${CEILING})` : ''),
