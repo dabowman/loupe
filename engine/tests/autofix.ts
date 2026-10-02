@@ -832,6 +832,37 @@ await check('fix --judge still writes what needed no model when the judge cannot
 	}
 });
 
+// `analyze` bounds every line before it returns, and `--judge` recomposes a
+// message after that. A css-in-js selector rides in the tail, so a long one
+// came back whole and past the cap once the judgement was written in.
+await check('a judged css-in-js finding with a long selector is still one bounded line', async () => {
+	const root = scratch('dsh-judge-bound-');
+	try {
+		const selector = `.Styled-${'x'.repeat(200)}-tail`;
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			// No padding token at all, so the answer is written without a model.
+			[DS_TOKENS]: ':root { --wpds-border-radius-md: 4px; }',
+			'src/A.jsx': `import styled from 'styled-components';\nexport const A = styled.div\`\n\t${selector} {\n\t\tpadding: 999px;\n\t}\n\`;\n`,
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const result = await analyze(config, { scope: null });
+		assert(result.tokens, 'analyze did not hand back its token set');
+		const stub = (async () => {
+			throw new Error('asked a model about a property with no tokens');
+		}) as unknown as typeof fetch;
+		assert((await judgeValues(root, result.findings, result.tokens, 'key', new Map(), stub)) === 1, 'not judged');
+		const f = result.findings.find((x) => x.decl?.prop === 'padding');
+		assert(f, 'no padding finding');
+		assert([...f.message].length <= 200, `${[...f.message].length} characters: ${f.message}`);
+		assert(f.message.startsWith('padding: 999px → no padding token in the design system'), f.message);
+		// Shortened from the front, so what tells two selectors apart survives.
+		assert(f.message.endsWith('-tail` (css-in-js)'), f.message);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // Each of these once wrote CSS that was wrong in a way no report would show.
 // The rule `--judge` was widened to, and the shape the widening is about: one
 // finding, three declarations, three different outcomes on three lines.

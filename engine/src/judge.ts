@@ -33,6 +33,7 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
+import { boundMessage } from './text.ts';
 import { KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
@@ -322,11 +323,12 @@ export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescrip
  *
  * Every settled declaration is rendered by the same `declarationMessage` the
  * token pass used, so a judged finding and an unjudged one read by one set of
- * rules. The channel marker comes off `suffix`, where the walk put it.
+ * rules. The channel marker comes off `suffix`, where the walk put it, and the
+ * line is bounded again, since the bound in `analyze` ran before this did.
  */
 function restate(f: Finding): void {
 	const parts = f.suggest ?? [];
-	f.message = declarationMessage(parts, f.suffix ?? '');
+	f.message = boundMessage(declarationMessage(parts, f.suffix ?? ''), f.suffix);
 	const judged = parts.flatMap((s) => (s.judged ? [s.judged] : []));
 	if (!judged.length) return;
 	// The least certain answer speaks for the finding: it is the one a floor

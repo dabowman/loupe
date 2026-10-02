@@ -43,7 +43,7 @@ import { discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
-import { messageLine, messageOf, oneLine, snippet } from './text.ts';
+import { boundMessage, messageOf, oneLine, snippet } from './text.ts';
 import {
 	cssFilesUnder,
 	declarationMessage,
@@ -719,11 +719,7 @@ export async function analyze(
 	// above is the last of several writers of `message`. Each captured snippet is
 	// bounded where it was captured; this bounds what they add up to, keeping the
 	// channel marker on the end.
-	for (const f of unique) {
-		const tail = f.suffix ?? '';
-		const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
-		f.message = messageLine(body, tail);
-	}
+	for (const f of unique) f.message = boundMessage(f.message, f.suffix);
 	// `suffix` is not dropped here: `--judge` runs after this and recomposes the
 	// message of anything it settles. It is dropped where the output is built.
 
