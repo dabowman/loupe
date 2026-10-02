@@ -172,3 +172,26 @@ Expect counts to move. In rough order of impact:
   file isn't in scope. Run `check --all` in CI to catch those.
 - CSS Grid is always a keep. Flex primitives can't express it, so `layout/in-css`
   stays quiet on grid rules rather than proposing a conversion that can't work.
+
+# Upgrading a loupe config from before 0.8.0
+
+## Rule options are gone: `[severity, {opts}]` → `severity`
+
+0.8.0 removed the array form of a rule setting, and the options it carried
+(`allowZero` among them — zero is always allowed now, as it was by default). A
+rule may only be set to a severity:
+
+```diff
+   "rules": {
+-    "layout/margin-on-child": ["warn", { "except": ["Spacer"] }]
++    "layout/margin-on-child": "warn"
+   }
+```
+
+A config still written the old way does not load. `loupe check` and
+`loupe status` fail with `config error — rule options are no longer supported —
+write "<rule>": "<severity>"`, naming the line to write. The hook does not block
+the turn over it — it stands aside — so until the config is fixed **the gate
+checks nothing**: it tells the user `loupe: skipped — config error: …` and, on a
+write, hands the agent the same error as advisory context so it can offer the
+rewrite. Run `loupe status` after upgrading to catch it before a session does.

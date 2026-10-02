@@ -612,6 +612,15 @@ Under the hook, `EXIT.CANNOT_RUN` is exit 2, which blocks the turn. A mistyped
 preset in the plugin settings would otherwise block every turn in every project,
 with nothing the agent could do about it.
 
+Standing aside is not telling no one. An error in the project's *own* config —
+a rule still written in the `[severity, {opts}]` form 0.8.0 removed — turns the
+gate off on every turn, and a `systemMessage` reaches only the user, in the slot
+a clean run's tally fills. So that one also goes to the agent, as PostToolUse
+`additionalContext`: advisory, exit 0, and specific enough to offer the rewrite.
+A Stop hook has no non-blocking channel to the agent, so there it stays the
+user's message; so does a plugin setting's error, which is not the agent's to
+fix.
+
 ### Silence, not advisory mode
 
 The `off` switch makes the hook check nothing. An advisory finding still lands

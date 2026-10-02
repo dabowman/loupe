@@ -275,6 +275,62 @@ await check('a config error never blocks a turn', () => {
 	}
 });
 
+// 0.8.0 dropped the `[severity, {opts}]` rule form, and a committed config still
+// written that way turned the gate off on every turn with nothing but a one-line
+// systemMessage — the shape a clean run has — to say so. An error in the
+// project's own config is the project's to fix, so the agent hears it too, as
+// advisory context where the event has a channel for it; a mistyped plugin
+// setting is not the agent's business and stays the user's message alone.
+await check("an error in the project's own config reaches the agent, without blocking", () => {
+	const root = tmpRepo({
+		'package.json': '{}',
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			rules: { 'layout/margin-on-child': ['warn', { except: ['Spacer'] }] },
+		}),
+		'style.css': '.a { margin-bottom: 16px; }',
+	});
+	const bare = tmpRepo({ 'package.json': '{}', 'src/App.jsx': 'export const App = () => <div />;' });
+	type Out = { systemMessage?: string; hookSpecificOutput?: { hookEventName?: string; additionalContext?: string } };
+	const hook = (at: string, payload: object, extra: NodeJS.ProcessEnv = {}): Out => {
+		const r = runCli(['hook', '--root', at], extra, JSON.stringify({ session_id: 'cfg', ...payload }));
+		assert(r.status === 0, `a config error blocked the turn: exit ${r.status}\n${r.stderr}`);
+		return JSON.parse(r.stdout) as Out;
+	};
+	try {
+		const post = hook(root, { hook_event_name: 'PostToolUse', tool_input: { file_path: 'style.css' } });
+		assert(/skipped .*config error/.test(post.systemMessage ?? ''), `unexpected message: ${JSON.stringify(post)}`);
+		const context = post.hookSpecificOutput?.additionalContext ?? '';
+		assert(
+			post.hookSpecificOutput?.hookEventName === 'PostToolUse',
+			`no context for the agent: ${JSON.stringify(post)}`,
+		);
+		assert(
+			context.includes('loupe.config.json') && context.includes('"layout/margin-on-child": "warn"'),
+			`the agent was not handed the rewrite: ${context}`,
+		);
+
+		// Stop has no non-blocking way into the agent's context.
+		const stop = hook(root, { hook_event_name: 'Stop' });
+		assert(stop.hookSpecificOutput === undefined, `a Stop hook was handed context: ${JSON.stringify(stop)}`);
+
+		// A plugin setting the agent cannot fix is the user's to hear about.
+		const setting = hook(
+			bare,
+			{ hook_event_name: 'PostToolUse', tool_input: { file_path: 'src/App.jsx' } },
+			{ CLAUDE_PLUGIN_OPTION_PRESET: 'no-such-preset' },
+		);
+		assert(/config error/.test(setting.systemMessage ?? ''), `unexpected message: ${JSON.stringify(setting)}`);
+		assert(
+			setting.hookSpecificOutput === undefined,
+			`a plugin setting's error was handed to the agent: ${JSON.stringify(setting)}`,
+		);
+	} finally {
+		cleanup(root);
+		cleanup(bare);
+	}
+});
+
 // The wordpress-components markup glob was `**/src/**`, which made 59% of a real
 // repo invisible — and every class referenced only there reported as dead.
 await check('markup outside src/ still counts as a reference', async () => {

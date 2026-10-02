@@ -35,6 +35,7 @@ interface AttemptState {
 /** What a Claude Code hook payload carries that this cares about. */
 export interface HookPayload {
 	session_id?: string;
+	hook_event_name?: string;
 	stop_hook_active?: boolean;
 	tool_input?: { file_path?: string };
 	[key: string]: unknown;
@@ -367,6 +368,31 @@ function coerce(opts: Record<string, unknown>): PluginOptions {
 
 export function emitClean(message: string): number {
 	process.stdout.write(JSON.stringify({ systemMessage: message, suppressOutput: true }));
+	return 0;
+}
+
+/**
+ * A stand-down the agent has to hear about as well as the user: exit 0, never
+ * blocking, with `message` for the user and `context` for the agent.
+ *
+ * PostToolUse has a non-blocking way into the agent's context,
+ * `hookSpecificOutput.additionalContext`. Stop has none — its only channel to
+ * the agent is `decision: "block"`, which is exactly what a gate that cannot
+ * configure itself must not do — so there it is the user's message alone.
+ * Claude Code always names the event; a payload carrying a file is a
+ * PostToolUse one when it does not.
+ */
+export function emitAdvisory(message: string, context: string, payload: HookPayload): number {
+	const event = payload.hook_event_name ?? (payload.tool_input ? 'PostToolUse' : undefined);
+	process.stdout.write(
+		JSON.stringify({
+			systemMessage: message,
+			suppressOutput: true,
+			...(event === 'PostToolUse'
+				? { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: context } }
+				: {}),
+		}),
+	);
 	return 0;
 }
 

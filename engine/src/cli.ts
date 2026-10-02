@@ -38,6 +38,7 @@ import {
 	claudeProjectDir,
 	clearAttempts,
 	describeOptions,
+	emitAdvisory,
 	emitBlocking,
 	emitClean,
 	hookRoot,
@@ -504,6 +505,9 @@ async function main(): Promise<number> {
 	// Hoisted: `status` has to be able to say where an inferred config got its
 	// ruleset, and "inferred" on its own does not say a profile named it.
 	let profilePreset: string | null = null;
+	// The config file the project wrote, when that is what is being loaded: an
+	// error in it is the project's to fix, not a plugin setting's.
+	let ownConfig: string | null = null;
 	// Detection plus everything that outranks it. Reads `profilePreset` at call
 	// time, which is what lets `detect` and `init` below reuse it after the
 	// resolution above has settled.
@@ -526,6 +530,7 @@ async function main(): Promise<number> {
 		const projectConfig = args.flags.config ? null : findConfig(root);
 		const optionPreset = options.preset && options.preset !== 'auto' ? options.preset : null;
 		const explicitPreset = args.flags.preset ?? (projectConfig ? null : optionPreset);
+		ownConfig = args.flags.config ? resolve(args.flags.config) : explicitPreset ? null : projectConfig;
 
 		// The project-shape guard runs ahead of inference, not after it: inference
 		// walks the tree, and `hookRoot()` falls back to the process cwd, so the tree
@@ -571,6 +576,19 @@ async function main(): Promise<number> {
 		// Under the hook, EXIT.CANNOT_RUN is exit 2, which blocks the turn: a mistyped
 		// preset in the plugin settings would block every turn in every project. A gate
 		// that cannot configure itself stands aside and says so.
+		//
+		// Standing aside is not the same as telling no one. An error in the project's
+		// own config — a rule written in a form a release removed, say — turns the
+		// gate off on every turn, and a systemMessage reaches only the user, in the
+		// slot a clean run's tally fills. The agent is told too, as advisory context,
+		// so it can offer the rewrite the error already names.
+		if (isHook && ownConfig)
+			return emitAdvisory(
+				`loupe: skipped \u2014 config error: ${messageOf(err)}`,
+				`loupe, the design-system gate, is checking nothing in this project: ${ownConfig} has a config error \u2014 ${messageOf(err)}. ` +
+					'Until it is fixed no edit is checked. Offer the user that fix; this is advisory and blocks nothing.',
+				payload,
+			);
 		if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf(err)}`);
 		fail(`loupe: config error \u2014 ${messageOf(err)}\n`);
 		return EXIT.CANNOT_RUN;

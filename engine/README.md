@@ -204,6 +204,11 @@ error-severity findings, so CI behaviour does not depend on this.
 }
 ```
 
+A rule takes a severity and nothing else. The `["warn", { … }]` form was removed
+in 0.8.0, and a config still using it does not load — under the hook that means
+the gate checks nothing until it is fixed. The rewrite is one line per rule; see
+[MIGRATION.md](MIGRATION.md#upgrading-a-loupe-config-from-before-080).
+
 Defaults are `DEFAULTS` in `src/config.ts`; `presets/generic.json` adds the
 ignore globs and CSS-in-JS packages every shipped preset inherits. The
 design-system block is what makes a preset:
