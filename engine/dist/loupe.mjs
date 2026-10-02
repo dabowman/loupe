@@ -28170,24 +28170,24 @@ function writeBaseline(full, result) {
 `);
   return { path: full, findings: result.findings.length, entries: entries.length };
 }
-function applyBaseline(result, baseline) {
-  if (!baseline) return { ...result, baselined: 0, fixed: 0 };
+function applyBaseline(result, baseline, { scoped = false } = {}) {
+  if (!baseline) return { ...result, baselined: 0, baselinedFindings: [], fixed: null };
   const seen = /* @__PURE__ */ new Set();
   const kept = [];
-  let baselined = 0;
+  const accepted = [];
   for (const f of result.findings) {
     const key = findingKey(f);
     seen.add(key);
-    if (baseline.set.has(key)) baselined++;
+    if (baseline.set.has(key)) accepted.push(f);
     else kept.push(f);
   }
-  const fixed = [...baseline.set].filter((k) => !seen.has(k)).length;
   return {
     ...result,
     findings: kept,
     blocking: kept.some((f) => f.severity === "error"),
-    baselined,
-    fixed
+    baselined: accepted.length,
+    baselinedFindings: accepted,
+    fixed: scoped ? null : [...baseline.set].filter((k) => !seen.has(k)).length
   };
 }
 
@@ -28758,7 +28758,8 @@ function reportPayload(result, config) {
       // Only when a baseline was applied. Without it, the number the agent
       // format prints has no counterpart here, and a consumer cannot tell a
       // clean repo from one whose whole backlog is accepted.
-      ..."baselined" in result ? { baselined: result.baselined } : {}
+      ..."baselined" in result ? { baselined: result.baselined } : {},
+      ..."fixed" in result && result.fixed !== null ? { fixed: result.fixed } : {}
     },
     rules: usedRules(result, config),
     // `rank` orders the report and `suffix` carries the channel marker; both are
@@ -28769,9 +28770,12 @@ function reportPayload(result, config) {
     config: { rules: config.rules, enabled: config.enabled }
   };
 }
+var BASELINE_SUPPRESSION = { kind: "external", justification: "accepted in the loupe baseline" };
 function formatSarif(result, config) {
   const title = titleFor(config);
-  const fps = fingerprints(result.findings);
+  const accepted = "baselinedFindings" in result ? result.baselinedFindings : [];
+  const all = [...result.findings, ...accepted];
+  const fps = fingerprints(all);
   return JSON.stringify(
     {
       $schema: "https://json.schemastore.org/sarif-2.1.0.json",
@@ -28782,7 +28786,7 @@ function formatSarif(result, config) {
             driver: {
               name: "Loupe",
               informationUri: "https://github.com/dvdbwmn/loupe",
-              rules: usedRules(result, config).map((r) => ({
+              rules: usedRules({ ...result, findings: all }, config).map((r) => ({
                 id: r.id,
                 shortDescription: { text: r.title },
                 // No `fullDescription`: the catalog holds one line of guidance per
@@ -28796,7 +28800,7 @@ function formatSarif(result, config) {
               }))
             }
           },
-          results: result.findings.map((f, i) => ({
+          results: all.map((f, i) => ({
             ruleId: f.rule,
             level: f.severity === "error" ? "error" : "warning",
             message: { text: `${f.message} \u2014 ${title(f.rule)}` },
@@ -28808,8 +28812,16 @@ function formatSarif(result, config) {
                   region: { startLine: f.line }
                 }
               }
-            ]
-          }))
+            ],
+            ...i >= result.findings.length ? { suppressions: [BASELINE_SUPPRESSION] } : {}
+          })),
+          // The same counts `--format json` carries in its summary.
+          ..."baselined" in result ? {
+            properties: {
+              baselined: result.baselined,
+              ...result.fixed !== null ? { fixed: result.fixed } : {}
+            }
+          } : {}
         }
       ]
     },
@@ -31124,7 +31136,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     const baseline = found ? readBaseline(bPath) : null;
     if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
 `);
-    result = applyBaseline(result, baseline);
+    result = applyBaseline(result, baseline, { scoped: scope !== null });
   }
   if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   if (apiKey) {
