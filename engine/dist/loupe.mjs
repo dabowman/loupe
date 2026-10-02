@@ -23664,6 +23664,21 @@ function readDir(dir) {
 var git = (root2, args) => execFileSync("git", [...args], { cwd: root2, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 var KINDS = ["styles", "markup", "references"];
 var HARD_SKIP = /* @__PURE__ */ new Set([".git", "node_modules"]);
+var ANALYZE_ENTRY_BUDGET = 2e5;
+function analyzeEntryBudget() {
+  const set = Number(process.env.LOUPE_MAX_ENTRIES);
+  return Number.isInteger(set) && set > 0 ? set : ANALYZE_ENTRY_BUDGET;
+}
+var TreeTooLarge = class extends Error {
+  limit;
+  constructor(limit) {
+    super(
+      `tree too large to index: the walk stopped at ${limit.toLocaleString("en-US")} entries without finishing, and a partial index would call the rest clean. Point --root at the project, or narrow \`sources\` (or extend \`sources.ignore\`) in loupe.config.json; LOUPE_MAX_ENTRIES raises the ceiling.`
+    );
+    this.name = "TreeTooLarge";
+    this.limit = limit;
+  }
+};
 var NAMES_DOT_SEGMENT = /^\.|[{,]\./;
 var reachesDotDirs = (globs) => globs.some(
   (g) => g.split("/").slice(0, -1).some((seg) => NAMES_DOT_SEGMENT.test(seg))
@@ -25649,20 +25664,26 @@ function collapsePerRule(pending) {
 async function analyze(config, {
   scope = null,
   judge = false,
-  suppress = true
+  suppress = true,
+  contents
 } = {}) {
   const ds = config.designSystem;
   const ruleIsLive = (rule2) => config.enabled[rule2];
   const parseSuppressions = makeSuppressionParser(config.suppression);
-  const files = discover({ root: config.root, sources: config.sources });
+  const limit = analyzeEntryBudget();
+  const files = discover({ root: config.root, sources: config.sources, limit });
+  if (files.truncated) throw new TreeTooLarge(limit);
   const MAX_BYTES = 15e5;
-  const tooBig = (abs) => {
+  const tooBig = (abs, rel) => {
+    const given = contents?.get(rel);
+    if (given !== void 0) return Buffer.byteLength(given) > MAX_BYTES;
     try {
       return statSync2(abs).size > MAX_BYTES;
     } catch {
       return false;
     }
   };
+  const read = (abs, rel) => contents?.get(rel) ?? readFileSync2(abs, "utf8");
   const tokenPrefixes = ds.tokenPrefixes ?? [];
   const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
   const realRoot = realPath(config.root) ?? config.root;
@@ -25712,10 +25733,10 @@ async function analyze(config, {
   const importsByFile = /* @__PURE__ */ new Map();
   const componentImports = [];
   for (const { abs, rel } of files.markup) {
-    if (tooBig(abs)) continue;
+    if (tooBig(abs, rel)) continue;
     let text2;
     try {
-      text2 = readFileSync2(abs, "utf8");
+      text2 = read(abs, rel);
     } catch {
       continue;
     }
@@ -25740,10 +25761,10 @@ async function analyze(config, {
     for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
     suppressionsFor(rel, text2);
   }
-  for (const { abs } of files.references) {
-    if (tooBig(abs)) continue;
+  for (const { abs, rel } of files.references) {
+    if (tooBig(abs, rel)) continue;
     try {
-      harvestTokens(readFileSync2(abs, "utf8"), referenced);
+      harvestTokens(read(abs, rel), referenced);
       diagnostics.filesScanned++;
     } catch {
     }
@@ -25755,7 +25776,7 @@ async function analyze(config, {
     if (isLibrarySheet(rel)) continue;
     let text2;
     try {
-      text2 = readFileSync2(abs, "utf8");
+      text2 = read(abs, rel);
     } catch {
       continue;
     }
@@ -25774,7 +25795,7 @@ async function analyze(config, {
           rank: RULES["stylesheet/unparsed"].rank
         });
     };
-    if (tooBig(abs)) {
+    if (tooBig(abs, rel)) {
       unparsed(`stylesheet over ${Math.round(MAX_BYTES / 1e3)}kB \u2014 skipped as generated`);
       continue;
     }
@@ -30338,6 +30359,12 @@ function payloadFile(payload, root2) {
   if (!rel || rel.startsWith("..")) return null;
   return toPosix(rel);
 }
+function preEditContent(payload) {
+  const response = payload?.tool_response;
+  if (!response || typeof response !== "object") return null;
+  const original = response.originalFile;
+  return typeof original === "string" ? original : null;
+}
 function hookRoot() {
   const fromEnv = process.env.CLAUDE_PROJECT_DIR;
   if (fromEnv && existsSync8(fromEnv)) return fromEnv;
@@ -30557,6 +30584,9 @@ Environment:
                         Code as 'LOUPE_OFF=1 claude'.
                         Both read 1/true/yes/on as on; anything else \u2014 0 and
                         false included \u2014 as not set.
+  LOUPE_MAX_ENTRIES=<n> How many entries analysis walks before it refuses to
+                        report at all (default 200,000), rather than calling
+                        the part of the tree it never read clean.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
@@ -30585,6 +30615,23 @@ function resolveScope(config, args, { defaultChanged = false }) {
     return [...changed];
   }
   return null;
+}
+async function keysBeforeEdit(config, touched, before, { judge, suppress }) {
+  if (before === null) return /* @__PURE__ */ new Set();
+  try {
+    const prior = await analyze(config, {
+      scope: [touched],
+      judge,
+      suppress,
+      contents: /* @__PURE__ */ new Map([[touched, before]])
+    });
+    const keys = new Set(prior.findings.map(findingKey));
+    for (const c of prior.controls ?? [])
+      keys.add(findingKey({ rule: "patterns/judged-redirect", file: c.file, code: `<${c.component}>`, message: "" }));
+    return keys;
+  } catch {
+    return /* @__PURE__ */ new Set();
+  }
 }
 function filterSeverity(result, min) {
   if (min !== "error") return result;
@@ -31091,11 +31138,25 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   }
   if (isHook) {
     const sessionId = payload.session_id ?? "";
-    if (!result.blocking) {
-      clearAttempts(root2, touched ? `${sessionId}\0${touched}` : sessionId);
-      return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
+    const budgetKey = touched ? `${sessionId}\0${touched}` : sessionId;
+    const errors = result.findings.filter((f) => f.severity === "error");
+    let blocking = errors;
+    if (touched && errors.length) {
+      const before = await keysBeforeEdit(config, touched, preEditContent(payload), {
+        judge: Boolean(apiKey),
+        suppress: !args.flags["no-suppressions"]
+      });
+      blocking = errors.filter((f) => !before.has(findingKey(f)));
     }
-    const attempts = bumpAttempts(root2, touched ? `${sessionId}\0${touched}` : sessionId);
+    const standing = errors.length - blocking.length;
+    const standingNote = standing ? ` ${standing} blocking finding(s) already in ${touched} before this edit, left for the Stop check.` : "";
+    if (!blocking.length) {
+      clearAttempts(root2, budgetKey);
+      return emitClean(
+        standing ? `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}` : `${formatSummary(result)}${ceilingSuffix}`
+      );
+    }
+    const attempts = bumpAttempts(root2, budgetKey);
     const max = config.hook.maxAttempts;
     if (!sessionId && payload.stop_hook_active) {
       return emitClean(`loupe: blocking findings remain (retry budget unavailable).${ceilingSuffix}`);
@@ -31105,13 +31166,13 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
         attempts === max + 1 ? `loupe: still failing after ${max} attempt(s) \u2014 gate stood down. ${formatSummary(result, { prefix: false })}${ceilingSuffix}` : `${formatSummary(result)}${ceilingSuffix}`
       );
     }
-    const report = formatAgent({ ...result, findings: result.findings.filter((f) => f.severity === "error") }, config, {
+    const report = formatAgent({ ...result, findings: blocking }, config, {
       maxFindings: config.hook.maxFindings,
       terse: true
     });
     return emitBlocking(`${report}
 
-(attempt ${attempts} of ${max})${ceilingSuffix}`);
+(attempt ${attempts} of ${max})${standingNote}${ceilingSuffix}`);
   }
   const maxFindings = Number(args.flags["max-findings"] ?? 0) || 0;
   if (format === "json") process.stdout.write(`${JSON.stringify(reportPayload(result, config), null, 2)}
@@ -31132,7 +31193,7 @@ ${result.baselined} baselined finding(s) hidden.
 main().then((code) => {
   process.exitCode = code;
 }).catch((err) => {
-  fail(`loupe: ${err instanceof Error ? err.stack : String(err)}
+  fail(`loupe: ${err instanceof TreeTooLarge ? err.message : err instanceof Error ? err.stack : String(err)}
 `);
   process.exitCode = EXIT.CANNOT_RUN;
 });
