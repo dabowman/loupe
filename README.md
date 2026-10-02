@@ -603,10 +603,14 @@ block at all unless you turn blocking on. Run `status` when a gate isn't
 behaving — it names the preset, the namespaces and the blocking switch, which is
 the whole space of reasons a gate misbehaves.
 
-`status` reads the plugin settings from `~/.claude` and says where it got them,
-because Claude Code exports plugin options to hook processes only — a terminal
-sees none of them, and a diagnostic that silently guesses at the switch it is
-diagnosing is worse than no diagnostic.
+`status` reads the plugin settings from `~/.claude` and says where it got each
+one, because Claude Code exports plugin options to hook processes only — a
+terminal sees none of them, and a diagnostic that silently guesses at the switch
+it is diagnosing is worse than no diagnostic. The two are merged key by key, the
+environment over the file, so an option the hook was handed does not hide the
+rest of the file from it. When `~/.claude/settings.json` has `pluginConfigs` but
+none of them is keyed `loupe` or `loupe@…`, `status` names the keys it found
+rather than reporting no options at all.
 
 ### Sass, Less
 

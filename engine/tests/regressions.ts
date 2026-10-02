@@ -324,6 +324,46 @@ await check('status reports the blocking switch it cannot see in the environment
 	}
 });
 
+// The environment was a whole answer or none: one exported option discarded
+// every other the settings file carried, so the hook — which sees the exported
+// keys — and a terminal — which sees only the file — resolved different options
+// for the same project, and produced finding keys no shared baseline covers.
+await check('plugin options merge per key, environment over settings', () => {
+	const home = scratch('dsh-home-');
+	const root = inferrableRepo();
+	try {
+		mkdirSync(join(home, '.claude'), { recursive: true });
+		writeFileSync(
+			join(home, '.claude', 'settings.json'),
+			JSON.stringify({
+				pluginConfigs: { 'loupe@somewhere': { options: { project_prefixes: 'zz-', blocking: false } } },
+			}),
+		);
+		// What the hook sees: one key exported, the rest only in the file.
+		const { stdout } = runCli(['status', '--root', root], { HOME: home, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' });
+		assert(/namespaces:\s+zz-/.test(stdout), `the exported key discarded the file's project_prefixes:\n${stdout}`);
+		assert(/blocking on \(environment\)/.test(stdout), `the environment did not win its key:\n${stdout}`);
+		assert(
+			/project_prefixes zz- \(~\/\.claude\/settings\.json\)/.test(stdout),
+			`status did not say where each key came from:\n${stdout}`,
+		);
+
+		// A `pluginConfigs` key the name guess misses is not "configured nothing".
+		writeFileSync(
+			join(home, '.claude', 'settings.json'),
+			JSON.stringify({ pluginConfigs: { 'Loupe-Plugin@elsewhere': { options: { blocking: true } } } }),
+		);
+		const missed = runCli(['status', '--root', root], { HOME: home }).stdout;
+		assert(
+			/none set .*no pluginConfigs entry is named loupe.*Loupe-Plugin@elsewhere/.test(missed),
+			`a missed pluginConfigs key read as no options at all:\n${missed}`,
+		);
+	} finally {
+		cleanup(home);
+		cleanup(root);
+	}
+});
+
 // The other half of the same bug: what status promises has to be what the hook
 // does, or the diagnostic is just a different kind of wrong.
 await check('the hook blocks when the setting says it should', () => {

@@ -36,6 +36,7 @@ import { baselinePath, findExistingBaseline, isPluginContext } from './paths.ts'
 import {
 	bumpAttempts,
 	clearAttempts,
+	describeOptions,
 	emitBlocking,
 	emitClean,
 	hookRoot,
@@ -466,7 +467,8 @@ async function main(): Promise<number> {
 
 	// Resolved for every command, not just the hook. `status` exists to say what
 	// the gate will do, and it cannot do that without the settings the gate reads.
-	const { options, source: optionsSource } = resolvedOptions();
+	const resolved = resolvedOptions();
+	const { options } = resolved;
 
 	// Read before the config rather than with the other registry work below: a
 	// profile names the preset that configures its design system, and that has
@@ -713,13 +715,7 @@ async function main(): Promise<number> {
 							? ''
 							: '  (none recorded yet)'
 			}`,
-			`${dim('options:    ')}${
-				optionsSource === 'environment'
-					? 'from the plugin environment (hook context)'
-					: optionsSource === 'settings'
-						? 'from ~/.claude settings'
-						: 'none found — plugin defaults apply'
-			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
+			`${dim('options:    ')}${describeOptions(resolved)}`,
 			`${dim('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
 			// The hook passes `--judge` and then turns it off silently when there is no
 			// key. A report that quietly stopped asking and one that found nothing to

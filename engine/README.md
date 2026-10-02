@@ -740,6 +740,10 @@ Installed as a Claude Code plugin, the hook reads its settings from
 class prefixes the project owns, and the attempt and finding caps. (Claude Code
 won't substitute `${user_config.*}` into a shell-form hook command, since the
 value would reach a shell, but it does export the options to the hook process.)
+The same options are read from `pluginConfigs` in `~/.claude/settings.json`, and
+the two are merged per key with the environment winning, so the hook and a
+terminal resolve the same set; `loupe status` prints each option with where it
+came from.
 
 Each session gets `hook.maxAttempts` gated passes (default 3), then the gate
 stands down and says so. Bailing out entirely on `stop_hook_active` — the

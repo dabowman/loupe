@@ -172,7 +172,33 @@ export function hookOff(root: string): string | null {
 	return null;
 }
 
-const OPTION_KEYS = ['preset', 'project_prefixes', 'blocking', 'max_attempts', 'max_findings'] as const;
+/** Each `userConfig` key, as `plugin.json` spells it, and the field it fills. */
+const FIELDS = {
+	preset: 'preset',
+	project_prefixes: 'projectPrefixes',
+	blocking: 'blocking',
+	max_attempts: 'maxAttempts',
+	max_findings: 'maxFindings',
+} as const satisfies Record<string, keyof PluginOptions>;
+
+export type OptionKey = keyof typeof FIELDS;
+const OPTION_KEYS = Object.keys(FIELDS) as OptionKey[];
+
+/** The options in effect, and where each one that is set was read. */
+export interface ResolvedOptions {
+	options: PluginOptions;
+	/** Keyed as `userConfig` spells it; an option nobody set has no entry. */
+	sources: Partial<Record<OptionKey, string>>;
+	/**
+	 * The `pluginConfigs` keys found when none of them was this plugin's. Matching
+	 * is a guess at the marketplace's spelling, and a guess that misses reads
+	 * exactly like having configured nothing — so the miss is kept to be named.
+	 */
+	unmatched: string[];
+}
+
+/** Claude Code keys a plugin's settings `<name>@<marketplace>`. */
+const isOurs = (key: string): boolean => key === 'loupe' || key.startsWith('loupe@');
 
 /**
  * Options the user set when enabling the plugin.
@@ -180,32 +206,73 @@ const OPTION_KEYS = ['preset', 'project_prefixes', 'blocking', 'max_attempts', '
  * Claude Code exports every option to hook processes as
  * CLAUDE_PLUGIN_OPTION_<KEY> — to hook processes only, not to terminals, so
  * `status` typed by hand cannot see them. They are also in the settings file
- * under this plugin's key: read them there when the environment has nothing to
- * say, and report the source so a stale answer is recognizable as one.
+ * under this plugin's key.
+ *
+ * Merged key by key, never chosen between: the settings files first, the
+ * environment over them. Choosing whichever side had anything to say let one
+ * exported key discard every other option the file carried, so the hook and a
+ * terminal resolved different options for the same project. Each key keeps its
+ * source, so a stale answer is recognizable as one.
  */
-export function resolvedOptions(): {
-	options: PluginOptions;
-	source: 'environment' | 'settings' | 'none';
-} {
-	const fromEnv = coerce(
-		Object.fromEntries(OPTION_KEYS.map((k) => [k, process.env[`CLAUDE_PLUGIN_OPTION_${k.toUpperCase()}`]])),
-	);
-	if (Object.values(fromEnv).some((v) => v !== undefined)) return { options: fromEnv, source: 'environment' };
-
-	for (const file of ['settings.local.json', 'settings.json']) {
-		try {
-			const raw = JSON.parse(readFileSync(join(homedir(), '.claude', file), 'utf8')) as {
-				pluginConfigs?: Record<string, { options?: Record<string, unknown> }>;
-			};
-			const configs = raw.pluginConfigs ?? {};
-			const key = Object.keys(configs).find((k) => k === 'loupe' || k.startsWith('loupe@'));
-			const opts = key === undefined ? undefined : configs[key]?.options;
-			if (opts) return { options: coerce(opts), source: 'settings' };
-		} catch {
-			/* no settings file, or not ours to read */
+export function resolvedOptions(): ResolvedOptions {
+	const options = coerce({});
+	const sources: Partial<Record<OptionKey, string>> = {};
+	const overlay = (layer: PluginOptions, from: string): void => {
+		for (const k of OPTION_KEYS) {
+			const field = FIELDS[k];
+			if (layer[field] === undefined) continue;
+			(options as unknown as Record<string, unknown>)[field] = layer[field];
+			sources[k] = from;
 		}
+	};
+
+	// Least specific first: each layer overlays the one before it.
+	const seen: string[] = [];
+	let matched = false;
+	for (const file of ['settings.json', 'settings.local.json']) {
+		let configs: Record<string, { options?: Record<string, unknown> }> | undefined;
+		try {
+			configs = (
+				JSON.parse(readFileSync(join(homedir(), '.claude', file), 'utf8')) as {
+					pluginConfigs?: Record<string, { options?: Record<string, unknown> }>;
+				}
+			).pluginConfigs;
+		} catch {
+			continue; // no settings file, or not ours to read
+		}
+		if (!configs || typeof configs !== 'object') continue;
+		const key = Object.keys(configs).find(isOurs);
+		if (key === undefined) {
+			seen.push(...Object.keys(configs));
+			continue;
+		}
+		matched = true;
+		const opts = configs[key]?.options;
+		if (opts) overlay(coerce(opts), `~/.claude/${file}`);
 	}
-	return { options: fromEnv, source: 'none' };
+
+	overlay(
+		coerce(Object.fromEntries(OPTION_KEYS.map((k) => [k, process.env[`CLAUDE_PLUGIN_OPTION_${k.toUpperCase()}`]]))),
+		'environment',
+	);
+	return { options, sources, unmatched: matched ? [] : seen };
+}
+
+/**
+ * The `options:` line of `status`: each option that is set and where it was
+ * read, and a `pluginConfigs` lookup that missed named as a miss.
+ */
+export function describeOptions({ options, sources, unmatched }: ResolvedOptions): string {
+	const value = (k: OptionKey): string => {
+		const v = options[FIELDS[k]];
+		if (typeof v === 'boolean') return v ? 'on' : 'off';
+		return Array.isArray(v) ? v.join(', ') : String(v);
+	};
+	const set = OPTION_KEYS.filter((k) => sources[k] !== undefined).map((k) => `${k} ${value(k)} (${sources[k]})`);
+	const miss = unmatched.length
+		? `; no pluginConfigs entry is named loupe or loupe@… (found ${unmatched.join(', ')})`
+		: '';
+	return `${set.length ? set.join('; ') : 'none set — plugin defaults apply'}${miss}`;
 }
 
 /** Settings hold real JSON types; the environment hands us strings. Normalize both. */

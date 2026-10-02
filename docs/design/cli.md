@@ -438,9 +438,13 @@ The same applies to plugin options. Claude Code refuses to substitute
 *hook processes* as `CLAUDE_PLUGIN_OPTION_<KEY>` — to hook processes only. So
 `status`, whose entire job is to say what the gate will actually do, could not
 see the blocking switch from a terminal. The values are also in the settings
-file under the plugin's key; they are read there when the environment has
-nothing to say, and the source is reported so a stale answer is recognizable as
-one.
+file under the plugin's key, and the two are **merged key by key**, the
+environment over the file. Choosing between them — the environment if it said
+anything, the file otherwise — let one exported key discard every other option
+the file carried, so the hook and a terminal resolved different options for the
+same project. Each key's source is reported, so a stale answer is recognizable
+as one, and a `pluginConfigs` lookup whose name guess missed says so rather than
+reading as "configured nothing".
 
 **One spelling of "on" for every switch.** The set was written out three times —
 plugin options from the environment, the same options from the settings file,
