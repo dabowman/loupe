@@ -876,9 +876,9 @@ var require_parse = __commonJS({
           safeChars.push(...chars);
           continue;
         }
-        const literal = normalizeSimpleBranch(branch);
-        if (literal && literal.length === 1) {
-          safeChars.push(literal);
+        const literal2 = normalizeSimpleBranch(branch);
+        if (literal2 && literal2.length === 1) {
+          safeChars.push(literal2);
           continue;
         }
         combinable = false;
@@ -1030,15 +1030,15 @@ var require_parse = __commonJS({
         extglobs.push(token);
       };
       const extglobClose = (token) => {
-        const literal = input.slice(token.startIndex, state.index + 1);
+        const literal2 = input.slice(token.startIndex, state.index + 1);
         const body2 = input.slice(token.startIndex + 2, state.index);
         const analysis = analyzeRepeatedExtglob(body2, opts);
         if ((token.type === "plus" || token.type === "star") && analysis.risky) {
           const safeOutput = analysis.safeOutput ? (token.output ? "" : ONE_CHAR) + (opts.capture ? `(${analysis.safeOutput})` : analysis.safeOutput) : void 0;
           const open = tokens[token.tokensIndex];
           open.type = "text";
-          open.value = literal;
-          open.output = safeOutput || utils.escapeRegex(literal);
+          open.value = literal2;
+          open.output = safeOutput || utils.escapeRegex(literal2);
           for (let i = token.tokensIndex + 1; i < tokens.length; i++) {
             tokens[i].value = "";
             tokens[i].output = "";
@@ -1661,9 +1661,9 @@ var require_picomatch = __commonJS({
     var utils = require_utils();
     var constants = require_constants();
     var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
-    var picomatch2 = (glob, options, returnState = false) => {
+    var picomatch3 = (glob, options, returnState = false) => {
       if (Array.isArray(glob)) {
-        const fns = glob.map((input) => picomatch2(input, options, returnState));
+        const fns = glob.map((input) => picomatch3(input, options, returnState));
         const arrayMatcher = (str2) => {
           for (const isMatch of fns) {
             const state2 = isMatch(str2);
@@ -1679,16 +1679,16 @@ var require_picomatch = __commonJS({
       }
       const opts = options || {};
       const posix = opts.windows;
-      const regex = isState ? picomatch2.compileRe(glob, options) : picomatch2.makeRe(glob, options, false, true);
+      const regex = isState ? picomatch3.compileRe(glob, options) : picomatch3.makeRe(glob, options, false, true);
       const state = regex.state;
       delete regex.state;
       let isIgnored = () => false;
       if (opts.ignore) {
         const ignoreOpts = { ...options, ignore: null, onMatch: null, onResult: null };
-        isIgnored = picomatch2(opts.ignore, ignoreOpts, returnState);
+        isIgnored = picomatch3(opts.ignore, ignoreOpts, returnState);
       }
       const matcher = (input, returnObject = false) => {
-        const { isMatch, match, output } = picomatch2.test(input, regex, options, { glob, posix });
+        const { isMatch, match, output } = picomatch3.test(input, regex, options, { glob, posix });
         const result = { glob, state, regex, posix, input, output, match, isMatch };
         if (typeof opts.onResult === "function") {
           opts.onResult(result);
@@ -1714,7 +1714,7 @@ var require_picomatch = __commonJS({
       }
       return matcher;
     };
-    picomatch2.test = (input, regex, options, { glob, posix } = {}) => {
+    picomatch3.test = (input, regex, options, { glob, posix } = {}) => {
       if (typeof input !== "string") {
         throw new TypeError("Expected input to be a string");
       }
@@ -1731,24 +1731,24 @@ var require_picomatch = __commonJS({
       }
       if (match === false || opts.capture === true) {
         if (opts.matchBase === true || opts.basename === true) {
-          match = picomatch2.matchBase(input, regex, options, posix);
+          match = picomatch3.matchBase(input, regex, options, posix);
         } else {
           match = regex.exec(output);
         }
       }
       return { isMatch: Boolean(match), match, output };
     };
-    picomatch2.matchBase = (input, glob, options, posix = options && options.windows) => {
-      const regex = glob instanceof RegExp ? glob : picomatch2.makeRe(glob, options);
+    picomatch3.matchBase = (input, glob, options, posix = options && options.windows) => {
+      const regex = glob instanceof RegExp ? glob : picomatch3.makeRe(glob, options);
       return regex.test(utils.basename(input, { windows: posix }));
     };
-    picomatch2.isMatch = (str2, patterns, options) => picomatch2(patterns, options)(str2);
-    picomatch2.parse = (pattern, options) => {
-      if (Array.isArray(pattern)) return pattern.map((p) => picomatch2.parse(p, options));
+    picomatch3.isMatch = (str2, patterns, options) => picomatch3(patterns, options)(str2);
+    picomatch3.parse = (pattern, options) => {
+      if (Array.isArray(pattern)) return pattern.map((p) => picomatch3.parse(p, options));
       return parse3(pattern, { ...options, fastpaths: false });
     };
-    picomatch2.scan = (input, options) => scan(input, options);
-    picomatch2.compileRe = (state, options, returnOutput = false, returnState = false) => {
+    picomatch3.scan = (input, options) => scan(input, options);
+    picomatch3.compileRe = (state, options, returnOutput = false, returnState = false) => {
       if (returnOutput === true) {
         return state.output;
       }
@@ -1759,13 +1759,13 @@ var require_picomatch = __commonJS({
       if (state && state.negated === true) {
         source = `^(?!${source}).*$`;
       }
-      const regex = picomatch2.toRegex(source, options);
+      const regex = picomatch3.toRegex(source, options);
       if (returnState === true) {
         regex.state = state;
       }
       return regex;
     };
-    picomatch2.makeRe = (input, options = {}, returnOutput = false, returnState = false) => {
+    picomatch3.makeRe = (input, options = {}, returnOutput = false, returnState = false) => {
       if (!input || typeof input !== "string") {
         throw new TypeError("Expected a non-empty string");
       }
@@ -1776,9 +1776,9 @@ var require_picomatch = __commonJS({
       if (!parsed.output) {
         parsed = parse3(input, options);
       }
-      return picomatch2.compileRe(parsed, options, returnOutput, returnState);
+      return picomatch3.compileRe(parsed, options, returnOutput, returnState);
     };
-    picomatch2.toRegex = (source, options) => {
+    picomatch3.toRegex = (source, options) => {
       try {
         const opts = options || {};
         return new RegExp(source, opts.flags || (opts.nocase ? "i" : ""));
@@ -1787,8 +1787,8 @@ var require_picomatch = __commonJS({
         return /$^/;
       }
     };
-    picomatch2.constants = constants;
-    module.exports = picomatch2;
+    picomatch3.constants = constants;
+    module.exports = picomatch3;
   }
 });
 
@@ -1798,14 +1798,14 @@ var require_picomatch2 = __commonJS({
     "use strict";
     var pico = require_picomatch();
     var utils = require_utils();
-    function picomatch2(glob, options, returnState = false) {
+    function picomatch3(glob, options, returnState = false) {
       if (options && (options.windows === null || options.windows === void 0)) {
         options = { ...options, windows: utils.isWindows() };
       }
       return pico(glob, options, returnState);
     }
-    Object.assign(picomatch2, pico);
-    module.exports = picomatch2;
+    Object.assign(picomatch3, pico);
+    module.exports = picomatch3;
   }
 });
 
@@ -5583,12 +5583,12 @@ var require_lib = __commonJS({
         const endOfInit = () => this.match(12) || this.match(8);
         switch (this.state.type) {
           case 135: {
-            const literal = this.parseNumericLiteral(this.state.value);
+            const literal2 = this.parseNumericLiteral(this.state.value);
             if (endOfInit()) {
               return {
                 type: "number",
-                loc: literal.loc.start,
-                value: literal
+                loc: literal2.loc.start,
+                value: literal2
               };
             }
             return {
@@ -5597,12 +5597,12 @@ var require_lib = __commonJS({
             };
           }
           case 134: {
-            const literal = this.parseStringLiteral(this.state.value);
+            const literal2 = this.parseStringLiteral(this.state.value);
             if (endOfInit()) {
               return {
                 type: "string",
-                loc: literal.loc.start,
-                value: literal
+                loc: literal2.loc.start,
+                value: literal2
               };
             }
             return {
@@ -5612,12 +5612,12 @@ var require_lib = __commonJS({
           }
           case 85:
           case 86: {
-            const literal = this.parseBooleanLiteral(this.match(85));
+            const literal2 = this.parseBooleanLiteral(this.match(85));
             if (endOfInit()) {
               return {
                 type: "boolean",
-                loc: literal.loc.start,
-                value: literal
+                loc: literal2.loc.start,
+                value: literal2
               };
             }
             return {
@@ -12548,14 +12548,14 @@ var require_lib = __commonJS({
     };
     var mixinPluginNames = Object.keys(mixinPlugins);
     var ExpressionParser = class extends LValParser {
-      checkProto(prop, isRecord, sawProto, refExpressionErrors) {
+      checkProto(prop, isRecord2, sawProto, refExpressionErrors) {
         if (prop.type === "SpreadElement" || this.isObjectMethod(prop) || prop.computed || prop.shorthand) {
           return sawProto;
         }
         const key = prop.key;
         const name = key.type === "Identifier" ? key.name : key.value;
         if (name === "__proto__") {
-          if (isRecord) {
+          if (isRecord2) {
             this.raise(Errors.RecordNoProto, key);
             return true;
           }
@@ -13621,8 +13621,8 @@ var require_lib = __commonJS({
       parseTemplateSubstitution() {
         return this.parseExpression();
       }
-      parseObjectLike(close, isPattern, isRecord, refExpressionErrors) {
-        if (isRecord) {
+      parseObjectLike(close, isPattern, isRecord2, refExpressionErrors) {
+        if (isRecord2) {
           this.expectPlugin("recordAndTuple");
         }
         const oldInFSharpPipelineDirectBody = this.state.inFSharpPipelineDirectBody;
@@ -13647,9 +13647,9 @@ var require_lib = __commonJS({
             prop = this.parseBindingProperty();
           } else {
             prop = this.parsePropertyDefinition(refExpressionErrors);
-            sawProto = this.checkProto(prop, isRecord, sawProto, refExpressionErrors);
+            sawProto = this.checkProto(prop, isRecord2, sawProto, refExpressionErrors);
           }
-          if (isRecord && !this.isObjectProperty(prop) && prop.type !== "SpreadElement") {
+          if (isRecord2 && !this.isObjectProperty(prop) && prop.type !== "SpreadElement") {
             this.raise(Errors.InvalidRecordProperty, prop);
           }
           if (prop.shorthand) {
@@ -13662,7 +13662,7 @@ var require_lib = __commonJS({
         let type = "ObjectExpression";
         if (isPattern) {
           type = "ObjectPattern";
-        } else if (isRecord) {
+        } else if (isRecord2) {
           type = "RecordExpression";
         }
         return this.finishNode(node, type);
@@ -18425,7 +18425,7 @@ var require_util = __commonJS({
       return path;
     });
     exports.normalize = normalize2;
-    function join15(aRoot, aPath) {
+    function join16(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -18457,7 +18457,7 @@ var require_util = __commonJS({
       }
       return joined;
     }
-    exports.join = join15;
+    exports.join = join16;
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
@@ -18671,7 +18671,7 @@ var require_util = __commonJS({
             parsed.path = parsed.path.substring(0, index2 + 1);
           }
         }
-        sourceURL = join15(urlGenerate(parsed), sourceURL);
+        sourceURL = join16(urlGenerate(parsed), sourceURL);
       }
       return normalize2(sourceURL);
     }
@@ -20111,8 +20111,8 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync10, readFileSync: readFileSync14, realpathSync: realpathSync2 } = __require("fs");
-    var { dirname: dirname8, isAbsolute: isAbsolute7, join: join15, relative: relative5, sep: sep3 } = __require("path");
+    var { existsSync: existsSync11, readFileSync: readFileSync16, realpathSync: realpathSync2 } = __require("fs");
+    var { dirname: dirname8, isAbsolute: isAbsolute7, join: join16, relative: relative5, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -20191,9 +20191,9 @@ var require_previous_map = __commonJS({
           }
         }
         this.root = dirname8(path);
-        if (existsSync10(path)) {
+        if (existsSync11(path)) {
           this.mapFile = path;
-          return readFileSync14(path, "utf-8").toString().trim();
+          return readFileSync16(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -20227,7 +20227,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join15(dirname8(file), map);
+          if (file) map = join16(dirname8(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -23494,15 +23494,15 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync9, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
+import { existsSync as existsSync10, writeFileSync as writeFileSync4 } from "node:fs";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join15, relative as relative4, resolve as resolve6 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
 
 // src/analyze.ts
-import { readFileSync as readFileSync2, realpathSync, statSync as statSync2 } from "node:fs";
-import { isAbsolute, join as join3, relative as relative2, sep as sep2 } from "node:path";
+import { readFileSync as readFileSync4, realpathSync, statSync as statSync3 } from "node:fs";
+import { isAbsolute, join as join4, relative as relative2, sep as sep2 } from "node:path";
 
 // src/rules.ts
 var RULES = {
@@ -23565,6 +23565,14 @@ var RULES = {
     rank: 22,
     needs: ["tokenPrefixes"],
     title: "unknown token \u2014 no {tokenPrefix} token by this name is defined; check the spelling against the design system"
+  },
+  "tokens/undelivered": {
+    severity: "warn",
+    rank: 21,
+    // The other half of what it needs — a profile's delivery block — arrives
+    // with the profiles, after availability is settled; without one it is silent.
+    needs: ["tokenPrefixes"],
+    title: "{tokenPrefix} tokens are used, and nothing shows the stylesheet defining them reaches the page \u2014 every var() of them resolves to nothing there, and the declaration drops"
   },
   "tokens/hardcoded-value": {
     severity: "warn",
@@ -23647,11 +23655,160 @@ function renderTitle(ruleId, ds, keyword) {
   return RULES[ruleId].title.replace("{layout}", list2(ds.layoutComponents, "a layout primitive")).replace("{text}", list2(ds.textComponents, "a text component")).replace(/\{tokenPrefix\}/g, namespace).replace("{system}", ds.name || "the design system").replace("{kw}", keyword);
 }
 
+// src/delivery.ts
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
+var asString = (v) => typeof v === "string" && v !== "" ? v : void 0;
+var isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function readPackages(raw) {
+  const out = /* @__PURE__ */ new Map();
+  if (!isRecord(raw)) return out;
+  for (const [pkg, entry] of Object.entries(raw)) {
+    if (!isRecord(entry)) continue;
+    const provided = entry.provided;
+    if (provided !== "external" && provided !== "bundled") continue;
+    out.set(pkg, { provided, handle: asString(entry.handle), note: asString(entry.note) });
+  }
+  return out;
+}
+function readCheck(raw) {
+  if (!isRecord(raw)) return null;
+  const files = asStrings(raw.files);
+  const note2 = asString(raw.note);
+  if (!files.length) return null;
+  switch (raw.kind) {
+    case "enqueue-dependency": {
+      const calls = asStrings(raw.calls).filter((c) => /^[A-Za-z_]\w*$/.test(c));
+      const handles = asStrings(raw.handles);
+      const argument = typeof raw.argument === "number" && Number.isInteger(raw.argument) ? raw.argument : 2;
+      if (!calls.length || !handles.length || argument < 0) return null;
+      const enqueues = asStrings(raw.enqueues).filter((c) => calls.includes(c));
+      return { kind: "enqueue-dependency", files, calls, handles, enqueues, argument, note: note2 };
+    }
+    case "import": {
+      const specifiers = asStrings(raw.specifiers);
+      return specifiers.length ? { kind: "import", files, specifiers, note: note2 } : null;
+    }
+    case "pattern": {
+      const source = asString(raw.pattern);
+      if (!source) return null;
+      try {
+        return { kind: "pattern", files, pattern: new RegExp(source), note: note2 };
+      } catch {
+        return null;
+      }
+    }
+    default:
+      return null;
+  }
+}
+function readTokens(raw) {
+  if (!isRecord(raw)) return null;
+  const stylesheet = asString(raw.stylesheet);
+  const evidence = (Array.isArray(raw.evidence) ? raw.evidence : []).map(readCheck).filter((c) => c !== null);
+  if (!stylesheet || !evidence.length) return null;
+  return {
+    stylesheet,
+    handle: asString(raw.handle),
+    prefixes: asStrings(raw.prefixes),
+    note: asString(raw.note),
+    evidence
+  };
+}
+function loadDelivery(raw) {
+  if (!isRecord(raw)) return null;
+  const packages = readPackages(raw.packages);
+  const tokens = readTokens(raw.tokens);
+  if (!packages.size && !tokens) return null;
+  return { host: asString(raw.host) ?? "the host", packages, tokens };
+}
+function readDelivery(path) {
+  if (!path || !existsSync(path)) return null;
+  try {
+    return loadDelivery(JSON.parse(readFileSync(path, "utf8")));
+  } catch {
+    return null;
+  }
+}
+var REMEDY_RULES = /* @__PURE__ */ new Set([
+  "system/raw-element",
+  "system/superseded-component",
+  "system/locked-component"
+]);
+var packageRoot = (spec) => {
+  const parts = spec.split("/");
+  return spec.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0] ?? spec;
+};
+function remedyPackages(message, dsPackages) {
+  const arrow = message.indexOf("\u2192");
+  if (arrow < 0) return [];
+  const named = [...message.slice(arrow).matchAll(/\(\s*([^\s,()]+)/g)].map((m) => String(m[1]));
+  return [...new Set(named.filter((p) => p.startsWith("@") && p.includes("/") || dsPackages.includes(p)))];
+}
+function projectDependencies(root2) {
+  try {
+    const pkg = JSON.parse(readFileSync(join(root2, "package.json"), "utf8"));
+    if (pkg.workspaces) return null;
+    const out = /* @__PURE__ */ new Set();
+    for (const field2 of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"])
+      if (isRecord(pkg[field2])) for (const name of Object.keys(pkg[field2])) out.add(name);
+    return out;
+  } catch {
+    return null;
+  }
+}
+function reachNote(pkg, {
+  delivery,
+  imported,
+  dependencies
+}) {
+  const root2 = packageRoot(pkg);
+  if (imported.has(root2)) return null;
+  const entry = delivery?.packages.get(pkg) ?? delivery?.packages.get(root2);
+  if (entry?.provided === "external") return null;
+  if (entry?.provided === "bundled")
+    return `bundling required: ${root2} is bundled into your build, not provided by ${delivery?.host ?? "the host"}`;
+  return dependencies !== null && !dependencies.has(root2) ? `new dependency: ${root2} is not in package.json` : null;
+}
+function annotateReach(findings, {
+  delivery,
+  imports,
+  dependencies,
+  dsPackages
+}) {
+  const imported = new Set(imports.map((ci) => packageRoot(ci.package)));
+  for (const f of findings) {
+    if (!REMEDY_RULES.has(f.rule)) continue;
+    const notes = remedyPackages(f.message, dsPackages).map((pkg) => reachNote(pkg, { delivery, imported, dependencies })).filter((n) => n !== null);
+    if (!notes.length) continue;
+    f.note = [f.note, ...notes].filter(Boolean).join("; ");
+  }
+}
+function mergeDeliveries(deliveries) {
+  const present = deliveries.filter((d) => Boolean(d));
+  const [head2] = present;
+  if (!head2) return null;
+  const packages = /* @__PURE__ */ new Map();
+  for (const d of present) for (const [pkg, entry] of d.packages) if (!packages.has(pkg)) packages.set(pkg, entry);
+  return { host: head2.host, packages, tokens: present.find((d) => d.tokens)?.tokens ?? null };
+}
+function deliverySummary(d) {
+  const by = (kind) => [...d.packages].filter(([, e]) => e.provided === kind).map(([pkg, e]) => e.handle ? `${pkg} (${e.handle})` : pkg);
+  const bundled = by("bundled");
+  const external = by("external");
+  return [
+    d.tokens ? `tokens from ${d.tokens.stylesheet}${d.tokens.handle ? ` (handle ${d.tokens.handle})` : ""}` : "",
+    external.length ? `provided by ${d.host}: ${external.join(", ")}` : "",
+    bundled.length ? `bundled into your build: ${bundled.join(", ")}` : ""
+  ].filter(Boolean).join("; ");
+}
+
 // src/discover.ts
 var import_picomatch = __toESM(require_picomatch2(), 1);
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync as existsSync2, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join as join2, relative, resolve, sep } from "node:path";
 var toPosix = (p) => p.split(sep).join("/").split("\\").join("/");
 var byBytes = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function readDir(dir) {
@@ -23692,7 +23849,7 @@ function discover({
         return;
       }
       seen++;
-      const full = join(dir, e.name);
+      const full = join2(dir, e.name);
       const rel = toPosix(relative(root2, full));
       if (e.isDirectory()) {
         if (HARD_SKIP.has(e.name)) continue;
@@ -23730,7 +23887,7 @@ function isWorktree(root2) {
 function hasGitDir(root2) {
   let dir = resolve(root2);
   for (; ; ) {
-    if (existsSync(join(dir, ".git"))) return true;
+    if (existsSync2(join2(dir, ".git"))) return true;
     const up = dirname(dir);
     if (up === dir) return false;
     dir = up;
@@ -24987,8 +25144,8 @@ async function syntaxFor(path) {
 }
 
 // src/tokens.ts
-import { readFileSync, statSync } from "node:fs";
-import { join as join2 } from "node:path";
+import { readFileSync as readFileSync2, statSync } from "node:fs";
+import { join as join3 } from "node:path";
 var ROLE_HINTS = [
   [/^border-radius|radius$/, /radius/],
   [/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
@@ -25059,7 +25216,7 @@ function cssFilesUnder(path, budget = { left: 200 }, exts = [".css"]) {
     if (budget.left <= 0) return;
     for (const e of readDir(dir)) {
       if (budget.left <= 0) return;
-      const full = join2(dir, e.name);
+      const full = join3(dir, e.name);
       if (e.isDirectory()) {
         if (e.name !== "node_modules") walk(full);
       } else if (wanted(e.name)) {
@@ -25075,9 +25232,9 @@ function readTokenSources(root2, sources, prefixes) {
   const set = emptyTokenSet();
   if (!prefixes.length) return set;
   for (const rel of sources ?? []) {
-    for (const file of cssFilesUnder(join2(root2, rel))) {
+    for (const file of cssFilesUnder(join3(root2, rel))) {
       try {
-        harvestTokenDefs(postcss_default.parse(readFileSync(file, "utf8"), { from: file }), prefixes, set);
+        harvestTokenDefs(postcss_default.parse(readFileSync2(file, "utf8"), { from: file }), prefixes, set);
         set.sources++;
       } catch {
       }
@@ -25471,6 +25628,191 @@ var hardcodedValue = ({ prop, value }) => {
   return { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hints: [{ prop, value }] };
 };
 
+// src/checks/tokens/undelivered.ts
+var import_picomatch2 = __toESM(require_picomatch2(), 1);
+import { readFileSync as readFileSync3, statSync as statSync2 } from "node:fs";
+var WALK_LIMIT = 5e4;
+var FILE_LIMIT = 4e3;
+var MAX_BYTES = 15e5;
+var ARGS_MAX = 5e3;
+function stripComments(text2) {
+  const out = text2.split("");
+  let quote = null;
+  for (let i = 0; i < out.length; i++) {
+    const c = out[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
+    }
+    const next = out[i + 1];
+    let stop;
+    if (c === "/" && next === "/" || c === "#" && next !== "[") stop = text2.indexOf("\n", i);
+    else if (c === "/" && next === "*") {
+      const close = text2.indexOf("*/", i + 2);
+      stop = close === -1 ? -1 : close + 2;
+    } else continue;
+    if (stop === -1) stop = out.length;
+    for (let k = i; k < stop; k++) if (out[k] !== "\n") out[k] = " ";
+    i = stop - 1;
+  }
+  return out.join("");
+}
+function argumentsAt(text2, open) {
+  const args = [];
+  let depth = 0;
+  let quote = null;
+  let start = open + 1;
+  const stop = Math.min(text2.length, open + ARGS_MAX);
+  for (let i = open + 1; i < stop; i++) {
+    const c = text2[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"') quote = c;
+    else if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" && depth === 0) {
+      const last = text2.slice(start, i).trim();
+      if (last || args.length) args.push(last);
+      return args;
+    } else if (c === ")" || c === "]" || c === "}") depth--;
+    else if (c === "," && depth === 0) {
+      args.push(text2.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  return null;
+}
+var literal = (arg) => {
+  const m = /^'((?:[^'\\]|\\.)*)'$|^"((?:[^"\\$]|\\.)*)"$/.exec(arg.trim());
+  return m ? m[1] ?? m[2] ?? "" : null;
+};
+function dependencyList(arg) {
+  if (arg === void 0 || arg === "") return { handles: [], complete: true };
+  const text2 = arg.trim();
+  const named = [...text2.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\$]|\\.)*)"/g)].map((m) => m[1] ?? m[2] ?? "");
+  const list2 = /^array\s*\(([\s\S]*)\)$/i.exec(text2)?.[1] ?? /^\[([\s\S]*)\]$/.exec(text2)?.[1];
+  if (list2 === void 0) return { handles: named, complete: false };
+  const items = argumentsAt(`(${list2})`, 0) ?? [];
+  const complete = items.every((item) => item === "" || literal(item) !== null);
+  return { handles: named, complete };
+}
+function dependencyArgument(args, index2) {
+  const named = args.find((a) => /^deps\s*:(?!:)/.test(a));
+  if (named !== void 0) return named.replace(/^deps\s*:/, "").trim();
+  const arg = args[index2];
+  return arg !== void 0 && /^[A-Za-z_]\w*\s*:(?!:)/.test(arg) ? void 0 : arg;
+}
+var lineAt = (text2, offset) => text2.slice(0, offset).split("\n").length;
+function enqueueVerdict(check, files) {
+  const calls = new RegExp(`(?<![\\w$>:])(${check.calls.join("|")})\\s*\\(`, "g");
+  let seen = 0;
+  let first = null;
+  let unknown = false;
+  for (const { rel, text: text2 } of files) {
+    const code = stripComments(text2);
+    for (const m of code.matchAll(calls)) {
+      if (/\bfunction\s+$/.test(code.slice(Math.max(0, m.index - 20), m.index))) continue;
+      const args = argumentsAt(code, m.index + m[0].length - 1);
+      seen++;
+      first ??= { file: rel, line: lineAt(code, m.index) };
+      if (!args) {
+        unknown = true;
+        continue;
+      }
+      const own = literal(args[0] ?? "");
+      if (own !== null && check.enqueues.includes(String(m[1])) && check.handles.includes(own))
+        return { state: "delivered" };
+      const deps = dependencyList(dependencyArgument(args, check.argument));
+      if (deps.handles.some((h) => check.handles.includes(h))) return { state: "delivered" };
+      if (!deps.complete) unknown = true;
+    }
+  }
+  if (unknown) return { state: "unknown" };
+  return first ? { state: "missing", calls: seen, first } : { state: "silent" };
+}
+var SPECIFIERS = /@(?:import|use|forward)\s+(?:url\(\s*)?['"]([^'"]+)['"]|\bimport\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|\brequire\(\s*['"]([^'"]+)['"]/g;
+var withoutExt = (s) => s.replace(/\.(?:s?css|sass|less)$/, "");
+function importVerdict(check, files) {
+  const wanted = check.specifiers.map(withoutExt);
+  for (const { text: text2 } of files)
+    for (const m of text2.matchAll(SPECIFIERS)) {
+      const spec = withoutExt(String(m[1] ?? m[2] ?? m[3]).replace(/^~/, ""));
+      if (wanted.some((w) => spec === w || spec.endsWith(`/${w}`))) return { state: "delivered" };
+    }
+  return { state: "silent" };
+}
+function readEvidenceFiles(root2, checks, ignore) {
+  const globs = [...new Set(checks.flatMap((c) => c.files))];
+  const found = discover({
+    root: root2,
+    sources: { styles: globs, markup: [], references: [], ignore: [...ignore] },
+    limit: WALK_LIMIT
+  });
+  if (found.truncated || found.styles.length > FILE_LIMIT) return null;
+  const out = [];
+  for (const { abs, rel } of found.styles) {
+    try {
+      if (statSync2(abs).size > MAX_BYTES) return null;
+      out.push({ rel, text: readFileSync3(abs, "utf8") });
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
+function undelivered({
+  root: root2,
+  ignore,
+  tokens,
+  refs,
+  prefixes,
+  projectDefined,
+  reports
+}) {
+  if (!tokens) return [];
+  const namespace = tokens.prefixes.length ? tokens.prefixes : prefixes;
+  if (!namespace.length) return [];
+  const used = refs.filter((r) => namespace.some((p) => r.name.startsWith(p)) && !projectDefined.has(r.name)).sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
+  const [anchor] = used;
+  if (!anchor || !reports(anchor.file)) return [];
+  const files = readEvidenceFiles(root2, tokens.evidence, ignore);
+  if (!files) return [];
+  const verdicts = tokens.evidence.map((check) => {
+    const mine = files.filter((f) => (0, import_picomatch2.default)(check.files)(f.rel));
+    if (check.kind === "enqueue-dependency") return enqueueVerdict(check, mine);
+    if (check.kind === "import") return importVerdict(check, mine);
+    return mine.some((f) => check.pattern.test(f.text)) ? { state: "delivered" } : { state: "silent" };
+  });
+  if (verdicts.some((v) => v.state === "delivered" || v.state === "unknown")) return [];
+  const missing = verdicts.find((v) => v.state === "missing");
+  if (!missing) return [];
+  const target = tokens.handle ?? tokens.stylesheet;
+  const users = new Set(used.map((r) => r.file)).size;
+  const shown = namespace.map((p) => `${p}*`).join(", ");
+  return [
+    {
+      rule: "tokens/undelivered",
+      file: anchor.file,
+      line: anchor.line,
+      message: `${shown} used in ${users} file(s); none of ${missing.calls} style enqueue(s) depends on ${target} (first: ${missing.first.file}:${missing.first.line})`,
+      // One per project and delivery: the count and the first enqueue move with
+      // every edit, and a baseline must not.
+      code: `tokens/undelivered:${target}`,
+      // The remedy, short enough to survive as the line's tail. The profile's
+      // own prose on it is `loupe explain`'s to print, whole.
+      note: tokens.handle ? `list '${tokens.handle}' in the dependencies of the enqueue loading this CSS` : void 0,
+      scopeLines: anchor.scopeLines
+    }
+  ];
+}
+
 // src/checks/tokens/unknown-token.ts
 function oneEdit(a, b) {
   if (Math.abs(a.length - b.length) > 1) return false;
@@ -25558,7 +25900,7 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
   const dirs = [];
   const unread = [];
   for (const src of sources) {
-    const dir = realPath(isAbsolute(src) ? src : join3(root2, src));
+    const dir = realPath(isAbsolute(src) ? src : join4(root2, src));
     if (!dir) continue;
     dirs.push(dir);
     const budget = { left: 400 };
@@ -25571,7 +25913,7 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
       }
       let sheet;
       try {
-        sheet = syntax.parse(readFileSync2(file, "utf8"), { from: file });
+        sheet = syntax.parse(readFileSync4(file, "utf8"), { from: file });
       } catch (err) {
         unread.push({ file: shown, message: messageOf(err) });
         continue;
@@ -25653,12 +25995,13 @@ async function analyze(config, {
 } = {}) {
   const ds = config.designSystem;
   const ruleIsLive = (rule2) => config.enabled[rule2];
+  const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
   const parseSuppressions = makeSuppressionParser(config.suppression);
   const files = discover({ root: config.root, sources: config.sources });
-  const MAX_BYTES = 15e5;
+  const MAX_BYTES2 = 15e5;
   const tooBig = (abs) => {
     try {
-      return statSync2(abs).size > MAX_BYTES;
+      return statSync3(abs).size > MAX_BYTES2;
     } catch {
       return false;
     }
@@ -25668,10 +26011,11 @@ async function analyze(config, {
   const realRoot = realPath(config.root) ?? config.root;
   const library = await readLibrary(realRoot, ds.styleSources, tokenPrefixes, tokenSet);
   const isLibrarySheet = (rel) => {
-    const abs = join3(realRoot, rel);
+    const abs = join4(realRoot, rel);
     return library.dirs.some((d) => abs === d || abs.startsWith(`${d}${sep2}`));
   };
   const tokenRefs = [];
+  const projectTokens = emptyTokenSet();
   const findings = [];
   const directives = [];
   const diagnostics = {
@@ -25715,7 +26059,7 @@ async function analyze(config, {
     if (tooBig(abs)) continue;
     let text2;
     try {
-      text2 = readFileSync2(abs, "utf8");
+      text2 = readFileSync4(abs, "utf8");
     } catch {
       continue;
     }
@@ -25743,7 +26087,7 @@ async function analyze(config, {
   for (const { abs } of files.references) {
     if (tooBig(abs)) continue;
     try {
-      harvestTokens(readFileSync2(abs, "utf8"), referenced);
+      harvestTokens(readFileSync4(abs, "utf8"), referenced);
       diagnostics.filesScanned++;
     } catch {
     }
@@ -25755,7 +26099,7 @@ async function analyze(config, {
     if (isLibrarySheet(rel)) continue;
     let text2;
     try {
-      text2 = readFileSync2(abs, "utf8");
+      text2 = readFileSync4(abs, "utf8");
     } catch {
       continue;
     }
@@ -25775,7 +26119,7 @@ async function analyze(config, {
         });
     };
     if (tooBig(abs)) {
-      unparsed(`stylesheet over ${Math.round(MAX_BYTES / 1e3)}kB \u2014 skipped as generated`);
+      unparsed(`stylesheet over ${Math.round(MAX_BYTES2 / 1e3)}kB \u2014 skipped as generated`);
       continue;
     }
     const syntax = await syntaxFor(rel);
@@ -25792,6 +26136,7 @@ async function analyze(config, {
     }
     const emit = (f) => report({ ...f, file: rel, code: f.code ?? f.message });
     harvestTokenDefs(root2, tokenPrefixes, tokenSet);
+    if (delivery?.tokens) harvestTokenDefs(root2, tokenPrefixes, projectTokens);
     const srcLines = text2.split("\n");
     root2.walkRules((cssRule) => {
       const ruleLine = cssRule.source?.start?.line ?? 1;
@@ -25924,6 +26269,12 @@ async function analyze(config, {
   }))
     report(f);
   for (const f of currency(componentImports, config.componentRegistry, ruleIsLive)) report(f);
+  annotateReach(findings, {
+    delivery,
+    imports: componentImports,
+    dependencies: projectDependencies(config.root),
+    dsPackages: ds.packages
+  });
   for (const [file, s] of suppByFile) {
     directives.push(...s.directives);
     if (!config.enabled["suppression/malformed"] || !reports(file)) continue;
@@ -25946,6 +26297,17 @@ async function analyze(config, {
     delete f.hints;
   }
   for (const f of unknownTokens(tokenRefs, tokenSet.known)) report(f);
+  if (ruleIsLive("tokens/undelivered"))
+    for (const f of undelivered({
+      root: config.root,
+      ignore: config.sources.ignore ?? [],
+      tokens: delivery?.tokens ?? null,
+      refs: tokenRefs,
+      prefixes: tokenPrefixes,
+      projectDefined: projectTokens.known,
+      reports
+    }))
+      report(f);
   const seen = /* @__PURE__ */ new Set();
   const unique = findings.filter((f) => {
     const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ""}|${f.message}`;
@@ -25983,8 +26345,8 @@ async function analyze(config, {
 var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.message))}`;
 
 // src/autofix.ts
-import { readFileSync as readFileSync3, writeFileSync } from "node:fs";
-import { join as join4 } from "node:path";
+import { readFileSync as readFileSync5, writeFileSync } from "node:fs";
+import { join as join5 } from "node:path";
 var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 function tokenFixes(findings) {
   const out = [];
@@ -26042,10 +26404,10 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
   const applied = [];
   const skipped = [];
   for (const [file, group] of byFile) {
-    const abs = join4(root2, file);
+    const abs = join5(root2, file);
     let text2;
     try {
-      text2 = readFileSync3(abs, "utf8");
+      text2 = readFileSync5(abs, "utf8");
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       for (const fix of group) skipped.push({ ...fix, why });
@@ -26103,10 +26465,10 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
   }
   const applied = [];
   for (const [file, group] of byFile) {
-    const abs = join4(root2, file);
+    const abs = join5(root2, file);
     let text2;
     try {
-      text2 = readFileSync3(abs, "utf8");
+      text2 = readFileSync5(abs, "utf8");
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
       for (const k of group) skipped.push({ ...k, why });
@@ -26146,11 +26508,11 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
 }
 
 // src/judge.ts
-import { readFileSync as readFileSync6 } from "node:fs";
+import { readFileSync as readFileSync8 } from "node:fs";
 
 // src/embedded.ts
-import { existsSync as existsSync2, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "node:fs";
-import { dirname as dirname2, join as join5 } from "node:path";
+import { existsSync as existsSync3, readFileSync as readFileSync6, readdirSync as readdirSync2 } from "node:fs";
+import { dirname as dirname2, join as join6 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // presets/archer.json
@@ -26572,6 +26934,7 @@ var wpds_default = {
     "tokens/hardcoded-value": "warn",
     "css/dead-class": "warn",
     "tokens/unknown-token": "warn",
+    "tokens/undelivered": "warn",
     "patterns/duplicate-composite": "warn",
     "patterns/superseded-composite": "warn",
     "patterns/unregistered-composite": "warn"
@@ -27678,7 +28041,7 @@ var package_default = {
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
     "eval:renames": "node evals/renames/run.ts",
-    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts && node tests/serve.ts && node tests/lsp.ts"
+    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/delivery.ts && node tests/report.ts && node tests/serve.ts && node tests/lsp.ts"
   },
   dependencies: {
     "@babel/parser": "^7.24.0",
@@ -27713,7 +28076,7 @@ var EMBEDDED_PRESETS = Object.assign(/* @__PURE__ */ Object.create(null), {
 var EMBEDDED_VERSION = package_default.version;
 var EMBEDDED_LANGUAGE = patterns_default;
 var presetKey = (spec) => spec.replace(/^loupe\/presets\//, "");
-var PRESET_DIR = join5(dirname2(fileURLToPath(import.meta.url)), "..", "presets");
+var PRESET_DIR = join6(dirname2(fileURLToPath(import.meta.url)), "..", "presets");
 var presetNames = () => {
   try {
     return readdirSync2(PRESET_DIR).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, "")).sort();
@@ -27722,17 +28085,17 @@ var presetNames = () => {
   }
 };
 var readPreset = (name) => {
-  const onDisk = join5(PRESET_DIR, `${name}.json`);
-  if (existsSync2(onDisk)) {
+  const onDisk = join6(PRESET_DIR, `${name}.json`);
+  if (existsSync3(onDisk)) {
     try {
-      return JSON.parse(readFileSync4(onDisk, "utf8"));
+      return JSON.parse(readFileSync6(onDisk, "utf8"));
     } catch {
       return void 0;
     }
   }
   return EMBEDDED_PRESETS[name];
 };
-var hasPreset = (spec) => existsSync2(join5(PRESET_DIR, `${presetKey(spec)}.json`)) || Boolean(EMBEDDED_PRESETS[presetKey(spec)]);
+var hasPreset = (spec) => existsSync3(join6(PRESET_DIR, `${presetKey(spec)}.json`)) || Boolean(EMBEDDED_PRESETS[presetKey(spec)]);
 
 // src/judge/force.ts
 var forceQuery = (force) => ({
@@ -27777,10 +28140,10 @@ var valueQuery = (about) => ({
 });
 
 // src/judge/variant.ts
-import { readFileSync as readFileSync5 } from "node:fs";
-import { join as join6 } from "node:path";
+import { readFileSync as readFileSync7 } from "node:fs";
+import { join as join7 } from "node:path";
 function around(root2, file, line, before, after) {
-  const lines = readFileSync5(join6(root2, file), "utf8").split("\n");
+  const lines = readFileSync7(join7(root2, file), "utf8").split("\n");
   const i = line - 1;
   return {
     context_before: lines.slice(Math.max(0, i - before), i).join("\n"),
@@ -27940,7 +28303,7 @@ function tokenDescriptions(profiles) {
   for (const p of profiles) {
     if (!p.tokenDescriptions) continue;
     try {
-      const raw = JSON.parse(readFileSync6(p.tokenDescriptions, "utf8"));
+      const raw = JSON.parse(readFileSync8(p.tokenDescriptions, "utf8"));
       for (const [name, text2] of Object.entries(raw))
         if (!name.startsWith("$") && typeof text2 === "string") out.set(name, text2);
     } catch {
@@ -28070,14 +28433,14 @@ async function judgeRenames(root2, findings, set, apiKey, about = /* @__PURE__ *
 }
 
 // src/baseline.ts
-import { existsSync as existsSync4, readFileSync as readFileSync7, writeFileSync as writeFileSync2 } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync9, writeFileSync as writeFileSync2 } from "node:fs";
 import { dirname as dirname3, resolve as resolve3 } from "node:path";
 
 // src/paths.ts
 import { createHash } from "node:crypto";
-import { existsSync as existsSync3, mkdirSync } from "node:fs";
+import { existsSync as existsSync4, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute as isAbsolute2, join as join7, resolve as resolve2 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join8, resolve as resolve2 } from "node:path";
 var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
 function projectKey(root2) {
   const full = resolve2(root2);
@@ -28093,34 +28456,34 @@ function ensureDir(dir) {
     return null;
   }
 }
-var attemptsPath = (root2) => join7(
-  process.env.CLAUDE_PLUGIN_DATA || join7(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`),
+var attemptsPath = (root2) => join8(
+  process.env.CLAUDE_PLUGIN_DATA || join8(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`),
   projectKey(root2),
   "attempts.json"
 );
 var DEFAULT_BASELINE = ".loupe-baseline.json";
 function baselinePath(root2, named) {
   const p = named || DEFAULT_BASELINE;
-  return isAbsolute2(p) ? p : join7(root2, p);
+  return isAbsolute2(p) ? p : join8(root2, p);
 }
 function findExistingBaseline(root2, explicit, configured) {
   if (explicit) {
     const path = baselinePath(root2, explicit);
-    return { path, found: existsSync3(path), fallback: "none" };
+    return { path, found: existsSync4(path), fallback: "none" };
   }
   const target = baselinePath(root2, configured);
-  if (existsSync3(target)) return { path: target, found: true, fallback: "none" };
-  const byDefaultName = join7(root2, DEFAULT_BASELINE);
-  if (byDefaultName !== target && existsSync3(byDefaultName))
+  if (existsSync4(target)) return { path: target, found: true, fallback: "none" };
+  const byDefaultName = join8(root2, DEFAULT_BASELINE);
+  if (byDefaultName !== target && existsSync4(byDefaultName))
     return { path: byDefaultName, found: true, fallback: "default-name" };
   return { path: target, found: false, fallback: "none" };
 }
 
 // src/baseline.ts
 function readBaseline(path) {
-  if (!existsSync4(path)) return null;
+  if (!existsSync5(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync7(path, "utf8"));
+    const parsed = JSON.parse(readFileSync9(path, "utf8"));
     if (!Array.isArray(parsed.entries)) return null;
     return { createdAt: parsed.createdAt ?? "", entries: parsed.entries, set: new Set(parsed.entries) };
   } catch {
@@ -28166,8 +28529,8 @@ function applyBaseline(result, baseline) {
 }
 
 // src/config.ts
-import { existsSync as existsSync5, readFileSync as readFileSync8 } from "node:fs";
-import { dirname as dirname4, isAbsolute as isAbsolute3, join as join8, resolve as resolve4 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync10 } from "node:fs";
+import { dirname as dirname4, isAbsolute as isAbsolute3, join as join9, resolve as resolve4 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // src/registry.ts
@@ -28246,13 +28609,13 @@ function findConfig(start) {
   let dir = resolve4(start);
   for (; ; ) {
     for (const name of CONFIG_NAMES) {
-      const p = join8(dir, name);
-      if (existsSync5(p)) return p;
+      const p = join9(dir, name);
+      if (existsSync6(p)) return p;
     }
-    const pkg = join8(dir, "package.json");
-    if (existsSync5(pkg)) {
+    const pkg = join9(dir, "package.json");
+    if (existsSync6(pkg)) {
       try {
-        const parsed = JSON.parse(readFileSync8(pkg, "utf8"));
+        const parsed = JSON.parse(readFileSync10(pkg, "utf8"));
         if (isObj(parsed) && parsed.loupe) return pkg;
       } catch {
       }
@@ -28263,21 +28626,21 @@ function findConfig(start) {
   }
 }
 async function readConfigFile(path) {
-  if (path.startsWith(PRESET_DIR) && !existsSync5(path)) {
+  if (path.startsWith(PRESET_DIR) && !existsSync6(path)) {
     const embedded = EMBEDDED_PRESETS[presetKey(path.slice(PRESET_DIR.length + 1).replace(/\.json$/, ""))];
     if (embedded) return embedded;
   }
   if (path.endsWith(".json")) {
-    const parsed = JSON.parse(readFileSync8(path, "utf8"));
+    const parsed = JSON.parse(readFileSync10(path, "utf8"));
     return path.endsWith("package.json") ? parsed.loupe : parsed;
   }
   const mod = await import(pathToFileURL(path).href);
   return mod.default ?? mod;
 }
 async function resolveExtends(spec, fromDir) {
-  if (hasPreset(spec)) return { path: join8(PRESET_DIR, `${presetKey(spec)}.json`), dir: PRESET_DIR };
-  const asPath = isAbsolute3(spec) ? spec : join8(fromDir, spec);
-  if (existsSync5(asPath)) return { path: asPath, dir: dirname4(asPath) };
+  if (hasPreset(spec)) return { path: join9(PRESET_DIR, `${presetKey(spec)}.json`), dir: PRESET_DIR };
+  const asPath = isAbsolute3(spec) ? spec : join9(fromDir, spec);
+  if (existsSync6(asPath)) return { path: asPath, dir: dirname4(asPath) };
   throw new Error(`cannot resolve extends: ${spec}`);
 }
 async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
@@ -28425,7 +28788,7 @@ function readRegistry(spec, root2, packages, load, empty) {
   if (Array.isArray(spec)) return load(spec);
   if (typeof spec !== "string") return empty;
   try {
-    const raw = JSON.parse(readFileSync8(isAbsolute3(spec) ? spec : join8(root2, spec), "utf8"));
+    const raw = JSON.parse(readFileSync10(isAbsolute3(spec) ? spec : join9(root2, spec), "utf8"));
     return registryApplies(raw, packages) ? load(raw) : empty;
   } catch {
     return empty;
@@ -28477,7 +28840,7 @@ async function loadConfig({
     source = { kind: "file", path: resolve4(configPath) };
   } else if (preset2) {
     if (!hasPreset(preset2)) throw new Error(`unknown preset: ${preset2}`);
-    raw = await loadChain(join8(PRESET_DIR, `${presetKey(preset2)}.json`));
+    raw = await loadChain(join9(PRESET_DIR, `${presetKey(preset2)}.json`));
     source = { kind: "preset", name: preset2 };
   } else {
     const found = findConfig(root2);
@@ -28488,7 +28851,7 @@ async function loadConfig({
       raw = await expandExtends(inline, root2);
       source = { kind: inferred ? "inferred" : "inline" };
     } else {
-      raw = await loadChain(join8(PRESET_DIR, "generic.json"));
+      raw = await loadChain(join9(PRESET_DIR, "generic.json"));
       source = { kind: "preset", name: "generic" };
     }
   }
@@ -29202,8 +29565,8 @@ ${body(payload, clean, result.diagnostics.parseErrors.length)}
 }
 
 // src/lsp.ts
-import { readFileSync as readFileSync9 } from "node:fs";
-import { join as join9 } from "node:path";
+import { readFileSync as readFileSync11 } from "node:fs";
+import { join as join10 } from "node:path";
 import { fileURLToPath as fileURLToPath2, pathToFileURL as pathToFileURL2 } from "node:url";
 var SEVERITY = { error: 1, warn: 2, off: 2 };
 var field = (v, ...keys) => keys.reduce(
@@ -29281,7 +29644,7 @@ function lsp(opts) {
   const open = /* @__PURE__ */ new Map();
   let findings = /* @__PURE__ */ new Map();
   let published = /* @__PURE__ */ new Set();
-  const uriOf = (rel) => pathToFileURL2(join9(root2, rel)).href;
+  const uriOf = (rel) => pathToFileURL2(join10(root2, rel)).href;
   const relOf = (uri) => {
     let abs;
     try {
@@ -29310,7 +29673,7 @@ function lsp(opts) {
       let text2 = buffer;
       if (text2 === void 0) {
         try {
-          text2 = readFileSync9(join9(root2, rel), "utf8");
+          text2 = readFileSync11(join10(root2, rel), "utf8");
         } catch {
           text2 = "";
         }
@@ -29559,10 +29922,10 @@ ${renderTitle(rule2, config.designSystem, config.suppression.keyword)}`).join("\
 
 // src/serve.ts
 import { createServer } from "node:http";
-import { readFileSync as readFileSync10 } from "node:fs";
-import { dirname as dirname5, join as join10 } from "node:path";
+import { readFileSync as readFileSync12 } from "node:fs";
+import { dirname as dirname5, join as join11 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
-var MU_PLUGIN = join10(
+var MU_PLUGIN = join11(
   dirname5(fileURLToPath3(import.meta.url)),
   "..",
   "..",
@@ -29888,7 +30251,7 @@ function serve(opts) {
       if (path === "/loupe-overlay.php") {
         let php;
         try {
-          php = readFileSync10(MU_PLUGIN, "utf8");
+          php = readFileSync12(MU_PLUGIN, "utf8");
         } catch {
           res.statusCode = 404;
           res.end(
@@ -29924,11 +30287,11 @@ function serve(opts) {
 }
 
 // src/detect.ts
-import { existsSync as existsSync6, readFileSync as readFileSync11, statSync as statSync3 } from "node:fs";
-import { join as join11 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync13, statSync as statSync4 } from "node:fs";
+import { join as join12 } from "node:path";
 var readJson = (p) => {
   try {
-    return JSON.parse(readFileSync11(p, "utf8"));
+    return JSON.parse(readFileSync13(p, "utf8"));
   } catch {
     return null;
   }
@@ -29940,12 +30303,12 @@ function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
   const walk = (dir, rel, depth) => {
     if (depth > maxDepth || out.length >= budget) return;
-    const pkg = join11(dir, "package.json");
-    if (existsSync6(pkg)) out.push({ dir, rel });
+    const pkg = join12(dir, "package.json");
+    if (existsSync7(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
     for (const e of readDir(dir)) {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walk(join11(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      walk(join12(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(root2, "", 0);
@@ -29953,11 +30316,11 @@ function manifests(root2, maxDepth = 3, budget = 60) {
 }
 function markerAt(dir, marker) {
   const name = marker.replace(/\/$/, "");
-  const full = join11(dir, name);
-  if (!existsSync6(full)) return false;
+  const full = join12(dir, name);
+  if (!existsSync7(full)) return false;
   if (!marker.endsWith("/")) return true;
   try {
-    return statSync3(full).isDirectory();
+    return statSync4(full).isDirectory();
   } catch {
     return false;
   }
@@ -29966,7 +30329,7 @@ function probeDirs(root2) {
   const out = [{ dir: root2, rel: "" }];
   for (const e of readDir(root2)) {
     if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-    out.push({ dir: join11(root2, e.name), rel: e.name });
+    out.push({ dir: join12(root2, e.name), rel: e.name });
   }
   return out;
 }
@@ -29974,7 +30337,7 @@ var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? det
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson(join11(root2, rel, "package.json")) ?? {};
+      const pkg = readJson(join12(root2, rel, "package.json")) ?? {};
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
       const first = hit[0];
@@ -30043,7 +30406,7 @@ function libraryPrefixes(dirs, candidates) {
     if (depth > 4 || budget <= 0 || !want.size) return;
     for (const e of readDir(dir)) {
       if (budget <= 0 || !want.size) return;
-      const full = join11(dir, e.name);
+      const full = join12(dir, e.name);
       if (e.isDirectory()) {
         if (e.name === ".bin" || e.name === "node_modules") continue;
         walk(full, depth + 1);
@@ -30051,7 +30414,7 @@ function libraryPrefixes(dirs, candidates) {
         budget--;
         let text2;
         try {
-          text2 = readFileSync11(full, "utf8");
+          text2 = readFileSync13(full, "utf8");
         } catch {
           continue;
         }
@@ -30063,7 +30426,7 @@ function libraryPrefixes(dirs, candidates) {
       }
     }
   };
-  for (const dir of dirs) if (existsSync6(dir)) walk(dir, 0);
+  for (const dir of dirs) if (existsSync7(dir)) walk(dir, 0);
   return found;
 }
 function resolvePreset(name, seen = /* @__PURE__ */ new Set()) {
@@ -30089,7 +30452,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   for (const { abs } of files.styles) {
     let text2;
     try {
-      text2 = readFileSync11(abs, "utf8");
+      text2 = readFileSync13(abs, "utf8");
     } catch {
       continue;
     }
@@ -30103,14 +30466,14 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync11(abs, "utf8"));
+      markupText.push(readFileSync13(abs, "utf8"));
     } catch {
     }
   }
   const haystack = markupText.join("\n");
   const candidates = [...cssCounts.entries()].filter(([prefix, count]) => count >= 3 && haystack.includes(prefix)).sort((a, b) => b[1] - a[1]);
   const vendored = libraryPrefixes(
-    [join11(root2, "node_modules"), ...packageDir ? [join11(root2, packageDir, "node_modules")] : []],
+    [join12(root2, "node_modules"), ...packageDir ? [join12(root2, packageDir, "node_modules")] : []],
     candidates.map(([p]) => p)
   );
   const accepted = [];
@@ -30159,36 +30522,40 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/profiles.ts
-import { existsSync as existsSync7, readFileSync as readFileSync12 } from "node:fs";
-import { isAbsolute as isAbsolute4, join as join12, resolve as resolve5 } from "node:path";
-var readJson2 = (p) => JSON.parse(readFileSync12(p, "utf8"));
-var under = (dir, rel) => isAbsolute4(rel) ? rel : join12(dir, rel);
-var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
-var asString = (v) => typeof v === "string" && v !== "" ? v : null;
+import { existsSync as existsSync8, readFileSync as readFileSync14 } from "node:fs";
+import { isAbsolute as isAbsolute4, join as join13, resolve as resolve5 } from "node:path";
+var readJson2 = (p) => JSON.parse(readFileSync14(p, "utf8"));
+var under = (dir, rel) => isAbsolute4(rel) ? rel : join13(dir, rel);
+var asStrings2 = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
+var asString2 = (v) => typeof v === "string" && v !== "" ? v : null;
 function readProfiles(root2) {
-  if (!root2 || !existsSync7(root2)) return [];
+  if (!root2 || !existsSync8(root2)) return [];
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   for (const e of readDir(root2)) {
     if (!e.isDirectory()) continue;
-    const dir = join12(root2, e.name);
-    const manifest = join12(dir, "profile.json");
-    if (!existsSync7(manifest)) continue;
+    const dir = join13(root2, e.name);
+    const manifest = join13(dir, "profile.json");
+    if (!existsSync8(manifest)) continue;
     try {
       const raw = readJson2(manifest);
-      const id = asString(raw.id) ?? e.name;
+      const id = asString2(raw.id) ?? e.name;
       if (seen.has(id)) continue;
-      const patterns = asString(raw.patterns);
-      const components2 = asString(raw.components);
-      const tokenDescriptions2 = asString(raw.tokenDescriptions);
+      const patterns = asString2(raw.patterns);
+      const components2 = asString2(raw.components);
+      const tokenDescriptions2 = asString2(raw.tokenDescriptions);
+      const delivery = asString2(raw.delivery);
       out.push({
         id,
-        name: asString(raw.name) ?? asString(raw.id) ?? e.name,
-        preset: asString(raw.preset),
-        packages: asStrings(raw.packages),
+        name: asString2(raw.name) ?? asString2(raw.id) ?? e.name,
+        preset: asString2(raw.preset),
+        packages: asStrings2(raw.packages),
         patterns: patterns ? under(dir, patterns) : null,
         components: components2 ? under(dir, components2) : null,
         tokenDescriptions: tokenDescriptions2 ? under(dir, tokenDescriptions2) : null,
+        // Read now, not by path later: two consumers want it, and a block that
+        // does not validate is no block rather than a profile that cannot load.
+        delivery: delivery ? readDelivery(under(dir, delivery)) : null,
         dir
       });
       seen.add(id);
@@ -30281,15 +30648,15 @@ function applyRegistries(config, sources) {
 }
 
 // src/hook.ts
-import { existsSync as existsSync8, readFileSync as readFileSync13, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute5, join as join13, relative as relative3 } from "node:path";
+import { existsSync as existsSync9, readFileSync as readFileSync15, writeFileSync as writeFileSync3 } from "node:fs";
+import { dirname as dirname6, isAbsolute as isAbsolute5, join as join14, relative as relative3 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var readStdin = async () => process.stdin.isTTY ? "" : text(process.stdin);
 function readState(root2) {
   try {
-    const raw = JSON.parse(readFileSync13(attemptsPath(root2), "utf8"));
+    const raw = JSON.parse(readFileSync15(attemptsPath(root2), "utf8"));
     const now = Date.now();
     const sessions = {};
     for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -30333,26 +30700,26 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute5(raw) ? raw : join13(root2, raw);
+  const abs = isAbsolute5(raw) ? raw : join14(root2, raw);
   const rel = relative3(root2, abs);
   if (!rel || rel.startsWith("..")) return null;
   return toPosix(rel);
 }
 function hookRoot() {
   const fromEnv = process.env.CLAUDE_PROJECT_DIR;
-  if (fromEnv && existsSync8(fromEnv)) return fromEnv;
+  if (fromEnv && existsSync9(fromEnv)) return fromEnv;
   return process.cwd();
 }
 var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
 function optedIn(root2) {
   if (process.env.LOUPE !== void 0) return isOn(process.env.LOUPE);
   for (const file of [
-    join13(root2, ".claude", "settings.local.json"),
-    join13(root2, ".claude", "settings.json"),
-    join13(homedir(), ".claude", "settings.json")
+    join14(root2, ".claude", "settings.local.json"),
+    join14(root2, ".claude", "settings.json"),
+    join14(homedir(), ".claude", "settings.json")
   ]) {
     try {
-      const v = JSON.parse(readFileSync13(file, "utf8")).env?.LOUPE;
+      const v = JSON.parse(readFileSync15(file, "utf8")).env?.LOUPE;
       if (v !== void 0) return isOn(String(v));
     } catch {
     }
@@ -30373,7 +30740,7 @@ function resolvedOptions() {
   if (Object.values(fromEnv).some((v) => v !== void 0)) return { options: fromEnv, source: "environment" };
   for (const file of ["settings.local.json", "settings.json"]) {
     try {
-      const raw = JSON.parse(readFileSync13(join13(homedir(), ".claude", file), "utf8"));
+      const raw = JSON.parse(readFileSync15(join14(homedir(), ".claude", file), "utf8"));
       const configs = raw.pluginConfigs ?? {};
       const key = Object.keys(configs).find((k) => k === "loupe" || k.startsWith("loupe@"));
       const opts = key === void 0 ? void 0 : configs[key]?.options;
@@ -30438,9 +30805,9 @@ var note = (msg) => {
 };
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
 var HERE = dirname7(fileURLToPath4(import.meta.url));
-var SINGLE_FILE = !existsSync9(join14(HERE, "..", "package.json"));
-var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
-var USER_ENV_FILE = join14(process.env.XDG_CONFIG_HOME || join14(homedir2(), ".config"), "loupe", ".env");
+var SINGLE_FILE = !existsSync10(join15(HERE, "..", "package.json"));
+var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join15(HERE, "..", "..", ".env");
+var USER_ENV_FILE = join15(process.env.XDG_CONFIG_HOME || join15(homedir2(), ".config"), "loupe", ".env");
 var KEY_SOURCES = `the environment, the plugin's API key option, ${ENV_FILE}, or ${USER_ENV_FILE}`;
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
@@ -30567,7 +30934,7 @@ var needsProject = (command, args, isHook) => {
   if (args.flags.all || args.flags.files) return false;
   return isHook || Boolean(args.flags.changed) && SCOPED_COMMANDS.has(command);
 };
-var looksLikeProject = (root2) => existsSync9(join14(root2, "package.json")) || existsSync9(join14(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
+var looksLikeProject = (root2) => existsSync10(join15(root2, "package.json")) || existsSync10(join15(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
 var CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString("en-US")}-entry ceiling`;
 var CEILING_WHY = "this root is larger than a project, so the namespaces are a guess from the part of it that was read";
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
@@ -30618,7 +30985,7 @@ async function main() {
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
   const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
   const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
-  if (!existsSync9(root2)) {
+  if (!existsSync10(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
 `);
@@ -30743,6 +31110,26 @@ async function main() {
 `
         );
     }
+    const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+    const bundled = [...delivery?.packages ?? []].filter(([, e]) => e.provided === "bundled").map(([pkg]) => pkg);
+    if (REMEDY_RULES.has(id) && delivery && bundled.length)
+      process.stdout.write(
+        `  ${dim(`A remedy naming ${bundled.join(", ")} carries "bundling required" until the project imports it: ${delivery.host} does not provide ${bundled.length > 1 ? "them" : "it"}, so the build compiles ${bundled.length > 1 ? "them" : "it"} in.`)}
+`
+      );
+    if (id === "tokens/undelivered") {
+      const t = delivery?.tokens;
+      const lines = t ? [
+        `Tokens come from ${t.stylesheet}${t.handle ? `, the ${t.handle} handle` : ""}. Any one of these is delivery:`,
+        ...t.evidence.map(
+          (e) => `  ${e.kind === "enqueue-dependency" ? `${e.calls.join("/")} listing ${e.handles.join(", ")}` : e.kind === "import" ? `an import of ${e.specifiers.join(" or ")}` : `/${e.pattern.source}/`} in ${e.files.join(", ")}`
+        ),
+        "It reports only when enqueues were found, every one was read, and none qualifies; anything it cannot read is not a finding.",
+        ...t.note ? [t.note] : []
+      ] : ["No active profile declares how its tokens are delivered, so this reports nothing."];
+      for (const l of lines) process.stdout.write(`  ${dim(l)}
+`);
+    }
     return EXIT.OK;
   }
   if (command === "status") {
@@ -30751,6 +31138,7 @@ async function main() {
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ""}` : config.source.kind;
     const base = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
     const ds = config.designSystem;
+    const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
     const orNone = (arr) => arr?.length ? arr.join(", ") : "(none)";
     const components2 = (arr) => arr?.length ? arr.map((n) => supersededEverywhere(config.componentRegistry, n) ? `${n} (legacy)` : n).join(", ") : "(none)";
     const lines = [
@@ -30778,6 +31166,11 @@ async function main() {
       // identical in a report and must not look identical here. The directory, not
       // just the id: a profile carries its authoring prose beside its registries.
       `${dim("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(", ") : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
+      // What adopting the system costs this project: which packages the host
+      // provides and which get bundled, and which sheet carries the tokens. A
+      // remedy naming a bundled package is a new runtime dependency, and a token
+      // whose sheet never loads resolves to nothing — both read here first.
+      ...delivery ? [`${dim("delivery:   ")}${deliverySummary(delivery)}`] : [],
       "",
       bold("rules:")
     ];
@@ -30836,14 +31229,14 @@ async function main() {
 `);
       return EXIT.OK;
     }
-    const target = join14(root2, "loupe.config.json");
+    const target = join15(root2, "loupe.config.json");
     if (info.truncated && !args.flags.force) {
       fail(
         "loupe: refusing to write that guess to a config \u2014 a written config is not held to advisory. Point --root at the project, or pass --force to write it anyway.\n"
       );
       return EXIT.CANNOT_RUN;
     }
-    if (existsSync9(target) && !args.flags.force) {
+    if (existsSync10(target) && !args.flags.force) {
       fail(`loupe: ${target} already exists (use --force)
 `);
       return EXIT.CANNOT_RUN;
