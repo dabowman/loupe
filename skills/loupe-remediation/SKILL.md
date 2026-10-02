@@ -55,9 +55,12 @@ the finding is worth. Say so before the edit, not after it:
   dependency on it, unless it already imports it: a bigger bundle, the
   package's own dependencies with it, and possibly test config for its ESM
   build. The engine cannot measure the bundle, so it does not claim a number.
-  Check whether the project already ships that package and whether it is
-  deliberately dependency-free; when the cost is new, state it to the user and
-  let them choose before converting.
+  Such a finding's note says so — `bundling required: <pkg> is bundled into
+  your build, not provided by <host>` — and the note is absent once the project
+  imports the package anywhere. `new dependency: <pkg> is not in package.json`
+  is the same question for a package the profile says nothing about. Check
+  whether the project is deliberately dependency-free; when the cost is new,
+  state it to the user and let them choose before converting.
 - **Tokens whose stylesheet never loads.** A `var()` naming a token the page
   never defines is invalid at computed-value time: the declaration drops, it
   does not fall back. Before substituting tokens, confirm the stylesheet

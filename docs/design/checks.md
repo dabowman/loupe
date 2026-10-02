@@ -346,3 +346,29 @@ file is missing or broken still loads — its registries do not depend on it.
 `loupe status` prints it as `delivery:`, the line the remediation skill reads
 before it converts anything: what the host provides, what gets bundled, and
 which sheet the tokens come from.
+
+### Reachability notes
+
+`system/raw-element`, `system/superseded-component` and
+`system/locked-component` name the component to move to, and the package it
+comes from, after the arrow. Each package named there is asked what adopting it
+would cost:
+
+| the package | note |
+|---|---|
+| already imported somewhere in the project | none — that cost is paid |
+| `external` in the profile | none — the host provides it |
+| `bundled` in the profile | `bundling required: <pkg> is bundled into your build, not provided by <host>` |
+| undeclared, and a readable `package.json` does not list it | `new dependency: <pkg> is not in package.json` |
+| undeclared, and no `package.json` to ask (or a workspace root) | none — unknown is not a cost |
+
+**The note rides in `note`, never in `message` or `code`.** The baseline keys on
+`code`, falling back to `message`; a remedy that grew a clause would resurrect
+every accepted finding the day a profile gained a delivery block. `note` is
+shipped whole by JSON, SARIF, the HTML report and the language server, and the
+agent format spares it as the tail of the line — which is why it comes after any
+registry note rather than before it, and why it stops at one clause: the tail
+budget is 100 characters, and the clause is what has to survive it.
+
+The bundle impact itself is not claimed. Measuring it needs the project's build,
+and a number the engine guessed at would be read as one it measured.

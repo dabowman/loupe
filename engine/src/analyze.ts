@@ -27,6 +27,7 @@
  *   over the whole index:
  *     checks/patterns/composites.ts     patterns/duplicate-, superseded-, unregistered-composite
  *     checks/system/currency.ts         system/locked-component, system/superseded-component
+ *     delivery.ts                       a reachability note on those and system/raw-element
  *     checks/tokens/unknown-token.ts    tokens/unknown-token
  *   run by the scanner, per JSX element (`markup.ts`):
  *     checks/detectors/*.ts             the pattern registry's detectors
@@ -39,6 +40,7 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import type { Root } from 'postcss';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
+import { annotateReach, mergeDeliveries, projectDependencies } from './delivery.ts';
 import { discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
@@ -305,6 +307,8 @@ export async function analyze(
 ): Promise<AnalyzeResult> {
 	const ds = config.designSystem;
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
+	// How the active profiles say their packages and tokens reach a page.
+	const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
 	const parseSuppressions = makeSuppressionParser(config.suppression);
 	const files = discover({ root: config.root, sources: config.sources });
 
@@ -668,6 +672,15 @@ export async function analyze(
 	}))
 		report(f);
 	for (const f of currency(componentImports, config.componentRegistry, ruleIsLive)) report(f);
+	// What a remedy naming a package would cost here: nothing for a package the
+	// project already imports or the host provides, a bundling note otherwise.
+	// A note, never the message or code, so a baseline keyed on either survives.
+	annotateReach(findings, {
+		delivery,
+		imports: componentImports,
+		dependencies: projectDependencies(config.root),
+		dsPackages: ds.packages,
+	});
 
 	// ── malformed suppressions ────────────────────────────────────────────────
 	for (const [file, s] of suppByFile) {

@@ -12,12 +12,14 @@
  * that the declaration is read strictly, and that each consumer fails safe.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadDelivery } from '../src/delivery.ts';
+import { findingKey } from '../src/analyze.ts';
+import { loadDelivery, reachNote, remedyPackages } from '../src/delivery.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { assert, CLI, check, cleanup, finish, one, scratch, writeAll } from './harness.ts';
+import type { Finding } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROFILES = join(HERE, '..', '..', 'profiles');
@@ -154,6 +156,135 @@ await check('`loupe status` names what the active profile delivers how', () => {
 	} finally {
 		cleanup(root);
 	}
+});
+
+// ── C: what a remedy naming a package costs ─────────────────────────────────
+
+/** `check --all --format json` through the CLI, the way the hook and skills run it. */
+function checkJson(root: string, profiles: boolean = true): Finding[] {
+	const args = [CLI, 'check', '--all', '--format', 'json', '--no-baseline', '--root', root, '--preset', 'wpds'];
+	const r = spawnSync('node', profiles ? [...args, '--profiles', PROFILES] : args, { encoding: 'utf8' });
+	assert(r.status === 0 || r.status === 1, `loupe could not run (${r.status}): ${r.stderr}`);
+	return (JSON.parse(r.stdout) as { findings: Finding[] }).findings;
+}
+
+const PLUGIN = {
+	'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '^30.0.0' } }),
+	'src/Panel.jsx': `import { HStack, Button } from '@wordpress/components';
+export const Panel = () => (
+  <HStack>
+    <p>Settings</p>
+    <button>Save</button>
+  </HStack>
+);
+`,
+};
+
+const BUNDLING = 'bundling required: @wordpress/ui is bundled into your build, not provided by WordPress';
+
+await check('a remedy naming a bundled package the project does not import says bundling is required', () => {
+	const root = scratch('loupe-reach-');
+	try {
+		writeAll(root, PLUGIN);
+		const findings = checkJson(root);
+		const p = one(
+			findings.filter((f) => f.rule === 'system/raw-element' && f.code === '<p>'),
+			'the <p> should report',
+		);
+		assert(p.message.includes('(@wordpress/ui)'), `the remedy should name @wordpress/ui: ${p.message}`);
+		assert(p.note?.includes(BUNDLING), `the note should name the bundling cost: ${p.note}`);
+		const hstack = one(
+			findings.filter((f) => f.rule === 'system/superseded-component'),
+			'HStack should report as superseded',
+		);
+		assert(hstack.note?.endsWith(BUNDLING), `after its own note: ${hstack.note}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a remedy naming a package the host provides carries no note', () => {
+	const root = scratch('loupe-reach-ext-');
+	try {
+		writeAll(root, PLUGIN);
+		const button = one(
+			checkJson(root).filter((f) => f.rule === 'system/raw-element' && f.code === '<button>'),
+			'the <button> should report',
+		);
+		assert(button.message.includes('(@wordpress/components)'), `remedy: ${button.message}`);
+		assert(!button.note, `an external costs nothing to adopt: ${button.note}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('once the project imports the bundled package, its remedies carry no note', () => {
+	const root = scratch('loupe-reach-paid-');
+	try {
+		writeAll(root, {
+			...PLUGIN,
+			'package.json': JSON.stringify({
+				dependencies: { '@wordpress/components': '^30.0.0', '@wordpress/ui': '^0.5.0' },
+			}),
+			'src/Other.jsx': `import { Stack } from '@wordpress/ui';\nexport const Other = () => <Stack />;\n`,
+		});
+		const findings = checkJson(root);
+		const p = one(
+			findings.filter((f) => f.rule === 'system/raw-element' && f.code === '<p>'),
+			'the <p> should still report',
+		);
+		assert(!p.note, `the bundling cost is already paid: ${p.note}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('the note changes no finding key, so a baseline survives it', () => {
+	const root = scratch('loupe-reach-key-');
+	try {
+		writeAll(root, PLUGIN);
+		const keys = (fs: Finding[]): string =>
+			fs
+				.filter((f) => f.rule === 'system/raw-element')
+				.map(findingKey)
+				.sort()
+				.join('\n');
+		const withNote = checkJson(root);
+		assert(
+			withNote.some((f) => f.note?.includes('bundling required')),
+			'the annotated run should carry the note',
+		);
+		// Without profiles there is no registry naming a package and no note.
+		const bare = checkJson(root, false);
+		assert(keys(withNote) === keys(bare), `keys moved:\n${keys(withNote)}\n---\n${keys(bare)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('what a remedy names is read after the arrow, and unknown is not a cost', () => {
+	assert(
+		remedyPackages('HStack (@wordpress/components) ×3 → Stack (@wordpress/ui, direction="row")', []).join() ===
+			'@wordpress/ui',
+		'the current import, before the arrow, is not the remedy',
+	);
+	// The elementMap remedy shape, with a substitution prop inside it.
+	assert(
+		remedyPackages('<h4> → <Text render={ <h4 /> }> (@wordpress/ui) (judged 0.80)', []).join() === '@wordpress/ui',
+		'a judged tail is not a package',
+	);
+	assert(remedyPackages('<p> → <Text>', []).length === 0, 'a remedy naming no package names none');
+	const imported = new Set<string>();
+	// No profile says, and package.json lists it: nothing new to say.
+	assert(reachNote('@acme/ui', { delivery: null, imported, dependencies: new Set(['@acme/ui']) }) === null, 'listed');
+	// No profile says, and package.json does not list it: a new dependency.
+	assert(
+		reachNote('@acme/ui', { delivery: null, imported, dependencies: new Set() }) ===
+			'new dependency: @acme/ui is not in package.json',
+		'unlisted',
+	);
+	// No profile says, and there is no package.json to ask: say nothing.
+	assert(reachNote('@acme/ui', { delivery: null, imported, dependencies: null }) === null, 'unknown');
 });
 
 finish();

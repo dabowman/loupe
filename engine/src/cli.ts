@@ -31,7 +31,7 @@ import { serve } from './serve.ts';
 import { oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
-import { deliverySummary, mergeDeliveries } from './delivery.ts';
+import { deliverySummary, mergeDeliveries, REMEDY_RULES } from './delivery.ts';
 import type { RegistrySource } from './profiles.ts';
 import { baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
 import {
@@ -662,6 +662,14 @@ async function main(): Promise<number> {
 					`  ${dim(`From ${src.map((p) => `${p.id} (${p.components})`).join(', ')} — each finding carries its entry's note, and \`--format json\` ships that note whole.`)}\n`,
 				);
 		}
+		// What adopting a remedy costs is the profile's to say, and this is where a
+		// reader asks what a remedy rule's note means.
+		const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+		const bundled = [...(delivery?.packages ?? [])].filter(([, e]) => e.provided === 'bundled').map(([pkg]) => pkg);
+		if (REMEDY_RULES.has(id) && delivery && bundled.length)
+			process.stdout.write(
+				`  ${dim(`A remedy naming ${bundled.join(', ')} carries "bundling required" until the project imports it: ${delivery.host} does not provide ${bundled.length > 1 ? 'them' : 'it'}, so the build compiles ${bundled.length > 1 ? 'them' : 'it'} in.`)}\n`,
+			);
 		return EXIT.OK;
 	}
 
