@@ -21,7 +21,7 @@ import { isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
 import { RULES } from '../src/rules.ts';
 import { analyze } from '../src/analyze.ts';
-import { CLI, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
+import { CLI, PLUGIN_DATA, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 import type { Finding } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -54,7 +54,7 @@ function runCli(
 	const home = scratch('dsh-home-');
 	try {
 		// Opted in, and not silenced: the gate is off until a project turns it on.
-		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, LOUPE: 'on' };
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, LOUPE: 'on', CLAUDE_PLUGIN_DATA: PLUGIN_DATA };
 		delete env.LOUPE_OFF;
 		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
 		// `process.execPath` rather than `'node'`: the suite must run under the
@@ -124,7 +124,9 @@ const tmpRepo = (files: Record<string, string>): string => {
  * `CLAUDE_PLUGIN_OPTION_*` family overrides rules, and `preset` among them wins
  * over the fixture's own `loupe.config.json`, so `CLAUDE_PLUGIN_OPTION_PRESET`
  * makes the wpds rules vanish and the blocking test fail with "it did not
- * block". `CLAUDE_PLUGIN_DATA` and `CLAUDE_PLUGIN_ROOT` move state and profiles.
+ * block". `CLAUDE_PLUGIN_DATA` and `CLAUDE_PLUGIN_ROOT` move state and profiles,
+ * so the first is the suite's own scratch directory unless a test names one —
+ * `undefined` for none, as a shell has.
  * `HOME` is the quietest of them: `resolvedOptions` reads `~/.claude/settings*
  * .json`, so a developer with this plugin installed and configured has options
  * leaking in through a file nothing in the test mentions.
@@ -142,7 +144,8 @@ const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
 	const e: NodeJS.ProcessEnv = { ...process.env, HOME: EMPTY_HOME, LOUPE: 'on', ...extra };
 	if (e.LOUPE === undefined) delete e.LOUPE;
 	if (!('LOUPE_OFF' in extra)) delete e.LOUPE_OFF;
-	if (!('CLAUDE_PLUGIN_DATA' in extra)) delete e.CLAUDE_PLUGIN_DATA;
+	if (!('CLAUDE_PLUGIN_DATA' in extra)) e.CLAUDE_PLUGIN_DATA = PLUGIN_DATA;
+	if (e.CLAUDE_PLUGIN_DATA === undefined) delete e.CLAUDE_PLUGIN_DATA;
 	if (!('CLAUDE_PLUGIN_ROOT' in extra)) delete e.CLAUDE_PLUGIN_ROOT;
 	for (const k of Object.keys(e)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_') && !(k in extra)) delete e[k];
 	return e;
@@ -364,7 +367,7 @@ await check('a baseline recorded from a shell is visible to the plugin hook', ()
 	});
 	const pluginData = scratch('dsh-plugin-data-');
 	try {
-		const shell = env();
+		const shell = env({ CLAUDE_PLUGIN_DATA: undefined });
 
 		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: shell });
 		assert(/baselined [1-9]/.test(recorded), `nothing baselined:\n${recorded}`);
