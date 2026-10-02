@@ -13,7 +13,7 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
@@ -2080,6 +2080,44 @@ await check('the hook runs --judge without a key instead of refusing', () => {
 		assert(stderr.includes('TYPESAFE_API_KEY'), `unexpected refusal: ${stderr}`);
 	} finally {
 		cleanup(root);
+	}
+});
+
+// The PATH shim found itself with `realpath`, which macOS 12 and earlier do not
+// ship: every invocation died on "command not found" before loupe ran. Both
+// routes onto PATH go through a symlink — Claude Code links the plugin
+// directory, a hand install links the file, sometimes relatively — so each is
+// run here under `sh` with a PATH that holds the shim's tools and nothing else.
+await check('the PATH shim finds the engine through either symlink, with no realpath', () => {
+	const repo = join(HERE, '..', '..');
+	const dir = scratch('dsh-shim-');
+	try {
+		const tools = join(dir, 'tools');
+		mkdirSync(tools);
+		symlinkSync(process.execPath, join(tools, 'node'));
+		for (const tool of ['dirname', 'readlink']) {
+			const found = execFileSync('/bin/sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).trim();
+			symlinkSync(found, join(tools, tool));
+		}
+		mkdirSync(join(dir, 'bin'));
+		mkdirSync(join(dir, 'chain'));
+		symlinkSync(join(repo, 'bin', 'loupe'), join(dir, 'bin', 'loupe'));
+		symlinkSync(join('..', 'bin', 'loupe'), join(dir, 'chain', 'loupe'));
+		symlinkSync(repo, join(dir, 'plugin'));
+		const routes = {
+			'a symlinked file': join(dir, 'bin', 'loupe'),
+			'a relative link to that link': join(dir, 'chain', 'loupe'),
+			'a symlinked directory': join(dir, 'plugin', 'bin', 'loupe'),
+		};
+		for (const [route, shim] of Object.entries(routes)) {
+			// From the scratch dir: a shim that resolved nothing falls back to `.`,
+			// and from `engine/` that finds an engine by accident.
+			const r = spawnSync('/bin/sh', [shim, 'presets'], { cwd: dir, encoding: 'utf8', env: env({ PATH: tools }) });
+			assert(r.status === 0, `${route}: exit ${r.status}\n${r.stderr}`);
+			assert(/\bwpds\b/.test(r.stdout), `${route}: no presets listed:\n${r.stdout}`);
+		}
+	} finally {
+		cleanup(dir);
 	}
 });
 
