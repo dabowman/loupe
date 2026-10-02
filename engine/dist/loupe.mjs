@@ -25159,6 +25159,7 @@ function partsOf2(value) {
 }
 var isLiteralPart = (p) => /^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0 || /^#[0-9a-f]+$/i.test(p) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
 var KEEP = "keep";
+var DELIBERATE = "deliberate, no token fits";
 function planValue(set, prop, value) {
   const family = familyFor(set, prop);
   if (!family.length) return onRole([...set.known], prop).length ? null : "none";
@@ -26091,6 +26092,7 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
   );
   const byFile = /* @__PURE__ */ new Map();
   const skipped = [];
+  const deliberate = (s) => s.judged?.spans[0] === DELIBERATE;
   for (const { f, s: decl2, line } of all) {
     if (decl2.judged?.answer !== KEEP) continue;
     const kept = {
@@ -26100,9 +26102,11 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
       value: decl2.value,
       reason: decl2.judged.spans.join(" ")
     };
-    if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
-    else if (onLine.get(`${f.file}\0${line}`)?.some((o) => o.s.judged?.answer !== KEEP))
-      skipped.push({ ...kept, why: "shares its line with a value that was not kept" });
+    if (deliberate(decl2))
+      skipped.push({ ...kept, why: "judged deliberate \u2014 suppress it by hand, saying what the value is" });
+    else if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
+    else if (onLine.get(`${f.file}\0${line}`)?.some((o) => o.s.judged?.answer !== KEEP || deliberate(o.s)))
+      skipped.push({ ...kept, why: "shares its line with a value that is not suppressed" });
     else byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
   }
   const applied = [];
@@ -28017,9 +28021,8 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
     const kept = got.find((a) => a?.choice === KEEP);
     if (kept && got.some((a) => a?.choice !== KEEP)) continue;
     if (kept) {
-      const why = "deliberate, no token fits";
       const tail = judgedTail(kept.confidence);
-      decl2.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+      decl2.judged = { answer: KEEP, confidence: kept.confidence, spans: [DELIBERATE, tail] };
     } else {
       const out = [...parts];
       const named = [...parts];
