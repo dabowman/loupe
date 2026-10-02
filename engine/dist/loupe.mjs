@@ -18461,7 +18461,7 @@ var require_util = __commonJS({
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
-    function relative5(aRoot, aPath) {
+    function relative6(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -18480,7 +18480,7 @@ var require_util = __commonJS({
       }
       return Array(level + 1).join("../") + aPath.substr(aRoot.length + 1);
     }
-    exports.relative = relative5;
+    exports.relative = relative6;
     var supportsNullProto = (function() {
       var obj = /* @__PURE__ */ Object.create(null);
       return !("__proto__" in obj);
@@ -20112,7 +20112,7 @@ var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
     var { existsSync: existsSync10, readFileSync: readFileSync14, realpathSync: realpathSync2 } = __require("fs");
-    var { dirname: dirname8, isAbsolute: isAbsolute7, join: join15, relative: relative5, sep: sep3 } = __require("path");
+    var { dirname: dirname8, isAbsolute: isAbsolute7, join: join15, relative: relative6, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -20185,7 +20185,7 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative5(realPath2(dirname8(cssFile)), realPath2(path));
+          let rel = relative6(realPath2(dirname8(cssFile)), realPath2(path));
           if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute7(rel)) {
             return void 0;
           }
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname8, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
+    var { dirname: dirname8, relative: relative6, resolve: resolve7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL3 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname8 && resolve7 && relative5 && sep3);
+    var pathAvailable = Boolean(dirname8 && resolve7 && relative6 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20966,7 +20966,7 @@ var require_map_generator = __commonJS({
         if (typeof this.mapOpts.annotation === "string") {
           from = dirname8(resolve7(from, this.mapOpts.annotation));
         }
-        let path = relative5(from, file);
+        let path = relative6(from, file);
         this.memoizedPaths.set(file, path);
         return path;
       }
@@ -23495,7 +23495,7 @@ var require_lib2 = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync9, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative5, resolve as resolve6 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
@@ -26241,8 +26241,14 @@ var base_ui_default = {
     substitutionProps: ["render"]
   },
   rules: {
-    "system/override": "off",
-    "system/inline-style": "off"
+    "system/override": {
+      severity: "off",
+      reason: "Base UI is headless and ships no CSS: styling its parts from outside is the intended API, not an override"
+    },
+    "system/inline-style": {
+      severity: "off",
+      reason: "Base UI is headless and ships no CSS: a style on its parts is how it is styled, not a bypass"
+    }
   }
 };
 
@@ -28167,7 +28173,7 @@ function applyBaseline(result, baseline) {
 
 // src/config.ts
 import { existsSync as existsSync5, readFileSync as readFileSync8 } from "node:fs";
-import { dirname as dirname4, isAbsolute as isAbsolute3, join as join8, resolve as resolve4 } from "node:path";
+import { dirname as dirname4, isAbsolute as isAbsolute3, join as join8, relative as relative3, resolve as resolve4 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // src/registry.ts
@@ -28242,6 +28248,11 @@ function merge(base, over) {
   for (const [k, v] of Object.entries(over)) out[k] = isObj(v) && isObj(base[k]) ? merge(base[k], v) : v;
   return out;
 }
+function mergeConfig(base, over) {
+  const out = merge(base, over);
+  if (isObj(base.rules) && isObj(over.rules)) out.rules = { ...base.rules, ...over.rules };
+  return out;
+}
 function findConfig(start) {
   let dir = resolve4(start);
   for (; ; ) {
@@ -28285,18 +28296,23 @@ async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
   if (seen.has(real)) throw new Error(`circular extends at ${real}`);
   seen.add(real);
   const raw = await readConfigFile(real) ?? {};
-  return expandExtends(raw, dirname4(real), seen);
+  const label = real.startsWith(PRESET_DIR) ? `preset ${real.slice(PRESET_DIR.length + 1).replace(/\.json$/, "")}` : real;
+  return expandExtends(raw, dirname4(real), label, seen);
 }
-async function expandExtends(raw, fromDir, seen = /* @__PURE__ */ new Set()) {
-  if (!raw?.extends) return raw ?? {};
+async function expandExtends(raw, fromDir, label, seen = /* @__PURE__ */ new Set()) {
+  const own = Object.fromEntries(Object.keys(isObj(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
+  if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
   const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
   let base = {};
+  let ruleFrom = {};
   for (const spec of specs) {
     const { path: p } = await resolveExtends(spec, fromDir);
-    base = merge(base, await loadChain(p, seen));
+    const parent = await loadChain(p, seen);
+    base = mergeConfig(base, parent.raw);
+    ruleFrom = { ...ruleFrom, ...parent.ruleFrom };
   }
   const { extends: _drop, ...rest } = raw;
-  return merge(base, rest);
+  return { raw: mergeConfig(base, rest), ruleFrom: { ...ruleFrom, ...own } };
 }
 function listPresets() {
   return presetNames().sort((a, b) => Number(a === "generic") - Number(b === "generic"));
@@ -28326,21 +28342,19 @@ function shippedVocabulary() {
 function compilePatterns(patterns) {
   return (patterns ?? []).map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`));
 }
-function normalize(raw, { root: root2 }) {
+function normalize(raw, { root: root2, ruleFrom = {} }) {
   const cfg = merge(DEFAULTS, raw ?? {});
   const ds = cfg.designSystem;
   const patterns = readRegistry(cfg.patterns, root2, ds.packages, loadPatterns, []);
   const componentRegistry = readRegistry(cfg.componentRegistry, root2, ds.packages, loadComponents, /* @__PURE__ */ new Map());
   const rules = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity }]));
+  const ruleOrigins = {};
   for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
     const id = canonicalRuleId(rawId);
     if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
-    const sev = value;
-    if (!isSeverity(sev))
-      throw new Error(
-        Array.isArray(sev) ? `rule options are no longer supported \u2014 write "${rawId}": ${JSON.stringify(sev[0])}` : `bad severity for ${rawId}: ${String(sev)}`
-      );
-    rules[id] = { severity: sev };
+    rules[id] = ruleSetting(rawId, value);
+    const from = ruleFrom[rawId];
+    ruleOrigins[id] = from === void 0 ? "config" : isAbsolute3(from) ? relative3(root2, from) || from : from;
   }
   const elementMap = /* @__PURE__ */ new Map();
   for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
@@ -28414,12 +28428,30 @@ function normalize(raw, { root: root2 }) {
     baselinePath: cfg.baseline,
     hook: cfg.hook,
     rules,
+    ruleFrom: ruleOrigins,
     severityOf: (id) => rules[id].severity,
     isProject: (cls) => projectPrefixes.some((p) => cls.startsWith(p)),
     isExternal: (cls) => externalPrefixes.some((p) => cls.startsWith(p)),
     isNeverDead: (cls) => neverDead.some((re) => re.test(cls))
   };
   return { ...config, enabled: enabledRules(config) };
+}
+function ruleSetting(rawId, value) {
+  if (isSeverity(value)) return { severity: value };
+  if (Array.isArray(value))
+    throw new Error(`rule options are no longer supported \u2014 write "${rawId}": ${JSON.stringify(value[0])}`);
+  if (!isObj(value)) throw new Error(`bad severity for ${rawId}: ${String(value)}`);
+  const extra = Object.keys(value).filter((k) => k !== "severity" && k !== "reason");
+  if (extra.length)
+    throw new Error(
+      `unknown key${extra.length > 1 ? "s" : ""} in the setting for ${rawId}: ${extra.join(", ")} \u2014 a rule setting takes only severity and reason`
+    );
+  const { severity, reason } = value;
+  if (!isSeverity(severity)) throw new Error(`bad severity for ${rawId}: ${String(severity)}`);
+  if (reason === void 0) return { severity };
+  if (typeof reason !== "string" || !reason.trim())
+    throw new Error(`the reason for ${rawId} must be a non-empty string, got: ${JSON.stringify(reason)}`);
+  return { severity, reason: reason.trim() };
 }
 function readRegistry(spec, root2, packages, load, empty) {
   if (Array.isArray(spec)) return load(spec);
@@ -28470,29 +28502,29 @@ async function loadConfig({
   inline,
   inferred = false
 }) {
-  let raw;
+  let chain;
   let source;
   if (configPath) {
-    raw = await loadChain(resolve4(configPath));
+    chain = await loadChain(resolve4(configPath));
     source = { kind: "file", path: resolve4(configPath) };
   } else if (preset2) {
     if (!hasPreset(preset2)) throw new Error(`unknown preset: ${preset2}`);
-    raw = await loadChain(join8(PRESET_DIR, `${presetKey(preset2)}.json`));
+    chain = await loadChain(join8(PRESET_DIR, `${presetKey(preset2)}.json`));
     source = { kind: "preset", name: preset2 };
   } else {
     const found = findConfig(root2);
     if (found) {
-      raw = await loadChain(found);
+      chain = await loadChain(found);
       source = { kind: "file", path: found };
     } else if (inline) {
-      raw = await expandExtends(inline, root2);
+      chain = await expandExtends(inline, root2, inferred ? "inferred config" : "inline config");
       source = { kind: inferred ? "inferred" : "inline" };
     } else {
-      raw = await loadChain(join8(PRESET_DIR, "generic.json"));
+      chain = await loadChain(join8(PRESET_DIR, "generic.json"));
       source = { kind: "preset", name: "generic" };
     }
   }
-  const normalized = normalize(raw, { root: root2 });
+  const normalized = normalize(chain.raw, { root: root2, ruleFrom: chain.ruleFrom });
   normalized.source = source;
   normalized.inferred = source.kind === "inferred";
   return normalized;
@@ -30282,7 +30314,7 @@ function applyRegistries(config, sources) {
 
 // src/hook.ts
 import { existsSync as existsSync8, readFileSync as readFileSync13, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute5, join as join13, relative as relative3 } from "node:path";
+import { dirname as dirname6, isAbsolute as isAbsolute5, join as join13, relative as relative4 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
@@ -30334,7 +30366,7 @@ function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
   const abs = isAbsolute5(raw) ? raw : join13(root2, raw);
-  const rel = relative3(root2, abs);
+  const rel = relative4(root2, abs);
   if (!rel || rel.startsWith("..")) return null;
   return toPosix(rel);
 }
@@ -30488,7 +30520,8 @@ Commands:
   fix                   Apply the fixes the engine can make without judgement;
                         with --judge, also the ones TypeSafe settles
   baseline              Record current findings as the accepted backlog
-  suppressions          List every active suppression directive
+  suppressions          List every active suppression directive, and every
+                        rule turned off in config, with its reason
   explain <rule>        Print a rule's guidance
   presets               List bundled presets
   version               Print the version, whether it runs from source or the bundle, and where
@@ -30578,7 +30611,7 @@ function resolveScope(config, args, { defaultChanged = false }) {
   if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(" ")}` };
   if (args.flags.all) return null;
   if (args.flags.files)
-    return args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative4(config.root, resolve6(f)) : f)).filter((f) => f && !f.startsWith(".."));
+    return args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative5(config.root, resolve6(f)) : f)).filter((f) => f && !f.startsWith(".."));
   if (args.flags.changed || defaultChanged) {
     const changed = changedFiles(config.root);
     if (changed === null) return { error: NOT_A_WORKTREE };
@@ -30786,7 +30819,8 @@ async function main() {
       const sev = config.severityOf(id);
       const judgeOnly = id === "patterns/judged-redirect";
       const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red(judgeOnly ? "BLOCKS (--judge only)" : "BLOCKS") : judgeOnly ? yellow("advisory, --judge only") : sev === "error" ? yellow("advisory (would block if enabled)") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
-      lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
+      const reason = config.rules[id].reason;
+      lines.push(`  ${magenta(id.padEnd(32))} ${verdict}${reason ? dim(` \u2014 ${reason}`) : ""}`);
     }
     const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
     lines.push(
@@ -30925,25 +30959,41 @@ ${dim("  Ctrl-C to stop.")}
     const why = (id) => !isRuleId(id) ? "not a rule" : !config.enabled[id] ? "rule off" : "mutes nothing";
     const staleNote = (d) => d.stale ? yellow(`  [stale: ${d.stale.map((id) => `${id} \u2014 ${why(id)}`).join("; ")}]`) : "";
     const tail = (d) => `${d.reason}${d.alias ? dim(`  (${d.alias} \u2192 ${kw})`) : ""}${staleNote(d)}`;
+    const offs = staleOnly ? [] : RULE_IDS.flatMap((id) => {
+      const from = config.ruleFrom[id];
+      return from !== void 0 && config.rules[id].severity === "off" ? [
+        {
+          scope: "config",
+          file: from,
+          rules: [id],
+          reason: config.rules[id].reason ?? null
+        }
+      ] : [];
+    });
+    const offTail = (o) => `${dim("(rule off)")}  ${o.reason ?? yellow("no reason given")}`;
+    const listed = [...offs, ...directives];
     const exit = staleOnly && directives.length ? EXIT.BLOCKED : EXIT.OK;
-    if (args.flags.format === "json") process.stdout.write(`${JSON.stringify(directives, null, 2)}
+    if (args.flags.format === "json") process.stdout.write(`${JSON.stringify(listed, null, 2)}
 `);
     else if (!by)
-      for (const d of directives)
-        process.stdout.write(`${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(","))}  ${tail(d)}
-`);
+      for (const d of listed)
+        process.stdout.write(
+          "scope" in d ? `${dim(d.file)}  ${magenta(d.rules[0])}  ${offTail(d)}
+` : `${dim(`${d.file}:${d.line}`)}  ${magenta(d.rules.join(","))}  ${tail(d)}
+`
+        );
     else {
       const groups = /* @__PURE__ */ new Map();
-      for (const d of directives)
+      for (const d of listed)
         for (const key of by === "rule" ? d.rules : [d.file]) groups.set(key, [...groups.get(key) ?? [], d]);
       const sorted = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
       const out = [];
       for (const [key, group2] of sorted) {
         out.push(`${by === "rule" ? magenta(key) : bold(key)} ${dim(`(${group2.length})`)}`);
-        const width = Math.max(...group2.map((d) => String(d.line).length));
+        const width = Math.max(...group2.map((d) => "scope" in d ? 0 : String(d.line).length));
         for (const d of group2)
           out.push(
-            by === "rule" ? `  ${dim(`${d.file}:${d.line}`)}  ${tail(d)}` : `  ${dim(String(d.line).padStart(width))}  ${magenta(d.rules.join(","))}  ${tail(d)}`
+            "scope" in d ? by === "rule" ? `  ${dim(d.file)}  ${offTail(d)}` : `  ${magenta(d.rules[0])}  ${offTail(d)}` : by === "rule" ? `  ${dim(`${d.file}:${d.line}`)}  ${tail(d)}` : `  ${dim(String(d.line).padStart(width))}  ${magenta(d.rules.join(","))}  ${tail(d)}`
           );
         out.push("");
       }
