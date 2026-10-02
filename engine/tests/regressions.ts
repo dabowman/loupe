@@ -13,8 +13,8 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
 import { isSource } from '../src/discover.ts';
@@ -768,6 +768,36 @@ await check('a gate that stood down stays down until the finding goes', () => {
 		assert(fire() === 0, 'a clean run should pass');
 		writeFileSync(join(root, 'styles', 'a.css'), '/* ds-disable */\n.a { color: #f00; }');
 		assert(fire() === 2, 'the gate stayed down after the finding was fixed and reintroduced');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Outside a plugin there is no CLAUDE_PLUGIN_DATA, and the retry counter used to
+// fall back to `<root>/.loupe/` — an untracked directory in the user's repo for
+// data that expires in six hours. It goes to a temp directory of this user's
+// own, and `status` still says where, marked as outside the repo.
+await check('the hook keeps its retry counter out of the repo, and status says where it is', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '/* ds-disable */\n.a { color: #f00; }',
+	});
+	try {
+		const r = runCli(
+			['hook', '--root', root],
+			env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+			'{"session_id":"tmp","tool_input":{"file_path":"styles/a.css"}}',
+		);
+		assert(r.status === 2, `the fixture should block (and so count an attempt), got ${r.status}:\n${r.stderr}`);
+		assert(!existsSync(join(root, '.loupe')), 'the hook wrote a .loupe/ directory into the project');
+
+		const status = runCli(['status', '--root', root], env()).stdout;
+		const line = /state:\s+(\S+)(.*)/.exec(status);
+		assert(line, `status does not report the retry counter:\n${status}`);
+		const [, where = '', marker = ''] = line;
+		assert(existsSync(where), `status names ${where}, which the hook did not write`);
+		assert(relative(root, where).startsWith('..'), `the retry counter is inside the repo: ${where}`);
+		assert(/outside your repo/.test(marker), `status did not mark the location:\n${status}`);
 	} finally {
 		cleanup(root);
 	}

@@ -32,7 +32,7 @@ import { oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
 import type { RegistrySource } from './profiles.ts';
-import { baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
+import { attemptsPath, baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
 import {
 	bumpAttempts,
 	clearAttempts,
@@ -685,6 +685,7 @@ async function main(): Promise<number> {
 						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
 		const base = findExistingBaseline(root, namedBaseline, config.baselinePath);
+		const state = attemptsPath(root);
 		// What design system this run thinks it is checking, in the terms the rules are
 		// written against — the half a skill has to read before it writes a line of UI.
 		// Empty fields are printed as such: "no layout primitive" is a fact about the
@@ -719,6 +720,11 @@ async function main(): Promise<number> {
 							? ''
 							: '  (none recorded yet)'
 			}`,
+			// Beside the baseline line, because the two used to share a directory and are
+			// easy to assume still do: the retry counter is the one that stays out of the
+			// repo. The marker is computed, not assumed — a root above the temp
+			// directory would contain it.
+			`${dim('state:      ')}${state}${relative(root, state).startsWith('..') ? '  (retry counter only, outside your repo)' : ''}`,
 			`${dim('options:    ')}${
 				optionsSource === 'environment'
 					? 'from the plugin environment (hook context)'

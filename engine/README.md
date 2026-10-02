@@ -710,6 +710,12 @@ a gate that blocks on findings it was told to accept. Set `baseline` in the
 config, or pass `--baseline <path>`, to put it elsewhere. `loupe status` prints
 the path in use, and says so when that path is a fallback.
 
+The hook's retry counter is the opposite case, and never lands in the project:
+it goes in `$CLAUDE_PLUGIN_DATA` under the plugin, and otherwise in a temp
+directory of this user's own, keyed by project — so running the engine directly
+from `.claude/settings.local.json` leaves no `.loupe/` in your tree. `loupe
+status` prints the location on its `state:` line.
+
 A committed `.loupe-baseline.json` the config has since pointed away from is
 still read. 0.1.x baseline locations (`.loupe/baseline.json`, the plugin data
 directory) are not: re-run `loupe baseline` to record one in the project.

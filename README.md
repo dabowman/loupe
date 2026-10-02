@@ -667,8 +667,9 @@ The baseline is written to `.loupe-baseline.json` in the project and is meant to
 be committed: it is a statement about this repo, and the CLI and the hook are
 different processes that have to read the same file. Set `baseline` in the
 config, or pass `--baseline <path>`, to move it. The hook's retry counter is the
-one piece of state that does not live in the project: it goes in the OS temp
-directory, keyed by project, and expires after six hours.
+one piece of state that does not live in the project: it goes in the plugin's
+data directory, or a temp directory of your own, keyed by project, and expires
+after six hours. `loupe status` prints where, on its `state:` line.
 
 One fallback is read, and `status` says when it answered: a committed
 `.loupe-baseline.json` in a project whose config has since pointed `baseline`
