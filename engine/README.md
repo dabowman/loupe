@@ -695,9 +695,17 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
-loupe baseline          # record the current findings
-loupe check --changed   # only what's new
+loupe baseline --dry-run  # what would be recorded, by rule — writes nothing
+loupe baseline            # record the current findings
+loupe check --changed     # only what's new
 ```
+
+`--dry-run` prints the count each rule would record and, against a baseline
+already in force, how many entries are new (`+N new`, backlog being accepted)
+and how many it holds that nothing matches any more (`-N fixed`), followed by
+that baseline's entry count and when it was recorded. `check` cannot answer
+this: it applies the existing baseline, and `--no-baseline` shows everything
+rather than what would change.
 
 Entries key on rule + file + normalized code, not line number, so reformatting
 doesn't resurrect the whole file.

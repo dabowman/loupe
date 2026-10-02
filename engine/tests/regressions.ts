@@ -939,6 +939,45 @@ await check('re-recording an unchanged backlog rewrites the same bytes', () => {
 	}
 });
 
+// `/loupe-baseline` confirms before writing, and could only ask `check`, which
+// applies the existing baseline: on a repo that had one it reported nothing to
+// confirm. `--dry-run` says what recording now would change, by rule, against
+// the baseline in force — and writes nothing.
+await check('baseline --dry-run shows what would be recorded, new and fixed, and writes nothing', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.a { color: #f00; }\n.b { margin: 3px; }',
+	});
+	const file = join(root, '.loupe-baseline.json');
+	const dry = (): string =>
+		execFileSync('node', [CLI, 'baseline', '--dry-run', '--root', root], { encoding: 'utf8', env: env() });
+	try {
+		const fresh = dry();
+		assert(/^Would record [1-9]\d* finding\(s\)/.test(fresh), `no headline:\n${fresh}`);
+		assert(/tokens\/hardcoded-value\s+1\b/.test(fresh), `no by-rule count:\n${fresh}`);
+		assert(/No existing baseline/.test(fresh), `did not say there was nothing to compare with:\n${fresh}`);
+		assert(!existsSync(file), 'a dry run wrote the baseline');
+
+		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
+		const written = readFileSync(file, 'utf8');
+		const { createdAt, entries } = JSON.parse(written) as { createdAt: string; entries: string[] };
+		assert(/Nothing would change/.test(dry()), `an unchanged backlog reported a change:\n${dry()}`);
+
+		// One finding fixed, one introduced: the split is the decision, not the total.
+		writeFileSync(join(root, 'styles', 'a.css'), '.a { color: #f00; }\n.c { padding: 5px; }');
+		const after = dry();
+		assert(/\+1 new/.test(after), `the new finding was not called new:\n${after}`);
+		assert(/layout\/margin-on-child\s+0\s+\(-1 fixed\)/.test(after), `the fixed rule has no row:\n${after}`);
+		assert(
+			after.includes(`Existing baseline: ${entries.length} entries, recorded ${createdAt}`),
+			`the existing baseline was not described:\n${after}`,
+		);
+		assert(readFileSync(file, 'utf8') === written, 'a dry run rewrote the baseline');
+	} finally {
+		cleanup(root);
+	}
+});
+
 // SARIF and JSON read `RULES[id].title` straight out of the table, while the
 // agent format ran it through `renderTitle`. So a GitHub code-scanning alert
 // said "replace with a {tokenPrefix} token" where the terminal said

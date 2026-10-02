@@ -651,6 +651,7 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
+./bin/loupe baseline --dry-run   # by rule: what would be recorded, +new / -fixed
 ./bin/loupe baseline
 ```
 

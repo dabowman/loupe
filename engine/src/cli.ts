@@ -18,7 +18,7 @@ import { analyze } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import { judgeRedirects, judgeRenames, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
-import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
+import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
@@ -261,7 +261,9 @@ Options:
   --stale               For suppressions, list only the directives naming a
                         rule that muted nothing — no finding left, the rule
                         off, or an id that is not a rule — and exit 1 if any
-  --dry-run             Report what 'fix' would change without writing
+  --dry-run             Report what 'fix' would change without writing; for
+                        'baseline', what it would record by rule, new and
+                        fixed against the existing baseline
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
                         pattern it was built as (patterns/judged-redirect), and
@@ -912,14 +914,53 @@ async function main(): Promise<number> {
 	if (command === 'baseline') {
 		const result = await analyze(config, { scope: null });
 		const target = baselinePath(root, namedBaseline ?? config.baselinePath);
-		const { path, findings, entries } = writeBaseline(target, result);
 		// Nothing collapsed means nothing to reconcile, and saying the same number
 		// twice invents a distinction the reader then has to go and check.
-		const recorded =
+		const counted = (findings: number, entries: number): string =>
 			findings === entries
 				? `${findings} finding(s)`
 				: `${findings} finding(s) as ${entries} ${entries === 1 ? 'entry' : 'entries'}`;
-		process.stdout.write(green(`loupe: baselined ${recorded} \u2192 ${path}\n`));
+
+		// What recording would change, written nowhere. `check` cannot answer this:
+		// it applies the existing baseline, so on a repo that has one it reports
+		// nothing to confirm, and `--no-baseline` answers "everything", not "what
+		// changes if I record now". Compared against the baseline in force \u2014 the one
+		// `check` reads \u2014 since that is what the write would replace.
+		if (args.flags['dry-run']) {
+			const base = findExistingBaseline(root, namedBaseline, config.baselinePath);
+			const prior = base.found ? readBaseline(base.path) : null;
+			const { entries, rules } = diffBaseline(result, prior);
+			const width = Math.max(0, ...rules.map((r) => r.rule.length));
+			const lines = [`Would record ${counted(result.findings.length, entries)} \u2192 ${target}`, ''];
+			for (const r of rules) {
+				const split = [r.added ? yellow(`+${r.added} new`) : '', r.removed ? green(`-${r.removed} fixed`) : '']
+					.filter(Boolean)
+					.join(', ');
+				lines.push(
+					`  ${magenta(r.rule.padEnd(width))}  ${String(r.findings).padStart(5)}${split ? `   (${split})` : ''}`,
+				);
+			}
+			if (!rules.length) lines.push('  (nothing to record)');
+			lines.push('');
+			if (!base.found) lines.push(dim('No existing baseline \u2014 every entry would be new.'));
+			else if (!prior)
+				lines.push(yellow(`Existing baseline at ${base.path} is unreadable \u2014 recording would replace it.`));
+			else {
+				const n = prior.entries.length;
+				lines.push(
+					`Existing baseline: ${n} ${n === 1 ? 'entry' : 'entries'}, recorded ${prior.createdAt || '(no date)'}${
+						base.path === target ? '' : ` \u2014 ${base.path}`
+					}`,
+				);
+				if (!rules.some((r) => r.added || r.removed))
+					lines.push(dim('Nothing would change: recording now rewrites the same entries.'));
+			}
+			process.stdout.write(`${lines.join('\n')}\n`);
+			return EXIT.OK;
+		}
+
+		const { path, findings, entries } = writeBaseline(target, result);
+		process.stdout.write(green(`loupe: baselined ${counted(findings, entries)} \u2192 ${path}\n`));
 		return EXIT.OK;
 	}
 
