@@ -489,7 +489,7 @@ export function renameOptions(
 	about: ReadonlyMap<string, string> = new Map(),
 ): [string, string][] {
 	const values = new Map([...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v])));
-	return renameCandidates(name, prop, set.known).map((n) => [
+	return renameCandidates(name, prop, set.known, set.scopes).map((n) => [
 		n,
 		[values.get(n), about.get(n)].filter(Boolean).join(' \u2014 ') || n,
 	]);

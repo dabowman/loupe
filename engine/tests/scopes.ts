@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
+import { renameOptions } from '../src/judge.ts';
 import { tokenFixes } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
 import { readProfiles } from '../src/profiles.ts';
@@ -21,7 +22,7 @@ import { fitOf, parseTokenScopes, place } from '../src/scopes.ts';
 import type { TokenScopes } from '../src/scopes.ts';
 import { GENERIC_ROLES, onRole } from '../src/tokens.ts';
 import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
-import type { Finding, Profile } from '../src/types.ts';
+import type { Finding, Profile, TokenSet } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROFILES = join(HERE, '..', '..', 'profiles');
@@ -271,6 +272,34 @@ await check('WPDS scopes narrow only where the system says, and leave every othe
 		onRole(WPDS_NAMES, 'fill', WPDS).every((n) => n.includes('-foreground-')),
 		'fill is a foreground colour under WPDS',
 	);
+});
+
+// A judged rename chooses among these. Asked from the generic family, `fill`
+// offered every colour the system has — background and stroke included — and a
+// confident pick among them rewrites every line naming the unknown token to one
+// the profile says is not for this property.
+await check('a judged rename is asked among the family the scopes put on the property', () => {
+	assert(WPDS, 'wpds scopes loaded');
+	const set = (scopes?: TokenScopes): TokenSet => ({
+		known: new Set(WPDS_NAMES),
+		byValue: new Map(),
+		sources: 1,
+		scopes,
+	});
+	// Nothing a keystroke away, so the family is all there is.
+	const name = '--wpds-colour-fill-mystery';
+	const generic = renameOptions(name, 'fill', set()).map(([n]) => n);
+	const scoped = renameOptions(name, 'fill', set(WPDS)).map(([n]) => n);
+	assert(scoped.length, 'the scoped family offered nothing');
+	assert(scoped.length < generic.length, `the scopes did not narrow it: ${scoped.length} of ${generic.length}`);
+	assert(
+		scoped.every((n) => n.includes('-foreground-')),
+		`an off-scope token was offered: ${scoped.filter((n) => !n.includes('-foreground-'))}`,
+	);
+	// And a property the scopes say nothing about is asked as it was.
+	const cursor = (s?: TokenScopes) => renameOptions('--wpds-cursor-mystery', 'cursor', set(s)).map(([n]) => n);
+	assert(cursor().length, 'the generic table offered no cursor token');
+	assert(cursor(WPDS).join(' ') === cursor().join(' '), 'an undeclared property changed family');
 });
 
 // ── fix, and the suggestion path ────────────────────────────────────────────
