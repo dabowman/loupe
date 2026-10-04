@@ -1,7 +1,7 @@
 ---
 name: loupe-remediation
 description: >-
-  Load when fixing design-system conformance findings — output from `loupe`, the `/loupe-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/negative-margin`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `tokens/misapplied-token`, `patterns/duplicate-composite`, `patterns/superseded-composite`, `patterns/judged-redirect`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Works on whatever design system the project is on — WordPress Design System, Archer, or one declared in the project's own config — reading the system-specific half of each remedy from the active profile. Carries the order to fix in, the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the loupe findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `loupe-authoring` for the underlying rules.
+  Load when fixing design-system conformance findings — output from `loupe`, the `/loupe-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/negative-margin`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `tokens/misapplied-token`, `tokens/undelivered`, `patterns/duplicate-composite`, `patterns/superseded-composite`, `patterns/judged-redirect`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Works on whatever design system the project is on — WordPress Design System, Archer, or one declared in the project's own config — reading the system-specific half of each remedy from the active profile. Carries the order to fix in, the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the loupe findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `loupe-authoring` for the underlying rules.
 compatibility: "Any React-family design system Loupe can be configured for. Needs the plugin's engine (node >=18)."
 ---
 
@@ -39,6 +39,36 @@ exist.
   `<profile dir>/remediation.md`** — it carries the system-specific half of
   every rule below, and `<profile dir>/authoring.md` carries the token families
   a value has to come from.
+- `delivery:` says how the system reaches a page: which packages the host
+  provides, which get bundled into the project's own build, and which
+  stylesheet defines the tokens. Absent means the profile declares nothing —
+  not that everything is free. `<profile dir>/delivery.json` carries the same
+  facts with their sources.
+
+## Before converting or tokenizing: state the cost
+
+A remedy is a proposal to *this* project, and two of them can cost more than
+the finding is worth. Say so before the edit, not after it:
+
+- **A component from a bundled package.** A remedy naming a package that
+  `delivery:` lists as bundled is asking the project to take its first runtime
+  dependency on it, unless it already imports it: a bigger bundle, the
+  package's own dependencies with it, and possibly test config for its ESM
+  build. The engine cannot measure the bundle, so it does not claim a number.
+  Such a finding's note says so — `bundling required: <pkg> is bundled into
+  your build, not provided by <host>` — and the note is absent once the project
+  imports the package anywhere. `new dependency: <pkg> is not in package.json`
+  is the same question for a package the profile says nothing about. Check
+  whether the project is deliberately dependency-free; when the cost is new,
+  state it to the user and let them choose before converting.
+- **Tokens whose stylesheet never loads.** A `var()` naming a token the page
+  never defines is invalid at computed-value time: the declaration drops, it
+  does not fall back. Before substituting tokens, confirm the stylesheet
+  `delivery:` names reaches the page the CSS styles — for a WordPress plugin, a
+  dependency on its handle in the enqueue that loads the CSS. `tokens/undelivered`
+  reports a project where the profile's evidence says it does not. Until it does,
+  every token substitution is dead on the page, and "rendering change: none" is
+  false.
 
 When the finding rather than the fix is what needs explaining, `loupe explain
 <ruleId>` prints the rule's guidance and whether it is live in this config — and
@@ -64,8 +94,9 @@ findings say:
    component is being fought
 6. `layout/*` — structure
 7. `patterns/*` — composites, once individual components are conformant
-8. `tokens/hardcoded-value`, `tokens/unknown-token`, `tokens/misapplied-token`,
-   `typography/untokenized` — values
+8. `tokens/undelivered`, then `tokens/hardcoded-value`, `tokens/unknown-token`,
+   `tokens/misapplied-token`, `typography/untokenized` — values; the first
+   decides whether any of the rest render
 9. `css/dead-class`, sweep — what the work above left dead, once the rest has
    settled. The same cross-file check applies
 
@@ -294,6 +325,24 @@ It is advisory, and the scope is the profile author's reading of the system. If
 the element really is what the token says — a card that is also a link, say —
 suppress it with that reason; and if the profile's scope is simply wrong, that
 is the profile's `token-scopes.json` to fix, not the code.
+
+### `tokens/undelivered`
+
+The project uses the design system's tokens, and nothing the profile counts as
+evidence shows the stylesheet defining them reaches the page. Every `var()` of
+them resolves to nothing there, and each declaration drops — the element loses
+its background, not just its colour.
+
+Fix the delivery, not the tokens: the finding's note names the handle, and
+`loupe explain tokens/undelivered` prints what counts as delivery here and the
+profile's own advice. Usually that is one line — the handle added to the
+dependency array of the enqueue that loads the CSS. Do not paste the token
+definitions into the project's own stylesheet to silence it; that forks the
+design system and stops following its themes.
+
+It reports only on a positive no: enqueues found, every one read, none
+qualifying. If the CSS genuinely renders only where the host already loads the
+sheet (inside the block editor's iframe, say), suppress it with that reason.
 
 ### `patterns/duplicate-composite`
 

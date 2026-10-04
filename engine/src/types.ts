@@ -828,7 +828,77 @@ export interface Profile {
 	tokenScopes: TokenScopes | null;
 	/** What was wrong with the profile's own declarations, for the CLI to say. Empty when nothing was. */
 	problems: string[];
+	/** How the system's packages and tokens reach a page — read, validated, or null. */
+	delivery: Delivery | null;
 	dir: string;
+}
+
+// ── delivery ────────────────────────────────────────────────────────────────
+
+/**
+ * How one package reaches the page.
+ *
+ * `external`: the host provides it at runtime (WordPress's `wp-components`
+ * script), so importing it costs the build nothing. `bundled`: the build tool
+ * compiles it into the project's own bundle, so the first import is a new
+ * runtime dependency and a bigger bundle.
+ */
+export interface PackageDelivery {
+	provided: 'external' | 'bundled';
+	/** The host's handle for an external package, where it has one. */
+	handle?: string | undefined;
+	note?: string | undefined;
+}
+
+/**
+ * One way a project can show the token stylesheet reaches its pages. The
+ * profile states them; `tokens/undelivered` runs them. None parses a language:
+ * each is a bounded, literal read of the files its `files` globs name.
+ *
+ *   enqueue-dependency   a call (`wp_enqueue_style(…)`) whose dependency
+ *                        argument is a literal list naming one of `handles`,
+ *                        or an `enqueues` call whose own handle is one of them.
+ *                        The only kind that can say "not delivered": calls
+ *                        found, every one read, none naming a handle.
+ *   import               an `@import`, `import` or `require` of one of
+ *                        `specifiers` — the sheet bundled into the project's own.
+ *   pattern              any match of `pattern` — a build plugin that writes
+ *                        fallbacks into every `var()`, say.
+ */
+export type DeliveryCheck =
+	| {
+			kind: 'enqueue-dependency';
+			files: string[];
+			calls: string[];
+			handles: string[];
+			/** Calls whose first argument naming a handle is itself the delivery. */
+			enqueues: string[];
+			/** 0-based position of the dependency list in the call. */
+			argument: number;
+			note?: string | undefined;
+	  }
+	| { kind: 'import'; files: string[]; specifiers: string[]; note?: string | undefined }
+	| { kind: 'pattern'; files: string[]; pattern: RegExp; note?: string | undefined };
+
+/** Where a design system's tokens come from, and what shows they arrived. */
+export interface TokenDelivery {
+	/** The stylesheet that defines them, as a reader would name it. */
+	stylesheet: string;
+	/** The host's handle for it, where there is one. */
+	handle?: string | undefined;
+	/** The token namespace this delivery covers. Empty: the design system's own. */
+	prefixes: string[];
+	note?: string | undefined;
+	/** Any one of these, holding, is delivery. */
+	evidence: DeliveryCheck[];
+}
+
+/** A profile's delivery block, validated. */
+export interface Delivery {
+	/** What provides the externals: "WordPress". */
+	host: string;
+	packages: Map<string, PackageDelivery>;
+	tokens: TokenDelivery | null;
 }
 
 /** A registry that was read but did not apply to this project. */

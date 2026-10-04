@@ -42,6 +42,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `css/dead-class` | A project-namespaced class referenced in no markup or reference file |
 | `tokens/unknown-token` | A `var()` naming no token any known source defines |
 | `tokens/misapplied-token` | A real token used outside the scope the profile declares for it — another property, or another kind of element |
+| `tokens/undelivered` | Tokens used with no evidence their stylesheet reaches the page — from the profile's delivery block |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the file that built it |
 | `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere |
@@ -386,13 +387,20 @@ it, and the registries describing its components and composites:
 profiles/
   acme/
     profile.json       { id, name, packages, preset, patterns, components,
-                         tokenDescriptions, tokenScopes }
+                         tokenDescriptions, tokenScopes, delivery }
     patterns/index.json
     components/index.json
+    delivery.json      how its packages and tokens reach a page
     authoring.md       read by the plugin's skills, not by this engine
     patterns.md
     remediation.md
 ```
+
+`delivery.json` says what adopting the system costs a project: which packages
+the host provides at runtime (`external`, with its handle) and which the build
+compiles in (`bundled`), and which stylesheet defines the tokens. `loupe status`
+prints it as `delivery:`. See
+[delivery](../docs/design/checks.md#delivery).
 
 The three `.md` files are the design system's own authoring prose. The engine
 never opens them — it prints the profile's directory in `loupe status`, and the

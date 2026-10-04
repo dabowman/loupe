@@ -350,6 +350,53 @@ Advisory, and low in the report. It is a judgement the profile's author encoded,
 and a wrong scope declaration must not block a turn before the metadata has
 been exercised on real repos. No profile declaring scopes, no findings.
 
+## `tokens/undelivered`
+
+The token half of [delivery](#delivery). Neither `tokens/hardcoded-value` nor
+`tokens/unknown-token` can see it: every `var()` names a real token, and the page
+still renders without one of them, because the sheet defining them never loaded.
+
+**The profile says what counts as evidence; the engine only runs it.** Three
+kinds, each a bounded, literal read of the files its globs name, none a parser:
+
+| kind | evidence | can it say "no"? |
+|---|---|---|
+| `enqueue-dependency` | a call in `calls` whose dependency argument (`argument`, 0-based, or a named `deps:`) lists one of `handles` — or an `enqueues` call whose own handle is one | yes: calls found, every one read, none qualifies |
+| `import` | an `@import`/`@use`/`import`/`require` of one of `specifiers` | no |
+| `pattern` | any match of `pattern` | no |
+
+```jsonc
+{ "kind": "enqueue-dependency", "files": ["**/*.php"],
+  "calls": ["wp_enqueue_style", "wp_register_style"], "enqueues": ["wp_enqueue_style"],
+  "argument": 2, "handles": ["wp-theme", "wp-components", …] }
+```
+
+The PHP read is the smallest thing that answers the question: comments blanked
+(a commented-out `'wp-theme'` is not a dependency), the call's argument list
+split at top-level commas with strings and brackets respected, and the
+dependency argument accepted as complete only when it is a literal `array( … )`
+or `[ … ]` of plain strings. `$deps`, `array_merge( … )` or a list holding a
+variable could name anything, so a run that meets one cannot conclude.
+
+**One finding per project, and only on a positive "no".** Any evidence →
+silent. Anything unreadable — a walk past 50,000 entries, more than 4,000
+candidate files, a file over 1.5MB, a list that does not close or is not a
+literal → silent. No enqueue at all → silent: nothing shows this project is the
+one that delivers the sheet (a component library's consumer does that). Only
+enqueues found, every one read, none qualifying, reports — at the first `var()`
+of the namespace, in byte order of path, so the anchor and the key
+(`tokens/undelivered:<handle>`) are stable across runs. A token the project's own
+stylesheets define is excluded: it arrives with the sheet that defines it.
+
+The evidence walk is the rule's only cost, so it runs only when the anchor is in
+the run's scope — a scoped hook run that cannot report the finding does not pay
+for it.
+
+Starts at `warn`. The evidence list is WPDS's best statement of how a page gets
+`wp-theme`, and a page can also get it from WordPress itself — the block
+editor's content iframe loads it through `wp-edit-blocks`. A plugin whose CSS
+only ever renders there suppresses the finding with that reason.
+
 ## `css/dead-class`
 
 The reference index over-collects on purpose (see
@@ -417,3 +464,77 @@ as big as the tree it describes — a five-column card runs past the line bound 
 its own. The remedy goes in `suffix`, which that bound is built to spare: eliding
 the shape still names the file count and what to do about it, where eliding the
 end left neither. See [message bounding](report.md#bounding).
+
+## Delivery
+
+Two of the cheapest remedies to write are the most expensive to ship. A
+`system/raw-element` finding that names `Stack (@wordpress/ui)` reads like an
+advisory nit, and in a plugin that has never imported `@wordpress/ui` it is the
+plugin's first bundled runtime dependency: WordPress registers no `wp-ui` script
+handle, so `@wordpress/dependency-extraction-webpack-plugin` keeps the package in
+`BUNDLED_PACKAGES` and webpack compiles it in. And a `var(--wpds-*)`
+substitution is correct CSS that does nothing on a page that never loads the
+`wp-theme` stylesheet — an unresolvable `var()` makes its declaration invalid at
+computed-value time, so it drops instead of falling back.
+
+Neither fact generalizes. "The token sheet is delivered" is a
+`wp_enqueue_style` dependency in WordPress, a CSS import in a Vite app, a
+provider component somewhere else; "this package is reachable" depends on an
+externals list a build plugin owns. An engine rule would need a delivery model
+per ecosystem, which is the thing profiles exist to avoid — so the profile
+declares it, in `delivery.json` beside its registries:
+
+```jsonc
+{
+  "host": "WordPress",
+  "packages": {
+    "@wordpress/ui":         { "provided": "bundled" },
+    "@wordpress/components": { "provided": "external", "handle": "wp-components" }
+  },
+  "tokens": {
+    "stylesheet": "@wordpress/theme/design-tokens.css",
+    "handle": "wp-theme",
+    "prefixes": ["--wpds-"],
+    "evidence": [ /* see tokens/undelivered */ ]
+  }
+}
+```
+
+It carries `verifiedAgainst` the way the component registry does — which
+release of which file each fact was read from — because `BUNDLED_PACKAGES` moves
+between releases and a stale entry is worse than none.
+
+**Read strictly, per field.** A package entry whose `provided` is neither
+`external` nor `bundled`, or a check missing a field its kind runs on, is
+dropped; a block with nothing usable left is no block. A profile whose delivery
+file is missing or broken still loads — its registries do not depend on it.
+
+`loupe status` prints it as `delivery:`, the line the remediation skill reads
+before it converts anything: what the host provides, what gets bundled, and
+which sheet the tokens come from.
+
+### Reachability notes
+
+`system/raw-element`, `system/superseded-component` and
+`system/locked-component` name the component to move to, and the package it
+comes from, after the arrow. Each package named there is asked what adopting it
+would cost:
+
+| the package | note |
+|---|---|
+| already imported somewhere in the project | none — that cost is paid |
+| `external` in the profile | none — the host provides it |
+| `bundled` in the profile | `bundling required: <pkg> is bundled into your build, not provided by <host>` |
+| undeclared, and a readable `package.json` does not list it | `new dependency: <pkg> is not in package.json` |
+| undeclared, and no `package.json` to ask (or a workspace root) | none — unknown is not a cost |
+
+**The note rides in `note`, never in `message` or `code`.** The baseline keys on
+`code`, falling back to `message`; a remedy that grew a clause would resurrect
+every accepted finding the day a profile gained a delivery block. `note` is
+shipped whole by JSON, SARIF, the HTML report and the language server, and the
+agent format spares it as the tail of the line — which is why it comes after any
+registry note rather than before it, and why it stops at one clause: the tail
+budget is 100 characters, and the clause is what has to survive it.
+
+The bundle impact itself is not claimed. Measuring it needs the project's build,
+and a number the engine guessed at would be read as one it measured.

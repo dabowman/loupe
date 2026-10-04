@@ -12,6 +12,27 @@ MCP is for prop/usage detail on a component already chosen — it carries no
 maturity signal at all, so it is the wrong tool for "is this still the right
 component." That question is `components/index.json`'s job.
 
+## What a remedy costs here
+
+`delivery.json` beside this file records how WPDS reaches a WordPress page, with
+its sources:
+
+- `@wordpress/components` is an external — `wp-components`, provided by
+  WordPress — so moving within it costs the bundle nothing.
+- `@wordpress/ui` (and `@wordpress/dataviews`, `@wordpress/admin-ui`,
+  `@wordpress/global-styles-ui`, `@wordpress/icons`) is in
+  `@wordpress/dependency-extraction-webpack-plugin`'s `BUNDLED_PACKAGES`: no
+  `wp-ui` handle exists, webpack compiles it into the plugin's own bundle. The
+  first `Stack` or `Text` from it is a new runtime dependency, a larger bundle, a
+  `react` entry in the asset manifest, and often a Jest mapping for its ESM
+  build. A finding carrying `bundling required: @wordpress/ui …` is proposing
+  that; say so before converting a plugin that does not already ship it.
+- `--wpds-*` tokens are defined only by the `wp-theme` stylesheet. A page that
+  does not load it resolves every one of them to nothing. List `'wp-theme'` in
+  the dependency array of the `wp_enqueue_style` that loads the plugin's CSS
+  before substituting any token — WordPress core registers the handle from 7.1,
+  the Gutenberg plugin before that.
+
 ## `system/locked-component`
 
 The import is a private API — WordPress does not recommend using it outside
@@ -163,6 +184,24 @@ static text and icons, `interactive` for buttons, inputs, links. So a radio,
 button or link takes `background-interactive-*`, `foreground-interactive-*` and
 `stroke-interactive-*`, matching tone and emphasis across the three; and
 `--wpds-cursor-control` is for controls that are not links.
+
+## `tokens/undelivered`
+
+Add `'wp-theme'` to the dependency array of the `wp_enqueue_style` (or
+`wp_register_style`) that loads the CSS using the tokens:
+
+```php
+wp_enqueue_style( 'my-plugin-admin', $url, array( 'wp-theme' ), $version );
+```
+
+A dependency on `wp-components` does the same, since it depends on `wp-theme`
+wherever `wp-theme` exists — but only take it if the screen also uses
+`@wordpress/components`' own styles. Do not bundle
+`@wordpress/theme/design-tokens.css` into the plugin; the package's README asks
+plugins to enqueue the handle so the tokens follow the site's theme. On a core
+older than 7.1 without Gutenberg there is no `wp-theme` handle at all: say so,
+and treat build-time fallbacks (`@wordpress/build` applies them when
+`@wordpress/theme` is installed) as the way the declarations survive.
 
 ## `patterns/*`
 

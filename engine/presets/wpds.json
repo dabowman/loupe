@@ -71,6 +71,7 @@
     "tokens/hardcoded-value": "warn",
     "css/dead-class": "warn",
     "tokens/unknown-token": "warn",
+    "tokens/undelivered": "warn",
     "patterns/duplicate-composite": "warn",
     "patterns/superseded-composite": "warn",
     "patterns/unregistered-composite": "warn"

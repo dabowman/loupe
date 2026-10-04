@@ -201,6 +201,7 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `css/dead-class` | A namespaced class referenced in no markup or reference file | warn |
 | `tokens/unknown-token` | A `var()` naming no token the design system defines | warn |
 | `tokens/misapplied-token` | A real token used outside its declared scope — a `surface` background on a button | warn |
+| `tokens/undelivered` | Tokens used, and nothing shows the stylesheet defining them reaches the page | warn |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in more than one file | warn |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the one file that built it | warn |
 | `patterns/unregistered-composite` | The same composite built in three or more files, registered in none | warn |
@@ -239,7 +240,18 @@ wrong meaning, which survives review precisely because it looks correct. When
 nothing on-role matches, the finding names no token rather than a plausible one.
 
 `tokens/unknown-token` catches the other direction — a `var()` naming nothing the
-design system defines. It stays silent when no definitions were found at all,
+design system defines.
+
+`tokens/undelivered` asks whether the tokens arrive at all. An undefined custom
+property makes its whole declaration invalid, so `background:
+var(--wpds-color-…)` on a page that never loads `wp-theme` does not fall back —
+it drops. How a sheet is delivered is the design system's fact, so the profile's
+`delivery.json` declares the evidence (for WPDS: a `wp_enqueue_style` whose
+dependency array lists `wp-theme` or a style that depends on it, a `block.json`
+naming one, an import of the sheet, or a build that writes fallbacks) and the
+engine runs it with a bounded, literal read — no PHP parser. It reports once per
+project, at the first token use, and only when it found enqueues, read every one,
+and none qualifies. It stays silent when no definitions were found at all,
 because an empty token set proves nothing. A name that is one keystroke from
 exactly one real token is a misspelling the engine can settle, and `loupe fix`
 renames it wherever the file writes it. With `--judge`, a name an agent made up

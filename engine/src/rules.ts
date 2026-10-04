@@ -83,6 +83,15 @@ export const RULES = {
 		title:
 			'misapplied token — it exists, but {system} scopes it to another property or another kind of element; use the token whose role matches',
 	},
+	'tokens/undelivered': {
+		severity: 'warn',
+		rank: 21,
+		// The other half of what it needs — a profile's delivery block — arrives
+		// with the profiles, after availability is settled; without one it is silent.
+		needs: ['tokenPrefixes'],
+		title:
+			'{tokenPrefix} tokens are used, and nothing shows the stylesheet defining them reaches the page — every var() of them resolves to nothing there, and the declaration drops',
+	},
 	'tokens/hardcoded-value': {
 		severity: 'warn',
 		rank: 9,

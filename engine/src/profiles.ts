@@ -10,9 +10,10 @@
  *   profiles/
  *     wpds/
  *       profile.json          { id, name, packages, preset, patterns, components,
- *                               tokenDescriptions, tokenScopes }
+ *                               tokenDescriptions, tokenScopes, delivery }
  *       patterns/index.json
  *       components/index.json
+ *       delivery.json         how its packages and tokens reach a page (delivery.ts)
  *
  * A profile with no `packages` is never selected automatically — there is
  * nothing to recognize it by — and has to be named with `--profile <id>`.
@@ -25,6 +26,7 @@ import { byBytes, readDir } from './discover.ts';
 import { isAbsolute, join, resolve } from 'node:path';
 import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
+import { readDelivery } from './delivery.ts';
 import { setComponentRegistry, setPatterns } from './config.ts';
 import { declaredPackages, registryApplies } from './registry.ts';
 import { parseTokenScopes } from './scopes.ts';
@@ -69,6 +71,7 @@ interface RawProfile {
 	components?: unknown;
 	tokenDescriptions?: unknown;
 	tokenScopes?: unknown;
+	delivery?: unknown;
 }
 
 /**
@@ -116,6 +119,7 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 			// Validated here, once, so a mistake surfaces as the profile loads rather than
 			// as suggestions that quietly fell back to the generic table.
 			const scopes = raw.tokenScopes === undefined ? null : readScopes(dir, raw.tokenScopes);
+			const delivery = asString(raw.delivery);
 			out.push({
 				id,
 				name: asString(raw.name) ?? asString(raw.id) ?? e.name,
@@ -126,6 +130,9 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 				tokenDescriptions: tokenDescriptions ? under(dir, tokenDescriptions) : null,
 				tokenScopes: scopes?.scopes ?? null,
 				problems: scopes?.errors ?? [],
+				// Read now, not by path later: two consumers want it, and a block that
+				// does not validate is no block rather than a profile that cannot load.
+				delivery: delivery ? readDelivery(under(dir, delivery)) : null,
 				dir,
 			});
 			// Claimed only once the entry is on the list: reserving it above let a

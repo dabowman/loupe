@@ -27,8 +27,10 @@
  *   over the whole index:
  *     checks/patterns/composites.ts     patterns/duplicate-, superseded-, unregistered-composite
  *     checks/system/currency.ts         system/locked-component, system/superseded-component
+ *     delivery.ts                       a reachability note on those and system/raw-element
  *     checks/tokens/unknown-token.ts    tokens/unknown-token
  *     checks/tokens/misapplied-token.ts tokens/misapplied-token
+ *     checks/tokens/undelivered.ts      tokens/undelivered, from the profile's delivery block
  *   run by the scanner, per JSX element (`markup.ts`):
  *     checks/detectors/*.ts             the pattern registry's detectors
  *
@@ -40,6 +42,7 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import type { Root } from 'postcss';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
+import { annotateReach, mergeDeliveries, projectDependencies } from './delivery.ts';
 import { TreeTooLarge, analyzeEntryBudget, byBytes, discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
@@ -49,6 +52,7 @@ import { boundMessage, oneLine, parseMessageOf, snippet } from './text.ts';
 import {
 	cssFilesUnder,
 	declarationMessage,
+	emptyTokenSet,
 	harvestTokenDefs,
 	readTokenSources,
 	tokensFor,
@@ -81,6 +85,7 @@ import { inlineStyle } from './checks/system/inline-style.ts';
 import { libraryOverride, systemOverride } from './checks/system/override.ts';
 import { rawElements } from './checks/system/raw-element.ts';
 import { hardcodedValue } from './checks/tokens/hardcoded-value.ts';
+import { undelivered } from './checks/tokens/undelivered.ts';
 import { unknownTokens as unknownTokenFindings } from './checks/tokens/unknown-token.ts';
 import type { TokenRef } from './checks/tokens/unknown-token.ts';
 import { misappliedTokens } from './checks/tokens/misapplied-token.ts';
@@ -325,6 +330,8 @@ export async function analyze(
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
 	const surfaceOf = (b: Binding): StylingSurface | undefined =>
 		surfaceFor(config.componentRegistry, b.package, b.component);
+	// How the active profiles say their packages and tokens reach a page.
+	const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
 	const parseSuppressions = makeSuppressionParser(config.suppression);
 	// Bounded, and loud when the bound trips: the index is repo-wide whatever the
 	// scope, so a hook on one file under a home directory with a `package.json`
@@ -368,6 +375,8 @@ export async function analyze(
 	const tokenRefs: TokenRef[] = [];
 	/** The same references, with what each lands on — and the inline channel's too — for `tokens/misapplied-token`. */
 	const scopedRefs: ScopedRef[] = [];
+	/** The tokens the project's own stylesheets define. Read only by `tokens/undelivered`. */
+	const projectTokens: TokenSet = emptyTokenSet();
 
 	const findings: Finding[] = [];
 	const directives: Directive[] = [];
@@ -553,6 +562,9 @@ export async function analyze(
 		const emit = (f: PendingFinding): void => report({ ...f, file: rel, code: f.code ?? f.message });
 
 		harvestTokenDefs(root, tokenPrefixes, tokenSet);
+		// Kept apart as well: a token the project defines itself arrives with its
+		// own stylesheet, and is no evidence about the design system's.
+		if (delivery?.tokens) harvestTokenDefs(root, tokenPrefixes, projectTokens);
 
 		// What a rule's own lines say, for the deletion `css/dead-class` offers in
 		// the editor: an extent in lines is only safe if it is the whole of them.
@@ -768,6 +780,15 @@ export async function analyze(
 	}))
 		report(f);
 	for (const f of currency(componentImports, config.componentRegistry, ruleIsLive)) report(f);
+	// What a remedy naming a package would cost here: nothing for a package the
+	// project already imports or the host provides, a bundling note otherwise.
+	// A note, never the message or code, so a baseline keyed on either survives.
+	annotateReach(findings, {
+		delivery,
+		imports: componentImports,
+		dependencies: projectDependencies(config.root),
+		dsPackages: ds.packages,
+	});
 
 	// ── malformed suppressions ────────────────────────────────────────────────
 	for (const [file, s] of suppByFile) {
@@ -822,6 +843,17 @@ export async function analyze(
 
 	for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
 	for (const f of misappliedTokens(scopedRefs, scopes, tokenSet.known)) report(f);
+	if (ruleIsLive('tokens/undelivered'))
+		for (const f of undelivered({
+			root: config.root,
+			ignore: config.sources.ignore ?? [],
+			tokens: delivery?.tokens ?? null,
+			refs: tokenRefs,
+			prefixes: tokenPrefixes,
+			projectDefined: projectTokens.known,
+			reports,
+		}))
+			report(f);
 
 	// Run BEFORE the line bound below, so a cap cannot decide whether a finding
 	// survives.

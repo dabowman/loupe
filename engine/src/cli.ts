@@ -40,6 +40,7 @@ import { serve } from './serve.ts';
 import { messageOf, oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
+import { deliverySummary, mergeDeliveries, REMEDY_RULES } from './delivery.ts';
 import type { RegistrySource } from './profiles.ts';
 import { attemptsPath, baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
 import {
@@ -792,6 +793,31 @@ async function main(): Promise<number> {
 					`  ${dim(`From ${src.map((p) => `${p.id} (${p.components})`).join(', ')} — each finding carries its entry's note, and \`--format json\` ships that note whole.`)}\n`,
 				);
 		}
+		// What adopting a remedy costs is the profile's to say, and this is where a
+		// reader asks what a remedy rule's note means.
+		const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+		const bundled = [...(delivery?.packages ?? [])].filter(([, e]) => e.provided === 'bundled').map(([pkg]) => pkg);
+		if (REMEDY_RULES.has(id) && delivery && bundled.length)
+			process.stdout.write(
+				`  ${dim(`A remedy naming ${bundled.join(', ')} carries "bundling required" until the project imports it: ${delivery.host} does not provide ${bundled.length > 1 ? 'them' : 'it'}, so the build compiles ${bundled.length > 1 ? 'them' : 'it'} in.`)}\n`,
+			);
+		// The rule runs what the profile declares, so the declaration is the
+		// explanation: what counts as delivery, and what to do about none.
+		if (id === 'tokens/undelivered') {
+			const t = delivery?.tokens;
+			const lines = t
+				? [
+						`Tokens come from ${t.stylesheet}${t.handle ? `, the ${t.handle} handle` : ''}. Any one of these is delivery:`,
+						...t.evidence.map(
+							(e) =>
+								`  ${e.kind === 'enqueue-dependency' ? `${e.calls.join('/')} listing ${e.handles.join(', ')}` : e.kind === 'import' ? `an import of ${e.specifiers.join(' or ')}` : `/${e.pattern.source}/`} in ${e.files.join(', ')}`,
+						),
+						'It reports only when enqueues were found, every one was read, and none qualifies; anything it cannot read is not a finding.',
+						...(t.note ? [t.note] : []),
+					]
+				: ['No active profile declares how its tokens are delivered, so this reports nothing.'];
+			for (const l of lines) process.stdout.write(`  ${dim(l)}\n`);
+		}
 		return EXIT.OK;
 	}
 
@@ -816,6 +842,7 @@ async function main(): Promise<number> {
 		// Empty fields are printed as such: "no layout primitive" is a fact about the
 		// system, and inferring it from a missing line recommends one that isn't there.
 		const ds = config.designSystem;
+		const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
 		// `layout:`/`text:` get read as "what should I write", but they are
 		// recognition lists and carry the superseded spellings too. Mark those, so
@@ -872,6 +899,11 @@ async function main(): Promise<number> {
 						? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(', ')}`
 						: 'none available'
 			}`,
+			// What adopting the system costs this project: which packages the host
+			// provides and which get bundled, and which sheet carries the tokens. A
+			// remedy naming a bundled package is a new runtime dependency, and a token
+			// whose sheet never loads resolves to nothing — both read here first.
+			...(delivery ? [`${dim('delivery:   ')}${deliverySummary(delivery)}`] : []),
 			'',
 			bold('rules:'),
 		];

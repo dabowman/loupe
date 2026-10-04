@@ -6,5 +6,6 @@
   "patterns": "./patterns/index.json",
   "components": "./components/index.json",
   "tokenDescriptions": "./token-descriptions.json",
-  "tokenScopes": "./token-scopes.json"
+  "tokenScopes": "./token-scopes.json",
+  "delivery": "./delivery.json"
 }
