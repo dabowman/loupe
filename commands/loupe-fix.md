@@ -45,8 +45,13 @@ node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --format json --pr
 ```
 
 If `$ARGUMENTS` names a rule id, pass it as `--rule <id>` — to this check and to
-the `fix` in step 1 — and a path as `--files <path>`; both repeat. Don't filter
-the JSON yourself. Add `--severity error`
+the `fix` in step 1 — and add `--no-baseline` to this check (and to the
+verifying one in step 4): naming a rule is working that rule's backlog on
+purpose, and a baseline would hide exactly the findings you were asked to clear.
+`fix` reads no baseline, so it needs no flag. A path goes in as
+`--files <path>`; both repeat. A bare `/loupe-fix`, or one naming only a path,
+keeps the baseline: that is the new drift, not the accepted backlog. Don't
+filter the JSON yourself. Add `--severity error`
 to cut the run down to what the hook actually blocks on, which is the subset to
 clear first when the backlog is too large for one pass. Otherwise work upward
 through the layers, because lower fixes change what the higher findings say:
@@ -102,7 +107,10 @@ it would need to see. Handle those yourself.
 ## 4. Verify
 
 Re-run the check once, repo-wide — not once per file; every run re-indexes the
-whole repo regardless of scope. Report what changed. If any fix could have
+whole repo regardless of scope — with the same `--rule` and `--no-baseline` as
+step 2. Report what changed, and when a rule was named and its backlog is now
+empty, suggest re-recording the baseline with `/loupe-baseline` so it stops
+carrying entries for findings that are gone. If any fix could have
 altered rendering, say which ones and why, rather than folding it into a cleanup
 summary. Agents report their own rendering risks; carry those through instead of
 dropping them.
