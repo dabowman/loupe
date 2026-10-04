@@ -213,13 +213,18 @@ decoration.
 
 - **An empty token set proves nothing about the system.** With nothing read,
   every property's family is empty, and "no padding token in the design system"
-  would be said of every value and suppressed by `fix --judge` as fact.
+  would be said of every value and suppressed by `fix --judge` as fact. Empty
+  is reckoned on what the design system's sources yielded: the walk adds what
+  the project itself defines under the prefix to the same set, so `analyze`
+  hands back no set at all when `diagnostics.tokensKnown` is 0.
 - **One failure fails the whole ask.** The pool stops its other workers rather
   than pay for answers that are about to be thrown away; the caller reports the
   failure and keeps what it had.
 - **Overload is transient.** A run is a hundred requests, so one 529 should not
   lose the other ninety-nine — retried with the server's own wait where it names
-  one, doubling otherwise.
+  one, doubling otherwise. The server's wait is capped at the longest the
+  doubling would pick (4s): a `retry-after: 3600` is not a wait a run, or a hook
+  inside Claude Code's timeout, can afford.
 
 ## The evals
 

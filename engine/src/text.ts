@@ -118,6 +118,14 @@ export const messageLine = (body: string, tail = ''): string => {
 	return clip(body, MESSAGE_MAX - [...end].length) + end;
 };
 
+/**
+ * A composed message, bounded with its `tail` kept last: what the finalize pass
+ * at the end of `analyze` does to every finding, and what `--judge` does again
+ * to a message it recomposes after that pass.
+ */
+export const boundMessage = (message: string, tail = ''): string =>
+	messageLine(tail && message.endsWith(tail) ? message.slice(0, -tail.length) : message, tail);
+
 /** What separates one composed part of a message from the next. */
 const JOIN = '; ';
 

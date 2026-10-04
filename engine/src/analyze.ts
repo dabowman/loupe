@@ -43,7 +43,7 @@ import { byBytes, discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
-import { messageLine, oneLine, parseMessageOf, snippet } from './text.ts';
+import { boundMessage, oneLine, parseMessageOf, snippet } from './text.ts';
 import {
 	cssFilesUnder,
 	declarationMessage,
@@ -711,26 +711,15 @@ export async function analyze(
 
 	for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
 
-	// Dedupe: nesting and multi-selector rules can legitimately reach the same
-	// declaration twice. Keyed on identity AND display, and run BEFORE the line
-	// bound below, so a cap cannot decide whether a finding survives.
-	const seen = new Set<string>();
-	const unique = findings.filter((f) => {
-		const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ''}|${f.message}`;
-		if (seen.has(k)) return false;
-		seen.add(k);
-		return true;
-	});
+	// Run BEFORE the line bound below, so a cap cannot decide whether a finding
+	// survives.
+	const unique = dedupe(findings);
 
 	// One report line per finding, bounded once — here, because the token pass
 	// above is the last of several writers of `message`. Each captured snippet is
 	// bounded where it was captured; this bounds what they add up to, keeping the
 	// channel marker on the end.
-	for (const f of unique) {
-		const tail = f.suffix ?? '';
-		const body = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
-		f.message = messageLine(body, tail);
-	}
+	for (const f of unique) f.message = boundMessage(f.message, f.suffix);
 	// `suffix` is not dropped here: `--judge` runs after this and recomposes the
 	// message of anything it settles. It is dropped where the output is built.
 
@@ -762,11 +751,34 @@ export async function analyze(
 		directives,
 		diagnostics,
 		blocking: unique.some((f) => f.severity === 'error'),
-		tokens: tokenSet,
+		// Only when the design system's own sources yielded tokens. The walk adds
+		// whatever the project defines under the same prefix to this same set, and
+		// one `--wpds-brand-color` of the project's own would otherwise pass for a
+		// design system read, with every value judged tokenless against it.
+		...(diagnostics.tokensKnown ? { tokens: tokenSet } : {}),
 		// Scoped and suppressed here, where the scope and the comments are: the
 		// finding a control becomes is written later, by the judge.
 		...(liveControls ? { controls: liveControls } : {}),
 	};
+}
+
+/**
+ * The findings with each repeat dropped, first one kept. Nesting and
+ * multi-selector rules can legitimately reach the same declaration twice, and
+ * two controls on one line can be judged the same redirect. Keyed on identity
+ * AND display.
+ *
+ * Exported for `check --judge`, whose redirects are written after `analyze`
+ * has returned and so never passed through it here.
+ */
+export function dedupe(findings: readonly Finding[]): Finding[] {
+	const seen = new Set<string>();
+	return findings.filter((f) => {
+		const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ''}|${f.message}`;
+		if (seen.has(k)) return false;
+		seen.add(k);
+		return true;
+	});
 }
 
 /** Stable identity for baselining: survives reformatting and unrelated edits. */

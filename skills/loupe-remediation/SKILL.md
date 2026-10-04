@@ -205,6 +205,9 @@ which picked it by what the rule styles among the tokens near the value. It is
 usually right but check it against the role. `deliberate, no token fits
 (judged …)` means the model read the value as a decision: suppress it with
 what it actually is (a scrim, a pill, a brand colour), not with the judgement.
+`fix --judge` leaves these unsuppressed and lists them as skipped for exactly
+that reason. `no <property> token in the design system` is a fact, not a
+judgement, and `fix --judge` suppresses it with that as the reason.
 
 When it names none, the engine found no token on-role for that value. Do not
 substitute one that merely matches: a token is chosen by what the value is

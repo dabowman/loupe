@@ -23792,6 +23792,7 @@ var messageLine = (body2, tail = "") => {
   const end = clipFront(tail, TAIL_MAX);
   return clip(body2, MESSAGE_MAX - [...end].length) + end;
 };
+var boundMessage = (message, tail = "") => messageLine(tail && message.endsWith(tail) ? message.slice(0, -tail.length) : message, tail);
 var JOIN = "; ";
 var messageParts = (parts, tail = "") => {
   const budget = MESSAGE_MAX - [...clipFront(tail, TAIL_MAX)].length;
@@ -25163,6 +25164,7 @@ function partsOf2(value) {
 }
 var isLiteralPart = (p) => /^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0 || /^#[0-9a-f]+$/i.test(p) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
 var KEEP = "keep";
+var DELIBERATE = "deliberate, no token fits";
 function planValue(set, prop, value) {
   const family = familyFor(set, prop);
   if (!family.length) return onRole([...set.known], prop).length ? null : "none";
@@ -25951,18 +25953,8 @@ async function analyze(config, {
     delete f.hints;
   }
   for (const f of unknownTokens(tokenRefs, tokenSet.known)) report(f);
-  const seen = /* @__PURE__ */ new Set();
-  const unique = findings.filter((f) => {
-    const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ""}|${f.message}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-  for (const f of unique) {
-    const tail = f.suffix ?? "";
-    const body2 = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
-    f.message = messageLine(body2, tail);
-  }
+  const unique = dedupe(findings);
+  for (const f of unique) f.message = boundMessage(f.message, f.suffix);
   unique.sort((a, b) => b.rank - a.rank || byBytes(a.file, b.file) || a.line - b.line);
   directives.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
   const liveControls = judge && config.enabled["patterns/judged-redirect"] ? controls.filter((c) => {
@@ -25979,11 +25971,24 @@ async function analyze(config, {
     directives,
     diagnostics,
     blocking: unique.some((f) => f.severity === "error"),
-    tokens: tokenSet,
+    // Only when the design system's own sources yielded tokens. The walk adds
+    // whatever the project defines under the same prefix to this same set, and
+    // one `--wpds-brand-color` of the project's own would otherwise pass for a
+    // design system read, with every value judged tokenless against it.
+    ...diagnostics.tokensKnown ? { tokens: tokenSet } : {},
     // Scoped and suppressed here, where the scope and the comments are: the
     // finding a control becomes is written later, by the judge.
     ...liveControls ? { controls: liveControls } : {}
   };
+}
+function dedupe(findings) {
+  const seen = /* @__PURE__ */ new Set();
+  return findings.filter((f) => {
+    const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ""}|${f.message}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.message))}`;
 
@@ -26092,6 +26097,7 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
   );
   const byFile = /* @__PURE__ */ new Map();
   const skipped = [];
+  const deliberate = (s) => s.judged?.spans[0] === DELIBERATE;
   for (const { f, s: decl2, line } of all) {
     if (decl2.judged?.answer !== KEEP) continue;
     const kept = {
@@ -26101,9 +26107,11 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
       value: decl2.value,
       reason: decl2.judged.spans.join(" ")
     };
-    if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
-    else if (onLine.get(`${f.file}\0${line}`)?.some((o) => o.s.judged?.answer !== KEEP))
-      skipped.push({ ...kept, why: "shares its line with a value that was not kept" });
+    if (deliberate(decl2))
+      skipped.push({ ...kept, why: "judged deliberate \u2014 suppress it by hand, saying what the value is" });
+    else if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
+    else if (onLine.get(`${f.file}\0${line}`)?.some((o) => o.s.judged?.answer !== KEEP || deliberate(o.s)))
+      skipped.push({ ...kept, why: "shares its line with a value that is not suppressed" });
     else byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
   }
   const applied = [];
@@ -27817,6 +27825,7 @@ var MODEL = "jev-1.13.0";
 var FLOOR = 0.5;
 var CONCURRENCY = 6;
 var RETRIES = 4;
+var RETRY_WAIT_MAX_MS = 500 * 2 ** (RETRIES - 1);
 var REQUEST_TIMEOUT_MS = 2e4;
 async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
   const batches = [];
@@ -27842,7 +27851,8 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
       if (!transient || attempt >= RETRIES)
         throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
       const after = Number(res.headers.get("retry-after"));
-      await new Promise((r) => setTimeout(r, after > 0 ? after * 1e3 : 500 * 2 ** attempt));
+      const wait = after > 0 ? Math.min(after * 1e3, RETRY_WAIT_MAX_MS) : 500 * 2 ** attempt;
+      await new Promise((r) => setTimeout(r, wait));
     }
   };
   const done = new Array(batches.length);
@@ -27955,7 +27965,7 @@ function tokenDescriptions(profiles) {
 }
 function restate(f) {
   const parts = f.suggest ?? [];
-  f.message = declarationMessage(parts, f.suffix ?? "");
+  f.message = boundMessage(declarationMessage(parts, f.suffix ?? ""), f.suffix);
   const judged = parts.flatMap((s) => s.judged ? [s.judged] : []);
   if (!judged.length) return;
   f.judged = {
@@ -27965,7 +27975,7 @@ function restate(f) {
   };
 }
 async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */ new Map(), fetchImpl = fetch) {
-  if (!set.known.size)
+  if (!set?.known.size)
     throw new Error(
       "no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships"
     );
@@ -28016,9 +28026,8 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
     const kept = got.find((a) => a?.choice === KEEP);
     if (kept && got.some((a) => a?.choice !== KEEP)) continue;
     if (kept) {
-      const why = "deliberate, no token fits";
       const tail = judgedTail(kept.confidence);
-      decl2.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+      decl2.judged = { answer: KEEP, confidence: kept.confidence, spans: [DELIBERATE, tail] };
     } else {
       const out = [...parts];
       const named = [...parts];
@@ -30994,14 +31003,24 @@ ${dim("  Ctrl-C to stop.")}
     let toFix;
     try {
       toFix = await analyze(config, { scope: fixScope });
-      const judgeable = toFix.findings.filter((f) => f.suggest?.length);
-      const about = tokenDescriptions(config.profiles?.active ?? []);
-      if (apiKey && toFix.tokens && judgeable.length) await judgeValues(root2, judgeable, toFix.tokens, apiKey, about);
-      if (apiKey && toFix.tokens) await judgeRenames(root2, toFix.findings, toFix.tokens, apiKey, about);
     } catch (err) {
       fail(`loupe: ${messageOf(err)}
 `);
       return EXIT.CANNOT_RUN;
+    }
+    const about = tokenDescriptions(config.profiles?.active ?? []);
+    try {
+      const judgeable = toFix.findings.filter((f) => f.suggest?.length);
+      if (apiKey && judgeable.length) await judgeValues(root2, judgeable, toFix.tokens, apiKey, about);
+    } catch (err) {
+      note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
+`);
+    }
+    try {
+      if (apiKey && toFix.tokens) await judgeRenames(root2, toFix.findings, toFix.tokens, apiKey, about);
+    } catch (err) {
+      note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
+`);
     }
     const dry = Boolean(args.flags["dry-run"]);
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
@@ -31075,15 +31094,17 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   if (apiKey) {
     try {
       const redirectSeverity = config.severityOf("patterns/judged-redirect");
-      if (result.controls?.length && (args.flags.severity !== "error" || redirectSeverity === "error"))
+      if (result.controls?.length && (args.flags.severity !== "error" || redirectSeverity === "error")) {
         result.findings.push(...await judgeRedirects(result.controls, apiKey, redirectSeverity));
+        result.findings = dedupe(result.findings);
+      }
       await judgeVariants(root2, result.findings, config.componentRegistry, apiKey);
     } catch (err) {
       note(`loupe: --judge skipped \u2014 ${messageOf(err)}
 `);
     }
     try {
-      if (result.tokens && result.findings.some((f) => f.suggest?.length))
+      if (result.findings.some((f) => f.suggest?.length))
         await judgeValues(
           root2,
           result.findings,

@@ -33,7 +33,8 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import { KEEP, declarationMessage, planValue } from './tokens.ts';
+import { boundMessage } from './text.ts';
+import { DELIBERATE, KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
 
@@ -49,6 +50,10 @@ const FLOOR = 0.5;
 const CONCURRENCY = 6;
 // Overload is transient and a run is a hundred requests.
 const RETRIES = 4;
+// The longest a server's `retry-after` is honoured for: the longest wait the
+// doubling picks on its own. A proxy answering `retry-after: 3600` would
+// otherwise hold the whole run, hook included, for an hour.
+const RETRY_WAIT_MAX_MS = 500 * 2 ** (RETRIES - 1);
 // The hook runs this inside Claude Code's 60s timeout, and `fetch` has no
 // deadline of its own: one socket that never answers is otherwise a killed hook
 // on every write. An abort throws, the caller notes it, the run keeps the
@@ -118,10 +123,11 @@ export async function ask<T>(
 			const transient = res.status === 429 || res.status >= 500;
 			if (!transient || attempt >= RETRIES)
 				throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
-			// The server's own wait when it names one, in seconds; a date or
-			// nothing falls back to doubling.
+			// The server's own wait when it names one, in seconds and capped; a
+			// date or nothing falls back to doubling.
 			const after = Number(res.headers.get('retry-after'));
-			await new Promise((r) => setTimeout(r, after > 0 ? after * 1000 : 500 * 2 ** attempt));
+			const wait = after > 0 ? Math.min(after * 1000, RETRY_WAIT_MAX_MS) : 500 * 2 ** attempt;
+			await new Promise((r) => setTimeout(r, wait));
 		}
 	};
 
@@ -322,11 +328,12 @@ export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescrip
  *
  * Every settled declaration is rendered by the same `declarationMessage` the
  * token pass used, so a judged finding and an unjudged one read by one set of
- * rules. The channel marker comes off `suffix`, where the walk put it.
+ * rules. The channel marker comes off `suffix`, where the walk put it, and the
+ * line is bounded again, since the bound in `analyze` ran before this did.
  */
 function restate(f: Finding): void {
 	const parts = f.suggest ?? [];
-	f.message = declarationMessage(parts, f.suffix ?? '');
+	f.message = boundMessage(declarationMessage(parts, f.suffix ?? ''), f.suffix);
 	const judged = parts.flatMap((s) => (s.judged ? [s.judged] : []));
 	if (!judged.length) return;
 	// The least certain answer speaks for the finding: it is the one a floor
@@ -357,17 +364,19 @@ function restate(f: Finding): void {
 export async function judgeValues(
 	root: string,
 	findings: readonly Finding[],
-	set: TokenSet,
+	set: TokenSet | undefined,
 	apiKey: string,
 	about: ReadonlyMap<string, string> = new Map(),
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
 	// An empty set proves nothing about the system: with nothing read, every
 	// property's family is empty, and "no padding token in the design system" would
-	// be said of every value and suppressed by `fix --judge` as fact.
+	// be said of every value and suppressed by `fix --judge` as fact. `analyze`
+	// hands back no set at all when the design system's sources yielded nothing,
+	// so a set the project's own definitions alone filled never reaches here.
 	// ponytail: a set read only partly passes this; a per-family check is the
 	// upgrade if a token source that half-resolves turns up.
-	if (!set.known.size)
+	if (!set?.known.size)
 		throw new Error(
 			'no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships',
 		);
@@ -433,9 +442,8 @@ export async function judgeValues(
 		// the rest would exempt the kept literal. Left for review.
 		if (kept && got.some((a) => a?.choice !== KEEP)) continue;
 		if (kept) {
-			const why = 'deliberate, no token fits';
 			const tail = judgedTail(kept.confidence);
-			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [DELIBERATE, tail] };
 		} else {
 			const out = [...parts];
 			const named = [...parts];

@@ -497,15 +497,21 @@ is never spliced at a span.
 **Findings cleared, not fixes applied**, is what gets counted. A collapsed
 finding holding one settled declaration and one nobody could settle is still
 there, and so is a misspelled name still written on a line the rewrite could not
-reach. Settled means rewritten *or* suppressed: a value `--judge` kept is as
-done with as one it replaced. The tally keys on file, line and property; a
+reach. Settled means rewritten *or* suppressed: a value suppressed as kept is
+as done with as one it replaced. The tally keys on file, line and property; a
 rename has no property and takes the empty slot, which no declaration fix can
 collide with, because every declaration a fix or a keep names came out of a
 parse and a parse has no nameless property.
 
+Only a value kept for a reason that is a fact is suppressed: its property has
+no token in the design system at all. One the model judged deliberate is
+reported as skipped. `deliberate, no token fits` is the judgement, and what
+the value actually is (a scrim, a pill, a brand colour), which is what a
+suppression's reason should say, is not something it says.
+
 Suppressions written for a kept value follow the grammar's own constraints. A
 directive mutes its whole next line, so one is written only where **every**
-flagged value on that line was kept — muting a line that also carries an
+flagged value on that line was suppressible — muting a line that also carries an
 unsettled value would hide it along with the one that was. Not above a rule's
 opening line, where a directive covers the whole rule, and not between an
 existing directive and the line it is for. Only the nearest line above is read,
@@ -515,8 +521,8 @@ come back.
 The directive names **every** rule the kept declarations on that line were
 reported under: a minified stylesheet can put a kept colour and a kept
 font-weight on the same line, and one naming only the first leaves the second
-reported under a comment that claims to cover it. The reason is what the
-judgement said, so the comment records that a model made the call, not a person.
+reported under a comment that claims to cover it. The reason is the one the
+keep was settled with, so the comment records how it was decided.
 
 Indentation is copied with spaces and tabs only — `\s` would copy a byte-order
 mark onto the directive — and the line's own ending, so a CRLF file stays one.
