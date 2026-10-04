@@ -23828,15 +23828,16 @@ var git = (root2, args) => execFileSync("git", [...args], { cwd: root2, encoding
 var KINDS = ["styles", "markup", "references"];
 var HARD_SKIP = /* @__PURE__ */ new Set([".git", "node_modules"]);
 var ANALYZE_ENTRY_BUDGET = 2e5;
-function analyzeEntryBudget() {
+function analyzeEntryBudget(configured) {
   const set = Number(process.env.LOUPE_MAX_ENTRIES);
-  return Number.isInteger(set) && set > 0 ? set : ANALYZE_ENTRY_BUDGET;
+  if (Number.isInteger(set) && set > 0) return set;
+  return configured ?? ANALYZE_ENTRY_BUDGET;
 }
 var TreeTooLarge = class extends Error {
   limit;
   constructor(limit) {
     super(
-      `tree too large to index: the walk stopped at ${limit.toLocaleString("en-US")} entries without finishing, and a partial index would call the rest clean. Point --root at the project, or narrow \`sources\` (or extend \`sources.ignore\`) in loupe.config.json; LOUPE_MAX_ENTRIES raises the ceiling.`
+      `tree too large to index: the walk stopped at ${limit.toLocaleString("en-US")} entries without finishing, and a partial index would call the rest clean. Point --root at the project, or narrow \`sources\` (or extend \`sources.ignore\`) in loupe.config.json; \`maxEntries\` there (or LOUPE_MAX_ENTRIES for one run) raises the ceiling.`
     );
     this.name = "TreeTooLarge";
     this.limit = limit;
@@ -26221,11 +26222,11 @@ function nearMiss(name, known) {
   }
   return found;
 }
-function renameCandidates(name, prop, known) {
+function renameCandidates(name, prop, known, scopes) {
   const names = [...known];
   const tails = prop.startsWith("--") ? prop.slice(2).split("-") : [];
-  let family = onRole(names, prop);
-  for (let k = 0; !family.length && k < tails.length; k++) family = onRole(names, tails.slice(k).join("-"));
+  let family = onRole(names, prop, scopes);
+  for (let k = 0; !family.length && k < tails.length; k++) family = onRole(names, tails.slice(k).join("-"), scopes);
   const segs = name.split("-");
   for (let k = segs.length - 1; !family.length && k >= 4; k--) {
     const head2 = `${segs.slice(0, k).join("-")}-`;
@@ -26450,7 +26451,7 @@ async function analyze(config, {
   const surfaceOf = (b) => surfaceFor(config.componentRegistry, b.package, b.component);
   const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
   const parseSuppressions = makeSuppressionParser(config.suppression);
-  const limit = analyzeEntryBudget();
+  const limit = analyzeEntryBudget(config.maxEntries);
   const files = discover({ root: config.root, sources: config.sources, limit });
   if (files.truncated) throw new TreeTooLarge(limit);
   const MAX_BYTES2 = 15e5;
@@ -28780,7 +28781,7 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
     const span = not ? `no analog, not ${target.name} content` : `variant="${a.choice}"`;
     const suggestion = not ? span : /variant="[^"]*"/.test(analog) ? analog.replace(/variant="[^"]*"/, span) : tag.test(analog) ? analog.replace(tag, `<${target.name} ${span}`) : `${analog} with ${span}`;
     const tail = judgedTail(a.confidence);
-    f.message = `${element} \u2192 ${suggestion} ${tail}`;
+    f.message = messageLine(`${element} \u2192 ${suggestion}`, ` ${tail}`);
     f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
     annotated++;
   });
@@ -28788,6 +28789,11 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
 }
 var LANGUAGE = EMBEDDED_LANGUAGE;
 var REDIRECT_FLOOR = 0.9;
+var redirectIdentity = (c) => ({
+  rule: "patterns/judged-redirect",
+  file: c.file,
+  code: `<${c.component}>`
+});
 async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch) {
   const byId = new Map(LANGUAGE.patterns.map((p) => [p.id, p]));
   const abstractOf = (patternId) => patternId.split("#", 1)[0]?.split(".", 1)[0] ?? patternId;
@@ -28818,16 +28824,15 @@ async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch) {
     const reading = `(${when.map(([f, v]) => `${f}: ${String(v)}`).join(", ")})`;
     const confidence2 = Math.min(...when.map(([f]) => sure[i]?.[f] ?? 0));
     const tail = judgedTail(confidence2);
+    const id = redirectIdentity(c);
     return [
       {
-        rule: "patterns/judged-redirect",
+        ...id,
         severity,
-        rank: RULES["patterns/judged-redirect"].rank,
-        file: c.file,
+        rank: RULES[id.rule].rank,
         line: c.line,
-        message: `<${c.component}> ${reading} \u2192 \`${r.redirect}\` ${tail}`,
+        message: `${id.code} ${reading} \u2192 \`${r.redirect}\` ${tail}`,
         note: r.because,
-        code: `<${c.component}>`,
         judged: { answer: when.map(([, v]) => String(v)).join(", "), confidence: confidence2, spans: [reading, tail] }
       }
     ];
@@ -28933,7 +28938,7 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
 var RENAME_FLOOR = 0.8;
 function renameOptions(name, prop, set, about = /* @__PURE__ */ new Map()) {
   const values = new Map([...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v])));
-  return renameCandidates(name, prop, set.known).map((n) => [
+  return renameCandidates(name, prop, set.known, set.scopes).map((n) => [
     n,
     [values.get(n), about.get(n)].filter(Boolean).join(" \u2014 ") || n
   ]);
@@ -28958,7 +28963,7 @@ async function judgeRenames(root2, findings, set, apiKey, about = /* @__PURE__ *
     if (!a || a.confidence < RENAME_FLOOR) return;
     const tail = judgedTail(a.confidence);
     const span = a.choice === NONE ? "no token means this" : a.choice;
-    f.message = `${item.name} \u2192 ${span} ${tail}`;
+    f.message = messageLine(item.name, ` \u2192 ${span} ${tail}`);
     f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
     if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
     settled++;
@@ -28997,6 +29002,15 @@ var attemptsPath = (root2) => join8(
 );
 var DEFAULT_BASELINE = ".loupe-baseline.json";
 var baselinePath = (root2, p) => isAbsolute2(p) ? p : join8(root2, p);
+function legacyBaseline(root2) {
+  const data = process.env.CLAUDE_PLUGIN_DATA;
+  const candidates = [
+    join8(root2, ".loupe", "baseline.json"),
+    ...data ? [join8(data, "projects", projectKey(root2), "baseline.json")] : []
+  ];
+  return candidates.find((path) => existsSync4(path)) ?? null;
+}
+var legacyBaselineNotice = (path) => `${path} is a 0.1.x baseline, which this version no longer reads \u2014 re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
 function findExistingBaseline(root2, explicit, configured) {
   if (explicit !== null) {
     const path = baselinePath(root2, explicit);
@@ -29277,6 +29291,9 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
     throw new Error(
       `designSystem.allowedInlineStyles must map component names to arrays of CSS properties, got: ${JSON.stringify(allowedInlineStyles)}`
     );
+  const maxEntries = cfg.maxEntries;
+  if (maxEntries !== void 0 && maxEntries !== null && !(Number.isInteger(maxEntries) && maxEntries > 0))
+    throw new Error(`maxEntries must be a positive whole number of entries, got: ${JSON.stringify(maxEntries)}`);
   const layoutComponents = ds.components?.layout ?? [];
   const textComponents = ds.components?.text ?? [];
   const shipped = shippedVocabulary();
@@ -29329,6 +29346,7 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
     // An empty `baseline` names nothing, as an empty `--baseline=` does.
     baselinePath: cfg.baseline || DEFAULT_BASELINE,
     hook: cfg.hook,
+    ...typeof maxEntries === "number" ? { maxEntries } : {},
     rules,
     ruleFrom: ruleOrigins,
     severityOf: (id) => rules[id].severity,
@@ -31758,7 +31776,8 @@ Environment:
                         false included \u2014 as not set.
   LOUPE_MAX_ENTRIES=<n> How many entries analysis walks before it refuses to
                         report at all (default 200,000), rather than calling
-                        the part of the tree it never read clean.
+                        the part of the tree it never read clean. Outranks
+                        "maxEntries" in loupe.config.json for one run.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
@@ -31798,8 +31817,7 @@ async function keysBeforeEdit(config, touched, before, { judge, suppress }) {
       contents: /* @__PURE__ */ new Map([[touched, before]])
     });
     const keys = new Set(prior.findings.map(findingKey));
-    for (const c of prior.controls ?? [])
-      keys.add(findingKey({ rule: "patterns/judged-redirect", file: c.file, code: `<${c.component}>`, message: "" }));
+    for (const c of prior.controls ?? []) keys.add(findingKey({ ...redirectIdentity(c), message: "" }));
     return keys;
   } catch {
     return /* @__PURE__ */ new Set();
@@ -32021,6 +32039,7 @@ async function main() {
     const gateBlocks = blockingAllowed && !off;
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ""}` : config.source.kind;
     const base = findExistingBaseline(root2, namedBaseline, config.baselinePath);
+    const legacy = base.found ? null : legacyBaseline(root2);
     const state = attemptsPath(root2);
     const ds = config.designSystem;
     const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
@@ -32037,6 +32056,7 @@ async function main() {
       `${dim("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
       `${dim("suppress:   ")}${config.suppression.keyword} <ruleId> -- <reason>`,
       `${dim("baseline:   ")}${base.path}${base.found && readBaseline(base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
+      ...legacy ? [yellow(`            ${legacyBaselineNotice(legacy)}`)] : [],
       // Beside the baseline line, because the two used to share a directory and are
       // easy to assume still do: the retry counter is the one that stays out of the
       // repo. The marker is computed, not assumed — a root above the temp
@@ -32447,6 +32467,11 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     const baseline = found ? readBaseline(bPath) : null;
     if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
 `);
+    if (!found && !isHook) {
+      const legacy = legacyBaseline(root2);
+      if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}
+`);
+    }
     result = applyBaseline(result, baseline, { scoped: scope !== null, rules });
   }
   if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
