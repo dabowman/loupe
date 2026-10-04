@@ -871,7 +871,47 @@ await check('a file importing ConfirmDialog beside a hand-built pair is not told
 	assert(!at(r, 'patterns/superseded-composite').length, 'the canonical import means the choice was deliberate');
 });
 
+// @wordpress/ui's SelectControl, recommended there since 0.23.0, takes the same
+// `{ value, label }` shape under `items`: four of them are the same refusal.
+await check('the @wordpress/ui SelectControl with four static items is refused the same way', async () => {
+	const src = [
+		"import { SelectControl } from '@wordpress/ui';",
+		`export const A = () => (<SelectControl label="Align" items={ ${four} } />);`,
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { patterns: registry });
+	const hit = one(at(r, 'patterns/superseded-composite'), 'one select, one finding');
+	assert(hit.message.includes('choose.segmented') && hit.message.includes('4 short static items'), hit.message);
+});
+
 // ── component currency ────────────────────────────────────────────────────
+
+// Upstream moved the select in one release: @wordpress/ui 0.23.0 marks its
+// SelectControl and Select `recommended`, and @wordpress/components 41.0.0 marks
+// its SelectControl and BaseControl `not-recommended`, naming the replacements.
+await check('the select moved to @wordpress/ui, and BaseControl to Field', async () => {
+	const entry = (key: string) => componentRegistry.get(key);
+	assert(entry('@wordpress/ui::SelectControl')?.status === 'recommended', 'ui SelectControl is the current select');
+	assert(entry('@wordpress/ui::Select')?.status === 'recommended', 'and its Select primitive');
+	assert(
+		JSON.stringify(entry('@wordpress/ui::SelectControl')?.surface?.properties) === '{}',
+		'its root is Field.Root, which owns nothing',
+	);
+	const old = entry('@wordpress/components::SelectControl');
+	assert(old?.status === 'legacy' && old.supersededBy === 'SelectControl (@wordpress/ui)', `${JSON.stringify(old)}`);
+	const base = entry('@wordpress/components::BaseControl');
+	assert(base?.status === 'legacy' && base.supersededBy === 'Field (@wordpress/ui)', `${JSON.stringify(base)}`);
+	const raw = JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')) as { scope: { absent: string } };
+	assert(!raw.scope.absent.includes('SelectControl'), 'recorded, so no longer listed as known and unrecorded');
+
+	const src = [
+		"import { SelectControl } from '@wordpress/components';",
+		"import { SelectControl as UiSelect } from '@wordpress/ui';",
+		'export const A = () => (<><SelectControl label="a" /><UiSelect label="b" /></>);',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const f = one(at(r, 'system/superseded-component'), 'only the @wordpress/components import is stale');
+	assert(f.message.includes('SelectControl (@wordpress/ui)'), `names the replacement: ${f.message}`);
+});
 
 await check('a locked component is reported, its recommended sibling is not', async () => {
 	const src = [
@@ -1138,7 +1178,7 @@ await check('a raw interactive element names its analog and the package to impor
 		'6 <input> → <FormFileUpload> (@wordpress/components)',
 		'7 <input> → <Button> (@wordpress/components)',
 		'8 <input> → <InputControl> (@wordpress/ui)',
-		'10 <select> → <SelectControl> (@wordpress/components)',
+		'10 <select> → <SelectControl> (@wordpress/ui)',
 		'11 <textarea> → <TextareaControl> (@wordpress/ui)',
 		'12 <table> → <DataViews> (@wordpress/dataviews)',
 		'13 <dialog> → <Modal> (@wordpress/components)',

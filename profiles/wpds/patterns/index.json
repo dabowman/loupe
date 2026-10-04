@@ -62,6 +62,16 @@
           "min": 2,
           "max": 5,
           "maxLabelChars": 32
+        },
+        {
+          "rule": "few-static-options",
+          "components": [
+            "SelectControl"
+          ],
+          "prop": "items",
+          "min": 2,
+          "max": 5,
+          "maxLabelChars": 32
         }
       ],
       "signature": [
@@ -86,10 +96,10 @@
     },
     {
       "pattern": "choose.select",
-      "import": "@wordpress/components",
+      "import": "@wordpress/ui",
       "canonical": "SelectControl",
       "detector": ["import", { "rule": "judge", "components": ["SelectControl"] }],
-      "note": "Select (@wordpress/ui) is the eventual replacement; experimental. The trigger represents the current value — if it would represent a command, this is action-cluster.overflow (Menu); if a destination, navigate-hierarchy#descend."
+      "note": "@wordpress/components' SelectControl is not-recommended upstream as of 41.0.0 and legacy here: options move to `items` as `{ value, label }`, `onChange` becomes `onValueChange`, and `label` is required. For a borderless trigger, the Select primitive (@wordpress/ui) with `variant=\"minimal\"` on Select.Trigger. The trigger represents the current value — if it would represent a command, this is action-cluster.overflow (Menu); if a destination, navigate-hierarchy#descend."
     },
     {
       "pattern": "choose.combobox",

@@ -152,8 +152,9 @@ lacks: `<button>` → `Button`, `<select>` → `SelectControl`, `<textarea>` →
 `Collapsible`. `<input>` is read by its `type`: `checkbox`, `radio`, `search`,
 `file` and `range` have their own controls, `submit`/`button`/`reset` are a
 `Button`, anything else is `InputControl`, and `hidden` is never flagged. The
-finding names the package to import from — `InputControl` and
-`TextareaControl` are in both, and only the `@wordpress/ui` one is current.
+finding names the package to import from — `InputControl`, `SelectControl`
+and `TextareaControl` are in both, and only the `@wordpress/ui` one is
+current.
 
 A message ending `— converted, would block: …` names what the conversion
 promotes. On `Text` that is usually `font-size`, `line-height`, `font-weight`

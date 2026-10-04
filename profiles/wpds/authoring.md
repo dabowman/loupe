@@ -80,7 +80,11 @@ represent: `Menu` (commands, actions, navigation destinations — `Menu.Item`
 for commands, `Menu.LinkItem` for navigation, `Menu.CheckboxItem`/
 `Menu.RadioItem` for settings within the menu) vs. `SelectControl`/`Select`
 (choosing one predefined value — the trigger represents the current value)
-vs. `Autocomplete` (free-form filtering of suggestions). The
+vs. `Autocomplete` (free-form filtering of suggestions). The select to write
+is `@wordpress/ui`'s `SelectControl` (`Select` for a borderless trigger or a
+select you compose yourself): both are `recommended` there since 0.23.0, and
+`@wordpress/components`' `SelectControl` is `legacy` — its options move to
+`items`, and `onChange` becomes `onValueChange`. The
 `@wordpress/components` `Menu` is `locked` — a private API, never use it.
 The `@wordpress/ui` `Menu` is real but `experimental` — same
 not-yet-safe-alongside-`@wordpress/components` gate as the Button family.
