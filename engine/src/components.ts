@@ -47,13 +47,17 @@ export function loadComponents(raw: unknown): Map<string, ComponentEntry> {
 	const list: MaybeEntry[] = Array.isArray(raw)
 		? raw
 		: ((raw as { components?: MaybeEntry[] } | null)?.components ?? []);
+	const read = list.filter(isEntry).map((c): ComponentEntry => {
+		// `surfaced` is the loader's to say, whatever the file claims.
+		const { surface, surfaced: _claimed, ...rest } = c;
+		const s = surface === undefined ? undefined : readSurface(surface);
+		return s ? { ...rest, surface: s } : rest;
+	});
+	// A registry that records any surface has opted in to reading by surface,
+	// and its gaps are gaps. A malformed surface is not a recorded one.
+	const surfaced = read.some((c) => c.surface !== undefined);
 	const map = new Map<string, ComponentEntry>();
-	for (const c of list) {
-		if (!isEntry(c)) continue;
-		const { surface, ...rest } = c;
-		const read = surface === undefined ? undefined : readSurface(surface);
-		map.set(`${c.package}::${c.name}`, read ? { ...rest, surface: read } : rest);
-	}
+	for (const c of read) map.set(`${c.package}::${c.name}`, surfaced ? { ...c, surfaced: true } : c);
 	return map;
 }
 
@@ -73,6 +77,34 @@ export function surfaceFor(
 	if (exact) return exact.surface;
 	const [root, ...parts] = name.split('.');
 	return parts.length === 1 && parts[0] === 'Root' ? registry.get(`${pkg}::${root}`)?.surface : undefined;
+}
+
+/**
+ * Whether the registries a component could come from record styling surfaces
+ * at all — answered per component, because several profiles can be active and
+ * only some of them record surfaces. Where none does, a missing surface says
+ * nothing about this component in particular, and `system/override` keeps the
+ * reading it had before surfaces existed: an appearance property on a class
+ * bound to a design-system component blocks.
+ *
+ * Most precise first:
+ *   the component's own entry, or its namespace's for a part   → that entry's registry
+ *   no entry, but entries from the same package                → whether any of them is surfaced
+ *   nothing from its package, or no package to key on          → whether any registry in the run is
+ */
+export function surfacesRecorded(
+	registry: ReadonlyMap<string, ComponentEntry>,
+): (pkg: string | undefined, name: string | undefined) => boolean {
+	const byPackage = new Map<string, boolean>();
+	for (const e of registry.values())
+		byPackage.set(e.package, (byPackage.get(e.package) ?? false) || e.surfaced === true);
+	const anywhere = [...byPackage.values()].some(Boolean);
+	return (pkg, name) => {
+		if (!pkg) return anywhere;
+		const entry = (name && registry.get(`${pkg}::${name}`)) || (name && registry.get(`${pkg}::${name.split('.')[0]}`));
+		if (entry) return entry.surfaced === true;
+		return byPackage.get(pkg) ?? anywhere;
+	};
 }
 
 /**

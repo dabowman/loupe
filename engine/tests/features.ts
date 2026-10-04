@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
-import { loadComponents } from '../src/components.ts';
+import { loadComponents, surfacesRecorded } from '../src/components.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { APPEARANCE_PROPS, propsOverlap } from '../src/styles.ts';
 import { LANGUAGE, ask, judgeRedirects, judgeVariants } from '../src/judge.ts';
@@ -1906,6 +1906,31 @@ await check('a malformed surface is dropped rather than half-read', () => {
 	assert(!loaded.get('p::B')?.surface, 'properties must be an object');
 	assert(loaded.get('p::C')?.surface?.properties['font-size']?.[0] === 'variant', 'property names are lower-cased');
 	assert(loaded.get('p::D')?.surface !== undefined, 'an empty surface is a verified answer, and is kept');
+	assert(loaded.get('p::A')?.surfaced, 'every entry of a registry recording a surface is read by surface');
+});
+
+// Where the registry records no surface anywhere, a missing one is not a gap in
+// one entry, and the rule keeps the reading it had before surfaces existed.
+await check('whether a registry records surfaces is the loader’s to say, per component', () => {
+	const none = loadComponents([
+		{ name: 'A', package: 'p', status: 'recommended', surfaced: true },
+		{ name: 'B', package: 'p', status: 'recommended', surface: { properties: { color: 3 } } },
+	]);
+	assert(
+		[...none.values()].every((e) => !e.surfaced),
+		'neither a claimed flag nor a malformed surface makes a registry surfaced',
+	);
+	const merged = new Map([
+		...none,
+		...loadComponents([{ name: 'C', package: 'q', status: 'recommended', surface: { properties: {} } }]),
+	]);
+	const recorded = surfacesRecorded(merged);
+	assert(!recorded('p', 'A'), 'an entry from a registry recording none');
+	assert(!recorded('p', 'Z'), 'an unlisted component, from a package only that registry lists');
+	assert(recorded('q', 'C.Item'), 'a part, by its namespace’s entry');
+	assert(recorded('r', 'X'), 'a package nobody lists: whether anything in the run records surfaces');
+	assert(recorded(undefined, 'X'), 'no package to key on: the same');
+	assert(!surfacesRecorded(none)(undefined, 'X'), 'and nothing in the run does');
 });
 
 await check('a shorthand and its longhands overlap; neighbouring families do not', () => {

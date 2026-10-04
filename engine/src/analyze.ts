@@ -47,7 +47,7 @@ import { TreeTooLarge, analyzeEntryBudget, byBytes, discover, toPosix } from './
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
-import { surfaceFor } from './components.ts';
+import { surfaceFor, surfacesRecorded } from './components.ts';
 import { boundMessage, oneLine, parseMessageOf, snippet } from './text.ts';
 import {
 	cssFilesUnder,
@@ -241,7 +241,14 @@ const DECLARATIONS: readonly DeclarationCheck[] = [
  */
 function classifyDeclaration(
 	{ prop, value }: Decl,
-	{ boundSystem = [], boundText = [], isGrid = false, surfaceOf = () => undefined, enabled }: ClassifyContext,
+	{
+		boundSystem = [],
+		boundText = [],
+		isGrid = false,
+		surfaceOf = () => undefined,
+		surfaced = () => true,
+		enabled,
+	}: ClassifyContext,
 ): { finding: ClassifiedFinding | null; styling: boolean } {
 	const styling =
 		isMarginProp(prop) ||
@@ -250,7 +257,7 @@ function classifyDeclaration(
 		TYPE_PROPS.has(prop) ||
 		isHardcodedTokenValue(prop, value) ||
 		APPEARANCE_PROPS.has(prop);
-	const ctx = { boundSystem, boundText, isGrid, surfaceOf, enabled };
+	const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled };
 	// Deliberately unbounded: `message` is part of what the dedupe tells two
 	// findings apart by. The line is bounded once, at the end of `analyze`.
 	for (const check of DECLARATIONS) {
@@ -330,6 +337,8 @@ export async function analyze(
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
 	const surfaceOf = (b: Binding): StylingSurface | undefined =>
 		surfaceFor(config.componentRegistry, b.package, b.component);
+	const recorded = surfacesRecorded(config.componentRegistry);
+	const surfaced = (b: Binding): boolean => recorded(b.package, b.component);
 	// How the active profiles say their packages and tokens reach a page.
 	const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
 	const parseSuppressions = makeSuppressionParser(config.suppression);
@@ -607,7 +616,7 @@ export async function analyze(
 				const line = decl.source?.start?.line ?? ruleLine;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, surfaceOf, enabled: ruleIsLive },
+					{ boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive },
 				);
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
@@ -741,6 +750,7 @@ export async function analyze(
 					boundText: onTarget ? boundText : [],
 					isGrid: group.isGrid,
 					surfaceOf,
+					surfaced,
 					enabled: ruleIsLive,
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });

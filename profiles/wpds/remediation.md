@@ -115,7 +115,10 @@ A class on a `*Control` lands on the wrapper around label, input and help, not
 on the input, so `border` there frames the whole field and is not an override.
 CSS that reaches the input itself goes through `.components-*-control__input`
 — a library internal, below. A component the registry records no surface for
-gets the plain-element verdict, advisory.
+gets the plain-element verdict, advisory. That holds only while this
+profile's registry is active: a run without it — `--preset wpds` and no
+`--profiles` — has no surfaces to read, and every appearance property on a
+bound class reports as `restyle via its props/tokens, not CSS`.
 
 For a library internal
 (`.components-*`, `.block-editor-*`, `.dataviews-*`) there is no supported fix:

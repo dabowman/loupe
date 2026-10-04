@@ -504,7 +504,11 @@ on a property a surface lists, and names the prop — `<Text> ← font-size — 
 via its variant prop` — or says there is none. A class setting anything else is
 `className` doing its job, and gets the verdict it would get on a plain
 element. An entry with no `surface` has not been read for one, so it fails safe
-to that advisory verdict too; the registry's `scope` field says which component
+to that advisory verdict too — in a registry that records surfaces at all.
+Where none the component could come from records one (the VIP and Archer
+registries, a run with no profile, a project's own registry), the rule keeps
+its earlier reading: any appearance property on a class bound to the component
+blocks, with "restyle via its props/tokens, not CSS"; the registry's `scope` field says which component
 families the file covers at all, so a missing entry reads as unreviewed rather
 than fine.
 
@@ -1094,8 +1098,9 @@ Known limits, in rough priority order:
 2. **Styling surfaces are hand-read.** `system/override` names the prop that
    owns a declaration, or says there is none, only for components whose
    registry entry records a `surface` — read from the package source, per
-   component. Everything else gets the plain-element verdict, advisory. The
-   VIP and Archer registries record none yet.
+   component. In a registry that records them, everything else gets the
+   plain-element verdict, advisory. The VIP and Archer registries record none
+   yet, so there every appearance property on a bound class still blocks.
 3. **Structural interpolation.** A template whose shape depends on an
    interpolation (``styled.div`${mixin}` ``) parses only when the interpolation
    sits where a whole statement would. Anything else is recorded as a parse

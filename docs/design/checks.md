@@ -92,15 +92,36 @@ the declaration would get on a plain element: `tokens/hardcoded-value` or
 ways, so a surface owning `border-color` owns what `border: 0` would reset,
 and `font` reaches `font-size`.
 
-**No surface fails safe.** An entry without `surface` — or a component the
-registry does not list — has not been read for one, and a blocking finding
-that promises a prop nobody checked exists is the failure above. Its
-declarations get the plain-element verdict. `"properties": {}` is different:
-it is a verified answer that the component owns nothing there (`Stack`,
-`Field.Root`, every `@wordpress/ui` `*Control` root), and it is recorded so
-that absence keeps meaning "unreviewed". The cost is that a project or a
-profile with no surfaces gets no per-declaration blocking at all until someone
-reads its components; that is the right way round for a rule at `error`.
+**No surface fails safe — in a registry that records them.** An entry
+without `surface` — or a component the registry does not list — has not been
+read for one, and a blocking finding that promises a prop nobody checked
+exists is the failure above. Its declarations get the plain-element verdict.
+`"properties": {}` is different: it is a verified answer that the component
+owns nothing there (`Stack`, `Field.Root`, every `@wordpress/ui` `*Control`
+root), and it is recorded so that absence keeps meaning "unreviewed".
+
+**A registry that records no surfaces keeps the old reading.** Failing safe
+on every gap is right where someone has read the components and the gaps are
+the ones they have not reached yet. Where nobody has read any — the VIP and
+Archer registries today, a run with no profile, a project's own registry — it
+would switch the per-declaration form off for the whole design system, and a
+class restyling a `Button` would block nowhere. So where no registry a
+component could come from records a single surface, an appearance property on
+a class bound to it blocks as it did before surfaces existed, with the remedy
+it had then: `<Button> ← background — restyle via its props/tokens, not CSS`.
+`code` is `<Button> ← background` either way, so a baseline taken under one
+reading matches under the other.
+
+"The registry" is decided per component, because several profiles can be
+active and only some of them record surfaces. The component's own entry
+decides (a part goes by its namespace's entry), so a project overriding one
+WPDS entry with its own surface-less copy gets the old reading for that
+component alone. A component no registry lists goes by the other entries from
+its package; one from a package nobody lists, or bound where the channel
+cannot say the package, goes by whether anything in the run records surfaces.
+The flag is the loader's (`surfaced` on each entry it loads), set when any
+entry in the same file carries a surface that reads; a malformed surface is
+not a recorded one, and a file cannot claim the flag for itself.
 
 **A surface describes one element.** It is what the component styles where its
 `className` lands — for most `@wordpress/components` controls that is

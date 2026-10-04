@@ -203,9 +203,15 @@ the component owns the property, and the message says what controls it:
   declaration with a suppression whose reason says why the design needs it;
   that override is what a version bump breaks first.
 
-A class setting a property the component does not own is not reported here —
-it gets the same verdict it would on a plain element, usually
-`tokens/hardcoded-value`. For a library
+- `<Button> ← background — restyle via its props/tokens, not CSS` — the
+  registry this component comes from records no styling surfaces at all, so
+  nothing says what it owns and every appearance property on its class
+  reports. Look for the prop or token in the component's docs; where there
+  is none, the same two exits as above.
+
+Where the registry does record surfaces, a class setting a property the
+component does not own is not reported here — it gets the same verdict it
+would on a plain element, usually `tokens/hardcoded-value`. For a library
 internal, there is no supported fix: the selector depends on markup that will
 change without notice. Find the supported API, or accept the default. If you
 must keep it, the suppression reason should say it is a known-fragile coupling.

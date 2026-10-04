@@ -17,6 +17,13 @@
  * exists. Converting a raw element to a component must not, on its own, turn
  * that element's advisory findings into blocking ones.
  *
+ * That reading needs a registry that records surfaces. Where none the
+ * component could come from records any — a profile nobody has read for them,
+ * a run with no profile, a project's own registry — a missing surface is not a
+ * gap in one entry but the absence of the data, and the rule reads the way it
+ * did before surfaces existed: every appearance property blocks, with the
+ * remedy it always had.
+ *
  * On a whole rule: a key selector reaching into one of the library's own parts
  * — a class the design system's stylesheets style, or one carrying an
  * external prefix. "Stop styling this" replaces every per-declaration remedy
@@ -28,10 +35,14 @@
  *   not one of `APPEARANCE_PROPS` — colour, border, radius,
  *   type, opacity, filter                                 → not ours, next check
  *   this rule is off                                      → not ours, next check
- *   no bound component's surface owns the property — none
- *   recorded, or recorded without it                      → not ours, next check
- *   owned, through a prop                                 → system/override, naming the prop
- *   owned, with no prop for it                            → system/override, saying so
+ *   a bound component's surface owns the property,
+ *   through a prop                                        → system/override, naming the prop
+ *   … with no prop for it                                 → system/override, saying so
+ *   a bound component comes from where no registry
+ *   records surfaces at all                               → system/override, restyle via
+ *                                                           its props/tokens
+ *   otherwise — a surface without the property, or a
+ *   surfaced registry with no surface for this one        → not ours, next check
  */
 
 import type { DeclarationCheck } from '../../analyze.ts';
@@ -57,20 +68,28 @@ export function owningBinding(
 export const viaProps = (via: readonly string[]): string =>
 	via.length === 1 ? `its ${via[0]} prop` : `its ${via.slice(0, -1).join(', ')} and ${via.at(-1)} props`;
 
-export const systemOverride: DeclarationCheck = ({ prop }, { boundSystem, enabled, surfaceOf }) => {
+/** The remedy the rule gave before surfaces, where there is still nothing better to say. */
+export const UNREAD_REMEDY = 'restyle via its props/tokens, not CSS';
+
+export const systemOverride: DeclarationCheck = ({ prop }, { boundSystem, enabled, surfaceOf, surfaced }) => {
 	if (!boundSystem[0] || !APPEARANCE_PROPS.has(prop) || !enabled('system/override')) return undefined;
 	const owner = owningBinding(boundSystem, prop, surfaceOf);
-	if (!owner) return undefined;
-	const head = `<${owner.binding.tag}> ← ${prop}`;
-	return {
-		rule: 'system/override',
-		message: owner.via.length
-			? `${head} — set via ${viaProps(owner.via)}`
-			: `${head} — it sets this itself and has no prop for it`,
-		// Identity is the component and the property, as it was before the
-		// message said why: a baseline entry must survive the explanation.
-		code: head,
-	};
+	// Identity is the component and the property, as it was before the message
+	// said why: a baseline entry must survive the explanation.
+	if (owner) {
+		const head = `<${owner.binding.tag}> ← ${prop}`;
+		return {
+			rule: 'system/override',
+			message: owner.via.length
+				? `${head} — set via ${viaProps(owner.via)}`
+				: `${head} — it sets this itself and has no prop for it`,
+			code: head,
+		};
+	}
+	const unread = boundSystem.find((b) => !surfaced(b));
+	if (!unread) return undefined;
+	const head = `<${unread.tag}> ← ${prop}`;
+	return { rule: 'system/override', message: `${head} — ${UNREAD_REMEDY}`, code: head };
 };
 
 /**
