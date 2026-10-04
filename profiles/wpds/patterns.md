@@ -59,7 +59,7 @@ Most bad choices are the wrong pattern, not the wrong variant. Each row is a for
 | --- | --- | --- |
 | All options visible on one row, the active one marked; re-selecting the active one clears it when 'no opinion' is a valid state. | `choose.segmented` → `ToggleGroupControl` (`@wordpress/components`) | A SelectControl with two to five options; A RadioControl for a set that fits on one row; A row of Buttons with isPressed and hand-managed exclusivity |
 | All options visible as a labelled vertical list. | `choose.radio` → `RadioControl` (`@wordpress/components`) (unverified) |  |
-| The current value is the trigger; the set opens on demand. | `choose.select` → `SelectControl` (`@wordpress/components`) |  |
+| The current value is the trigger; the set opens on demand. | `choose.select` → `SelectControl` (`@wordpress/ui`) |  |
 | Typed filtering over the set; may accept values the set lacks. | `choose.combobox` → `ComboboxControl` (`@wordpress/components`) (unverified) |  |
 | Chosen options shown as removable tokens; unchosen ones found by typing. | `choose.token-list` → `FormTokenField` (`@wordpress/components`) (unverified) |  |
 | The option is its rendering — a swatch, a word set in its face, a live preview — laid out as a grid of tiles with the active one marked; the name is secondary, in a tooltip or caption. | `choose.rendered` → `Variation` (`@wordpress/global-styles-ui`) | A SelectControl of variation names; A RadioControl list of theme or preset names; Static thumbnails that are not the thing they preview |

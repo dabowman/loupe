@@ -5,7 +5,7 @@
     "@wordpress/dataviews"
   ],
   "version": 1,
-  "verifiedAgainst": "WordPress/gutenberg trunk, from each component's own Storybook `componentStatus` metadata, 2026-08-25. `dropIn` is a separate, later check: trunk at 037f7ed (2026-09-19), reading both implementations' prop types and styles for the eight same-name `@wordpress/components` -> `@wordpress/ui` moves (Text, Card, Icon, Spinner, Tooltip, VisuallyHidden, TextareaControl, InputControl). None of the eight qualified, so no entry carries the field. `surface` is a third, separate reading, and each one names its own source: the published @wordpress/components 41.0.0 and @wordpress/ui 0.23.0 packages, read 2026-10-02, where the three @wordpress/ui control entries added then (CheckboxControl, RadioGroupControl, SwitchControl) were also taken.",
+  "verifiedAgainst": "WordPress/gutenberg trunk, from each component's own Storybook `componentStatus` metadata, 2026-08-25. `dropIn` is a separate, later check: trunk at 037f7ed (2026-09-19), reading both implementations' prop types and styles for the eight same-name `@wordpress/components` -> `@wordpress/ui` moves (Text, Card, Icon, Spinner, Tooltip, VisuallyHidden, TextareaControl, InputControl). None of the eight qualified, so no entry carries the field. `surface` is a third, separate reading, and each one names its own source: the published @wordpress/components 41.0.0 and @wordpress/ui 0.23.0 packages, read 2026-10-02, where the three @wordpress/ui control entries added then (CheckboxControl, RadioGroupControl, SwitchControl) were also taken. Currency for the select family is a fourth reading, from the same two packages' own stories, read 2026-10-04: @wordpress/ui 0.23.0 marks SelectControl and Select `recommended` (src/form/select-control and src/form/primitives/select stories, `componentStatus`), and @wordpress/components 41.0.0 marks SelectControl and BaseControl `not-recommended` (src/select-control and src/base-control stories), both changelogs citing gutenberg#83030 for the select pair.",
   "note": "Component currency, not props -- plus, where an entry carries `surface`, what the component styles itself on the element its `className` reaches, and the prop that controls each property (`null`: it sets it and no prop does). `system/override` blocks only on a property a surface lists; an entry with no `surface` has not been read for one, so a class on it is treated like a class on a plain element. `\"properties\": {}` is a verified answer -- it owns nothing there -- not a missing one. `status` says whether a component is the current best-practice choice: `recommended` (use it), `legacy` (works, but a recommended replacement now covers the job -- see `supersededBy`), `locked` (a private API Gutenberg explicitly does not recommend outside core -- can break without notice on any update), `experimental` (real, documented, but WordPress's own Storybook metadata (`componentStatus.status: 'use-with-caution'`) flags it not-yet-safe to mix with @wordpress/components -- true of almost every real WP admin codebase today, so treat as informational, not a migration target, until that gate lifts). Two components can share a name across packages with different status -- `Button` in `@wordpress/components` is `recommended` today while the newer `Button` in `@wordpress/ui` is `experimental`; check `package` too. This file is the canonical answer to 'is this the current best practice' -- the design-system MCP is for prop/usage detail on a component you've already chosen, and does not carry this maturity signal at all (it presents `experimental`-status components with the same confidence as `recommended` ones, and is itself measurably behind trunk for several @wordpress/ui additions: Dialog, AlertDialog, Drawer, IconButton, LinkButton, and the current Menu all return nothing from `get_component_details`). Re-verify against trunk (`packages/ui/src/*/stories/index.story.tsx` -> `parameters.componentStatus`) before bumping this file's version -- do not guess a status. `dropIn` is a much narrower claim than `status`: that moving the import changes the specifier and nothing else. A matching name is not evidence for it -- see docs/design/checks.md#a-same-name-move-is-not-a-drop-in-move.",
   "scope": {
     "covers": [
@@ -27,7 +27,7 @@
       "Guide, Placeholder, TreeGrid, TreeSelect, QueryControls, Tip, ResizableBox",
       "utilities that render no UI of their own (SlotFill, Animate, Draggable, DropZone, KeyboardShortcuts, SVG primitives)"
     ],
-    "absent": "Absence means unreviewed, never fine -- in a covered family as much as an uncovered one. A component this file does not list gets no currency verdict, and one listed without `surface` gets no blocking override verdict; neither is an endorsement. Known and deliberately unrecorded: @wordpress/ui 0.23.0's SelectControl (Storybook `recommended`), whose @wordpress/components namesake and BaseControl now read `not-recommended` upstream -- recording that moves the elementMap's `select` target and the `choose.select` pattern, so it is a decision, not a data entry. The same reading has @wordpress/ui's Select primitive at `recommended`, where this file still says `experimental`."
+    "absent": "Absence means unreviewed, never fine -- in a covered family as much as an uncovered one. A component this file does not list gets no currency verdict, and one listed without `surface` gets no blocking override verdict; neither is an endorsement."
   },
   "components": [
     {
@@ -534,8 +534,9 @@
     {
       "name": "SelectControl",
       "package": "@wordpress/components",
-      "status": "recommended",
-      "note": "Correct for a long or open-ended list. For two to five options that fit on one row, ToggleGroupControl; for a visual choice, a preview grid or a value-preview row.",
+      "status": "legacy",
+      "supersededBy": "SelectControl (@wordpress/ui)",
+      "note": "Storybook `not-recommended` as of 41.0.0 (gutenberg#83030): 'Use SelectControl from @wordpress/ui instead. For the minimal variant, use the Select primitive rather than SelectControl.' Not a specifier swap: @wordpress/ui's SelectControl requires `label`, takes `items` (`{ value, label }`, plus an optional `description`) where this takes `options` or `<option>` children, calls `onValueChange` where this calls `onChange`, has no `multiple`, `labelPosition`, `prefix` or `suffix`, and renders a listbox popup rather than a native `<select>`.",
       "surface": {
         "properties": {
           "font-family": null,
@@ -589,8 +590,9 @@
     {
       "name": "BaseControl",
       "package": "@wordpress/components",
-      "status": "recommended",
-      "note": "Label, help text and id wiring for a composite control you are building out of more than one input.",
+      "status": "legacy",
+      "supersededBy": "Field (@wordpress/ui)",
+      "note": "Storybook `not-recommended` in 41.0.0, with no changelog entry of its own: 'Use Field from @wordpress/ui instead. For a purely visual label outside Field.Root, use Field.VisualLabel. For a group legend, use Fieldset and Fieldset.Legend.' Not a specifier swap: Field is a compound (`Field.Root`, `Field.Label`, `Field.Control`, `Field.Description`) where BaseControl takes `label`, `help` and `id` as props.",
       "surface": {
         "properties": {
           "font-family": null,
@@ -901,8 +903,19 @@
     {
       "name": "Select",
       "package": "@wordpress/ui",
-      "status": "experimental",
-      "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135)."
+      "status": "recommended",
+      "note": "Storybook `recommended` as of @wordpress/ui 0.23.0 (gutenberg#83030). The primitive, for a select you are composing yourself or one with a borderless trigger (`Select.Trigger variant=\"minimal\"`); SelectControl is the one to reach for first. No surface recorded: `Select.Root` renders no element, and the trigger's styling is on `Select.Trigger`, a part with no entry of its own."
+    },
+    {
+      "name": "SelectControl",
+      "package": "@wordpress/ui",
+      "status": "recommended",
+      "note": "The current select: Storybook `recommended` as of 0.23.0 (gutenberg#83030), replacing @wordpress/components' SelectControl. Label, description and details come with it; options go in `items` as `{ value, label }`. Correct for a long or open-ended list. For two to five options that fit on one row, ToggleGroupControl; for a visual choice, a preview grid or a value-preview row.",
+      "surface": {
+        "properties": {},
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/form/select-control/select-control.tsx and src/form/primitives/field/root.tsx, read 2026-10-04",
+        "note": "`className` lands on Field.Root, a Stack around the label, the select and the description, which sets no appearance property. The bordered trigger is Select.Trigger's InputLayout, which takes no class of its own here."
+      }
     },
     {
       "name": "Checkbox",

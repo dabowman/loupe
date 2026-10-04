@@ -75,7 +75,16 @@ import {
 	resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
-import type { AnalyzeResult, BaselinedResult, Config, ConfigSuppression, Directive, Finding, RuleId } from './types.ts';
+import type {
+	AnalyzeResult,
+	BaselinedResult,
+	Config,
+	ConfigSuppression,
+	DeliveryCheck,
+	Directive,
+	Finding,
+	RuleId,
+} from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
@@ -819,14 +828,21 @@ async function main(): Promise<number> {
 		// explanation: what counts as delivery, and what to do about none.
 		if (id === 'tokens/undelivered') {
 			const t = delivery?.tokens;
+			const described = (e: DeliveryCheck): string =>
+				`${e.kind === 'enqueue-dependency' ? `${e.calls.join('/')} listing ${e.handles.join(', ')}` : e.kind === 'import' ? `an import of ${e.specifiers.join(' or ')}` : `/${e.pattern.source}/`} in ${e.files.join(', ')}`;
 			const lines = t
 				? [
 						`Tokens come from ${t.stylesheet}${t.handle ? `, the ${t.handle} handle` : ''}. Any one of these is delivery:`,
-						...t.evidence.map(
-							(e) =>
-								`  ${e.kind === 'enqueue-dependency' ? `${e.calls.join('/')} listing ${e.handles.join(', ')}` : e.kind === 'import' ? `an import of ${e.specifiers.join(' or ')}` : `/${e.pattern.source}/`} in ${e.files.join(', ')}`,
-						),
+						...t.evidence.map((e) => `  ${described(e)}`),
 						'It reports only when enqueues were found, every one was read, and none qualifies; anything it cannot read is not a finding.',
+						// Named so nobody reads a build plugin as the fix: the page renders,
+						// at the default theme's values.
+						...(t.fallbacks.length
+							? [
+									"Build-time fallbacks are not delivery: they render the default theme's values, not the site's. The finding says so where one of these shows them:",
+									...t.fallbacks.map((e) => `  ${described(e)}`),
+								]
+							: []),
 						...(t.note ? [t.note] : []),
 					]
 				: ['No active profile declares how its tokens are delivered, so this reports nothing.'];

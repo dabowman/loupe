@@ -115,7 +115,10 @@ A class on a `*Control` lands on the wrapper around label, input and help, not
 on the input, so `border` there frames the whole field and is not an override.
 CSS that reaches the input itself goes through `.components-*-control__input`
 — a library internal, below. A component the registry records no surface for
-gets the plain-element verdict, advisory.
+gets the plain-element verdict, advisory. That holds only while this
+profile's registry is active: a run without it — `--preset wpds` and no
+`--profiles` — has no surfaces to read, and every appearance property on a
+bound class reports as `restyle via its props/tokens, not CSS`.
 
 For a library internal
 (`.components-*`, `.block-editor-*`, `.dataviews-*`) there is no supported fix:
@@ -149,8 +152,14 @@ lacks: `<button>` → `Button`, `<select>` → `SelectControl`, `<textarea>` →
 `Collapsible`. `<input>` is read by its `type`: `checkbox`, `radio`, `search`,
 `file` and `range` have their own controls, `submit`/`button`/`reset` are a
 `Button`, anything else is `InputControl`, and `hidden` is never flagged. The
-finding names the package to import from — `InputControl` and
-`TextareaControl` are in both, and only the `@wordpress/ui` one is current.
+finding names the package to import from — `InputControl`, `SelectControl`
+and `TextareaControl` are in both, and only the `@wordpress/ui` one is
+current.
+
+A message ending `— converted, would block: …` names what the conversion
+promotes. On `Text` that is usually `font-size`, `line-height`, `font-weight`
+or `font-family`, which `variant` sets: pick the variant and drop them in the
+same edit.
 
 "No design-system equivalent" is usually wrong; check before suppressing. A
 file input with `webkitdirectory`, which `FormFileUpload` cannot set, is the
@@ -194,14 +203,20 @@ Add `'wp-theme'` to the dependency array of the `wp_enqueue_style` (or
 wp_enqueue_style( 'my-plugin-admin', $url, array( 'wp-theme' ), $version );
 ```
 
-A dependency on `wp-components` does the same, since it depends on `wp-theme`
-wherever `wp-theme` exists — but only take it if the screen also uses
-`@wordpress/components`' own styles. Do not bundle
-`@wordpress/theme/design-tokens.css` into the plugin; the package's README asks
-plugins to enqueue the handle so the tokens follow the site's theme. On a core
-older than 7.1 without Gutenberg there is no `wp-theme` handle at all: say so,
-and treat build-time fallbacks (`@wordpress/build` applies them when
-`@wordpress/theme` is installed) as the way the declarations survive.
+Name `wp-theme` itself, even where the style already depends on
+`wp-components`: that dependency brings `wp-theme` along only on WordPress 7.1+
+or with Gutenberg active, so it does not count. A `block.json` style naming
+`wp-theme` does. Do not bundle `@wordpress/theme/design-tokens.css` into the
+plugin; the package's README asks plugins to enqueue the handle so the tokens
+follow the site's theme.
+
+A note beginning `fallbacks render but won't follow the theme` means the build
+(`@wordpress/build`, which applies them when `@wordpress/theme` is installed)
+writes the default theme's values into each `var()`. The page renders, so it
+can look fixed — but every token is pinned to the default theme. That is not
+delivery; add the handle anyway. On a core older than 7.1 without Gutenberg
+there is no `wp-theme` handle at all: say so, and the fallbacks are what keeps
+the declarations from dropping there.
 
 ## `patterns/*`
 

@@ -356,6 +356,13 @@ export interface ClassifyContext {
 	 */
 	surfaceOf?: (binding: Binding) => StylingSurface | undefined;
 	/**
+	 * Whether the registry a bound component comes from records styling
+	 * surfaces at all. Where it does not, a missing surface says nothing about
+	 * this component in particular, and `system/override` reads it the way it
+	 * did before surfaces existed — see `surfacesRecorded`.
+	 */
+	surfaced?: (binding: Binding) => boolean;
+	/**
 	 * Whether a rule is live in this run. Two branches of the classifier
 	 * *supersede* the ordinary verdict rather than adding to it, so a
 	 * superseding rule that is off has to step aside and let the ordinary one
@@ -484,6 +491,13 @@ export interface ComponentEntry {
 	 * fail safe — see `StylingSurface`.
 	 */
 	surface?: StylingSurface;
+	/**
+	 * Set by the loader, never authored: the registry this entry was read from
+	 * records a surface on at least one entry. It is what tells "this entry was
+	 * not read for a surface" (a gap, advisory) from "this registry records no
+	 * surfaces" (the pre-surface reading, blocking).
+	 */
+	surfaced?: true;
 }
 
 /**
@@ -894,6 +908,12 @@ export interface TokenDelivery {
 	note?: string | undefined;
 	/** Any one of these, holding, is delivery. */
 	evidence: DeliveryCheck[];
+	/**
+	 * Any one of these, holding, means the build writes fallback values into
+	 * each `var()`: the declarations render, but at the default theme's values,
+	 * not the site's. Not delivery — said on the finding instead.
+	 */
+	fallbacks: DeliveryCheck[];
 }
 
 /** A profile's delivery block, validated. */

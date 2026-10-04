@@ -211,6 +211,12 @@ Rules disable themselves when the config cannot support them — a block theme
 with no component layer leaves the component rules inert rather than firing on
 nothing.
 
+`system/raw-element` says what the conversion would cost: where a declaration
+on the element's classes would block once the class sits on the component, the
+message names it — `<h4> → <Text render={ <h4 /> }> (@wordpress/ui) —
+converted, would block: font-size (.acme-title)` — so the change is weighed
+before it is made, not discovered after.
+
 `system/raw-element` skips the element a text or layout component's
 substitution prop is handed: `<Text variant="heading-md" render={ <h4 /> }>` is
 how you keep a heading's semantics under WPDS, not a raw `<h4>`. The prop list is
@@ -248,7 +254,10 @@ var(--wpds-color-…)` on a page that never loads `wp-theme` does not fall back 
 it drops. How a sheet is delivered is the design system's fact, so the profile's
 `delivery.json` declares the evidence (for WPDS: a `wp_enqueue_style` whose
 dependency array lists `wp-theme` or a style that depends on it, a `block.json`
-naming one, an import of the sheet, or a build that writes fallbacks) and the
+naming `wp-theme`, or an import of the sheet — `wp-components` and the editor
+handles do not count, since they depend on `wp-theme` only on some cores, and a
+build that writes fallbacks is not delivery either: the finding says it found
+one, because those values render but never follow the theme) and the
 engine runs it with a bounded, literal read — no PHP parser. It reports once per
 project, at the first token use, and only when it found enqueues, read every one,
 and none qualifies. It stays silent when no definitions were found at all,
@@ -502,7 +511,11 @@ on a property a surface lists, and names the prop — `<Text> ← font-size — 
 via its variant prop` — or says there is none. A class setting anything else is
 `className` doing its job, and gets the verdict it would get on a plain
 element. An entry with no `surface` has not been read for one, so it fails safe
-to that advisory verdict too; the registry's `scope` field says which component
+to that advisory verdict too — in a registry that records surfaces at all.
+Where none the component could come from records one (the VIP and Archer
+registries, a run with no profile, a project's own registry), the rule keeps
+its earlier reading: any appearance property on a class bound to the component
+blocks, with "restyle via its props/tokens, not CSS"; the registry's `scope` field says which component
 families the file covers at all, so a missing entry reads as unreviewed rather
 than fine.
 
@@ -1093,8 +1106,9 @@ Known limits, in rough priority order:
 2. **Styling surfaces are hand-read.** `system/override` names the prop that
    owns a declaration, or says there is none, only for components whose
    registry entry records a `surface` — read from the package source, per
-   component. Everything else gets the plain-element verdict, advisory. The
-   VIP and Archer registries record none yet.
+   component. In a registry that records them, everything else gets the
+   plain-element verdict, advisory. The VIP and Archer registries record none
+   yet, so there every appearance property on a bound class still blocks.
 3. **Structural interpolation.** A template whose shape depends on an
    interpolation (``styled.div`${mixin}` ``) parses only when the interpolation
    sits where a whole statement would. Anything else is recorded as a parse

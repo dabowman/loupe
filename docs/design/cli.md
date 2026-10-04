@@ -562,7 +562,10 @@ advisory into blocking — through its `surface`, see
 [checks.md](checks.md#it-blocks-only-where-the-component-owns-the-property) —
 that difference is load-bearing. The merge is per entry, `package::name`, so an
 entry's `surface` travels with it: a project's own entry for a shipped
-component replaces the shipped surface along with the shipped currency.
+component replaces the shipped surface along with the shipped currency. So
+does whether the entry is read by surface at all: an entry from a registry
+that records none keeps `system/override`'s pre-surface reading (see
+[checks.md](checks.md#it-blocks-only-where-the-component-owns-the-property)).
 
 Merging a registry by fiat is not the same as its rules coming on: a composite
 signature still needs a component layer to match against, and a registry that

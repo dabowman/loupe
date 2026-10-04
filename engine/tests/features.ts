@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
-import { loadComponents } from '../src/components.ts';
+import { loadComponents, surfacesRecorded } from '../src/components.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { APPEARANCE_PROPS, propsOverlap } from '../src/styles.ts';
 import { LANGUAGE, ask, judgeRedirects, judgeVariants, redirectIdentity } from '../src/judge.ts';
@@ -871,7 +871,47 @@ await check('a file importing ConfirmDialog beside a hand-built pair is not told
 	assert(!at(r, 'patterns/superseded-composite').length, 'the canonical import means the choice was deliberate');
 });
 
+// @wordpress/ui's SelectControl, recommended there since 0.23.0, takes the same
+// `{ value, label }` shape under `items`: four of them are the same refusal.
+await check('the @wordpress/ui SelectControl with four static items is refused the same way', async () => {
+	const src = [
+		"import { SelectControl } from '@wordpress/ui';",
+		`export const A = () => (<SelectControl label="Align" items={ ${four} } />);`,
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { patterns: registry });
+	const hit = one(at(r, 'patterns/superseded-composite'), 'one select, one finding');
+	assert(hit.message.includes('choose.segmented') && hit.message.includes('4 short static items'), hit.message);
+});
+
 // ── component currency ────────────────────────────────────────────────────
+
+// Upstream moved the select in one release: @wordpress/ui 0.23.0 marks its
+// SelectControl and Select `recommended`, and @wordpress/components 41.0.0 marks
+// its SelectControl and BaseControl `not-recommended`, naming the replacements.
+await check('the select moved to @wordpress/ui, and BaseControl to Field', async () => {
+	const entry = (key: string) => componentRegistry.get(key);
+	assert(entry('@wordpress/ui::SelectControl')?.status === 'recommended', 'ui SelectControl is the current select');
+	assert(entry('@wordpress/ui::Select')?.status === 'recommended', 'and its Select primitive');
+	assert(
+		JSON.stringify(entry('@wordpress/ui::SelectControl')?.surface?.properties) === '{}',
+		'its root is Field.Root, which owns nothing',
+	);
+	const old = entry('@wordpress/components::SelectControl');
+	assert(old?.status === 'legacy' && old.supersededBy === 'SelectControl (@wordpress/ui)', `${JSON.stringify(old)}`);
+	const base = entry('@wordpress/components::BaseControl');
+	assert(base?.status === 'legacy' && base.supersededBy === 'Field (@wordpress/ui)', `${JSON.stringify(base)}`);
+	const raw = JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')) as { scope: { absent: string } };
+	assert(!raw.scope.absent.includes('SelectControl'), 'recorded, so no longer listed as known and unrecorded');
+
+	const src = [
+		"import { SelectControl } from '@wordpress/components';",
+		"import { SelectControl as UiSelect } from '@wordpress/ui';",
+		'export const A = () => (<><SelectControl label="a" /><UiSelect label="b" /></>);',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const f = one(at(r, 'system/superseded-component'), 'only the @wordpress/components import is stale');
+	assert(f.message.includes('SelectControl (@wordpress/ui)'), `names the replacement: ${f.message}`);
+});
 
 await check('a locked component is reported, its recommended sibling is not', async () => {
 	const src = [
@@ -1138,7 +1178,7 @@ await check('a raw interactive element names its analog and the package to impor
 		'6 <input> → <FormFileUpload> (@wordpress/components)',
 		'7 <input> → <Button> (@wordpress/components)',
 		'8 <input> → <InputControl> (@wordpress/ui)',
-		'10 <select> → <SelectControl> (@wordpress/components)',
+		'10 <select> → <SelectControl> (@wordpress/ui)',
 		'11 <textarea> → <TextareaControl> (@wordpress/ui)',
 		'12 <table> → <DataViews> (@wordpress/dataviews)',
 		'13 <dialog> → <Modal> (@wordpress/components)',
@@ -1936,6 +1976,64 @@ await check('a compound part is its own element: Card.Root owns its surface, Car
 	);
 });
 
+// What converting would change is said before the conversion, on the
+// `system/raw-element` finding that asks for it: #13's 41 blockers arrived
+// after the fact. The message grows a tail; `code` does not, so a baseline
+// keyed on `<h4>` survives it.
+
+const TITLE_CSS = '.acme-title { color: #826200; text-transform: uppercase; letter-spacing: 0.05em; font-size: 14px; }';
+const H4 = 'export const A = () => <h4 className="acme-title">Hi</h4>;';
+
+await check('a raw element names the declarations its conversion would promote', async () => {
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'styles/a.scss': TITLE_CSS, 'src/A.tsx': H4 },
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/raw-element'), 'the <h4> should report');
+	// Text's surface owns font-size through `variant`, and nothing else here.
+	assert(
+		f.message === '<h4> → <Text render={ <h4 /> }> (@wordpress/ui) — converted, would block: font-size (.acme-title)',
+		`message: ${f.message}`,
+	);
+	assert(f.code === '<h4>', `the identity does not move: ${f.code}`);
+});
+
+await check('a raw element whose conversion changes nothing says nothing more', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-title { color: #826200; letter-spacing: 0.05em; }',
+			'src/A.tsx': H4,
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/raw-element'), 'the <h4> should report');
+	assert(f.message === '<h4> → <Text render={ <h4 /> }> (@wordpress/ui)', `message: ${f.message}`);
+});
+
+await check('where no registry records surfaces, every appearance property is named', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.scss': `${TITLE_CSS}\n.acme-big { border: 1px solid #ccc; }`,
+		'src/A.tsx': 'export const A = () => <h4 className="acme-title acme-big acme-x">Hi</h4>;',
+	});
+	const f = one(at(r, 'system/raw-element'), 'the <h4> should report');
+	assert(
+		f.message ===
+			'<h4> → <Text render={ <h4 /> }> — converted, would block: color, text-transform, letter-spacing, font-size (+1 more) (.acme-title, .acme-big)',
+		`message: ${f.message}`,
+	);
+	// The keys of a run that says it and one that cannot.
+	const quiet = await run({
+		'loupe.config.json': CONFIG({ rules: { 'system/override': 'off', 'typography/in-css': 'off' } }),
+		'styles/a.scss': `${TITLE_CSS}\n.acme-big { border: 1px solid #ccc; }`,
+		'src/A.tsx': 'export const A = () => <h4 className="acme-title acme-big acme-x">Hi</h4>;',
+	});
+	const bare = one(at(quiet, 'system/raw-element'), 'the <h4> should still report');
+	assert(bare.message === '<h4> → <Text render={ <h4 /> }>', `with nothing to promote: ${bare.message}`);
+	assert(findingKey(bare) === findingKey(f), `the baseline key moved: ${findingKey(bare)} / ${findingKey(f)}`);
+});
+
 await check('a malformed surface is dropped rather than half-read', () => {
 	const loaded = loadComponents([
 		{ name: 'A', package: 'p', status: 'recommended', surface: { properties: { color: 3 } } },
@@ -1947,6 +2045,31 @@ await check('a malformed surface is dropped rather than half-read', () => {
 	assert(!loaded.get('p::B')?.surface, 'properties must be an object');
 	assert(loaded.get('p::C')?.surface?.properties['font-size']?.[0] === 'variant', 'property names are lower-cased');
 	assert(loaded.get('p::D')?.surface !== undefined, 'an empty surface is a verified answer, and is kept');
+	assert(loaded.get('p::A')?.surfaced, 'every entry of a registry recording a surface is read by surface');
+});
+
+// Where the registry records no surface anywhere, a missing one is not a gap in
+// one entry, and the rule keeps the reading it had before surfaces existed.
+await check('whether a registry records surfaces is the loader’s to say, per component', () => {
+	const none = loadComponents([
+		{ name: 'A', package: 'p', status: 'recommended', surfaced: true },
+		{ name: 'B', package: 'p', status: 'recommended', surface: { properties: { color: 3 } } },
+	]);
+	assert(
+		[...none.values()].every((e) => !e.surfaced),
+		'neither a claimed flag nor a malformed surface makes a registry surfaced',
+	);
+	const merged = new Map([
+		...none,
+		...loadComponents([{ name: 'C', package: 'q', status: 'recommended', surface: { properties: {} } }]),
+	]);
+	const recorded = surfacesRecorded(merged);
+	assert(!recorded('p', 'A'), 'an entry from a registry recording none');
+	assert(!recorded('p', 'Z'), 'an unlisted component, from a package only that registry lists');
+	assert(recorded('q', 'C.Item'), 'a part, by its namespace’s entry');
+	assert(recorded('r', 'X'), 'a package nobody lists: whether anything in the run records surfaces');
+	assert(recorded(undefined, 'X'), 'no package to key on: the same');
+	assert(!surfacesRecorded(none)(undefined, 'X'), 'and nothing in the run does');
 });
 
 await check('a shorthand and its longhands overlap; neighbouring families do not', () => {

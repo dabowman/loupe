@@ -92,15 +92,41 @@ the declaration would get on a plain element: `tokens/hardcoded-value` or
 ways, so a surface owning `border-color` owns what `border: 0` would reset,
 and `font` reaches `font-size`.
 
-**No surface fails safe.** An entry without `surface` — or a component the
-registry does not list — has not been read for one, and a blocking finding
-that promises a prop nobody checked exists is the failure above. Its
-declarations get the plain-element verdict. `"properties": {}` is different:
-it is a verified answer that the component owns nothing there (`Stack`,
-`Field.Root`, every `@wordpress/ui` `*Control` root), and it is recorded so
-that absence keeps meaning "unreviewed". The cost is that a project or a
-profile with no surfaces gets no per-declaration blocking at all until someone
-reads its components; that is the right way round for a rule at `error`.
+**No surface fails safe — in a registry that records them.** An entry
+without `surface` — or a component the registry does not list — has not been
+read for one, and a blocking finding that promises a prop nobody checked
+exists is the failure above. Its declarations get the plain-element verdict.
+`"properties": {}` is different: it is a verified answer that the component
+owns nothing there (`Stack`, `Field.Root`, every `@wordpress/ui` `*Control`
+root), and it is recorded so that absence keeps meaning "unreviewed".
+
+**A registry that records no surfaces keeps the old reading.** Failing safe
+on every gap is right where someone has read the components and the gaps are
+the ones they have not reached yet. Where nobody has read any — the VIP and
+Archer registries today, a run with no profile, a project's own registry — it
+would switch the per-declaration form off for the whole design system, and a
+class restyling a `Button` would block nowhere. So where no registry a
+component could come from records a single surface, an appearance property on
+a class bound to it blocks as it did before surfaces existed, with the remedy
+it had then: `<Button> ← background — restyle via its props/tokens, not CSS`.
+`code` is `<Button> ← background` either way, so a baseline taken under one
+reading matches under the other.
+
+The cost of the old reading is the one #13 was filed about — converting a raw
+element to a component turns its advisory CSS into blocking findings — so
+`system/raw-element` names those declarations before the conversion; see
+[below](#what-the-conversion-would-promote-is-said-before-it).
+
+"The registry" is decided per component, because several profiles can be
+active and only some of them record surfaces. The component's own entry
+decides (a part goes by its namespace's entry), so a project overriding one
+WPDS entry with its own surface-less copy gets the old reading for that
+component alone. A component no registry lists goes by the other entries from
+its package; one from a package nobody lists, or bound where the channel
+cannot say the package, goes by whether anything in the run records surfaces.
+The flag is the loader's (`surfaced` on each entry it loads), set when any
+entry in the same file carries a surface that reads; a malformed surface is
+not a recorded one, and a file cannot claim the flag for itself.
 
 **A surface describes one element.** It is what the component styles where its
 `className` lands — for most `@wordpress/components` controls that is
@@ -176,6 +202,35 @@ it names. Forwarding hid the drift rather than preventing it: `h1`–`h6` →
 trunk is the other half.
 
 The variant is left to `--judge`; see [judge.md](judge.md#which-variant).
+
+### What the conversion would promote is said before it
+
+The element's classes come along to the component, and a declaration that was
+advisory on a plain element can block on a component — where the surface owns
+the property, or anywhere at all where the registry records no surfaces. #13's
+plugin found that out by converting: 41 new blockers in one session, each one
+taking the tool's own advice. So the finding says it first:
+
+```
+<h4> → <Text render={ <h4 /> }> (@wordpress/ui) — converted, would block: font-size (.acme-title)
+```
+
+It is read off the classifier the stylesheet walk already ran: every
+declaration in a rule whose *key* selector names one of the element's classes
+is classified again with the analog bound beside whatever the rule's classes
+are bound to already, and only a change of severity is named — grouped by
+where it would land (`would block`, `would warn`, `would clear`), up to four
+properties and two classes, the rest counted. A rule the whole-rule
+library-internal form reports is skipped; it reports the same either way. The
+analog is the one the message names, keyed to the registry by the package of
+its single `recommended` entry; one forwarded to a `supersededBy` replacement,
+or a `A / B` choice, names no one component and gets no tail.
+
+It rides in the message rather than `note`, because the report's one line
+spares a note only its last clause, and the reachability note (`bundling
+required: …`) is appended after it — the two are the two costs of the same
+conversion, and both have to survive. `code` stays `<h4>`, so a baseline
+recorded before the tail matches after it.
 
 ## `system/inline-style`
 
@@ -368,8 +423,27 @@ kinds, each a bounded, literal read of the files its globs name, none a parser:
 ```jsonc
 { "kind": "enqueue-dependency", "files": ["**/*.php"],
   "calls": ["wp_enqueue_style", "wp_register_style"], "enqueues": ["wp_enqueue_style"],
-  "argument": 2, "handles": ["wp-theme", "wp-components", …] }
+  "argument": 2, "handles": ["wp-theme"] }
 ```
+
+**Only the handle itself counts.** `wp-components`, `wp-block-editor`,
+`wp-edit-blocks` and `wp-commands` depend on `wp-theme` in WordPress 7.1 and
+with the Gutenberg plugin active, and not on 6.9 or 7.0 without it — where they
+load, and the tokens do not. A plugin whose CSS reaches its tokens through one
+of them works on the developer's site and drops every declaration on an older
+customer's, so WPDS counts `wp-theme` named directly, in an enqueue or a
+`block.json`, and nothing that only implies it.
+
+**Build-time fallbacks are not delivery.** `@wordpress/build` (and the
+`ds-token-fallbacks` plugins it applies) write the default theme's value into
+every bare `var(--wpds-*)`, so a page without the sheet renders instead of
+dropping — but at the default theme's values, whatever theme the site runs. A
+token that never follows the theme is doing nothing a literal would not. The
+profile declares those builds under `tokens.fallbacks`, checks of the same
+kinds, and finding one changes what the finding says, never whether it
+reports: the note becomes `fallbacks render but won't follow the theme; add
+'wp-theme' to this CSS's enqueue dependencies`, short enough that both
+clauses survive the report line's tail.
 
 The PHP read is the smallest thing that answers the question: comments blanked
 (a commented-out `'wp-theme'` is not a dependency), the call's argument list
@@ -495,7 +569,8 @@ declares it, in `delivery.json` beside its registries:
     "stylesheet": "@wordpress/theme/design-tokens.css",
     "handle": "wp-theme",
     "prefixes": ["--wpds-"],
-    "evidence": [ /* see tokens/undelivered */ ]
+    "evidence": [ /* see tokens/undelivered */ ],
+    "fallbacks": [ /* builds writing fallback values: not delivery */ ]
   }
 }
 ```

@@ -203,9 +203,15 @@ the component owns the property, and the message says what controls it:
   declaration with a suppression whose reason says why the design needs it;
   that override is what a version bump breaks first.
 
-A class setting a property the component does not own is not reported here —
-it gets the same verdict it would on a plain element, usually
-`tokens/hardcoded-value`. For a library
+- `<Button> ← background — restyle via its props/tokens, not CSS` — the
+  registry this component comes from records no styling surfaces at all, so
+  nothing says what it owns and every appearance property on its class
+  reports. Look for the prop or token in the component's docs; where there
+  is none, the same two exits as above.
+
+Where the registry does record surfaces, a class setting a property the
+component does not own is not reported here — it gets the same verdict it
+would on a plain element, usually `tokens/hardcoded-value`. For a library
 internal, there is no supported fix: the selector depends on markup that will
 change without notice. Find the supported API, or accept the default. If you
 must keep it, the suppression reason should say it is a known-fragile coupling.
@@ -229,6 +235,15 @@ leave the computed ones, then suppress with a reason naming what is computed.
 ### `system/raw-element`
 
 The element has a design-system analog and the finding names it. Convert it.
+
+A message ending `— converted, would block: font-size, color (.acme-title)`
+names the declarations on the element's classes that will block once those
+classes sit on the component — because the component owns the property, or
+because its registry records nothing about what it owns. Convert, and in the
+same edit settle each named declaration the way `system/override` and
+`typography/in-css` would ask: move it to the prop, drop it, or keep it with a
+suppression whose reason says why the design needs it. Converting and leaving
+them is trading advisory findings for blocking ones.
 
 An element handed to a text or layout component's substitution prop — `render`,
 `as`, `component` — is not flagged: it names the tag that component emits, so
@@ -336,9 +351,15 @@ its background, not just its colour.
 Fix the delivery, not the tokens: the finding's note names the handle, and
 `loupe explain tokens/undelivered` prints what counts as delivery here and the
 profile's own advice. Usually that is one line — the handle added to the
-dependency array of the enqueue that loads the CSS. Do not paste the token
-definitions into the project's own stylesheet to silence it; that forks the
-design system and stops following its themes.
+dependency array of the enqueue that loads the CSS. Name the handle itself: a
+dependency that only implies it on some host versions does not count. Do not
+paste the token definitions into the project's own stylesheet to silence it;
+that forks the design system and stops following its themes.
+
+A note beginning `fallbacks render but won't follow the theme` means the build
+writes the default theme's values into each `var()`. The page renders, which
+can look like there is nothing to fix, but every token is pinned to one theme;
+the remedy after the semicolon still applies.
 
 It reports only on a positive no: enqueues found, every one read, none
 qualifying. If the CSS genuinely renders only where the host already loads the

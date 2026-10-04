@@ -18,7 +18,7 @@
     "stylesheet": "@wordpress/theme/design-tokens.css",
     "handle": "wp-theme",
     "prefixes": ["--wpds-"],
-    "note": "List 'wp-theme' in the dependency array of the wp_enqueue_style that loads this CSS. WordPress core registers it from 7.1, the Gutenberg plugin before that; on an older core without Gutenberg there is no handle, and the sheet has to be bundled or the build has to write fallbacks.",
+    "note": "List 'wp-theme' in the dependency array of the wp_enqueue_style that loads this CSS. WordPress core registers it from 7.1, the Gutenberg plugin before that; on an older core without Gutenberg there is no handle, and the sheet has to be bundled. Build-time fallbacks keep the declarations from dropping, but render the default theme's values whatever the site's theme is, so they do not count as delivery.",
     "evidence": [
       {
         "kind": "enqueue-dependency",
@@ -26,26 +26,28 @@
         "calls": ["wp_enqueue_style", "wp_register_style"],
         "enqueues": ["wp_enqueue_style"],
         "argument": 2,
-        "handles": ["wp-theme", "wp-components", "wp-block-editor", "wp-edit-blocks", "wp-commands"],
-        "note": "A style depending on `wp-components`, `wp-block-editor`, `wp-edit-blocks` or `wp-commands` gets `wp-theme` through it wherever `wp-theme` exists at all."
+        "handles": ["wp-theme"],
+        "note": "`wp-theme` itself. A style depending on `wp-components`, `wp-block-editor`, `wp-edit-blocks` or `wp-commands` gets it transitively only on WordPress 7.1+ or with the Gutenberg plugin active, so it is not counted: name the handle the CSS needs."
       },
       {
         "kind": "pattern",
         "files": ["**/block.json"],
-        "pattern": "\"wp-(theme|components|block-editor|edit-blocks|commands)\"",
-        "note": "A block's `style`/`editorStyle` naming the handle."
+        "pattern": "\"wp-theme\"",
+        "note": "A block's `style`/`editorStyle` naming `wp-theme` itself."
       },
       {
         "kind": "import",
         "files": ["**/*.{css,scss,sass,less,js,jsx,ts,tsx,mjs,cjs}"],
         "specifiers": ["@wordpress/theme/design-tokens.css", "@wordpress/theme/prebuilt/css/design-tokens.css"],
         "note": "The sheet bundled into the project's own CSS. The @wordpress/theme README advises enqueueing `wp-theme` instead inside WordPress."
-      },
+      }
+    ],
+    "fallbacks": [
       {
         "kind": "pattern",
         "files": ["**/*.config.{js,cjs,mjs,ts}", "**/package.json"],
         "pattern": "ds-token-fallbacks|\"@wordpress/build\"\\s*:",
-        "note": "Generated fallbacks in every var(): the declaration renders the default theme's value instead of dropping."
+        "note": "Generated fallbacks in every var(): the declaration renders the default theme's value instead of dropping, and never the site's theme. Not delivery; the finding says it was found."
       }
     ]
   }

@@ -47,7 +47,7 @@ import { TreeTooLarge, analyzeEntryBudget, byBytes, discover, toPosix } from './
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
-import { surfaceFor } from './components.ts';
+import { surfaceFor, surfacesRecorded } from './components.ts';
 import { boundMessage, oneLine, parseMessageOf, snippet } from './text.ts';
 import {
 	cssFilesUnder,
@@ -84,6 +84,7 @@ import { currency } from './checks/system/currency.ts';
 import { inlineStyle } from './checks/system/inline-style.ts';
 import { libraryOverride, systemOverride } from './checks/system/override.ts';
 import { rawElements } from './checks/system/raw-element.ts';
+import type { ClassDecl } from './checks/system/raw-element.ts';
 import { hardcodedValue } from './checks/tokens/hardcoded-value.ts';
 import { undelivered } from './checks/tokens/undelivered.ts';
 import { unknownTokens as unknownTokenFindings } from './checks/tokens/unknown-token.ts';
@@ -241,7 +242,14 @@ const DECLARATIONS: readonly DeclarationCheck[] = [
  */
 function classifyDeclaration(
 	{ prop, value }: Decl,
-	{ boundSystem = [], boundText = [], isGrid = false, surfaceOf = () => undefined, enabled }: ClassifyContext,
+	{
+		boundSystem = [],
+		boundText = [],
+		isGrid = false,
+		surfaceOf = () => undefined,
+		surfaced = () => true,
+		enabled,
+	}: ClassifyContext,
 ): { finding: ClassifiedFinding | null; styling: boolean } {
 	const styling =
 		isMarginProp(prop) ||
@@ -250,7 +258,7 @@ function classifyDeclaration(
 		TYPE_PROPS.has(prop) ||
 		isHardcodedTokenValue(prop, value) ||
 		APPEARANCE_PROPS.has(prop);
-	const ctx = { boundSystem, boundText, isGrid, surfaceOf, enabled };
+	const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled };
 	// Deliberately unbounded: `message` is part of what the dedupe tells two
 	// findings apart by. The line is bounded once, at the end of `analyze`.
 	for (const check of DECLARATIONS) {
@@ -330,6 +338,8 @@ export async function analyze(
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
 	const surfaceOf = (b: Binding): StylingSurface | undefined =>
 		surfaceFor(config.componentRegistry, b.package, b.component);
+	const recorded = surfacesRecorded(config.componentRegistry);
+	const surfaced = (b: Binding): boolean => recorded(b.package, b.component);
 	// How the active profiles say their packages and tokens reach a page.
 	const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
 	const parseSuppressions = makeSuppressionParser(config.suppression);
@@ -505,6 +515,10 @@ export async function analyze(
 	const styledClasses = new Set<string>(); // classes CSS actually styles — feeds system/raw-element
 	const layoutClasses = new Set<string>(); // classes whose CSS lays something out — feeds the same rule for div/span
 	const declared: DeclaredClass[] = []; // every key class a stylesheet rule declares — feeds css/dead-class
+	// What each class some raw element carries is set to, and the verdict it got
+	// — for `system/raw-element` to say what converting the element would change.
+	const onRaw = new Set(ruleIsLive('system/raw-element') ? rawEls.flatMap((el) => el.classes) : []);
+	const rawClassDecls = new Map<string, ClassDecl[]>();
 
 	// `stylesheet/unparsed`, per stylesheet the discovery pass found:
 	//   the design system's own sheet                     → skipped, not the project's
@@ -601,14 +615,18 @@ export async function analyze(
 			// third-party component's internals, "stop styling this" supersedes
 			// every per-declaration remedy inside it.
 			const pending: PendingFinding[] = [];
+			const onRawKeys = keyClasses.filter((c) => onRaw.has(c));
+			const classDecls: ClassDecl[] = [];
 
 			for (const decl of ownDecls(cssRule)) {
 				const prop = decl.prop.toLowerCase();
 				const line = decl.source?.start?.line ?? ruleLine;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, surfaceOf, enabled: ruleIsLive },
+					{ boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive },
 				);
+				if (onRawKeys.length)
+					classDecls.push({ prop, value: decl.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
 				for (const name of tokenRefsIn(decl.value, tokenPrefixes)) {
@@ -630,6 +648,14 @@ export async function analyze(
 					: null;
 			if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
 			else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
+			// A library internal is reported whole whatever binds it, so converting
+			// the element changes nothing about it.
+			if (!override)
+				for (const c of onRawKeys) {
+					const list = rawClassDecls.get(c) ?? [];
+					list.push(...classDecls);
+					rawClassDecls.set(c, list);
+				}
 
 			const cut = deletableRule(cssRule, srcLines);
 			for (const cls of keyClasses)
@@ -741,6 +767,7 @@ export async function analyze(
 					boundText: onTarget ? boundText : [],
 					isGrid: group.isGrid,
 					surfaceOf,
+					surfaced,
 					enabled: ruleIsLive,
 				});
 				if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
@@ -769,6 +796,25 @@ export async function analyze(
 		styledClasses,
 		layoutClasses,
 		registry: config.componentRegistry,
+		promotion: {
+			decls: rawClassDecls,
+			// The same classifier, with the analog bound alongside whatever the
+			// rule's classes are already bound to.
+			verdictAs: (d, as) =>
+				classifyDeclaration(
+					{ prop: d.prop, value: d.value },
+					{
+						boundSystem: [...d.boundSystem, as],
+						boundText: as.isText ? [...d.boundText, as] : d.boundText,
+						isGrid: d.isGrid,
+						surfaceOf,
+						surfaced,
+						enabled: ruleIsLive,
+					},
+				).finding?.rule ?? null,
+			severityOf: config.severityOf,
+			textComponents: ds.textComponents,
+		},
 	}))
 		report(f);
 	for (const f of compositeFindings({

@@ -127,7 +127,7 @@ export const RULES = {
 		rank: 11,
 		needs: ['components'],
 		title:
-			'overrides styling a design-system component owns \u2014 use the prop the finding names; where it names none there is no prop, so keep the component\u2019s own styling or suppress with the reason the design needs it',
+			'overrides styling a design-system component owns \u2014 use the prop the finding names; where it says there is none, keep the component\u2019s own styling or suppress with the reason the design needs it; where it says restyle via props/tokens, nothing records what the component owns, so find the prop or token in its docs',
 	},
 	'system/inline-style': {
 		severity: 'warn',
