@@ -5,14 +5,42 @@
  * `@wordpress/ui`) can have the same name mean two different things at once —
  * `Button` is stable in one and experimental in the other — so the registry keys
  * on `package::name`, never on name alone.
+ *
+ * An entry may also carry a styling surface: what the component styles itself
+ * and the prop that controls each. That is what lets `system/override` tell a
+ * class fighting a component from a class doing what `className` is for.
  */
 
-import type { ComponentEntry } from './types.ts';
+import { propsOverlap } from './styles.ts';
+import type { ComponentEntry, StylingSurface } from './types.ts';
 
 /** The shape a registry entry has before anything has vouched for it. */
 type MaybeEntry = Partial<ComponentEntry> | null | undefined;
 
 const isEntry = (c: MaybeEntry): c is ComponentEntry => Boolean(c?.name && c?.package && c?.status);
+
+const isControl = (v: unknown): v is string | string[] | null =>
+	v === null ||
+	(typeof v === 'string' && v !== '') ||
+	(Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && x !== ''));
+
+/**
+ * A surface as authored, or `undefined` if it is not one. A malformed surface is
+ * dropped rather than half-read: no surface fails safe, and a surface claiming
+ * ownership nobody wrote down does not.
+ */
+function readSurface(raw: unknown): StylingSurface | undefined {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+	const { properties, verifiedAgainst, note } = raw as Record<string, unknown>;
+	if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return undefined;
+	const entries = Object.entries(properties as Record<string, unknown>);
+	if (!entries.every(([, v]) => isControl(v))) return undefined;
+	return {
+		properties: Object.fromEntries(entries.map(([p, v]) => [p.toLowerCase(), v as string | string[] | null])),
+		...(typeof verifiedAgainst === 'string' ? { verifiedAgainst } : {}),
+		...(typeof note === 'string' ? { note } : {}),
+	};
+}
 
 /** Normalize a registry file or inline array into a `package::name` -> entry map. */
 export function loadComponents(raw: unknown): Map<string, ComponentEntry> {
@@ -22,7 +50,39 @@ export function loadComponents(raw: unknown): Map<string, ComponentEntry> {
 	const map = new Map<string, ComponentEntry>();
 	for (const c of list) {
 		if (!isEntry(c)) continue;
-		map.set(`${c.package}::${c.name}`, c);
+		const { surface, ...rest } = c;
+		const read = surface === undefined ? undefined : readSurface(surface);
+		map.set(`${c.package}::${c.name}`, read ? { ...rest, surface: read } : rest);
 	}
 	return map;
+}
+
+/**
+ * The surface a component's styling is recorded under. A compound part is its
+ * own element, so it has its own entry or none: `Card.Content` does not inherit
+ * what `Card` records. `Card.Root` is the exception — the root part is the
+ * element the namespace's entry describes.
+ */
+export function surfaceFor(
+	registry: ReadonlyMap<string, ComponentEntry>,
+	pkg: string | undefined,
+	name: string | undefined,
+): StylingSurface | undefined {
+	if (!pkg || !name) return undefined;
+	const exact = registry.get(`${pkg}::${name}`);
+	if (exact) return exact.surface;
+	const [root, ...parts] = name.split('.');
+	return parts.length === 1 && parts[0] === 'Root' ? registry.get(`${pkg}::${root}`)?.surface : undefined;
+}
+
+/**
+ * Whether a surface owns `prop`, and through what. `via` names the controlling
+ * props, and is empty where the component sets the property and exposes no
+ * prop for it. `undefined` where the surface does not own it.
+ */
+export function ownership(surface: StylingSurface, prop: string): { owned: string; via: string[] } | undefined {
+	for (const [owned, control] of Object.entries(surface.properties))
+		if (propsOverlap(prop, owned))
+			return { owned, via: control === null ? [] : Array.isArray(control) ? control : [control] };
+	return undefined;
 }

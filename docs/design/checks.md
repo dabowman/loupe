@@ -40,7 +40,8 @@ with a cheaper remedy. See [whole-rule findings](analysis.md#whole-rule-findings
 
 ## `system/override`
 
-Restricted to appearance properties. Layout and box-model props are deliberately
+Restricted to appearance properties, and — per declaration — to the ones the
+component owns; see below. Layout and box-model props are deliberately
 excluded: on a layout primitive that exposes no padding or per-child sizing prop,
 a styling-hook class carrying them is the *intended* usage, not an override, so
 flagging them just manufactures suppressions.
@@ -49,6 +50,78 @@ It supersedes the ordinary verdict on a declaration, so it has to step aside
 when it is off. On a headless library a class on a component is how you are
 meant to style it — and the `background: #fff` still owes its token, so the
 declaration must fall through to `tokens/hardcoded-value` rather than vanish.
+
+### It blocks only where the component owns the property
+
+The rule used to fire on any appearance property on any class bound to a
+component. Its remedy — restyle via the props — was then false most of the
+time: `@wordpress/ui`'s `Text` has one styling prop, `variant`, and no colour,
+letter-spacing or text-transform axis at all, so `<Text> ← color` offered a
+prop that does not exist, and the only exits were a suppression or the
+baseline. Worse, it punished taking the tool's own advice. `<h4
+className="rp-title">` with a colour, a text-transform and a letter-spacing
+was three advisory findings; converting it to `<Text render={ <h4 /> }>`, as
+`system/raw-element` asks, turned the same unchanged CSS into three blocking
+ones. On a real plugin that conversion cost 41 new blockers, none with a prop
+to move to, and the session ended by baselining all of them.
+
+`className` is a public prop on both WPDS and Base UI — the sanctioned
+styling channel, not an override. So a declaration only blocks when the
+component *owns* the property: its own styles set it on the element the class
+lands on, or a prop does. That is what the component registry's `surface`
+records per entry:
+
+```json
+"surface": {
+  "properties": { "font-size": "variant", "border-radius": null, "color": ["variant", "tone"] },
+  "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/text/text.tsx and style.module.css, read 2026-10-02",
+  "note": "where className lands, and anything a reader needs to act on it"
+}
+```
+
+Each listed property maps to the prop (or props) that controls it, or to
+`null` where the component sets it and no prop does. The finding says which:
+`<Text> ← font-size — set via its variant prop`, or `<TextControl> ←
+font-size — it sets this itself and has no prop for it`. The second is still
+blocking — that is the declaration most likely to break on a version bump —
+but it no longer sends anyone to look for a prop; the decision it leaves is
+keep the component's styling, or suppress with the reason the design needs
+otherwise. A property the surface does not list falls through to the verdict
+the declaration would get on a plain element: `tokens/hardcoded-value` or
+`typography/untokenized`, advisory. Shorthands overlap their longhands both
+ways, so a surface owning `border-color` owns what `border: 0` would reset,
+and `font` reaches `font-size`.
+
+**No surface fails safe.** An entry without `surface` — or a component the
+registry does not list — has not been read for one, and a blocking finding
+that promises a prop nobody checked exists is the failure above. Its
+declarations get the plain-element verdict. `"properties": {}` is different:
+it is a verified answer that the component owns nothing there (`Stack`,
+`Field.Root`, every `@wordpress/ui` `*Control` root), and it is recorded so
+that absence keeps meaning "unreviewed". The cost is that a project or a
+profile with no surfaces gets no per-declaration blocking at all until someone
+reads its components; that is the right way round for a rule at `error`.
+
+**A surface describes one element.** It is what the component styles where its
+`className` lands — for most `@wordpress/components` controls that is
+`BaseControl`'s wrapper around label, input and help, not the input, so
+`border` on a `TextControl` class is a border around the whole field and owns
+nothing. A compound part is its own element: `Card.Content` does not inherit
+the surface `Card` records (for `Card.Root`). Reaching past that element into
+the component's internals is the whole-rule form below, which needs no surface.
+
+**`typography/in-css` reads the same surface.** Being a declared text
+component is the claim that it owns its type; a recorded surface narrows the
+claim. `Text` sets family, size, line height and weight through `variant` and
+never sets `letter-spacing`, so a letter-spacing on a `Text` class is
+`typography/untokenized` again. With no surface recorded, a text component's
+type declarations still report as before — `designSystem.components.text` is
+itself a declaration, which `APPEARANCE_PROPS` never was.
+
+The surface lives on the component registry entry, beside currency, rather
+than in the profile: it is a fact about one component in one package, read
+from that package's source, and it carries its own provenance because it is a
+separate reading from the currency one.
 
 **A project prefix wins over a library one** in the whole-rule form.
 `wp-parsely-*` matches the `wp-` external prefix, and reporting a project's own

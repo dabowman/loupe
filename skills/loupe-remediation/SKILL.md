@@ -134,7 +134,9 @@ tokens. CSS Grid is never reported.
 ### `typography/in-css`
 
 The class is on a text component, and that component already has a prop
-carrying the whole type style. Delete the type declarations and use it. If the
+carrying the whole type style — the message names it where the registry
+records one (`font-size on <Text> — set via its variant prop`). Delete the type
+declarations and use it. If the
 finding is on `color` and the styling prop has no colour axis, that is a system
 gap — set colour separately with a foreground token and leave a comment naming
 the missing prop.
@@ -156,11 +158,22 @@ does not clear until every declaration in it does.
 
 ### `system/override`
 
-CSS restyling a design-system component, or reaching into another library's
-internals.
+CSS setting a property a design-system component owns, or reaching into
+another library's internals.
 
-For a component of your own design system, restyle through props, and through
-whatever tokens that component declares as its own contract. For a library
+The per-declaration form fires only where the component registry records that
+the component owns the property, and the message says what controls it:
+
+- `<Text> ← font-size — set via its variant prop` — delete the declaration and
+  use that prop.
+- `<TextControl> ← font-size — it sets this itself and has no prop for it` —
+  there is nothing to move to. Keep the component's own styling, or keep the
+  declaration with a suppression whose reason says why the design needs it;
+  that override is what a version bump breaks first.
+
+A class setting a property the component does not own is not reported here —
+it gets the same verdict it would on a plain element, usually
+`tokens/hardcoded-value`. For a library
 internal, there is no supported fix: the selector depends on markup that will
 change without notice. Find the supported API, or accept the default. If you
 must keep it, the suppression reason should say it is a known-fragile coupling.

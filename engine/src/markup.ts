@@ -581,6 +581,19 @@ export function scanMarkup(
 		}
 	};
 
+	// What keys the component registry: the canonical name and the package the
+	// local came from, with the part a compound element names (`Card.Content`),
+	// since each part is its own element. A name with no recorded package keys
+	// nothing.
+	const registryKey = (
+		local: string,
+		member: string | null = null,
+	): { component: string; package: string } | Record<string, never> => {
+		const pkg = packages.get(local);
+		const name = canonicals.get(local) ?? local;
+		return pkg ? { component: member ? `${name}.${member}` : name, package: pkg } : {};
+	};
+
 	const readTaggedTemplate = (node: TaggedTemplateExpression): void => {
 		if (!tags.any) return;
 		const t = node.tag;
@@ -610,6 +623,7 @@ export function scanMarkup(
 			target,
 			isSystem,
 			isText: isSystem && target !== null && textLike.has(target),
+			...(isSystem && target ? registryKey(target) : {}),
 			groups,
 			error,
 		});
@@ -697,7 +711,8 @@ export function scanMarkup(
 		if (isComponent) {
 			if (!isSystem) return;
 			const isText = textLike.has(root);
-			for (const cls of classes) bindings.push({ cls, tag: root, isSystem: true, isText, file: relPath, line });
+			const key = registryKey(root, member);
+			for (const cls of classes) bindings.push({ cls, tag: root, isSystem: true, isText, ...key, file: relPath, line });
 		} else {
 			// `render={ <h4 /> }` is not markup being rendered — it is the argument
 			// telling a design-system component which tag to emit. Its children are

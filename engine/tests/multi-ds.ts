@@ -544,9 +544,23 @@ await check('the archer profile reaches a project that imports it, and only that
 // covered: it inherits Base UI's parts but not its licence to restyle them.
 // Turning the override rules off — which is what the headless preset does — was
 // the easy wrong answer, and it silently stops reporting real overrides.
+//
+// The per-declaration form also needs the registry to say the component owns
+// what the class sets (its `surface`); the shipped Archer registry records none
+// yet, so this fixture states one for the component it restyles.
 await check('a styled system on a headless library keeps its override rules', async () => {
 	const root = repo({
-		'loupe.config.json': JSON.stringify({ extends: 'archer' }),
+		'loupe.config.json': JSON.stringify({
+			extends: 'archer',
+			componentRegistry: [
+				{
+					name: 'Button',
+					package: '@dabowman/archer',
+					status: 'recommended',
+					surface: { properties: { background: 'variant' } },
+				},
+			],
+		}),
 		'src/A.jsx': `import { Button } from '@dabowman/archer';\nexport const A = () => <Button className="save">Save</Button>;\n`,
 		'styles/a.css': '.save { background: #c24300; }\n',
 	});

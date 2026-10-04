@@ -110,7 +110,8 @@ export const RULES = {
 		severity: 'warn',
 		rank: 11,
 		needs: ['components'],
-		title: 'overrides a design-system component — restyle via its props/tokens, not CSS',
+		title:
+			'overrides styling a design-system component owns \u2014 use the prop the finding names; where it names none there is no prop, so keep the component\u2019s own styling or suppress with the reason the design needs it',
 	},
 	'system/inline-style': {
 		severity: 'warn',

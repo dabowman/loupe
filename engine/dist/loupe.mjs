@@ -23600,7 +23600,7 @@ var RULES = {
     severity: "warn",
     rank: 11,
     needs: ["components"],
-    title: "overrides a design-system component \u2014 restyle via its props/tokens, not CSS"
+    title: "overrides styling a design-system component owns \u2014 use the prop the finding names; where it names none there is no prop, so keep the component\u2019s own styling or suppress with the reason the design needs it"
   },
   "system/inline-style": {
     severity: "warn",
@@ -24151,6 +24151,36 @@ var APPEARANCE_PROPS = /* @__PURE__ */ new Set([
   "filter",
   "backdrop-filter"
 ]);
+var SIDES = ["top", "right", "bottom", "left"];
+var LOGICAL = ["block", "inline", "block-start", "block-end", "inline-start", "inline-end"];
+var BORDER_PARTS = ["width", "style", "color"];
+var LONGHANDS = new Map([
+  ["font", ["font-size", "font-weight", "font-family", "line-height", "font-style", "font-variant", "font-stretch"]],
+  ["background", ["background-color", "background-image"]],
+  ["outline", ["outline-color", "outline-width", "outline-style"]],
+  ["text-decoration", ["text-decoration-color", "text-decoration-line", "text-decoration-style"]],
+  ["border", [...[...SIDES, ...LOGICAL].map((s) => `border-${s}`), ...BORDER_PARTS.map((p) => `border-${p}`)]],
+  ...[...SIDES, ...LOGICAL].map((s) => [
+    `border-${s}`,
+    BORDER_PARTS.map((p) => `border-${s}-${p}`)
+  ]),
+  ...BORDER_PARTS.map((p) => [`border-${p}`, SIDES.map((s) => `border-${s}-${p}`)]),
+  [
+    "border-radius",
+    ["border-top-left-radius", "border-top-right-radius", "border-bottom-left-radius", "border-bottom-right-radius"]
+  ]
+]);
+function withLonghands(prop) {
+  const out = /* @__PURE__ */ new Set([prop]);
+  for (const p of out) for (const l of LONGHANDS.get(p) ?? []) out.add(l);
+  return out;
+}
+function propsOverlap(a, b) {
+  if (a === b) return true;
+  const below = withLonghands(a);
+  for (const p of withLonghands(b)) if (below.has(p)) return true;
+  return false;
+}
 var KEYWORD = /^(inherit|initial|unset|revert|revert-layer|none|auto|transparent|currentcolor|normal)$/i;
 var ZERO = /^0([a-z%]*)$/i;
 var usesToken = (value) => /var\(\s*--/.test(value);
@@ -24481,13 +24511,13 @@ var confirmPair = (el, spec, ctx) => {
   const consent = new RegExp(stringParam(spec, "labels", CONSENT), "i");
   const controls = new RegExp(stringParam(spec, "controls", CONTROLS));
   const inside = ctx.elementsIn(el);
-  const isControl = (c) => {
+  const isControl2 = (c) => {
     const name = ctx.nameOf(c);
     const sys = ctx.canonicalOf(c);
     if (sys) return controls.test(sys) || controls.test(name ?? "");
     return !!name && /^(input|select|textarea)$/.test(name);
   };
-  if (inside.some(isControl)) return null;
+  if (inside.some(isControl2)) return null;
   const labels = inside.filter((c) => ctx.canonicalOf(c) === button).map(ctx.labelOf);
   if (labels.length !== 2 || !labels.every((l) => l !== null && consent.test(l))) return null;
   return `${ctx.canonical} with two consent buttons (${labels.join(" / ")}) and no form control`;
@@ -24850,6 +24880,11 @@ function scanMarkup(text2, relPath, ds, rules = []) {
       if (detail) ruleHits.push({ patternId, rule: spec.rule, line, detail });
     }
   };
+  const registryKey = (local, member = null) => {
+    const pkg = packages.get(local);
+    const name = canonicals.get(local) ?? local;
+    return pkg ? { component: member ? `${name}.${member}` : name, package: pkg } : {};
+  };
   const readTaggedTemplate = (node) => {
     if (!tags.any) return;
     const t = node.tag;
@@ -24878,6 +24913,7 @@ function scanMarkup(text2, relPath, ds, rules = []) {
       target,
       isSystem,
       isText: isSystem && target !== null && textLike.has(target),
+      ...isSystem && target ? registryKey(target) : {},
       groups,
       error
     });
@@ -24944,7 +24980,8 @@ function scanMarkup(text2, relPath, ds, rules = []) {
     if (isComponent) {
       if (!isSystem) return;
       const isText = textLike.has(root2);
-      for (const cls of classes) bindings.push({ cls, tag: root2, isSystem: true, isText, file: relPath, line });
+      const key = registryKey(root2, member);
+      for (const cls of classes) bindings.push({ cls, tag: root2, isSystem: true, isText, ...key, file: relPath, line });
     } else {
       if (substituted.has(node)) return;
       const lower = tag.toLowerCase();
@@ -25018,6 +25055,46 @@ async function syntaxFor(path) {
   }
   cache.set(pkg, resolved);
   return resolved;
+}
+
+// src/components.ts
+var isEntry = (c) => Boolean(c?.name && c?.package && c?.status);
+var isControl = (v) => v === null || typeof v === "string" && v !== "" || Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && x !== "");
+function readSurface(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return void 0;
+  const { properties, verifiedAgainst, note: note2 } = raw;
+  if (!properties || typeof properties !== "object" || Array.isArray(properties)) return void 0;
+  const entries = Object.entries(properties);
+  if (!entries.every(([, v]) => isControl(v))) return void 0;
+  return {
+    properties: Object.fromEntries(entries.map(([p, v]) => [p.toLowerCase(), v])),
+    ...typeof verifiedAgainst === "string" ? { verifiedAgainst } : {},
+    ...typeof note2 === "string" ? { note: note2 } : {}
+  };
+}
+function loadComponents(raw) {
+  const list2 = Array.isArray(raw) ? raw : raw?.components ?? [];
+  const map = /* @__PURE__ */ new Map();
+  for (const c of list2) {
+    if (!isEntry(c)) continue;
+    const { surface, ...rest } = c;
+    const read = surface === void 0 ? void 0 : readSurface(surface);
+    map.set(`${c.package}::${c.name}`, read ? { ...rest, surface: read } : rest);
+  }
+  return map;
+}
+function surfaceFor(registry, pkg, name) {
+  if (!pkg || !name) return void 0;
+  const exact = registry.get(`${pkg}::${name}`);
+  if (exact) return exact.surface;
+  const [root2, ...parts] = name.split(".");
+  return parts.length === 1 && parts[0] === "Root" ? registry.get(`${pkg}::${root2}`)?.surface : void 0;
+}
+function ownership(surface, prop) {
+  for (const [owned, control] of Object.entries(surface.properties))
+    if (propsOverlap(prop, owned))
+      return { owned, via: control === null ? [] : Array.isArray(control) ? control : [control] };
+  return void 0;
 }
 
 // src/tokens.ts
@@ -25459,7 +25536,28 @@ function inlineStyle(el, allowed = /* @__PURE__ */ new Map()) {
 }
 
 // src/checks/system/override.ts
-var systemOverride = ({ prop }, { boundSystem, enabled: enabled2 }) => boundSystem[0] && APPEARANCE_PROPS.has(prop) && enabled2("system/override") ? { rule: "system/override", message: `<${boundSystem[0].tag}> \u2190 ${prop}` } : void 0;
+function owningBinding(bound, prop, surfaceOf) {
+  for (const binding of bound) {
+    const surface = surfaceOf(binding);
+    const owned = surface && ownership(surface, prop);
+    if (owned) return { binding, via: owned.via };
+  }
+  return void 0;
+}
+var viaProps = (via) => via.length === 1 ? `its ${via[0]} prop` : `its ${via.slice(0, -1).join(", ")} and ${via.at(-1)} props`;
+var systemOverride = ({ prop }, { boundSystem, enabled: enabled2, surfaceOf }) => {
+  if (!boundSystem[0] || !APPEARANCE_PROPS.has(prop) || !enabled2("system/override")) return void 0;
+  const owner = owningBinding(boundSystem, prop, surfaceOf);
+  if (!owner) return void 0;
+  const head2 = `<${owner.binding.tag}> \u2190 ${prop}`;
+  return {
+    rule: "system/override",
+    message: owner.via.length ? `${head2} \u2014 set via ${viaProps(owner.via)}` : `${head2} \u2014 it sets this itself and has no prop for it`,
+    // Identity is the component and the property, as it was before the
+    // message said why: a baseline entry must survive the explanation.
+    code: head2
+  };
+};
 function libraryOverride(keyClasses, isLibrary, isProject) {
   const part = keyClasses.find((c) => isLibrary(c) && !isProject(c));
   return part ? { rule: "system/override", message: `.${part} (library internal)` } : null;
@@ -25570,7 +25668,15 @@ function unknownTokens(refs, known) {
 }
 
 // src/checks/typography/in-css.ts
-var typographyInCss = ({ prop }, { boundText, enabled: enabled2 }) => TYPE_PROPS.has(prop) && boundText[0] && enabled2("typography/in-css") ? { rule: "typography/in-css", message: `${prop} on <${boundText[0].tag}>` } : void 0;
+var typographyInCss = ({ prop }, { boundText, enabled: enabled2, surfaceOf }) => {
+  const text2 = boundText[0];
+  if (!TYPE_PROPS.has(prop) || !text2 || !enabled2("typography/in-css")) return void 0;
+  const surface = surfaceOf(text2);
+  const owned = surface ? ownership(surface, prop) : void 0;
+  if (surface && !owned) return void 0;
+  const head2 = `${prop} on <${text2.tag}>`;
+  return owned?.via.length ? { rule: "typography/in-css", message: `${head2} \u2014 set via ${viaProps(owned.via)}`, code: head2 } : { rule: "typography/in-css", message: head2 };
+};
 
 // src/checks/typography/untokenized.ts
 var untokenizedType = ({ prop, value }) => {
@@ -25637,9 +25743,9 @@ var DECLARATIONS = [
   layoutInCss,
   hardcodedValue
 ];
-function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, enabled: enabled2 }) {
+function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, surfaceOf = () => void 0, enabled: enabled2 }) {
   const styling = isMarginProp(prop) || isFlexDecl(prop, value) || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || isHardcodedTokenValue(prop, value) || APPEARANCE_PROPS.has(prop);
-  const ctx = { boundSystem, boundText, isGrid, enabled: enabled2 };
+  const ctx = { boundSystem, boundText, isGrid, surfaceOf, enabled: enabled2 };
   for (const check of DECLARATIONS) {
     const verdict = check({ prop, value }, ctx);
     if (verdict !== void 0) return { finding: verdict, styling };
@@ -25690,6 +25796,7 @@ async function analyze(config, {
 } = {}) {
   const ds = config.designSystem;
   const ruleIsLive = (rule2) => config.enabled[rule2];
+  const surfaceOf = (b) => surfaceFor(config.componentRegistry, b.package, b.component);
   const parseSuppressions = makeSuppressionParser(config.suppression);
   const limit = analyzeEntryBudget();
   const files = discover({ root: config.root, sources: config.sources, limit });
@@ -25857,7 +25964,7 @@ async function analyze(config, {
         const line = decl2.source?.start?.line ?? ruleLine;
         const { finding, styling } = classifyDeclaration(
           { prop, value: decl2.value },
-          { boundSystem, boundText, isGrid, enabled: ruleIsLive }
+          { boundSystem, boundText, isGrid, surfaceOf, enabled: ruleIsLive }
         );
         if (styling) touchesStyle = true;
         if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
@@ -25921,8 +26028,12 @@ async function analyze(config, {
       diagnostics.parseErrors.push({ file: tpl.file, message: `css-in-js at line ${tpl.line}: ${tpl.error}` });
       continue;
     }
-    const boundSystem = tpl.isSystem ? [{ tag: tpl.target, isSystem: true }] : [];
-    const boundText = tpl.isText ? [{ tag: tpl.target, isSystem: true, isText: true }] : [];
+    const key = {
+      ...tpl.component ? { component: tpl.component } : {},
+      ...tpl.package ? { package: tpl.package } : {}
+    };
+    const boundSystem = tpl.isSystem ? [{ tag: tpl.target, isSystem: true, ...key }] : [];
+    const boundText = tpl.isText ? [{ tag: tpl.target, isSystem: true, isText: true, ...key }] : [];
     for (const group of tpl.groups) {
       const onTarget = group.onTarget;
       const pending = [];
@@ -25934,6 +26045,7 @@ async function analyze(config, {
           boundSystem: onTarget ? boundSystem : [],
           boundText: onTarget ? boundText : [],
           isGrid: group.isGrid,
+          surfaceOf,
           enabled: ruleIsLive
         });
         if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
@@ -28252,18 +28364,6 @@ function registryApplies(raw, dsPackages) {
   const declared = declaredPackages(raw);
   if (!declared.length) return true;
   return (dsPackages ?? []).some((p) => declared.includes(p));
-}
-
-// src/components.ts
-var isEntry = (c) => Boolean(c?.name && c?.package && c?.status);
-function loadComponents(raw) {
-  const list2 = Array.isArray(raw) ? raw : raw?.components ?? [];
-  const map = /* @__PURE__ */ new Map();
-  for (const c of list2) {
-    if (!isEntry(c)) continue;
-    map.set(`${c.package}::${c.name}`, c);
-  }
-  return map;
 }
 
 // src/config.ts

@@ -5,13 +5,40 @@
     "@wordpress/dataviews"
   ],
   "version": 1,
-  "verifiedAgainst": "WordPress/gutenberg trunk, from each component's own Storybook `componentStatus` metadata, 2026-08-25. `dropIn` is a separate, later check: trunk at 037f7ed (2026-09-19), reading both implementations' prop types and styles for the eight same-name `@wordpress/components` -> `@wordpress/ui` moves (Text, Card, Icon, Spinner, Tooltip, VisuallyHidden, TextareaControl, InputControl). None of the eight qualified, so no entry carries the field.",
-  "note": "Component currency, not props. `status` says whether a component is the current best-practice choice: `recommended` (use it), `legacy` (works, but a recommended replacement now covers the job -- see `supersededBy`), `locked` (a private API Gutenberg explicitly does not recommend outside core -- can break without notice on any update), `experimental` (real, documented, but WordPress's own Storybook metadata (`componentStatus.status: 'use-with-caution'`) flags it not-yet-safe to mix with @wordpress/components -- true of almost every real WP admin codebase today, so treat as informational, not a migration target, until that gate lifts). Two components can share a name across packages with different status -- `Button` in `@wordpress/components` is `recommended` today while the newer `Button` in `@wordpress/ui` is `experimental`; check `package` too. This file is the canonical answer to 'is this the current best practice' -- the design-system MCP is for prop/usage detail on a component you've already chosen, and does not carry this maturity signal at all (it presents `experimental`-status components with the same confidence as `recommended` ones, and is itself measurably behind trunk for several @wordpress/ui additions: Dialog, AlertDialog, Drawer, IconButton, LinkButton, and the current Menu all return nothing from `get_component_details`). Re-verify against trunk (`packages/ui/src/*/stories/index.story.tsx` -> `parameters.componentStatus`) before bumping this file's version -- do not guess a status. `dropIn` is a much narrower claim than `status`: that moving the import changes the specifier and nothing else. A matching name is not evidence for it -- see docs/design/checks.md#a-same-name-move-is-not-a-drop-in-move.",
+  "verifiedAgainst": "WordPress/gutenberg trunk, from each component's own Storybook `componentStatus` metadata, 2026-08-25. `dropIn` is a separate, later check: trunk at 037f7ed (2026-09-19), reading both implementations' prop types and styles for the eight same-name `@wordpress/components` -> `@wordpress/ui` moves (Text, Card, Icon, Spinner, Tooltip, VisuallyHidden, TextareaControl, InputControl). None of the eight qualified, so no entry carries the field. `surface` is a third, separate reading, and each one names its own source: the published @wordpress/components 41.0.0 and @wordpress/ui 0.23.0 packages, read 2026-10-02, where the three @wordpress/ui control entries added then (CheckboxControl, RadioGroupControl, SwitchControl) were also taken.",
+  "note": "Component currency, not props -- plus, where an entry carries `surface`, what the component styles itself on the element its `className` reaches, and the prop that controls each property (`null`: it sets it and no prop does). `system/override` blocks only on a property a surface lists; an entry with no `surface` has not been read for one, so a class on it is treated like a class on a plain element. `\"properties\": {}` is a verified answer -- it owns nothing there -- not a missing one. `status` says whether a component is the current best-practice choice: `recommended` (use it), `legacy` (works, but a recommended replacement now covers the job -- see `supersededBy`), `locked` (a private API Gutenberg explicitly does not recommend outside core -- can break without notice on any update), `experimental` (real, documented, but WordPress's own Storybook metadata (`componentStatus.status: 'use-with-caution'`) flags it not-yet-safe to mix with @wordpress/components -- true of almost every real WP admin codebase today, so treat as informational, not a migration target, until that gate lifts). Two components can share a name across packages with different status -- `Button` in `@wordpress/components` is `recommended` today while the newer `Button` in `@wordpress/ui` is `experimental`; check `package` too. This file is the canonical answer to 'is this the current best practice' -- the design-system MCP is for prop/usage detail on a component you've already chosen, and does not carry this maturity signal at all (it presents `experimental`-status components with the same confidence as `recommended` ones, and is itself measurably behind trunk for several @wordpress/ui additions: Dialog, AlertDialog, Drawer, IconButton, LinkButton, and the current Menu all return nothing from `get_component_details`). Re-verify against trunk (`packages/ui/src/*/stories/index.story.tsx` -> `parameters.componentStatus`) before bumping this file's version -- do not guess a status. `dropIn` is a much narrower claim than `status`: that moving the import changes the specifier and nothing else. A matching name is not evidence for it -- see docs/design/checks.md#a-same-name-move-is-not-a-drop-in-move.",
+  "scope": {
+    "covers": [
+      "layout primitives",
+      "typography",
+      "surfaces and structure (Card, Panel, ItemGroup, EmptyState, Skeleton, Spinner, Badge, Icon)",
+      "actions (Button, IconButton, LinkButton)",
+      "overlays (Modal, Dialog, Popover, Drawer, Tooltip, Dropdown)",
+      "navigation and menus (Tabs, Menu, Navigator, Composite)",
+      "feedback (Notice)",
+      "form controls -- the *Control family, its @wordpress/ui primitives, Field and Fieldset, color and font-size pickers, FormTokenField, FormFileUpload, Calendar",
+      "data views (DataViews)"
+    ],
+    "notCovered": [
+      "toolbars (Toolbar, ToolbarButton, ToolbarGroup, ToolbarItem, ToolbarDropdownMenu)",
+      "snackbars and notice lists (Snackbar, SnackbarList, NoticeList)",
+      "@wordpress/components' date, time and geometry pickers (DatePicker, DateTimePicker, TimePicker, AnglePickerControl, AlignmentMatrixControl, FocalPointPicker, BorderControl, BorderBoxControl, Duotone*, CustomGradientPicker)",
+      "compound parts listed only through their root (CardBody, CardHeader, PanelBody, PanelRow, NavigatorScreen, ToolsPanelItem, ToggleGroupControlOption)",
+      "Guide, Placeholder, TreeGrid, TreeSelect, QueryControls, Tip, ResizableBox",
+      "utilities that render no UI of their own (SlotFill, Animate, Draggable, DropZone, KeyboardShortcuts, SVG primitives)"
+    ],
+    "absent": "Absence means unreviewed, never fine -- in a covered family as much as an uncovered one. A component this file does not list gets no currency verdict, and one listed without `surface` gets no blocking override verdict; neither is an endorsement. Known and deliberately unrecorded: @wordpress/ui 0.23.0's SelectControl (Storybook `recommended`), whose @wordpress/components namesake and BaseControl now read `not-recommended` upstream -- recording that moves the elementMap's `select` target and the `choose.select` pattern, so it is a decision, not a data entry. The same reading has @wordpress/ui's Select primitive at `recommended`, where this file still says `experimental`."
+  },
   "components": [
     {
       "name": "Stack",
       "package": "@wordpress/ui",
-      "status": "recommended"
+      "status": "recommended",
+      "surface": {
+        "properties": {},
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/stack/stack.tsx and style.module.css, read 2026-10-02",
+        "note": "Sets `display: flex` and nothing else; direction, gap, alignment and wrapping are layout props, not appearance."
+      }
     },
     {
       "name": "HStack",
@@ -77,6 +104,16 @@
         "body-lg": "Emphasised intro paragraph. 15px, regular.",
         "body-md": "Default body text: paragraphs, labels, values. 13px, regular.",
         "body-sm": "Secondary text: help text, descriptions, captions, metadata, muted notes. 12px, regular."
+      },
+      "surface": {
+        "properties": {
+          "font-family": "variant",
+          "font-size": "variant",
+          "line-height": "variant",
+          "font-weight": "variant"
+        },
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/text/text.tsx, style.module.css and src/utils/css/global-css-defense.module.css, read 2026-10-02",
+        "note": "`className` lands on the rendered element. `variant` is the only styling prop. Colour, letter-spacing and text-transform are set by no prop -- only `heading-sm` also sets `text-transform: uppercase` -- so a class setting them is the sanctioned channel. Rendered as h1-h6, an unlayered defense rule (`:is(h1, ..., h6).heading`, specificity 0,1,1) sets `color`, so a one-class colour rule loses to it there; the preset sanctions colour through `style` instead."
       }
     },
     {
@@ -84,13 +121,40 @@
       "package": "@wordpress/components",
       "status": "legacy",
       "supersededBy": "Text (@wordpress/ui)",
-      "note": "Not a specifier swap: @wordpress/ui's Text has only `variant` -- no size/weight/color/align/truncate -- and its `variant` names a typographic scale (`body-md`, `heading-lg`) where the old one's only value was `muted`."
+      "note": "Not a specifier swap: @wordpress/ui's Text has only `variant` -- no size/weight/color/align/truncate -- and its `variant` names a typographic scale (`body-md`, `heading-lg`) where the old one's only value was `muted`.",
+      "surface": {
+        "properties": {
+          "color": "color",
+          "font-size": "size",
+          "font-weight": "weight",
+          "line-height": "lineHeight",
+          "letter-spacing": "letterSpacing",
+          "text-transform": "upperCase"
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/text/hook.ts, styles.ts and types.ts, read 2026-10-02",
+        "note": "Emotion styles built from props. None of them survives the move to @wordpress/ui's Text, whose only styling prop is `variant`."
+      }
     },
     {
       "name": "Heading",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "Text (@wordpress/ui) with variant=\"heading-*\" and render for the semantic element"
+      "supersededBy": "Text (@wordpress/ui) with variant=\"heading-*\" and render for the semantic element",
+      "surface": {
+        "properties": {
+          "color": "color",
+          "font-size": [
+            "level",
+            "size"
+          ],
+          "font-weight": "weight",
+          "line-height": "lineHeight",
+          "letter-spacing": "letterSpacing",
+          "text-transform": "upperCase"
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/heading/hook.ts and types.ts, over src/text/hook.ts, read 2026-10-02",
+        "note": "Text with a heading level: every Text styling prop passes through."
+      }
     },
     {
       "name": "Truncate",
@@ -101,7 +165,17 @@
     {
       "name": "Card",
       "package": "@wordpress/ui",
-      "status": "recommended"
+      "status": "recommended",
+      "surface": {
+        "properties": {
+          "border": null,
+          "border-radius": null,
+          "background-color": null,
+          "color": null
+        },
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/card/root.tsx and style.module.css, read 2026-10-02",
+        "note": "Recorded for Card.Root, where `className` lands; no prop restyles it. Card.Header, Card.Content, Card.Title and Card.FullBleed have no surface recorded."
+      }
     },
     {
       "name": "Card",
@@ -162,7 +236,21 @@
     {
       "name": "Badge",
       "package": "@wordpress/ui",
-      "status": "recommended"
+      "status": "recommended",
+      "surface": {
+        "properties": {
+          "background-color": "intent",
+          "color": "intent",
+          "border": "intent",
+          "border-radius": null,
+          "font-family": null,
+          "font-size": null,
+          "line-height": null,
+          "font-weight": null
+        },
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/badge/badge.tsx and style.module.css, read 2026-10-02",
+        "note": "Renders Text with `variant=\"body-sm\"` fixed after the caller's props, so its type is owned and not reachable through any prop."
+      }
     },
     {
       "name": "Badge",
@@ -198,7 +286,18 @@
     {
       "name": "Link",
       "package": "@wordpress/ui",
-      "status": "recommended"
+      "status": "recommended",
+      "surface": {
+        "properties": {
+          "color": [
+            "tone",
+            "variant"
+          ],
+          "text-decoration": "variant"
+        },
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/link/link.tsx, types.ts and style.module.css, read 2026-10-02",
+        "note": "`variant=\"unstyled\"` drops the link styling entirely (colour inherits, no underline) -- the sanctioned start for a link styled from scratch."
+      }
     },
     {
       "name": "EmptyState",
@@ -229,7 +328,12 @@
       "name": "Field",
       "package": "@wordpress/ui",
       "status": "recommended",
-      "note": "A low-level form primitive. Check for a higher-level *Control component (in either package) or DataForm first -- most UI should not need Field directly."
+      "note": "A low-level form primitive. Check for a higher-level *Control component (in either package) or DataForm first -- most UI should not need Field directly.",
+      "surface": {
+        "properties": {},
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/form/primitives/field/root.tsx, read 2026-10-02",
+        "note": "Recorded for Field.Root, a column Stack that sets no appearance property. Field.Label, Field.Description and Field.Details have no surface recorded."
+      }
     },
     {
       "name": "Fieldset",
@@ -241,13 +345,55 @@
       "name": "Button",
       "package": "@wordpress/components",
       "status": "recommended",
-      "note": "Still the safe, stable choice. @wordpress/ui's Button exists but is experimental (see below) -- not a migration target yet."
+      "note": "Still the safe, stable choice. @wordpress/ui's Button exists but is experimental (see below) -- not a migration target yet.",
+      "surface": {
+        "properties": {
+          "background": "variant",
+          "color": [
+            "variant",
+            "isDestructive"
+          ],
+          "border": "variant",
+          "text-decoration": "variant",
+          "font-size": "size",
+          "font-weight": "variant",
+          "border-radius": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/button/index.tsx, types.ts and style.scss, read 2026-10-02",
+        "note": "`className` lands on the button element. `size` changes the font size only at `small`; otherwise it sets height and padding."
+      }
     },
     {
       "name": "Button",
       "package": "@wordpress/ui",
       "status": "experimental",
-      "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components, pending style-consistency and text-overflow review (gutenberg#76135)."
+      "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components, pending style-consistency and text-overflow review (gutenberg#76135).",
+      "surface": {
+        "properties": {
+          "background-color": [
+            "variant",
+            "tone"
+          ],
+          "color": [
+            "variant",
+            "tone"
+          ],
+          "border-color": [
+            "variant",
+            "tone"
+          ],
+          "border-width": null,
+          "border-style": null,
+          "border-radius": null,
+          "font-family": null,
+          "font-size": null,
+          "font-weight": null,
+          "line-height": null,
+          "text-decoration": null
+        },
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/button/button.tsx and style.module.css, read 2026-10-02",
+        "note": "`size` sets height and padding only. `variant=\"unstyled\"` drops the button styling entirely -- the sanctioned start for a button styled from scratch."
+      }
     },
     {
       "name": "IconButton",
@@ -361,41 +507,98 @@
       "name": "RangeControl",
       "package": "@wordpress/components",
       "status": "recommended",
-      "note": "Will be superseded by SliderControl in @wordpress/ui, which is not shipped yet. Pair with UnitControl when the value is a CSS length."
+      "note": "Will be superseded by SliderControl in @wordpress/ui, which is not shipped yet. Pair with UnitControl when the value is a CSS length.",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/range-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "`className` lands on BaseControl's wrapper around the label, the control and the help text. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "SearchControl",
       "package": "@wordpress/components",
       "status": "recommended",
-      "note": "Will be superseded by the @wordpress/ui version, which is not ready yet."
+      "note": "Will be superseded by the @wordpress/ui version, which is not ready yet.",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/search-control/index.tsx, src/input-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "Renders InputControl, so `className` lands on the same BaseControl wrapper. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "SelectControl",
       "package": "@wordpress/components",
       "status": "recommended",
-      "note": "Correct for a long or open-ended list. For two to five options that fit on one row, ToggleGroupControl; for a visual choice, a preview grid or a value-preview row."
+      "note": "Correct for a long or open-ended list. For two to five options that fit on one row, ToggleGroupControl; for a visual choice, a preview grid or a value-preview row.",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/select-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "`className` lands on BaseControl's wrapper around the label, the control and the help text. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "ToggleControl",
       "package": "@wordpress/components",
-      "status": "recommended"
+      "status": "recommended",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/toggle-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "`className` lands on BaseControl's wrapper around the label, the control and the help text. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "CheckboxControl",
       "package": "@wordpress/components",
-      "status": "recommended"
+      "status": "recommended",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/checkbox-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "`className` lands on BaseControl's wrapper around the label, the control and the help text. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "RadioControl",
       "package": "@wordpress/components",
       "status": "recommended",
-      "note": "For a set that fits on one row, ToggleGroupControl reads better and costs less space."
+      "note": "For a set that fits on one row, ToggleGroupControl reads better and costs less space.",
+      "surface": {
+        "properties": {
+          "border": null,
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/radio-control/index.tsx and style.scss, read 2026-10-02",
+        "note": "`className` lands on the fieldset, which resets its border to 0 and sets the body font and size. The radios and labels are internals, styled on their own `.components-radio-control__*` classes."
+      }
     },
     {
       "name": "BaseControl",
       "package": "@wordpress/components",
       "status": "recommended",
-      "note": "Label, help text and id wiring for a composite control you are building out of more than one input."
+      "note": "Label, help text and id wiring for a composite control you are building out of more than one input.",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/base-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "`className` lands on BaseControl's wrapper around the label, the control and the help text. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "FontSizePicker",
@@ -432,7 +635,15 @@
       "name": "ComboboxControl",
       "package": "@wordpress/components",
       "status": "recommended",
-      "note": "Will be superseded by SearchableSelectControl in @wordpress/ui, which is not shipped yet."
+      "note": "Will be superseded by SearchableSelectControl in @wordpress/ui, which is not shipped yet.",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/combobox-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "`className` lands on BaseControl's wrapper around the label, the control and the help text. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "CustomSelectControl",
@@ -475,14 +686,30 @@
       "name": "TextControl",
       "package": "@wordpress/components",
       "status": "legacy",
-      "supersededBy": "InputControl (@wordpress/ui)"
+      "supersededBy": "InputControl (@wordpress/ui)",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/text-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "`className` lands on BaseControl's wrapper around the label, the control and the help text. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "TextareaControl",
       "package": "@wordpress/components",
       "status": "legacy",
       "supersededBy": "TextareaControl (@wordpress/ui)",
-      "note": "Not a specifier swap: @wordpress/ui's TextareaControl requires `label`, renames `help` to `description`, takes the event rather than the value in `onChange`, and no longer defaults `rows` to 4."
+      "note": "Not a specifier swap: @wordpress/ui's TextareaControl requires `label`, renames `help` to `description`, takes the event rather than the value in `onChange`, and no longer defaults `rows` to 4.",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/textarea-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "`className` lands on BaseControl's wrapper around the label, the control and the help text. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "NumberControl",
@@ -495,7 +722,15 @@
       "package": "@wordpress/components",
       "status": "legacy",
       "supersededBy": "InputControl (@wordpress/ui)",
-      "note": "Not a specifier swap: @wordpress/ui's InputControl requires `label`, takes the event rather than the value in `onChange`, and drops `labelPosition`, `size`, `prefix`, `suffix`, `isPressEnterToChange` and the drag props."
+      "note": "Not a specifier swap: @wordpress/ui's InputControl requires `label`, takes the event rather than the value in `onChange`, and drops `labelPosition`, `size`, `prefix`, `suffix`, `isPressEnterToChange` and the drag props.",
+      "surface": {
+        "properties": {
+          "font-family": null,
+          "font-size": null
+        },
+        "verifiedAgainst": "@wordpress/components 41.0.0 (npm), src/input-control/index.tsx and src/base-control/styles/style.module.scss, read 2026-10-02",
+        "note": "`className` lands on BaseControl's wrapper around the label, the control and the help text. The wrapper sets the body font and a 13px size and nothing else, and the label, the help and the control each set their own type, so a font-size here reaches none of them. Everything else on a class here is styling the box you were handed. The control's own border, radius, background and colour are on its `.components-*` internal class -- CSS reaching that is the library-internal form of system/override, not a class on the component."
+      }
     },
     {
       "name": "BoxControl",
@@ -574,23 +809,63 @@
       "name": "InputControl",
       "package": "@wordpress/ui",
       "status": "recommended",
-      "note": "The current text input. Label, description and validation come with it."
+      "note": "The current text input. Label, description and validation come with it.",
+      "surface": {
+        "properties": {},
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/form/input-control and src/form/primitives/field/root.tsx, read 2026-10-02",
+        "note": "`className` lands on Field.Root, a Stack around the label, the control and the description, which sets no appearance property. The bordered field is the inner Input, which takes no class of its own here."
+      }
     },
     {
       "name": "Input",
       "package": "@wordpress/ui",
       "status": "recommended",
-      "note": "The bare input for a control you are composing yourself; InputControl is the one to reach for first."
+      "note": "The bare input for a control you are composing yourself; InputControl is the one to reach for first.",
+      "surface": {
+        "properties": {
+          "background-color": null,
+          "border-width": null,
+          "border-style": null,
+          "border-color": null,
+          "border-radius": null,
+          "font-family": null,
+          "font-size": null,
+          "line-height": null,
+          "color": null
+        },
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/form/primitives/input/input.tsx and src/form/primitives/input-layout/style.module.css, read 2026-10-02",
+        "note": "`className` lands on InputLayout, the bordered box around the input and its prefix and suffix. `size` sets height and padding only; InputLayout's borderless mode is not reachable through Input."
+      }
     },
     {
       "name": "TextareaControl",
       "package": "@wordpress/ui",
-      "status": "recommended"
+      "status": "recommended",
+      "surface": {
+        "properties": {},
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/form/textarea-control and src/form/primitives/field/root.tsx, read 2026-10-02",
+        "note": "`className` lands on Field.Root, a Stack around the label, the control and the description, which sets no appearance property. The bordered field is the inner Input, which takes no class of its own here."
+      }
     },
     {
       "name": "Textarea",
       "package": "@wordpress/ui",
-      "status": "recommended"
+      "status": "recommended",
+      "surface": {
+        "properties": {
+          "background-color": null,
+          "border-width": null,
+          "border-style": null,
+          "border-color": null,
+          "border-radius": null,
+          "font-family": null,
+          "font-size": null,
+          "line-height": null,
+          "color": null
+        },
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/form/primitives/textarea/textarea.tsx and style.module.css, src/form/primitives/input-layout/style.module.css, read 2026-10-02",
+        "note": "Renders Input around the textarea, so `className` lands on the same InputLayout box, with its own line-height."
+      }
     },
     {
       "name": "InputLayout",
@@ -640,6 +915,39 @@
       "package": "@wordpress/ui",
       "status": "experimental",
       "note": "Real and documented, but Storybook flags it use-with-caution: not yet recommended alongside @wordpress/components (gutenberg#76135)."
+    },
+    {
+      "name": "CheckboxControl",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Its story sets no componentStatus, its Checkbox primitive is use-with-caution, and @wordpress/components' own CheckboxControl story says to keep using that one for now.",
+      "surface": {
+        "properties": {},
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/form/checkbox-control and src/form/primitives/field/root.tsx, read 2026-10-02",
+        "note": "`className` lands on Field.Root, a Stack around the label, the control and the description, which sets no appearance property. The bordered field is the inner Input, which takes no class of its own here. Its root rule sets only the custom properties that size the control and line up its label."
+      }
+    },
+    {
+      "name": "RadioGroupControl",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Its story sets no componentStatus, its RadioGroup and Radio primitives are use-with-caution, and @wordpress/components' RadioControl story says to keep using that one for now.",
+      "surface": {
+        "properties": {},
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/form/radio-group-control and src/form/primitives/field/root.tsx, read 2026-10-02",
+        "note": "`className` lands on Field.Root, a Stack around the label, the control and the description, which sets no appearance property. The bordered field is the inner Input, which takes no class of its own here. Its root rule sets only the custom properties that size the control and line up its label."
+      }
+    },
+    {
+      "name": "SwitchControl",
+      "package": "@wordpress/ui",
+      "status": "experimental",
+      "note": "Storybook flags it use-with-caution. @wordpress/components' ToggleControl is the current choice.",
+      "surface": {
+        "properties": {},
+        "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/form/switch-control and src/form/primitives/field/root.tsx, read 2026-10-02",
+        "note": "`className` lands on Field.Root, a Stack around the label, the control and the description, which sets no appearance property. The bordered field is the inner Input, which takes no class of its own here. Its root rule sets only the custom properties that size the control and line up its label."
+      }
     },
     {
       "name": "ControlWithError",

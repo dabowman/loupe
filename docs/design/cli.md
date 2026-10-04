@@ -549,6 +549,17 @@ findings. Each source is reported with what it actually contributed, not just it
 label, or a forced registry whose every id collided with the project's own reads
 as fine because some *other* source filled the same list.
 
+**A component registry says what it covers.** The file's `scope` lists the
+component families it was read against (`covers`), the ones it was not
+(`notCovered`), and what absence means (`absent`): unreviewed, never fine.
+Without it a reader cannot tell a component nobody looked at from one judged
+unremarkable, and since a registry entry is what turns a `system/override` from
+advisory into blocking — through its `surface`, see
+[checks.md](checks.md#it-blocks-only-where-the-component-owns-the-property) —
+that difference is load-bearing. The merge is per entry, `package::name`, so an
+entry's `surface` travels with it: a project's own entry for a shipped
+component replaces the shipped surface along with the shipped currency.
+
 Merging a registry by fiat is not the same as its rules coming on: a composite
 signature still needs a component layer to match against, and a registry that
 contributed no entries enables nothing. Either way it is exactly as invisible as
