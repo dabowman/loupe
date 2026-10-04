@@ -2953,4 +2953,6 @@ await check('an engine copied out of the repo runs its bundle, not its source', 
 	}
 });
 
+// Module-scope, so no test's own `finally` reaches it.
+cleanup(EMPTY_HOME);
 finish();
