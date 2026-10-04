@@ -905,6 +905,12 @@ export interface TokenDelivery {
 	note?: string | undefined;
 	/** Any one of these, holding, is delivery. */
 	evidence: DeliveryCheck[];
+	/**
+	 * Any one of these, holding, means the build writes fallback values into
+	 * each `var()`: the declarations render, but at the default theme's values,
+	 * not the site's. Not delivery — said on the finding instead.
+	 */
+	fallbacks: DeliveryCheck[];
 }
 
 /** A profile's delivery block, validated. */

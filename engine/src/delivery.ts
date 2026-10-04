@@ -92,12 +92,16 @@ function readTokens(raw: unknown): TokenDelivery | null {
 		.filter((c): c is DeliveryCheck => c !== null);
 	// Without a check there is nothing to run, and nothing to run never reports.
 	if (!stylesheet || !evidence.length) return null;
+	const fallbacks = (Array.isArray(raw.fallbacks) ? raw.fallbacks : [])
+		.map(readCheck)
+		.filter((c): c is DeliveryCheck => c !== null);
 	return {
 		stylesheet,
 		handle: asString(raw.handle),
 		prefixes: asStrings(raw.prefixes),
 		note: asString(raw.note),
 		evidence,
+		fallbacks,
 	};
 }
 

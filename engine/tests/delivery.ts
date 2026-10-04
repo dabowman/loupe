@@ -135,10 +135,16 @@ await check('the shipped WPDS profile declares what WordPress provides and what 
 	assert(components?.provided === 'external' && components.handle === 'wp-components', 'components is wp-components');
 	assert(d.tokens?.handle === 'wp-theme', `the token sheet ships as wp-theme: ${d.tokens?.handle}`);
 	assert(d.tokens?.prefixes.join() === '--wpds-', `it covers the --wpds- namespace: ${d.tokens?.prefixes}`);
+	const enqueues = d.tokens?.evidence.filter((e) => e.kind === 'enqueue-dependency') ?? [];
 	assert(
-		d.tokens?.evidence.some((e) => e.kind === 'enqueue-dependency' && e.handles.includes('wp-theme')),
-		'an enqueue listing wp-theme should count as delivery',
+		enqueues.length > 0 && enqueues.every((e) => e.kind === 'enqueue-dependency' && e.handles.join() === 'wp-theme'),
+		'an enqueue listing wp-theme, and only that handle, should count as delivery',
 	);
+	assert(
+		d.tokens?.evidence.every((e) => e.kind !== 'pattern' || !/build|fallback/.test(e.pattern.source)),
+		'a build writing fallbacks is not delivery',
+	);
+	assert(d.tokens?.fallbacks.length === 1, `the fallback build is declared as one: ${d.tokens?.fallbacks.length}`);
 });
 
 await check('`loupe status` names what the active profile delivers how', () => {
@@ -373,11 +379,10 @@ await check('a commented-out dependency is not one', () => {
 	one(undeliveredIn({ 'src/a.css': TOKENS_CSS, 'includes/admin.php': php }), 'a comment delivers nothing');
 });
 
-await check('an enqueue listing wp-theme, or a style that depends on it, is delivery', () => {
+await check("an enqueue listing wp-theme, or a style of the project's that depends on it, is delivery", () => {
 	const cases: [string, string][] = [
 		['wp-theme in the deps', enqueue("array( 'site-spec-styles', 'wp-theme' )")],
 		['short array syntax', enqueue('[ "wp-theme" ]')],
-		['wp-components, which depends on it', enqueue("array( 'wp-components' )")],
 		['the handle enqueued itself', `<?php\nwp_enqueue_style( 'wp-theme' );\n${enqueue('array()')}`],
 		[
 			'a registered style that lists it',
@@ -391,6 +396,65 @@ await check('an enqueue listing wp-theme, or a style that depends on it, is deli
 	}
 });
 
+// `wp-components` and the editor handles depend on `wp-theme` only on WordPress
+// 7.1+ or with Gutenberg active; on 6.9 or 7.0 without it they load and the
+// tokens do not. The CSS has to name the handle it needs.
+await check('a handle that depends on wp-theme only on some cores is not delivery', () => {
+	for (const handle of ['wp-components', 'wp-block-editor', 'wp-edit-blocks', 'wp-commands']) {
+		one(
+			undeliveredIn({ 'src/a.css': TOKENS_CSS, 'includes/admin.php': enqueue(`array( '${handle}' )`) }),
+			`a dependency on ${handle} alone should still report`,
+		);
+		one(
+			undeliveredIn({
+				'src/a.css': TOKENS_CSS,
+				'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+				'blocks/card/block.json': JSON.stringify({ name: 'x/card', editorStyle: [handle, 'file:./index.css'] }),
+			}),
+			`a block.json naming ${handle} should still report`,
+		);
+	}
+});
+
+// Fallbacks written at build keep each declaration from dropping, at the
+// default theme's value: the page renders, and never follows the site's theme.
+await check('build-time fallbacks are not delivery, and the finding says they were found', () => {
+	const builds: [string, Record<string, string>][] = [
+		[
+			'@wordpress/build',
+			{
+				'package.json': JSON.stringify({
+					dependencies: { '@wordpress/components': '^30.0.0' },
+					devDependencies: { '@wordpress/build': '^0.24.0' },
+				}),
+			},
+		],
+		['a ds-token-fallbacks plugin', { 'webpack.config.js': "const fallbacks = require( 'ds-token-fallbacks' );\n" }],
+	];
+	for (const [label, files] of builds) {
+		const f = one(
+			undeliveredIn({
+				'src/a.css': TOKENS_CSS,
+				'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+				...files,
+			}),
+			`${label} should still report`,
+		);
+		assert(
+			f.note === "fallbacks render but won't follow the theme; add 'wp-theme' to this CSS's enqueue dependencies",
+			`${label}: the note should say what the fallbacks leave, and the remedy: ${f.note}`,
+		);
+		// The agent format spares a note 100 characters with its brackets; both
+		// clauses have to fit.
+		assert([...` (${f.note})`].length <= 100, `the note outruns the line's tail: ${f.note.length}`);
+	}
+	const plain = one(
+		undeliveredIn({ 'src/a.css': TOKENS_CSS, 'includes/admin.php': enqueue("array( 'site-spec-styles' )") }),
+		'without fallbacks it reports too',
+	);
+	assert(!plain.note?.includes('fallbacks'), `no fallbacks, no mention of them: ${plain.note}`);
+});
+
 await check('other evidence the profile names is delivery too', () => {
 	const imported = undeliveredIn({
 		'src/a.css': `@import '@wordpress/theme/design-tokens.css';\n${TOKENS_CSS}`,
@@ -400,7 +464,7 @@ await check('other evidence the profile names is delivery too', () => {
 	const block = undeliveredIn({
 		'src/a.css': TOKENS_CSS,
 		'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
-		'blocks/card/block.json': JSON.stringify({ name: 'x/card', editorStyle: ['wp-components', 'file:./index.css'] }),
+		'blocks/card/block.json': JSON.stringify({ name: 'x/card', editorStyle: ['wp-theme', 'file:./index.css'] }),
 	});
 	assert(!block.length, 'a block.json naming the handle delivers it');
 });

@@ -423,8 +423,27 @@ kinds, each a bounded, literal read of the files its globs name, none a parser:
 ```jsonc
 { "kind": "enqueue-dependency", "files": ["**/*.php"],
   "calls": ["wp_enqueue_style", "wp_register_style"], "enqueues": ["wp_enqueue_style"],
-  "argument": 2, "handles": ["wp-theme", "wp-components", …] }
+  "argument": 2, "handles": ["wp-theme"] }
 ```
+
+**Only the handle itself counts.** `wp-components`, `wp-block-editor`,
+`wp-edit-blocks` and `wp-commands` depend on `wp-theme` in WordPress 7.1 and
+with the Gutenberg plugin active, and not on 6.9 or 7.0 without it — where they
+load, and the tokens do not. A plugin whose CSS reaches its tokens through one
+of them works on the developer's site and drops every declaration on an older
+customer's, so WPDS counts `wp-theme` named directly, in an enqueue or a
+`block.json`, and nothing that only implies it.
+
+**Build-time fallbacks are not delivery.** `@wordpress/build` (and the
+`ds-token-fallbacks` plugins it applies) write the default theme's value into
+every bare `var(--wpds-*)`, so a page without the sheet renders instead of
+dropping — but at the default theme's values, whatever theme the site runs. A
+token that never follows the theme is doing nothing a literal would not. The
+profile declares those builds under `tokens.fallbacks`, checks of the same
+kinds, and finding one changes what the finding says, never whether it
+reports: the note becomes `fallbacks render but won't follow the theme; add
+'wp-theme' to this CSS's enqueue dependencies`, short enough that both
+clauses survive the report line's tail.
 
 The PHP read is the smallest thing that answers the question: comments blanked
 (a commented-out `'wp-theme'` is not a dependency), the call's argument list
@@ -550,7 +569,8 @@ declares it, in `delivery.json` beside its registries:
     "stylesheet": "@wordpress/theme/design-tokens.css",
     "handle": "wp-theme",
     "prefixes": ["--wpds-"],
-    "evidence": [ /* see tokens/undelivered */ ]
+    "evidence": [ /* see tokens/undelivered */ ],
+    "fallbacks": [ /* builds writing fallback values: not delivery */ ]
   }
 }
 ```

@@ -27,6 +27,12 @@
  *                                                           project is the one that
  *                                                           delivers the sheet
  *
+ * Build-time fallbacks (`delivery.tokens.fallbacks`) are not delivery. A
+ * `var(--wpds-x, #fff)` written by the build renders, but at the default
+ * theme's value whatever theme the site runs, so the tokens are doing nothing
+ * a literal would not. Found, they change what the finding says, never whether
+ * it reports.
+ *
  * Fails safe throughout: the cost of a false "your tokens never load" is an
  * agent re-plumbing a stylesheet that worked.
  *
@@ -39,6 +45,9 @@ import type { Candidate } from '../../analyze.ts';
 import { byBytes, discover } from '../../discover.ts';
 import type { DeliveryCheck, TokenDelivery } from '../../types.ts';
 import type { TokenRef } from './unknown-token.ts';
+
+/** What build-time fallbacks leave the page with. */
+export const FALLBACKS = "fallbacks render but won't follow the theme";
 
 /** Directory entries the evidence walk may look at before it gives up. */
 const WALK_LIMIT = 50_000;
@@ -261,19 +270,22 @@ export function undelivered({
 	// reported here.
 	if (!anchor || !reports(anchor.file)) return [];
 
-	const files = readEvidenceFiles(root, tokens.evidence, ignore);
+	const files = readEvidenceFiles(root, [...tokens.evidence, ...tokens.fallbacks], ignore);
 	if (!files) return [];
-	const verdicts = tokens.evidence.map((check): Verdict => {
+	// `delivered` is "the check holds": for a fallback check, that fallbacks are written.
+	const verdictOf = (check: DeliveryCheck): Verdict => {
 		const mine = files.filter((f) => picomatch(check.files)(f.rel));
 		if (check.kind === 'enqueue-dependency') return enqueueVerdict(check, mine);
 		if (check.kind === 'import') return importVerdict(check, mine);
 		return mine.some((f) => check.pattern.test(f.text)) ? { state: 'delivered' } : { state: 'silent' };
-	});
+	};
+	const verdicts = tokens.evidence.map(verdictOf);
 	if (verdicts.some((v) => v.state === 'delivered' || v.state === 'unknown')) return [];
 	const missing = verdicts.find((v): v is Extract<Verdict, { state: 'missing' }> => v.state === 'missing');
 	if (!missing) return [];
 
 	const target = tokens.handle ?? tokens.stylesheet;
+	const fallbacks = tokens.fallbacks.some((check) => verdictOf(check).state === 'delivered');
 	const users = new Set(used.map((r) => r.file)).size;
 	const shown = namespace.map((p) => `${p}*`).join(', ');
 	return [
@@ -286,8 +298,14 @@ export function undelivered({
 			// every edit, and a baseline must not.
 			code: `tokens/undelivered:${target}`,
 			// The remedy, short enough to survive as the line's tail. The profile's
-			// own prose on it is `loupe explain`'s to print, whole.
-			note: tokens.handle ? `list '${tokens.handle}' in the dependencies of the enqueue loading this CSS` : undefined,
+			// own prose on it is `loupe explain`'s to print, whole. With fallbacks
+			// the page does render, so the note says why that is not enough, and
+			// stays short enough for both clauses to survive the tail's bound.
+			note: fallbacks
+				? `${FALLBACKS}${tokens.handle ? `; add '${tokens.handle}' to this CSS's enqueue dependencies` : ''}`
+				: tokens.handle
+					? `list '${tokens.handle}' in the dependencies of the enqueue loading this CSS`
+					: undefined,
 			scopeLines: anchor.scopeLines,
 		},
 	];

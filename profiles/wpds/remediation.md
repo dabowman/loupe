@@ -203,14 +203,20 @@ Add `'wp-theme'` to the dependency array of the `wp_enqueue_style` (or
 wp_enqueue_style( 'my-plugin-admin', $url, array( 'wp-theme' ), $version );
 ```
 
-A dependency on `wp-components` does the same, since it depends on `wp-theme`
-wherever `wp-theme` exists — but only take it if the screen also uses
-`@wordpress/components`' own styles. Do not bundle
-`@wordpress/theme/design-tokens.css` into the plugin; the package's README asks
-plugins to enqueue the handle so the tokens follow the site's theme. On a core
-older than 7.1 without Gutenberg there is no `wp-theme` handle at all: say so,
-and treat build-time fallbacks (`@wordpress/build` applies them when
-`@wordpress/theme` is installed) as the way the declarations survive.
+Name `wp-theme` itself, even where the style already depends on
+`wp-components`: that dependency brings `wp-theme` along only on WordPress 7.1+
+or with Gutenberg active, so it does not count. A `block.json` style naming
+`wp-theme` does. Do not bundle `@wordpress/theme/design-tokens.css` into the
+plugin; the package's README asks plugins to enqueue the handle so the tokens
+follow the site's theme.
+
+A note beginning `fallbacks render but won't follow the theme` means the build
+(`@wordpress/build`, which applies them when `@wordpress/theme` is installed)
+writes the default theme's values into each `var()`. The page renders, so it
+can look fixed — but every token is pinned to the default theme. That is not
+delivery; add the handle anyway. On a core older than 7.1 without Gutenberg
+there is no `wp-theme` handle at all: say so, and the fallbacks are what keeps
+the declarations from dropping there.
 
 ## `patterns/*`
 

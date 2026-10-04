@@ -254,7 +254,10 @@ var(--wpds-color-…)` on a page that never loads `wp-theme` does not fall back 
 it drops. How a sheet is delivered is the design system's fact, so the profile's
 `delivery.json` declares the evidence (for WPDS: a `wp_enqueue_style` whose
 dependency array lists `wp-theme` or a style that depends on it, a `block.json`
-naming one, an import of the sheet, or a build that writes fallbacks) and the
+naming `wp-theme`, or an import of the sheet — `wp-components` and the editor
+handles do not count, since they depend on `wp-theme` only on some cores, and a
+build that writes fallbacks is not delivery either: the finding says it found
+one, because those values render but never follow the theme) and the
 engine runs it with a bounded, literal read — no PHP parser. It reports once per
 project, at the first token use, and only when it found enqueues, read every one,
 and none qualifies. It stays silent when no definitions were found at all,
