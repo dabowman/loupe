@@ -204,6 +204,40 @@ await check('a remedy naming a bundled package the project does not import says 
 	}
 });
 
+// The two things a conversion costs, said together: what it promotes to
+// blocking rides in the message, what it adds to the bundle in the note.
+await check('a remedy says both what the conversion would promote and what it would bundle', () => {
+	const root = scratch('loupe-reach-promote-');
+	try {
+		writeAll(root, {
+			...PLUGIN,
+			'src/Panel.jsx': PLUGIN['src/Panel.jsx'].replace('<p>', '<p className="acme-lede">'),
+			'src/panel.css': '.acme-lede { font-size: 14px; }\n',
+		});
+		const p = one(
+			checkJson(root).filter((f) => f.rule === 'system/raw-element' && f.code === '<p>'),
+			'the <p> should report',
+		);
+		assert(
+			p.message === '<p> → <Text> (@wordpress/ui) — converted, would block: font-size (.acme-lede)',
+			`message: ${p.message}`,
+		);
+		assert(p.note === BUNDLING, `note: ${p.note}`);
+		const text = spawnSync(
+			'node',
+			[CLI, 'check', '--all', '--no-baseline', '--root', root, '--preset', 'wpds', '--profiles', PROFILES],
+			{ encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' } },
+		).stdout;
+		const line = text.split('\n').find((l) => l.includes('<p> →'));
+		assert(
+			line?.includes('would block: font-size (.acme-lede)') && line.includes(BUNDLING),
+			`the report's one line should keep both: ${line}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('a remedy naming a package the host provides carries no note', () => {
 	const root = scratch('loupe-reach-ext-');
 	try {

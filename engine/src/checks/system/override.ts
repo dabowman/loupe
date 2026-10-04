@@ -22,7 +22,8 @@
  * a run with no profile, a project's own registry — a missing surface is not a
  * gap in one entry but the absence of the data, and the rule reads the way it
  * did before surfaces existed: every appearance property blocks, with the
- * remedy it always had.
+ * remedy it always had. `system/raw-element` says, before a conversion, which
+ * declarations it would promote.
  *
  * On a whole rule: a key selector reaching into one of the library's own parts
  * — a class the design system's stylesheets style, or one carrying an

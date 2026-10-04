@@ -236,6 +236,15 @@ leave the computed ones, then suppress with a reason naming what is computed.
 
 The element has a design-system analog and the finding names it. Convert it.
 
+A message ending `— converted, would block: font-size, color (.acme-title)`
+names the declarations on the element's classes that will block once those
+classes sit on the component — because the component owns the property, or
+because its registry records nothing about what it owns. Convert, and in the
+same edit settle each named declaration the way `system/override` and
+`typography/in-css` would ask: move it to the prop, drop it, or keep it with a
+suppression whose reason says why the design needs it. Converting and leaving
+them is trading advisory findings for blocking ones.
+
 An element handed to a text or layout component's substitution prop — `render`,
 `as`, `component` — is not flagged: it names the tag that component emits, so
 converting an `<h4>` to the text component with `render={<h4 />}` settles the

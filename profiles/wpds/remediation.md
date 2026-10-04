@@ -155,6 +155,11 @@ lacks: `<button>` → `Button`, `<select>` → `SelectControl`, `<textarea>` →
 finding names the package to import from — `InputControl` and
 `TextareaControl` are in both, and only the `@wordpress/ui` one is current.
 
+A message ending `— converted, would block: …` names what the conversion
+promotes. On `Text` that is usually `font-size`, `line-height`, `font-weight`
+or `font-family`, which `variant` sets: pick the variant and drop them in the
+same edit.
+
 "No design-system equivalent" is usually wrong; check before suppressing. A
 file input with `webkitdirectory`, which `FormFileUpload` cannot set, is the
 kind of exception worth a `wpds-allow`.

@@ -112,6 +112,11 @@ it had then: `<Button> ← background — restyle via its props/tokens, not CSS`
 `code` is `<Button> ← background` either way, so a baseline taken under one
 reading matches under the other.
 
+The cost of the old reading is the one #13 was filed about — converting a raw
+element to a component turns its advisory CSS into blocking findings — so
+`system/raw-element` names those declarations before the conversion; see
+[below](#what-the-conversion-would-promote-is-said-before-it).
+
 "The registry" is decided per component, because several profiles can be
 active and only some of them record surfaces. The component's own entry
 decides (a part goes by its namespace's entry), so a project overriding one
@@ -197,6 +202,35 @@ it names. Forwarding hid the drift rather than preventing it: `h1`–`h6` →
 trunk is the other half.
 
 The variant is left to `--judge`; see [judge.md](judge.md#which-variant).
+
+### What the conversion would promote is said before it
+
+The element's classes come along to the component, and a declaration that was
+advisory on a plain element can block on a component — where the surface owns
+the property, or anywhere at all where the registry records no surfaces. #13's
+plugin found that out by converting: 41 new blockers in one session, each one
+taking the tool's own advice. So the finding says it first:
+
+```
+<h4> → <Text render={ <h4 /> }> (@wordpress/ui) — converted, would block: font-size (.acme-title)
+```
+
+It is read off the classifier the stylesheet walk already ran: every
+declaration in a rule whose *key* selector names one of the element's classes
+is classified again with the analog bound beside whatever the rule's classes
+are bound to already, and only a change of severity is named — grouped by
+where it would land (`would block`, `would warn`, `would clear`), up to four
+properties and two classes, the rest counted. A rule the whole-rule
+library-internal form reports is skipped; it reports the same either way. The
+analog is the one the message names, keyed to the registry by the package of
+its single `recommended` entry; one forwarded to a `supersededBy` replacement,
+or a `A / B` choice, names no one component and gets no tail.
+
+It rides in the message rather than `note`, because the report's one line
+spares a note only its last clause, and the reachability note (`bundling
+required: …`) is appended after it — the two are the two costs of the same
+conversion, and both have to survive. `code` stays `<h4>`, so a baseline
+recorded before the tail matches after it.
 
 ## `system/inline-style`
 

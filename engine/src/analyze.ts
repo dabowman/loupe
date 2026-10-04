@@ -84,6 +84,7 @@ import { currency } from './checks/system/currency.ts';
 import { inlineStyle } from './checks/system/inline-style.ts';
 import { libraryOverride, systemOverride } from './checks/system/override.ts';
 import { rawElements } from './checks/system/raw-element.ts';
+import type { ClassDecl } from './checks/system/raw-element.ts';
 import { hardcodedValue } from './checks/tokens/hardcoded-value.ts';
 import { undelivered } from './checks/tokens/undelivered.ts';
 import { unknownTokens as unknownTokenFindings } from './checks/tokens/unknown-token.ts';
@@ -514,6 +515,10 @@ export async function analyze(
 	const styledClasses = new Set<string>(); // classes CSS actually styles — feeds system/raw-element
 	const layoutClasses = new Set<string>(); // classes whose CSS lays something out — feeds the same rule for div/span
 	const declared: DeclaredClass[] = []; // every key class a stylesheet rule declares — feeds css/dead-class
+	// What each class some raw element carries is set to, and the verdict it got
+	// — for `system/raw-element` to say what converting the element would change.
+	const onRaw = new Set(ruleIsLive('system/raw-element') ? rawEls.flatMap((el) => el.classes) : []);
+	const rawClassDecls = new Map<string, ClassDecl[]>();
 
 	// `stylesheet/unparsed`, per stylesheet the discovery pass found:
 	//   the design system's own sheet                     → skipped, not the project's
@@ -610,6 +615,8 @@ export async function analyze(
 			// third-party component's internals, "stop styling this" supersedes
 			// every per-declaration remedy inside it.
 			const pending: PendingFinding[] = [];
+			const onRawKeys = keyClasses.filter((c) => onRaw.has(c));
+			const classDecls: ClassDecl[] = [];
 
 			for (const decl of ownDecls(cssRule)) {
 				const prop = decl.prop.toLowerCase();
@@ -618,6 +625,8 @@ export async function analyze(
 					{ prop, value: decl.value },
 					{ boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive },
 				);
+				if (onRawKeys.length)
+					classDecls.push({ prop, value: decl.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
 				for (const name of tokenRefsIn(decl.value, tokenPrefixes)) {
@@ -639,6 +648,14 @@ export async function analyze(
 					: null;
 			if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
 			else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
+			// A library internal is reported whole whatever binds it, so converting
+			// the element changes nothing about it.
+			if (!override)
+				for (const c of onRawKeys) {
+					const list = rawClassDecls.get(c) ?? [];
+					list.push(...classDecls);
+					rawClassDecls.set(c, list);
+				}
 
 			const cut = deletableRule(cssRule, srcLines);
 			for (const cls of keyClasses)
@@ -779,6 +796,25 @@ export async function analyze(
 		styledClasses,
 		layoutClasses,
 		registry: config.componentRegistry,
+		promotion: {
+			decls: rawClassDecls,
+			// The same classifier, with the analog bound alongside whatever the
+			// rule's classes are already bound to.
+			verdictAs: (d, as) =>
+				classifyDeclaration(
+					{ prop: d.prop, value: d.value },
+					{
+						boundSystem: [...d.boundSystem, as],
+						boundText: as.isText ? [...d.boundText, as] : d.boundText,
+						isGrid: d.isGrid,
+						surfaceOf,
+						surfaced,
+						enabled: ruleIsLive,
+					},
+				).finding?.rule ?? null,
+			severityOf: config.severityOf,
+			textComponents: ds.textComponents,
+		},
 	}))
 		report(f);
 	for (const f of compositeFindings({

@@ -1895,6 +1895,64 @@ await check('a compound part is its own element: Card.Root owns its surface, Car
 	);
 });
 
+// What converting would change is said before the conversion, on the
+// `system/raw-element` finding that asks for it: #13's 41 blockers arrived
+// after the fact. The message grows a tail; `code` does not, so a baseline
+// keyed on `<h4>` survives it.
+
+const TITLE_CSS = '.acme-title { color: #826200; text-transform: uppercase; letter-spacing: 0.05em; font-size: 14px; }';
+const H4 = 'export const A = () => <h4 className="acme-title">Hi</h4>;';
+
+await check('a raw element names the declarations its conversion would promote', async () => {
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'styles/a.scss': TITLE_CSS, 'src/A.tsx': H4 },
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/raw-element'), 'the <h4> should report');
+	// Text's surface owns font-size through `variant`, and nothing else here.
+	assert(
+		f.message === '<h4> → <Text render={ <h4 /> }> (@wordpress/ui) — converted, would block: font-size (.acme-title)',
+		`message: ${f.message}`,
+	);
+	assert(f.code === '<h4>', `the identity does not move: ${f.code}`);
+});
+
+await check('a raw element whose conversion changes nothing says nothing more', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-title { color: #826200; letter-spacing: 0.05em; }',
+			'src/A.tsx': H4,
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/raw-element'), 'the <h4> should report');
+	assert(f.message === '<h4> → <Text render={ <h4 /> }> (@wordpress/ui)', `message: ${f.message}`);
+});
+
+await check('where no registry records surfaces, every appearance property is named', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.scss': `${TITLE_CSS}\n.acme-big { border: 1px solid #ccc; }`,
+		'src/A.tsx': 'export const A = () => <h4 className="acme-title acme-big acme-x">Hi</h4>;',
+	});
+	const f = one(at(r, 'system/raw-element'), 'the <h4> should report');
+	assert(
+		f.message ===
+			'<h4> → <Text render={ <h4 /> }> — converted, would block: color, text-transform, letter-spacing, font-size (+1 more) (.acme-title, .acme-big)',
+		`message: ${f.message}`,
+	);
+	// The keys of a run that says it and one that cannot.
+	const quiet = await run({
+		'loupe.config.json': CONFIG({ rules: { 'system/override': 'off', 'typography/in-css': 'off' } }),
+		'styles/a.scss': `${TITLE_CSS}\n.acme-big { border: 1px solid #ccc; }`,
+		'src/A.tsx': 'export const A = () => <h4 className="acme-title acme-big acme-x">Hi</h4>;',
+	});
+	const bare = one(at(quiet, 'system/raw-element'), 'the <h4> should still report');
+	assert(bare.message === '<h4> → <Text render={ <h4 /> }>', `with nothing to promote: ${bare.message}`);
+	assert(findingKey(bare) === findingKey(f), `the baseline key moved: ${findingKey(bare)} / ${findingKey(f)}`);
+});
+
 await check('a malformed surface is dropped rather than half-read', () => {
 	const loaded = loadComponents([
 		{ name: 'A', package: 'p', status: 'recommended', surface: { properties: { color: 3 } } },

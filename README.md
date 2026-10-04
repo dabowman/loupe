@@ -211,6 +211,12 @@ Rules disable themselves when the config cannot support them — a block theme
 with no component layer leaves the component rules inert rather than firing on
 nothing.
 
+`system/raw-element` says what the conversion would cost: where a declaration
+on the element's classes would block once the class sits on the component, the
+message names it — `<h4> → <Text render={ <h4 /> }> (@wordpress/ui) —
+converted, would block: font-size (.acme-title)` — so the change is weighed
+before it is made, not discovered after.
+
 `system/raw-element` skips the element a text or layout component's
 substitution prop is handed: `<Text variant="heading-md" render={ <h4 /> }>` is
 how you keep a heading's semantics under WPDS, not a raw `<h4>`. The prop list is
