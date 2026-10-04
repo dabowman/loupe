@@ -23614,7 +23614,7 @@ var RULES = {
     severity: "warn",
     rank: 11,
     needs: ["components"],
-    title: "overrides styling a design-system component owns \u2014 use the prop the finding names; where it names none there is no prop, so keep the component\u2019s own styling or suppress with the reason the design needs it"
+    title: "overrides styling a design-system component owns \u2014 use the prop the finding names; where it says there is none, keep the component\u2019s own styling or suppress with the reason the design needs it; where it says restyle via props/tokens, nothing records what the component owns, so find the prop or token in its docs"
   },
   "system/inline-style": {
     severity: "warn",
@@ -23714,12 +23714,14 @@ function readTokens(raw) {
   const stylesheet = asString(raw.stylesheet);
   const evidence = (Array.isArray(raw.evidence) ? raw.evidence : []).map(readCheck).filter((c) => c !== null);
   if (!stylesheet || !evidence.length) return null;
+  const fallbacks = (Array.isArray(raw.fallbacks) ? raw.fallbacks : []).map(readCheck).filter((c) => c !== null);
   return {
     stylesheet,
     handle: asString(raw.handle),
     prefixes: asStrings(raw.prefixes),
     note: asString(raw.note),
-    evidence
+    evidence,
+    fallbacks
   };
 }
 function loadDelivery(raw) {
@@ -23749,8 +23751,8 @@ var packageRoot = (spec) => {
 function remedyPackages(message, dsPackages) {
   const arrow = message.indexOf("\u2192");
   if (arrow < 0) return [];
-  const named = [...message.slice(arrow).matchAll(/\(\s*([^\s,()]+)/g)].map((m) => String(m[1]));
-  return [...new Set(named.filter((p) => p.startsWith("@") && p.includes("/") || dsPackages.includes(p)))];
+  const named2 = [...message.slice(arrow).matchAll(/\(\s*([^\s,()]+)/g)].map((m) => String(m[1]));
+  return [...new Set(named2.filter((p) => p.startsWith("@") && p.includes("/") || dsPackages.includes(p)))];
 }
 function projectDependencies(root2) {
   try {
@@ -24548,8 +24550,8 @@ var split = (raw) => {
   const direct = raw.startsWith(">");
   const spec = direct ? raw.slice(1).trimStart() : raw;
   const i = spec.indexOf("::");
-  const named = i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
-  return direct ? { ...named, direct } : named;
+  const named2 = i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
+  return direct ? { ...named2, direct } : named2;
 };
 function toNode(spec) {
   if (typeof spec === "string") return { ...split(spec), children: [] };
@@ -25237,13 +25239,14 @@ function readSurface(raw) {
 }
 function loadComponents(raw) {
   const list2 = Array.isArray(raw) ? raw : raw?.components ?? [];
+  const read = list2.filter(isEntry).map((c) => {
+    const { surface, surfaced: _claimed, ...rest } = c;
+    const s = surface === void 0 ? void 0 : readSurface(surface);
+    return s ? { ...rest, surface: s } : rest;
+  });
+  const surfaced = read.some((c) => c.surface !== void 0);
   const map = /* @__PURE__ */ new Map();
-  for (const c of list2) {
-    if (!isEntry(c)) continue;
-    const { surface, ...rest } = c;
-    const read = surface === void 0 ? void 0 : readSurface(surface);
-    map.set(`${c.package}::${c.name}`, read ? { ...rest, surface: read } : rest);
-  }
+  for (const c of read) map.set(`${c.package}::${c.name}`, surfaced ? { ...c, surfaced: true } : c);
   return map;
 }
 function surfaceFor(registry, pkg, name) {
@@ -25252,6 +25255,18 @@ function surfaceFor(registry, pkg, name) {
   if (exact) return exact.surface;
   const [root2, ...parts] = name.split(".");
   return parts.length === 1 && parts[0] === "Root" ? registry.get(`${pkg}::${root2}`)?.surface : void 0;
+}
+function surfacesRecorded(registry) {
+  const byPackage = /* @__PURE__ */ new Map();
+  for (const e of registry.values())
+    byPackage.set(e.package, (byPackage.get(e.package) ?? false) || e.surfaced === true);
+  const anywhere = [...byPackage.values()].some(Boolean);
+  return (pkg, name) => {
+    if (!pkg) return anywhere;
+    const entry = name && registry.get(`${pkg}::${name}`) || name && registry.get(`${pkg}::${name.split(".")[0]}`);
+    if (entry) return entry.surfaced === true;
+    return byPackage.get(pkg) ?? anywhere;
+  };
 }
 function ownership(surface, prop) {
   for (const [owned, control] of Object.entries(surface.properties))
@@ -25957,18 +25972,22 @@ function owningBinding(bound, prop, surfaceOf) {
   return void 0;
 }
 var viaProps = (via) => via.length === 1 ? `its ${via[0]} prop` : `its ${via.slice(0, -1).join(", ")} and ${via.at(-1)} props`;
-var systemOverride = ({ prop }, { boundSystem, enabled: enabled2, surfaceOf }) => {
+var UNREAD_REMEDY = "restyle via its props/tokens, not CSS";
+var systemOverride = ({ prop }, { boundSystem, enabled: enabled2, surfaceOf, surfaced }) => {
   if (!boundSystem[0] || !APPEARANCE_PROPS.has(prop) || !enabled2("system/override")) return void 0;
   const owner = owningBinding(boundSystem, prop, surfaceOf);
-  if (!owner) return void 0;
-  const head2 = `<${owner.binding.tag}> \u2190 ${prop}`;
-  return {
-    rule: "system/override",
-    message: owner.via.length ? `${head2} \u2014 set via ${viaProps(owner.via)}` : `${head2} \u2014 it sets this itself and has no prop for it`,
-    // Identity is the component and the property, as it was before the
-    // message said why: a baseline entry must survive the explanation.
-    code: head2
-  };
+  if (owner) {
+    const head3 = `<${owner.binding.tag}> \u2190 ${prop}`;
+    return {
+      rule: "system/override",
+      message: owner.via.length ? `${head3} \u2014 set via ${viaProps(owner.via)}` : `${head3} \u2014 it sets this itself and has no prop for it`,
+      code: head3
+    };
+  }
+  const unread = boundSystem.find((b) => !surfaced(b));
+  if (!unread) return void 0;
+  const head2 = `<${unread.tag}> \u2190 ${prop}`;
+  return { rule: "system/override", message: `${head2} \u2014 ${UNREAD_REMEDY}`, code: head2 };
 };
 function libraryOverride(keyClasses, isLibrary, isProject) {
   const part = keyClasses.find((c) => isLibrary(c) && !isProject(c));
@@ -25976,20 +25995,51 @@ function libraryOverride(keyClasses, isLibrary, isProject) {
 }
 
 // src/checks/system/raw-element.ts
+var PROPS_MAX = 4;
+var CLASSES_MAX = 2;
+var named = (items, max) => `${items.slice(0, max).join(", ")}${items.length > max ? ` (+${items.length - max} more)` : ""}`;
+var LEVEL = { none: 0, off: 0, warn: 1, error: 2 };
+var VERB = ["clear", "warn", "block"];
+function conversion(el, name, pkg, { decls, verdictAs, severityOf, textComponents }) {
+  const isText = textComponents.includes(name);
+  const as = { tag: name, isSystem: true, isText, component: name, ...pkg ? { package: pkg } : {} };
+  const level = (rule2) => LEVEL[rule2 ? severityOf(rule2) : "none"];
+  const changed = /* @__PURE__ */ new Map();
+  for (const cls of new Set(el.classes))
+    for (const d of decls.get(cls) ?? []) {
+      const after = level(verdictAs(d, as));
+      if (after === level(d.now)) continue;
+      const group = changed.get(after) ?? { props: [], classes: /* @__PURE__ */ new Set() };
+      if (!group.props.includes(d.prop)) group.props.push(d.prop);
+      group.classes.add(cls);
+      changed.set(after, group);
+    }
+  if (!changed.size) return void 0;
+  const parts = [...changed].sort(([a], [b]) => b - a).map(([at, { props, classes }]) => {
+    const on = named(
+      [...classes].map((c) => `.${c}`),
+      CLASSES_MAX
+    );
+    return `would ${VERB[at]}: ${named(props, PROPS_MAX)} (${on})`;
+  });
+  return `converted, ${parts.join("; ")}`;
+}
 function currentAnalog(registry, suggest, render) {
   if (!supersededEverywhere(registry, suggest)) {
     const open = render ? `<${suggest} render={ <${render} /> }>` : `<${suggest}>`;
     const current = [...registry.values()].filter((e) => e.name === suggest && e.status === "recommended");
-    return current.length === 1 ? `${open} (${current[0]?.package})` : open;
+    const pkg = current.length === 1 ? current[0]?.package : void 0;
+    return { text: pkg ? `${open} (${pkg})` : open, current: { name: suggest, package: pkg } };
   }
   const remedy = [...registry.values()].find((e) => e.name === suggest && e.supersededBy)?.supersededBy;
-  return remedy || `<${suggest}>`;
+  return { text: remedy || `<${suggest}>` };
 }
 function rawElements(els, {
   layoutComponents,
   styledClasses,
   layoutClasses,
-  registry
+  registry,
+  promotion
 }) {
   return els.flatMap((el) => {
     if (el.styledOnly) {
@@ -25998,12 +26048,16 @@ function rawElements(els, {
       const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
       if (suggestsLayout ? !laidOut : !styled) return [];
     }
+    const analog = currentAnalog(registry, el.suggest, el.render);
+    const name = analog.current?.name;
+    const target = typeof name === "string" && name && !name.includes("/") ? analog.current : void 0;
+    const tail = target && promotion ? conversion(el, target.name, target.package, promotion) : void 0;
     return [
       {
         rule: "system/raw-element",
         file: el.file,
         line: el.line,
-        message: `<${el.tag}> \u2192 ${currentAnalog(registry, el.suggest, el.render)}`,
+        message: `<${el.tag}> \u2192 ${analog.text}${tail ? ` \u2014 ${tail}` : ""}`,
         code: `<${el.tag}>`
       }
     ];
@@ -26020,6 +26074,7 @@ var hardcodedValue = ({ prop, value }) => {
 // src/checks/tokens/undelivered.ts
 var import_picomatch2 = __toESM(require_picomatch2(), 1);
 import { readFileSync as readFileSync3, statSync as statSync2 } from "node:fs";
+var FALLBACKS = "fallbacks render but won't follow the theme";
 var WALK_LIMIT = 5e4;
 var FILE_LIMIT = 4e3;
 var MAX_BYTES = 15e5;
@@ -26085,16 +26140,16 @@ var literal = (arg) => {
 function dependencyList(arg) {
   if (arg === void 0 || arg === "") return { handles: [], complete: true };
   const text2 = arg.trim();
-  const named = [...text2.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\$]|\\.)*)"/g)].map((m) => m[1] ?? m[2] ?? "");
+  const named2 = [...text2.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\$]|\\.)*)"/g)].map((m) => m[1] ?? m[2] ?? "");
   const list2 = /^array\s*\(([\s\S]*)\)$/i.exec(text2)?.[1] ?? /^\[([\s\S]*)\]$/.exec(text2)?.[1];
-  if (list2 === void 0) return { handles: named, complete: false };
+  if (list2 === void 0) return { handles: named2, complete: false };
   const items = argumentsAt(`(${list2})`, 0) ?? [];
   const complete = items.every((item) => item === "" || literal(item) !== null);
-  return { handles: named, complete };
+  return { handles: named2, complete };
 }
 function dependencyArgument(args, index2) {
-  const named = args.find((a) => /^deps\s*:(?!:)/.test(a));
-  if (named !== void 0) return named.replace(/^deps\s*:/, "").trim();
+  const named2 = args.find((a) => /^deps\s*:(?!:)/.test(a));
+  if (named2 !== void 0) return named2.replace(/^deps\s*:/, "").trim();
   const arg = args[index2];
   return arg !== void 0 && /^[A-Za-z_]\w*\s*:(?!:)/.test(arg) ? void 0 : arg;
 }
@@ -26171,18 +26226,20 @@ function undelivered({
   const used = refs.filter((r) => namespace.some((p) => r.name.startsWith(p)) && !projectDefined.has(r.name)).sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
   const [anchor] = used;
   if (!anchor || !reports(anchor.file)) return [];
-  const files = readEvidenceFiles(root2, tokens.evidence, ignore);
+  const files = readEvidenceFiles(root2, [...tokens.evidence, ...tokens.fallbacks], ignore);
   if (!files) return [];
-  const verdicts = tokens.evidence.map((check) => {
+  const verdictOf = (check) => {
     const mine = files.filter((f) => (0, import_picomatch2.default)(check.files)(f.rel));
     if (check.kind === "enqueue-dependency") return enqueueVerdict(check, mine);
     if (check.kind === "import") return importVerdict(check, mine);
     return mine.some((f) => check.pattern.test(f.text)) ? { state: "delivered" } : { state: "silent" };
-  });
+  };
+  const verdicts = tokens.evidence.map(verdictOf);
   if (verdicts.some((v) => v.state === "delivered" || v.state === "unknown")) return [];
   const missing = verdicts.find((v) => v.state === "missing");
   if (!missing) return [];
   const target = tokens.handle ?? tokens.stylesheet;
+  const fallbacks = tokens.fallbacks.some((check) => verdictOf(check).state === "delivered");
   const users = new Set(used.map((r) => r.file)).size;
   const shown = namespace.map((p) => `${p}*`).join(", ");
   return [
@@ -26195,8 +26252,10 @@ function undelivered({
       // every edit, and a baseline must not.
       code: `tokens/undelivered:${target}`,
       // The remedy, short enough to survive as the line's tail. The profile's
-      // own prose on it is `loupe explain`'s to print, whole.
-      note: tokens.handle ? `list '${tokens.handle}' in the dependencies of the enqueue loading this CSS` : void 0,
+      // own prose on it is `loupe explain`'s to print, whole. With fallbacks
+      // the page does render, so the note says why that is not enough, and
+      // stays short enough for both clauses to survive the tail's bound.
+      note: fallbacks ? `${FALLBACKS}${tokens.handle ? `; add '${tokens.handle}' to this CSS's enqueue dependencies` : ""}` : tokens.handle ? `list '${tokens.handle}' in the dependencies of the enqueue loading this CSS` : void 0,
       scopeLines: anchor.scopeLines
     }
   ];
@@ -26394,9 +26453,16 @@ var DECLARATIONS = [
   layoutInCss,
   hardcodedValue
 ];
-function classifyDeclaration({ prop, value }, { boundSystem = [], boundText = [], isGrid = false, surfaceOf = () => void 0, enabled: enabled2 }) {
+function classifyDeclaration({ prop, value }, {
+  boundSystem = [],
+  boundText = [],
+  isGrid = false,
+  surfaceOf = () => void 0,
+  surfaced = () => true,
+  enabled: enabled2
+}) {
   const styling = isMarginProp(prop) || isFlexDecl(prop, value) || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || isHardcodedTokenValue(prop, value) || APPEARANCE_PROPS.has(prop);
-  const ctx = { boundSystem, boundText, isGrid, surfaceOf, enabled: enabled2 };
+  const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: enabled2 };
   for (const check of DECLARATIONS) {
     const verdict = check({ prop, value }, ctx);
     if (verdict !== void 0) return { finding: verdict, styling };
@@ -26448,6 +26514,8 @@ async function analyze(config, {
   const ds = config.designSystem;
   const ruleIsLive = (rule2) => config.enabled[rule2];
   const surfaceOf = (b) => surfaceFor(config.componentRegistry, b.package, b.component);
+  const recorded = surfacesRecorded(config.componentRegistry);
+  const surfaced = (b) => recorded(b.package, b.component);
   const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
   const parseSuppressions = makeSuppressionParser(config.suppression);
   const limit = analyzeEntryBudget();
@@ -26574,6 +26642,8 @@ async function analyze(config, {
   const styledClasses = /* @__PURE__ */ new Set();
   const layoutClasses = /* @__PURE__ */ new Set();
   const declared = [];
+  const onRaw = new Set(ruleIsLive("system/raw-element") ? rawEls.flatMap((el) => el.classes) : []);
+  const rawClassDecls = /* @__PURE__ */ new Map();
   for (const { abs, rel } of files.styles) {
     if (isLibrarySheet(rel)) continue;
     let text2;
@@ -26635,13 +26705,17 @@ async function analyze(config, {
       let touchesStyle = false;
       let touchesLayout = false;
       const pending = [];
+      const onRawKeys = keyClasses.filter((c) => onRaw.has(c));
+      const classDecls = [];
       for (const decl2 of ownDecls(cssRule)) {
         const prop = decl2.prop.toLowerCase();
         const line = decl2.source?.start?.line ?? ruleLine;
         const { finding, styling } = classifyDeclaration(
           { prop, value: decl2.value },
-          { boundSystem, boundText, isGrid, surfaceOf, enabled: ruleIsLive }
+          { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive }
         );
+        if (onRawKeys.length)
+          classDecls.push({ prop, value: decl2.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
         if (styling) touchesStyle = true;
         if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
         for (const name of tokenRefsIn(decl2.value, tokenPrefixes)) {
@@ -26656,6 +26730,12 @@ async function analyze(config, {
       const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
       if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
       else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
+      if (!override)
+        for (const c of onRawKeys) {
+          const list2 = rawClassDecls.get(c) ?? [];
+          list2.push(...classDecls);
+          rawClassDecls.set(c, list2);
+        }
       const cut = deletableRule(cssRule, srcLines);
       for (const cls of keyClasses)
         declared.push({
@@ -26749,6 +26829,7 @@ async function analyze(config, {
           boundText: onTarget ? boundText : [],
           isGrid: group.isGrid,
           surfaceOf,
+          surfaced,
           enabled: ruleIsLive
         });
         if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
@@ -26770,7 +26851,25 @@ async function analyze(config, {
     layoutComponents: ds.layoutComponents,
     styledClasses,
     layoutClasses,
-    registry: config.componentRegistry
+    registry: config.componentRegistry,
+    promotion: {
+      decls: rawClassDecls,
+      // The same classifier, with the analog bound alongside whatever the
+      // rule's classes are already bound to.
+      verdictAs: (d, as) => classifyDeclaration(
+        { prop: d.prop, value: d.value },
+        {
+          boundSystem: [...d.boundSystem, as],
+          boundText: as.isText ? [...d.boundText, as] : d.boundText,
+          isGrid: d.isGrid,
+          surfaceOf,
+          surfaced,
+          enabled: ruleIsLive
+        }
+      ).finding?.rule ?? null,
+      severityOf: config.severityOf,
+      textComponents: ds.textComponents
+    }
   }))
     report(f);
   for (const f of composites({
@@ -28913,14 +29012,14 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
       decl2.judged = { answer: KEEP, confidence: kept.confidence, spans: [DELIBERATE, tail] };
     } else {
       const out = [...parts];
-      const named = [...parts];
+      const named2 = [...parts];
       slots.forEach((s, k) => {
         const token = got[k]?.choice ?? "";
         out[s.at] = `var(${token})`;
-        named[s.at] = token;
+        named2[s.at] = token;
       });
       const to = out.join(" ");
-      const shown = named.join(" ");
+      const shown = named2.join(" ");
       const tail = confidence2 < 1 ? judgedTail(confidence2) : "";
       decl2.judged = { answer: to, confidence: confidence2, spans: tail ? [shown, tail] : [shown] };
     }
@@ -31068,16 +31167,16 @@ function presetEvidence(root2, imports) {
     }
   }
   const known = (pkg) => marker.has(pkg) || [...scopes].some((s) => pkg.startsWith(s));
-  const named = (pkg) => marker.has(pkg) ? `${pkg} [a ${marker.get(pkg)} marker]` : pkg;
+  const named2 = (pkg) => marker.has(pkg) ? `${pkg} [a ${marker.get(pkg)} marker]` : pkg;
   const out = [];
   const imported = [...imports].filter(([pkg]) => known(pkg)).sort((a, b) => b[1] - a[1]);
   if (imported.length)
     out.push(
-      `source imports: ${imported.slice(0, 5).map(([pkg, n]) => `${named(pkg)} \xD7${n}`).join(", ")}${imported.length > 5 ? `, +${imported.length - 5} more` : ""}`
+      `source imports: ${imported.slice(0, 5).map(([pkg, n]) => `${named2(pkg)} \xD7${n}`).join(", ")}${imported.length > 5 ? `, +${imported.length - 5} more` : ""}`
     );
   for (const { rel } of manifests(root2)) {
     const pkg = readJson(join12(root2, rel, "package.json")) ?? {};
-    const typed = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).map((dep) => /^@types\/([\w.-]+)__([\w.-]+)$/.exec(dep)).filter((m) => m !== null && known(`@${m[1]}/${m[2]}`)).map((m) => `${m[0]} \u2192 ${named(`@${m[1]}/${m[2]}`)}`);
+    const typed = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).map((dep) => /^@types\/([\w.-]+)__([\w.-]+)$/.exec(dep)).filter((m) => m !== null && known(`@${m[1]}/${m[2]}`)).map((m) => `${m[0]} \u2192 ${named2(`@${m[1]}/${m[2]}`)}`);
     if (typed.length) out.push(`${rel ? `${rel}/package.json` : "package.json"}: ${typed.join(", ")}`);
   }
   for (const { dir, rel } of probeDirs(root2)) {
@@ -32003,12 +32102,17 @@ async function main() {
       );
     if (id === "tokens/undelivered") {
       const t = delivery?.tokens;
+      const described = (e) => `${e.kind === "enqueue-dependency" ? `${e.calls.join("/")} listing ${e.handles.join(", ")}` : e.kind === "import" ? `an import of ${e.specifiers.join(" or ")}` : `/${e.pattern.source}/`} in ${e.files.join(", ")}`;
       const lines = t ? [
         `Tokens come from ${t.stylesheet}${t.handle ? `, the ${t.handle} handle` : ""}. Any one of these is delivery:`,
-        ...t.evidence.map(
-          (e) => `  ${e.kind === "enqueue-dependency" ? `${e.calls.join("/")} listing ${e.handles.join(", ")}` : e.kind === "import" ? `an import of ${e.specifiers.join(" or ")}` : `/${e.pattern.source}/`} in ${e.files.join(", ")}`
-        ),
+        ...t.evidence.map((e) => `  ${described(e)}`),
         "It reports only when enqueues were found, every one was read, and none qualifies; anything it cannot read is not a finding.",
+        // Named so nobody reads a build plugin as the fix: the page renders,
+        // at the default theme's values.
+        ...t.fallbacks.length ? [
+          "Build-time fallbacks are not delivery: they render the default theme's values, not the site's. The finding says so where one of these shows them:",
+          ...t.fallbacks.map((e) => `  ${described(e)}`)
+        ] : [],
         ...t.note ? [t.note] : []
       ] : ["No active profile declares how its tokens are delivered, so this reports nothing."];
       for (const l of lines) process.stdout.write(`  ${dim(l)}
@@ -32096,8 +32200,8 @@ ${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id))
     return EXIT.OK;
   }
   if (command === "detect" || command === "init") {
-    const named = args.flags.preset ? presetKey(args.flags.preset) : profilePreset;
-    const info = detected ?? runDetection(named);
+    const named2 = args.flags.preset ? presetKey(args.flags.preset) : profilePreset;
+    const info = detected ?? runDetection(named2);
     if (!detected && info.truncated) note(TRUNCATED_NOTE);
     if (args.flags.format === "json") {
       process.stdout.write(`${JSON.stringify(info, null, 2)}
@@ -32109,8 +32213,8 @@ ${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id))
       dim(`            ${info.presetReasons.join("; ")}`),
       // What inference concluded is still reported; it is just no longer what the
       // run uses, and `init` writes the config below verbatim.
-      ...named ? [
-        `            ${args.flags.preset ? `--preset ${args.flags.preset}` : `--profile ${forced?.id}`} overrides that: the config below extends ${named}`
+      ...named2 ? [
+        `            ${args.flags.preset ? `--preset ${args.flags.preset}` : `--profile ${forced?.id}`} overrides that: the config below extends ${named2}`
       ] : [],
       `${dim("namespaces: ")}${info.namespaces.project.join(", ") || "(none found)"}  ${confidence(info.namespaceConfidence)}`,
       dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
@@ -32141,7 +32245,7 @@ ${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id))
       );
       return EXIT.CANNOT_RUN;
     }
-    if (guessedPreset(info.presetConfidence) && !named && !args.flags.force) {
+    if (guessedPreset(info.presetConfidence) && !named2 && !args.flags.force) {
       const evidence = info.presetEvidence.length ? ["  Evidence that was not conclusive:", ...info.presetEvidence.map((e) => `    ${e}`)] : ["  Nothing else in the project points at a design system either."];
       lines.push(
         "",
