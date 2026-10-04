@@ -30,7 +30,7 @@ hardcoded hex next to your token, a `<p>` where the system has a `<Text>`, an
 override reaching into a third-party component's internals. None of that is a
 syntax error. All of it is drift.
 
-Most of the seventeen rules need cross-file correlation to decide. The rest
+Most of the twenty-one rules need cross-file correlation to decide. The rest
 would work as a stylelint plugin, and are included because you want one report.
 
 ## Rules
