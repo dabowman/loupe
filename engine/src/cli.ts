@@ -14,7 +14,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
-import { analyze, dedupe } from './analyze.ts';
+import { analyze, dedupe, findingKey } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import { judgeRedirects, judgeRenames, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
@@ -22,7 +22,16 @@ import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './base
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
-import { byBytes, changedFiles, gitIgnores, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
+import {
+	TreeTooLarge,
+	byBytes,
+	changedFiles,
+	gitIgnores,
+	hasGitDir,
+	isSource,
+	isWorktree,
+	toPosix,
+} from './discover.ts';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
@@ -46,11 +55,12 @@ import {
 	hookSilenced,
 	parsePayload,
 	payloadFile,
+	preEditContent,
 	readStdin,
 	resolvedOptions,
 } from './hook.ts';
 import type { HookPayload } from './hook.ts';
-import type { AnalyzeResult, BaselinedResult, Config, ConfigSuppression, Directive } from './types.ts';
+import type { AnalyzeResult, BaselinedResult, Config, ConfigSuppression, Directive, Finding } from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
@@ -302,6 +312,9 @@ Environment:
                         'loupe status' names which switch did it.
                         Both read 1/true/yes/on as on; anything else — 0 and
                         false included — as not set.
+  LOUPE_MAX_ENTRIES=<n> How many entries analysis walks before it refuses to
+                        report at all (default 200,000), rather than calling
+                        the part of the tree it never read clean.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
@@ -411,6 +424,42 @@ function resolveScope(
 		return [...changed];
 	}
 	return null;
+}
+
+/**
+ * The touched file's finding keys as it stood before the edit, for PostToolUse
+ * to tell what the edit introduced from what it walked past.
+ *
+ * Empty when there is nothing to compare against — a file the write created, a
+ * payload with no pre-edit content, an analysis that failed — which is the
+ * absolute check, the gate as it was. Keyed like the baseline, rule + file +
+ * code, so a finding the edit merely moved down the file is not a new one.
+ */
+async function keysBeforeEdit(
+	config: Config,
+	touched: string,
+	before: string | null,
+	{ judge, suppress }: { judge: boolean; suppress: boolean },
+): Promise<Set<string>> {
+	if (before === null) return new Set();
+	try {
+		const prior = await analyze(config, {
+			scope: [touched],
+			judge,
+			suppress,
+			contents: new Map([[touched, before]]),
+		});
+		const keys = new Set(prior.findings.map(findingKey));
+		// A judged redirect is written after analysis, from a control the analysis
+		// collected (`judgeRedirects`, keyed by its component). The control standing
+		// before the edit is the finding standing before it, without paying to ask
+		// the judge about a file the edit has already replaced.
+		for (const c of prior.controls ?? [])
+			keys.add(findingKey({ rule: 'patterns/judged-redirect', file: c.file, code: `<${c.component}>`, message: '' }));
+		return keys;
+	} catch {
+		return new Set();
+	}
 }
 
 function filterSeverity<T extends AnalyzeResult>(result: T, min: string): T {
@@ -1302,11 +1351,40 @@ async function main(): Promise<number> {
 
 	if (isHook) {
 		const sessionId = payload.session_id ?? '';
-		if (!result.blocking) {
-			clearAttempts(root, touched ? `${sessionId}\u0000${touched}` : sessionId);
-			return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
+		const budgetKey = touched ? `${sessionId}\u0000${touched}` : sessionId;
+		// Two questions, one per hook. PostToolUse asks whether this edit made the
+		// file worse, and blocks only on what it introduced: a refactor passes
+		// through states that are worse before they are better, and a finding the
+		// edit walked past is not the edit's fault. Stop asks whether the turn's work
+		// is conformant, absolutely — the JSX converted and the CSS left behind is an
+		// omission by then, not an intermediate state.
+		//
+		// The "before" is only analyzed when the "after" would block, so a clean
+		// edit pays nothing for the question.
+		const errors = result.findings.filter((f) => f.severity === 'error');
+		let blocking: Finding[] = errors;
+		if (touched && errors.length) {
+			const before = await keysBeforeEdit(config, touched, preEditContent(payload), {
+				judge: Boolean(apiKey),
+				suppress: !args.flags['no-suppressions'],
+			});
+			blocking = errors.filter((f) => !before.has(findingKey(f)));
 		}
-		const attempts = bumpAttempts(root, touched ? `${sessionId}\u0000${touched}` : sessionId);
+		const standing = errors.length - blocking.length;
+		// Said, not dropped: the agent should know what it is walking past, and that
+		// Stop will hold it to them.
+		const standingNote = standing
+			? ` ${standing} blocking finding(s) already in ${touched} before this edit, left for the Stop check.`
+			: '';
+		if (!blocking.length) {
+			clearAttempts(root, budgetKey);
+			return emitClean(
+				standing
+					? `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`
+					: `${formatSummary(result)}${ceilingSuffix}`,
+			);
+		}
+		const attempts = bumpAttempts(root, budgetKey);
 		const max = config.hook.maxAttempts;
 		if (!sessionId && payload.stop_hook_active) {
 			// No session id to budget against: fall back to the conservative
@@ -1324,11 +1402,11 @@ async function main(): Promise<number> {
 					: `${formatSummary(result)}${ceilingSuffix}`,
 			);
 		}
-		const report = formatAgent({ ...result, findings: result.findings.filter((f) => f.severity === 'error') }, config, {
+		const report = formatAgent({ ...result, findings: blocking }, config, {
 			maxFindings: config.hook.maxFindings,
 			terse: true,
 		});
-		return emitBlocking(`${report}\n\n(attempt ${attempts} of ${max})${ceilingSuffix}`);
+		return emitBlocking(`${report}\n\n(attempt ${attempts} of ${max})${standingNote}${ceilingSuffix}`);
 	}
 
 	const maxFindings = Number(args.flags['max-findings'] ?? 0) || 0;
@@ -1353,6 +1431,8 @@ main()
 		process.exitCode = code;
 	})
 	.catch((err: unknown) => {
-		fail(`loupe: ${err instanceof Error ? err.stack : String(err)}\n`);
+		// A refusal is a message, not a crash: `baseline` and `suppressions` reach
+		// the tree ceiling here rather than through a catch of their own.
+		fail(`loupe: ${err instanceof TreeTooLarge ? err.message : err instanceof Error ? err.stack : String(err)}\n`);
 		process.exitCode = EXIT.CANNOT_RUN;
 	});

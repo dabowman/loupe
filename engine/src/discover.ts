@@ -8,7 +8,8 @@
  *
  * The walk is unbounded by default: a scan that quietly stopped halfway would
  * report "clean" for the half it never read. A caller that is only guessing
- * passes a `limit` and reads `truncated` back.
+ * passes a `limit` and reads `truncated` back; `analyze`, which is not guessing,
+ * passes one too and refuses outright when it trips ({@link TreeTooLarge}).
  *
  * Design notes: docs/design/cli.md#file-discovery
  */
@@ -58,6 +59,48 @@ const KINDS = ['styles', 'markup', 'references'] as const satisfies readonly Sou
 
 /** Directory names always skipped, regardless of config — cheap traversal guard. */
 const HARD_SKIP = new Set(['.git', 'node_modules']);
+
+/**
+ * How many entries `analyze` walks before it refuses to report at all.
+ *
+ * Inference stops at `DETECT_ENTRY_BUDGET` and carries on with a guess; an
+ * analysis cannot, because a partial index reports "clean" for whatever it never
+ * reached. So this ceiling is a refusal, not a truncation, and it sits well
+ * above the inference one — four times a budget that is itself several times the
+ * largest project this plugin plausibly meets, counted with `node_modules`, the
+ * ignore globs and dot-directories already pruned — at about two seconds of
+ * walking. Past it the root is a home directory with a stray `package.json`, and
+ * walking on was 30s and more of a 60s hook timeout.
+ */
+export const ANALYZE_ENTRY_BUDGET = 200_000;
+
+/**
+ * The analysis ceiling: `LOUPE_MAX_ENTRIES` where it is a positive whole number,
+ * so a project genuinely larger than the default can say so — and a test can
+ * trip the refusal without building a tree of that size.
+ */
+export function analyzeEntryBudget(): number {
+	const set = Number(process.env.LOUPE_MAX_ENTRIES);
+	return Number.isInteger(set) && set > 0 ? set : ANALYZE_ENTRY_BUDGET;
+}
+
+/**
+ * The analysis walk reached its ceiling. Thrown rather than returned so no caller
+ * can report from what it got — under the hook it becomes a visible `skipped`,
+ * and a typed command exits with "could not run".
+ */
+export class TreeTooLarge extends Error {
+	readonly limit: number;
+	constructor(limit: number) {
+		super(
+			`tree too large to index: the walk stopped at ${limit.toLocaleString('en-US')} entries without finishing, ` +
+				'and a partial index would call the rest clean. Point --root at the project, or narrow `sources` ' +
+				'(or extend `sources.ignore`) in loupe.config.json; LOUPE_MAX_ENTRIES raises the ceiling.',
+		);
+		this.name = 'TreeTooLarge';
+		this.limit = limit;
+	}
+}
 
 /**
  * Could any of these globs match something *inside* a dot-directory?

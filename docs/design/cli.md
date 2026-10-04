@@ -227,8 +227,30 @@ pruned against the ignore globs *during* traversal rather than filtered
 afterwards, so a large `node_modules` is never enumerated.
 
 **The walk is unbounded by default**, because a scan that quietly stopped
-halfway would report "clean" for the half it never read. Only a caller that is
-merely guessing passes a `limit`, and it reads `truncated` back.
+halfway would report "clean" for the half it never read. A caller that is
+merely guessing — inference — passes a `limit`, reads `truncated` back, and
+carries on with a guess it labels as one.
+
+**Analysis is bounded too, and refuses at the bound.** The index is repo-wide
+whatever the scope, so a `PostToolUse` on one file indexed the whole tree first
+— and the project-shape guard is one `npm init` wide: a `package.json` in a home
+directory says "project", after which a hook run on a 1.66M-file tree took 30s
+of its 60s timeout (38s from source). Passing inference's ceiling down would
+not have done: a truncated *analysis* reports "clean" for what it never read,
+which is the one failure a gate must not have. So `analyze` walks to
+`ANALYZE_ENTRY_BUDGET` (200,000 entries, four times the inference budget, about
+two seconds of walking) and, if the walk has not finished, throws `TreeTooLarge`
+instead of returning anything. Under the hook that is a `skipped` system message
+naming the count and the remedy — point `--root` at the project, or narrow
+`sources` / extend `sources.ignore` — and typed it is exit 2. On the same tree
+the hook now stands down in about 4s. `LOUPE_MAX_ENTRIES` raises the ceiling for
+a project that is genuinely larger, and is how the tests trip it without
+building the tree.
+
+The other options were weighed and left for later: stat-ing a known file list
+instead of walking (the cross-file rules — `css/dead-class`, the composites —
+are why the index is repo-wide, and which of them stay meaningful on a partial
+index is its own question), and keeping an index between hook runs.
 
 **Dot-directories are pruned unless a glob names one.** With picomatch's `dot:
 false`, nothing inside `.venv`, `.cache`, `.cargo`, `.yarn/cache` or a pnpm
@@ -777,6 +799,61 @@ its retry budget on findings nobody asked it to fix.
 **Judgement runs after the baseline**, so accepted findings cost nothing — and a
 judged finding never enters a baseline, since its confidence moves between runs
 and a baselined finding that comes and goes is noise in both directions.
+
+## The hook gates what an edit introduced
+
+The two hooks answer different questions. **PostToolUse asks whether this edit
+made the file worse**, and blocks only on findings the edit introduced. **Stop
+asks whether the turn's work is conformant**, absolutely, unchanged.
+
+Blocking PostToolUse on the touched file's absolute state interrupted every
+multi-step remediation partway through. Converting `<div className="x">` to
+`<Stack>` and *then* moving the CSS off `.x` is two edits, and the state between
+them is genuinely non-conformant — so the gate blocked the first edit on
+findings that predated it, with feedback that was true but premature. The retry
+budget kept it from being fatal, but it is per file, so a seven-file conversion
+paid for three interruptions in each. It also meant every edit to a legacy file
+in a repo with no baseline blocked. Stop is the right place for "you converted
+the JSX and left the CSS behind": by then it is an omission, not an
+intermediate state.
+
+**The "before" comes from the payload.** Claude Code hands PostToolUse the
+tool's own result, and Edit and Write both return the content they replaced as
+`tool_response.originalFile` — `null` when Write created the file. The hook
+analyzes that content in the touched file's place (`analyze`'s `contents`
+option) and subtracts its findings. Two alternatives were weighed and passed
+over:
+
+- *A PreToolUse hook snapshotting the file into the state directory.* A second
+  process on every Edit and Write, paid before the tool runs, whether or not
+  anything is wrong: about 0.35s just to start the bundle and 1s from source,
+  plus a full analysis if it recorded findings rather than bytes.
+- *Reconstructing the file by reversing `old_string`/`new_string`.* Ambiguous
+  wherever the new text occurs more than once — a deletion's empty
+  `new_string` occurs everywhere — and impossible for a Write.
+
+**Only when it would block.** The "before" is analyzed only when the "after"
+has a blocking finding, so an edit that leaves the file clean pays nothing for
+the question. One that would block pays a second analysis: on a synthetic
+2,460-file project, a blocking hook run went from 0.94s to 1.41s, and a clean
+one stayed at 1.0s.
+
+**Keyed like the baseline**: rule + file + normalized code, not line. An edit
+above a finding moves it down the file, and a key with the line in it would
+call that finding new.
+
+**No "before", no subtraction.** A file the write created, a payload that does
+not carry `originalFile`, or a pre-edit analysis that fails compares against
+nothing — the absolute check, the gate as it was. A judged redirect is written
+after analysis from a control the analysis collected, so the control standing
+before the edit counts as the finding standing before it; the judge is never
+asked about content the edit has already replaced.
+
+**What it walked past is said, not dropped.** A PostToolUse that passes over
+standing findings says how many in its message, and a blocking report names the
+count beneath the new ones — the agent should know what Stop will hold it to.
+The retry budget is untouched: it counts the runs that blocked, keyed as before
+on session and file.
 
 ## The stand-down latches
 

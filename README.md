@@ -55,7 +55,7 @@ than using it.
 | `skills/loupe-remediation` | Per-rule remedies, and the checks that stop a "fix" from silently changing rendering. |
 | `agents/loupe-fixer` | Per-file remediation agent. `/loupe-fix` fans it out once the work spans enough files to be worth it. |
 | `commands/` | `/loupe-audit`, `/loupe-fix`, `/loupe-baseline`, `/loupe-report` |
-| `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
+| `hooks/hooks.json` | `PostToolUse` on what the edit just introduced, `Stop` across changed files |
 | `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, its two registries and its three authoring docs |
 | `profiles/archer/` | The Archer profile — the same, for a styled system built on Base UI, with its own layout and text components |
 | `profiles/vip/` | The VIP Design System profile — the same, for `@automattic/vip-design-system` on Theme UI |
@@ -967,6 +967,13 @@ The plugin ships both, and both are off until the project opts in (see
 what makes this a write-time gate rather than a review-time one. `Stop` covers
 everything changed in the turn.
 
+They ask different questions. `PostToolUse` blocks only on findings the edit
+*introduced*, against the file as it was before the write; what the file already
+had is mentioned, not blocked on, so a refactor that is worse before it is
+better is not stopped halfway. `Stop` asks whether the turn's work is
+conformant, absolutely — the place for "you converted the JSX and left the CSS
+behind".
+
 Each gets `hook.maxAttempts` gated passes (default 3, budgeted per file for
 `PostToolUse`), then the gate stands down and says so. Bailing out entirely on
 `stop_hook_active` — the obvious loop guard — means the turn that *fixes* a
@@ -984,6 +991,12 @@ more to parse than every finding it could produce. A skipped *stylesheet* still
 reports as `stylesheet/unparsed`; a skipped markup file just contributes
 nothing. Gutenberg — 6,100 markup files, 1,300 stylesheets — indexes in about
 five seconds.
+
+Past 200,000 entries the walk stops and the hook stands aside with a `skipped`
+message saying so, rather than reporting "clean" for the part it never read —
+the case is a home directory with a stray `package.json`, not a project. Point
+the root at the project, or narrow `sources` in `loupe.config.json`;
+`LOUPE_MAX_ENTRIES` raises the ceiling.
 
 ## Status
 
