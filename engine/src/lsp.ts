@@ -31,7 +31,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { substituteOnLine, tokenFixes } from './autofix.ts';
 import { renderTitle } from './rules.ts';
 import { toPosix } from './discover.ts';
-import { escapeRe } from './text.ts';
+import { escapeRe, messageOf } from './text.ts';
 import type { AnalyzeResult, BaselinedResult, Config, DeadRule, Finding, Severity } from './types.ts';
 
 /** LSP severities. `off` never reaches a finding; it maps to Warning so none is ever dropped. */
@@ -259,7 +259,7 @@ export function lsp(opts: {
 		} catch (err) {
 			// The last good set stands: a cleared panel is indistinguishable from a
 			// clean workspace, which is the one thing a failure must not look like.
-			log(`analysis failed: ${err instanceof Error ? err.message : String(err)}`);
+			log(`analysis failed: ${messageOf(err)}`);
 			return;
 		}
 		const next = new Map<string, Finding[]>();

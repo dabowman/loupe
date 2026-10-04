@@ -19,7 +19,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { byBytes } from './discover.ts';
 import { KEEP } from './tokens.ts';
-import { escapeRe } from './text.ts';
+import { escapeRe, messageLineOf } from './text.ts';
 import type { Directive, FixCandidate, KeptValue, SkippedFix, SkippedKeep, TokenFix } from './types.ts';
 
 /**
@@ -177,7 +177,7 @@ export function applyTokenFixes(
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch (err) {
-			const why = err instanceof Error ? err.message : String(err);
+			const why = messageLineOf(err);
 			for (const fix of group) skipped.push({ ...fix, why });
 			continue;
 		}
@@ -269,7 +269,7 @@ export function applyKeeps(
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch (err) {
-			const why = err instanceof Error ? err.message : String(err);
+			const why = messageLineOf(err);
 			for (const k of group) skipped.push({ ...k, why });
 			continue;
 		}

@@ -24,7 +24,7 @@ import { setColor } from '../src/color.ts';
 import { loadConfig } from '../src/config.ts';
 import { formatAgent, formatSarif, reportPayload } from '../src/report.ts';
 import { formatHtml } from '../src/report-html.ts';
-import { CLI, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
+import { CLI, PLUGIN_DATA, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 import type { AnalyzeResult, Config } from '../src/types.ts';
@@ -383,7 +383,7 @@ function runColor(argv: readonly string[], extra: NodeJS.ProcessEnv, input?: str
 		const r = spawnSync(process.execPath, [CLI, ...argv], {
 			cwd: dir,
 			encoding: 'utf8',
-			env: { ...process.env, ...extra },
+			env: { ...process.env, CLAUDE_PLUGIN_DATA: PLUGIN_DATA, ...extra },
 			...(input === undefined ? {} : { input }),
 		});
 		if (r.error) throw r.error;

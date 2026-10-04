@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { reportPayload } from './report.ts';
+import { messageOf } from './text.ts';
 import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
 
 /**
@@ -393,7 +394,7 @@ export function serve(opts: {
 						// shows the message; the status keeps it out of `.json()`.
 						res.statusCode = 500;
 						res.setHeader('content-type', 'application/json; charset=utf-8');
-						res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+						res.end(JSON.stringify({ error: messageOf(err) }));
 					});
 				return;
 			}

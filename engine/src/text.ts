@@ -15,19 +15,24 @@
  * Design notes: docs/design/report.md#bounding
  */
 
-/** First line of an unknown throw — a parser may reject with anything. */
-export const messageOf = (err: unknown): string =>
-	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
+/** The message of an unknown throw. Anything can be thrown; only Errors carry a message. */
+export const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 /**
- * `messageOf` for a parse handed `{ from: abs }`. postcss opens a syntax error
+ * The first line of the same, for a message that has to fit on one — a parser
+ * may reject with anything, a code frame included.
+ */
+export const messageLineOf = (err: unknown): string => messageOf(err).split('\n')[0] ?? 'parse failed';
+
+/**
+ * `messageLineOf` for a parse handed `{ from: abs }`. postcss opens a syntax error
  * with that path — `/home/alice/proj/a.css:1:1: Unclosed block` — and an
  * absolute path is a fact about the machine, not the project: as a finding's
  * `code` it is part of the baseline key, which then matches on no other
  * checkout. The finding already names the file, so only `line:column` is kept.
  */
 export const parseMessageOf = (err: unknown, abs: string): string => {
-	const message = messageOf(err);
+	const message = messageLineOf(err);
 	return message.startsWith(`${abs}:`) ? message.slice(abs.length + 1) : message;
 };
 

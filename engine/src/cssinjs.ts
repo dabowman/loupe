@@ -15,7 +15,7 @@ import postcss from 'postcss';
 import type { Container, Root, Rule } from 'postcss';
 import type { File, ImportDeclaration, TemplateLiteral } from '@babel/types';
 import { isGridDecl } from './styles.ts';
-import { messageOf } from './text.ts';
+import { messageLineOf } from './text.ts';
 import type { CssInJsLocals, Decl, TemplateGroup } from './types.ts';
 
 /**
@@ -89,7 +89,7 @@ export function parseTemplate(cssText: string, startLine: number): { groups: Tem
 	try {
 		root = postcss.parse(`.dsh-root{${cssText}\n}`, { from: undefined });
 	} catch (err) {
-		return { groups: [], error: messageOf(err) };
+		return { groups: [], error: messageLineOf(err) };
 	}
 	const groups: TemplateGroup[] = [];
 	const at = (node: { source?: { start?: { line: number } } }): number =>

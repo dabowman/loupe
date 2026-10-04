@@ -11,10 +11,25 @@
 #     ln -s ~/.claude/plugins/<marketplace>/loupe/bin/loupe ~/.local/bin/loupe
 #
 # Both routes reach it through a symlink, but different ones: Claude Code
-# symlinks the plugin *directory*, ~/.local/bin symlinks this *file*. `realpath`
-# resolves both — otherwise the ~/.local/bin route looks for the engine in
+# symlinks the plugin *directory*, ~/.local/bin symlinks this *file*. Both have
+# to resolve — otherwise the ~/.local/bin route looks for the engine in
 # ~/.local/engine.
-here=$(dirname -- "$(realpath -- "$0")")
+#
+# Not `realpath`: macOS 12 and earlier ship no such binary, and the shim died on
+# "command not found" before loupe ever ran. The loop follows the file's own
+# links with `readlink`, one hop at a time (a relative target is relative to the
+# link's directory); `pwd -P` then resolves a linked directory anywhere above it.
+# `CDPATH=` keeps `cd` from searching elsewhere and printing where it went.
+resolve() {
+	p=$1
+	while [ -h "$p" ]; do
+		d=$(dirname -- "$p")
+		p=$(readlink -- "$p")
+		case $p in /*) ;; *) p="$d/$p" ;; esac
+	done
+	CDPATH= cd -- "$(dirname -- "$p")" && pwd -P
+}
+here=$(resolve "$0") || exit 2
 
 # Default to the shipped design-system profiles, the same ones the hooks and
 # commands pass. A profile only supplies its registries to a project that

@@ -13,7 +13,7 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
@@ -21,7 +21,7 @@ import { isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
 import { RULES } from '../src/rules.ts';
 import { analyze } from '../src/analyze.ts';
-import { CLI, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
+import { CLI, PLUGIN_DATA, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 import type { Finding } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -54,7 +54,7 @@ function runCli(
 	const home = scratch('dsh-home-');
 	try {
 		// Opted in, and not silenced: the gate is off until a project turns it on.
-		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, LOUPE: 'on' };
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, LOUPE: 'on', CLAUDE_PLUGIN_DATA: PLUGIN_DATA };
 		delete env.LOUPE_OFF;
 		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
 		// `process.execPath` rather than `'node'`: the suite must run under the
@@ -124,7 +124,9 @@ const tmpRepo = (files: Record<string, string>): string => {
  * `CLAUDE_PLUGIN_OPTION_*` family overrides rules, and `preset` among them wins
  * over the fixture's own `loupe.config.json`, so `CLAUDE_PLUGIN_OPTION_PRESET`
  * makes the wpds rules vanish and the blocking test fail with "it did not
- * block". `CLAUDE_PLUGIN_DATA` and `CLAUDE_PLUGIN_ROOT` move state and profiles.
+ * block". `CLAUDE_PLUGIN_DATA` and `CLAUDE_PLUGIN_ROOT` move state and profiles,
+ * so the first is the suite's own scratch directory unless a test names one —
+ * `undefined` for none, as a shell has.
  * `HOME` is the quietest of them: `resolvedOptions` reads `~/.claude/settings*
  * .json`, so a developer with this plugin installed and configured has options
  * leaking in through a file nothing in the test mentions.
@@ -142,7 +144,8 @@ const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
 	const e: NodeJS.ProcessEnv = { ...process.env, HOME: EMPTY_HOME, LOUPE: 'on', ...extra };
 	if (e.LOUPE === undefined) delete e.LOUPE;
 	if (!('LOUPE_OFF' in extra)) delete e.LOUPE_OFF;
-	if (!('CLAUDE_PLUGIN_DATA' in extra)) delete e.CLAUDE_PLUGIN_DATA;
+	if (!('CLAUDE_PLUGIN_DATA' in extra)) e.CLAUDE_PLUGIN_DATA = PLUGIN_DATA;
+	if (e.CLAUDE_PLUGIN_DATA === undefined) delete e.CLAUDE_PLUGIN_DATA;
 	if (!('CLAUDE_PLUGIN_ROOT' in extra)) delete e.CLAUDE_PLUGIN_ROOT;
 	for (const k of Object.keys(e)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_') && !(k in extra)) delete e[k];
 	return e;
@@ -364,7 +367,7 @@ await check('a baseline recorded from a shell is visible to the plugin hook', ()
 	});
 	const pluginData = scratch('dsh-plugin-data-');
 	try {
-		const shell = env();
+		const shell = env({ CLAUDE_PLUGIN_DATA: undefined });
 
 		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: shell });
 		assert(/baselined [1-9]/.test(recorded), `nothing baselined:\n${recorded}`);
@@ -454,19 +457,26 @@ await check('the hook is off until the project opts in', () => {
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
 	let session = 0;
-	const hook = (extra: NodeJS.ProcessEnv): number => {
+	// The exit code alone cannot tell "off" from "ran and passed": an advisory run
+	// exits 0 too, with its report on stdout. Off is exit 0 *and* nothing said.
+	const hook = (extra: NodeJS.ProcessEnv, content?: string): { status: number; stdout: string } => {
 		try {
-			execFileSync('node', [CLI, 'hook', '--root', root], {
+			const stdout = execFileSync('node', [CLI, 'hook', '--root', root], {
 				encoding: 'utf8',
-				input: JSON.stringify({ session_id: `optin-${++session}`, tool_input: { file_path: 'styles/a.css' } }),
+				input: JSON.stringify({
+					session_id: `optin-${++session}`,
+					tool_input: { file_path: 'styles/a.css', ...(content === undefined ? {} : { content }) },
+				}),
 				env: env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true', ...extra }),
 				stdio: ['pipe', 'pipe', 'pipe'],
 			});
-			return 0;
+			return { status: 0, stdout };
 		} catch (err) {
-			return execFailure(err).status ?? -1;
+			const f = execFailure(err);
+			return { status: f.status ?? -1, stdout: f.stdout };
 		}
 	};
+	const silent = (r: { status: number; stdout: string }): boolean => r.status === 0 && r.stdout === '';
 	const status = (): string =>
 		execFileSync('node', [CLI, 'status', '--root', root], {
 			encoding: 'utf8',
@@ -474,14 +484,21 @@ await check('the hook is off until the project opts in', () => {
 			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 	try {
-		assert(hook({ LOUPE: 'on' }) === 2, 'fixture does not block, so silence proves nothing');
-		assert(hook({ LOUPE: undefined }) === 0, 'the hook ran in a project that never opted in');
+		assert(hook({ LOUPE: 'on' }).status === 2, 'fixture does not block, so silence proves nothing');
+		assert(silent(hook({ LOUPE: undefined })), 'the hook ran in a project that never opted in');
+		// Off still drains the payload, as under LOUPE_OFF: a Write's whole file
+		// body arrives on this pipe, and one past the pipe buffer is the one that
+		// proves it was read.
+		assert(silent(hook({ LOUPE: undefined }, 'x'.repeat(512 * 1024))), 'a large payload was not drained before opt-in');
 		assert(/hook:\s+OFF/.test(status()), 'status did not report the hook off before opt-in');
 
 		writeAll(root, { '.claude/settings.local.json': JSON.stringify({ env: { LOUPE: 'on' } }) });
-		assert(hook({ LOUPE: undefined }) === 2, 'opting in through .claude/settings.local.json did not turn the hook on');
+		assert(
+			hook({ LOUPE: undefined }).status === 2,
+			'opting in through .claude/settings.local.json did not turn the hook on',
+		);
 		assert(!/hook:\s+OFF/.test(status()), 'status reports OFF for an opted-in project');
-		assert(hook({ LOUPE: 'off' }) === 0, 'the environment did not outrank the settings file');
+		assert(silent(hook({ LOUPE: 'off' })), 'the environment did not outrank the settings file');
 	} finally {
 		cleanup(root);
 	}
@@ -2080,6 +2097,85 @@ await check('the hook runs --judge without a key instead of refusing', () => {
 		assert(stderr.includes('TYPESAFE_API_KEY'), `unexpected refusal: ${stderr}`);
 	} finally {
 		cleanup(root);
+	}
+});
+
+// The PATH shim found itself with `realpath`, which macOS 12 and earlier do not
+// ship: every invocation died on "command not found" before loupe ran. Both
+// routes onto PATH go through a symlink — Claude Code links the plugin
+// directory, a hand install links the file, sometimes relatively — so each is
+// run here under `sh` with a PATH that holds the shim's tools and nothing else.
+await check('the PATH shim finds the engine through either symlink, with no realpath', () => {
+	const repo = join(HERE, '..', '..');
+	const dir = scratch('dsh-shim-');
+	try {
+		const tools = join(dir, 'tools');
+		mkdirSync(tools);
+		symlinkSync(process.execPath, join(tools, 'node'));
+		for (const tool of ['dirname', 'readlink']) {
+			const found = execFileSync('/bin/sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).trim();
+			symlinkSync(found, join(tools, tool));
+		}
+		mkdirSync(join(dir, 'bin'));
+		mkdirSync(join(dir, 'chain'));
+		symlinkSync(join(repo, 'bin', 'loupe'), join(dir, 'bin', 'loupe'));
+		symlinkSync(join('..', 'bin', 'loupe'), join(dir, 'chain', 'loupe'));
+		symlinkSync(repo, join(dir, 'plugin'));
+		const routes = {
+			'a symlinked file': join(dir, 'bin', 'loupe'),
+			'a relative link to that link': join(dir, 'chain', 'loupe'),
+			'a symlinked directory': join(dir, 'plugin', 'bin', 'loupe'),
+		};
+		for (const [route, shim] of Object.entries(routes)) {
+			// From the scratch dir: a shim that resolved nothing falls back to `.`,
+			// and from `engine/` that finds an engine by accident.
+			const r = spawnSync('/bin/sh', [shim, 'presets'], { cwd: dir, encoding: 'utf8', env: env({ PATH: tools }) });
+			assert(r.status === 0, `${route}: exit ${r.status}\n${r.stderr}`);
+			assert(/\bwpds\b/.test(r.stdout), `${route}: no presets listed:\n${r.stdout}`);
+		}
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// The bin chose `src/` whenever picomatch resolved beside it. Outside the repo
+// that is wrong twice: `src/` imports `../../patterns/index.json`, which a
+// vendored copy of the engine does not have, and Node strips no types under
+// `node_modules`. Either way the bundle sat there unused while the bin said
+// there was none — or, under `node_modules`, dumped a raw Node stack trace.
+await check('an engine copied out of the repo runs its bundle, not its source', () => {
+	const engine = join(HERE, '..');
+	const dir = scratch('dsh-vendor-');
+	const copy = (to: string, parts: readonly string[]): string => {
+		for (const part of parts) cpSync(join(engine, part), join(to, part), { recursive: true });
+		mkdirSync(join(to, 'node_modules'), { recursive: true });
+		symlinkSync(join(engine, 'node_modules', 'picomatch'), join(to, 'node_modules', 'picomatch'));
+		return to;
+	};
+	const run = (at: string) =>
+		spawnSync(process.execPath, [join(at, 'bin', 'loupe.mjs'), 'version'], { encoding: 'utf8', env: env() });
+	try {
+		const whole = ['bin', 'src', 'dist', 'presets', 'package.json'];
+		for (const at of [
+			copy(join(dir, 'vendor', 'loupe-engine'), whole),
+			copy(join(dir, 'node_modules', '@dvdbwmn', 'loupe'), whole),
+		]) {
+			const r = run(at);
+			assert(r.status === 0, `${at}: exit ${r.status}\n${r.stderr}`);
+			assert(/\(bundle,/.test(r.stdout), `${at}: did not run the bundle:\n${r.stdout}${r.stderr}`);
+		}
+
+		// With no bundle to fall back on, the failure says so in a sentence.
+		const bare = copy(
+			join(dir, 'node_modules', '@dvdbwmn', 'bare'),
+			whole.filter((part) => part !== 'dist'),
+		);
+		const r = run(bare);
+		assert(r.status === 2, `no bundle, yet exit ${r.status}`);
+		assert(/has no bundle/.test(r.stderr), `unexpected message:\n${r.stderr}`);
+		assert(!/node:internal/.test(r.stderr), `a raw stack trace reached the user:\n${r.stderr}`);
+	} finally {
+		cleanup(dir);
 	}
 });
 

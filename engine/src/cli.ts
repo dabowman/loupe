@@ -28,7 +28,7 @@ import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPa
 import { formatHtml } from './report-html.ts';
 import { lsp } from './lsp.ts';
 import { serve } from './serve.ts';
-import { oneLine } from './text.ts';
+import { messageOf, oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
 import type { RegistrySource } from './profiles.ts';
@@ -50,9 +50,6 @@ import type { AnalyzeResult, BaselinedResult, Config, Directive } from './types.
 import type { DetectedConfig } from './detect.ts';
 
 const EXIT = { OK: 0, BLOCKED: 1, CANNOT_RUN: 2 };
-
-/** First line of an unknown throw. Anything can be thrown; only Errors carry a message. */
-const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
 /**
  * The TypeSafe key, or undefined. First found wins: the environment, the plugin
