@@ -260,7 +260,10 @@ Other decisions there:
 - The client is written **without template literals**: the whole string is itself
   inside one, and a stray `${` would be interpolated by the bundler rather than
   shipped — a failure that shows up as a broken page, not a build error.
-- Every themed value is `light-dark(light, dark)`. Severity uses reserved status
+- Every themed value is `light-dark(light, dark)`, declared under
+  `@supports (color: light-dark(#000, #000))` over plain light values. Unguarded,
+  a custom property holding a value the browser cannot compute still wins, and
+  every `var()` reading it falls back to nothing. Severity uses reserved status
   colors rather than a series hue, because severity is a state, not an identity.
   On the light surface the advisory amber falls below 3:1, which carries an
   obligation: **every severity is rendered with its glyph and the word, never

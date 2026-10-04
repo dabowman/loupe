@@ -19,6 +19,18 @@
 export const messageOf = (err: unknown): string =>
 	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
 
+/**
+ * `messageOf` for a parse handed `{ from: abs }`. postcss opens a syntax error
+ * with that path — `/home/alice/proj/a.css:1:1: Unclosed block` — and an
+ * absolute path is a fact about the machine, not the project: as a finding's
+ * `code` it is part of the baseline key, which then matches on no other
+ * checkout. The finding already names the file, so only `line:column` is kept.
+ */
+export const parseMessageOf = (err: unknown, abs: string): string => {
+	const message = messageOf(err);
+	return message.startsWith(`${abs}:`) ? message.slice(abs.length + 1) : message;
+};
+
 /** `s` as a literal inside a regex. */
 export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

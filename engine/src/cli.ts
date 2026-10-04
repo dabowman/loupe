@@ -22,7 +22,7 @@ import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
-import { changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
+import { byBytes, changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
@@ -947,7 +947,7 @@ async function main(): Promise<number> {
 			const groups = new Map<string, Directive[]>();
 			for (const d of directives)
 				for (const key of by === 'rule' ? d.rules : [d.file]) groups.set(key, [...(groups.get(key) ?? []), d]);
-			const sorted = [...groups].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+			const sorted = [...groups].sort((a, b) => b[1].length - a[1].length || byBytes(a[0], b[0]));
 			const out: string[] = [];
 			for (const [key, group] of sorted) {
 				out.push(`${by === 'rule' ? magenta(key) : bold(key)} ${dim(`(${group.length})`)}`);

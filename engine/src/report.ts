@@ -13,6 +13,7 @@
 
 import { createHash } from 'node:crypto';
 import { findingKey } from './analyze.ts';
+import { byBytes } from './discover.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, yellow } from './color.ts';
 import { RULES, renderTitle } from './rules.ts';
 import { messageLine } from './text.ts';
@@ -131,7 +132,7 @@ function nearMisses(result: AnalyzeResult | BaselinedResult): string[] {
 const tally = (keys: readonly string[]): [string, number][] => {
 	const counts = new Map<string, number>();
 	for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
-	return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+	return [...counts].sort((a, b) => b[1] - a[1] || byBytes(a[0], b[0]));
 };
 
 /** How many entries a one-line tally may name before it starts counting the rest. */
@@ -215,7 +216,7 @@ const byRank = (a: Group, b: Group): number => RULES[b[0] as RuleId].rank - RULE
  */
 const byWeight = (a: Group, b: Group): number => {
 	const blocking = (g: Finding[]): number => g.filter((f) => f.severity === 'error').length;
-	return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]);
+	return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || byBytes(a[0], b[0]);
 };
 
 /** The findings grouped on one axis, that axis's own order. */
@@ -439,7 +440,7 @@ function fingerprints(findings: readonly Finding[]): string[] {
 export function reportPayload(result: AnalyzeResult | BaselinedResult, config: Config): ReportPayload {
 	const title = titleFor(config);
 	return {
-		version: 1,
+		version: 2,
 		tool: 'loupe',
 		blocking: result.blocking,
 		summary: {

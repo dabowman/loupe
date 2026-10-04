@@ -848,10 +848,13 @@ export interface RuleDescriptor {
  * is now a contract with two consumers instead of one, and the second reads it
  * back at runtime. `version` is additive-only: fields may be added, so a
  * consumer must ignore what it does not know, and nothing already emitted
- * changes meaning without a bump.
+ * changes meaning or disappears without a bump.
+ *
+ * 2 — `config.rules[id]` is `{ severity }`: `options` went with the
+ * `[severity, {opts}]` rule form.
  */
 export interface ReportPayload {
-	version: 1;
+	version: 2;
 	tool: 'loupe';
 	blocking: boolean;
 	summary: {

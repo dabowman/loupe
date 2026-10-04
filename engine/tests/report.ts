@@ -124,11 +124,36 @@ await check('the page is one file — no external requests', () => {
 	assert(!/<(script|link|img)[^>]+(src|href)=/i.test(html), 'the page loads something over the network');
 });
 
+await check('the palette has a plain value under every light-dark() one', () => {
+	// A custom property accepts any value, so an unguarded `light-dark()` wins in
+	// a browser that cannot compute it, and every colour reading it is lost.
+	const css = /<style>([\s\S]*?)<\/style>/.exec(formatHtml(result, config))?.[1] ?? '';
+	const at = css.indexOf('@supports (color: light-dark(#000, #000))');
+	assert(at > 0, 'no @supports guard around the light-dark() palette');
+	const plain = css.slice(0, at);
+	assert(!plain.includes('light-dark('), 'a light-dark() value sits outside the @supports guard');
+	const themed = [...css.slice(at).matchAll(/(--[\w-]+): light-dark\(/g)].map((m) => m[1] ?? '');
+	assert(themed.length > 0, 'the guard declares no themed properties');
+	for (const name of themed) assert(plain.includes(`${name}: `), `${name} has no plain fallback`);
+});
+
 await check('summary.baselined is absent when no baseline step ran', () => {
 	const bare = reportPayload(result, config);
 	assert(!('baselined' in bare.summary), 'an un-baselined run reported a baselined count');
 	const withBaseline = reportPayload({ ...result, baselined: 4, fixed: 0 }, config);
 	assert(withBaseline.summary.baselined === 4, 'the baselined count did not survive');
+});
+
+await check('the payload version names the shape config.rules has', () => {
+	// Version 2 is the one without `options`: a shape change that ships under an
+	// unchanged version is one no consumer can detect.
+	const payload = reportPayload(result, config);
+	assert(payload.version === 2, `the payload is version ${payload.version}`);
+	for (const [id, setting] of Object.entries(payload.config.rules))
+		assert(
+			JSON.stringify(Object.keys(setting)) === '["severity"]',
+			`${id} carries ${JSON.stringify(setting)} — a new shape needs a new version`,
+		);
 });
 
 await check('the rules roster resolves title placeholders', () => {
@@ -186,6 +211,63 @@ await check('sarif rules carry a namespace tag and a pointer to the guidance', (
 });
 
 cleanup(root);
+
+await check('an unparsed stylesheet is keyed without the path it was read from', async () => {
+	// postcss opens its error with the absolute path it was handed, and `code`
+	// is part of the baseline key: left in, the key holds one machine's checkout
+	// and a committed baseline matches on no other.
+	const { result, root } = await run({
+		'loupe.config.json': CONFIG,
+		'styles/broken.css': '.wf-row { color: #757575;',
+	});
+	try {
+		const f = one(
+			result.findings.filter((x) => x.rule === 'stylesheet/unparsed'),
+			'stylesheet/unparsed finding',
+		);
+		assert(f.file === 'styles/broken.css', `the finding names ${f.file}`);
+		for (const text of [f.message, f.code ?? '', ...result.diagnostics.parseErrors.map((e) => e.message)])
+			assert(!text.includes('broken.css') && /^\d+:\d+: /.test(text), `a parse error kept its path: ${text}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('findings, directives and tallies are in byte order, not the locale’s', async () => {
+	// `localeCompare` puts `a` before `B` and may skip the `-`, and answers
+	// differently under another `LANG`: the same run would print in a different
+	// order on a CI box than on a laptop.
+	const sheet =
+		'.wf-x { color: #757575; }\n/* wpds-allow tokens/hardcoded-value -- kept */\n.wf-y { color: #757575; }\n';
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'styles/a.css': sheet,
+		'styles/B.css': sheet,
+		'styles/-c.css': sheet,
+	});
+	try {
+		const expected = ['styles/-c.css', 'styles/B.css', 'styles/a.css'];
+		const order = (files: readonly string[]): string[] => files.filter((f, i) => files.indexOf(f) === i);
+		const first = result.findings[0];
+		assert(first, 'the fixture produced no findings');
+		const findings = order(result.findings.filter((f) => f.rule === first.rule).map((f) => f.file));
+		assert(JSON.stringify(findings) === JSON.stringify(expected), `findings ran ${findings.join(', ')}`);
+		const directives = order(result.directives.map((d) => d.file));
+		assert(JSON.stringify(directives) === JSON.stringify(expected), `directives ran ${directives.join(', ')}`);
+		const byFile = Object.keys(reportPayload(result, config).summary.byFile);
+		assert(JSON.stringify(byFile) === JSON.stringify(expected), `the tally ran ${byFile.join(', ')}`);
+		assert(!formatHtml(result, config).includes('localeCompare'), 'the page sorts by the reader’s locale');
+		const grouped = execFileSync(process.execPath, [CLI, 'suppressions', '--group-by', 'file'], {
+			cwd: root,
+			encoding: 'utf8',
+			env: { ...process.env, NO_COLOR: '1' },
+		});
+		const heads = grouped.split('\n').flatMap((l) => /^(\S+\.css) \(\d+\)$/.exec(l)?.[1] ?? []);
+		assert(JSON.stringify(heads) === JSON.stringify(expected), `suppressions --group-by ran ${heads.join(', ')}`);
+	} finally {
+		cleanup(root);
+	}
+});
 
 await check('composite findings carry the key their cluster is grouped on', async () => {
 	// Three files assembling the same shape: one defect, reported three times,

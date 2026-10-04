@@ -781,6 +781,12 @@ loupe suppressions --stale          # only the ones muting nothing; exit 1 if an
 Exit codes are a contract: `0` clean or advisory-only, `1` blocking findings,
 `2` could not run.
 
+The JSON payload carries a `version`, bumped whenever a field it already emitted
+changes meaning or goes away; adding a field does not bump it, so a consumer
+should ignore keys it does not know. Version `2` dropped `options` from every
+`config.rules` entry, which is now `{ severity }` alone, since a rule no longer
+takes the `[severity, {opts}]` form.
+
 JSON findings that flag a declaration carry `suggest`: `[{ prop, value, tokens,
 line? }]`, one entry per declaration, tokens most specific first. `tokens` is
 empty where nothing matched — the entry is still there, so "no token for this"
