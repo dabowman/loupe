@@ -56,13 +56,12 @@ export const DEFAULT_BASELINE = '.loupe-baseline.json';
  * Resolve the baseline path — always project-relative, never plugin data. The
  * CLI and the hook are the same tool and must read the same file. A named path
  * is honored as given.
+ *
+ * The one place a baseline path is resolved. `p` is never empty: an empty
+ * `--baseline=` is normalized to "unnamed" once, in `main()`, and an empty
+ * config `baseline` to the default name once, in `loadConfig`.
  */
-export function baselinePath(root: string, named?: string | null): string {
-	// Falsy, not nullish: `--baseline=` reaches here as an empty string, and the
-	// readers below treat that as "nobody named one".
-	const p = named || DEFAULT_BASELINE;
-	return isAbsolute(p) ? p : join(root, p);
-}
+export const baselinePath = (root: string, p: string): string => (isAbsolute(p) ? p : join(root, p));
 
 /**
  * The baseline to read, or the one to write if none exists yet.
@@ -76,10 +75,10 @@ export function baselinePath(root: string, named?: string | null): string {
  */
 export function findExistingBaseline(
 	root: string,
-	explicit?: string | null,
-	configured?: string | null,
+	explicit: string | null,
+	configured: string,
 ): { path: string; found: boolean; fallback: 'none' | 'default-name' } {
-	if (explicit) {
+	if (explicit !== null) {
 		const path = baselinePath(root, explicit);
 		return { path, found: existsSync(path), fallback: 'none' };
 	}

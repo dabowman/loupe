@@ -13,8 +13,8 @@
  */
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
 import { isSource } from '../src/discover.ts';
@@ -699,6 +699,27 @@ await check('--baseline names the same file for the writer and the readers', () 
 	}
 });
 
+// The config's own empty `baseline` is the other way to name nothing. It is
+// normalized in `loadConfig` rather than at each reader, so the writer and the
+// readers have to land on the default name together — joined to the root as
+// given, it names the project directory itself.
+await check('an empty config `baseline` means the default name, for the writer and the readers', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] }, baseline: '' }),
+		'src/A.jsx':
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
+		'styles/a.css': '.acme-t { color: #f00; }',
+	});
+	try {
+		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
+		assert(recorded.includes(join(root, '.loupe-baseline.json')), `wrote somewhere else:\n${recorded}`);
+		const read = checkAll(root);
+		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(read), `readers missed the default name:\n${read}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // When a configured baseline path is not there yet, the project's own default
 // file answers — and `status` says so, rather than calling a file already in
 // the project an old location.
@@ -766,6 +787,42 @@ await check('a gate that stood down stays down until the finding goes', () => {
 		assert(fire() === 2, 'the gate stayed down after the finding was fixed and reintroduced');
 	} finally {
 		cleanup(root);
+	}
+});
+
+// Outside a plugin there is no CLAUDE_PLUGIN_DATA, and the retry counter used to
+// fall back to `<root>/.loupe/` — an untracked directory in the user's repo for
+// data that expires in six hours. It goes to a temp directory of this user's
+// own, and `status` still says where, marked as outside the repo.
+await check('the hook keeps its retry counter out of the repo, and status says where it is', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '/* ds-disable */\n.a { color: #f00; }',
+	});
+	// The suite's own plugin data would hide the fallback this is about, so the
+	// shell's empty one; the counter it writes is removed below, by the path
+	// `status` names, so the run leaves nothing in the user's temp directory.
+	let where = '';
+	try {
+		const r = runCli(
+			['hook', '--root', root],
+			env({ CLAUDE_PLUGIN_DATA: undefined, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+			'{"session_id":"tmp","tool_input":{"file_path":"styles/a.css"}}',
+		);
+		assert(r.status === 2, `the fixture should block (and so count an attempt), got ${r.status}:\n${r.stderr}`);
+		assert(!existsSync(join(root, '.loupe')), 'the hook wrote a .loupe/ directory into the project');
+
+		const status = runCli(['status', '--root', root], env({ CLAUDE_PLUGIN_DATA: undefined })).stdout;
+		const line = /state:\s+(\S+)(.*)/.exec(status);
+		assert(line, `status does not report the retry counter:\n${status}`);
+		const [, named = '', marker = ''] = line;
+		where = named;
+		assert(existsSync(where), `status names ${where}, which the hook did not write`);
+		assert(relative(root, where).startsWith('..'), `the retry counter is inside the repo: ${where}`);
+		assert(/outside your repo/.test(marker), `status did not mark the location:\n${status}`);
+	} finally {
+		cleanup(root);
+		if (where.endsWith('attempts.json')) cleanup(dirname(where));
 	}
 });
 
@@ -902,6 +959,90 @@ await check('re-recording an unchanged backlog rewrites the same bytes', () => {
 		assert(readFileSync(file, 'utf8') !== first, 'a changed backlog kept the old timestamp');
 	} finally {
 		cleanup(root);
+	}
+});
+
+// `/loupe-baseline` confirms before writing, and could only ask `check`, which
+// applies the existing baseline: on a repo that had one it reported nothing to
+// confirm. `--dry-run` says what recording now would change, by rule, against
+// the baseline in force — and writes nothing.
+await check('baseline --dry-run shows what would be recorded, new and fixed, and writes nothing', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.a { color: #f00; }\n.b { margin: 3px; }',
+	});
+	const file = join(root, '.loupe-baseline.json');
+	const dry = (): string =>
+		execFileSync('node', [CLI, 'baseline', '--dry-run', '--root', root], { encoding: 'utf8', env: env() });
+	try {
+		const fresh = dry();
+		assert(/^Would record [1-9]\d* finding\(s\)/.test(fresh), `no headline:\n${fresh}`);
+		assert(/tokens\/hardcoded-value\s+1\b/.test(fresh), `no by-rule count:\n${fresh}`);
+		assert(/No existing baseline/.test(fresh), `did not say there was nothing to compare with:\n${fresh}`);
+		assert(!existsSync(file), 'a dry run wrote the baseline');
+
+		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
+		const written = readFileSync(file, 'utf8');
+		const { createdAt, entries } = JSON.parse(written) as { createdAt: string; entries: string[] };
+		assert(/Nothing would change/.test(dry()), `an unchanged backlog reported a change:\n${dry()}`);
+
+		// One finding fixed, one introduced: the split is the decision, not the total.
+		writeFileSync(join(root, 'styles', 'a.css'), '.a { color: #f00; }\n.c { padding: 5px; }');
+		const after = dry();
+		assert(/\+1 new/.test(after), `the new finding was not called new:\n${after}`);
+		assert(/layout\/margin-on-child\s+0\s+\(-1 fixed\)/.test(after), `the fixed rule has no row:\n${after}`);
+		assert(
+			after.includes(`Existing baseline: ${entries.length} entries, recorded ${createdAt}`),
+			`the existing baseline was not described:\n${after}`,
+		);
+		assert(readFileSync(file, 'utf8') === written, 'a dry run rewrote the baseline');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Whether the baseline is tracked decides whether the gate means anything to
+// anyone else: untracked, CI and every other clone run with none. `baseline`
+// said only where it wrote. It now says to commit the file, and when git
+// ignores it says that instead — a combination that guarantees the divergence.
+// Outside a repository there is nothing to ask, and it must not crash asking.
+await check('baseline says to commit the file, and warns when git ignores it', () => {
+	const files = { 'loupe.config.json': JSON.stringify({ extends: 'wpds' }), 'styles/a.css': '.a { color: #f00; }' };
+	const record = (root: string, dryRun = false): string =>
+		execFileSync('node', [CLI, 'baseline', ...(dryRun ? ['--dry-run'] : []), '--root', root], {
+			encoding: 'utf8',
+			env: env(),
+		});
+	const gitIn = (dir: string, args: string[]): void => {
+		execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'ignore', 'ignore'] });
+	};
+	const plain = tmpRepo(files);
+	const tracked = tmpRepo(files);
+	const ignored = tmpRepo({ ...files, '.gitignore': '.loupe-baseline.json\n' });
+	try {
+		const outside = record(plain);
+		assert(/Commit this file/.test(outside), `no commit reminder outside git:\n${outside}`);
+		assert(!/gitignored/.test(outside), `warned about git outside a repository:\n${outside}`);
+
+		gitIn(tracked, ['init']);
+		const inRepo = record(tracked);
+		assert(/Commit this file/.test(inRepo), `no commit reminder:\n${inRepo}`);
+		assert(!/gitignored/.test(inRepo), `warned about a file git does not ignore:\n${inRepo}`);
+
+		gitIn(ignored, ['init']);
+		const warned = record(ignored);
+		assert(
+			/Warning: \.loupe-baseline\.json is gitignored/.test(warned),
+			`no warning for an ignored baseline:\n${warned}`,
+		);
+		assert(/report all 1 finding\(s\)/.test(warned), `the warning does not say what it costs:\n${warned}`);
+		assert(!/Commit this file/.test(warned), `told to commit a file git will not take:\n${warned}`);
+		// Before writing too: the dry run is where the decision is made.
+		assert(/is gitignored/.test(record(ignored, true)), 'the dry run did not warn about an ignored baseline');
+	} finally {
+		cleanup(plain);
+		cleanup(tracked);
+		cleanup(ignored);
 	}
 });
 

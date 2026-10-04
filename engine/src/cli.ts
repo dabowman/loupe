@@ -18,11 +18,11 @@ import { analyze, dedupe } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import { judgeRedirects, judgeRenames, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
-import { applyBaseline, readBaseline, writeBaseline } from './baseline.ts';
+import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
-import { byBytes, changedFiles, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
+import { byBytes, changedFiles, gitIgnores, hasGitDir, isSource, isWorktree, toPosix } from './discover.ts';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
 import { formatHtml } from './report-html.ts';
@@ -32,7 +32,7 @@ import { messageOf, oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
 import type { RegistrySource } from './profiles.ts';
-import { baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
+import { attemptsPath, baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
 import {
 	bumpAttempts,
 	clearAttempts,
@@ -258,7 +258,9 @@ Options:
   --stale               For suppressions, list only the directives naming a
                         rule that muted nothing — no finding left, the rule
                         off, or an id that is not a rule — and exit 1 if any
-  --dry-run             Report what 'fix' would change without writing
+  --dry-run             Report what 'fix' would change without writing; for
+                        'baseline', what it would record by rule, new and
+                        fixed against the existing baseline
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
                         pattern it was built as (patterns/judged-redirect), and
@@ -620,6 +622,12 @@ async function main(): Promise<number> {
 	if (options.maxAttempts) config.hook.maxAttempts = options.maxAttempts;
 	if (options.maxFindings) config.hook.maxFindings = options.maxFindings;
 
+	// The baseline this run was told to use, or null for the configured one. Said
+	// once, here: `--baseline=` arrives as an empty string, and the writer and
+	// every reader must agree that it names nothing — one of them taking it as a
+	// path records the backlog in a file the others never open.
+	const namedBaseline = args.flags.baseline || null;
+
 	if (command === 'explain') {
 		const id = canonicalRuleId(args._[1] ?? '');
 		if (!isRuleId(id)) {
@@ -675,7 +683,8 @@ async function main(): Promise<number> {
 					: config.source.kind === 'inferred'
 						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
-		const base = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+		const base = findExistingBaseline(root, namedBaseline, config.baselinePath);
+		const state = attemptsPath(root);
 		// What design system this run thinks it is checking, in the terms the rules are
 		// written against — the half a skill has to read before it writes a line of UI.
 		// Empty fields are printed as such: "no layout primitive" is a fact about the
@@ -710,6 +719,11 @@ async function main(): Promise<number> {
 							? ''
 							: '  (none recorded yet)'
 			}`,
+			// Beside the baseline line, because the two used to share a directory and are
+			// easy to assume still do: the retry counter is the one that stays out of the
+			// repo. The marker is computed, not assumed — a root above the temp
+			// directory would contain it.
+			`${dim('state:      ')}${state}${relative(root, state).startsWith('..') ? '  (retry counter only, outside your repo)' : ''}`,
 			`${dim('options:    ')}${
 				optionsSource === 'environment'
 					? 'from the plugin environment (hook context)'
@@ -846,7 +860,7 @@ async function main(): Promise<number> {
 		return async () => {
 			const fresh = await analyze(config, { scope: null });
 			if (args.flags['no-baseline']) return fresh;
-			const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+			const { path: bPath, found } = findExistingBaseline(root, namedBaseline, config.baselinePath);
 			const baseline = found ? readBaseline(bPath) : null;
 			// Once, not per request: a long-lived process would repeat it until the
 			// line meant nothing.
@@ -896,19 +910,76 @@ async function main(): Promise<number> {
 	// the hook, which is a different process with a different environment.
 	if (command === 'baseline') {
 		const result = await analyze(config, { scope: null });
-		// `||`, not `??`: an empty `--baseline=` is not a path. `findExistingBaseline`
-		// reads it as "unnamed" and falls through to the configured path, so a
-		// writer that took it as nullish-only would record the backlog somewhere
-		// the next `check` never looks.
-		const target = baselinePath(root, args.flags.baseline || config.baselinePath);
-		const { path, findings, entries } = writeBaseline(root, target, result);
+		const target = baselinePath(root, namedBaseline ?? config.baselinePath);
 		// Nothing collapsed means nothing to reconcile, and saying the same number
 		// twice invents a distinction the reader then has to go and check.
-		const recorded =
+		const counted = (findings: number, entries: number): string =>
 			findings === entries
 				? `${findings} finding(s)`
 				: `${findings} finding(s) as ${entries} ${entries === 1 ? 'entry' : 'entries'}`;
-		process.stdout.write(green(`loupe: baselined ${recorded} \u2192 ${path}\n`));
+
+		// The baseline is only a gate for everyone once it is committed. Gitignored,
+		// CI and every other clone run with none and report the whole accepted
+		// backlog — a divergence nothing else would mention. Silent outside git.
+		const ignoredWarning = (findings: number): string | null =>
+			gitIgnores(root, target)
+				? yellow(
+						`  Warning: ${relative(root, target) || target} is gitignored. It will not reach CI or other clones,\n` +
+							`  which will run without it and report all ${findings} finding(s). Un-ignore it, or \`git add -f\` it.`,
+					)
+				: null;
+
+		// What recording would change, written nowhere. `check` cannot answer this:
+		// it applies the existing baseline, so on a repo that has one it reports
+		// nothing to confirm, and `--no-baseline` answers "everything", not "what
+		// changes if I record now". Compared against the baseline in force \u2014 the one
+		// `check` reads \u2014 since that is what the write would replace.
+		if (args.flags['dry-run']) {
+			const base = findExistingBaseline(root, namedBaseline, config.baselinePath);
+			const prior = base.found ? readBaseline(base.path) : null;
+			const { entries, rules } = diffBaseline(result, prior);
+			const width = Math.max(0, ...rules.map((r) => r.rule.length));
+			const lines = [`Would record ${counted(result.findings.length, entries)} \u2192 ${target}`, ''];
+			for (const r of rules) {
+				const split = [r.added ? yellow(`+${r.added} new`) : '', r.removed ? green(`-${r.removed} fixed`) : '']
+					.filter(Boolean)
+					.join(', ');
+				lines.push(
+					`  ${magenta(r.rule.padEnd(width))}  ${String(r.findings).padStart(5)}${split ? `   (${split})` : ''}`,
+				);
+			}
+			if (!rules.length) lines.push('  (nothing to record)');
+			lines.push('');
+			if (!base.found) lines.push(dim('No existing baseline \u2014 every entry would be new.'));
+			else if (!prior)
+				lines.push(yellow(`Existing baseline at ${base.path} is unreadable \u2014 recording would replace it.`));
+			else {
+				const n = prior.entries.length;
+				lines.push(
+					`Existing baseline: ${n} ${n === 1 ? 'entry' : 'entries'}, recorded ${prior.createdAt || '(no date)'}${
+						base.path === target ? '' : ` \u2014 ${base.path}`
+					}`,
+				);
+				if (!rules.some((r) => r.added || r.removed))
+					lines.push(dim('Nothing would change: recording now rewrites the same entries.'));
+			}
+			const ignored = ignoredWarning(result.findings.length);
+			if (ignored) lines.push('', ignored);
+			process.stdout.write(`${lines.join('\n')}\n`);
+			return EXIT.OK;
+		}
+
+		const { path, findings, entries } = writeBaseline(target, result);
+		process.stdout.write(green(`loupe: baselined ${counted(findings, entries)} \u2192 ${path}\n`));
+		// Said at the moment of writing, because it is the moment the user is looking:
+		// whether the file is tracked decides whether the gate means anything to
+		// anyone else.
+		process.stdout.write(
+			`\n${
+				ignoredWarning(findings) ??
+				dim('  Commit this file \u2014 until it is tracked, the gate applies only to this working copy.')
+			}\n`,
+		);
 		return EXIT.OK;
 	}
 
@@ -1094,10 +1165,9 @@ async function main(): Promise<number> {
 	}
 
 	if (!args.flags['no-baseline']) {
-		// The lookup already stat'd it. Most projects have no baseline, and this
-		// runs on every write, so don't pay a second stat inside `readBaseline`
-		// just to be told the same thing.
-		const { path: bPath, found } = findExistingBaseline(root, args.flags.baseline, config.baselinePath);
+		// `found` is what lets the warning below tell an absent baseline from a
+		// broken one: `readBaseline` answers null for both.
+		const { path: bPath, found } = findExistingBaseline(root, namedBaseline, config.baselinePath);
 		const baseline = found ? readBaseline(bPath) : null;
 		// A file that is present and unparseable is not the same as no file, and
 		// treating it as one puts the whole backlog back with the gate blocking on all
@@ -1107,7 +1177,7 @@ async function main(): Promise<number> {
 		// backlog it accepted, with no reason given. `emitBlocking` already writes to
 		// stderr, and Claude Code feeds that back on exit 2.
 		if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
-		result = applyBaseline(result, baseline);
+		result = applyBaseline(result, baseline, { scoped: scope !== null });
 	}
 	// Before the judgements: a finding the filter drops is not worth a paid question.
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);

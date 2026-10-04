@@ -812,7 +812,12 @@ export type Discovered = Record<SourceKind, DiscoveredFile[]> & { truncated: boo
 export interface BaselineFile {
 	version: number;
 	createdAt: string;
-	/** Entries, not findings — kept under this name because 0.1.x files use it. */
+	/**
+	 * Entries, not findings — kept under this name because 0.1.x files use it.
+	 * Nothing here reads it; it is written for engines that predate `findings`.
+	 * Remove it in 0.9.0, the minor after 0.8.0: the 0.1.x locations that were
+	 * its only other reason to stay were dropped in 0.8.0 (#42).
+	 */
 	count: number;
 	/**
 	 * Findings recorded, which is >= `count` whenever several shared a key.
@@ -829,9 +834,17 @@ export interface Baseline extends Pick<BaselineFile, 'createdAt' | 'entries'> {
 
 /** An analysis with the accepted backlog subtracted. */
 export interface BaselinedResult extends AnalyzeResult {
+	/** Findings the baseline hid — `baselinedFindings.length`. */
 	baselined: number;
-	/** Only meaningful on a whole-repo run — scoped runs suppress it. */
-	fixed: number;
+	/** The findings the baseline hid, for the formats that list them as suppressed. */
+	baselinedFindings: Finding[];
+	/**
+	 * Baseline *entries* nothing matched — work done since it was recorded. In
+	 * entries, not findings, because entries are all a baseline stores. Null on a
+	 * scoped run, where an absent entry is mostly just out of scope, and when no
+	 * baseline was read.
+	 */
+	fixed: number | null;
 }
 
 // ── report payload ──────────────────────────────────────────────────────────
@@ -888,6 +901,15 @@ export interface ReportPayload {
 		 * not evidence that a baseline exists.
 		 */
 		baselined?: number;
+		/**
+		 * Baseline *entries* nothing matched any more — the backlog burned down
+		 * since it was recorded. Entries, not findings: several findings can
+		 * collapse into one entry, and an entry with no finding left has nothing
+		 * to count but itself. The same `-N fixed` `baseline --dry-run` prints.
+		 * Absent on a scoped run, where a missing entry is mostly out of scope,
+		 * and when no baseline file was read.
+		 */
+		fixed?: number;
 	};
 	rules: RuleDescriptor[];
 	findings: (Omit<Finding, 'rank'> & { fix: string })[];

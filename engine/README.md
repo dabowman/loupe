@@ -706,9 +706,17 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
-loupe baseline          # record the current findings
-loupe check --changed   # only what's new
+loupe baseline --dry-run  # what would be recorded, by rule — writes nothing
+loupe baseline            # record the current findings
+loupe check --changed     # only what's new
 ```
+
+`--dry-run` prints the count each rule would record and, against a baseline
+already in force, how many entries are new (`+N new`, backlog being accepted)
+and how many it holds that nothing matches any more (`-N fixed`), followed by
+that baseline's entry count and when it was recorded. `check` cannot answer
+this: it applies the existing baseline, and `--no-baseline` shows everything
+rather than what would change.
 
 Entries key on rule + file + normalized code, not line number, so reformatting
 doesn't resurrect the whole file.
@@ -720,6 +728,17 @@ processes with different environments, and a backlog only one of them can see is
 a gate that blocks on findings it was told to accept. Set `baseline` in the
 config, or pass `--baseline <path>`, to put it elsewhere. `loupe status` prints
 the path in use, and says so when that path is a fallback.
+
+The hook's retry counter is the opposite case, and never lands in the project:
+it goes in `$CLAUDE_PLUGIN_DATA` under the plugin, and otherwise in a temp
+directory of this user's own, keyed by project — so running the engine directly
+from `.claude/settings.local.json` leaves no `.loupe/` in your tree. `loupe
+status` prints the location on its `state:` line.
+
+`loupe baseline` ends by saying to commit the file: until it is tracked, CI and
+every other clone run with no baseline at all. When the path is ignored it says
+that instead, with the number of findings those runs will report; outside a
+repository it does not ask.
 
 A committed `.loupe-baseline.json` the config has since pointed away from is
 still read. 0.1.x baseline locations (`.loupe/baseline.json`, the plugin data
@@ -797,6 +816,17 @@ changes meaning or goes away; adding a field does not bump it, so a consumer
 should ignore keys it does not know. Version `2` dropped `options` from every
 `config.rules` entry, which is now `{ severity }` alone, since a rule no longer
 takes the `[severity, {opts}]` form.
+
+A baseline hides findings from `findings`, not from the record. The JSON
+`summary` carries `baselined` — findings the baseline hid — whenever a baseline
+step ran, and `fixed` — baseline *entries* nothing matches any more, the unit a
+baseline stores and the same `-N fixed` `baseline --dry-run` prints — on a
+whole-repo run that read a baseline file. Both are additive: absent rather than
+0 when the question was not asked. SARIF lists each baselined finding as a
+result carrying `suppressions: [{ "kind": "external", "justification":
+"accepted in the loupe baseline" }]`, after the live ones, so code scanning
+shows it as suppressed rather than as fixed, and puts the same two counts in the
+run's `properties`.
 
 JSON findings that flag a declaration carry `suggest`: `[{ prop, value, tokens,
 line? }]`, one entry per declaration, tokens most specific first. `tokens` is

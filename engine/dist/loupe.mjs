@@ -20257,7 +20257,7 @@ var require_input = __commonJS({
   "node_modules/postcss/lib/input.js"(exports, module) {
     "use strict";
     var { nanoid } = require_non_secure();
-    var { isAbsolute: isAbsolute7, resolve: resolve7 } = __require("path");
+    var { isAbsolute: isAbsolute7, resolve: resolve6 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { fileURLToPath: fileURLToPath5, pathToFileURL: pathToFileURL3 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
@@ -20265,7 +20265,7 @@ var require_input = __commonJS({
     var terminalHighlight = require_terminal_highlight();
     var lineToIndexCache = Symbol("lineToIndexCache");
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(resolve7 && isAbsolute7);
+    var pathAvailable = Boolean(resolve6 && isAbsolute7);
     function getLineToIndex(input) {
       if (input[lineToIndexCache]) return input[lineToIndexCache];
       let lines = input.css.split("\n");
@@ -20299,7 +20299,7 @@ var require_input = __commonJS({
           if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute7(opts.from)) {
             this.file = opts.from;
           } else {
-            this.file = resolve7(opts.from);
+            this.file = resolve6(opts.from);
           }
         }
         if (pathAvailable && sourceMapAvailable) {
@@ -20420,7 +20420,7 @@ var require_input = __commonJS({
         if (/^\w+:\/\//.test(file)) {
           return file;
         }
-        return resolve7(this.map.consumer().sourceRoot || this.map.root || ".", file);
+        return resolve6(this.map.consumer().sourceRoot || this.map.root || ".", file);
       }
       origin(line, column, endLine, endColumn) {
         if (!this.map) return false;
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname8, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
+    var { dirname: dirname8, relative: relative5, resolve: resolve6, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL3 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname8 && resolve7 && relative5 && sep3);
+    var pathAvailable = Boolean(dirname8 && resolve6 && relative5 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20964,7 +20964,7 @@ var require_map_generator = __commonJS({
         if (cached) return cached;
         let from = this.opts.to ? dirname8(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname8(resolve7(from, this.mapOpts.annotation));
+          from = dirname8(resolve6(from, this.mapOpts.annotation));
         }
         let path = relative5(from, file);
         this.memoizedPaths.set(file, path);
@@ -23495,7 +23495,7 @@ var require_lib2 = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync9, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve5 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
@@ -23734,6 +23734,14 @@ function hasGitDir(root2) {
     const up = dirname(dir);
     if (up === dir) return false;
     dir = up;
+  }
+}
+function gitIgnores(root2, path) {
+  try {
+    git(root2, ["check-ignore", "-q", "--", path]);
+    return true;
+  } catch (err) {
+    return err.status === 1 ? false : null;
   }
 }
 function changedFiles(root2) {
@@ -28085,7 +28093,7 @@ async function judgeRenames(root2, findings, set, apiKey, about = /* @__PURE__ *
 
 // src/baseline.ts
 import { existsSync as existsSync4, readFileSync as readFileSync7, writeFileSync as writeFileSync2 } from "node:fs";
-import { dirname as dirname3, resolve as resolve3 } from "node:path";
+import { dirname as dirname3 } from "node:path";
 
 // src/paths.ts
 import { createHash } from "node:crypto";
@@ -28113,12 +28121,9 @@ var attemptsPath = (root2) => join7(
   "attempts.json"
 );
 var DEFAULT_BASELINE = ".loupe-baseline.json";
-function baselinePath(root2, named) {
-  const p = named || DEFAULT_BASELINE;
-  return isAbsolute2(p) ? p : join7(root2, p);
-}
+var baselinePath = (root2, p) => isAbsolute2(p) ? p : join7(root2, p);
 function findExistingBaseline(root2, explicit, configured) {
-  if (explicit) {
+  if (explicit !== null) {
     const path = baselinePath(root2, explicit);
     return { path, found: existsSync3(path), fallback: "none" };
   }
@@ -28141,10 +28146,31 @@ function readBaseline(path) {
     return null;
   }
 }
-function writeBaseline(root2, full, result) {
-  const dir = dirname3(full);
-  if (dir !== resolve3(root2)) ensureDir(dir);
-  const entries = [...new Set(result.findings.map(findingKey))].sort();
+var entriesOf = (result) => [...new Set(result.findings.map(findingKey))].sort();
+var ruleOf = (entry) => entry.slice(0, entry.indexOf("|"));
+function diffBaseline(result, prior) {
+  const entries = entriesOf(result);
+  const rows = /* @__PURE__ */ new Map();
+  const row = (rule2) => {
+    let r = rows.get(rule2);
+    if (!r) {
+      r = { rule: rule2, findings: 0, added: 0, removed: 0 };
+      rows.set(rule2, r);
+    }
+    return r;
+  };
+  for (const f of result.findings) row(f.rule).findings++;
+  if (prior) {
+    const now = new Set(entries);
+    for (const e of entries) if (!prior.set.has(e)) row(ruleOf(e)).added++;
+    for (const e of prior.entries) if (!now.has(e)) row(ruleOf(e)).removed++;
+  }
+  const rules = [...rows.values()].sort((a, b) => b.findings - a.findings || (a.rule < b.rule ? -1 : 1));
+  return { entries: entries.length, rules };
+}
+function writeBaseline(full, result) {
+  ensureDir(dirname3(full));
+  const entries = entriesOf(result);
   const prior = readBaseline(full);
   const unchanged = prior !== null && prior.entries.length === entries.length && prior.entries.every((e, i) => e === entries[i]);
   const file = {
@@ -28158,30 +28184,30 @@ function writeBaseline(root2, full, result) {
 `);
   return { path: full, findings: result.findings.length, entries: entries.length };
 }
-function applyBaseline(result, baseline) {
-  if (!baseline) return { ...result, baselined: 0, fixed: 0 };
+function applyBaseline(result, baseline, { scoped = false } = {}) {
+  if (!baseline) return { ...result, baselined: 0, baselinedFindings: [], fixed: null };
   const seen = /* @__PURE__ */ new Set();
   const kept = [];
-  let baselined = 0;
+  const accepted = [];
   for (const f of result.findings) {
     const key = findingKey(f);
     seen.add(key);
-    if (baseline.set.has(key)) baselined++;
+    if (baseline.set.has(key)) accepted.push(f);
     else kept.push(f);
   }
-  const fixed = [...baseline.set].filter((k) => !seen.has(k)).length;
   return {
     ...result,
     findings: kept,
     blocking: kept.some((f) => f.severity === "error"),
-    baselined,
-    fixed
+    baselined: accepted.length,
+    baselinedFindings: accepted,
+    fixed: scoped ? null : [...baseline.set].filter((k) => !seen.has(k)).length
   };
 }
 
 // src/config.ts
 import { existsSync as existsSync5, readFileSync as readFileSync8 } from "node:fs";
-import { dirname as dirname4, isAbsolute as isAbsolute3, join as join8, resolve as resolve4 } from "node:path";
+import { dirname as dirname4, isAbsolute as isAbsolute3, join as join8, resolve as resolve3 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // src/registry.ts
@@ -28257,7 +28283,7 @@ function merge(base, over) {
   return out;
 }
 function findConfig(start) {
-  let dir = resolve4(start);
+  let dir = resolve3(start);
   for (; ; ) {
     for (const name of CONFIG_NAMES) {
       const p = join8(dir, name);
@@ -28295,7 +28321,7 @@ async function resolveExtends(spec, fromDir) {
   throw new Error(`cannot resolve extends: ${spec}`);
 }
 async function loadChain(path, seen = /* @__PURE__ */ new Set()) {
-  const real = resolve4(path);
+  const real = resolve3(path);
   if (seen.has(real)) throw new Error(`circular extends at ${real}`);
   seen.add(real);
   const raw = await readConfigFile(real) ?? {};
@@ -28425,7 +28451,8 @@ function normalize(raw, { root: root2 }) {
     componentRegistry,
     sources: cfg.sources,
     suppression,
-    baselinePath: cfg.baseline,
+    // An empty `baseline` names nothing, as an empty `--baseline=` does.
+    baselinePath: cfg.baseline || DEFAULT_BASELINE,
     hook: cfg.hook,
     rules,
     severityOf: (id) => rules[id].severity,
@@ -28487,8 +28514,8 @@ async function loadConfig({
   let raw;
   let source;
   if (configPath) {
-    raw = await loadChain(resolve4(configPath));
-    source = { kind: "file", path: resolve4(configPath) };
+    raw = await loadChain(resolve3(configPath));
+    source = { kind: "file", path: resolve3(configPath) };
   } else if (preset2) {
     if (!hasPreset(preset2)) throw new Error(`unknown preset: ${preset2}`);
     raw = await loadChain(join8(PRESET_DIR, `${presetKey(preset2)}.json`));
@@ -28745,7 +28772,8 @@ function reportPayload(result, config) {
       // Only when a baseline was applied. Without it, the number the agent
       // format prints has no counterpart here, and a consumer cannot tell a
       // clean repo from one whose whole backlog is accepted.
-      ..."baselined" in result ? { baselined: result.baselined } : {}
+      ..."baselined" in result ? { baselined: result.baselined } : {},
+      ..."fixed" in result && result.fixed !== null ? { fixed: result.fixed } : {}
     },
     rules: usedRules(result, config),
     // `rank` orders the report and `suffix` carries the channel marker; both are
@@ -28756,9 +28784,12 @@ function reportPayload(result, config) {
     config: { rules: config.rules, enabled: config.enabled }
   };
 }
+var BASELINE_SUPPRESSION = { kind: "external", justification: "accepted in the loupe baseline" };
 function formatSarif(result, config) {
   const title = titleFor(config);
-  const fps = fingerprints(result.findings);
+  const accepted = "baselinedFindings" in result ? result.baselinedFindings : [];
+  const all = [...result.findings, ...accepted];
+  const fps = fingerprints(all);
   return JSON.stringify(
     {
       $schema: "https://json.schemastore.org/sarif-2.1.0.json",
@@ -28769,7 +28800,7 @@ function formatSarif(result, config) {
             driver: {
               name: "Loupe",
               informationUri: "https://github.com/dvdbwmn/loupe",
-              rules: usedRules(result, config).map((r) => ({
+              rules: usedRules({ ...result, findings: all }, config).map((r) => ({
                 id: r.id,
                 shortDescription: { text: r.title },
                 // No `fullDescription`: the catalog holds one line of guidance per
@@ -28783,7 +28814,7 @@ function formatSarif(result, config) {
               }))
             }
           },
-          results: result.findings.map((f, i) => ({
+          results: all.map((f, i) => ({
             ruleId: f.rule,
             level: f.severity === "error" ? "error" : "warning",
             message: { text: `${f.message} \u2014 ${title(f.rule)}` },
@@ -28795,8 +28826,16 @@ function formatSarif(result, config) {
                   region: { startLine: f.line }
                 }
               }
-            ]
-          }))
+            ],
+            ...i >= result.findings.length ? { suppressions: [BASELINE_SUPPRESSION] } : {}
+          })),
+          // The same counts `--format json` carries in its summary.
+          ..."baselined" in result ? {
+            properties: {
+              baselined: result.baselined,
+              ...result.fixed !== null ? { fixed: result.fixed } : {}
+            }
+          } : {}
         }
       ]
     },
@@ -29893,7 +29932,7 @@ function serve(opts) {
   const { port, config, run } = opts;
   const client = (origin) => JS2.replace("__ORIGIN__", origin).replace("__CSS__", JSON.stringify(CSS2));
   let url = `http://localhost:${port}`;
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve6, reject) => {
     const server = createServer((req, res) => {
       const origin = url;
       res.setHeader("access-control-allow-origin", "*");
@@ -29944,7 +29983,7 @@ function serve(opts) {
     server.listen(port, () => {
       const addr = server.address();
       if (addr && typeof addr === "object") url = `http://localhost:${addr.port}`;
-      resolve7({
+      resolve6({
         url,
         close: () => new Promise((done) => {
           server.close(() => done());
@@ -30191,7 +30230,7 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 
 // src/profiles.ts
 import { existsSync as existsSync7, readFileSync as readFileSync12 } from "node:fs";
-import { isAbsolute as isAbsolute4, join as join12, resolve as resolve5 } from "node:path";
+import { isAbsolute as isAbsolute4, join as join12, resolve as resolve4 } from "node:path";
 var readJson2 = (p) => JSON.parse(readFileSync12(p, "utf8"));
 var under = (dir, rel) => isAbsolute4(rel) ? rel : join12(dir, rel);
 var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
@@ -30261,7 +30300,7 @@ function applyRegistries(config, sources) {
       const path = src[kind];
       if (!path) continue;
       try {
-        const raw = readJson2(resolve5(path));
+        const raw = readJson2(resolve4(path));
         const inScope = registryApplies(raw, config.designSystem.packages);
         if (!src.forced && !inScope) {
           skipped.push({ label: src.label, kind, packages: declaredPackages(raw) });
@@ -30469,13 +30508,13 @@ var note = (msg) => {
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
 var HERE = dirname7(fileURLToPath4(import.meta.url));
 var SINGLE_FILE = !existsSync9(join14(HERE, "..", "package.json"));
-var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
+var ENV_FILE = SINGLE_FILE ? resolve5(".env") : join14(HERE, "..", "..", ".env");
 var USER_ENV_FILE = join14(process.env.XDG_CONFIG_HOME || join14(homedir2(), ".config"), "loupe", ".env");
 var KEY_SOURCES = `the environment, the plugin's API key option, ${ENV_FILE}, or ${USER_ENV_FILE}`;
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
   const entry = basename(HERE) === "src" ? "source" : "bundle";
-  return `loupe ${EMBEDDED_VERSION} (${entry}, ${resolve6(HERE, "..", "..")})`;
+  return `loupe ${EMBEDDED_VERSION} (${entry}, ${resolve5(HERE, "..", "..")})`;
 }
 var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${dim(`"${name}"`)}:`);
 var usage = () => USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^ {2}([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
@@ -30554,7 +30593,9 @@ Options:
   --stale               For suppressions, list only the directives naming a
                         rule that muted nothing \u2014 no finding left, the rule
                         off, or an id that is not a rule \u2014 and exit 1 if any
-  --dry-run             Report what 'fix' would change without writing
+  --dry-run             Report what 'fix' would change without writing; for
+                        'baseline', what it would record by rule, new and
+                        fixed against the existing baseline
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
                         pattern it was built as (patterns/judged-redirect), and
@@ -30608,7 +30649,7 @@ function resolveScope(config, args, { defaultChanged = false }) {
   if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(" ")}` };
   if (args.flags.all) return null;
   if (args.flags.files)
-    return args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative4(config.root, resolve6(f)) : f)).filter((f) => f && !f.startsWith(".."));
+    return args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative4(config.root, resolve5(f)) : f)).filter((f) => f && !f.startsWith(".."));
   if (args.flags.changed || defaultChanged) {
     const changed = changedFiles(config.root);
     if (changed === null) return { error: NOT_A_WORKTREE };
@@ -30646,8 +30687,8 @@ async function main() {
   const payload = isHook ? parsePayload(await readStdin()) : {};
   if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
-  const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
-  const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
+  const anchor = explicitRoot ? null : findConfig(resolve5(process.cwd()));
+  const root2 = resolve5(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
   if (!existsSync9(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
@@ -30655,11 +30696,11 @@ async function main() {
     return EXIT.CANNOT_RUN;
   }
   const { options, source: optionsSource } = resolvedOptions();
-  const profiles = readProfiles(args.flags.profiles ? resolve6(args.flags.profiles) : null);
+  const profiles = readProfiles(args.flags.profiles ? resolve5(args.flags.profiles) : null);
   const forced = args.flags.profile ? profiles.find((p) => p.id === args.flags.profile) ?? null : null;
   if (args.flags.profile && !forced && !isHook)
     note(
-      `loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve6(args.flags.profiles) : "any profiles directory (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
+      `loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve5(args.flags.profiles) : "any profiles directory (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
 `
     );
   let config;
@@ -30740,6 +30781,7 @@ async function main() {
   }
   if (options.maxAttempts) config.hook.maxAttempts = options.maxAttempts;
   if (options.maxFindings) config.hook.maxFindings = options.maxFindings;
+  const namedBaseline = args.flags.baseline || null;
   if (command === "explain") {
     const id = canonicalRuleId(args._[1] ?? "");
     if (!isRuleId(id)) {
@@ -30779,7 +30821,8 @@ async function main() {
     const off = hookOff(root2);
     const gateBlocks = blockingAllowed && !off;
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ""}` : config.source.kind;
-    const base = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
+    const base = findExistingBaseline(root2, namedBaseline, config.baselinePath);
+    const state = attemptsPath(root2);
     const ds = config.designSystem;
     const orNone = (arr) => arr?.length ? arr.join(", ") : "(none)";
     const components2 = (arr) => arr?.length ? arr.map((n) => supersededEverywhere(config.componentRegistry, n) ? `${n} (legacy)` : n).join(", ") : "(none)";
@@ -30794,6 +30837,11 @@ async function main() {
       `${dim("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
       `${dim("suppress:   ")}${config.suppression.keyword} <ruleId> -- <reason>`,
       `${dim("baseline:   ")}${base.path}${base.found && readBaseline(base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
+      // Beside the baseline line, because the two used to share a directory and are
+      // easy to assume still do: the retry counter is the one that stays out of the
+      // repo. The marker is computed, not assumed — a root above the temp
+      // directory would contain it.
+      `${dim("state:      ")}${state}${relative4(root2, state).startsWith("..") ? "  (retry counter only, outside your repo)" : ""}`,
       `${dim("options:    ")}${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
       `${dim("plugin:     ")}${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
       // The hook passes `--judge` and then turns it off silently when there is no
@@ -30891,7 +30939,7 @@ ${green(`Wrote ${target}`)}
     return async () => {
       const fresh = await analyze(config, { scope: null });
       if (args.flags["no-baseline"]) return fresh;
-      const { path: bPath, found } = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
+      const { path: bPath, found } = findExistingBaseline(root2, namedBaseline, config.baselinePath);
       const baseline = found ? readBaseline(bPath) : null;
       if (found && !baseline && !warned) {
         warned = true;
@@ -30934,11 +30982,51 @@ ${dim("  Ctrl-C to stop.")}
   }
   if (command === "baseline") {
     const result2 = await analyze(config, { scope: null });
-    const target = baselinePath(root2, args.flags.baseline || config.baselinePath);
-    const { path, findings, entries } = writeBaseline(root2, target, result2);
-    const recorded = findings === entries ? `${findings} finding(s)` : `${findings} finding(s) as ${entries} ${entries === 1 ? "entry" : "entries"}`;
-    process.stdout.write(green(`loupe: baselined ${recorded} \u2192 ${path}
+    const target = baselinePath(root2, namedBaseline ?? config.baselinePath);
+    const counted = (findings2, entries2) => findings2 === entries2 ? `${findings2} finding(s)` : `${findings2} finding(s) as ${entries2} ${entries2 === 1 ? "entry" : "entries"}`;
+    const ignoredWarning = (findings2) => gitIgnores(root2, target) ? yellow(
+      `  Warning: ${relative4(root2, target) || target} is gitignored. It will not reach CI or other clones,
+  which will run without it and report all ${findings2} finding(s). Un-ignore it, or \`git add -f\` it.`
+    ) : null;
+    if (args.flags["dry-run"]) {
+      const base = findExistingBaseline(root2, namedBaseline, config.baselinePath);
+      const prior = base.found ? readBaseline(base.path) : null;
+      const { entries: entries2, rules } = diffBaseline(result2, prior);
+      const width = Math.max(0, ...rules.map((r) => r.rule.length));
+      const lines = [`Would record ${counted(result2.findings.length, entries2)} \u2192 ${target}`, ""];
+      for (const r of rules) {
+        const split2 = [r.added ? yellow(`+${r.added} new`) : "", r.removed ? green(`-${r.removed} fixed`) : ""].filter(Boolean).join(", ");
+        lines.push(
+          `  ${magenta(r.rule.padEnd(width))}  ${String(r.findings).padStart(5)}${split2 ? `   (${split2})` : ""}`
+        );
+      }
+      if (!rules.length) lines.push("  (nothing to record)");
+      lines.push("");
+      if (!base.found) lines.push(dim("No existing baseline \u2014 every entry would be new."));
+      else if (!prior)
+        lines.push(yellow(`Existing baseline at ${base.path} is unreadable \u2014 recording would replace it.`));
+      else {
+        const n = prior.entries.length;
+        lines.push(
+          `Existing baseline: ${n} ${n === 1 ? "entry" : "entries"}, recorded ${prior.createdAt || "(no date)"}${base.path === target ? "" : ` \u2014 ${base.path}`}`
+        );
+        if (!rules.some((r) => r.added || r.removed))
+          lines.push(dim("Nothing would change: recording now rewrites the same entries."));
+      }
+      const ignored = ignoredWarning(result2.findings.length);
+      if (ignored) lines.push("", ignored);
+      process.stdout.write(`${lines.join("\n")}
+`);
+      return EXIT.OK;
+    }
+    const { path, findings, entries } = writeBaseline(target, result2);
+    process.stdout.write(green(`loupe: baselined ${counted(findings, entries)} \u2192 ${path}
 `));
+    process.stdout.write(
+      `
+${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked, the gate applies only to this working copy.")}
+`
+    );
     return EXIT.OK;
   }
   if (command === "suppressions") {
@@ -31084,11 +31172,11 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     return EXIT.CANNOT_RUN;
   }
   if (!args.flags["no-baseline"]) {
-    const { path: bPath, found } = findExistingBaseline(root2, args.flags.baseline, config.baselinePath);
+    const { path: bPath, found } = findExistingBaseline(root2, namedBaseline, config.baselinePath);
     const baseline = found ? readBaseline(bPath) : null;
     if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
 `);
-    result = applyBaseline(result, baseline);
+    result = applyBaseline(result, baseline, { scoped: scope !== null });
   }
   if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   if (apiKey) {

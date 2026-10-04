@@ -37,7 +37,8 @@ Then summarize for the user rather than pasting raw output:
 3. **Call out `stylesheet/unparsed` first if present** — those files were not
    checked at all, so the rest of the report is incomplete until they are.
 4. **Say so if a baseline is hiding findings.** `N baselined finding(s) hidden`
-   below the report means an accepted backlog is being filtered out, so what you
+   below the report (`summary.baselined` under `--format json`) means an
+   accepted backlog is being filtered out, so what you
    are looking at is new drift rather than the state of the repo — re-run with
    `--no-baseline` for the real total. Unsaid, a near-empty report reads as a
    clean codebase. Suppression directives hide findings the same way: add

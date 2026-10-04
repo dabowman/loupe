@@ -653,6 +653,7 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
+./bin/loupe baseline --dry-run   # by rule: what would be recorded, +new / -fixed
 ./bin/loupe baseline
 ```
 
@@ -669,8 +670,9 @@ The baseline is written to `.loupe-baseline.json` in the project and is meant to
 be committed: it is a statement about this repo, and the CLI and the hook are
 different processes that have to read the same file. Set `baseline` in the
 config, or pass `--baseline <path>`, to move it. The hook's retry counter is the
-one piece of state that does not live in the project: it goes in the OS temp
-directory, keyed by project, and expires after six hours.
+one piece of state that does not live in the project: it goes in the plugin's
+data directory, or a temp directory of your own, keyed by project, and expires
+after six hours. `loupe status` prints where, on its `state:` line.
 
 One fallback is read, and `status` says when it answered: a committed
 `.loupe-baseline.json` in a project whose config has since pointed `baseline`
@@ -812,6 +814,10 @@ either way. The job does not fail on findings unless you pass
 SARIF results carry a `partialFingerprints` entry derived from the same identity
 the baseline ratchets on: rule, file, and normalized code, deliberately not the
 line number. An edit above a finding moves its line without re-opening its alert.
+
+Findings your baseline accepted are uploaded too, as results marked suppressed
+(`kind: external`, "accepted in the loupe baseline"), so code scanning shows the
+backlog as suppressed alerts rather than reading it as a clean repository.
 
 #### Without Node
 
