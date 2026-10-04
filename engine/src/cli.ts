@@ -705,6 +705,10 @@ async function main(): Promise<number> {
 	config.profiles = { available: profiles, active, ...registries };
 	if (!isHook) {
 		for (const err of registries.errors) fail(`loupe: ${err}\n`);
+		// A scope declaration refused at load leaves its profile on the generic token
+		// table, which reads exactly like one that declared nothing — so it says so.
+		for (const p of active)
+			for (const problem of p.problems) fail(`loupe: profile ${p.id} ${problem} \u2014 its token scopes are ignored\n`);
 		// A registry handed over and then ignored has to say so: silently dropping
 		// it is indistinguishable from running it and finding nothing.
 		for (const s of registries.skipped)
@@ -1316,6 +1320,14 @@ async function main(): Promise<number> {
 			);
 		for (const f of [...skipped, ...kept.skipped])
 			process.stdout.write(`${yellow('skip')} ${dim(`${f.file}:${f.line}`)}  ${decl(f)} \u2014 ${f.why}\n`);
+		// The one token a value matched, held back because the profile scopes it
+		// elsewhere: named, so the review starts from the candidate and the reason.
+		for (const f of toFix.findings)
+			for (const s of f.suggest ?? [])
+				if (s.review && !s.judged)
+					process.stdout.write(
+						`${yellow('review')} ${dim(`${f.file}:${s.line ?? f.line}`)}  ${decl(s)} \u2192 ${s.tokens.join(' or ')} \u2014 ${s.review}\n`,
+					);
 		// A collapsed finding is several declarations and a misspelled token is
 		// every line naming it, so a substitution written is not a finding cleared.
 		// What is counted as done is the finding every one of whose parts was

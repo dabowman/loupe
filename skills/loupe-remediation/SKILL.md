@@ -1,7 +1,7 @@
 ---
 name: loupe-remediation
 description: >-
-  Load when fixing design-system conformance findings — output from `loupe`, the `/loupe-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/negative-margin`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `patterns/duplicate-composite`, `patterns/superseded-composite`, `patterns/judged-redirect`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Works on whatever design system the project is on — WordPress Design System, Archer, or one declared in the project's own config — reading the system-specific half of each remedy from the active profile. Carries the order to fix in, the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the loupe findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `loupe-authoring` for the underlying rules.
+  Load when fixing design-system conformance findings — output from `loupe`, the `/loupe-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/negative-margin`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `tokens/misapplied-token`, `patterns/duplicate-composite`, `patterns/superseded-composite`, `patterns/judged-redirect`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Works on whatever design system the project is on — WordPress Design System, Archer, or one declared in the project's own config — reading the system-specific half of each remedy from the active profile. Carries the order to fix in, the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the loupe findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `loupe-authoring` for the underlying rules.
 compatibility: "Any React-family design system Loupe can be configured for. Needs the plugin's engine (node >=18)."
 ---
 
@@ -64,7 +64,8 @@ findings say:
    component is being fought
 6. `layout/*` — structure
 7. `patterns/*` — composites, once individual components are conformant
-8. `tokens/hardcoded-value`, `tokens/unknown-token`, `typography/untokenized` — values
+8. `tokens/hardcoded-value`, `tokens/unknown-token`, `tokens/misapplied-token`,
+   `typography/untokenized` — values
 9. `css/dead-class`, sweep — what the work above left dead, once the rest has
    settled. The same cross-file check applies
 
@@ -253,6 +254,14 @@ If no token fits the role, the value may be genuinely outside the system.
 Suppress with that reason rather than forcing an approximate token — a wrong
 token is worse than a literal, because it will move when the system moves.
 
+A token followed by `(review: …)` matched by value, but the active profile
+scopes it to another kind of element, or to one nothing shows this element to
+be — `--wpds-border-radius-md` is for menus and popovers, whatever the pixels.
+`loupe fix` left it on purpose. Read the reason, find what the element actually
+is, and use the token its role names (a dialog's radius is `lg`), even where
+that changes the value; or keep the value if the design meant it. Do not apply
+the named token because it is the one offered.
+
 ### `tokens/unknown-token`
 
 The `var()` names a token nothing defines — almost always a typo or a name
@@ -268,6 +277,23 @@ If the token is real but defined somewhere the engine cannot see — including
 custom properties a library sets at runtime rather than in a stylesheet — the
 fix is `designSystem.tokenSources` in config, which fixes every finding of this
 shape at once.
+
+### `tokens/misapplied-token`
+
+The token is real and the pixels are probably right; the meaning is not. The
+finding says which half is wrong. *"a background token sets background, …"* —
+it is on a property its family is not for: use the token of the right family
+(`foreground` for `color`, `stroke` for a border). *"not for interactive; this
+styles `<button>`"* or *"for overlay; this styles `<button>`"* — it is on a kind
+of element its role excludes: a surface colour on a clickable control, a menu
+radius on a button. Pick the token whose target or step names what the element
+is (`background-interactive-*`, `radius-sm`), keeping tone and emphasis aligned
+with the rest of the element.
+
+It is advisory, and the scope is the profile author's reading of the system. If
+the element really is what the token says — a card that is also a link, say —
+suppress it with that reason; and if the profile's scope is simply wrong, that
+is the profile's `token-scopes.json` to fix, not the code.
 
 ### `patterns/duplicate-composite`
 

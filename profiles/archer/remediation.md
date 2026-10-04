@@ -124,6 +124,15 @@ Custom properties Base UI sets at runtime — `--anchor-width`,
 stylesheet. If they report here, declare them in a small CSS file and add it to
 `designSystem.tokenSources`, which fixes every finding of that shape at once.
 
+## `tokens/misapplied-token`
+
+Only the common colour tier is scoped (`token-scopes.json` beside this file):
+`--color-text-*` sets `color`, `--color-background-*` backgrounds, and
+`--color-border-*` borders and outlines. A `--color-background-*` on a `color`
+is the right pixels in one theme and the wrong role in both — use the
+`--color-text-*` that says what the text is. Archer's other families carry no
+role in their names (`--radius-3`, `--space-m`), so nothing reports for them.
+
 ## `patterns/unregistered-composite` on component anatomy
 
 If this fires on the parts of an Archer component used correctly — a Dialog's

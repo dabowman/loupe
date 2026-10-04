@@ -1,0 +1,44 @@
+{
+  "$source": "The VIP theme's colour roles, from this profile's authoring.md: Theme UI writes theme.colors.<role>.<step> as --theme-ui-colors-<role>-<step>, and the role is the first segment after the prefix — texts, heading, links, icon, layer, backgrounds, borders — or, under support and tag, a later one. Spacing, radii and shadows are sx theme keys with no custom property, so nothing else is declared. The raw palette (gray, blue…) and support.accent carry no role and stay undeclared.",
+  "grammars": [
+    {
+      "pattern": "--theme-ui-colors-support-{property}-{tone}...",
+      "property": {
+        "background": { "sets": ["background", "background-color", "background-image"], "also": ["box-shadow"] },
+        "text": { "sets": ["color", "text-decoration-color"], "also": ["fill", "stroke", "caret-color"] },
+        "icon": { "sets": ["fill", "stroke"], "also": ["color"] }
+      }
+    },
+    {
+      "pattern": "--theme-ui-colors-tag-{tone}-{property}",
+      "property": {
+        "background": { "sets": ["background", "background-color"], "also": ["box-shadow", "border-color"] },
+        "text": { "sets": ["color"], "also": ["fill", "stroke"] }
+      }
+    },
+    {
+      "pattern": "--theme-ui-colors-{property}...",
+      "property": {
+        "texts": {
+          "sets": ["color", "caret-color", "text-decoration-color", "-webkit-text-fill-color"],
+          "also": ["fill", "stroke", "text-decoration", "text-shadow", "box-shadow"]
+        },
+        "heading": { "sets": ["color"], "also": ["fill", "stroke", "text-decoration-color"] },
+        "links": { "sets": ["color", "text-decoration-color"], "also": ["fill", "stroke", "text-decoration", "outline-color", "border-color", "border-bottom-color"] },
+        "icon": { "sets": ["fill", "stroke"], "also": ["color"] },
+        "layer": { "sets": ["background", "background-color", "background-image"], "also": ["box-shadow", "scrollbar-color"] },
+        "backgrounds": { "sets": ["background", "background-color", "background-image"], "also": ["box-shadow", "scrollbar-color"] },
+        "borders": {
+          "sets": [
+            "border-color", "border-*-color", "outline-color",
+            "border", "border-top", "border-right", "border-bottom", "border-left",
+            "border-block", "border-block-start", "border-block-end",
+            "border-inline", "border-inline-start", "border-inline-end",
+            "outline", "column-rule", "column-rule-color"
+          ],
+          "also": ["box-shadow", "background-image"]
+        }
+      }
+    }
+  ]
+}

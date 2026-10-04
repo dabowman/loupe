@@ -440,6 +440,17 @@ value is a semantic choice, and picking one by array order is exactly how you
 get the right pixels with the wrong meaning — the failure the token suggestion
 machinery exists to prevent.
 
+**So is one token outside its declared scope.** Matching by property and value
+made `border-radius: 4px` "unambiguous" on a dialog and on a button alike — `md`,
+both times, both wrong: WPDS's radius scale is role-based, and `md` is for menus
+and popovers. Where the active profile scopes the single candidate to a kind of
+element, it is applied only when every element the declaration is shown to
+style is that kind. Off its scope, or with nothing shown, the suggestion carries
+`review` and its reason, the message says `(review: …)`, and `fix` prints it as
+a `review` line instead of writing it. The judge skips it too: it is a single
+candidate, and what it needs is a reader, not a choice among options. See
+[token scopes](analysis.md#token-scopes).
+
 **All three channels, two ways in.** A stylesheet declaration and a CSS-in-JS
 one are both matched as text on the line they were reported at: what is inside a
 template *is* literal CSS, and a declaration whose value comes from an

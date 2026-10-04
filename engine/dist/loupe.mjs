@@ -1660,7 +1660,7 @@ var require_picomatch = __commonJS({
     var parse3 = require_parse();
     var utils = require_utils();
     var constants = require_constants();
-    var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
+    var isObject2 = (val) => val && typeof val === "object" && !Array.isArray(val);
     var picomatch2 = (glob, options, returnState = false) => {
       if (Array.isArray(glob)) {
         const fns = glob.map((input) => picomatch2(input, options, returnState));
@@ -1673,7 +1673,7 @@ var require_picomatch = __commonJS({
         };
         return arrayMatcher;
       }
-      const isState = isObject(glob) && glob.tokens && glob.input;
+      const isState = isObject2(glob) && glob.tokens && glob.input;
       if (glob === "" || typeof glob !== "string" && !isState) {
         throw new TypeError("Expected pattern to be a non-empty string");
       }
@@ -23566,6 +23566,12 @@ var RULES = {
     needs: ["tokenPrefixes"],
     title: "unknown token \u2014 no {tokenPrefix} token by this name is defined; check the spelling against the design system"
   },
+  "tokens/misapplied-token": {
+    severity: "warn",
+    rank: 2,
+    needs: ["tokenPrefixes"],
+    title: "misapplied token \u2014 it exists, but {system} scopes it to another property or another kind of element; use the token whose role matches"
+  },
   "tokens/hardcoded-value": {
     severity: "warn",
     rank: 9,
@@ -24444,8 +24450,8 @@ function loadPatterns(raw) {
   const load = (p, id, inheritedCanonical) => {
     const canonical = "canonical" in (p ?? {}) ? bindName(p.canonical) : inheritedCanonical;
     const shapes = [toNode(p?.signature), toNode(p?.rendered_signature)].filter((n) => n !== null);
-    const authored = p?.instead_of_signature;
-    const antiShapes = !Array.isArray(authored) ? [] : typeof authored[0] === "string" ? [authored] : authored;
+    const authored2 = p?.instead_of_signature;
+    const antiShapes = !Array.isArray(authored2) ? [] : typeof authored2[0] === "string" ? [authored2] : authored2;
     const avoid = antiShapes.map((shape) => toNode(shape)).filter((n) => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes);
     const rules = ruleSpecs(p?.detector);
     const summary = p?.summary ?? p?.note ?? "";
@@ -25100,7 +25106,252 @@ function ownership(surface, prop) {
 // src/tokens.ts
 import { readFileSync, statSync } from "node:fs";
 import { join as join2 } from "node:path";
-var ROLE_HINTS = [
+
+// src/scopes.ts
+var PROP = /^-?[a-z][a-z-]*(\*[a-z-]*)?$/;
+var ELEMENT = /^([a-z][a-z0-9-]*|[A-Z][A-Za-z0-9_]*(\.[A-Z][A-Za-z0-9_]*)*)$/;
+var KIND = /^[a-z][a-z0-9-]*$/;
+var PLACEHOLDER = /\{([^}]*)\}/g;
+var isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+var authored = (o) => Object.entries(o).filter(([k]) => !k.startsWith("$"));
+function parseTokenScopes(raw) {
+  const errors = [];
+  const err = (at, what) => {
+    errors.push(`tokenScopes${at}: ${what}`);
+  };
+  if (!isObject(raw)) {
+    err("", "expected an object of grammars, kinds and scales");
+    return { scopes: null, errors };
+  }
+  for (const [k] of authored(raw))
+    if (k !== "grammars" && k !== "kinds" && k !== "scales")
+      err(`.${k}`, "unknown key \u2014 expected grammars, kinds, scales");
+  const kinds = /* @__PURE__ */ new Map();
+  if (raw.kinds !== void 0) {
+    if (!isObject(raw.kinds)) err(".kinds", "expected an object of kind \u2192 element and component names");
+    else
+      for (const [kind, names] of authored(raw.kinds)) {
+        if (!KIND.test(kind)) err(`.kinds.${kind}`, "a kind is a lowercase name");
+        if (!Array.isArray(names)) {
+          err(`.kinds.${kind}`, "expected a list of element and component names (empty for a kind markup cannot show)");
+          continue;
+        }
+        const bad = names.filter((n) => typeof n !== "string" || !ELEMENT.test(n));
+        if (bad.length)
+          err(
+            `.kinds.${kind}`,
+            `not an element or component name: ${bad.map((b) => JSON.stringify(b)).join(", ")} \u2014 a tag is lowercase (\`button\`), a component capitalised (\`Button\`)`
+          );
+        kinds.set(kind, new Set(names.filter((n) => typeof n === "string")));
+      }
+  }
+  const kindList = (at, v) => {
+    if (!Array.isArray(v) || !v.length || v.some((x) => typeof x !== "string")) {
+      err(at, "expected a list of kind names");
+      return [];
+    }
+    const unknown = v.filter((x) => !kinds.has(x));
+    if (unknown.length) err(at, `undeclared kind ${unknown.join(", ")} \u2014 declare it under tokenScopes.kinds`);
+    return v;
+  };
+  const propList = (at, v) => {
+    if (!Array.isArray(v) || v.some((x) => typeof x !== "string" || !PROP.test(x))) {
+      err(at, "expected a list of lowercase CSS properties, with at most one `*` each");
+      return [];
+    }
+    return v;
+  };
+  const segment = (at, v) => {
+    if (Array.isArray(v)) return { sets: propList(at, v), also: [] };
+    if (!isObject(v)) {
+      err(at, "expected a list of CSS properties, or { sets, also }");
+      return { sets: [], also: [] };
+    }
+    for (const [k] of authored(v))
+      if (k !== "sets" && k !== "also") err(`${at}.${k}`, "unknown key \u2014 expected sets, also");
+    return {
+      sets: propList(`${at}.sets`, v.sets),
+      also: v.also === void 0 ? [] : propList(`${at}.also`, v.also)
+    };
+  };
+  const grammars = [];
+  if (raw.grammars !== void 0 && !Array.isArray(raw.grammars)) err(".grammars", "expected a list");
+  for (const [i, g] of (Array.isArray(raw.grammars) ? raw.grammars : []).entries()) {
+    const at = `.grammars[${i}]`;
+    if (!isObject(g)) {
+      err(at, "expected an object with a pattern");
+      continue;
+    }
+    for (const [k] of authored(g))
+      if (!["pattern", "property", "properties", "target"].includes(k))
+        err(`${at}.${k}`, "unknown key \u2014 expected pattern, property, properties, target");
+    const pattern = g.pattern;
+    if (typeof pattern !== "string" || !pattern.startsWith("--")) {
+      err(`${at}.pattern`, "expected a custom-property name pattern, like `--acme-color-{property}-{target}...`");
+      continue;
+    }
+    const holes = [...pattern.matchAll(PLACEHOLDER)].map((m) => m[1] ?? "");
+    const bad = holes.filter((h) => !/^[a-z][a-z-]*$/.test(h));
+    if (bad.length) err(`${at}.pattern`, `a placeholder is a lowercase name: ${bad.map((b) => `{${b}}`).join(", ")}`);
+    for (const name of ["property", "target"])
+      if (holes.filter((h) => h === name).length > 1) err(`${at}.pattern`, `{${name}} appears more than once`);
+    if (/[^a-z0-9-]/.test(pattern.replace(/\.\.\.$/, "").replace(PLACEHOLDER, "")))
+      err(`${at}.pattern`, "only lowercase letters, digits, `-`, placeholders and a trailing `...`");
+    const hasProperty = holes.includes("property");
+    const property = /* @__PURE__ */ new Map();
+    if (hasProperty) {
+      if (g.properties !== void 0) err(`${at}.properties`, "a pattern with {property} maps it under `property`");
+      if (!isObject(g.property) || !authored(g.property).length)
+        err(`${at}.property`, "expected an object of property segment \u2192 CSS properties");
+      else
+        for (const [seg, v] of authored(g.property)) {
+          if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(seg))
+            err(`${at}.property.${seg}`, "a segment is lowercase words joined by `-`");
+          property.set(seg, segment(`${at}.property.${seg}`, v));
+        }
+    } else {
+      if (g.property !== void 0) err(`${at}.property`, "the pattern has no {property} to map");
+      if (g.properties === void 0)
+        err(`${at}.properties`, "a pattern without {property} names the CSS properties its family sets");
+      else property.set(pattern, segment(`${at}.properties`, g.properties));
+    }
+    const target = /* @__PURE__ */ new Map();
+    if (g.target !== void 0) {
+      if (!holes.includes("target")) err(`${at}.target`, "the pattern has no {target} to map");
+      if (!isObject(g.target)) err(`${at}.target`, "expected an object of target segment \u2192 { requires, not }");
+      else
+        for (const [seg, v] of authored(g.target)) {
+          const t = `${at}.target.${seg}`;
+          if (!isObject(v)) {
+            err(t, "expected { requires, not }");
+            continue;
+          }
+          for (const [k] of authored(v))
+            if (k !== "requires" && k !== "not") err(`${t}.${k}`, "unknown key \u2014 expected requires, not");
+          const requires = v.requires === void 0 ? [] : kindList(`${t}.requires`, v.requires);
+          const not = v.not === void 0 ? [] : kindList(`${t}.not`, v.not);
+          if (!requires.length && !not.length) err(t, "declares neither requires nor not");
+          target.set(seg, { requires, not });
+        }
+    }
+    const alternatives = [...property.keys()].sort((a, b) => b.length - a.length).map(escapeRe);
+    const open = pattern.endsWith("...");
+    const source = (open ? pattern.slice(0, -3) : pattern).split(/(\{[^}]*\})/).map((piece, k) => {
+      if (k % 2 === 0) return escapeRe(piece);
+      const name = piece.slice(1, -1);
+      if (name === "property") return `(?<property>${alternatives.join("|")})`;
+      return name === "target" ? "(?<target>[a-z0-9]+)" : "[a-z0-9]+";
+    }).join("");
+    grammars.push({ pattern, re: new RegExp(`^${source}${open ? "(?:-[a-z0-9]+)*" : ""}$`), property, target });
+  }
+  const scales = /* @__PURE__ */ new Map();
+  if (raw.scales !== void 0) {
+    if (!isObject(raw.scales)) err(".scales", "expected an object of token \u2192 { on: [kinds] }");
+    else
+      for (const [token, v] of authored(raw.scales)) {
+        const at = `.scales.${token}`;
+        if (!token.startsWith("--")) err(at, "a scale step is a token name");
+        if (!isObject(v)) {
+          err(at, "expected { on: [kinds] }");
+          continue;
+        }
+        for (const [k] of authored(v)) if (k !== "on") err(`${at}.${k}`, "unknown key \u2014 expected on");
+        scales.set(token, kindList(`${at}.on`, v.on));
+      }
+  }
+  if (!grammars.length && !scales.size && !errors.length) err("", "declares no grammars and no scales");
+  return errors.length ? { scopes: null, errors } : { scopes: { grammars, kinds, scales }, errors };
+}
+function mergeScopes(list2) {
+  const present = list2.filter((s) => Boolean(s));
+  if (!present.length) return void 0;
+  if (present.length === 1) return present[0];
+  const kinds = /* @__PURE__ */ new Map();
+  for (const s of present) for (const [k, names] of s.kinds) kinds.set(k, /* @__PURE__ */ new Set([...kinds.get(k) ?? [], ...names]));
+  return {
+    grammars: present.flatMap((s) => s.grammars),
+    kinds,
+    scales: new Map(present.flatMap((s) => [...s.scales]))
+  };
+}
+var globCache = /* @__PURE__ */ new Map();
+function propMatches(list2, prop) {
+  return list2.some((p) => {
+    if (!p.includes("*")) return p === prop;
+    let re = globCache.get(p);
+    if (!re) {
+      re = new RegExp(`^${p.split("*").map(escapeRe).join("[a-z-]+")}$`);
+      globCache.set(p, re);
+    }
+    return re.test(prop);
+  });
+}
+var placed = /* @__PURE__ */ new WeakMap();
+function place(scopes, token) {
+  let memo = placed.get(scopes);
+  if (!memo) {
+    memo = /* @__PURE__ */ new Map();
+    placed.set(scopes, memo);
+  }
+  const hit = memo.get(token);
+  if (hit !== void 0) return hit;
+  const found = placeUncached(scopes, token);
+  memo.set(token, found);
+  return found;
+}
+function placeUncached(scopes, token) {
+  const on = scopes.scales.get(token);
+  for (const g of scopes.grammars) {
+    const m = g.re.exec(token);
+    if (!m) continue;
+    const property = m.groups?.property ?? g.pattern;
+    const segment = g.property.get(property);
+    if (!segment) continue;
+    const target = m.groups?.target;
+    const placing = target === void 0 ? void 0 : g.target.get(target);
+    return { property, sets: segment.sets, also: segment.also, target: placing ? target : void 0, placing, on };
+  }
+  return on ? { property: null, sets: [], also: [], on } : null;
+}
+var covers = (scopes, prop) => scopes.grammars.some((g) => [...g.property.values()].some((s) => propMatches(s.sets, prop)));
+function scopedFamily(scopes, names, prop) {
+  if (!covers(scopes, prop)) return null;
+  return names.filter((n) => {
+    const p = place(scopes, n);
+    return p !== null && propMatches(p.sets, prop);
+  });
+}
+var kindsOf = (scopes, element) => [...scopes.kinds].filter(([, names]) => names.has(element)).map(([k]) => k);
+function fitOf(scopes, token, elements) {
+  const p = place(scopes, token);
+  const requires = [...p?.placing?.requires ?? [], ...p?.on ?? []];
+  const not = p?.placing?.not ?? [];
+  if (!requires.length && !not.length) return { fit: "free" };
+  const scope = [
+    ...requires.length ? [`for ${requires.join(" or ")}`] : [],
+    ...not.length ? [`not for ${not.join(" or ")}`] : []
+  ].join(", ");
+  const els = [...new Set(elements)];
+  if (!els.length)
+    return requires.length ? { fit: "unknown", why: `${scope}; what this styles is not known`, elements: [] } : { fit: "on" };
+  const kinds = els.map((e) => kindsOf(scopes, e));
+  const shown = els.map((e) => `<${e}>`).join(", ");
+  if (not.length && kinds.every((ks) => ks.some((k) => not.includes(k))))
+    return { fit: "off", why: `${scope}; this styles ${shown}`, elements: els };
+  const mixed = not.length && kinds.some((ks) => ks.some((k) => not.includes(k)));
+  if (requires.length) {
+    if (kinds.every((ks) => ks.some((k) => requires.includes(k))))
+      return mixed ? { fit: "unknown", why: `${scope}; ${shown} do not agree`, elements: els } : { fit: "on" };
+    const undeterminable = requires.some((k) => !scopes.kinds.get(k)?.size);
+    if (!undeterminable && kinds.every((ks) => !ks.some((k) => requires.includes(k))))
+      return { fit: "off", why: `${scope}; this styles ${shown}`, elements: els };
+    return { fit: "unknown", why: `${scope}; ${shown} cannot be shown to be`, elements: els };
+  }
+  return mixed ? { fit: "unknown", why: `${scope}; ${shown} do not agree`, elements: els } : { fit: "on" };
+}
+
+// src/tokens.ts
+var GENERIC_ROLES = [
   [/^border-radius|radius$/, /radius/],
   [/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
   // Colour roles are split finer than the rest: a background token suggested for
@@ -25196,15 +25447,17 @@ function readTokenSources(root2, sources, prefixes) {
   }
   return set;
 }
-function onRole(names, prop) {
-  const [, hint, own] = ROLE_HINTS.find(([p]) => p.test(prop)) ?? [];
+function onRole(names, prop, scopes) {
+  const scoped = scopes ? scopedFamily(scopes, names, prop) : null;
+  if (scoped) return scoped;
+  const [, hint, own] = GENERIC_ROLES.find(([p]) => p.test(prop)) ?? [];
   if (!hint) return [];
   const onRole2 = names.filter((n) => hint.test(n));
   const preferred = own ? onRole2.filter((n) => own.test(n)) : [];
   return preferred.length ? preferred : onRole2;
 }
 function tokensFor(set, prop, value) {
-  const family = new Set(onRole([...set.known], prop));
+  const family = new Set(onRole([...set.known], prop, set.scopes));
   return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
 }
 function familyFor(set, prop) {
@@ -25212,7 +25465,8 @@ function familyFor(set, prop) {
   const keep = new Set(
     onRole(
       all.map(([n]) => n),
-      prop
+      prop,
+      set.scopes
     )
   );
   return all.filter(([n]) => keep.has(n));
@@ -25272,7 +25526,7 @@ var KEEP = "keep";
 var DELIBERATE = "deliberate, no token fits";
 function planValue(set, prop, value) {
   const family = familyFor(set, prop);
-  if (!family.length) return onRole([...set.known], prop).length ? null : "none";
+  if (!family.length) return onRole([...set.known], prop, set.scopes).length ? null : "none";
   const measurable = family.some(([, fv]) => measure(fv));
   const parts = measurable ? partsOf2(value) : [value.trim()];
   const slots = [];
@@ -25299,7 +25553,8 @@ var remedyFor = (names) => {
 };
 var stated = (s) => {
   const decl2 = snippet(`${s.prop}: ${s.value}`);
-  return s.judged ? `${decl2} \u2192 ${s.judged.spans.join(" ")}` : `${decl2}${remedyFor(s.tokens)}`;
+  if (s.judged) return `${decl2} \u2192 ${s.judged.spans.join(" ")}`;
+  return `${decl2}${remedyFor(s.tokens)}${s.review ? ` (review: ${s.review})` : ""}`;
 };
 var declarationMessage = (parts, tail) => messageParts(parts.map(stated), tail);
 function tokenRefsIn(value, prefixes) {
@@ -25667,6 +25922,59 @@ function unknownTokens(refs, known) {
   });
 }
 
+// src/checks/tokens/misapplied-token.ts
+function plainRefs(value) {
+  const out = [];
+  const stack = [];
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    if (ch === ")") stack.pop();
+    if (ch !== "(") continue;
+    const fn = /([-\w]*)$/.exec(value.slice(0, i))?.[1]?.toLowerCase() ?? "";
+    if (fn === "var" && !stack.includes(true)) {
+      const name = /^\(\s*(--[\w-]+)/.exec(value.slice(i))?.[1];
+      if (name) out.push(name);
+    }
+    stack.push(["calc", "min", "max", "clamp"].includes(fn) || fn.endsWith("-calc"));
+  }
+  return out;
+}
+function misappliedTokens(refs, scopes, known) {
+  if (!scopes) return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const ref of refs) {
+    const prop = ref.prop.toLowerCase();
+    if (prop.startsWith("--")) continue;
+    if (known.size && !known.has(ref.name)) continue;
+    if (!plainRefs(ref.value).includes(ref.name)) continue;
+    const at = place(scopes, ref.name);
+    if (!at) continue;
+    const key = `${ref.file}\0${ref.line}\0${prop}\0${ref.name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    let why = null;
+    if (at.property !== null && !propMatches(at.sets, prop) && !propMatches(at.also, prop))
+      why = `${at.property.startsWith("--") ? "its family" : `a ${at.property} token`} sets ${at.sets.join(", ")}`;
+    else {
+      const fit = fitOf(scopes, ref.name, ref.elements);
+      if (fit.fit === "off") why = fit.why;
+    }
+    if (why === null) continue;
+    out.push({
+      rule: "tokens/misapplied-token",
+      file: ref.file,
+      line: ref.line,
+      message: `${prop}: ${ref.name} \u2014 ${why}`,
+      // The token and where it is written, not why: a declaration that edits
+      // its scope stays the same finding.
+      code: `${prop}: ${ref.name}`,
+      scopeLines: ref.scopeLines
+    });
+  }
+  return out;
+}
+
 // src/checks/typography/in-css.ts
 var typographyInCss = ({ prop }, { boundText, enabled: enabled2, surfaceOf }) => {
   const text2 = boundText[0];
@@ -25695,6 +26003,7 @@ var realPath = (path) => {
   }
 };
 var partClass = (sel) => keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, "")).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+var tagOf = (compound) => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
 async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
   const classes = /* @__PURE__ */ new Set();
   const dirs = [];
@@ -25814,6 +26123,8 @@ async function analyze(config, {
   const read = (abs, rel) => contents?.get(rel) ?? readFileSync2(abs, "utf8");
   const tokenPrefixes = ds.tokenPrefixes ?? [];
   const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
+  tokenSet.scopes = mergeScopes((config.profiles?.active ?? []).map((p) => p.tokenScopes));
+  const scopes = tokenSet.scopes;
   const realRoot = realPath(config.root) ?? config.root;
   const library = await readLibrary(realRoot, ds.styleSources, tokenPrefixes, tokenSet);
   const isLibrarySheet = (rel) => {
@@ -25821,6 +26132,7 @@ async function analyze(config, {
     return library.dirs.some((d) => abs === d || abs.startsWith(`${d}${sep2}`));
   };
   const tokenRefs = [];
+  const scopedRefs = [];
   const findings = [];
   const directives = [];
   const diagnostics = {
@@ -25889,6 +26201,24 @@ async function analyze(config, {
     for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
     suppressionsFor(rel, text2);
   }
+  const rawByClass = /* @__PURE__ */ new Map();
+  if (scopes)
+    for (const el of rawEls) for (const c of el.classes) rawByClass.set(c, [...rawByClass.get(c) ?? [], el.tag]);
+  const elementsOf = (selectors) => {
+    if (!scopes) return [];
+    const out = /* @__PURE__ */ new Set();
+    for (const sel of selectors) {
+      const key = keySelector(sel);
+      const tag = tagOf(key);
+      const found = tag ? [tag] : classesIn(key).flatMap((c) => [
+        ...(bindings.get(c) ?? []).flatMap((b) => b.tag ? [b.tag] : []),
+        ...rawByClass.get(c) ?? []
+      ]);
+      if (!found.length) return [];
+      for (const e of found) out.add(e);
+    }
+    return [...out];
+  };
   for (const { abs, rel } of files.references) {
     if (tooBig(abs, rel)) continue;
     try {
@@ -25956,6 +26286,7 @@ async function analyze(config, {
       const scopeLines = [ruleLine, ruleLine - 1];
       const selector = selectors.join(", ");
       const media = mediaQuery(cssRule) || void 0;
+      const elements = elementsOf(selectors);
       let touchesStyle = false;
       let touchesLayout = false;
       const pending = [];
@@ -25968,15 +26299,18 @@ async function analyze(config, {
         );
         if (styling) touchesStyle = true;
         if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
-        for (const name of tokenRefsIn(decl2.value, tokenPrefixes))
-          tokenRefs.push({ file: rel, line, name, prop, scopeLines });
+        for (const name of tokenRefsIn(decl2.value, tokenPrefixes)) {
+          const ref = { file: rel, line, name, prop, scopeLines };
+          tokenRefs.push(ref);
+          if (scopes) scopedRefs.push({ ...ref, value: decl2.value, elements });
+        }
         if (finding) pending.push({ ...finding, line, scopeLines });
       }
       if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
       if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
       const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
       if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
-      else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media });
+      else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
       const cut = deletableRule(cssRule, srcLines);
       for (const cls of keyClasses)
         declared.push({
@@ -26005,7 +26339,19 @@ async function analyze(config, {
     }
     const isGrid = el.decls.some((d) => isGridDecl(d.prop, d.value));
     const pending = [];
+    const elements = [el.tag];
     for (const d of el.decls) {
+      if (scopes)
+        for (const name of tokenRefsIn(d.value, tokenPrefixes))
+          scopedRefs.push({
+            file: el.file,
+            line: d.line ?? el.line,
+            name,
+            prop: d.prop,
+            scopeLines,
+            value: d.value,
+            elements
+          });
       const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
       if (finding)
         pending.push({
@@ -26019,7 +26365,14 @@ async function analyze(config, {
         });
     }
     for (const f of collapsePerRule(pending))
-      report({ ...f, file: el.file, message: `${f.message}${f.suffix ?? ""}`, code: f.code ?? f.message, scopeLines });
+      report({
+        ...f,
+        file: el.file,
+        message: `${f.message}${f.suffix ?? ""}`,
+        code: f.code ?? f.message,
+        scopeLines,
+        elements
+      });
   }
   for (const tpl of cssInJs) {
     if (!reports(tpl.file)) continue;
@@ -26037,10 +26390,15 @@ async function analyze(config, {
     for (const group of tpl.groups) {
       const onTarget = group.onTarget;
       const pending = [];
+      const tag = onTarget ? tpl.target : group.selector ? tagOf(keySelector(group.selector)) : null;
+      const elements = scopes && tag ? [tag] : [];
       for (const d of group.decls) {
         if (supp)
-          for (const name of tokenRefsIn(d.value, tokenPrefixes))
-            tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
+          for (const name of tokenRefsIn(d.value, tokenPrefixes)) {
+            const ref = { file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] };
+            tokenRefs.push(ref);
+            if (scopes) scopedRefs.push({ ...ref, value: d.value, elements });
+          }
         const { finding } = classifyDeclaration(d, {
           boundSystem: onTarget ? boundSystem : [],
           boundText: onTarget ? boundText : [],
@@ -26058,7 +26416,8 @@ async function analyze(config, {
           message: `${f.message}${where} (css-in-js)`,
           code: `css-in-js:${f.code ?? f.message}`,
           suffix: `${where} (css-in-js)`,
-          scopeLines: [tpl.line, tpl.line - 1]
+          scopeLines: [tpl.line, tpl.line - 1],
+          elements
         });
     }
   }
@@ -26090,16 +26449,24 @@ async function analyze(config, {
       });
   }
   for (const f of findings) {
+    const elements = f.elements ?? [];
+    delete f.elements;
     if (!f.hints?.length) {
       delete f.hints;
       continue;
     }
-    f.suggest = f.hints.map((h) => ({ ...h, tokens: tokensFor(tokenSet, h.prop, h.value) }));
+    f.suggest = f.hints.map((h) => {
+      const tokens = tokensFor(tokenSet, h.prop, h.value);
+      const [only] = tokens;
+      const fit = scopes && only !== void 0 && tokens.length === 1 ? fitOf(scopes, only, elements) : null;
+      return fit && (fit.fit === "off" || fit.fit === "unknown") ? { ...h, tokens, review: fit.why } : { ...h, tokens };
+    });
     f.message = declarationMessage(f.suggest, f.suffix ?? "");
     if (f.rule === "tokens/hardcoded-value" && f.hints.length === 1) f.decl = f.hints[0];
     delete f.hints;
   }
   for (const f of unknownTokens(tokenRefs, tokenSet.known)) report(f);
+  for (const f of misappliedTokens(scopedRefs, scopes, tokenSet.known)) report(f);
   const unique = dedupe(findings);
   for (const f of unique) f.message = boundMessage(f.message, f.suffix);
   unique.sort((a, b) => b.rank - a.rank || byBytes(a.file, b.file) || a.line - b.line);
@@ -26147,7 +26514,7 @@ function tokenFixes(findings) {
   const out = [];
   for (const f of findings) {
     for (const s of f.suggest ?? []) {
-      const to = s.tokens.length === 1 ? `var(${s.tokens[0]})` : s.judged?.answer;
+      const to = s.tokens.length === 1 && !s.review ? `var(${s.tokens[0]})` : s.judged?.answer;
       if (to === void 0 || to === KEEP) continue;
       out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to, span: s.span });
     }
@@ -27844,7 +28211,7 @@ var package_default = {
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
     "eval:renames": "node evals/renames/run.ts",
-    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/report.ts && node tests/serve.ts && node tests/lsp.ts"
+    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/scopes.ts && node tests/report.ts && node tests/serve.ts && node tests/lsp.ts"
   },
   dependencies: {
     "@babel/parser": "^7.24.0",
@@ -30516,6 +30883,17 @@ var readJson2 = (p) => JSON.parse(readFileSync12(p, "utf8"));
 var under = (dir, rel) => isAbsolute4(rel) ? rel : join12(dir, rel);
 var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString = (v) => typeof v === "string" && v !== "" ? v : null;
+function readScopes(dir, raw) {
+  if (typeof raw !== "string") return parseTokenScopes(raw);
+  try {
+    return parseTokenScopes(readJson2(under(dir, raw)));
+  } catch (err) {
+    return {
+      scopes: null,
+      errors: [`tokenScopes: could not read ${raw} \u2014 ${messageOf(err)}`]
+    };
+  }
+}
 function readProfiles(root2) {
   if (!root2 || !existsSync7(root2)) return [];
   const out = [];
@@ -30532,6 +30910,7 @@ function readProfiles(root2) {
       const patterns = asString(raw.patterns);
       const components2 = asString(raw.components);
       const tokenDescriptions2 = asString(raw.tokenDescriptions);
+      const scopes = raw.tokenScopes === void 0 ? null : readScopes(dir, raw.tokenScopes);
       out.push({
         id,
         name: asString(raw.name) ?? asString(raw.id) ?? e.name,
@@ -30540,6 +30919,8 @@ function readProfiles(root2) {
         patterns: patterns ? under(dir, patterns) : null,
         components: components2 ? under(dir, components2) : null,
         tokenDescriptions: tokenDescriptions2 ? under(dir, tokenDescriptions2) : null,
+        tokenScopes: scopes?.scopes ?? null,
+        problems: scopes?.errors ?? [],
         dir
       });
       seen.add(id);
@@ -31191,6 +31572,9 @@ async function main() {
   if (!isHook) {
     for (const err of registries.errors) fail(`loupe: ${err}
 `);
+    for (const p of active)
+      for (const problem of p.problems) fail(`loupe: profile ${p.id} ${problem} \u2014 its token scopes are ignored
+`);
     for (const s of registries.skipped)
       note(
         `loupe: ${s.label} ${s.kind} registry skipped \u2014 scoped to ${s.packages.join(", ")}, and this config declares ${config.designSystem.packages.length ? config.designSystem.packages.join(", ") : "no design-system packages"}
@@ -31609,6 +31993,13 @@ ${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked
     for (const f of [...skipped, ...kept.skipped])
       process.stdout.write(`${yellow("skip")} ${dim(`${f.file}:${f.line}`)}  ${decl2(f)} \u2014 ${f.why}
 `);
+    for (const f of toFix.findings)
+      for (const s of f.suggest ?? [])
+        if (s.review && !s.judged)
+          process.stdout.write(
+            `${yellow("review")} ${dim(`${f.file}:${s.line ?? f.line}`)}  ${decl2(s)} \u2192 ${s.tokens.join(" or ")} \u2014 ${s.review}
+`
+          );
     const left = toFix.findings.length - settledBy(toFix.findings, applied, kept.applied);
     const nSkipped = skipped.length + kept.skipped.length;
     process.stdout.write(

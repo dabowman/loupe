@@ -293,6 +293,13 @@ verdict. The finding carries the declaration as a hint rather than a remedy; the
 analyzer's token pass names the token that carries the value, and `--judge`
 settles the ones no single token does. See [tokens](analysis.md#the-token-set).
 
+Where the active profile scopes that one token to a kind of element, the pass
+also checks it against what the declaration styles. Off its scope, or scoped to
+a kind nothing shows this element to be, it is still named — with `(review: …)`
+and the reason — but `loupe fix` leaves it: one off-role candidate is a
+question, the way two on-role ones are. See
+[token scopes](analysis.md#token-scopes).
+
 ## `tokens/unknown-token`
 
 Runs only once every stylesheet has been read: a set that is still being built
@@ -314,6 +321,34 @@ written instead, and `--judge` asks which real token was meant — see
 [judge.md](judge.md#which-token-was-meant-judgetokents). Unjudged, it stands for
 a reader. The defence of that threshold — and why a scale step is
 never read as a spelling — is in [fixing](report.md#fixing).
+
+## `tokens/misapplied-token`
+
+The other half of `tokens/unknown-token`: the name is real, and it is used
+outside the scope the profile declares for it — a foreground colour on a
+`background`, a `surface` background on a clickable control, the menu radius on
+a button. The agent session that motivated it found exactly this by reading the
+token documentation: `background-surface-*` approved for a radio, then backed
+out because `surface` is "not for clickable parts". Nothing in the engine
+could say that.
+
+Two questions, in order. Does the token's property segment `set` the
+declaration's property, or may it `also` appear there? Then, where its target
+segment or scale step names kinds of element, is every element the declaration
+is shown to land on one it is not for? Only a definite no reports; see
+[token scopes](analysis.md#token-scopes) for what "shown" means and why unknown
+never reports.
+
+What it deliberately leaves alone: a custom property (`--ring:
+var(--wpds-…)` says nothing about what the ring is), a name no known token
+carries (that is `tokens/unknown-token`'s), and a `var()` inside `calc()`,
+`min()`, `max()` or `clamp()` — `margin: calc(-1 * var(--wpds-dimension-padding-md))`
+is the bleed out of a padded parent, arithmetic on the token rather than a use
+of its role.
+
+Advisory, and low in the report. It is a judgement the profile's author encoded,
+and a wrong scope declaration must not block a turn before the metadata has
+been exercised on real repos. No profile declaring scopes, no findings.
 
 ## `css/dead-class`
 

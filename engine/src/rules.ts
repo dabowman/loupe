@@ -76,6 +76,13 @@ export const RULES = {
 		title:
 			'unknown token — no {tokenPrefix} token by this name is defined; check the spelling against the design system',
 	},
+	'tokens/misapplied-token': {
+		severity: 'warn',
+		rank: 2,
+		needs: ['tokenPrefixes'],
+		title:
+			'misapplied token — it exists, but {system} scopes it to another property or another kind of element; use the token whose role matches',
+	},
 	'tokens/hardcoded-value': {
 		severity: 'warn',
 		rank: 9,
