@@ -236,6 +236,20 @@ export const LANGUAGE = EMBEDDED_LANGUAGE as Language;
 const REDIRECT_FLOOR = 0.9;
 
 /**
+ * What identifies the redirect a control would produce: everything its baseline
+ * and hook-delta key is built from. Shared with the hook's pre-edit comparison,
+ * which stands a control in for the redirect without paying to ask the judge,
+ * so the two cannot drift into keys that never match.
+ */
+export const redirectIdentity = (
+	c: Pick<Control, 'file' | 'component'>,
+): { rule: 'patterns/judged-redirect'; file: string; code: string } => ({
+	rule: 'patterns/judged-redirect',
+	file: c.file,
+	code: `<${c.component}>`,
+});
+
+/**
  * The findings the abstract language's redirects produce on these controls.
  *
  * Each control is an instance of the pattern its registry entry realizes. The
@@ -285,16 +299,15 @@ export async function judgeRedirects(
 		const reading = `(${when.map(([f, v]) => `${f}: ${String(v)}`).join(', ')})`;
 		const confidence = Math.min(...when.map(([f]) => sure[i]?.[f] ?? 0));
 		const tail = judgedTail(confidence);
+		const id = redirectIdentity(c);
 		return [
 			{
-				rule: 'patterns/judged-redirect',
+				...id,
 				severity,
-				rank: RULES['patterns/judged-redirect'].rank,
-				file: c.file,
+				rank: RULES[id.rule].rank,
 				line: c.line,
-				message: `<${c.component}> ${reading} \u2192 \`${r.redirect}\` ${tail}`,
+				message: `${id.code} ${reading} \u2192 \`${r.redirect}\` ${tail}`,
 				note: r.because,
-				code: `<${c.component}>`,
 				judged: { answer: when.map(([, v]) => String(v)).join(', '), confidence, spans: [reading, tail] },
 			},
 		];

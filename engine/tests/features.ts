@@ -18,7 +18,7 @@ import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { APPEARANCE_PROPS, propsOverlap } from '../src/styles.ts';
-import { LANGUAGE, ask, judgeRedirects, judgeVariants } from '../src/judge.ts';
+import { LANGUAGE, ask, judgeRedirects, judgeVariants, redirectIdentity } from '../src/judge.ts';
 import { forceQuery } from '../src/judge/force.ts';
 import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, ComponentEntry, Finding, Pattern, PatternNode, RuleId } from '../src/types.ts';
@@ -1656,6 +1656,16 @@ await check(
 		assert(f.message === '<Button> (represents: destination) \u2192 `navigate-hierarchy` (judged 0.97)', f.message);
 		assert(f.judged?.answer === 'destination' && f.judged.confidence === 0.97, JSON.stringify(f.judged));
 		assert(Boolean(f.note), "the redirect's `because` was dropped");
+		// The hook's pre-edit comparison keys a control as the redirect it would
+		// be, without asking: the two keys have to be the same string.
+		const control = first(
+			controls.filter((c) => c.line === 4),
+			'the control on line 4',
+		);
+		assert(
+			findingKey(f) === findingKey({ ...redirectIdentity(control), message: '' }),
+			`the pre-edit key ${findingKey({ ...redirectIdentity(control), message: '' })} is not the finding's ${findingKey(f)}`,
+		);
 
 		// Off unless asked: a plain check and the hook never collect a control.
 		const plain = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': file }, { patterns: registry });

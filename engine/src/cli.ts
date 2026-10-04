@@ -17,7 +17,14 @@ import { parseArgs as parseArgv } from 'node:util';
 import { analyze, dedupe, findingKey } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
-import { judgeRedirects, judgeRenames, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
+import {
+	judgeRedirects,
+	judgeRenames,
+	judgeValues,
+	judgeVariants,
+	redirectIdentity,
+	tokenDescriptions,
+} from './judge.ts';
 import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset, presetKey } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
@@ -470,8 +477,7 @@ async function keysBeforeEdit(
 		// collected (`judgeRedirects`, keyed by its component). The control standing
 		// before the edit is the finding standing before it, without paying to ask
 		// the judge about a file the edit has already replaced.
-		for (const c of prior.controls ?? [])
-			keys.add(findingKey({ rule: 'patterns/judged-redirect', file: c.file, code: `<${c.component}>`, message: '' }));
+		for (const c of prior.controls ?? []) keys.add(findingKey({ ...redirectIdentity(c), message: '' }));
 		return keys;
 	} catch {
 		return new Set();
