@@ -239,6 +239,12 @@ preset's setting is replaced whole by the project's, so a preset's reason never
 outlives the setting it explained, and one a preset turned off is listed under
 `preset <name>` rather than your config file.
 
+`maxEntries`, top level, moves the ceiling on the analysis walk — 200,000
+entries by default, past which analysis refuses rather than report on part of
+the tree (see [Programmatic use](#programmatic-use)) — for a project genuinely
+larger than that, or lowers it. It must be a positive whole number; anything
+else is a config error. `LOUPE_MAX_ENTRIES` outranks it for a single run.
+
 Defaults are `DEFAULTS` in `src/config.ts`; `presets/generic.json` adds the
 ignore globs and CSS-in-JS packages every shipped preset inherits. The
 design-system block is what makes a preset:
@@ -1075,6 +1081,7 @@ const { findings, blocking, directives } = analyze(config, { scope: null });
 | `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element` when the carrier is a `components.text` or `components.layout` name; nothing nested inside it is, and a genuine render callback on any other component is not. Defaults to `render`, `as`, `component`; `[]` exempts nothing. A list replaces the default rather than extending it. |
 | `designSystem.allowedInlineStyles` | Inline-style properties a component's own API sanctions, as `{ "Text": ["color"] }` keyed by canonical component name. A `style` on that component made only of those properties is not `system/inline-style`; its values still go through the ordinary checks, so a raw colour there is still `tokens/hardcoded-value`. Any other property, a spread, or an opaque `style={obj}` reports the element as before, naming only the unsanctioned properties. The `wpds` preset sanctions `color` on `Text`, which has no color prop. |
 | `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. A `judge` detector (`components`, `unless`) names elements for `check --judge` to ask about, and reports `patterns/judged-redirect`. |
+| `maxEntries` | How many entries the analysis walk reads before it refuses (default 200,000). A positive whole number; anything else is a config error. `LOUPE_MAX_ENTRIES` outranks it for one run. |
 | `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package, and optionally each component's styling `surface` — `{ "properties": { "font-size": "variant", "border-radius": null } }` — which `system/override` and `typography/in-css` read): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
 `scope` filters what is *reported*. The index is always built repo-wide —
@@ -1090,8 +1097,11 @@ And a ceiling bounds the walk itself: past 200,000 entries (pruned directories
 not counted) analysis refuses rather than reporting on part of the tree, since
 a partial index calls everything it never reached clean. The hook stands aside
 with a `skipped` message naming the count; a typed command exits 2. Point
-`--root` at the project, or narrow `sources` / extend `sources.ignore`;
-`LOUPE_MAX_ENTRIES` raises the ceiling for a project that really is that large.
+`--root` at the project, or narrow `sources` / extend `sources.ignore`.
+A project that really is that large sets the ceiling in `loupe.config.json` —
+`"maxEntries": 500000`, a positive whole number, anything else a config error —
+and `LOUPE_MAX_ENTRIES` overrides that for one run: the variable, then the
+config, then 200,000.
 
 ## Source and bundle
 

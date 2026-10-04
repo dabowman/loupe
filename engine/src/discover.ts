@@ -76,12 +76,18 @@ export const ANALYZE_ENTRY_BUDGET = 200_000;
 
 /**
  * The analysis ceiling: `LOUPE_MAX_ENTRIES` where it is a positive whole number,
- * so a project genuinely larger than the default can say so — and a test can
- * trip the refusal without building a tree of that size.
+ * then the config's `maxEntries`, then {@link ANALYZE_ENTRY_BUDGET}.
+ *
+ * The config key is how a project genuinely larger than the default says so
+ * for every run; the variable outranks it because it is the per-run escape
+ * hatch — and how a test trips the refusal without building a tree of that size.
+ * `normalize` has already refused a `maxEntries` that is not a positive whole
+ * number, so one that arrives here is used as it is.
  */
-export function analyzeEntryBudget(): number {
+export function analyzeEntryBudget(configured?: number | null): number {
 	const set = Number(process.env.LOUPE_MAX_ENTRIES);
-	return Number.isInteger(set) && set > 0 ? set : ANALYZE_ENTRY_BUDGET;
+	if (Number.isInteger(set) && set > 0) return set;
+	return configured ?? ANALYZE_ENTRY_BUDGET;
 }
 
 /**
@@ -95,7 +101,8 @@ export class TreeTooLarge extends Error {
 		super(
 			`tree too large to index: the walk stopped at ${limit.toLocaleString('en-US')} entries without finishing, ` +
 				'and a partial index would call the rest clean. Point --root at the project, or narrow `sources` ' +
-				'(or extend `sources.ignore`) in loupe.config.json; LOUPE_MAX_ENTRIES raises the ceiling.',
+				'(or extend `sources.ignore`) in loupe.config.json; `maxEntries` there (or LOUPE_MAX_ENTRIES for one run) ' +
+				'raises the ceiling.',
 		);
 		this.name = 'TreeTooLarge';
 		this.limit = limit;

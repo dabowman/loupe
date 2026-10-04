@@ -258,9 +258,13 @@ two seconds of walking) and, if the walk has not finished, throws `TreeTooLarge`
 instead of returning anything. Under the hook that is a `skipped` system message
 naming the count and the remedy — point `--root` at the project, or narrow
 `sources` / extend `sources.ignore` — and typed it is exit 2. On the same tree
-the hook now stands down in about 4s. `LOUPE_MAX_ENTRIES` raises the ceiling for
-a project that is genuinely larger, and is how the tests trip it without
-building the tree.
+the hook now stands down in about 4s. A project that is genuinely larger sets
+`maxEntries` in its config (a positive whole number; anything else is a config
+error, because a ceiling misread as "unset" refuses at the default or walks a
+home directory). `LOUPE_MAX_ENTRIES` outranks the config — it is the per-run
+escape hatch, and how the tests trip the refusal without building the tree — so
+the order is the variable, then the config, then `ANALYZE_ENTRY_BUDGET`. The
+refusal names both.
 
 The other options were weighed and left for later: stat-ing a known file list
 instead of walking (the cross-file rules — `css/dead-class`, the composites —

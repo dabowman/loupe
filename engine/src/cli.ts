@@ -329,7 +329,8 @@ Environment:
                         false included — as not set.
   LOUPE_MAX_ENTRIES=<n> How many entries analysis walks before it refuses to
                         report at all (default 200,000), rather than calling
-                        the part of the tree it never read clean.
+                        the part of the tree it never read clean. Outranks
+                        "maxEntries" in loupe.config.json for one run.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.

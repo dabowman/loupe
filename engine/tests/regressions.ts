@@ -1996,6 +1996,52 @@ await check('a walk that hits the ceiling refuses instead of reporting clean', a
 		// Under the ceiling nothing changes.
 		const whole = runCli(['check', '--all', '--root', root, '--preset', 'generic'], { LOUPE_MAX_ENTRIES: '5000' });
 		assert(whole.status !== 2, `a tree under the ceiling did not run: ${whole.stderr}`);
+
+		// The refusal names the config key as well as the variable.
+		assert(/maxEntries/.test(message), `the refusal does not name the config key: ${message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A project genuinely larger than the default says so once, in its config,
+// rather than exporting a variable in every shell and CI job that runs it. The
+// variable still outranks the config: it is the per-run escape hatch.
+await check('maxEntries in the config moves the ceiling, and LOUPE_MAX_ENTRIES outranks it', async () => {
+	const root = scratch('dsh-max-entries-');
+	const files: Record<string, string> = { 'package.json': '{"name":"x"}' };
+	for (let i = 0; i < 40; i++) files[`d${i % 4}/f${i}.css`] = '.pj-a{color:#111}\n';
+	writeAll(root, files);
+	const configWith = (maxEntries: unknown): void =>
+		writeFileSync(join(root, 'loupe.config.json'), JSON.stringify({ extends: 'generic', maxEntries }));
+	try {
+		configWith(10);
+		const low = runCli(['check', '--all', '--root', root]);
+		assert(low.status === 2, `a config ceiling of 10 did not refuse: exit ${low.status}\n${low.stdout}`);
+		assert(/too large to index/.test(low.stderr) && /10 entries/.test(low.stderr), `wrong refusal:\n${low.stderr}`);
+
+		// The variable wins over the config, in both directions.
+		const raised = runCli(['check', '--all', '--root', root], { LOUPE_MAX_ENTRIES: '5000' });
+		assert(raised.status !== 2, `LOUPE_MAX_ENTRIES did not outrank the config: ${raised.stderr}`);
+		configWith(5000);
+		const ran = runCli(['check', '--all', '--root', root]);
+		assert(ran.status !== 2, `a config ceiling of 5000 did not run: ${ran.stderr}`);
+		const lowered = runCli(['check', '--all', '--root', root], { LOUPE_MAX_ENTRIES: '10' });
+		assert(lowered.status === 2 && /10 entries/.test(lowered.stderr), `the variable did not win: ${lowered.stderr}`);
+
+		const config = await loadConfig({ root });
+		assert(config.maxEntries === 5000, `normalize lost the key: ${String(config.maxEntries)}`);
+
+		// Anything but a positive whole number is a config error, not "unset".
+		for (const bad of [0, -1, 1.5, '500000', true]) {
+			configWith(bad);
+			const r = runCli(['check', '--all', '--root', root]);
+			assert(r.status === 2, `maxEntries ${JSON.stringify(bad)} was accepted: exit ${r.status}`);
+			assert(
+				/maxEntries must be a positive whole number/.test(r.stderr),
+				`maxEntries ${JSON.stringify(bad)}: ${r.stderr}`,
+			);
+		}
 	} finally {
 		cleanup(root);
 	}
