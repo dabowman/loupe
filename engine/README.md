@@ -867,7 +867,10 @@ repository it does not ask.
 
 A committed `.loupe-baseline.json` the config has since pointed away from is
 still read. 0.1.x baseline locations (`.loupe/baseline.json`, the plugin data
-directory) are not: re-run `loupe baseline` to record one in the project.
+directory) are not: re-run `loupe baseline` to record one in the project, then
+delete the old file. Until a current baseline exists, `check` says so on stderr
+(never in JSON or SARIF on stdout) and `status` says so under its `baseline:`
+line; the hook does not.
 
 ## Claude Code hook
 

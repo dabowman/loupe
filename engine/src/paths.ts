@@ -64,6 +64,29 @@ export const DEFAULT_BASELINE = '.loupe-baseline.json';
 export const baselinePath = (root: string, p: string): string => (isAbsolute(p) ? p : join(root, p));
 
 /**
+ * A 0.1.x baseline, which nothing reads any more: `<root>/.loupe/baseline.json`,
+ * or the plugin data directory's `projects/<key>/baseline.json`. Null when
+ * neither is there.
+ *
+ * Asked only where no current baseline exists, so a backlog accepted under
+ * 0.1.x does not come back as live findings with no word as to why. Two stats,
+ * and never from the hook: the hook's own feedback is the agent's, and the
+ * remedy is a person's decision.
+ */
+export function legacyBaseline(root: string): string | null {
+	const data = process.env.CLAUDE_PLUGIN_DATA;
+	const candidates = [
+		join(root, '.loupe', 'baseline.json'),
+		...(data ? [join(data, 'projects', projectKey(root), 'baseline.json')] : []),
+	];
+	return candidates.find((path) => existsSync(path)) ?? null;
+}
+
+/** What `check` and `status` say about a {@link legacyBaseline}. */
+export const legacyBaselineNotice = (path: string): string =>
+	`${path} is a 0.1.x baseline, which this version no longer reads — re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
+
+/**
  * The baseline to read, or the one to write if none exists yet.
  *
  * `fallback` is 'default-name' when the config names a file that isn't there, so
