@@ -709,6 +709,7 @@ export function scanMarkup(
 			// `<input type="checkbox">` has its own analog and `type="hidden"` has
 			// none. A computed or absent value falls back to the element's own.
 			let suggest: string | null = mapped.component;
+			let render = mapped.render;
 			if (mapped.attribute && mapped.values) {
 				const attr = node.attributes.find(
 					(a) => a.type === 'JSXAttribute' && a.name.type === 'JSXIdentifier' && a.name.name === mapped.attribute,
@@ -721,7 +722,11 @@ export function scanMarkup(
 							? staticString(v.expression)
 							: null;
 				const value = raw?.trim().toLowerCase();
-				if (value !== undefined && Object.hasOwn(mapped.values, value)) suggest = mapped.values[value] ?? null;
+				if (value !== undefined && Object.hasOwn(mapped.values, value)) {
+					suggest = mapped.values[value] ?? null;
+					// `render` is the element's own analog's; a picked one renders itself.
+					render = undefined;
+				}
 				if (suggest === null) return;
 			}
 			// An inline style is styling too: a bare <div> laid out with
@@ -733,6 +738,7 @@ export function scanMarkup(
 				file: relPath,
 				line,
 				suggest,
+				render,
 				styledOnly: mapped.styledOnly,
 				inlineStyled: Boolean(style?.present),
 				inlineLayout: Boolean(style?.decls?.some(isLayoutDecl)),

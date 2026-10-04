@@ -196,15 +196,16 @@ export async function judgeVariants(
 		const arrow = f.message.indexOf(' → ');
 		const element = f.message.slice(0, arrow);
 		const analog = f.message.slice(arrow + 3);
-		const tag = `<${target.name}>`;
+		// `<Text>`, or `<Text render={ <h4 /> }>` when the mapping keeps the element.
+		const tag = new RegExp(`<${target.name.replace(/[.$]/g, '\\$&')}(?=[ >])`);
 		const not = a.choice === notKey(target);
 		const span = not ? `no analog, not ${target.name} content` : `variant="${a.choice}"`;
 		const suggestion = not
 			? span
 			: /variant="[^"]*"/.test(analog)
 				? analog.replace(/variant="[^"]*"/, span)
-				: analog.includes(tag)
-					? analog.replace(tag, `<${target.name} ${span}>`)
+				: tag.test(analog)
+					? analog.replace(tag, `<${target.name} ${span}`)
 					: `${analog} with ${span}`;
 		const tail = judgedTail(a.confidence);
 		f.message = `${element} → ${suggestion} ${tail}`;

@@ -193,7 +193,8 @@ At 0.80 none of them does.
 ## Reporting a judgement
 
 The answer goes where the reader would otherwise have had to put it: `<p> →
-<Text>` becomes `<p> → <Text variant="body-sm"> (judged 0.81)`, and a suggestion
+<Text>` becomes `<p> → <Text variant="body-sm"> (judged 0.81)`, a heading's
+`<Text render={ <h4 /> }>` gains its `variant` in the same tag, and a suggestion
 already naming a placeholder — `variant="heading-*"` — has it filled. A `not_`
 answer replaces the suggestion, since the analog was the wrong call.
 

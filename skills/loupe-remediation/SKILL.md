@@ -53,14 +53,20 @@ findings say:
 
 1. `stylesheet/unparsed` — a file nobody read, so its findings do not exist yet
 2. `suppression/malformed` — a broken directive is muting nothing
-3. `system/locked-component`, `system/superseded-component` — is this even the
+3. `css/dead-class`, pruning — delete what is already dead. Nothing below can
+   revive a class no markup references today, and every later stage gets a
+   smaller input instead of tokenizing rules about to be deleted. Still a
+   cross-file call: a class can be assembled at runtime, in PHP or a template
+   string, so confirm it is not before deleting
+4. `system/locked-component`, `system/superseded-component` — is this even the
    right component; swapping it can change what every finding below says
-4. `system/override`, `system/inline-style`, `typography/in-css` — the
+5. `system/override`, `system/inline-style`, `typography/in-css` — the
    component is being fought
-5. `layout/*` — structure
-6. `patterns/*` — composites, once individual components are conformant
-7. `tokens/hardcoded-value`, `tokens/unknown-token`, `typography/untokenized` — values
-8. `css/dead-class` — once the rest has settled
+6. `layout/*` — structure
+7. `patterns/*` — composites, once individual components are conformant
+8. `tokens/hardcoded-value`, `tokens/unknown-token`, `typography/untokenized` — values
+9. `css/dead-class`, sweep — what the work above left dead, once the rest has
+   settled. The same cross-file check applies
 
 Re-run between stages rather than fixing from a stale list.
 
@@ -184,6 +190,17 @@ An element handed to a text or layout component's substitution prop — `render`
 converting an `<h4>` to the text component with `render={<h4 />}` settles the
 finding rather than moving it. Markup nested inside such a prop still counts, as
 does an element handed to a genuine render callback.
+
+That conversion trips `jsx-a11y/heading-has-content`. The lint rule reads
+`<h4 />` statically and cannot follow the children through `render` to the
+element that actually renders, which has them. It is a false positive: disable
+it on that line, with the reason in the directive —
+
+```
+eslint-disable-next-line jsx-a11y/heading-has-content -- children pass through render
+```
+
+— not by dropping the semantic element, and not by reverting the conversion.
 
 Not every raw element should convert. Content rendered from an editor, docs
 prose, and third-party render props are legitimately raw — suppress those with
@@ -385,3 +402,10 @@ across all rules, and the mechanical repetition makes a mistake obvious.
 Re-run the check, then confirm the UI still renders as before. A conformance
 pass that changes what the user sees needs to be flagged as such, not folded
 into a cleanup commit.
+
+Then run the project's own linters. A conformance fix that trips another tool is
+still a fix, not a regression — but prove it, the same way you prove rendering
+did not change, rather than assume it. Formatter churn is the common case: a
+conversion that adds a JSX prop often reflows onto several lines, and the
+project's fix script (`lint:js:fix` on a `wp-scripts` project) settles it. Run
+that instead of hand-formatting.

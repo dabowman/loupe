@@ -251,6 +251,7 @@ design-system block is what makes a preset:
     "components": { "layout": ["Stack"], "text": ["Text"] },
     "elementMap": {
       "p": "Text",
+      "h4": { "component": "Text", "render": "h4" },    // <h4> → <Text render={ <h4 /> }>
       "div": { "component": "Stack", "styledOnly": true }
     }
   }
@@ -489,7 +490,8 @@ the component registry: `Text (@wordpress/ui)` in the WPDS profile. It sends
 each element's source and parent lines to TypeSafe in a request of its own, six
 in flight, and asks which variant fits, or `not_<name>` when the element is not
 that component's content. A pick at 0.5 confidence or above is written into
-the suggestion — `<p> → <Text variant="body-sm"> (judged 0.80)`, a
+the suggestion — `<p> → <Text variant="body-sm"> (judged 0.80)`,
+`<h3> → <Text variant="heading-lg" render={ <h3 /> }>`, a
 `variant="heading-*"` placeholder filled, or `no analog, not Text content` in
 place of a wrong analog — and recorded as `judged: { answer, confidence, spans }`
 on the finding, the spans being what the agent format paints green. Anything

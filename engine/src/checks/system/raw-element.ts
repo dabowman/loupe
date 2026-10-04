@@ -27,12 +27,17 @@ import { supersededEverywhere } from './currency.ts';
  * The element map's analog, forwarded if the registry has since superseded it.
  * Only when *every* package carrying the name is stale, so a component that is
  * legacy in one package and recommended in another keeps the bare name.
+ *
+ * A mapping with `render` names the element too, `<Text render={ <h4 /> }>`, so
+ * the semantics the conversion has to keep are in the suggestion rather than
+ * left for the agent to research.
  */
-function currentAnalog(registry: ReadonlyMap<string, ComponentEntry>, suggest: string): string {
+function currentAnalog(registry: ReadonlyMap<string, ComponentEntry>, suggest: string, render?: string): string {
 	if (!supersededEverywhere(registry, suggest)) {
+		const open = render ? `<${suggest} render={ <${render} /> }>` : `<${suggest}>`;
 		// `InputControl` is in two packages; name the one to import from.
 		const current = [...registry.values()].filter((e) => e.name === suggest && e.status === 'recommended');
-		return current.length === 1 ? `<${suggest}> (${current[0]?.package})` : `<${suggest}>`;
+		return current.length === 1 ? `${open} (${current[0]?.package})` : open;
 	}
 	const remedy = [...registry.values()].find((e) => e.name === suggest && e.supersededBy)?.supersededBy;
 	return remedy || `<${suggest}>`;
@@ -72,7 +77,7 @@ export function rawElements(
 				rule: 'system/raw-element',
 				file: el.file,
 				line: el.line,
-				message: `<${el.tag}> → ${currentAnalog(registry, el.suggest)}`,
+				message: `<${el.tag}> → ${currentAnalog(registry, el.suggest, el.render)}`,
 				code: `<${el.tag}>`,
 			},
 		];

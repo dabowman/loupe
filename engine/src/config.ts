@@ -277,13 +277,20 @@ export function normalize(
 		ruleOrigins[id] = from === undefined ? 'config' : isAbsolute(from) ? relative(root, from) || from : from;
 	}
 
-	// Element map: "p": "Text", "div": { component, styledOnly }, or
-	// "input": { component, attribute: "type", values: { checkbox: "CheckboxControl" } }.
+	// Element map: "p": "Text", "div": { component, styledOnly },
+	// "input": { component, attribute: "type", values: { checkbox: "CheckboxControl" } },
+	// or "h4": { component: "Text", render: "h4" }.
 	const elementMap = new Map<string, ElementMapping>();
 	for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
 		const entry = typeof v === 'string' ? { component: v, styledOnly: false } : v;
 		if ((entry.values === undefined) !== (entry.attribute === undefined))
 			throw new Error(`elementMap.${tag}: attribute and values go together`);
+		// It is printed as `render={ <h4 /> }`, so anything but a bare tag name
+		// would put a suggestion in the finding that does not parse.
+		if (entry.render !== undefined && !(typeof entry.render === 'string' && /^[a-z][a-z0-9-]*$/i.test(entry.render)))
+			throw new Error(
+				`elementMap.${tag}.render must be an element name like "h4", got: ${JSON.stringify(entry.render)}`,
+			);
 		elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
 	}
 

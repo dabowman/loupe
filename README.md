@@ -276,7 +276,7 @@ the element is not text at all:
 ```
 • system/raw-element (3 in 2 files, 3 distinct) advisory — raw element — use its design-system analog
   src/components/build-summary.tsx (2)
-      131  <h3> → Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.66)
+      131  <h3> → <Text variant="heading-lg" render={ <h3 /> }> (@wordpress/ui) (judged 0.66)
       142  <p> → <Text variant="body-sm"> (judged 0.80)
   src/components/brand-picker.tsx (1)
       101  <span> → no analog, not Text content (judged 1.00)
