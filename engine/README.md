@@ -722,12 +722,13 @@ measurements shaped the design:
   buttons. Offering the sizes had the model put `size-5xs` on `top: 4px`, and
   took the score from 97% to 95%.
 
-Applied to that plugin, `fix --judge` rewrote 156 declarations and wrote 20
-suppressions (measured while a value judged deliberate was still suppressed
-too; those are now left for review), taking `tokens/hardcoded-value` from 183 findings to 70 and
-`typography/untokenized` from 43 to 12, with no other finding moved. What is
-left is mostly the coin-flips — `10px` between 8 and 12, `3px` between 2 and
-4 — and the unitless line heights nobody is asked about.
+Applied to that plugin, what `fix --judge` leaves is the values judged
+deliberate — left for review now, rather than suppressed with the judgement as
+their reason — the coin-flips, `10px` between 8 and 12 or `3px` between 2 and
+4, and the unitless line heights nobody is asked about. Its rewrite and
+suppression counts there were last taken while deliberate values were still
+suppressed, against a checkout this repository does not carry, so none is
+given here: `evals/values` above is the measurement that reproduces.
 
 ### Judged renames
 
