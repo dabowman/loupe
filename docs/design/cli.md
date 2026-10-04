@@ -583,6 +583,21 @@ Related: an absolute path in `--files` matched nothing, because findings are
 keyed repo-relative — and the run reported clean, which is the worst answer a
 gate can give.
 
+### `--rule` scopes after the walk, and refuses an id it does not know
+
+Batch remediation is one rule across the repo, and before the flag an agent
+narrowed to one by piping `--format json` through an inline script. `--rule`
+repeats and takes a comma list, the way `--files` does. It filters the findings
+the analysis produced rather than switching rules off: the cross-file rules need
+the whole index whatever is reported. The filter runs before the baseline, so
+`N baselined finding(s) hidden` counts the same rule, and before `--judge`, so a
+rule left out costs no paid question. `blocking` is recomputed from what is
+left — the exit code answers for the report printed.
+
+An id that is not a rule is exit 2 before the walk, for the same reason as
+`--format`: it filters every finding out and the report says `clean`. A real id
+for a rule this config has off runs, with a note saying it reports nothing.
+
 ### Which preset wins
 
 An explicit path or a typed `--preset`; then a discovered project config; then

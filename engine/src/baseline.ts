@@ -132,12 +132,14 @@ export function writeBaseline(
  *
  * `fixed` is only meaningful on a whole-repo run — on a scoped run the absent
  * entries are mostly just out of scope — so it is null there, and with no
- * baseline to compare against.
+ * baseline to compare against. A run narrowed to some rules (`--rule`) still
+ * read every file, so it counts only those rules' entries: another rule's are
+ * absent because they were filtered out, not because they were fixed.
  */
 export function applyBaseline(
 	result: AnalyzeResult,
 	baseline: Baseline | null,
-	{ scoped = false }: { scoped?: boolean } = {},
+	{ scoped = false, rules = null }: { scoped?: boolean; rules?: ReadonlySet<string> | null } = {},
 ): BaselinedResult {
 	if (!baseline) return { ...result, baselined: 0, baselinedFindings: [], fixed: null };
 	const seen = new Set<string>();
@@ -155,6 +157,8 @@ export function applyBaseline(
 		blocking: kept.some((f) => f.severity === 'error'),
 		baselined: accepted.length,
 		baselinedFindings: accepted,
-		fixed: scoped ? null : [...baseline.set].filter((k) => !seen.has(k)).length,
+		fixed: scoped
+			? null
+			: [...baseline.set].filter((k) => !seen.has(k) && (!rules || rules.has(k.slice(0, k.indexOf('|'))))).length,
 	};
 }

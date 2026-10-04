@@ -28,7 +28,7 @@ import { formatHtml } from '../src/report-html.ts';
 import { CLI, PLUGIN_DATA, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-import type { AnalyzeResult, Baseline, Config } from '../src/types.ts';
+import type { AnalyzeResult, Baseline, Config, Finding } from '../src/types.ts';
 
 async function run(files: Record<string, string>): Promise<{ result: AnalyzeResult; config: Config; root: string }> {
 	const root = scratch('loupe-report-');
@@ -179,6 +179,12 @@ await check('json carries the baselined finding count and the fixed entry count'
 	// A scoped run cannot tell fixed from out of scope, so it does not guess.
 	const scoped = reportPayload(applyBaseline(result, baseline, { scoped: true }), config);
 	assert(!('fixed' in scoped.summary), 'a scoped run reported a fixed count');
+	// `--rule` reads every file but filters the other rules out: their entries
+	// are absent, not fixed, so only the named rules' entries are counted.
+	const other = reportPayload(applyBaseline(result, baseline, { rules: new Set(['layout/margin-on-child']) }), config);
+	assert(other.summary.fixed === 0, `fixed ${other.summary.fixed} under --rule for another rule`);
+	const same = reportPayload(applyBaseline(result, baseline, { rules: new Set(['tokens/hardcoded-value']) }), config);
+	assert(same.summary.fixed === 1, `fixed ${same.summary.fixed} under --rule for the gone entry's rule`);
 	assert(!('fixed' in reportPayload(applyBaseline(result, null), config).summary), 'no baseline, yet a fixed count');
 });
 
@@ -406,6 +412,96 @@ await check('an unknown --group-by is rejected, not silently treated as rule', (
 		const e = execFailure(err);
 		assert(e.status === 2, `expected exit 2 (cannot run), got ${String(e.status)}`);
 		assert(e.stderr.includes('fil') && e.stderr.includes('file'), `stderr did not name the valid axes: ${e.stderr}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// ── --rule ──────────────────────────────────────────────────────────────────
+// Batch remediation is one rule across the repo, and the way an agent narrowed to
+// one was piping `--format json` through an inline script. A flag now, scoping
+// `check` and `fix` alike.
+
+const RULED = {
+	'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'error' } }),
+	'styles/a.css': '.a { margin-bottom: 8px; padding: 13px; }\n.b { margin-bottom: 8px; }',
+	'styles/b.css': '.c { margin-top: 2px; padding: 7px; }',
+};
+
+/** Exit code and both streams, whichever way the run ended. */
+function cli(dir: string, ...argv: string[]): { status: number | null; stdout: string; stderr: string } {
+	const r = spawnSync(process.execPath, [CLI, ...argv], { cwd: dir, encoding: 'utf8' });
+	return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+await check('--rule scopes check to the rules it names, and may repeat', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		const rules = (...argv: string[]): string[] =>
+			(JSON.parse(cli(dir, 'check', '--all', '--format', 'json', ...argv).stdout) as { findings: Finding[] }).findings
+				.map((f) => f.rule)
+				.sort();
+		const all = rules();
+		assert(new Set(all).size === 2, `fixture should fire two rules: ${all.join(', ')}`);
+		const scoped = rules('--rule', 'layout/margin-on-child');
+		assert(
+			scoped.length === 3 && scoped.every((r) => r === 'layout/margin-on-child'),
+			`scoped to: ${scoped.join(', ')}`,
+		);
+		// The same two ways `--files` takes a list, and the legacy alias.
+		assert(
+			rules('--rule', 'layout/margin-on-child', '--rule', 'tokens/hardcoded-value').join() === all.join(),
+			'a repeat dropped a rule',
+		);
+		assert(
+			rules('--rule', 'layout/margin-on-child,tokens/hardcoded-value').join() === all.join(),
+			'a comma list dropped a rule',
+		);
+		assert(rules('--rule', 'R3').join() === scoped.join(), 'the alias did not resolve');
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// The gate answers for what was reported: a run scoped away from the only
+// blocking rule has nothing blocking in it.
+await check('--rule decides the exit code from what it kept', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'check', '--all').status === 1, 'the fixture should block unscoped');
+		const advisory = cli(dir, 'check', '--all', '--rule', 'tokens/hardcoded-value');
+		assert(advisory.status === 0, `advisory-only exited ${String(advisory.status)}:\n${advisory.stdout}`);
+		assert(!/margin/.test(advisory.stdout), `the scoped report kept another rule:\n${advisory.stdout}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// A misspelled id filters every finding out, and the report would say `clean`.
+await check('an unknown --rule is rejected before the walk, not read as clean', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		for (const command of ['check', 'fix']) {
+			const r = cli(dir, command, '--all', '--rule', 'layout/margin-on-chld');
+			assert(r.status === 2, `${command}: expected exit 2 (cannot run), got ${String(r.status)}`);
+			assert(r.stderr.includes('layout/margin-on-chld'), `${command}: stderr did not name the id: ${r.stderr}`);
+			assert(!r.stdout, `${command} reported anyway:\n${r.stdout}`);
+		}
+	} finally {
+		cleanup(dir);
+	}
+});
+
+await check('--rule scopes fix to the findings it names', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		const r = cli(dir, 'fix', '--all', '--dry-run', '--rule', 'tokens/hardcoded-value');
+		assert(r.status === 0, `fix exited ${String(r.status)}: ${r.stderr}`);
+		assert(/ of 2 finding\(s\) left/.test(r.stdout), `fix counted findings outside the rule:\n${r.stdout}`);
 	} finally {
 		cleanup(dir);
 	}
@@ -660,7 +756,7 @@ await check('a registry note keeps its last clause on screen and ships whole in 
 	const out = formatAgent(noted, config);
 	assert(/not Grid\.\)/.test(out), `the actionable end of the note was cut:\n${out}`);
 	assert(
-		/\(\d+\) (blocking|advisory) \u2014/.test(out),
+		/\(\d+(?: in \d+ files?)?(?:, \d+ distinct)?\) (blocking|advisory) \u2014/.test(out),
 		`a rule group that only says its severity in a glyph:\n${out}`,
 	);
 	const shipped = reportPayload(noted, config).findings[0]?.note;
@@ -723,7 +819,8 @@ await check('a prefix with no tokens behind it is said out loud, not failed open
 // The axes swap and nothing else about the report does — which is the half that
 // is easy to break, so it is the half asserted hardest.
 
-const RULE_HEAD = /^([✗•]) (\S+\/\S+) \((\d+)\) (blocking|advisory) — /;
+/** The count, and how it concentrates once there is more than one. */
+const RULE_HEAD = /^([✗•]) (\S+\/\S+) \((\d+)(?:(?: in \d+ files?)?, \d+ distinct)?\) (blocking|advisory) — /;
 const FILE_HEAD = /^(\S+\.(?:css|jsx)) \((\d+)\)$/;
 /** A finding line: six spaces, a right-aligned line number, the message. */
 const NUMBERED = /^ {6} *\d+ {2}\S/;
@@ -797,6 +894,74 @@ await check('a capped report spreads its budget across the axis it groups on', (
 	assert(/… \d+ more/.test(capped), `nothing said what the cap hid:\n${capped}`);
 	assert(/\d+ finding\(s\) not shown/.test(capped), `no way back to the full list:\n${capped}`);
 });
+
+// ── collapsing ──────────────────────────────────────────────────────────────
+// The same declaration seven times in one file is the ordinary case, and listed
+// one by one it spent seven of the hook's twelve lines on one decision. One line
+// with a count now, and the heading says how concentrated the rule is.
+
+const dupes = await run({
+	'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'warn' } }),
+	'styles/step.css': [
+		'.a { margin-bottom: 8px; }',
+		'.b { margin-top: 2px; }',
+		'.c { margin-bottom: 8px; }',
+		'.d { margin-top: 12px; }',
+		'.e { margin-bottom: 8px; }',
+		'.f { margin-bottom: 8px; }',
+		'.g { margin-bottom: 8px; }',
+	].join('\n'),
+	'styles/other.css': '.x { margin-bottom: 8px; }\n.y { margin-bottom: 8px; }',
+});
+const margins = dupes.result.findings.filter((f) => f.rule === 'layout/margin-on-child');
+
+await check('identical findings print once, with a count and every line they stand for', () => {
+	assert(margins.length === 9, `fixture produced ${margins.length} margin findings, not 9`);
+	const out = formatAgent(dupes.result, dupes.config);
+	assert(
+		/layout\/margin-on-child \(9 in 2 files, 3 distinct\)/.test(out),
+		`the heading did not say how the rule concentrates:\n${out}`,
+	);
+	assert(
+		/ {6}1 {2}margin-bottom: 8px {2}×5 \(lines 1, 3, 5, 6, 7\)$/m.test(out),
+		`five became one line badly:\n${out}`,
+	);
+	assert(
+		/ {6}1 {2}margin-bottom: 8px {2}×2 \(lines 1, 2\)$/m.test(out),
+		`the other file's pair did not collapse:\n${out}`,
+	);
+	// `code` is the property alone for a margin, so these share it — and are still
+	// two declarations, which a line printing one under the other's count would hide.
+	assert(/ {6}2 {2}margin-top: 2px$/m.test(out), `a singleton was folded into something:\n${out}`);
+	assert(/ {6}4 {2}margin-top: 12px$/m.test(out), `a different value collapsed by its code:\n${out}`);
+	const numbered = out.split('\n').filter((l) => NUMBERED.test(l));
+	assert(numbered.length === 4, `expected 4 lines for 9 findings, got ${numbered.length}:\n${out}`);
+	// Grouped by file the rule is the sub-heading, and its file is the heading.
+	const byFile = formatAgent(dupes.result, dupes.config, { group: 'file' });
+	assert(/^ {2}• layout\/margin-on-child \(7, 3 distinct\) advisory/m.test(byFile), `nested heading:\n${byFile}`);
+});
+
+// Collapsing makes the budget go further; it does not change what it is.
+await check('the budget counts printed lines, so duplicates do not eat it', () => {
+	const two = formatAgent(dupes.result, dupes.config, { maxFindings: 2 });
+	// Two lines of budget, seven findings on them: the two singletons are what is left.
+	assert(/×5/.test(two) && /×2/.test(two), `the budget did not reach both batches:\n${two}`);
+	assert(/2 finding\(s\) not shown/.test(two), `two lines did not stand for seven findings:\n${two}`);
+	// One line: the largest batch is the one that tells the reader the most.
+	const single = formatAgent(dupes.result, dupes.config, { maxFindings: 1 });
+	assert(/×5/.test(single), `the largest batch was not the one shown:\n${single}`);
+	assert(single.split('\n').filter((l) => NUMBERED.test(l)).length === 1, `the cap of one printed more:\n${single}`);
+	assert(/… 4 more/.test(single), `the count of what the cap hid is not in findings:\n${single}`);
+	assert(/4 finding\(s\) not shown/.test(single), `the total hidden is not in findings:\n${single}`);
+});
+
+await check('json and sarif stay one entry per finding', () => {
+	const { result, config } = dupes;
+	assert(reportPayload(result, config).findings.length === result.findings.length, 'json collapsed findings');
+	const sarif = JSON.parse(formatSarif(result, config)) as { runs: { results: unknown[] }[] };
+	assert(sarif.runs[0]?.results.length === result.findings.length, 'sarif collapsed findings');
+});
+cleanup(dupes.root);
 
 // ── concise ─────────────────────────────────────────────────────────────────
 // Defined by subtraction: every finding line gone, every heading and the tally

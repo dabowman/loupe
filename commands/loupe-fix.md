@@ -44,7 +44,9 @@ with. Whatever stays under the confidence floor is left for the passes below.
 node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --format json --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
-If `$ARGUMENTS` names a rule id or a path, narrow to that; add `--severity error`
+If `$ARGUMENTS` names a rule id, pass it as `--rule <id>` — to this check and to
+the `fix` in step 1 — and a path as `--files <path>`; both repeat. Don't filter
+the JSON yourself. Add `--severity error`
 to cut the run down to what the hook actually blocks on, which is the subset to
 clear first when the backlog is too large for one pass. Otherwise work upward
 through the layers, because lower fixes change what the higher findings say:

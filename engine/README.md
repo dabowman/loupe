@@ -844,6 +844,7 @@ no reader.
 loupe check --all --format json     # stable, versioned schema
 loupe check --all --format sarif    # GitHub code scanning
 loupe check --changed --max-findings 20
+loupe check --rule layout/margin-on-child --format json   # one rule, every finding
 loupe suppressions                  # audit every active directive, and every rule off in config
 loupe suppressions --stale          # only the ones muting nothing; exit 1 if any
 ```
@@ -862,12 +863,22 @@ A baseline hides findings from `findings`, not from the record. The JSON
 `summary` carries `baselined` — findings the baseline hid — whenever a baseline
 step ran, and `fixed` — baseline *entries* nothing matches any more, the unit a
 baseline stores and the same `-N fixed` `baseline --dry-run` prints — on a
-whole-repo run that read a baseline file. Both are additive: absent rather than
+whole-repo run that read a baseline file (under `--rule`, only those rules'
+entries). Both are additive: absent rather than
 0 when the question was not asked. SARIF lists each baselined finding as a
 result carrying `suppressions: [{ "kind": "external", "justification":
 "accepted in the loupe baseline" }]`, after the live ones, so code scanning
 shows it as suppressed rather than as fixed, and puts the same two counts in the
 run's `properties`.
+
+`--rule <id>` scopes `check` and `fix` to the rules it names: repeat it, or give
+a comma list. The exit code answers for what is left, the baselined count is the
+same rule's, and `fix` rewrites only that rule's findings. An id that is not a
+rule is exit `2` — filtering on it would report `clean` — and one this config
+has off runs with a note saying so. `--rule <id> --format json` is every
+occurrence, for a fix scripted in one pass; the agent format collapses identical
+findings onto one line with `×N` and their lines, and says on each rule heading
+how concentrated it is (`25 in 9 files, 11 distinct`).
 
 JSON findings that flag a declaration carry `suggest`: `[{ prop, value, tokens,
 line? }]`, one entry per declaration, tokens most specific first. `tokens` is

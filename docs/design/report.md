@@ -34,6 +34,23 @@ The budget is spent **round-robin across the groups being shown**. Filling it
 first-come buries every other group behind whichever one sorts highest, and an
 agent that only ever sees one rule only ever fixes one rule.
 
+**Identical findings print once**, with `×N` and the lines they stand for.
+Duplicates are the ordinary case in a real stylesheet — the same `margin-bottom:
+8px` seven times in one file — and listed one by one they spent seven of the
+hook's twelve lines on one decision and crowded out every other rule. The budget
+counts printed lines, so collapsing stretches it rather than replacing it; the
+largest batches are spent first, since they say the most per line. Identical
+means the same rule, file and *printed* text, not the same `code`: `code` is the
+baselining identity and for a margin it is the property alone, so collapsing on
+it would print `margin-top: 2px` under the count of a `margin-top: 12px`.
+
+A rule's heading says how its findings concentrate — `(25 in 9 files, 11
+distinct)` — because the total alone cannot tell 25 decisions from the same
+three repeated, and the two want different remedies: a count says write a
+script, singletons say read each one. Distinct is counted repo-wide, so one
+declaration copied into nine files is one. JSON and SARIF stay one entry per
+finding: their consumers count, fingerprint and fix findings, not lines.
+
 ### The lines that are not findings
 
 - **The tally comes first, always, findings or none** — the count, the split,
