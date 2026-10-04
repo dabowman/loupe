@@ -33,7 +33,7 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import { boundMessage } from './text.ts';
+import { boundMessage, messageLine } from './text.ts';
 import { DELIBERATE, KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
@@ -208,7 +208,9 @@ export async function judgeVariants(
 					? analog.replace(tag, `<${target.name} ${span}`)
 					: `${analog} with ${span}`;
 		const tail = judgedTail(a.confidence);
-		f.message = `${element} → ${suggestion} ${tail}`;
+		// Bounded again, with the judgement kept last: `analyze` bounded this line
+		// before the answer was spliced into it.
+		f.message = messageLine(`${element} → ${suggestion}`, ` ${tail}`);
 		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
 		annotated++;
 	});
@@ -530,7 +532,9 @@ export async function judgeRenames(
 		if (!a || a.confidence < RENAME_FLOOR) return;
 		const tail = judgedTail(a.confidence);
 		const span = a.choice === NONE ? 'no token means this' : a.choice;
-		f.message = `${item.name} \u2192 ${span} ${tail}`;
+		// The unknown name is source text, and nothing bounds this line after here.
+		// It is what gives way: the answer is the half a reader acts on.
+		f.message = messageLine(item.name, ` \u2192 ${span} ${tail}`);
 		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
 		if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
 		settled++;

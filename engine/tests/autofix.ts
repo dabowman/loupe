@@ -905,6 +905,43 @@ await check('a judged css-in-js finding with a long selector is still one bounde
 	}
 });
 
+// The same for a judged rename: the unknown name is source text, and the line
+// was rewritten after `analyze` bounded it.
+await check('a judged rename of a long unknown name is still one bounded line', async () => {
+	const root = scratch('dsh-judge-rename-bound-');
+	try {
+		const long = `--wpds-dimension-space-${'x'.repeat(220)}`;
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			[DS_TOKENS]: NEAR,
+			'styles/x.css': `.wf-x { padding: var(${long}); }\n`,
+			'src/X.jsx': uses('wf-x'),
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const result = await analyze(config, { scope: null });
+		assert(result.tokens, 'analyze did not hand back its token set');
+		const stub = (async (_url: string, init: { body: string }) => {
+			const questions = JSON.parse(init.body).questions as Record<string, unknown>;
+			const answers = Object.fromEntries(
+				Object.keys(questions).map((k) => [k, { choice: '--wpds-dimension-space-xl', confidence: 0.95 }]),
+			);
+			return new Response(JSON.stringify({ answers }));
+		}) as unknown as typeof fetch;
+		assert((await judgeRenames(root, result.findings, result.tokens, 'key', new Map(), stub)) === 1, 'not settled');
+		const f = result.findings.find((x) => x.rule === 'tokens/unknown-token' && x.code === long);
+		assert(f, 'no finding for the long name');
+		assert([...f.message].length <= 200, `${[...f.message].length} characters: ${f.message}`);
+		// The name gives way; the answer and its confidence are what a reader acts on.
+		assert(
+			f.message.endsWith('… → --wpds-dimension-space-xl (judged 0.95)'),
+			`the judgement did not survive the bound: ${f.message}`,
+		);
+		assert(f.rename?.to === '--wpds-dimension-space-xl', 'the rename itself was lost to the bound');
+	} finally {
+		cleanup(root);
+	}
+});
+
 // Each of these once wrote CSS that was wrong in a way no report would show.
 // The rule `--judge` was widened to, and the shape the widening is about: one
 // finding, three declarations, three different outcomes on three lines.

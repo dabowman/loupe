@@ -1444,6 +1444,37 @@ await check('--judge writes the variant into a suggestion that carries render', 
 	}
 });
 
+// `analyze` bounded the line before the variant was spliced into it, so a long
+// suggestion came back past the cap with the judgement at the end of it.
+await check('a judged variant is still one bounded line, with the judgement kept last', async () => {
+	const root = scratch('dsh-judge-variant-bound-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<p className="description">Help</p>' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
+		]);
+		const f: Finding = {
+			rule: 'system/raw-element',
+			severity: 'warn',
+			rank: 0,
+			file: 'src/A.jsx',
+			line: 1,
+			code: '<p>',
+			message: `<p> → <Text> (@wordpress/ui), ${'and then a long note about the analog '.repeat(8)}`,
+		};
+		const stub = (async () =>
+			new Response(
+				JSON.stringify({ answers: { e0: { choice: 'body-sm', confidence: 0.8 } } }),
+			)) as unknown as typeof fetch;
+		assert((await judgeVariants(root, [f], registry, 'key', stub)) === 1, 'nothing was written');
+		assert([...f.message].length <= 200, `${[...f.message].length} characters: ${f.message}`);
+		assert(f.message.startsWith('<p> → <Text variant="body-sm"> (@wordpress/ui)'), f.message);
+		assert(f.message.endsWith('… (judged 0.80)'), `the judgement did not survive the bound: ${f.message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // ── --judge: forces and redirects ───────────────────────────────────────────
 
 const represents = LANGUAGE.vocabulary.forces.represents?.judge;
