@@ -195,6 +195,21 @@ project's own namespace appears nowhere in `node_modules`.
   against what was read — which is why it can look convincing and still be
   wrong. `none` is a different and still-true claim, and swallowing it printed
   "(none found) [low confidence]".
+- **Stylesheets are read on a budget, and a tripped budget demotes the same
+  way.** The walk ceiling bounds entries visited, not bytes read, and a tree can
+  be nothing but large generated CSS. Inference reads the first 600 stylesheets
+  the walk found (the same count `libraryPrefixes` allows itself) and skips any
+  over 1.5MB (the size `analyze` treats as generated). Either one answering from
+  less than was found is a guess from part of the evidence, so it demotes `high`
+  and says what it skipped under the namespace line. It is not `truncated`,
+  though: the walk saw the whole tree, so `init` does not refuse over it.
+- **External prefixes are proposed, never written.** `namespaces.external` used
+  to come only from presets, so a vendored bundle no preset knew read as project
+  code. `detect` now lists candidates as `possible external`: a generated shape
+  (`Name-module_thing`, `Name_local__hash`), a prefix an installed dependency
+  defines, and a prefix only stylesheets mention. The last is also exactly what
+  dead CSS looks like, which is why the list is a question for whoever can read
+  the enqueue code — `/loupe-init` asks it — and `init` writes none of them.
 - **`--profile <id>` beats a guess.** Inference's own verdict is still returned
   as `preset` so `status` and `init` can report it, but the config extends what
   the flag named — and everything derived from the preset has to follow, or the
@@ -707,6 +722,20 @@ config is no longer a guess: `inferred` goes false, which turns blocking back on
 by default and lifts the `css/dead-class` demotion. A namespace list drawn from
 part of a tree would then block turns and tell an agent to delete classes it
 never read the stylesheet for.
+
+**Nor write the fallback down as a decision.** When no preset's markers match,
+detection answers `generic` at low confidence, and that is the absence of an
+answer. Written, it is worse than no config: once the file exists inference never
+runs again, so the day the project gains a dependency detection would recognise,
+nothing notices — and `generic` has most rules off, which only `status` says.
+So `init` refuses it unless `--preset` names the design system or `--force`
+accepts the guess, and prints the evidence it could not rank instead (imports no
+manifest declares, `@types/*` packages, build asset manifests, `.wp-env.json`,
+`composer.json`). Detection does not have to decide from those; it only has to
+surface them, which is the half that does not need to catch every project shape.
+`/loupe-init` is the agent-side half of the same idea. Until a config is
+written, `check` ends its agent-format report with one line saying it ran on the
+guess — not in JSON or SARIF, which are parsed.
 
 ### A silently-ignored registry looks exactly like a clean one
 

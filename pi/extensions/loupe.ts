@@ -5,6 +5,7 @@
  *
  *   PostToolUse (Edit|Write)  →  tool_result on edit/write
  *   Stop hook                 →  agent_end
+ *   /loupe-init               →  /loupe-init command
  *   /loupe-audit              →  /loupe-audit command
  *   /loupe-fix                →  /loupe-fix command
  *   /loupe-baseline           →  /loupe-baseline command
@@ -133,6 +134,34 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	// ── Commands ───────────────────────────────────────────────────────────
+
+	pi.registerCommand("loupe-init", {
+		description:
+			"Configure loupe for this project — settle the design system, namespaces and external prefixes with the user, then write loupe.config.json",
+		handler: async (args, ctx) => {
+			const named = args?.trim() || "";
+
+			const prompt = `Write this project's \`loupe.config.json\`, confirming with the user what detection could not settle. Once the file exists the engine never re-infers, so a wrong guess written here stays wrong.
+
+1. Detect:
+
+\`\`\`bash
+${loupe("detect", "--format json")}
+\`\`\`
+
+If a \`loupe.config.json\` already exists, say so and ask before replacing it (\`--force\`).
+
+2. Settle the design system.${named ? ` The user named \`${named}\` — use it.` : ""} At \`high\` presetConfidence, name it and move on. At \`low\` or \`none\`, stop — do not accept \`generic\`, which turns most rules off. Resolve it from \`presetEvidence\` (source imports, \`@types/wordpress__*\`, \`build/*.asset.php\` dependencies, \`.wp-env.json\`, \`composer.json\`) and the code itself. \`${loupe("presets")}\` lists the choices; \`${loupe("status", "--preset <name>")}\` shows what each turns on. Propose one with its evidence and let the user confirm.
+
+3. Confirm \`namespaces.project\` (with coverage, confidence and any \`namespaceNotes\`), then each \`possibleExternal\` entry: CSS-module or hashed names and \`node_modules\` prefixes are nearly always third-party; a prefix nothing references is vendored or dead — read how it is enqueued. Vendored goes in \`external\`; dead stays out.
+
+4. Write with \`${loupe("init", "--preset <name>")}\` (or \`init --force\` only if the user agreed there is no design system), then edit \`loupe.config.json\` for the confirmed \`namespaces.project\` and \`namespaces.external\`.
+
+5. Run \`${loupe("status")}\` and report which rules the choice turned on and which stayed off, with the reason each gives. Then size the backlog with \`${loupe("check", "--all", "--format json")}\`; if it is large, offer \`/loupe-baseline\`, otherwise \`/loupe-audit\`. Tell the user to commit \`loupe.config.json\`. Do not start fixing.`;
+
+			pi.sendUserMessage(prompt);
+		},
+	});
 
 	pi.registerCommand("loupe-audit", {
 		description:

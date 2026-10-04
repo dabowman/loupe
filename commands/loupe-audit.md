@@ -54,6 +54,7 @@ a report the reader has to guess at.
 
 If the repo has no config, say so — the run still worked, against one inferred
 from what the project imports. `loupe detect` prints that inferred config so the
-user can see what was assumed and `loupe init` writes it to `loupe.config.json`;
-`loupe presets` lists the bundled rulesets, any of which runs without one
-(`--preset <name>`).
+user can see what was assumed, and `/loupe-init` settles it with the user and
+writes `loupe.config.json` — offer it, especially when the report ends by saying
+no design system was recognised. `loupe presets` lists the bundled rulesets, any
+of which runs without one (`--preset <name>`).

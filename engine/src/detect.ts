@@ -53,6 +53,22 @@ interface NamespaceDetection {
 	sampled: { styles: number; markup: number; references: number };
 	/** The walk hit {@link DETECT_ENTRY_BUDGET} and stopped: this is part of the tree. */
 	truncated: boolean;
+	/** What the stylesheet budgets left unread, as sentences; empty when nothing was. */
+	notes: string[];
+	external: ExternalCandidate[];
+	/** Scoped packages the markup imports, by count: evidence a manifest may not carry. */
+	imports: Map<string, number>;
+}
+
+/**
+ * A class prefix that looks like somebody else's: reported for a person to
+ * confirm, never written into a config on inference's say-so.
+ */
+export interface ExternalCandidate {
+	prefix: string;
+	/** Distinct class names under it in the project's stylesheets. */
+	classes: number;
+	reason: string;
 }
 
 /** Everything inference concluded, with the config it produced. */
@@ -68,6 +84,24 @@ export interface DetectedConfig {
 	sampled: NamespaceDetection['sampled'];
 	/** Inference stopped at the file ceiling — the caller has to say so. */
 	truncated: boolean;
+	/**
+	 * Stylesheets the read budgets skipped, said in words. Not `truncated`: the
+	 * walk saw the whole tree, it just declined to read all of what it found.
+	 */
+	namespaceNotes: string[];
+	/**
+	 * Prefixes that look vendored rather than owned. Reported, not written: a
+	 * prefix nothing references is also exactly what dead CSS looks like, and
+	 * only somebody who can read the enqueue code can tell the two apart.
+	 */
+	possibleExternal: ExternalCandidate[];
+	/**
+	 * When the preset is a weak guess, what the project shows that the markers
+	 * could not rank: imports no manifest declares, type packages, build
+	 * manifests. Detection surfaces it; whoever runs `init` decides. Empty when
+	 * the preset matched outright.
+	 */
+	presetEvidence: string[];
 	config: AuthoredConfig;
 }
 
@@ -242,6 +276,43 @@ export function detectPreset(root: string): PresetMatch {
 	};
 }
 
+/**
+ * How many stylesheets namespace inference reads, and how large one may be.
+ *
+ * The walk ceiling bounds how many entries inference *visits*, not how much it
+ * reads, and a tree can be nothing but large generated stylesheets — a token
+ * dump, a checked-in `build-style/` a preset's ignore globs miss. The count
+ * matches {@link libraryPrefixes}'s budget; the size matches `analyze`, which
+ * skips anything bigger as generated, so a file the check never reads does not
+ * get to name the project's namespace either.
+ */
+export const STYLE_FILE_BUDGET = 600;
+export const STYLE_MAX_BYTES = 1_500_000;
+
+/**
+ * The prefix a build tool's generated class name carries, or null.
+ *
+ * A project's own source never spells these: its `Foo.module.css` says
+ * `.container`, and the bundler writes `Foo-module_container`. So a stylesheet
+ * that does spell one is styling compiled output, nearly always a bundle that
+ * belongs to someone else — a widget served from another origin, say.
+ */
+function generatedPrefix(cls: string): { prefix: string; reason: string } | null {
+	// CSS Modules' `[name]-module_[local]`, or `_module_`.
+	const mod = /^([A-Za-z]\w*?[-_]module_)/.exec(cls);
+	if (mod?.[1]) return { prefix: mod[1], reason: 'CSS-module output' };
+	// `[name]_[local]__[hash]` (Next.js), and emotion's or styled-jsx's bare hash.
+	// The hash has to carry a digit, which is what keeps BEM's `block__element` out.
+	const hashed =
+		/^([A-Za-z][A-Za-z0-9]*_)[A-Za-z][\w-]*__(?=[\w-]*\d)[\w-]{5,}$/.exec(cls) ??
+		/^((?:css|jsx)-)(?=[a-z0-9]*\d)[a-z0-9]{5,}$/.exec(cls);
+	if (hashed?.[1]) return { prefix: hashed[1], reason: 'hashed class names' };
+	return null;
+}
+
+/** How many candidates `detect` lists: a shortlist to confirm, not an inventory. */
+const EXTERNAL_LIMIT = 8;
+
 const CLASS_RE = /\.(-?[_a-zA-Z][\w-]*)/g;
 
 /** A class's namespace — everything up to and including its first `-` — or null when it has none. */
@@ -294,6 +365,94 @@ function libraryPrefixes(dirs: readonly string[], candidates: readonly string[])
 	return found;
 }
 
+/** A scoped package named by `import`, `import()`, `require()` or `export … from`. */
+const IMPORT_RE = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](@[\w.-]+\/[\w.-]+)/g;
+
+/**
+ * What a project shows about its design system that the preset markers could
+ * not rank.
+ *
+ * The case this exists for is `@wordpress/scripts`' externals: `@wordpress/*`
+ * imports are rewritten to `wp.*` globals at build time, so nothing lands in
+ * `dependencies` and no preset matches — while the source, the type packages
+ * and the build's asset manifests all say plainly what the project is built on.
+ * Deciding from these is a judgement this does not make; it only gathers them,
+ * cheaply, for whoever runs `init`.
+ *
+ * Which packages count is read off the presets — every package a preset
+ * detects or declares, and anything else in those scopes — so a new preset's
+ * evidence is surfaced with no change here.
+ */
+function presetEvidence(root: string, imports: ReadonlyMap<string, number>): string[] {
+	const marker = new Map<string, string>();
+	const scopes = new Set<string>();
+	for (const name of presetNames()) {
+		const p = preset(name);
+		for (const dep of [...(p.detect?.dependencies ?? []), ...(p.designSystem?.packages ?? [])]) {
+			if (p.detect?.dependencies?.includes(dep) && !marker.has(dep)) marker.set(dep, name);
+			if (dep.startsWith('@')) scopes.add(dep.slice(0, dep.indexOf('/') + 1));
+		}
+	}
+	const known = (pkg: string): boolean => marker.has(pkg) || [...scopes].some((s) => pkg.startsWith(s));
+	const named = (pkg: string): string => (marker.has(pkg) ? `${pkg} [a ${marker.get(pkg)} marker]` : pkg);
+	const out: string[] = [];
+
+	const imported = [...imports].filter(([pkg]) => known(pkg)).sort((a, b) => b[1] - a[1]);
+	if (imported.length)
+		out.push(
+			`source imports: ${imported
+				.slice(0, 5)
+				.map(([pkg, n]) => `${named(pkg)} \u00d7${n}`)
+				.join(', ')}${imported.length > 5 ? `, +${imported.length - 5} more` : ''}`,
+		);
+
+	// `@types/wordpress__components` types `@wordpress/components`: the project
+	// writes against the library even where the build supplies it at runtime.
+	for (const { rel } of manifests(root)) {
+		const pkg =
+			(readJson(join(root, rel, 'package.json')) as {
+				dependencies?: Record<string, string>;
+				devDependencies?: Record<string, string>;
+			} | null) ?? {};
+		const typed = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })
+			.map((dep) => /^@types\/([\w.-]+)__([\w.-]+)$/.exec(dep))
+			.filter((m): m is RegExpExecArray => m !== null && known(`@${m[1]}/${m[2]}`))
+			.map((m) => `${m[0]} \u2192 ${named(`@${m[1]}/${m[2]}`)}`);
+		if (typed.length) out.push(`${rel ? `${rel}/package.json` : 'package.json'}: ${typed.join(', ')}`);
+	}
+
+	// `@wordpress/scripts` writes the script handles a bundle needs beside it.
+	for (const { dir, rel } of probeDirs(root)) {
+		const build = join(dir, 'build');
+		const assets = readDir(build)
+			.filter((e) => e.isFile() && e.name.endsWith('.asset.php'))
+			.slice(0, 3);
+		for (const e of assets) {
+			let text: string;
+			try {
+				text = readFileSync(join(build, e.name), 'utf8');
+			} catch {
+				continue;
+			}
+			const list = /['"]dependencies['"]\s*=>\s*(?:array\s*\(|\[)([^)\]]*)/.exec(text)?.[1] ?? '';
+			const deps = [...list.matchAll(/['"]([^'"]+)['"]/g)].map((m) => m[1]);
+			if (deps.length) out.push(`${rel ? `${rel}/` : ''}build/${e.name} dependencies: ${deps.join(', ')}`);
+		}
+	}
+
+	if (existsSync(join(root, '.wp-env.json'))) out.push('.wp-env.json (a WordPress development environment)');
+	const composer = readJson(join(root, 'composer.json')) as { type?: string; require?: Record<string, string> } | null;
+	if (composer) {
+		const requires = Object.keys(composer.require ?? {}).filter((r) => r !== 'php');
+		const what = [
+			...(composer.type ? [`type ${composer.type}`] : []),
+			...(requires.length ? [`requires ${requires.slice(0, 4).join(', ')}`] : []),
+		];
+		out.push(`composer.json${what.length ? ` (${what.join('; ')})` : ''}`);
+	}
+	return out;
+}
+
 /** Resolve a shipped preset's `extends` chain, merged the way `loadConfig` merges it. */
 function resolvePreset(name: string, seen = new Set<string>()): PresetFile {
 	if (seen.has(name)) return {};
@@ -336,9 +495,19 @@ function detectNamespaces(
 		external.some((p) => cls.startsWith(p)) || neverDead.some((re) => re.test(cls));
 
 	const cssCounts = new Map<string, number>();
-	for (const { abs } of files.styles) {
+	const cssClasses = new Map<string, Set<string>>();
+	const generated = new Map<string, { classes: Set<string>; reason: string }>();
+	// Shallowest first, which is the order the walk found them in: the project's
+	// own stylesheets sit nearer the root than whatever generated the rest.
+	const read = files.styles.slice(0, STYLE_FILE_BUDGET);
+	let oversized = 0;
+	for (const { abs } of read) {
 		let text: string;
 		try {
+			if (statSync(abs).size > STYLE_MAX_BYTES) {
+				oversized++;
+				continue;
+			}
 			text = readFileSync(abs, 'utf8');
 		} catch {
 			continue;
@@ -346,7 +515,18 @@ function detectNamespaces(
 		for (const m of text.matchAll(CLASS_RE)) {
 			const cls = m[1];
 			const prefix = prefixOf(cls);
-			if (cls === undefined || !prefix || isExcluded(cls)) continue;
+			if (cls === undefined || isExcluded(cls)) continue;
+			// Generated names are nobody's namespace, the project's least of all, so
+			// they are set aside before they can count towards one.
+			const gen = generatedPrefix(cls);
+			if (gen) {
+				const entry = generated.get(gen.prefix) ?? { classes: new Set<string>(), reason: gen.reason };
+				entry.classes.add(cls);
+				generated.set(gen.prefix, entry);
+				continue;
+			}
+			if (!prefix) continue;
+			cssClasses.set(prefix, (cssClasses.get(prefix) ?? new Set<string>()).add(cls));
 			cssCounts.set(prefix, (cssCounts.get(prefix) ?? 0) + 1);
 		}
 	}
@@ -360,6 +540,8 @@ function detectNamespaces(
 		}
 	}
 	const haystack = markupText.join('\n');
+	const imports = new Map<string, number>();
+	for (const m of haystack.matchAll(IMPORT_RE)) if (m[1]) imports.set(m[1], (imports.get(m[1]) ?? 0) + 1);
 
 	const candidates = [...cssCounts.entries()]
 		.filter(([prefix, count]) => count >= 3 && haystack.includes(prefix))
@@ -381,9 +563,39 @@ function detectNamespaces(
 		if (accepted.length >= 5) break;
 	}
 
+	// What might be somebody else's, most certain first: a generated shape, then a
+	// prefix an installed dependency defines, then one only stylesheets mention.
+	const owned = (prefix: string): boolean => accepted.some(([p]) => prefix.startsWith(p));
+	const distinct = (prefix: string): number => cssClasses.get(prefix)?.size ?? 0;
+	const foreign: ExternalCandidate[] = [
+		...[...generated]
+			.map(([prefix, g]) => ({ prefix, classes: g.classes.size, reason: g.reason }))
+			.sort((a, b) => b.classes - a.classes),
+		...[...vendored].map((prefix) => ({ prefix, classes: distinct(prefix), reason: 'defined in node_modules' })),
+		...[...cssCounts]
+			.filter(([prefix, count]) => count >= 3 && !haystack.includes(prefix) && !owned(prefix))
+			.map(([prefix]) => ({
+				prefix,
+				classes: distinct(prefix),
+				reason: 'no markup or reference names it \u2014 vendored, or dead',
+			}))
+			.sort((a, b) => b.classes - a.classes),
+	].slice(0, EXTERNAL_LIMIT);
+
 	const total = [...cssCounts.values()].reduce((a, b) => a + b, 0);
 	const covered = accepted.reduce((a, [, c]) => a + c, 0);
 	const coverage = total ? covered / total : 0;
+
+	// Either budget answering from less than was found is the same claim as a
+	// truncated walk, and said the same way: in the confidence, and in words.
+	const notes = [
+		...(files.styles.length > read.length
+			? [`read the first ${read.length} of ${files.styles.length} stylesheets`]
+			: []),
+		...(oversized
+			? [`skipped ${oversized} stylesheet(s) over ${Math.round(STYLE_MAX_BYTES / 1000)}kB as generated`]
+			: []),
+	];
 
 	return {
 		project: accepted.map(([p]) => p),
@@ -391,9 +603,13 @@ function detectNamespaces(
 		// A truncated walk read part of a tree, so `high` is a claim it cannot make.
 		// It demotes `high` only: `none` is the different and still-true claim that
 		// nothing was found.
-		confidence: accepted.length === 0 ? 'none' : files.truncated ? 'low' : coverage >= 0.5 ? 'high' : 'low',
+		confidence:
+			accepted.length === 0 ? 'none' : files.truncated || notes.length ? 'low' : coverage >= 0.5 ? 'high' : 'low',
 		sampled: { styles: files.styles.length, markup: files.markup.length, references: files.references.length },
 		truncated: files.truncated,
+		notes,
+		external: foreign,
+		imports,
 	};
 }
 
@@ -439,6 +655,9 @@ export function detectConfig(
 		coverage: ns.coverage,
 		sampled: ns.sampled,
 		truncated: ns.truncated,
+		namespaceNotes: ns.notes,
+		possibleExternal: ns.external,
+		presetEvidence: presetConfidence === 'low' || presetConfidence === 'none' ? presetEvidence(root, ns.imports) : [],
 		config,
 	};
 }
