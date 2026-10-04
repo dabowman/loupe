@@ -605,10 +605,14 @@ block at all unless you turn blocking on. Run `status` when a gate isn't
 behaving — it names the preset, the namespaces and the blocking switch, which is
 the whole space of reasons a gate misbehaves.
 
-`status` reads the plugin settings from `~/.claude` and says where it got them,
-because Claude Code exports plugin options to hook processes only — a terminal
-sees none of them, and a diagnostic that silently guesses at the switch it is
-diagnosing is worse than no diagnostic.
+`status` reads the plugin settings from `~/.claude` and says where it got each
+one, because Claude Code exports plugin options to hook processes only — a
+terminal sees none of them, and a diagnostic that silently guesses at the switch
+it is diagnosing is worse than no diagnostic. The two are merged key by key, the
+environment over the file, so an option the hook was handed does not hide the
+rest of the file from it. When `~/.claude/settings.json` has `pluginConfigs` but
+none of them is keyed `loupe` or `loupe@…`, `status` names the keys it found
+rather than reporting no options at all.
 
 ### Sass, Less
 
@@ -705,7 +709,18 @@ To silence a project that has opted in, for one session:
 LOUPE_OFF=1 claude
 ```
 
-The hook says nothing — not advisory, silent. Advisory mode does not solve this:
+Or for one project, mid-session — the hook reads this file on every run:
+
+```jsonc
+// .claude/settings.local.json
+{ "env": { "LOUPE": "on", "LOUPE_OFF": "1" } }
+```
+
+Or everywhere, with the plugin's *Silence the hook* option. All three set the
+same switch, and `loupe status` names which one did it on its `options:` line.
+
+The hook checks nothing — not advisory, silent to the agent; the user sees one
+`loupe: skipped — silenced by …` line. Advisory mode does not solve this:
 an advisory finding still lands in the agent's context, and an agent that sees a
 finding starts fixing it, which is usually the thing you were trying to avoid.
 `loupe` typed by hand still reports normally; the switch is only for the hook.
@@ -937,7 +952,8 @@ Configured where you enable the plugin, read by the hook from the environment:
 
 | | |
 | --- | --- |
-| **Block turns on findings** | Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. |
+| **Block turns on findings** | Governs the hook only. Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. `loupe check` is unaffected — it exits 1 on error-severity findings either way, so CI and pre-commit still gate. |
+| **Silence the hook** | Off by default. On, the hook checks nothing in any project and says only that it was skipped. `"env": { "LOUPE_OFF": "1" }` in a project's `.claude/settings.local.json` does the same for that project. |
 | **Preset** | `auto` infers per project. A project's own `loupe.config.json` always wins over both. |
 | **Project class prefixes** | Comma-separated, e.g. `vip-workflow-, wf-`. Empty infers them. Only these can be reported dead. |
 | **Fix attempts** / **Findings shown** | The retry budget and the per-report cap. |

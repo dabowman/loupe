@@ -204,6 +204,11 @@ error-severity findings, so CI behaviour does not depend on this.
 }
 ```
 
+A rule takes a severity and nothing else. The `["warn", { … }]` form was removed
+in 0.8.0, and a config still using it does not load — under the hook that means
+the gate checks nothing until it is fixed. The rewrite is one line per rule; see
+[MIGRATION.md](MIGRATION.md#upgrading-a-loupe-config-from-before-080).
+
 Defaults are `DEFAULTS` in `src/config.ts`; `presets/generic.json` adds the
 ignore globs and CSS-in-JS packages every shipped preset inherits. The
 design-system block is what makes a preset:
@@ -770,6 +775,10 @@ Installed as a Claude Code plugin, the hook reads its settings from
 class prefixes the project owns, and the attempt and finding caps. (Claude Code
 won't substitute `${user_config.*}` into a shell-form hook command, since the
 value would reach a shell, but it does export the options to the hook process.)
+The same options are read from `pluginConfigs` in `~/.claude/settings.json`, and
+the two are merged per key with the environment winning, so the hook and a
+terminal resolve the same set; `loupe status` prints each option with where it
+came from.
 
 Each session gets `hook.maxAttempts` gated passes (default 3), then the gate
 stands down and says so. Bailing out entirely on `stop_hook_active` — the
@@ -781,12 +790,21 @@ which Claude Code supplies from `"env": { "LOUPE": "on" }` in the project's
 `.claude/settings.local.json`. When the environment doesn't set `LOUPE`, the
 engine reads that same key from `.claude/settings.local.json`,
 `.claude/settings.json` and `~/.claude/settings.json`, in that order, so that
-`loupe status` in a terminal agrees with the hook.
+`loupe status` in a terminal agrees with the hook. `.claude/` is the Claude Code
+project's, not the run's root: `CLAUDE_PROJECT_DIR` when it is set, otherwise the
+nearest `.claude/` above `--root` or the working directory, looking no further
+than the repository's top — so `status` run from inside a monorepo package reads
+the same file the hook does.
 
-Set `LOUPE_OFF=1` in the hook's environment to silence an opted-in hook for a session —
-`LOUPE_OFF=1 claude`. It produces no output at all rather than downgrading to
-advisory, because an advisory finding still reaches the agent and an agent that
-sees a finding starts fixing it. `loupe` run by hand ignores the switch.
+To silence an opted-in hook, turn on the plugin's `off` option (every project),
+put `"env": { "LOUPE_OFF": "1" }` in the project's `.claude/settings.local.json`
+(one project, read on every run, so it takes effect mid-session), or start a
+session as `LOUPE_OFF=1 claude`. All three feed the same option. The hook then
+checks nothing and says only `loupe: skipped — silenced by …` to the user,
+rather than downgrading to advisory, because an advisory finding still reaches
+the agent and an agent that sees a finding starts fixing it. `loupe status`
+reports the switch on its `options:` line with where it was set. `loupe` run by
+hand ignores it.
 
 Both read the same on/off spelling as every plugin option: `1`, `true`, `yes`,
 `on`, case-insensitively. `LOUPE_OFF=0` is not one of them and leaves the hook

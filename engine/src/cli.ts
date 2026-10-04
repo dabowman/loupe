@@ -35,11 +35,15 @@ import type { RegistrySource } from './profiles.ts';
 import { attemptsPath, baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
 import {
 	bumpAttempts,
+	claudeProjectDir,
 	clearAttempts,
+	describeOptions,
+	emitAdvisory,
 	emitBlocking,
 	emitClean,
 	hookRoot,
 	hookOff,
+	hookSilenced,
 	parsePayload,
 	payloadFile,
 	readStdin,
@@ -289,8 +293,12 @@ Environment:
   LOUPE=on              Turn the hook on. It is off until a project opts in:
                         "env": { "LOUPE": "on" } in .claude/settings.local.json.
                         'loupe' typed by hand always reports.
-  LOUPE_OFF=1           Silence an opted-in hook for this session. Start Claude
-                        Code as 'LOUPE_OFF=1 claude'.
+  LOUPE_OFF=1           Silence an opted-in hook: for one session as
+                        'LOUPE_OFF=1 claude', or for one project as
+                        "env": { "LOUPE_OFF": "1" } in .claude/settings.local.json,
+                        read on every run. The plugin's "off" option does the
+                        same for every project. The hook says it was skipped;
+                        'loupe status' names which switch did it.
                         Both read 1/true/yes/on as on; anything else — 0 and
                         false included — as not set.
 
@@ -443,12 +451,25 @@ async function main(): Promise<number> {
 	// below is downstream of this line, the off switch most of all.
 	const payload: HookPayload = isHook ? parsePayload(await readStdin()) : {};
 
-	// Off unless the project opted in, or silenced for the session.
+	// Resolved for every command, not just the hook. `status` exists to say what
+	// the gate will do, and it cannot do that without the settings the gate reads.
+	// Read from the Claude Code project, not the run's root: in a monorepo package
+	// the two differ, and `status` must land where the hook does.
+	const projectDir = claudeProjectDir(args.flags.root);
+	const resolved = resolvedOptions(projectDir);
+	const { options } = resolved;
+
+	// Off unless the project opted in, or silenced.
 	//
 	// Silence, not advisory mode: an advisory finding still lands in the agent's
 	// context, and an agent that sees a finding starts fixing it. Hook-only —
-	// `loupe check` typed by hand is someone asking.
-	if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
+	// `loupe check` typed by hand is someone asking. A project that never opted in
+	// hears nothing; one that opted in and was switched off is told so, like every
+	// other stand-down, or a stale switch disables the gate with no trace.
+	if (isHook) {
+		const off = hookOff(projectDir, resolved);
+		if (off) return hookSilenced(resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
+	}
 
 	// The project, not the directory you happen to be standing in: the hook roots
 	// at CLAUDE_PROJECT_DIR, and a typed command rooting at the cwd gave the same
@@ -462,10 +483,6 @@ async function main(): Promise<number> {
 		fail(`loupe: root does not exist: ${root}\n`);
 		return EXIT.CANNOT_RUN;
 	}
-
-	// Resolved for every command, not just the hook. `status` exists to say what
-	// the gate will do, and it cannot do that without the settings the gate reads.
-	const { options, source: optionsSource } = resolvedOptions();
 
 	// Read before the config rather than with the other registry work below: a
 	// profile names the preset that configures its design system, and that has
@@ -487,6 +504,9 @@ async function main(): Promise<number> {
 	// Hoisted: `status` has to be able to say where an inferred config got its
 	// ruleset, and "inferred" on its own does not say a profile named it.
 	let profilePreset: string | null = null;
+	// The config file the project wrote, when that is what is being loaded: an
+	// error in it is the project's to fix, not a plugin setting's.
+	let ownConfig: string | null = null;
 	// Detection plus everything that outranks it. Reads `profilePreset` at call
 	// time, which is what lets `detect` and `init` below reuse it after the
 	// resolution above has settled.
@@ -509,6 +529,7 @@ async function main(): Promise<number> {
 		const projectConfig = args.flags.config ? null : findConfig(root);
 		const optionPreset = options.preset && options.preset !== 'auto' ? options.preset : null;
 		const explicitPreset = args.flags.preset ?? (projectConfig ? null : optionPreset);
+		ownConfig = args.flags.config ? resolve(args.flags.config) : explicitPreset ? null : projectConfig;
 
 		// The project-shape guard runs ahead of inference, not after it: inference
 		// walks the tree, and `hookRoot()` falls back to the process cwd, so the tree
@@ -554,6 +575,19 @@ async function main(): Promise<number> {
 		// Under the hook, EXIT.CANNOT_RUN is exit 2, which blocks the turn: a mistyped
 		// preset in the plugin settings would block every turn in every project. A gate
 		// that cannot configure itself stands aside and says so.
+		//
+		// Standing aside is not the same as telling no one. An error in the project's
+		// own config — a rule written in a form a release removed, say — turns the
+		// gate off on every turn, and a systemMessage reaches only the user, in the
+		// slot a clean run's tally fills. The agent is told too, as advisory context,
+		// so it can offer the rewrite the error already names.
+		if (isHook && ownConfig)
+			return emitAdvisory(
+				`loupe: skipped \u2014 config error: ${messageOf(err)}`,
+				`loupe, the design-system gate, is checking nothing in this project: ${ownConfig} has a config error \u2014 ${messageOf(err)}. ` +
+					'Until it is fixed no edit is checked. Offer the user that fix; this is advisory and blocks nothing.',
+				payload,
+			);
 		if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf(err)}`);
 		fail(`loupe: config error \u2014 ${messageOf(err)}\n`);
 		return EXIT.CANNOT_RUN;
@@ -673,7 +707,7 @@ async function main(): Promise<number> {
 		// One conclusion, asked once. `blockingAllowed` answers "do the severities
 		// permit blocking", which is not "will this gate stop a turn" — a silenced hook
 		// stops nothing.
-		const off = hookOff(root);
+		const off = hookOff(projectDir, resolved);
 		const gateBlocks = blockingAllowed && !off;
 		const src =
 			config.source.kind === 'file'
@@ -724,13 +758,7 @@ async function main(): Promise<number> {
 			// repo. The marker is computed, not assumed — a root above the temp
 			// directory would contain it.
 			`${dim('state:      ')}${state}${relative(root, state).startsWith('..') ? '  (retry counter only, outside your repo)' : ''}`,
-			`${dim('options:    ')}${
-				optionsSource === 'environment'
-					? 'from the plugin environment (hook context)'
-					: optionsSource === 'settings'
-						? 'from ~/.claude settings'
-						: 'none found — plugin defaults apply'
-			}${options.blocking === undefined ? '' : `; blocking ${options.blocking ? 'on' : 'off'}`}`,
+			`${dim('options:    ')}${describeOptions(resolved)}`,
 			`${dim('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
 			// The hook passes `--judge` and then turns it off silently when there is no
 			// key. A report that quietly stopped asking and one that found nothing to
@@ -771,17 +799,27 @@ async function main(): Promise<number> {
 					: judgeOnly
 						? yellow('advisory, --judge only')
 						: sev === 'error'
-							? yellow('advisory (would block if enabled)')
+							? yellow('advisory in the hook (would block if enabled); fails `check`')
 							: yellow('advisory')
 				: dim(`off (${sev === 'off' ? 'disabled in config' : `needs ${def.needs.join('+')}`})`);
 			lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
 		}
 		const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === 'error');
+		// `blocking` is the hook's: it decides whether a turn stops, not whether a
+		// finding is an error. `check` still exits 1 on error severity, so CI and a
+		// pre-commit hook gate on the config whatever the plugin setting says — and
+		// "nothing blocks" said of the tool, not the hook, was contradicted by the
+		// very next `check`.
+		const quiet = off
+			? 'Nothing blocks turns: the hook is off.'
+			: 'Nothing blocks turns; the hook reports every finding as advisory.';
 		lines.push(
 			'',
 			gateBlocks && blockers.length
 				? `${red('Turns are blocked by:')} ${blockers.map((id) => magenta(id)).join(', ')}`
-				: green('Nothing blocks turns; every finding is advisory.'),
+				: blockers.length
+					? `${green(quiet)}\n${yellow('`loupe check` still exits 1 on:')} ${blockers.map((id) => magenta(id)).join(', ')} — ${off ? 'the hook being off does not change that' : '"Block turns on findings" governs the hook, not `check`'}.`
+					: green(`${quiet} No rule is at error severity, so \`loupe check\` exits 0 too.`),
 		);
 		if (off) {
 			lines.push(`The gate is off: ${off}.`);
@@ -790,10 +828,10 @@ async function main(): Promise<number> {
 			if (detected?.truncated) lines.push(`Inference stopped at the ${CEILING}: ${CEILING_WHY}.`);
 			if (!blockingAllowed)
 				lines.push(
-					'The gate reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.',
+					'The hook reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.',
 				);
 		} else if (!blockingAllowed) {
-			lines.push('The gate reports only: "Block turns on findings" is off in the plugin settings.');
+			lines.push('The hook reports only: "Block turns on findings" is off in the plugin settings.');
 		}
 		process.stdout.write(`${lines.join('\n')}\n`);
 		return EXIT.OK;

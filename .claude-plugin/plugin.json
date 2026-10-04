@@ -29,7 +29,7 @@
     "blocking": {
       "type": "boolean",
       "title": "Block turns on findings",
-      "description": "When on, error-severity findings stop the turn and hand the report back. When off, the gate reports only. A project with no loupe.config.json is always advisory unless this is on.",
+      "description": "Governs the hook only. When on, error-severity findings stop the turn and hand the report back. When off, the hook reports only. A project with no loupe.config.json is always advisory in the hook unless this is on. `loupe check` exits 1 on error-severity findings either way, so CI and pre-commit still gate.",
       "default": false
     },
     "preset": {
@@ -42,6 +42,12 @@
       "type": "string",
       "title": "Project class prefixes",
       "description": "Comma-separated CSS class prefixes your projects own, e.g. 'vip-workflow-, wf-'. Leave empty to infer per project. Only these can be reported dead."
+    },
+    "off": {
+      "type": "boolean",
+      "title": "Silence the hook",
+      "description": "When on, the hook checks nothing in any project, even one that opted in, and says only that it was skipped. To silence one project instead, put \"env\": { \"LOUPE_OFF\": \"1\" } in its .claude/settings.local.json. `loupe` typed by hand is unaffected.",
+      "default": false
     },
     "max_attempts": {
       "type": "number",

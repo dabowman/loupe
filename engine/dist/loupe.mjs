@@ -20257,7 +20257,7 @@ var require_input = __commonJS({
   "node_modules/postcss/lib/input.js"(exports, module) {
     "use strict";
     var { nanoid } = require_non_secure();
-    var { isAbsolute: isAbsolute7, resolve: resolve6 } = __require("path");
+    var { isAbsolute: isAbsolute7, resolve: resolve7 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { fileURLToPath: fileURLToPath5, pathToFileURL: pathToFileURL3 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
@@ -20265,7 +20265,7 @@ var require_input = __commonJS({
     var terminalHighlight = require_terminal_highlight();
     var lineToIndexCache = Symbol("lineToIndexCache");
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(resolve6 && isAbsolute7);
+    var pathAvailable = Boolean(resolve7 && isAbsolute7);
     function getLineToIndex(input) {
       if (input[lineToIndexCache]) return input[lineToIndexCache];
       let lines = input.css.split("\n");
@@ -20299,7 +20299,7 @@ var require_input = __commonJS({
           if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute7(opts.from)) {
             this.file = opts.from;
           } else {
-            this.file = resolve6(opts.from);
+            this.file = resolve7(opts.from);
           }
         }
         if (pathAvailable && sourceMapAvailable) {
@@ -20420,7 +20420,7 @@ var require_input = __commonJS({
         if (/^\w+:\/\//.test(file)) {
           return file;
         }
-        return resolve6(this.map.consumer().sourceRoot || this.map.root || ".", file);
+        return resolve7(this.map.consumer().sourceRoot || this.map.root || ".", file);
       }
       origin(line, column, endLine, endColumn) {
         if (!this.map) return false;
@@ -20730,12 +20730,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname8, relative: relative5, resolve: resolve6, sep: sep3 } = __require("path");
+    var { dirname: dirname8, relative: relative5, resolve: resolve7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL3 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname8 && resolve6 && relative5 && sep3);
+    var pathAvailable = Boolean(dirname8 && resolve7 && relative5 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -20964,7 +20964,7 @@ var require_map_generator = __commonJS({
         if (cached) return cached;
         let from = this.opts.to ? dirname8(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname8(resolve6(from, this.mapOpts.annotation));
+          from = dirname8(resolve7(from, this.mapOpts.annotation));
         }
         let path = relative5(from, file);
         this.memoizedPaths.set(file, path);
@@ -23495,7 +23495,7 @@ var require_lib2 = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync9, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve5 } from "node:path";
+import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join14, relative as relative4, resolve as resolve6 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
@@ -29932,7 +29932,7 @@ function serve(opts) {
   const { port, config, run } = opts;
   const client = (origin) => JS2.replace("__ORIGIN__", origin).replace("__CSS__", JSON.stringify(CSS2));
   let url = `http://localhost:${port}`;
-  return new Promise((resolve6, reject) => {
+  return new Promise((resolve7, reject) => {
     const server = createServer((req, res) => {
       const origin = url;
       res.setHeader("access-control-allow-origin", "*");
@@ -29983,7 +29983,7 @@ function serve(opts) {
     server.listen(port, () => {
       const addr = server.address();
       if (addr && typeof addr === "object") url = `http://localhost:${addr.port}`;
-      resolve6({
+      resolve7({
         url,
         close: () => new Promise((done) => {
           server.close(() => done());
@@ -30352,7 +30352,7 @@ function applyRegistries(config, sources) {
 
 // src/hook.ts
 import { existsSync as existsSync8, readFileSync as readFileSync13, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute5, join as join13, relative as relative3 } from "node:path";
+import { dirname as dirname6, isAbsolute as isAbsolute5, join as join13, relative as relative3, resolve as resolve5 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
@@ -30414,44 +30414,110 @@ function hookRoot() {
   return process.cwd();
 }
 var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
-function optedIn(root2) {
-  if (process.env.LOUPE !== void 0) return isOn(process.env.LOUPE);
-  for (const file of [
-    join13(root2, ".claude", "settings.local.json"),
-    join13(root2, ".claude", "settings.json"),
-    join13(homedir(), ".claude", "settings.json")
-  ]) {
+function claudeProjectDir(explicit) {
+  if (!explicit) {
+    const fromEnv = process.env.CLAUDE_PROJECT_DIR;
+    if (fromEnv && existsSync8(fromEnv)) return fromEnv;
+  }
+  const start = resolve5(explicit ?? process.cwd());
+  const home = resolve5(homedir());
+  for (let dir = start; dir !== home; dir = dirname6(dir)) {
+    if (existsSync8(join13(dir, ".claude"))) return dir;
+    if (existsSync8(join13(dir, ".git")) || dirname6(dir) === dir) break;
+  }
+  return start;
+}
+function settingsEnv(projectDir, name) {
+  const fromEnv = process.env[name];
+  if (fromEnv !== void 0) return { value: fromEnv, from: `${name} in the environment` };
+  const files = [
+    [join13(projectDir, ".claude", "settings.local.json"), ".claude/settings.local.json"],
+    [join13(projectDir, ".claude", "settings.json"), ".claude/settings.json"],
+    [join13(homedir(), ".claude", "settings.json"), "~/.claude/settings.json"]
+  ];
+  for (const [file, label] of files) {
     try {
-      const v = JSON.parse(readFileSync13(file, "utf8")).env?.LOUPE;
-      if (v !== void 0) return isOn(String(v));
+      const v = JSON.parse(readFileSync13(file, "utf8")).env?.[name];
+      if (v !== void 0) return { value: String(v), from: `${name} in ${label}` };
     } catch {
     }
   }
-  return false;
+  return void 0;
 }
-function hookOff(root2) {
-  if (isOn(process.env.LOUPE_OFF)) return "LOUPE_OFF is set for this session";
-  if (!optedIn(root2))
+function optedIn(projectDir) {
+  const v = settingsEnv(projectDir, "LOUPE");
+  return v !== void 0 && isOn(v.value);
+}
+function hookOff(projectDir, resolved = resolvedOptions(projectDir)) {
+  if (hookSilenced(resolved)) {
+    const from = resolved.sources.off ?? "";
+    return `silenced by ${from.startsWith("LOUPE_OFF") ? from : `the plugin's "off" option (${from})`}`;
+  }
+  if (!optedIn(projectDir))
     return 'this project has not opted in; add "env": { "LOUPE": "on" } to .claude/settings.local.json';
   return null;
 }
-var OPTION_KEYS = ["preset", "project_prefixes", "blocking", "max_attempts", "max_findings"];
-function resolvedOptions() {
-  const fromEnv = coerce(
-    Object.fromEntries(OPTION_KEYS.map((k) => [k, process.env[`CLAUDE_PLUGIN_OPTION_${k.toUpperCase()}`]]))
-  );
-  if (Object.values(fromEnv).some((v) => v !== void 0)) return { options: fromEnv, source: "environment" };
-  for (const file of ["settings.local.json", "settings.json"]) {
-    try {
-      const raw = JSON.parse(readFileSync13(join13(homedir(), ".claude", file), "utf8"));
-      const configs = raw.pluginConfigs ?? {};
-      const key = Object.keys(configs).find((k) => k === "loupe" || k.startsWith("loupe@"));
-      const opts = key === void 0 ? void 0 : configs[key]?.options;
-      if (opts) return { options: coerce(opts), source: "settings" };
-    } catch {
+var hookSilenced = (resolved) => resolved.options.off === true;
+var FIELDS = {
+  preset: "preset",
+  project_prefixes: "projectPrefixes",
+  blocking: "blocking",
+  max_attempts: "maxAttempts",
+  max_findings: "maxFindings",
+  off: "off"
+};
+var OPTION_KEYS = Object.keys(FIELDS);
+var isOurs = (key) => key === "loupe" || key.startsWith("loupe@");
+function resolvedOptions(projectDir) {
+  const options = coerce({});
+  const sources = {};
+  const overlay = (layer, from) => {
+    for (const k of OPTION_KEYS) {
+      const field2 = FIELDS[k];
+      if (layer[field2] === void 0) continue;
+      options[field2] = layer[field2];
+      sources[k] = from;
     }
+  };
+  const seen = [];
+  let matched = false;
+  for (const file of ["settings.json", "settings.local.json"]) {
+    let configs;
+    try {
+      configs = JSON.parse(readFileSync13(join13(homedir(), ".claude", file), "utf8")).pluginConfigs;
+    } catch {
+      continue;
+    }
+    if (!configs || typeof configs !== "object") continue;
+    const key = Object.keys(configs).find(isOurs);
+    if (key === void 0) {
+      seen.push(...Object.keys(configs));
+      continue;
+    }
+    matched = true;
+    const opts = configs[key]?.options;
+    if (opts) overlay(coerce(opts), `~/.claude/${file}`);
   }
-  return { options: fromEnv, source: "none" };
+  overlay(
+    coerce(Object.fromEntries(OPTION_KEYS.map((k) => [k, process.env[`CLAUDE_PLUGIN_OPTION_${k.toUpperCase()}`]]))),
+    "environment"
+  );
+  const silence = settingsEnv(projectDir, "LOUPE_OFF");
+  if (silence && isOn(silence.value)) {
+    options.off = true;
+    sources.off = silence.from;
+  }
+  return { options, sources, unmatched: matched ? [] : seen };
+}
+function describeOptions({ options, sources, unmatched }) {
+  const value = (k) => {
+    const v = options[FIELDS[k]];
+    if (typeof v === "boolean") return k === "off" ? v ? "yes" : "no" : v ? "on" : "off";
+    return Array.isArray(v) ? v.join(", ") : String(v);
+  };
+  const set = OPTION_KEYS.filter((k) => sources[k] !== void 0).map((k) => `${k} ${value(k)} (${sources[k]})`);
+  const miss = unmatched.length ? `; no pluginConfigs entry is named loupe or loupe@\u2026 (found ${unmatched.join(", ")})` : "";
+  return `${set.length ? set.join("; ") : "none set \u2014 plugin defaults apply"}${miss}`;
 }
 function coerce(opts) {
   const str2 = (v) => v === void 0 || v === null || v === "" ? void 0 : String(v);
@@ -30473,11 +30539,23 @@ function coerce(opts) {
     projectPrefixes: list2(opts.project_prefixes),
     blocking: str2(opts.blocking) === void 0 ? void 0 : isOn(String(opts.blocking)),
     maxAttempts: num2(opts.max_attempts),
-    maxFindings: num2(opts.max_findings)
+    maxFindings: num2(opts.max_findings),
+    off: str2(opts.off) === void 0 ? void 0 : isOn(String(opts.off))
   };
 }
 function emitClean(message) {
   process.stdout.write(JSON.stringify({ systemMessage: message, suppressOutput: true }));
+  return 0;
+}
+function emitAdvisory(message, context, payload) {
+  const event = payload.hook_event_name ?? (payload.tool_input ? "PostToolUse" : void 0);
+  process.stdout.write(
+    JSON.stringify({
+      systemMessage: message,
+      suppressOutput: true,
+      ...event === "PostToolUse" ? { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context } } : {}
+    })
+  );
   return 0;
 }
 function emitBlocking(report) {
@@ -30508,13 +30586,13 @@ var note = (msg) => {
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
 var HERE = dirname7(fileURLToPath4(import.meta.url));
 var SINGLE_FILE = !existsSync9(join14(HERE, "..", "package.json"));
-var ENV_FILE = SINGLE_FILE ? resolve5(".env") : join14(HERE, "..", "..", ".env");
+var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join14(HERE, "..", "..", ".env");
 var USER_ENV_FILE = join14(process.env.XDG_CONFIG_HOME || join14(homedir2(), ".config"), "loupe", ".env");
 var KEY_SOURCES = `the environment, the plugin's API key option, ${ENV_FILE}, or ${USER_ENV_FILE}`;
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
   const entry = basename(HERE) === "src" ? "source" : "bundle";
-  return `loupe ${EMBEDDED_VERSION} (${entry}, ${resolve5(HERE, "..", "..")})`;
+  return `loupe ${EMBEDDED_VERSION} (${entry}, ${resolve6(HERE, "..", "..")})`;
 }
 var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${dim(`"${name}"`)}:`);
 var usage = () => USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^ {2}([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
@@ -30624,8 +30702,12 @@ Environment:
   LOUPE=on              Turn the hook on. It is off until a project opts in:
                         "env": { "LOUPE": "on" } in .claude/settings.local.json.
                         'loupe' typed by hand always reports.
-  LOUPE_OFF=1           Silence an opted-in hook for this session. Start Claude
-                        Code as 'LOUPE_OFF=1 claude'.
+  LOUPE_OFF=1           Silence an opted-in hook: for one session as
+                        'LOUPE_OFF=1 claude', or for one project as
+                        "env": { "LOUPE_OFF": "1" } in .claude/settings.local.json,
+                        read on every run. The plugin's "off" option does the
+                        same for every project. The hook says it was skipped;
+                        'loupe status' names which switch did it.
                         Both read 1/true/yes/on as on; anything else \u2014 0 and
                         false included \u2014 as not set.
 
@@ -30649,7 +30731,7 @@ function resolveScope(config, args, { defaultChanged = false }) {
   if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(" ")}` };
   if (args.flags.all) return null;
   if (args.flags.files)
-    return args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative4(config.root, resolve5(f)) : f)).filter((f) => f && !f.startsWith(".."));
+    return args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative4(config.root, resolve6(f)) : f)).filter((f) => f && !f.startsWith(".."));
   if (args.flags.changed || defaultChanged) {
     const changed = changedFiles(config.root);
     if (changed === null) return { error: NOT_A_WORKTREE };
@@ -30685,27 +30767,33 @@ async function main() {
   }
   const isHook = command === "hook";
   const payload = isHook ? parsePayload(await readStdin()) : {};
-  if (isHook && hookOff(args.flags.root ?? hookRoot())) return EXIT.OK;
+  const projectDir = claudeProjectDir(args.flags.root);
+  const resolved = resolvedOptions(projectDir);
+  const { options } = resolved;
+  if (isHook) {
+    const off = hookOff(projectDir, resolved);
+    if (off) return hookSilenced(resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
+  }
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
-  const anchor = explicitRoot ? null : findConfig(resolve5(process.cwd()));
-  const root2 = resolve5(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
+  const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
+  const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
   if (!existsSync9(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
 `);
     return EXIT.CANNOT_RUN;
   }
-  const { options, source: optionsSource } = resolvedOptions();
-  const profiles = readProfiles(args.flags.profiles ? resolve5(args.flags.profiles) : null);
+  const profiles = readProfiles(args.flags.profiles ? resolve6(args.flags.profiles) : null);
   const forced = args.flags.profile ? profiles.find((p) => p.id === args.flags.profile) ?? null : null;
   if (args.flags.profile && !forced && !isHook)
     note(
-      `loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve5(args.flags.profiles) : "any profiles directory (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
+      `loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve6(args.flags.profiles) : "any profiles directory (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
 `
     );
   let config;
   let detected = null;
   let profilePreset = null;
+  let ownConfig = null;
   const runDetection = () => {
     const d = detectConfig(root2, { preset: profilePreset });
     if (options.projectPrefixes?.length)
@@ -30716,6 +30804,7 @@ async function main() {
     const projectConfig = args.flags.config ? null : findConfig(root2);
     const optionPreset = options.preset && options.preset !== "auto" ? options.preset : null;
     const explicitPreset = args.flags.preset ?? (projectConfig ? null : optionPreset);
+    ownConfig = args.flags.config ? resolve6(args.flags.config) : explicitPreset ? null : projectConfig;
     const statedProject = Boolean(args.flags.config) || Boolean(args.flags.preset) || Boolean(projectConfig);
     if (!statedProject && needsProject(command, args, isHook) && !looksLikeProject(root2)) {
       if (isHook) return emitClean(`loupe: skipped \u2014 ${NOT_A_WORKTREE}`);
@@ -30738,6 +30827,12 @@ async function main() {
       inferred: Boolean(detected)
     });
   } catch (err) {
+    if (isHook && ownConfig)
+      return emitAdvisory(
+        `loupe: skipped \u2014 config error: ${messageOf(err)}`,
+        `loupe, the design-system gate, is checking nothing in this project: ${ownConfig} has a config error \u2014 ${messageOf(err)}. Until it is fixed no edit is checked. Offer the user that fix; this is advisory and blocks nothing.`,
+        payload
+      );
     if (isHook) return emitClean(`loupe: skipped \u2014 config error: ${messageOf(err)}`);
     fail(`loupe: config error \u2014 ${messageOf(err)}
 `);
@@ -30818,7 +30913,7 @@ async function main() {
     return EXIT.OK;
   }
   if (command === "status") {
-    const off = hookOff(root2);
+    const off = hookOff(projectDir, resolved);
     const gateBlocks = blockingAllowed && !off;
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ""}` : config.source.kind;
     const base = findExistingBaseline(root2, namedBaseline, config.baselinePath);
@@ -30842,7 +30937,7 @@ async function main() {
       // repo. The marker is computed, not assumed — a root above the temp
       // directory would contain it.
       `${dim("state:      ")}${state}${relative4(root2, state).startsWith("..") ? "  (retry counter only, outside your repo)" : ""}`,
-      `${dim("options:    ")}${optionsSource === "environment" ? "from the plugin environment (hook context)" : optionsSource === "settings" ? "from ~/.claude settings" : "none found \u2014 plugin defaults apply"}${options.blocking === void 0 ? "" : `; blocking ${options.blocking ? "on" : "off"}`}`,
+      `${dim("options:    ")}${describeOptions(resolved)}`,
       `${dim("plugin:     ")}${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
       // The hook passes `--judge` and then turns it off silently when there is no
       // key. A report that quietly stopped asking and one that found nothing to
@@ -30863,13 +30958,15 @@ async function main() {
       const def = RULES[id];
       const sev = config.severityOf(id);
       const judgeOnly = id === "patterns/judged-redirect";
-      const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red(judgeOnly ? "BLOCKS (--judge only)" : "BLOCKS") : judgeOnly ? yellow("advisory, --judge only") : sev === "error" ? yellow("advisory (would block if enabled)") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
+      const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red(judgeOnly ? "BLOCKS (--judge only)" : "BLOCKS") : judgeOnly ? yellow("advisory, --judge only") : sev === "error" ? yellow("advisory in the hook (would block if enabled); fails `check`") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
       lines.push(`  ${magenta(id.padEnd(32))} ${verdict}`);
     }
     const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
+    const quiet = off ? "Nothing blocks turns: the hook is off." : "Nothing blocks turns; the hook reports every finding as advisory.";
     lines.push(
       "",
-      gateBlocks && blockers.length ? `${red("Turns are blocked by:")} ${blockers.map((id) => magenta(id)).join(", ")}` : green("Nothing blocks turns; every finding is advisory.")
+      gateBlocks && blockers.length ? `${red("Turns are blocked by:")} ${blockers.map((id) => magenta(id)).join(", ")}` : blockers.length ? `${green(quiet)}
+${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id)).join(", ")} \u2014 ${off ? "the hook being off does not change that" : '"Block turns on findings" governs the hook, not `check`'}.` : green(`${quiet} No rule is at error severity, so \`loupe check\` exits 0 too.`)
     );
     if (off) {
       lines.push(`The gate is off: ${off}.`);
@@ -30878,10 +30975,10 @@ async function main() {
       if (detected?.truncated) lines.push(`Inference stopped at the ${CEILING}: ${CEILING_WHY}.`);
       if (!blockingAllowed)
         lines.push(
-          'The gate reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.'
+          'The hook reports only: this config was inferred and "Block turns on findings" is not on. Write a config with `loupe init`, or turn the setting on.'
         );
     } else if (!blockingAllowed) {
-      lines.push('The gate reports only: "Block turns on findings" is off in the plugin settings.');
+      lines.push('The hook reports only: "Block turns on findings" is off in the plugin settings.');
     }
     process.stdout.write(`${lines.join("\n")}
 `);

@@ -441,9 +441,13 @@ The same applies to plugin options. Claude Code refuses to substitute
 *hook processes* as `CLAUDE_PLUGIN_OPTION_<KEY>` — to hook processes only. So
 `status`, whose entire job is to say what the gate will actually do, could not
 see the blocking switch from a terminal. The values are also in the settings
-file under the plugin's key; they are read there when the environment has
-nothing to say, and the source is reported so a stale answer is recognizable as
-one.
+file under the plugin's key, and the two are **merged key by key**, the
+environment over the file. Choosing between them — the environment if it said
+anything, the file otherwise — let one exported key discard every other option
+the file carried, so the hook and a terminal resolved different options for the
+same project. Each key's source is reported, so a stale answer is recognizable
+as one, and a `pluginConfigs` lookup whose name guess missed says so rather than
+reading as "configured nothing".
 
 **One spelling of "on" for every switch.** The set was written out three times —
 plugin options from the environment, the same options from the settings file,
@@ -611,12 +615,35 @@ Under the hook, `EXIT.CANNOT_RUN` is exit 2, which blocks the turn. A mistyped
 preset in the plugin settings would otherwise block every turn in every project,
 with nothing the agent could do about it.
 
+Standing aside is not telling no one. An error in the project's *own* config —
+a rule still written in the `[severity, {opts}]` form 0.8.0 removed — turns the
+gate off on every turn, and a `systemMessage` reaches only the user, in the slot
+a clean run's tally fills. So that one also goes to the agent, as PostToolUse
+`additionalContext`: advisory, exit 0, and specific enough to offer the rewrite.
+A Stop hook has no non-blocking channel to the agent, so there it stays the
+user's message; so does a plugin setting's error, which is not the agent's to
+fix.
+
 ### Silence, not advisory mode
 
-`LOUPE_OFF` makes the hook say nothing at all. An advisory finding still lands
+The `off` switch makes the hook check nothing. An advisory finding still lands
 in the agent's context, and an agent that sees a finding starts fixing it —
 which is the whole complaint. Deliberately hook-only: `loupe check` typed by
 hand is someone asking, and answering "nothing" would be a lie.
+
+It tells the user, though — a `skipped` systemMessage, the path every other
+stand-down takes. When it said nothing at all, a stale `export LOUPE_OFF=1` in
+a shell profile disabled the gate in every project with no trace but a
+`loupe status` nobody had a reason to run.
+
+**One switch, several doors.** `off` is a plugin option like `blocking`, the
+same axis — block, advise, say nothing — so it is resolved, sourced and
+reported with the others. `LOUPE_OFF` stays as an escape hatch feeding the same
+field, from the environment (`LOUPE_OFF=1 claude`) or from a project's own
+`.claude/settings.local.json` `env`, which is read on every run — the
+per-project, mid-session switch a process environment cannot be. A project
+that never opted in still hears nothing: that is every repo the plugin is
+installed for.
 
 ### The payload is drained before anything can return
 
