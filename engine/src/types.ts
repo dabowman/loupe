@@ -739,6 +739,8 @@ export interface MergedConfig {
 	componentRegistry: string | unknown[] | null;
 	baseline: string;
 	hook: HookConfig;
+	/** How many entries analysis walks before it refuses. Absent for the default. */
+	maxEntries?: number;
 	extends?: string | string[];
 }
 
@@ -758,6 +760,7 @@ export interface AuthoredConfig {
 	componentRegistry?: string | unknown[] | null;
 	baseline?: string;
 	hook?: Partial<HookConfig>;
+	maxEntries?: number;
 }
 
 /** The design system, resolved: names expanded, predicates precompiled. */
@@ -951,6 +954,11 @@ export interface Config {
 	suppression: SuppressionConfig;
 	baselinePath: string;
 	hook: HookConfig;
+	/**
+	 * The analysis walk's ceiling as the config sets it, validated. Absent when
+	 * the config leaves it to the default; `LOUPE_MAX_ENTRIES` outranks it.
+	 */
+	maxEntries?: number;
 	rules: Record<RuleId, RuleSetting>;
 	/**
 	 * Where each rule setting the config wrote came from: a path relative to the

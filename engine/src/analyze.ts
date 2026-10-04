@@ -337,7 +337,7 @@ export async function analyze(
 	// scope, so a hook on one file under a home directory with a `package.json`
 	// in it walked the whole home directory. Stopping short and carrying on would
 	// report "clean" for everything past the ceiling.
-	const limit = analyzeEntryBudget();
+	const limit = analyzeEntryBudget(config.maxEntries);
 	const files = discover({ root: config.root, sources: config.sources, limit });
 	if (files.truncated) throw new TreeTooLarge(limit);
 

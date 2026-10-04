@@ -17,7 +17,14 @@ import { parseArgs as parseArgv } from 'node:util';
 import { analyze, dedupe, findingKey } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
-import { judgeRedirects, judgeRenames, judgeValues, judgeVariants, tokenDescriptions } from './judge.ts';
+import {
+	judgeRedirects,
+	judgeRenames,
+	judgeValues,
+	judgeVariants,
+	redirectIdentity,
+	tokenDescriptions,
+} from './judge.ts';
 import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset, presetKey } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
@@ -42,7 +49,14 @@ import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
 import { deliverySummary, mergeDeliveries, REMEDY_RULES } from './delivery.ts';
 import type { RegistrySource } from './profiles.ts';
-import { attemptsPath, baselinePath, findExistingBaseline, isPluginContext } from './paths.ts';
+import {
+	attemptsPath,
+	baselinePath,
+	findExistingBaseline,
+	isPluginContext,
+	legacyBaseline,
+	legacyBaselineNotice,
+} from './paths.ts';
 import {
 	bumpAttempts,
 	claudeProjectDir,
@@ -329,7 +343,8 @@ Environment:
                         false included — as not set.
   LOUPE_MAX_ENTRIES=<n> How many entries analysis walks before it refuses to
                         report at all (default 200,000), rather than calling
-                        the part of the tree it never read clean.
+                        the part of the tree it never read clean. Outranks
+                        "maxEntries" in loupe.config.json for one run.
 
 With no config file present, the project is inspected and a config inferred.
 Run 'loupe detect' to see what that produces, 'init' to write it down.
@@ -469,8 +484,7 @@ async function keysBeforeEdit(
 		// collected (`judgeRedirects`, keyed by its component). The control standing
 		// before the edit is the finding standing before it, without paying to ask
 		// the judge about a file the edit has already replaced.
-		for (const c of prior.controls ?? [])
-			keys.add(findingKey({ rule: 'patterns/judged-redirect', file: c.file, code: `<${c.component}>`, message: '' }));
+		for (const c of prior.controls ?? []) keys.add(findingKey({ ...redirectIdentity(c), message: '' }));
 		return keys;
 	} catch {
 		return new Set();
@@ -836,6 +850,7 @@ async function main(): Promise<number> {
 						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
 		const base = findExistingBaseline(root, namedBaseline, config.baselinePath);
+		const legacy = base.found ? null : legacyBaseline(root);
 		const state = attemptsPath(root);
 		// What design system this run thinks it is checking, in the terms the rules are
 		// written against — the half a skill has to read before it writes a line of UI.
@@ -872,6 +887,7 @@ async function main(): Promise<number> {
 							? ''
 							: '  (none recorded yet)'
 			}`,
+			...(legacy ? [yellow(`            ${legacyBaselineNotice(legacy)}`)] : []),
 			// Beside the baseline line, because the two used to share a directory and are
 			// easy to assume still do: the retry counter is the one that stays out of the
 			// repo. The marker is computed, not assumed — a root above the temp
@@ -1434,6 +1450,13 @@ async function main(): Promise<number> {
 		// backlog it accepted, with no reason given. `emitBlocking` already writes to
 		// stderr, and Claude Code feeds that back on exit 2.
 		if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
+		// A 0.1.x baseline is no longer read, and dropping it was silent: the backlog
+		// it held came back as live findings with nothing to say why. On stderr, so
+		// JSON and SARIF on stdout stay what a parser expects; not from the hook.
+		if (!found && !isHook) {
+			const legacy = legacyBaseline(root);
+			if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}\n`);
+		}
 		result = applyBaseline(result, baseline, { scoped: scope !== null, rules });
 	}
 	// Before the judgements: a finding the filter drops is not worth a paid question.

@@ -261,9 +261,14 @@ either — so "right" is "one of those", and an item whose right answer was not
 among the candidates is **a miss the narrowing made, not the model**, counted
 separately as coverage.
 
-The two ways to be wrong cost differently: a wrong token changes the design, a
-wrong keep suppresses a mistake for good. Scoring mirrors how `fix --judge`
-acts, including the spacing-in-scale case it applies whatever the confidence.
+The two ways to be wrong cost differently: a wrong token changes the design
+under a clean report; a wrong keep leaves a mistake in place, labelled for its
+reviewer as a deliberate choice. `fix --judge` no longer suppresses a value
+judged deliberate — it is left for a reader to suppress with what the value
+actually is — so a wrong keep is a fix missed and a label that invites the
+wrong suppression, not a mistake muted for good. Scoring counts an answer over
+the floor as acted on, whichever way `fix --judge` then takes it, and includes
+the spacing-in-scale case it applies whatever the confidence.
 
 **`evals/renames`** — 158 names no WPDS token defines, each set in a real
 declaration from `site-foundry/src` or `gutenberg/packages` where a real token

@@ -321,6 +321,13 @@ export function normalize(
 			`designSystem.allowedInlineStyles must map component names to arrays of CSS properties, got: ${JSON.stringify(allowedInlineStyles)}`,
 		);
 
+	// A ceiling the walk refuses at. A string or a fraction read as "no ceiling
+	// set" would leave a project that meant to raise it refusing at the default,
+	// and one that meant to lower it walking a home directory.
+	const maxEntries: unknown = cfg.maxEntries;
+	if (maxEntries !== undefined && maxEntries !== null && !(Number.isInteger(maxEntries) && (maxEntries as number) > 0))
+		throw new Error(`maxEntries must be a positive whole number of entries, got: ${JSON.stringify(maxEntries)}`);
+
 	const layoutComponents = ds.components?.layout ?? [];
 	const textComponents = ds.components?.text ?? [];
 
@@ -388,6 +395,7 @@ export function normalize(
 		// An empty `baseline` names nothing, as an empty `--baseline=` does.
 		baselinePath: cfg.baseline || DEFAULT_BASELINE,
 		hook: cfg.hook,
+		...(typeof maxEntries === 'number' ? { maxEntries } : {}),
 		rules,
 		ruleFrom: ruleOrigins,
 		severityOf: (id: RuleId) => rules[id].severity,

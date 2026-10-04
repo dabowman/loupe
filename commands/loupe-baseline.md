@@ -39,6 +39,8 @@ new drift only, printing `N baselined finding(s) hidden` under it — the backlo
 is still there, and `--no-baseline` is what shows it.
 
 Suggest burning the backlog down one rule at a time with `/loupe-fix <rule-id>`,
-and deleting the baseline once it is empty. `check --no-baseline --rule <rule-id>`
-shows how much of one rule the baseline is holding; `fix --rule <rule-id>`
-ignores the baseline already.
+which works that rule's baselined findings deliberately — naming a rule makes
+its check run with `--no-baseline` — while a bare `/loupe-fix` keeps respecting
+the baseline and fixes new drift only. Delete the baseline once it is empty.
+`check --no-baseline --rule <rule-id>` shows how much of one rule the baseline
+is holding; `fix` reads no baseline at all.

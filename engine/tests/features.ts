@@ -18,7 +18,7 @@ import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents } from '../src/components.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { APPEARANCE_PROPS, propsOverlap } from '../src/styles.ts';
-import { LANGUAGE, ask, judgeRedirects, judgeVariants } from '../src/judge.ts';
+import { LANGUAGE, ask, judgeRedirects, judgeVariants, redirectIdentity } from '../src/judge.ts';
 import { forceQuery } from '../src/judge/force.ts';
 import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, ComponentEntry, Finding, Pattern, PatternNode, RuleId } from '../src/types.ts';
@@ -1444,6 +1444,37 @@ await check('--judge writes the variant into a suggestion that carries render', 
 	}
 });
 
+// `analyze` bounded the line before the variant was spliced into it, so a long
+// suggestion came back past the cap with the judgement at the end of it.
+await check('a judged variant is still one bounded line, with the judgement kept last', async () => {
+	const root = scratch('dsh-judge-variant-bound-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<p className="description">Help</p>' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
+		]);
+		const f: Finding = {
+			rule: 'system/raw-element',
+			severity: 'warn',
+			rank: 0,
+			file: 'src/A.jsx',
+			line: 1,
+			code: '<p>',
+			message: `<p> → <Text> (@wordpress/ui), ${'and then a long note about the analog '.repeat(8)}`,
+		};
+		const stub = (async () =>
+			new Response(
+				JSON.stringify({ answers: { e0: { choice: 'body-sm', confidence: 0.8 } } }),
+			)) as unknown as typeof fetch;
+		assert((await judgeVariants(root, [f], registry, 'key', stub)) === 1, 'nothing was written');
+		assert([...f.message].length <= 200, `${[...f.message].length} characters: ${f.message}`);
+		assert(f.message.startsWith('<p> → <Text variant="body-sm"> (@wordpress/ui)'), f.message);
+		assert(f.message.endsWith('… (judged 0.80)'), `the judgement did not survive the bound: ${f.message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // ── --judge: forces and redirects ───────────────────────────────────────────
 
 const represents = LANGUAGE.vocabulary.forces.represents?.judge;
@@ -1625,6 +1656,16 @@ await check(
 		assert(f.message === '<Button> (represents: destination) \u2192 `navigate-hierarchy` (judged 0.97)', f.message);
 		assert(f.judged?.answer === 'destination' && f.judged.confidence === 0.97, JSON.stringify(f.judged));
 		assert(Boolean(f.note), "the redirect's `because` was dropped");
+		// The hook's pre-edit comparison keys a control as the redirect it would
+		// be, without asking: the two keys have to be the same string.
+		const control = first(
+			controls.filter((c) => c.line === 4),
+			'the control on line 4',
+		);
+		assert(
+			findingKey(f) === findingKey({ ...redirectIdentity(control), message: '' }),
+			`the pre-edit key ${findingKey({ ...redirectIdentity(control), message: '' })} is not the finding's ${findingKey(f)}`,
+		);
 
 		// Off unless asked: a plain check and the hook never collect a control.
 		const plain = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': file }, { patterns: registry });

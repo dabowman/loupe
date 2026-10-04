@@ -394,10 +394,8 @@ are rewritten in place. A value whose property has no token in the design
 system at all gets a `wpds-allow` directive naming the rule it was reported
 under, with that as its reason. One the model judged deliberate is left for
 review, since what it actually is — a scrim, a pill — is a reason only a reader
-can write. Everything else is left for review too. On an un-remediated WPDS
-plugin, before deliberate values were left for review, that rewrote 156 declarations and wrote 20 suppressions, taking
-`tokens/hardcoded-value` from 183 findings to 70 and `typography/untokenized`
-from 43 to 12. See `engine/README.md` for how it scored.
+can write. Everything else is left for review too. See `engine/README.md` for
+how the judgement scores on the literals of an un-remediated WPDS plugin.
 
 ### Judged redirects
 
@@ -1073,8 +1071,9 @@ five seconds.
 Past 200,000 entries the walk stops and the hook stands aside with a `skipped`
 message saying so, rather than reporting "clean" for the part it never read —
 the case is a home directory with a stray `package.json`, not a project. Point
-the root at the project, or narrow `sources` in `loupe.config.json`;
-`LOUPE_MAX_ENTRIES` raises the ceiling.
+the root at the project, or narrow `sources` in `loupe.config.json`; a
+project that really is that large raises the ceiling with `"maxEntries"` there
+(`LOUPE_MAX_ENTRIES` overrides it for one run).
 
 ## Status
 
