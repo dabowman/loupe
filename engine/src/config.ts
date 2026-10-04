@@ -9,7 +9,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, isSeverity } from './rules.ts';
 import { loadPatterns } from './patterns.ts';
@@ -90,6 +90,19 @@ export function merge<T>(base: T, over: unknown): T {
 	return out as T;
 }
 
+/**
+ * {@link merge}, except that a rule's setting is replaced whole.
+ *
+ * Merging one field-by-field would carry a preset's `reason` for turning a rule
+ * off onto a project that turned it back on — an explanation of a setting that
+ * is no longer there.
+ */
+function mergeConfig(base: AuthoredConfig, over: AuthoredConfig): AuthoredConfig {
+	const out = merge(base, over);
+	if (isObj(base.rules) && isObj(over.rules)) out.rules = { ...base.rules, ...over.rules };
+	return out;
+}
+
 /** Walk up from `start` looking for a config file or a `loupe` package.json key. */
 export function findConfig(start: string): string | null {
 	let dir = resolve(start);
@@ -138,12 +151,26 @@ async function resolveExtends(spec: string, fromDir: string): Promise<{ path: st
 	throw new Error(`cannot resolve extends: ${spec}`);
 }
 
-async function loadChain(path: string, seen = new Set<string>()): Promise<AuthoredConfig> {
+/**
+ * A config with its `extends` resolved, and which file in the chain wrote each
+ * rule setting — what lets `loupe suppressions` say a preset turned a rule off
+ * rather than pin it on the project's own config.
+ */
+interface Chain {
+	raw: AuthoredConfig;
+	/** Rule id as written → the absolute path or `preset <name>` that set it. */
+	ruleFrom: Record<string, string>;
+}
+
+async function loadChain(path: string, seen = new Set<string>()): Promise<Chain> {
 	const real = resolve(path);
 	if (seen.has(real)) throw new Error(`circular extends at ${real}`);
 	seen.add(real);
 	const raw = (await readConfigFile(real)) ?? {};
-	return expandExtends(raw, dirname(real), seen);
+	const label = real.startsWith(PRESET_DIR)
+		? `preset ${real.slice(PRESET_DIR.length + 1).replace(/\.json$/, '')}`
+		: real;
+	return expandExtends(raw, dirname(real), label, seen);
 }
 
 /**
@@ -155,17 +182,22 @@ async function loadChain(path: string, seen = new Set<string>()): Promise<Author
 async function expandExtends(
 	raw: AuthoredConfig | undefined,
 	fromDir: string,
+	label: string,
 	seen = new Set<string>(),
-): Promise<AuthoredConfig> {
-	if (!raw?.extends) return raw ?? {};
+): Promise<Chain> {
+	const own = Object.fromEntries(Object.keys(isObj(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
+	if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
 	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
 	let base: AuthoredConfig = {};
+	let ruleFrom: Record<string, string> = {};
 	for (const spec of specs) {
 		const { path: p } = await resolveExtends(spec, fromDir);
-		base = merge(base, await loadChain(p, seen));
+		const parent = await loadChain(p, seen);
+		base = mergeConfig(base, parent.raw);
+		ruleFrom = { ...ruleFrom, ...parent.ruleFrom };
 	}
 	const { extends: _drop, ...rest } = raw;
-	return merge(base, rest);
+	return { raw: mergeConfig(base, rest), ruleFrom: { ...ruleFrom, ...own } };
 }
 
 /** Shipped presets, `generic` last — it is the fallback, not a choice. */
@@ -219,7 +251,10 @@ export function compilePatterns(patterns: readonly string[] | undefined): RegExp
  * Normalize a merged config: canonicalize rule ids, coerce severities, expand
  * the element map, and precompute the predicates the analyzer uses.
  */
-export function normalize(raw: AuthoredConfig | undefined, { root }: { root: string }): Config {
+export function normalize(
+	raw: AuthoredConfig | undefined,
+	{ root, ruleFrom = {} }: { root: string; ruleFrom?: Record<string, string> },
+): Config {
 	const cfg = merge(DEFAULTS, raw ?? {});
 	const ds = cfg.designSystem;
 	const patterns = readRegistry(cfg.patterns, root, ds.packages, loadPatterns, []);
@@ -231,17 +266,15 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		RuleId,
 		RuleSetting
 	>;
+	const ruleOrigins: Partial<Record<RuleId, string>> = {};
 	for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
 		const id = canonicalRuleId(rawId);
 		if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
-		const sev: unknown = value;
-		if (!isSeverity(sev))
-			throw new Error(
-				Array.isArray(sev)
-					? `rule options are no longer supported — write "${rawId}": ${JSON.stringify(sev[0])}`
-					: `bad severity for ${rawId}: ${String(sev)}`,
-			);
-		rules[id] = { severity: sev };
+		rules[id] = ruleSetting(rawId, value);
+		// A path is shown relative to the root; a preset by name. A config normalized
+		// straight from an object has no file to name.
+		const from = ruleFrom[rawId];
+		ruleOrigins[id] = from === undefined ? 'config' : isAbsolute(from) ? relative(root, from) || from : from;
 	}
 
 	// Element map: "p": "Text", "div": { component, styledOnly }, or
@@ -349,12 +382,37 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		baselinePath: cfg.baseline || DEFAULT_BASELINE,
 		hook: cfg.hook,
 		rules,
+		ruleFrom: ruleOrigins,
 		severityOf: (id: RuleId) => rules[id].severity,
 		isProject: (cls: string) => projectPrefixes.some((p) => cls.startsWith(p)),
 		isExternal: (cls: string) => externalPrefixes.some((p) => cls.startsWith(p)),
 		isNeverDead: (cls: string) => neverDead.some((re) => re.test(cls)),
 	};
 	return { ...config, enabled: enabledRules(config) };
+}
+
+/**
+ * One rule's setting: `"<severity>"`, or `{ severity, reason }` to say why.
+ *
+ * Anything else throws rather than guessing — a misspelled `reasn` read as no
+ * reason at all is exactly the silent loss the object form exists to prevent.
+ */
+function ruleSetting(rawId: string, value: unknown): RuleSetting {
+	if (isSeverity(value)) return { severity: value };
+	if (Array.isArray(value))
+		throw new Error(`rule options are no longer supported — write "${rawId}": ${JSON.stringify(value[0])}`);
+	if (!isObj(value)) throw new Error(`bad severity for ${rawId}: ${String(value)}`);
+	const extra = Object.keys(value).filter((k) => k !== 'severity' && k !== 'reason');
+	if (extra.length)
+		throw new Error(
+			`unknown key${extra.length > 1 ? 's' : ''} in the setting for ${rawId}: ${extra.join(', ')} — a rule setting takes only severity and reason`,
+		);
+	const { severity, reason } = value;
+	if (!isSeverity(severity)) throw new Error(`bad severity for ${rawId}: ${String(severity)}`);
+	if (reason === undefined) return { severity };
+	if (typeof reason !== 'string' || !reason.trim())
+		throw new Error(`the reason for ${rawId} must be a non-empty string, got: ${JSON.stringify(reason)}`);
+	return { severity, reason: reason.trim() };
 }
 
 /**
@@ -461,29 +519,29 @@ export async function loadConfig({
 	inline?: AuthoredConfig | null;
 	inferred?: boolean;
 }): Promise<Config> {
-	let raw: AuthoredConfig;
+	let chain: Chain;
 	let source: ConfigSource;
 	if (configPath) {
-		raw = await loadChain(resolve(configPath));
+		chain = await loadChain(resolve(configPath));
 		source = { kind: 'file', path: resolve(configPath) };
 	} else if (preset) {
 		if (!hasPreset(preset)) throw new Error(`unknown preset: ${preset}`);
-		raw = await loadChain(join(PRESET_DIR, `${presetKey(preset)}.json`));
+		chain = await loadChain(join(PRESET_DIR, `${presetKey(preset)}.json`));
 		source = { kind: 'preset', name: preset };
 	} else {
 		const found = findConfig(root);
 		if (found) {
-			raw = await loadChain(found);
+			chain = await loadChain(found);
 			source = { kind: 'file', path: found };
 		} else if (inline) {
-			raw = await expandExtends(inline, root);
+			chain = await expandExtends(inline, root, inferred ? 'inferred config' : 'inline config');
 			source = { kind: inferred ? 'inferred' : 'inline' };
 		} else {
-			raw = await loadChain(join(PRESET_DIR, 'generic.json'));
+			chain = await loadChain(join(PRESET_DIR, 'generic.json'));
 			source = { kind: 'preset', name: 'generic' };
 		}
 	}
-	const normalized = normalize(raw, { root });
+	const normalized = normalize(chain.raw, { root, ruleFrom: chain.ruleFrom });
 	normalized.source = source;
 	normalized.inferred = source.kind === 'inferred';
 	return normalized;

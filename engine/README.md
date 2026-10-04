@@ -199,15 +199,28 @@ error-severity findings, so CI behaviour does not depend on this.
 
   "rules": {
     "css/dead-class": "error",
-    "layout/margin-on-child": "off"
+    "layout/margin-on-child": "off",
+    "system/raw-element": {
+      "severity": "off",
+      "reason": "Stack/Text require bundling @wordpress/ui; this plugin ships zero runtime deps by design"
+    }
   }
 }
 ```
 
-A rule takes a severity and nothing else. The `["warn", { … }]` form was removed
-in 0.8.0, and a config still using it does not load — under the hook that means
-the gate checks nothing until it is fixed. The rewrite is one line per rule; see
+A rule takes a bare severity, or `{ "severity", "reason" }` to say why; any
+other key is a config error. The `["warn", { … }]` form was removed in 0.8.0,
+and a config still using it does not load — under the hook that means the gate
+checks nothing until it is fixed. The rewrite is one line per rule; see
 [MIGRATION.md](MIGRATION.md#upgrading-a-loupe-config-from-before-080).
+
+Turning a rule off in config is a suppression of the whole rule, everywhere, so
+`loupe suppressions` lists it beside the inline directives —
+`loupe.config.json  system/raw-element  (rule off)  <reason>`, or
+`no reason given` — and `loupe status` prints the reason beside the rule. A
+preset's setting is replaced whole by the project's, so a preset's reason never
+outlives the setting it explained, and one a preset turned off is listed under
+`preset <name>` rather than your config file.
 
 Defaults are `DEFAULTS` in `src/config.ts`; `presets/generic.json` adds the
 ignore globs and CSS-in-JS packages every shipped preset inherits. The
@@ -822,7 +835,7 @@ no reader.
 loupe check --all --format json     # stable, versioned schema
 loupe check --all --format sarif    # GitHub code scanning
 loupe check --changed --max-findings 20
-loupe suppressions                  # audit every active directive
+loupe suppressions                  # audit every active directive, and every rule off in config
 loupe suppressions --stale          # only the ones muting nothing; exit 1 if any
 ```
 
@@ -832,8 +845,9 @@ Exit codes are a contract: `0` clean or advisory-only, `1` blocking findings,
 The JSON payload carries a `version`, bumped whenever a field it already emitted
 changes meaning or goes away; adding a field does not bump it, so a consumer
 should ignore keys it does not know. Version `2` dropped `options` from every
-`config.rules` entry, which is now `{ severity }` alone, since a rule no longer
-takes the `[severity, {opts}]` form.
+`config.rules` entry, which is now `{ severity }`, since a rule no longer takes
+the `[severity, {opts}]` form; an entry whose setting says why also carries
+`reason`, an addition.
 
 A baseline hides findings from `findings`, not from the record. The JSON
 `summary` carries `baselined` — findings the baseline hid — whenever a baseline

@@ -192,7 +192,16 @@ export const isMarginProp = (prop: string): boolean => prop === 'margin' || prop
 export const isFlexDecl = (prop: string, value: string): boolean =>
 	FLEX_PROPS.has(prop) || (prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value));
 
-/** A declaration that establishes a CSS Grid. Grid is a genuine keep: flex primitives can't replace it. */
+/**
+ * A declaration that establishes a CSS Grid. Grid is a genuine keep: flex primitives can't replace it.
+ *
+ * The bare `grid` shorthand counts in every channel, and that is a decision, not
+ * a by-product of folding three checks into this one (#65): the inline-style and
+ * markup channels once skipped it while stylesheets did not, so the same
+ * declaration laid an element out in one and not the other. In effect a
+ * `grid:`-only `<div>` can draw `system/raw-element`, and an inline style with
+ * one is `isGrid`, which keeps `layout/in-css` off its `gap`.
+ */
 export const isGridDecl = (prop: string, value: string): boolean =>
 	(prop === 'display' && /\bgrid\b/.test(value)) ||
 	prop === 'grid' ||

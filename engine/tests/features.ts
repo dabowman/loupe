@@ -1097,6 +1097,21 @@ await check('a raw interactive element names its analog and the package to impor
 	assert(JSON.stringify(got) === JSON.stringify(want), `got:\n${got.join('\n')}`);
 });
 
+// The bare `grid` shorthand lays an element out in every channel, not only in a
+// stylesheet (#65). The two channels that once skipped it must not drift back.
+await check('an inline `grid` shorthand lays the element out, as it does in a stylesheet', async () => {
+	const src = [
+		'export const A = () => <div style={{ grid: "auto-flow / 1fr 1fr" }}>x</div>;',
+		'export const B = () => <div style={{ grid: "auto-flow / 1fr 1fr", gap: "8px" }}>x</div>;',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src });
+	assert(
+		at(r, 'system/raw-element').some((f) => f.line === 1),
+		'a grid-only <div> is laid out, so it maps to a layout primitive',
+	);
+	assert(!at(r, 'layout/in-css').length, 'the gap of a grid is not flex layout to move to a primitive');
+});
+
 // The element map's advice is only as good as the names in it: a suggestion
 // the registry has never heard of is one nobody can import.
 await check('every element-map analog is a component the registry knows', async () => {

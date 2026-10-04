@@ -179,7 +179,7 @@ Expect counts to move. In rough order of impact:
 
 0.8.0 removed the array form of a rule setting, and the options it carried
 (`allowZero` among them — zero is always allowed now, as it was by default). A
-rule may only be set to a severity:
+rule may only be set to a severity, or to `{ "severity", "reason" }` to record why:
 
 ```diff
    "rules": {

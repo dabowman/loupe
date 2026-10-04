@@ -16,7 +16,9 @@ Adjust for the arguments given in `$ARGUMENTS`:
   whole repo; scoping the index would make every unchanged reference look absent)
 - a path — pass as `--files <path>`
 - `--suppressions` — run the `suppressions` subcommand instead, listing every
-  active directive with its reason, so stale escape hatches surface
+  active directive with its reason, and every rule turned off in config with
+  the reason its setting gives (or `no reason given`), so stale escape hatches
+  surface
 - `--format json` — not a user argument; add it when the summary needs more
   than the default report prints: per-file counts past the densest three, or a
   finding's registry note in full. The default report already opens with the
