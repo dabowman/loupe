@@ -185,8 +185,10 @@ declared scope keeps today's matching and is never reported as misapplied.
 **What an element is comes from what the engine already correlates.** A
 stylesheet rule's key compound naming a tag (`.card button`), the design-system
 components the markup binds its key classes to, the raw elements carrying them,
-an inline style's own element, a CSS-in-JS template's target. Kinds are the
-profile's: `interactive` is `button`, `a`, `Button`, `Link`…; a component is
+an inline style's own element, a CSS-in-JS template's target. A component is
+looked up as the component it is, whatever the file called it: `Button`
+imported as `B`, the `Button` of `import * as WP`, and a compound part as itself
+— `Card.Header` is not the `Card` it belongs to. Kinds are the profile's: `interactive` is `button`, `a`, `Button`, `Link`…; a component is
 listed only where its `className` lands on that element (`Dropdown`'s lands on
 the toggle's wrapper, so it is not an overlay). A kind declared empty is one no
 markup can show — "nested inside a control", "the app shell".

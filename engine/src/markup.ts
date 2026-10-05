@@ -719,6 +719,7 @@ export function scanMarkup(
 			inlineStyles.push({
 				tag: isComponent ? root : tag.toLowerCase(),
 				component: isSystem ? (canonicals.get(root) ?? root) : null,
+				element: isSystem ? identityOf(root, member) : isComponent ? root : tag.toLowerCase(),
 				isSystem,
 				isText: isSystem && isTextElement(root, member),
 				decls: style.decls,

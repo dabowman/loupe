@@ -492,7 +492,12 @@ export async function analyze(
 			const found = tag
 				? [tag]
 				: classesIn(key).flatMap((c) => [
-						...(bindings.get(c) ?? []).flatMap((b) => (b.tag ? [b.tag] : [])),
+						// The component it is, not the name this file gave it: a profile's
+						// kinds list `Button`, never `B` or `WP`.
+						...(bindings.get(c) ?? []).flatMap((b) => {
+							const name = b.component ?? b.tag;
+							return name ? [name] : [];
+						}),
 						...(rawByClass.get(c) ?? []),
 					]);
 			if (!found.length) return [];
@@ -693,7 +698,7 @@ export async function analyze(
 		const isGrid = el.decls.some((d) => isGridDecl(d.prop, d.value));
 		const pending: PendingFinding[] = [];
 		// An inline style is on exactly the element it is written on.
-		const elements = [el.tag];
+		const elements = [el.element];
 		for (const d of el.decls) {
 			if (scopes)
 				for (const name of tokenRefsIn(d.value, tokenPrefixes))
@@ -752,8 +757,9 @@ export async function analyze(
 		for (const group of tpl.groups) {
 			const onTarget = group.onTarget;
 			const pending: PendingFinding[] = [];
-			// The styled element itself, or whatever a nested selector's key compound names.
-			const tag = onTarget ? tpl.target : group.selector ? tagOf(keySelector(group.selector)) : null;
+			// The styled element itself — the component it is, whatever the file
+			// called it — or whatever a nested selector's key compound names.
+			const tag = onTarget ? (tpl.component ?? tpl.target) : group.selector ? tagOf(keySelector(group.selector)) : null;
 			const elements = scopes && tag ? [tag] : [];
 			for (const d of group.decls) {
 				if (supp)

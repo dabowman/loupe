@@ -423,6 +423,12 @@ export interface InlineStyleElement {
 	tag: string;
 	/** The canonical name of a design-system component, however the file imported it. */
 	component: string | null;
+	/**
+	 * What a profile's token-scope kinds call this element: the tag, or the
+	 * design-system component it is — `Button` under any alias, a namespace
+	 * import's member, a compound part as itself (`Card.Header`).
+	 */
+	element: string;
 	isSystem: boolean;
 	isText: boolean;
 	decls: Decl[];

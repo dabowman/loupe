@@ -523,6 +523,42 @@ await check('a scale step on the wrong kind of element is misapplied; on the rig
 	);
 });
 
+// A profile's kinds list `Button`. Looked up by the name the file gave it — an
+// alias, a namespace, the root of a compound — a design-system control matched
+// no kind and read as definitely not one.
+await check('an element’s kind is the component it is, not the name the file gave it', async () => {
+	const { misapplied } = await run({
+		'src/A.jsx': `import styled from '@emotion/styled';
+import { Button as B, Card } from '@wordpress/components';
+import * as WP from '@wordpress/components';
+const S = styled(B)\`cursor: var(--wpds-cursor-control);\`;
+export const A = () => (
+	<Card>
+		<Card.Header className="rp-h" />
+		<B className="rp-c" />
+		<WP.Button className="rp-w" />
+		<S />
+	</Card>
+);
+`,
+		'src/a.css': `.rp-c { cursor: var(--wpds-cursor-control); }
+.rp-w { cursor: var(--wpds-cursor-control); background: var(--wpds-color-background-surface-neutral-strong); }
+.rp-h { border-radius: var(--wpds-border-radius-lg); }
+`,
+	});
+	// The control cursor is on-role on every spelling of Button; the surface
+	// background is not, and a card's header is not the card.
+	const said = misapplied.map((f) => `${f.file}:${f.line} ${f.message}`).sort();
+	assert(
+		said.length === 2 &&
+			said[0]?.startsWith('src/a.css:2 background: --wpds-color-background-surface-neutral-strong') &&
+			said[0].endsWith('this styles <Button>') &&
+			said[1]?.startsWith('src/a.css:3 border-radius: --wpds-border-radius-lg') &&
+			said[1].endsWith('this styles <Card.Header>'),
+		said.join('\n'),
+	);
+});
+
 await check('nothing is misapplied where nothing declares a scope, or nothing shows the element', async () => {
 	const { misapplied } = await run({
 		'src/a.css': `.rp-a {
