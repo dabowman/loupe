@@ -18,8 +18,12 @@
 # Not `realpath`: macOS 12 and earlier ship no such binary, and the shim died on
 # "command not found" before loupe ever ran. The loop follows the file's own
 # links with `readlink`, one hop at a time (a relative target is relative to the
-# link's directory); `pwd -P` then resolves a linked directory anywhere above it.
-# `CDPATH=` keeps `cd` from searching elsewhere and printing where it went.
+# link's directory); `cd -P` then resolves a linked directory anywhere above it.
+# Physically, not just in `pwd`: the target is built from the link's directory as
+# written, so `~/bin/../../src/…` through a linked `~/bin` has to climb from where
+# `~/bin` points, and a logical `cd` (dash, any POSIX sh) would drop `bin/..` as
+# text and look somewhere else. `CDPATH=` keeps `cd` from searching elsewhere and
+# printing where it went.
 resolve() {
 	p=$1
 	while [ -h "$p" ]; do
@@ -27,7 +31,7 @@ resolve() {
 		p=$(readlink -- "$p")
 		case $p in /*) ;; *) p="$d/$p" ;; esac
 	done
-	CDPATH= cd -- "$(dirname -- "$p")" && pwd -P
+	CDPATH= cd -P -- "$(dirname -- "$p")" && pwd -P
 }
 here=$(resolve "$0") || exit 2
 
