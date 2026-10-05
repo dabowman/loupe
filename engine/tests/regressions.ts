@@ -3071,10 +3071,19 @@ await check('the PATH shim finds the engine through either symlink, with no real
 		symlinkSync(join(repo, 'bin', 'loupe'), join(dir, 'bin', 'loupe'));
 		symlinkSync(join('..', 'bin', 'loupe'), join(dir, 'chain', 'loupe'));
 		symlinkSync(repo, join(dir, 'plugin'));
+		// `~/bin -> dotfiles/bin` on PATH, holding `loupe -> ../../src/loupe/bin/loupe`
+		// (what `ln -sr` writes): the `..`s climb from where `~/bin` points, and a
+		// logical `cd` that drops `bin/..` as text looks for `src/` beside `home/`.
+		mkdirSync(join(dir, 'home', 'dotfiles', 'bin'), { recursive: true });
+		mkdirSync(join(dir, 'home', 'src'));
+		symlinkSync(repo, join(dir, 'home', 'src', 'loupe'));
+		symlinkSync(join('..', '..', 'src', 'loupe', 'bin', 'loupe'), join(dir, 'home', 'dotfiles', 'bin', 'loupe'));
+		symlinkSync(join('dotfiles', 'bin'), join(dir, 'home', 'bin'));
 		const routes = {
 			'a symlinked file': join(dir, 'bin', 'loupe'),
 			'a relative link to that link': join(dir, 'chain', 'loupe'),
 			'a symlinked directory': join(dir, 'plugin', 'bin', 'loupe'),
+			'a relative `..` link in a symlinked directory': join(dir, 'home', 'bin', 'loupe'),
 		};
 		for (const [route, shim] of Object.entries(routes)) {
 			// From the scratch dir: a shim that resolved nothing falls back to `.`,

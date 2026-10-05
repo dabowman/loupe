@@ -197,8 +197,9 @@ project's own namespace appears nowhere in `node_modules`.
   "(none found) [low confidence]".
 - **Stylesheets are read on a budget, and a tripped budget demotes the same
   way.** The walk ceiling bounds entries visited, not bytes read, and a tree can
-  be nothing but large generated CSS. Inference reads the first 600 stylesheets
-  the walk found (the same count `libraryPrefixes` allows itself) and skips any
+  be nothing but large generated CSS. Inference reads 600 stylesheets, shallowest
+  first (the same count `libraryPrefixes` allows itself), since the project's
+  own sheets sit nearer the root than generated ones, and skips any
   over 1.5MB (the size `analyze` treats as generated). Either one answering from
   less than was found is a guess from part of the evidence, so it demotes `high`
   and says what it skipped under the namespace line. It is not `truncated`,
@@ -339,6 +340,15 @@ Resolution order, most explicit first:
 
 `extends` resolution is split out so a config that never touched disk — the one
 auto-detection produces — goes through the same resolution as a file.
+
+**`extends` can list several configs, and a shared ancestor is merged once.**
+Every shipped preset reaches `generic`, so `["wpds", "base-ui"]` is a diamond,
+not a cycle: a cycle is a config met again on its own ancestor chain, not one
+met twice on separate branches. The shared one is merged where it is first met
+and skipped after, so the order is still ancestors before descendants and left
+before right — `generic`, `wordpress-components`, `wpds`, `base-ui` — and the
+second branch's copy of `generic` cannot put back the `sources.references`
+that `wordpress-components` replaced.
 
 The deep merge **replaces arrays rather than concatenating**, so a preset can be
 overridden, and it is declared as returning the base's type: merging *onto*
