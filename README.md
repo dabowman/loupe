@@ -1059,7 +1059,8 @@ everything changed in the turn.
 They ask different questions. `PostToolUse` blocks only on findings the edit
 *introduced*, against the file as it was before the write; what the file already
 had is mentioned, not blocked on, so a refactor that is worse before it is
-better is not stopped halfway. `Stop` asks whether the turn's work is
+better is not stopped halfway (outside a git worktree, where `Stop` cannot
+tell what changed, `PostToolUse` blocks on everything in the file). `Stop` asks whether the turn's work is
 conformant, absolutely — the place for "you converted the JSX and left the CSS
 behind".
 

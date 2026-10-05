@@ -1256,6 +1256,38 @@ await check('PostToolUse counts a finding sharing a key with a standing one as i
 	}
 });
 
+// PostToolUse passes a standing finding over for Stop, but Stop stands down
+// where it cannot resolve the changed files — outside a git worktree — so a
+// finding passed over there, one the agent added an edit earlier included, was
+// never enforced by anything.
+await check('PostToolUse keeps the absolute check where Stop has no changed-file scope', () => {
+	const root = tmpRepo({
+		'package.json': JSON.stringify({ name: 'no-git' }),
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.b { margin-bottom: 16px; }\n',
+	});
+	const css = join(root, 'styles', 'a.css');
+	try {
+		const before = readFileSync(css, 'utf8');
+		writeFileSync(css, `/* spacing moves to the Stack next */\n${before}`);
+		const hook = (payload: object) =>
+			runCli(['hook', '--root', root], { CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }, JSON.stringify(payload));
+		const stop = hook({ session_id: 'nogit', hook_event_name: 'Stop', stop_hook_active: false });
+		assert(/not a git worktree/.test(stop.stdout), `the fixture is not outside a worktree:\n${stop.stdout}`);
+		const r = hook({
+			session_id: 'nogit',
+			hook_event_name: 'PostToolUse',
+			tool_name: 'Edit',
+			tool_input: { file_path: 'styles/a.css' },
+			tool_response: { filePath: css, originalFile: before },
+		});
+		assert(r.status === 2, `a standing finding was left for a Stop that will not check it: ${r.status}\n${r.stdout}`);
+		assert(/margin-on-child/.test(r.stderr), `blocked on something else:\n${r.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `--changed` is the hook's default scope. `git diff --name-only` answers from
 // the repository root while `ls-files` answers from the cwd, so a project rooted
 // in a subdirectory of the worktree built a scope Set in two coordinate systems

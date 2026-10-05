@@ -919,6 +919,12 @@ after analysis from a control the analysis collected, so the control standing
 before the edit counts as the finding standing before it; the judge is never
 asked about content the edit has already replaced.
 
+**Only where Stop will look.** Passing a standing finding over is a deferral to
+Stop, and Stop checks the files the turn changed. Where it cannot resolve them —
+not a git worktree, or a repository git refuses to read — it stands down, so
+PostToolUse keeps the absolute check there rather than defer a finding to a
+check that never runs.
+
 **What it walked past is said, not dropped.** A PostToolUse that passes over
 standing findings says how many in its message, and a blocking report names the
 count beneath the new ones — the agent should know what Stop will hold it to.

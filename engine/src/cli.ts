@@ -1566,9 +1566,18 @@ async function main(): Promise<number> {
 		//
 		// The "before" is only analyzed when the "after" would block, so a clean
 		// edit pays nothing for the question.
+		//
+		// Passing a standing finding over is a deferral only where Stop will see it.
+		// Where Stop cannot resolve the files the turn changed — no git worktree, or
+		// a repository git refuses to read — it stands down, and a finding passed
+		// over here is never enforced at all: that is the absolute check, as before.
 		const errors = result.findings.filter((f) => f.severity === 'error');
 		let blocking: Finding[] = errors;
-		if (touched && errors.length) {
+		const stopSees = (): boolean => {
+			const stopScope = resolveScope(config, args, { defaultChanged: true });
+			return stopScope === null || Array.isArray(stopScope);
+		};
+		if (touched && errors.length && stopSees()) {
 			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
 				judge: Boolean(apiKey),
 				suppress: !args.flags['no-suppressions'],
