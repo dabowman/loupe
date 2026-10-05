@@ -897,7 +897,9 @@ as `tool_response.originalFile`. Findings the file already had are named in the
 message, not blocked on — a refactor passes through states that are worse before
 they are better. `Stop` keeps the absolute check over everything changed. With
 no pre-edit content to compare against (a file the write created, or an older
-payload), `PostToolUse` checks absolutely too.
+payload), `PostToolUse` checks absolutely too — and likewise outside a git
+worktree, where `Stop` has no changed files to check and would never see what
+was passed over.
 
 On blocking findings it exits 2 and hands a budgeted report back to the agent:
 guidance printed once per rule, a sample of each rule rather than a flood of

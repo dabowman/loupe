@@ -904,12 +904,36 @@ one stayed at 1.0s.
 above a finding moves it down the file, and a key with the line in it would
 call that finding new.
 
+**Counted, not looked up.** The keys are compared as a multiset: a file that
+had one `margin-bottom` on a child and now has two gained a finding, though both
+share a key, and a set lookup called the second one pre-existing. Each finding
+standing before the edit accounts for at most one after it — one with the same
+message first, so where two differ only in their value the one reported is the
+one the edit wrote — and the count of standing findings is never more than
+stood before the edit.
+
+**Per declaration, where a finding is several.** A collapsed `layout/in-css` or
+`typography/untokenized` finding's code is its sorted property list, and a lone
+one's is its declaration, so `.c { display: flex; gap: 8px }` losing its `gap`
+changed the code and read as new. The comparison counts a collapsed finding as
+each of its declarations instead: that edit removed one, and adding `gap` to a
+lone `display: flex` adds one. A `stylesheet/unparsed` code is postcss's reason
+alone (`Unclosed block`), with no `line:column` to move when a line is added
+above the error, and the sheet is parsed without its source map, whose original
+file would otherwise open the message with an absolute path.
+
 **No "before", no subtraction.** A file the write created, a payload that does
 not carry `originalFile`, or a pre-edit analysis that fails compares against
 nothing — the absolute check, the gate as it was. A judged redirect is written
 after analysis from a control the analysis collected, so the control standing
 before the edit counts as the finding standing before it; the judge is never
 asked about content the edit has already replaced.
+
+**Only where Stop will look.** Passing a standing finding over is a deferral to
+Stop, and Stop checks the files the turn changed. Where it cannot resolve them —
+not a git worktree, or a repository git refuses to read — it stands down, so
+PostToolUse keeps the absolute check there rather than defer a finding to a
+check that never runs.
 
 **What it walked past is said, not dropped.** A PostToolUse that passes over
 standing findings says how many in its message, and a blocking report names the

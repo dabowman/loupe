@@ -13,7 +13,7 @@
  * Design notes: docs/design/cli.md#exit-codes-are-a-contract
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { text } from 'node:stream/consumers';
@@ -117,17 +117,38 @@ export function parsePayload(raw: string): HookPayload {
  * one: the drift is reported while the agent still has the decision in hand.
  *
  * Returns null for a payload with no file (a Stop event, or a non-file tool),
- * which the caller maps to the changed-files scope.
+ * which the caller maps to the changed-files scope, and for a file outside the
+ * project.
+ *
+ * Inside is asked of the spelling first and of the real paths after: the root
+ * comes from CLAUDE_PROJECT_DIR and the file from the tool, and the two can
+ * reach one directory through different symlinks.
  */
 export function payloadFile(payload: HookPayload | null | undefined, root: string): string | null {
 	const raw = payload?.tool_input?.file_path;
 	if (typeof raw !== 'string' || !raw) return null;
 	const abs = isAbsolute(raw) ? raw : join(root, raw);
-	const rel = relative(root, abs);
-	// Outside the project: nothing to say about it.
-	if (!rel || rel.startsWith('..')) return null;
-	return toPosix(rel);
+	const inside = (from: string, to: string): string | null => {
+		const rel = relative(from, to);
+		return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel : null;
+	};
+	let rel = inside(root, abs);
+	if (rel === null) {
+		try {
+			rel = inside(realpathSync(root), realpathSync(abs));
+		} catch {
+			/* a path that does not resolve is not one this project holds */
+		}
+	}
+	return rel === null ? null : toPosix(rel);
 }
+
+/**
+ * The event a payload is for. Claude Code always names it; a payload carrying a
+ * file is a PostToolUse one when it does not.
+ */
+export const hookEvent = (payload: HookPayload): string | undefined =>
+	payload.hook_event_name ?? (payload.tool_input ? 'PostToolUse' : undefined);
 
 /**
  * The touched file as it stood before the edit, or null when there is nothing
@@ -231,19 +252,24 @@ function optedIn(projectDir: string): boolean {
  * Why the hook says nothing, or null when it runs. Asked once, so a diagnostic
  * saying the hook is off is one that watched the same values the hook did.
  * `projectDir` is `claudeProjectDir()`'s answer, never the run's root.
+ *
+ * The opt-in is asked first: the `off` option is set once for every project
+ * its owner opens, and a project that never switched the gate on was not
+ * silenced by it.
  */
 export function hookOff(projectDir: string, resolved: ResolvedOptions = resolvedOptions(projectDir)): string | null {
-	if (hookSilenced(resolved)) {
+	if (!optedIn(projectDir))
+		return 'this project has not opted in; add "env": { "LOUPE": "on" } to .claude/settings.local.json';
+	if (resolved.options.off === true) {
 		const from = resolved.sources.off ?? '';
 		return `silenced by ${from.startsWith('LOUPE_OFF') ? from : `the plugin's "off" option (${from})`}`;
 	}
-	if (!optedIn(projectDir))
-		return 'this project has not opted in; add "env": { "LOUPE": "on" } to .claude/settings.local.json';
 	return null;
 }
 
 /** Opted in, then switched off — as opposed to never switched on. */
-export const hookSilenced = (resolved: ResolvedOptions): boolean => resolved.options.off === true;
+export const hookSilenced = (projectDir: string, resolved: ResolvedOptions): boolean =>
+	resolved.options.off === true && optedIn(projectDir);
 
 /** Each `userConfig` key, as `plugin.json` spells it, and the field it fills. */
 const FIELDS = {
@@ -403,11 +429,9 @@ export function emitClean(message: string): number {
  * `hookSpecificOutput.additionalContext`. Stop has none — its only channel to
  * the agent is `decision: "block"`, which is exactly what a gate that cannot
  * configure itself must not do — so there it is the user's message alone.
- * Claude Code always names the event; a payload carrying a file is a
- * PostToolUse one when it does not.
  */
 export function emitAdvisory(message: string, context: string, payload: HookPayload): number {
-	const event = payload.hook_event_name ?? (payload.tool_input ? 'PostToolUse' : undefined);
+	const event = hookEvent(payload);
 	process.stdout.write(
 		JSON.stringify({
 			systemMessage: message,

@@ -14,7 +14,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
-import { analyze, dedupe, findingKey } from './analyze.ts';
+import { analyze, declarationKeys, dedupe } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import {
@@ -66,6 +66,7 @@ import {
 	emitBlocking,
 	emitClean,
 	hookRoot,
+	hookEvent,
 	hookOff,
 	hookSilenced,
 	parsePayload,
@@ -465,22 +466,25 @@ function resolveScope(
 	return null;
 }
 
+/** What a finding is matched by across an edit: its baseline key, and its message. */
+type Identity = Pick<Finding, 'rule' | 'file' | 'code' | 'message'>;
+
 /**
- * The touched file's finding keys as it stood before the edit, for PostToolUse
- * to tell what the edit introduced from what it walked past.
+ * The touched file's findings as it stood before the edit, for PostToolUse to
+ * tell what the edit introduced from what it walked past.
  *
  * Empty when there is nothing to compare against — a file the write created, a
  * payload with no pre-edit content, an analysis that failed — which is the
- * absolute check, the gate as it was. Keyed like the baseline, rule + file +
+ * absolute check, the gate as it was. Matched like the baseline, rule + file +
  * code, so a finding the edit merely moved down the file is not a new one.
  */
-async function keysBeforeEdit(
+async function findingsBeforeEdit(
 	config: Config,
 	touched: string,
 	before: string | null,
 	{ judge, suppress }: { judge: boolean; suppress: boolean },
-): Promise<Set<string>> {
-	if (before === null) return new Set();
+): Promise<Identity[]> {
+	if (before === null) return [];
 	try {
 		const prior = await analyze(config, {
 			scope: [touched],
@@ -488,16 +492,40 @@ async function keysBeforeEdit(
 			suppress,
 			contents: new Map([[touched, before]]),
 		});
-		const keys = new Set(prior.findings.map(findingKey));
 		// A judged redirect is written after analysis, from a control the analysis
 		// collected (`judgeRedirects`, keyed by its component). The control standing
 		// before the edit is the finding standing before it, without paying to ask
 		// the judge about a file the edit has already replaced.
-		for (const c of prior.controls ?? []) keys.add(findingKey({ ...redirectIdentity(c), message: '' }));
-		return keys;
+		return [...prior.findings, ...(prior.controls ?? []).map((c) => ({ ...redirectIdentity(c), message: '' }))];
 	} catch {
-		return new Set();
+		return [];
 	}
+}
+
+/**
+ * The findings in `after` that the edit introduced.
+ *
+ * Counted, not looked up: a file with one margin on a child that now has two
+ * gained one, though both share a key. Each finding standing before the edit
+ * accounts for at most one after it, one with the same message first, so where
+ * two differ only in their value the one reported is the one the edit wrote.
+ *
+ * Counted per declaration (`declarationKeys`), so a collapsed finding that lost
+ * a declaration is not a new one for having changed its `code`; it is new when
+ * any of its declarations is.
+ */
+function introducedBy(after: readonly Finding[], before: readonly Identity[]): Finding[] {
+	const pool = new Map<string, string[]>();
+	for (const f of before) for (const k of declarationKeys(f)) pool.set(k, [...(pool.get(k) ?? []), f.message]);
+	const take = (k: string, message: string | null): boolean => {
+		const left = pool.get(k);
+		const i = !left ? -1 : message === null ? left.length - 1 : left.indexOf(message);
+		if (!left || i < 0) return false;
+		left.splice(i, 1);
+		return true;
+	};
+	const unmatched = after.map((f) => ({ f, keys: declarationKeys(f).filter((k) => !take(k, f.message)) }));
+	return unmatched.filter(({ keys }) => keys.filter((k) => !take(k, null)).length > 0).map(({ f }) => f);
 }
 
 /**
@@ -580,7 +608,7 @@ async function main(): Promise<number> {
 	// other stand-down, or a stale switch disables the gate with no trace.
 	if (isHook) {
 		const off = hookOff(projectDir, resolved);
-		if (off) return hookSilenced(resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
+		if (off) return hookSilenced(projectDir, resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
 	}
 
 	// The project, not the directory you happen to be standing in: the hook roots
@@ -1044,6 +1072,13 @@ async function main(): Promise<number> {
 			return EXIT.OK;
 		}
 		const target = join(root, 'loupe.config.json');
+		// First, ahead of every refusal below that suggests `--force`: that flag also
+		// overwrites, and advice to pass it that does not say a config exists is
+		// advice to replace a hand-written one with a guess.
+		if (existsSync(target) && !args.flags.force) {
+			fail(`loupe: ${target} already exists (use --force)\n`);
+			return EXIT.CANNOT_RUN;
+		}
 		// A written config is not a guess any more: `inferred` goes false, which turns
 		// blocking back on by default and lifts the css/dead-class demotion. Inference
 		// must never launder a truncated answer into an authored one.
@@ -1075,10 +1110,6 @@ async function main(): Promise<number> {
 			);
 			process.stdout.write(`${lines.join('\n')}\n`);
 			fail('loupe: refusing to write a guessed design system to a config.\n');
-			return EXIT.CANNOT_RUN;
-		}
-		if (existsSync(target) && !args.flags.force) {
-			fail(`loupe: ${target} already exists (use --force)\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		writeFileSync(target, `${JSON.stringify(info.config, null, 2)}\n`);
@@ -1432,6 +1463,12 @@ async function main(): Promise<number> {
 	// reported at write time. Stop payloads carry no file and fall through to
 	// the changed-file scope.
 	const touched = isHook ? payloadFile(payload, root) : null;
+	// A PostToolUse with no file in the project — a note in a scratchpad, a plan
+	// under ~/.claude — is not a Stop. Taken for one, it checked the whole changed
+	// set absolutely and spent the Stop gate's retry budget on an edit that could
+	// not have introduced anything here.
+	if (isHook && !touched && hookEvent(payload) === 'PostToolUse')
+		return emitClean('loupe: skipped \u2014 not a file in this project.');
 	if (touched && !isSource(config.sources, touched)) return emitClean('loupe: skipped \u2014 not a checked file type.');
 	const scope: ScopeResult = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
 	if (scope !== null && !Array.isArray(scope)) {
@@ -1541,15 +1578,25 @@ async function main(): Promise<number> {
 		//
 		// The "before" is only analyzed when the "after" would block, so a clean
 		// edit pays nothing for the question.
+		//
+		// Passing a standing finding over is a deferral only where Stop will see it.
+		// Where Stop cannot resolve the files the turn changed — no git worktree, or
+		// a repository git refuses to read — it stands down, and a finding passed
+		// over here is never enforced at all: that is the absolute check, as before.
 		const errors = result.findings.filter((f) => f.severity === 'error');
 		let blocking: Finding[] = errors;
-		if (touched && errors.length) {
-			const before = await keysBeforeEdit(config, touched, preEditContent(payload), {
+		const stopSees = (): boolean => {
+			const stopScope = resolveScope(config, args, { defaultChanged: true });
+			return stopScope === null || Array.isArray(stopScope);
+		};
+		if (touched && errors.length && stopSees()) {
+			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
 				judge: Boolean(apiKey),
 				suppress: !args.flags['no-suppressions'],
 			});
-			blocking = errors.filter((f) => !before.has(findingKey(f)));
+			blocking = introducedBy(errors, before);
 		}
+		// What stood before the edit and still does: never more than stood before it.
 		const standing = errors.length - blocking.length;
 		// Said, not dropped: the agent should know what it is walking past, and that
 		// Stop will hold it to them.

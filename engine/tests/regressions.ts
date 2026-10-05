@@ -628,6 +628,19 @@ await check('the hook is off until the project opts in', () => {
 		// proves it was read.
 		assert(silent(hook({ LOUPE: undefined }, 'x'.repeat(512 * 1024))), 'a large payload was not drained before opt-in');
 		assert(/hook:\s+OFF/.test(status()), 'status did not report the hook off before opt-in');
+		// The off switch silences an opted-in project. Asked ahead of the opt-in,
+		// it had every project that never opted in told it was skipped, on every
+		// edit, and `status` there called it silenced.
+		for (const off of [{ CLAUDE_PLUGIN_OPTION_OFF: 'true' }, { LOUPE_OFF: '1' }]) {
+			const r = hook({ LOUPE: undefined, ...off });
+			assert(silent(r), `a project that never opted in heard from ${Object.keys(off)[0]}: ${r.stdout}`);
+		}
+		const neverOn = execFileSync('node', [CLI, 'status', '--root', root], {
+			encoding: 'utf8',
+			env: env({ LOUPE: undefined, LOUPE_OFF: '1' }),
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		assert(/hook:\s+OFF .*not opted in/.test(neverOn), `status did not say "not opted in":\n${neverOn}`);
 
 		writeAll(root, { '.claude/settings.local.json': JSON.stringify({ env: { LOUPE: 'on' } }) });
 		assert(
@@ -1219,6 +1232,169 @@ await check('PostToolUse blocks on what the edit introduced; Stop on everything'
 		assert(stop.status === 2, `Stop did not block on the pre-existing finding: ${stop.status}\n${stop.stdout}`);
 		assert(/margin-on-child/.test(stop.stderr), `Stop blocked on something else:\n${stop.stderr}`);
 	} finally {
+		cleanup(root);
+	}
+});
+
+// The pre-edit findings were a Set of keys, so an edit that added a second
+// finding under a key the file already had — a second margin on a child, whose
+// code is the bare property — passed as pre-existing, and the note counted both
+// as standing before the edit though one had.
+await check('PostToolUse counts a finding sharing a key with a standing one as introduced', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.b { margin-bottom: 16px; }\n',
+	});
+	const css = join(root, 'styles', 'a.css');
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		const before = readFileSync(css, 'utf8');
+		writeFileSync(css, `${before}.d { margin-bottom: 24px; }\n`);
+		const r = runCli(
+			['hook', '--root', root],
+			{ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+			JSON.stringify({
+				session_id: 'multiset',
+				hook_event_name: 'PostToolUse',
+				tool_name: 'Edit',
+				tool_input: { file_path: 'styles/a.css' },
+				tool_response: { filePath: css, originalFile: before },
+			}),
+		);
+		assert(r.status === 2, `an edit that added a second margin on a child did not block: ${r.status}\n${r.stdout}`);
+		assert(/24px/.test(r.stderr) && !/16px/.test(r.stderr), `blocked on the wrong one:\n${r.stderr}`);
+		assert(/ 1 blocking finding\(s\) already in/.test(r.stderr), `miscounted what stood before:\n${r.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// PostToolUse passes a standing finding over for Stop, but Stop stands down
+// where it cannot resolve the changed files — outside a git worktree — so a
+// finding passed over there, one the agent added an edit earlier included, was
+// never enforced by anything.
+await check('PostToolUse keeps the absolute check where Stop has no changed-file scope', () => {
+	const root = tmpRepo({
+		'package.json': JSON.stringify({ name: 'no-git' }),
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.b { margin-bottom: 16px; }\n',
+	});
+	const css = join(root, 'styles', 'a.css');
+	try {
+		const before = readFileSync(css, 'utf8');
+		writeFileSync(css, `/* spacing moves to the Stack next */\n${before}`);
+		const hook = (payload: object) =>
+			runCli(['hook', '--root', root], { CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }, JSON.stringify(payload));
+		const stop = hook({ session_id: 'nogit', hook_event_name: 'Stop', stop_hook_active: false });
+		assert(/not a git worktree/.test(stop.stdout), `the fixture is not outside a worktree:\n${stop.stdout}`);
+		const r = hook({
+			session_id: 'nogit',
+			hook_event_name: 'PostToolUse',
+			tool_name: 'Edit',
+			tool_input: { file_path: 'styles/a.css' },
+			tool_response: { filePath: css, originalFile: before },
+		});
+		assert(r.status === 2, `a standing finding was left for a Stop that will not check it: ${r.status}\n${r.stdout}`);
+		assert(/margin-on-child/.test(r.stderr), `blocked on something else:\n${r.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Codes that change when nothing new was introduced: a collapsed finding's code
+// is its property list, which becomes the lone declaration when the group
+// shrinks to one, and an unparsed stylesheet's carried its line:column. Both
+// edits below introduce nothing, and both blocked.
+await check('PostToolUse does not call a shrunk collapsed finding or a moved parse error new', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.c { display: flex; gap: 8px; }\n',
+		'styles/b.css': '.a { color: red; }\n.b { color: blue;\n',
+	});
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		const edit = (rel: string, change: (text: string) => string) => {
+			const file = join(root, rel);
+			const before = readFileSync(file, 'utf8');
+			writeFileSync(file, change(before));
+			return runCli(
+				['hook', '--root', root],
+				{ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+				JSON.stringify({
+					session_id: `stable-${rel}`,
+					hook_event_name: 'PostToolUse',
+					tool_name: 'Edit',
+					tool_input: { file_path: rel },
+					tool_response: { filePath: file, originalFile: before },
+				}),
+			);
+		};
+		const shrunk = edit('styles/a.css', (t) => t.replace(' gap: 8px;', ''));
+		assert(shrunk.status === 0, `removing a declaration blocked as if it added one:\n${shrunk.stderr}`);
+		const moved = edit('styles/b.css', (t) => `/* note */\n${t}`);
+		assert(moved.status === 0, `a parse error moved down a line blocked as new:\n${moved.stderr}`);
+		// Adding a declaration to a lone one is still introducing it.
+		const grown = edit('styles/a.css', (t) => t.replace('display: flex;', 'display: flex; gap: 4px;'));
+		assert(grown.status === 2, `a declaration added to a collapsed finding passed: ${grown.status}\n${grown.stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A PostToolUse for a file outside the project got no touched file and took
+// the Stop path: the whole changed set, checked absolutely, on the Stop budget.
+// So a note written to a scratchpad blocked on a standing finding, and three of
+// them stood the Stop gate down for the turn. And the project spelled through
+// a symlink was "outside" itself.
+await check('PostToolUse for a file outside the project is clean and spends no Stop attempts', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.b { margin-bottom: 16px; }\n',
+	});
+	const elsewhere = scratch('dsh-notes-');
+	const link = `${root}-link`;
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		const hook = (payload: object, at = root) =>
+			runCli(['hook', '--root', at], { CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }, JSON.stringify(payload));
+		const note = join(elsewhere, 'notes.md');
+		writeFileSync(note, '# notes\n');
+		for (let i = 0; i < 4; i++) {
+			const r = hook({
+				session_id: 'outside',
+				hook_event_name: 'PostToolUse',
+				tool_name: 'Write',
+				tool_input: { file_path: note },
+				tool_response: { filePath: note, originalFile: null },
+			});
+			assert(r.status === 0, `an edit outside the project blocked: ${r.status}\n${r.stderr}`);
+		}
+		const stop = hook({ session_id: 'outside', hook_event_name: 'Stop', stop_hook_active: false });
+		assert(stop.status === 2, `Stop's budget was spent by edits outside the project: ${stop.status}\n${stop.stdout}`);
+
+		// The project through a symlink, the file by its real path: still this
+		// project's file, compared against what it was before the edit.
+		symlinkSync(root, link);
+		const css = join(root, 'styles', 'a.css');
+		const before = readFileSync(css, 'utf8');
+		writeFileSync(css, `/* note */\n${before}`);
+		const linked = hook(
+			{
+				session_id: 'linked',
+				hook_event_name: 'PostToolUse',
+				tool_name: 'Edit',
+				tool_input: { file_path: css },
+				tool_response: { filePath: css, originalFile: before },
+			},
+			link,
+		);
+		assert(
+			linked.status === 0 && /added no blocking findings/.test(linked.stdout),
+			`a file reached through another symlink was not this project's: ${linked.status}\n${linked.stdout}${linked.stderr}`,
+		);
+	} finally {
+		rmSync(link, { force: true });
+		cleanup(elsewhere);
 		cleanup(root);
 	}
 });

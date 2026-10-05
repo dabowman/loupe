@@ -48,7 +48,7 @@ import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
 import { surfaceFor, surfacesRecorded } from './components.ts';
-import { boundMessage, oneLine, parseMessageOf, snippet } from './text.ts';
+import { boundMessage, oneLine, parseMessageOf, parseReasonOf, snippet } from './text.ts';
 import {
 	cssFilesUnder,
 	declarationMessage,
@@ -277,6 +277,27 @@ function classifyDeclaration(
  */
 const COLLAPSE_PER_RULE = new Set(['layout/in-css', 'typography/untokenized']);
 
+/** The property a collapsible finding's message opens with: `gap: 8px` → `gap`. */
+const propOf = (message: string): string => (message.split(':')[0] ?? message).trim();
+
+/**
+ * A finding's identity one declaration at a time, for the hook's pre-edit
+ * comparison: `findingKey`, except that a collapsed finding is each of its
+ * declarations.
+ *
+ * A collapsed finding's `code` is the sorted property list, and a lone one's is
+ * its own declaration, so `.c { display: flex; gap: 8px }` losing its `gap`
+ * changes the code although the edit introduced nothing. Compared per
+ * declaration, that edit removed one; adding `gap` back to a lone `display:
+ * flex` adds one, which the whole-rule key would not have noticed either.
+ */
+export const declarationKeys = (f: Pick<Finding, 'rule' | 'file' | 'code' | 'message'>): string[] => {
+	if (!COLLAPSE_PER_RULE.has(f.rule)) return [findingKey(f)];
+	const collapsed = `${f.rule}:`;
+	const props = f.code?.startsWith(collapsed) ? f.code.slice(collapsed.length).split(',') : [propOf(f.message)];
+	return props.map((p) => findingKey({ ...f, code: `${collapsed}${p}` }));
+};
+
 function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 	const out: PendingFinding[] = [];
 	const groups = new Map<RuleId, PendingFinding[]>();
@@ -296,7 +317,7 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 			out.push(first);
 			continue;
 		}
-		const props = [...new Set(group.map((f) => (f.message.split(':')[0] ?? f.message).trim()))];
+		const props = [...new Set(group.map((f) => propOf(f.message)))];
 		out.push({
 			...first,
 			// Bounded per contributor, so one long value cannot spend the whole
@@ -540,7 +561,7 @@ export async function analyze(
 		suppressionsFor(rel, text); // cached for `report`
 		// Unreadable is a hole in coverage, not a diagnostic: it reports as a
 		// finding, so a clean run always means "checked and clean".
-		const unparsed = (message: string): void => {
+		const unparsed = (message: string, code?: string): void => {
 			diagnostics.parseErrors.push({ file: rel, message });
 			if (config.enabled['stylesheet/unparsed'] && reports(rel))
 				findings.push({
@@ -549,7 +570,7 @@ export async function analyze(
 					file: rel,
 					line: 1,
 					message,
-					code: message,
+					code: code ?? message,
 					rank: RULES['stylesheet/unparsed'].rank,
 				});
 		};
@@ -565,11 +586,15 @@ export async function analyze(
 			continue;
 		}
 
+		// `map: false`: a sheet naming its source map otherwise reports a syntax
+		// error at the original file's absolute path, which no other clone has.
 		let root: Root;
 		try {
-			root = syntax.parse(text, { from: abs });
+			root = syntax.parse(text, { from: abs, map: false });
 		} catch (err) {
-			unparsed(parseMessageOf(err, abs));
+			// Keyed on the reason alone. The position moves with every line added
+			// above the error, and the hook would call the same error a new one.
+			unparsed(parseMessageOf(err, abs), parseReasonOf(err));
 			continue;
 		}
 
