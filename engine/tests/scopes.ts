@@ -13,14 +13,15 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import postcss from 'postcss';
 import { analyze } from '../src/analyze.ts';
-import { renameOptions } from '../src/judge.ts';
+import { judgeValues, renameOptions } from '../src/judge.ts';
 import { tokenFixes } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { fitOf, parseTokenScopes, place } from '../src/scopes.ts';
 import type { TokenScopes } from '../src/scopes.ts';
-import { GENERIC_ROLES, onRole } from '../src/tokens.ts';
+import { GENERIC_ROLES, emptyTokenSet, harvestTokenDefs, onRole } from '../src/tokens.ts';
 import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { Finding, Profile, TokenSet } from '../src/types.ts';
 
@@ -403,6 +404,42 @@ await check('a step no markup can confirm — xs, nested inside a control — is
 	});
 	assert(!tokenFixes(findings).length, 'xs should not apply');
 	assert(hardcoded(findings, 'src/a.css', 1).suggest?.[0]?.review, 'xs is held for review');
+});
+
+// `fix --judge` settles a value part by part, and a part matching one token
+// exactly — or one token equal to it in another unit — was written at
+// confidence 1 with no question asked, past the hold a whole value gets.
+await check('a token a part or another unit settles on is held where a whole value would be', async () => {
+	const { findings } = await run({
+		'src/a.css': `.rp-d { border-radius: 4px 4px 0 0; }
+.rp-e { border-radius: 0.25rem; }
+.rp-b { border: 1px solid #dddddd; }
+`,
+		'src/A.jsx': `export const A = () => (
+	<dialog className="rp-d rp-e">
+		<button className="rp-b" />
+	</dialog>
+);
+`,
+	});
+	const reviews = [1, 2, 3].map((line) => hardcoded(findings, 'src/a.css', line).suggest?.[0]?.review ?? '');
+	assert(
+		reviews[0]?.startsWith('--wpds-border-radius-md for overlay; this styles <dialog>') &&
+			reviews[1]?.startsWith('--wpds-border-radius-md for overlay; this styles <dialog>') &&
+			reviews[2]?.startsWith('--wpds-color-stroke-surface-neutral not for interactive; this styles <button>'),
+		`each is held, naming its token: ${reviews.join(' | ')}`,
+	);
+	let asked = 0;
+	const stub = (async () => {
+		asked++;
+		throw new Error('nothing here is a question');
+	}) as unknown as typeof fetch;
+	// The set `fix --judge` judges against: the fixture's tokens, under the same scopes.
+	const tokens = harvestTokenDefs(postcss.parse(TOKENS), ['--wpds-'], emptyTokenSet());
+	tokens.scopes = WPDS ?? undefined;
+	await judgeValues('/nonexistent', findings, tokens, 'key', new Map(), stub);
+	assert(!asked, `asked ${asked} question(s)`);
+	assert(!tokenFixes(findings).length, `fix --judge writes none of them: ${JSON.stringify(tokenFixes(findings))}`);
 });
 
 await check('a token with nothing declared about where it sits is applied as before', async () => {

@@ -406,8 +406,10 @@ export async function judgeValues(
 	// the text component, is not available.
 	for (const f of findings) {
 		for (const decl of f.suggest ?? []) {
-			// The single exact token is plain `fix`'s already.
-			if (decl.tokens.length === 1) continue;
+			// The single exact token is plain `fix`'s already. One held for review —
+			// a whole value's or a part's — is outside its declared scope here, or
+			// not shown to be inside it, and no answer here is in a position to say.
+			if (decl.tokens.length === 1 || decl.review) continue;
 			const plan = planValue(set, decl.prop, decl.value);
 			if (plan === 'none') {
 				decl.judged = { answer: KEEP, confidence: 1, spans: [`no ${decl.prop} token in the design system`] };

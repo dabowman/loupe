@@ -55,6 +55,7 @@ import {
 	declarationMessage,
 	emptyTokenSet,
 	harvestTokenDefs,
+	planValue,
 	readTokenSources,
 	tokensFor,
 	tokenRefsIn,
@@ -967,11 +968,27 @@ export async function analyze(
 		// One token is applied unattended only where it is in its declared scope on
 		// what this styles. Off it — or scoped to a kind of element nothing here
 		// shows this to be — it is a question, the way two on-role tokens are.
+		//
+		// A value matched part by part — `4px 4px 0 0`, `border: 1px solid #ddd` —
+		// or by a token equal to it in another unit (`0.25rem` for `4px`) is
+		// settled by `fix --judge` without a question, so it is held the same way,
+		// and the review names the token.
+		const hold = scopes
+			? (token: string): string | null => {
+					const fit = fitOf(scopes, token, elements);
+					return fit.fit === 'off' || fit.fit === 'unknown' ? fit.why : null;
+				}
+			: null;
 		f.suggest = f.hints.map((h) => {
 			const tokens = tokensFor(tokenSet, h.prop, h.value);
 			const [only] = tokens;
-			const fit = scopes && only !== undefined && tokens.length === 1 ? fitOf(scopes, only, elements) : null;
-			return fit && (fit.fit === 'off' || fit.fit === 'unknown') ? { ...h, tokens, review: fit.why } : { ...h, tokens };
+			let review: string | null = null;
+			if (hold && only !== undefined && tokens.length === 1) review = hold(only);
+			else if (hold && !tokens.length) {
+				const plan = planValue(tokenSet, h.prop, h.value, hold);
+				if (plan && plan !== 'none') review = plan.review ?? null;
+			}
+			return review ? { ...h, tokens, review } : { ...h, tokens };
 		});
 		// Replaces what the classifier bounded rather than appending to it.
 		// `declarationMessage` is the single place that decides how it reads.

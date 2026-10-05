@@ -530,6 +530,14 @@ style that kind, the finding names it with `(review: …)` and the reason, and
 review src/a.scss:2  border-radius: 4px → --wpds-border-radius-md — for overlay; this styles <dialog>
 ```
 
+The same holds for a token that settles one part of a value, or equals it in
+another unit — `4px 4px 0 0`, `border: 1px solid #ddd`, `0.25rem` — which
+`--judge` would otherwise write without asking; the review names the token:
+
+```
+review src/a.scss:3  border-radius: 4px 4px 0 0 — --wpds-border-radius-md for overlay; this styles <dialog>
+```
+
 `tokens/unknown-token` is fixed on the same terms. A `var()` naming a token
 nothing defines is usually a misspelling, so where exactly **one** known token
 is one keystroke away — one insertion, deletion or substitution, and not a

@@ -1390,7 +1390,7 @@ async function main(): Promise<number> {
 			for (const s of f.suggest ?? [])
 				if (s.review && !s.judged)
 					process.stdout.write(
-						`${yellow('review')} ${dim(`${f.file}:${s.line ?? f.line}`)}  ${decl(s)} \u2192 ${s.tokens.join(' or ')} \u2014 ${s.review}\n`,
+						`${yellow('review')} ${dim(`${f.file}:${s.line ?? f.line}`)}  ${decl(s)}${s.tokens.length ? ` \u2192 ${s.tokens.join(' or ')}` : ''} \u2014 ${s.review}\n`,
 					);
 		// A collapsed finding is several declarations and a misspelled token is
 		// every line naming it, so a substitution written is not a finding cleared.
