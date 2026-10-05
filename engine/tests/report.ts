@@ -303,8 +303,36 @@ await check('an unparsed stylesheet is keyed without the path it was read from',
 			'stylesheet/unparsed finding',
 		);
 		assert(f.file === 'styles/broken.css', `the finding names ${f.file}`);
-		for (const text of [f.message, f.code ?? '', ...result.diagnostics.parseErrors.map((e) => e.message)])
+		for (const text of [f.message, ...result.diagnostics.parseErrors.map((e) => e.message)])
 			assert(!text.includes('broken.css') && /^\d+:\d+: /.test(text), `a parse error kept its path: ${text}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The code was the message, position and all, so a line added above the error
+// made it a different finding — to the baseline and to the hook's pre-edit
+// comparison alike. And a sheet naming its source map reported the error at
+// the original file's absolute path, which no other clone has.
+await check('an unparsed stylesheet is keyed on the reason, not the position or a source map', async () => {
+	const { result, root } = await run({
+		'loupe.config.json': CONFIG,
+		'css/a.css': '/* built */\n.a { color: red; }\n.b { color: blue;\n/*# sourceMappingURL=a.css.map */\n',
+		'css/a.css.map': JSON.stringify({
+			version: 3,
+			file: 'a.css',
+			sources: ['../scss/a.scss'],
+			names: [],
+			mappings: 'AAAA;AACA;AACA',
+		}),
+	});
+	try {
+		const f = one(
+			result.findings.filter((x) => x.rule === 'stylesheet/unparsed'),
+			'stylesheet/unparsed finding',
+		);
+		assert(f.code === 'Unclosed block', `the code is not the bare reason: ${f.code}`);
+		assert(!/scss|\//.test(f.message), `the message names the source map's original: ${f.message}`);
 	} finally {
 		cleanup(root);
 	}

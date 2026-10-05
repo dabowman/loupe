@@ -912,6 +912,16 @@ message first, so where two differ only in their value the one reported is the
 one the edit wrote — and the count of standing findings is never more than
 stood before the edit.
 
+**Per declaration, where a finding is several.** A collapsed `layout/in-css` or
+`typography/untokenized` finding's code is its sorted property list, and a lone
+one's is its declaration, so `.c { display: flex; gap: 8px }` losing its `gap`
+changed the code and read as new. The comparison counts a collapsed finding as
+each of its declarations instead: that edit removed one, and adding `gap` to a
+lone `display: flex` adds one. A `stylesheet/unparsed` code is postcss's reason
+alone (`Unclosed block`), with no `line:column` to move when a line is added
+above the error, and the sheet is parsed without its source map, whose original
+file would otherwise open the message with an absolute path.
+
 **No "before", no subtraction.** A file the write created, a payload that does
 not carry `originalFile`, or a pre-edit analysis that fails compares against
 nothing — the absolute check, the gate as it was. A judged redirect is written

@@ -27,13 +27,26 @@ export const messageLineOf = (err: unknown): string => messageOf(err).split('\n'
 /**
  * `messageLineOf` for a parse handed `{ from: abs }`. postcss opens a syntax error
  * with that path — `/home/alice/proj/a.css:1:1: Unclosed block` — and an
- * absolute path is a fact about the machine, not the project: as a finding's
- * `code` it is part of the baseline key, which then matches on no other
- * checkout. The finding already names the file, so only `line:column` is kept.
+ * absolute path is a fact about the machine, not the project, so it does not
+ * belong in a report another clone reads. The finding already names the file,
+ * so only `line:column` is kept.
  */
 export const parseMessageOf = (err: unknown, abs: string): string => {
 	const message = messageLineOf(err);
 	return message.startsWith(`${abs}:`) ? message.slice(abs.length + 1) : message;
+};
+
+/**
+ * What a parse error says is wrong, without where: postcss's `reason`,
+ * `Unclosed block`. A finding's `code` is part of its baseline key, and the
+ * position moves whenever a line is added above it — so a code carrying it
+ * matches no baseline after an unrelated edit, and the hook calls an error the
+ * file already had a new one. Undefined for a throw that gives no reason, which
+ * keeps its message.
+ */
+export const parseReasonOf = (err: unknown): string | undefined => {
+	const reason = (err as { reason?: unknown } | null)?.reason;
+	return typeof reason === 'string' && reason ? reason : undefined;
 };
 
 /** `s` as a literal inside a regex. */

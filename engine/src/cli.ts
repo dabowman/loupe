@@ -14,7 +14,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
-import { analyze, dedupe, findingKey } from './analyze.ts';
+import { analyze, declarationKeys, dedupe } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import {
@@ -508,21 +508,23 @@ async function findingsBeforeEdit(
  * gained one, though both share a key. Each finding standing before the edit
  * accounts for at most one after it, one with the same message first, so where
  * two differ only in their value the one reported is the one the edit wrote.
+ *
+ * Counted per declaration (`declarationKeys`), so a collapsed finding that lost
+ * a declaration is not a new one for having changed its `code`; it is new when
+ * any of its declarations is.
  */
 function introducedBy(after: readonly Finding[], before: readonly Identity[]): Finding[] {
 	const pool = new Map<string, string[]>();
-	for (const f of before) {
-		const k = findingKey(f);
-		pool.set(k, [...(pool.get(k) ?? []), f.message]);
-	}
-	const take = (f: Finding, sameMessage: boolean): boolean => {
-		const left = pool.get(findingKey(f));
-		const i = !left ? -1 : sameMessage ? left.indexOf(f.message) : left.length - 1;
+	for (const f of before) for (const k of declarationKeys(f)) pool.set(k, [...(pool.get(k) ?? []), f.message]);
+	const take = (k: string, message: string | null): boolean => {
+		const left = pool.get(k);
+		const i = !left ? -1 : message === null ? left.length - 1 : left.indexOf(message);
 		if (!left || i < 0) return false;
 		left.splice(i, 1);
 		return true;
 	};
-	return after.filter((f) => !take(f, true)).filter((f) => !take(f, false));
+	const unmatched = after.map((f) => ({ f, keys: declarationKeys(f).filter((k) => !take(k, f.message)) }));
+	return unmatched.filter(({ keys }) => keys.filter((k) => !take(k, null)).length > 0).map(({ f }) => f);
 }
 
 /**

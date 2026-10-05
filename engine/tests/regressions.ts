@@ -1288,6 +1288,46 @@ await check('PostToolUse keeps the absolute check where Stop has no changed-file
 	}
 });
 
+// Codes that change when nothing new was introduced: a collapsed finding's code
+// is its property list, which becomes the lone declaration when the group
+// shrinks to one, and an unparsed stylesheet's carried its line:column. Both
+// edits below introduce nothing, and both blocked.
+await check('PostToolUse does not call a shrunk collapsed finding or a moved parse error new', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.c { display: flex; gap: 8px; }\n',
+		'styles/b.css': '.a { color: red; }\n.b { color: blue;\n',
+	});
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		const edit = (rel: string, change: (text: string) => string) => {
+			const file = join(root, rel);
+			const before = readFileSync(file, 'utf8');
+			writeFileSync(file, change(before));
+			return runCli(
+				['hook', '--root', root],
+				{ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+				JSON.stringify({
+					session_id: `stable-${rel}`,
+					hook_event_name: 'PostToolUse',
+					tool_name: 'Edit',
+					tool_input: { file_path: rel },
+					tool_response: { filePath: file, originalFile: before },
+				}),
+			);
+		};
+		const shrunk = edit('styles/a.css', (t) => t.replace(' gap: 8px;', ''));
+		assert(shrunk.status === 0, `removing a declaration blocked as if it added one:\n${shrunk.stderr}`);
+		const moved = edit('styles/b.css', (t) => `/* note */\n${t}`);
+		assert(moved.status === 0, `a parse error moved down a line blocked as new:\n${moved.stderr}`);
+		// Adding a declaration to a lone one is still introducing it.
+		const grown = edit('styles/a.css', (t) => t.replace('display: flex;', 'display: flex; gap: 4px;'));
+		assert(grown.status === 2, `a declaration added to a collapsed finding passed: ${grown.status}\n${grown.stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `--changed` is the hook's default scope. `git diff --name-only` answers from
 // the repository root while `ls-files` answers from the cwd, so a project rooted
 // in a subdirectory of the worktree built a scope Set in two coordinate systems
