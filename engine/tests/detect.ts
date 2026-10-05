@@ -518,6 +518,26 @@ await check('init --preset names the design system and writes it; --force writes
 	}
 });
 
+// The guess refusal ran ahead of the existence check and recommended
+// `init --force` without saying a config was already there — and `--force`
+// overwrites, so following the advice replaced a hand-written config with
+// `generic`.
+await check('init on a guess says a config exists before it suggests --force', () => {
+	const root = scratch('dsh-init-exists-');
+	try {
+		externalsPlugin(root);
+		const own = JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } });
+		write(root, 'loupe.config.json', own);
+		const { status, stdout, stderr } = cli(['init', '--root', root, '--no-color']);
+		assert(status === 2, `init over an existing config exited ${status}`);
+		assert(/already exists \(use --force\)/.test(stderr), `the existing config went unmentioned:\n${stderr}`);
+		assert(!/--force/.test(stdout), `--force was suggested without naming the config:\n${stdout}`);
+		assert(readFileSync(join(root, 'loupe.config.json'), 'utf8') === own, 'the existing config was touched');
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('a recognised design system is written without being asked twice', () => {
 	const root = scratch('dsh-init-sure-');
 	try {

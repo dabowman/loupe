@@ -1072,6 +1072,13 @@ async function main(): Promise<number> {
 			return EXIT.OK;
 		}
 		const target = join(root, 'loupe.config.json');
+		// First, ahead of every refusal below that suggests `--force`: that flag also
+		// overwrites, and advice to pass it that does not say a config exists is
+		// advice to replace a hand-written one with a guess.
+		if (existsSync(target) && !args.flags.force) {
+			fail(`loupe: ${target} already exists (use --force)\n`);
+			return EXIT.CANNOT_RUN;
+		}
 		// A written config is not a guess any more: `inferred` goes false, which turns
 		// blocking back on by default and lifts the css/dead-class demotion. Inference
 		// must never launder a truncated answer into an authored one.
@@ -1103,10 +1110,6 @@ async function main(): Promise<number> {
 			);
 			process.stdout.write(`${lines.join('\n')}\n`);
 			fail('loupe: refusing to write a guessed design system to a config.\n');
-			return EXIT.CANNOT_RUN;
-		}
-		if (existsSync(target) && !args.flags.force) {
-			fail(`loupe: ${target} already exists (use --force)\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		writeFileSync(target, `${JSON.stringify(info.config, null, 2)}\n`);
