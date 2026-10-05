@@ -1911,6 +1911,29 @@ await check('a property the component owns still blocks, and the message names t
 	);
 });
 
+// `import * as UI` binds the package, so `<UI.Button>` is the package's Button.
+// Keyed as a part of `UI`, it found no surface while the package counted as
+// surfaced, and the override fell to an advisory hardcoded value.
+await check('a namespace import’s member is the component, and keeps its surface', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-t { font-size: 14px; }\n.acme-b { background: #f00; }',
+			'src/A.tsx': [
+				"import * as UI from '@wordpress/ui';",
+				"import * as WP from '@wordpress/components';",
+				'export const A = () => <><UI.Text className="acme-t">x</UI.Text><WP.Button className="acme-b">y</WP.Button></>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const type = one(at(r, 'typography/in-css'), 'font-size on UI.Text is the variant’s');
+	assert(type.severity === 'error' && type.message.endsWith('set via its variant prop'), `type: ${type.message}`);
+	const override = one(at(r, 'system/override'), 'background on WP.Button is the variant’s');
+	assert(override.severity === 'error' && override.message.endsWith('set via its variant prop'), override.message);
+	assert(!at(r, 'tokens/hardcoded-value').length, 'neither falls through to a plain hardcoded value');
+});
+
 await check('a component that sets a property with no prop for it says so, and still blocks', async () => {
 	const r = await run(
 		{
