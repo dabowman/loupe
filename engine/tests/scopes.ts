@@ -477,6 +477,29 @@ await check('fix --dry-run names what it held back, and why', () => {
 	}
 });
 
+// A grammar decides for the names under its own prefixes. A project's own
+// tokens are under none, and were dropped from every property the grammar
+// covers: no suggestion for the colour only they carry, and a same-valued one
+// gone from the background, which left a single candidate to apply.
+await check('a token no grammar’s prefix claims keeps the matching it had', async () => {
+	const { findings } = await run({
+		'loupe.config.json': JSON.stringify({
+			extends: 'wpds',
+			namespaces: { project: ['rp-'] },
+			designSystem: { tokenPrefixes: ['--wpds-', '--acme-'] },
+		}),
+		'styles/acme.css': ':root { --acme-color-text-brand: #123456; --acme-color-background-panel: #ffffff; }\n',
+		'src/a.css': '.rp-a { color: #123456; background: #ffffff; }\n',
+	});
+	const fixes = tokenFixes(findings).map((f) => `${f.prop} ${f.to}`);
+	assert(fixes.join() === 'color var(--acme-color-text-brand)', `fixes: ${fixes.join(', ')}`);
+	const background = findings.flatMap((f) => f.suggest ?? []).find((s) => s.prop === 'background');
+	assert(
+		background?.tokens.sort().join() === '--acme-color-background-panel,--wpds-color-background-surface-neutral-strong',
+		`two candidates, a question: ${background?.tokens}`,
+	);
+});
+
 await check('a profile with no scopes leaves suggestions and fixes exactly as they were', async () => {
 	const plain: Profile = { ...wpds, tokenScopes: null };
 	const files = {

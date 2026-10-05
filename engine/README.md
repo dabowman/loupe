@@ -493,9 +493,10 @@ whose role is not in the name. WPDS's is `profiles/wpds/token-scopes.json`:
 - Keys beginning with `$` are comments.
 
 What it changes. Wherever a declared segment `sets` a property, the declared
-grammar — not the engine's generic table — decides which tokens are suggested
-for it; everywhere else, and for a profile declaring nothing, the generic table
-answers exactly as before. A single suggested token scoped to a kind of element
+grammar — not the engine's generic table — decides which of the tokens under its
+patterns' prefixes are suggested for it; a token no pattern's prefix claims (a
+project's own `--acme-*`), every other property, and a profile declaring
+nothing get the generic table exactly as before. A single suggested token scoped to a kind of element
 is applied by `loupe fix` only where the declaration is shown to style that kind
 (see [Fixing](#fixing)), and `tokens/misapplied-token` reports a real token used
 off its declared property or kind. Where nothing shows what an element is, a

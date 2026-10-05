@@ -178,9 +178,12 @@ still offered only stroke colours for the hex.
 **The engine keeps the old table as the fallback, verbatim.** A profile that
 declares nothing, and every property no declared segment `sets`, is answered by
 the generic table exactly as before — a test holds the two equal. Where a
-profile does cover a property, it decides alone: a token its grammar does not
-place is not on-role there. Fail safe in both directions — a token with no
-declared scope keeps today's matching and is never reported as misapplied.
+profile does cover a property, it decides alone for the names under its
+grammars' own prefixes: a primitive `--wpds-dimension-*` the grammar does not
+place is not on-role there. Fail safe in both directions — a token no grammar's
+prefix claims (a project's own `--acme-*`, another preset's `--wp-components-*`)
+has no declared scope, keeps today's matching beside the placed ones, and is
+never reported as misapplied.
 
 **What an element is comes from what the engine already correlates.** A
 stylesheet rule's key compound naming a tag (`.card button`), the design-system

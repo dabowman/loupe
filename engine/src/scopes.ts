@@ -43,6 +43,8 @@ interface Placing {
 interface Grammar {
 	pattern: string;
 	re: RegExp;
+	/** The literal start of the pattern: the names this grammar speaks for, placed or not. */
+	claims: string;
 	/** Segment value → its properties. A family with no `{property}` keys its one entry by the pattern. */
 	property: ReadonlyMap<string, Segment>;
 	target: ReadonlyMap<string, Placing>;
@@ -236,7 +238,13 @@ export function parseTokenScopes(raw: unknown): { scopes: TokenScopes | null; er
 				return name === 'target' ? '(?<target>[a-z0-9]+)' : '[a-z0-9]+';
 			})
 			.join('');
-		grammars.push({ pattern, re: new RegExp(`^${source}${open ? '(?:-[a-z0-9]+)*' : ''}$`), property, target });
+		grammars.push({
+			pattern,
+			re: new RegExp(`^${source}${open ? '(?:-[a-z0-9]+)*' : ''}$`),
+			claims: (open ? pattern.slice(0, -3) : pattern).split('{')[0] ?? pattern,
+			property,
+			target,
+		});
 	}
 
 	const scales = new Map<string, readonly string[]>();
@@ -333,13 +341,30 @@ function placeUncached(scopes: TokenScopes, token: string): Placement | null {
 export const covers = (scopes: TokenScopes, prop: string): boolean =>
 	scopes.grammars.some((g) => [...g.property.values()].some((s) => propMatches(s.sets, prop)));
 
-/** The names among `names` the declared grammar puts on `prop`. Null where nothing declared covers it. */
-export function scopedFamily(scopes: TokenScopes, names: readonly string[], prop: string): string[] | null {
+/**
+ * The names among `names` that answer for `prop` where the declared grammar
+ * covers it, and null where nothing declared does.
+ *
+ * Under a grammar's own prefix (`--wpds-color-`, `--wpds-dimension-`) the
+ * grammar decides alone: a primitive it leaves unplaced is not on-role. A name
+ * no grammar's prefix claims — a project's own `--acme-*`, another preset's
+ * `--wp-components-*` — has no declared scope, and keeps the matching it had:
+ * `generic`'s. Dropping it would also drop a same-valued candidate, and turn a
+ * question between two tokens into one applied unattended.
+ */
+export function scopedFamily(
+	scopes: TokenScopes,
+	names: readonly string[],
+	prop: string,
+	generic: (names: readonly string[], prop: string) => string[],
+): string[] | null {
 	if (!covers(scopes, prop)) return null;
-	return names.filter((n) => {
+	const placed = names.filter((n) => {
 		const p = place(scopes, n);
 		return p !== null && propMatches(p.sets, prop);
 	});
+	const unclaimed = names.filter((n) => !scopes.grammars.some((g) => n.startsWith(g.claims)));
+	return [...placed, ...generic(unclaimed, prop)];
 }
 
 /** The kinds an element or component is, by the names the profile lists. */

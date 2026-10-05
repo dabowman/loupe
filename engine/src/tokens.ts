@@ -171,8 +171,11 @@ export function readTokenSources(
  * generic table everywhere else.
  */
 export function onRole(names: readonly string[], prop: string, scopes?: TokenScopes | undefined): string[] {
-	const scoped = scopes ? scopedFamily(scopes, names, prop) : null;
-	if (scoped) return scoped;
+	return (scopes ? scopedFamily(scopes, names, prop, genericRole) : null) ?? genericRole(names, prop);
+}
+
+/** The names the generic table puts on `prop`. */
+function genericRole(names: readonly string[], prop: string): string[] {
 	const [, hint, own] = GENERIC_ROLES.find(([p]) => p.test(prop)) ?? [];
 	if (!hint) return [];
 	const onRole = names.filter((n) => hint.test(n));
