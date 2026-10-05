@@ -13,14 +13,15 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import postcss from 'postcss';
 import { analyze } from '../src/analyze.ts';
-import { renameOptions } from '../src/judge.ts';
+import { judgeValues, renameOptions } from '../src/judge.ts';
 import { tokenFixes } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { fitOf, parseTokenScopes, place } from '../src/scopes.ts';
 import type { TokenScopes } from '../src/scopes.ts';
-import { GENERIC_ROLES, onRole } from '../src/tokens.ts';
+import { GENERIC_ROLES, emptyTokenSet, harvestTokenDefs, onRole } from '../src/tokens.ts';
 import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { Finding, Profile, TokenSet } from '../src/types.ts';
 
@@ -405,6 +406,42 @@ await check('a step no markup can confirm — xs, nested inside a control — is
 	assert(hardcoded(findings, 'src/a.css', 1).suggest?.[0]?.review, 'xs is held for review');
 });
 
+// `fix --judge` settles a value part by part, and a part matching one token
+// exactly — or one token equal to it in another unit — was written at
+// confidence 1 with no question asked, past the hold a whole value gets.
+await check('a token a part or another unit settles on is held where a whole value would be', async () => {
+	const { findings } = await run({
+		'src/a.css': `.rp-d { border-radius: 4px 4px 0 0; }
+.rp-e { border-radius: 0.25rem; }
+.rp-b { border: 1px solid #dddddd; }
+`,
+		'src/A.jsx': `export const A = () => (
+	<dialog className="rp-d rp-e">
+		<button className="rp-b" />
+	</dialog>
+);
+`,
+	});
+	const reviews = [1, 2, 3].map((line) => hardcoded(findings, 'src/a.css', line).suggest?.[0]?.review ?? '');
+	assert(
+		reviews[0]?.startsWith('--wpds-border-radius-md for overlay; this styles <dialog>') &&
+			reviews[1]?.startsWith('--wpds-border-radius-md for overlay; this styles <dialog>') &&
+			reviews[2]?.startsWith('--wpds-color-stroke-surface-neutral not for interactive; this styles <button>'),
+		`each is held, naming its token: ${reviews.join(' | ')}`,
+	);
+	let asked = 0;
+	const stub = (async () => {
+		asked++;
+		throw new Error('nothing here is a question');
+	}) as unknown as typeof fetch;
+	// The set `fix --judge` judges against: the fixture's tokens, under the same scopes.
+	const tokens = harvestTokenDefs(postcss.parse(TOKENS), ['--wpds-'], emptyTokenSet());
+	tokens.scopes = WPDS ?? undefined;
+	await judgeValues('/nonexistent', findings, tokens, 'key', new Map(), stub);
+	assert(!asked, `asked ${asked} question(s)`);
+	assert(!tokenFixes(findings).length, `fix --judge writes none of them: ${JSON.stringify(tokenFixes(findings))}`);
+});
+
 await check('a token with nothing declared about where it sits is applied as before', async () => {
 	const { findings } = await run({ 'src/a.css': '.rp-a { padding-top: 12px; outline-color: #3858e9; }\n' });
 	const to = tokenFixes(findings)
@@ -438,6 +475,29 @@ await check('fix --dry-run names what it held back, and why', () => {
 	} finally {
 		cleanup(root);
 	}
+});
+
+// A grammar decides for the names under its own prefixes. A project's own
+// tokens are under none, and were dropped from every property the grammar
+// covers: no suggestion for the colour only they carry, and a same-valued one
+// gone from the background, which left a single candidate to apply.
+await check('a token no grammar’s prefix claims keeps the matching it had', async () => {
+	const { findings } = await run({
+		'loupe.config.json': JSON.stringify({
+			extends: 'wpds',
+			namespaces: { project: ['rp-'] },
+			designSystem: { tokenPrefixes: ['--wpds-', '--acme-'] },
+		}),
+		'styles/acme.css': ':root { --acme-color-text-brand: #123456; --acme-color-background-panel: #ffffff; }\n',
+		'src/a.css': '.rp-a { color: #123456; background: #ffffff; }\n',
+	});
+	const fixes = tokenFixes(findings).map((f) => `${f.prop} ${f.to}`);
+	assert(fixes.join() === 'color var(--acme-color-text-brand)', `fixes: ${fixes.join(', ')}`);
+	const background = findings.flatMap((f) => f.suggest ?? []).find((s) => s.prop === 'background');
+	assert(
+		background?.tokens.sort().join() === '--acme-color-background-panel,--wpds-color-background-surface-neutral-strong',
+		`two candidates, a question: ${background?.tokens}`,
+	);
 });
 
 await check('a profile with no scopes leaves suggestions and fixes exactly as they were', async () => {
@@ -521,6 +581,85 @@ await check('a scale step on the wrong kind of element is misapplied; on the rig
 		misapplied.some((f) => f.message.includes('for control; this styles <a>')),
 		'cursor names its role',
 	);
+});
+
+// A profile's kinds list `Button`. Looked up by the name the file gave it — an
+// alias, a namespace, the root of a compound — a design-system control matched
+// no kind and read as definitely not one.
+await check('an element’s kind is the component it is, not the name the file gave it', async () => {
+	const { misapplied } = await run({
+		'src/A.jsx': `import styled from '@emotion/styled';
+import { Button as B, Card } from '@wordpress/components';
+import * as WP from '@wordpress/components';
+const S = styled(B)\`cursor: var(--wpds-cursor-control);\`;
+export const A = () => (
+	<Card>
+		<Card.Header className="rp-h" />
+		<B className="rp-c" />
+		<WP.Button className="rp-w" />
+		<S />
+	</Card>
+);
+`,
+		'src/a.css': `.rp-c { cursor: var(--wpds-cursor-control); }
+.rp-w { cursor: var(--wpds-cursor-control); background: var(--wpds-color-background-surface-neutral-strong); }
+.rp-h { border-radius: var(--wpds-border-radius-lg); }
+`,
+	});
+	// The control cursor is on-role on every spelling of Button; the surface
+	// background is not, and a card's header is not the card.
+	const said = misapplied.map((f) => `${f.file}:${f.line} ${f.message}`).sort();
+	assert(
+		said.length === 2 &&
+			said[0]?.startsWith('src/a.css:2 background: --wpds-color-background-surface-neutral-strong') &&
+			said[0].endsWith('this styles <Button>') &&
+			said[1]?.startsWith('src/a.css:3 border-radius: --wpds-border-radius-lg') &&
+			said[1].endsWith('this styles <Card.Header>'),
+		said.join('\n'),
+	);
+});
+
+// What a rule lands on is read from selector text and the markup the index
+// records, and every misreading of either named an element the rule does not
+// style: `.a.b` took the elements of each class, a class inside `:not()` counted,
+// an attribute value split into a tag, a nested group kept its last selector,
+// an interpolation read as `<dsh-e>`, and a class shared with an unrecorded
+// element was taken to style only the recorded one.
+await check('what a rule styles is read conservatively, and unknown where it is not shown', async () => {
+	const { findings, misapplied } = await run({
+		'src/A.jsx': `import styled from '@emotion/styled';
+const Icon = () => null;
+const Nav = styled.nav\`
+	& button, & a { cursor: var(--wpds-cursor-control); }
+	&:hover \${Icon} { background: var(--wpds-color-background-interactive-neutral); }
+\`;
+export const A = () => (
+	<Nav>
+		<section className="rp-panel is-active" />
+		<button className="is-active rp-x" aria-label="Close dialog" />
+		<ul>
+			<li className="rp-item" />
+			<li className="rp-item" />
+			<li className="rp-item" />
+		</ul>
+		<button className="rp-item" />
+		<dialog className="rp-n" />
+		<button className="rp-m" />
+	</Nav>
+);
+`,
+		'src/a.css': `.rp-panel.is-active { background: var(--wpds-color-background-surface-neutral-strong); }
+.rp-x[aria-label="Close dialog"] { border-radius: var(--wpds-border-radius-sm); }
+.rp-item { border-radius: 2px; }
+.rp-n:not(.rp-m) { border-radius: 8px; }
+`,
+	});
+	assert(!misapplied.length, misapplied.map((f) => `${f.file}:${f.line} ${f.message}`).join('\n'));
+	// Three list items and a button share the class: the button's radius is not
+	// the rule's to apply. A class inside `:not()` is one the element lacks.
+	const fixes = tokenFixes(findings).map((f) => `${f.line} ${f.to}`);
+	assert(fixes.join() === '4 var(--wpds-border-radius-lg)', `fixes: ${fixes.join(', ')}`);
+	assert(hardcoded(findings, 'src/a.css', 3).suggest?.[0]?.review, 'the shared class is held for review');
 });
 
 await check('nothing is misapplied where nothing declares a scope, or nothing shows the element', async () => {

@@ -39,6 +39,7 @@
  */
 
 import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { list } from 'postcss';
 import type { Root } from 'postcss';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
@@ -54,6 +55,7 @@ import {
 	declarationMessage,
 	emptyTokenSet,
 	harvestTokenDefs,
+	planValue,
 	readTokenSources,
 	tokensFor,
 	tokenRefsIn,
@@ -97,6 +99,7 @@ import { untokenizedType } from './checks/typography/untokenized.ts';
 import type {
 	AnalyzeResult,
 	Binding,
+	ClassCarrier,
 	ClassifiedFinding,
 	ClassifyContext,
 	ComponentImport,
@@ -143,6 +146,81 @@ const partClass = (sel: string): string | undefined =>
 
 /** The element a compound selector names, lowercased: `button.primary:hover` → `button`. */
 const tagOf = (compound: string): string | null => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
+
+/**
+ * The last compound of a selector — the element it styles. Cut only at a
+ * combinator outside brackets, parentheses and quotes: `.x[aria-label="Close
+ * dialog"]` is one compound, and so is `.x:has(> .y)`.
+ */
+function keyCompound(sel: string): string {
+	let depth = 0;
+	let quote = '';
+	let start = 0;
+	const s = sel.trim();
+	for (let i = 0; i < s.length; i++) {
+		const ch = s[i];
+		if (ch === '\\') i++;
+		else if (quote) {
+			if (ch === quote) quote = '';
+		} else if (ch === '"' || ch === "'") quote = ch;
+		else if (ch === '(' || ch === '[') depth++;
+		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+		else if (!depth && (ch === ' ' || ch === '\n' || ch === '\t' || ch === '>' || ch === '+' || ch === '~'))
+			start = i + 1;
+	}
+	return s.slice(start);
+}
+
+/**
+ * A compound with its attribute selectors and pseudo-class arguments taken out:
+ * what it says about the element itself. A class inside `:not()` is one the
+ * element does not carry, and one inside `:is()` or `:has()` one it may not.
+ */
+function ownLevel(compound: string): string {
+	let depth = 0;
+	let quote = '';
+	let out = '';
+	for (let i = 0; i < compound.length; i++) {
+		const ch = compound[i] ?? '';
+		if (quote) {
+			if (ch === '\\') i++;
+			else if (ch === quote) quote = '';
+		} else if (ch === '"' || ch === "'") quote = ch;
+		else if (ch === '(' || ch === '[') depth++;
+		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+		else if (!depth) out += ch;
+	}
+	return out;
+}
+
+/**
+ * The elements a key compound lands on, or null where that is not known: the
+ * tag it names, or every element the markup puts all of its own classes on.
+ *
+ * Unknown rather than a guess: a compound naming neither, an interpolated one
+ * (`${Icon}`, `.size-${s}`), an escaped class, a class no element carries, and
+ * a class carried by an element the index records nothing for — a project
+ * component, a tag the element map does not name — since the rule styles that
+ * one too, and what it is is not shown.
+ */
+function compoundElements(
+	compound: string,
+	carriersByClass: ReadonlyMap<string, readonly ClassCarrier[]>,
+): string[] | null {
+	if (compound.includes('dsh-e') || compound.includes('\\')) return null;
+	const own = ownLevel(compound);
+	const tag = tagOf(own);
+	if (tag) return [tag];
+	const [head, ...rest] = new Set(classesIn(own));
+	if (head === undefined) return null;
+	const on = (carriersByClass.get(head) ?? []).filter((c) => rest.every((k) => c.classes.includes(k)));
+	const out: string[] = [];
+	for (const c of on) {
+		if (c.element === null) return null;
+		out.push(c.element);
+	}
+	return out.length ? out : null;
+}
 
 /**
  * The design system's own stylesheets: the parts they style, and where they are.
@@ -449,6 +527,8 @@ export async function analyze(
 	/** class -> every component binding that carries it */
 	const bindings = new Map<string, Binding[]>();
 	const rawEls: RawElement[] = [];
+	/** class -> every element carrying it, for the token pass to know what a rule lands on */
+	const carriersByClass = new Map<string, ClassCarrier[]>();
 	const inlineStyles: InlineStyleElement[] = [];
 	const cssInJs: CssInJsTemplate[] = [];
 	const composites: Composite[] = [];
@@ -483,6 +563,14 @@ export async function analyze(
 			bindings.set(b.cls, group);
 		}
 		rawEls.push(...scanned.rawEls);
+		// Only collected where a profile declares scopes to check.
+		if (scopes)
+			for (const c of scanned.carriers)
+				for (const cls of new Set(c.classes)) {
+					const list = carriersByClass.get(cls);
+					if (list) list.push(c);
+					else carriersByClass.set(cls, [c]);
+				}
 		inlineStyles.push(...scanned.inlineStyles);
 		cssInJs.push(...scanned.cssInJs);
 		composites.push(...scanned.composites);
@@ -493,33 +581,30 @@ export async function analyze(
 		suppressionsFor(rel, text);
 	}
 
-	// class -> the raw elements carrying it, for the token pass to know what a
-	// rule lands on. Only collected where a profile declares scopes to check.
-	const rawByClass = new Map<string, string[]>();
-	if (scopes)
-		for (const el of rawEls) for (const c of el.classes) rawByClass.set(c, [...(rawByClass.get(c) ?? []), el.tag]);
 	/**
 	 * What a stylesheet rule lands on: the element its key compound names, or
-	 * every design-system component and raw element the markup puts its key
-	 * classes on. Empty when any one of its selectors says nothing — a scope is
-	 * only held against what is shown.
+	 * every element the markup puts all of its key compound's classes on. Empty
+	 * when any one of its selectors says nothing — a scope is only held against
+	 * what is shown.
 	 */
 	const elementsOf = (selectors: readonly string[]): string[] => {
 		if (!scopes) return [];
 		const out = new Set<string>();
 		for (const sel of selectors) {
-			const key = keySelector(sel);
-			const tag = tagOf(key);
-			const found = tag
-				? [tag]
-				: classesIn(key).flatMap((c) => [
-						...(bindings.get(c) ?? []).flatMap((b) => (b.tag ? [b.tag] : [])),
-						...(rawByClass.get(c) ?? []),
-					]);
-			if (!found.length) return [];
+			const found = compoundElements(keyCompound(sel), carriersByClass);
+			if (!found) return [];
 			for (const e of found) out.add(e);
 		}
 		return [...out];
+	};
+	/**
+	 * The same for a selector nested in a CSS-in-JS template, written as the
+	 * comma-joined list it is: every selector in it counts. A `&` there stands for
+	 * whatever encloses it, which a nested group does not carry, so it is not known.
+	 */
+	const nestedElements = (selector: string): string[] => {
+		const selectors = list.comma(selector);
+		return selectors.some((sel) => keyCompound(sel).includes('&')) ? [] : elementsOf(selectors);
 	};
 
 	for (const { abs, rel } of files.references) {
@@ -717,8 +802,9 @@ export async function analyze(
 
 		const isGrid = el.decls.some((d) => isGridDecl(d.prop, d.value));
 		const pending: PendingFinding[] = [];
-		// An inline style is on exactly the element it is written on.
-		const elements = [el.tag];
+		// An inline style is on exactly the element it is written on — where what
+		// that element is is known.
+		const elements = el.element ? [el.element] : [];
 		for (const d of el.decls) {
 			if (scopes)
 				for (const name of tokenRefsIn(d.value, tokenPrefixes))
@@ -773,13 +859,23 @@ export async function analyze(
 		};
 		const boundSystem: Binding[] = tpl.isSystem ? [{ tag: tpl.target, isSystem: true, ...key }] : [];
 		const boundText: Binding[] = tpl.isText ? [{ tag: tpl.target, isSystem: true, isText: true, ...key }] : [];
+		// What the template styles, for a token scope: a design-system component as
+		// the component it is, a tag as itself. A project component renders
+		// whatever its own markup says, so it is not known.
+		const self = tpl.isSystem
+			? (tpl.component ?? tpl.target)
+			: tpl.target && /^[a-z]/.test(tpl.target)
+				? tpl.target
+				: null;
 
 		for (const group of tpl.groups) {
 			const onTarget = group.onTarget;
 			const pending: PendingFinding[] = [];
-			// The styled element itself, or whatever a nested selector's key compound names.
-			const tag = onTarget ? tpl.target : group.selector ? tagOf(keySelector(group.selector)) : null;
-			const elements = scopes && tag ? [tag] : [];
+			// The styled element itself — the component it is, whatever the file
+			// called it — or what every selector of a nested group's list lands on.
+			let elements: string[] = [];
+			if (onTarget) elements = scopes && self ? [self] : [];
+			else if (group.selector) elements = nestedElements(group.selector);
 			for (const d of group.decls) {
 				if (supp)
 					for (const name of tokenRefsIn(d.value, tokenPrefixes)) {
@@ -897,11 +993,27 @@ export async function analyze(
 		// One token is applied unattended only where it is in its declared scope on
 		// what this styles. Off it — or scoped to a kind of element nothing here
 		// shows this to be — it is a question, the way two on-role tokens are.
+		//
+		// A value matched part by part — `4px 4px 0 0`, `border: 1px solid #ddd` —
+		// or by a token equal to it in another unit (`0.25rem` for `4px`) is
+		// settled by `fix --judge` without a question, so it is held the same way,
+		// and the review names the token.
+		const hold = scopes
+			? (token: string): string | null => {
+					const fit = fitOf(scopes, token, elements);
+					return fit.fit === 'off' || fit.fit === 'unknown' ? fit.why : null;
+				}
+			: null;
 		f.suggest = f.hints.map((h) => {
 			const tokens = tokensFor(tokenSet, h.prop, h.value);
 			const [only] = tokens;
-			const fit = scopes && only !== undefined && tokens.length === 1 ? fitOf(scopes, only, elements) : null;
-			return fit && (fit.fit === 'off' || fit.fit === 'unknown') ? { ...h, tokens, review: fit.why } : { ...h, tokens };
+			let review: string | null = null;
+			if (hold && only !== undefined && tokens.length === 1) review = hold(only);
+			else if (hold && !tokens.length) {
+				const plan = planValue(tokenSet, h.prop, h.value, hold);
+				if (plan && plan !== 'none') review = plan.review ?? null;
+			}
+			return review ? { ...h, tokens, review } : { ...h, tokens };
 		});
 		// Replaces what the classifier bounded rather than appending to it.
 		// `declarationMessage` is the single place that decides how it reads.

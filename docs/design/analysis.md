@@ -178,18 +178,33 @@ still offered only stroke colours for the hex.
 **The engine keeps the old table as the fallback, verbatim.** A profile that
 declares nothing, and every property no declared segment `sets`, is answered by
 the generic table exactly as before — a test holds the two equal. Where a
-profile does cover a property, it decides alone: a token its grammar does not
-place is not on-role there. Fail safe in both directions — a token with no
-declared scope keeps today's matching and is never reported as misapplied.
+profile does cover a property, it decides alone for the names under its
+grammars' own prefixes: a primitive `--wpds-dimension-*` the grammar does not
+place is not on-role there. Fail safe in both directions — a token no grammar's
+prefix claims (a project's own `--acme-*`, another preset's `--wp-components-*`)
+has no declared scope, keeps today's matching beside the placed ones, and is
+never reported as misapplied.
 
 **What an element is comes from what the engine already correlates.** A
 stylesheet rule's key compound naming a tag (`.card button`), the design-system
 components the markup binds its key classes to, the raw elements carrying them,
-an inline style's own element, a CSS-in-JS template's target. Kinds are the
-profile's: `interactive` is `button`, `a`, `Button`, `Link`…; a component is
+an inline style's own element, a CSS-in-JS template's target. A component is
+looked up as the component it is, whatever the file called it: `Button`
+imported as `B`, the `Button` of `import * as WP`, and a compound part as itself
+— `Card.Header` is not the `Card` it belongs to. Kinds are the profile's: `interactive` is `button`, `a`, `Button`, `Link`…; a component is
 listed only where its `className` lands on that element (`Dropdown`'s lands on
 the toggle's wrapper, so it is not an overlay). A kind declared empty is one no
 markup can show — "nested inside a control", "the app shell".
+
+A selector is read for what its key compound says about the element itself, and
+when unsure, what it styles is unknown. `.a.b` lands only on elements carrying
+both; a class inside `:not()`, `:is()` or `:has()`, or an attribute value, says
+nothing about the element; every selector of a list counts, a CSS-in-JS nested
+group's included. An interpolated compound (`${Icon}`), a class carried by an
+element the index records nothing for — a project component, a tag the element
+map does not name — and a project component's own inline style or template are
+not shown, so a rule reaching one of them is held for review, never reported as
+misapplied on the elements beside it.
 
 **A constraint is only held against what is shown.** `requires` (and a scale
 step's `on`) is satisfied when every element shown is one of the kinds; it is

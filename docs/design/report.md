@@ -448,8 +448,11 @@ element, it is applied only when every element the declaration is shown to
 style is that kind. Off its scope, or with nothing shown, the suggestion carries
 `review` and its reason, the message says `(review: …)`, and `fix` prints it as
 a `review` line instead of writing it. The judge skips it too: it is a single
-candidate, and what it needs is a reader, not a choice among options. See
-[token scopes](analysis.md#token-scopes).
+candidate, and what it needs is a reader, not a choice among options. A token
+that settles one part of a value (`border-radius: 4px 4px 0 0`, `border: 1px
+solid #ddd`), or equals the value in another unit (`0.25rem` for a `4px` step),
+is one `--judge` would write without a question, so it is held the same way,
+with the review naming the token. See [token scopes](analysis.md#token-scopes).
 
 **All three channels, two ways in.** A stylesheet declaration and a CSS-in-JS
 one are both matched as text on the line they were reported at: what is inside a

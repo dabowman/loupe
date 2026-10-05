@@ -493,9 +493,10 @@ whose role is not in the name. WPDS's is `profiles/wpds/token-scopes.json`:
 - Keys beginning with `$` are comments.
 
 What it changes. Wherever a declared segment `sets` a property, the declared
-grammar — not the engine's generic table — decides which tokens are suggested
-for it; everywhere else, and for a profile declaring nothing, the generic table
-answers exactly as before. A single suggested token scoped to a kind of element
+grammar — not the engine's generic table — decides which of the tokens under its
+patterns' prefixes are suggested for it; a token no pattern's prefix claims (a
+project's own `--acme-*`), every other property, and a profile declaring
+nothing get the generic table exactly as before. A single suggested token scoped to a kind of element
 is applied by `loupe fix` only where the declaration is shown to style that kind
 (see [Fixing](#fixing)), and `tokens/misapplied-token` reports a real token used
 off its declared property or kind. Where nothing shows what an element is, a
@@ -528,6 +529,14 @@ style that kind, the finding names it with `(review: …)` and the reason, and
 
 ```
 review src/a.scss:2  border-radius: 4px → --wpds-border-radius-md — for overlay; this styles <dialog>
+```
+
+The same holds for a token that settles one part of a value, or equals it in
+another unit — `4px 4px 0 0`, `border: 1px solid #ddd`, `0.25rem` — which
+`--judge` would otherwise write without asking; the review names the token:
+
+```
+review src/a.scss:3  border-radius: 4px 4px 0 0 — --wpds-border-radius-md for overlay; this styles <dialog>
 ```
 
 `tokens/unknown-token` is fixed on the same terms. A `var()` naming a token

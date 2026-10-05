@@ -171,8 +171,11 @@ export function readTokenSources(
  * generic table everywhere else.
  */
 export function onRole(names: readonly string[], prop: string, scopes?: TokenScopes | undefined): string[] {
-	const scoped = scopes ? scopedFamily(scopes, names, prop) : null;
-	if (scoped) return scoped;
+	return (scopes ? scopedFamily(scopes, names, prop, genericRole) : null) ?? genericRole(names, prop);
+}
+
+/** The names the generic table puts on `prop`. */
+function genericRole(names: readonly string[], prop: string): string[] {
 	const [, hint, own] = GENERIC_ROLES.find(([p]) => p.test(prop)) ?? [];
 	if (!hint) return [];
 	const onRole = names.filter((n) => hint.test(n));
@@ -343,12 +346,18 @@ export type Slot = { at: number; part: string } & ({ token: string } | { candida
  * to choose, so the value stays, whatever anyone thinks of it. Null when a part
  * is a literal no token here can stand for (`5%`, `-4px`, `hsl()`) — rewriting
  * the rest would leave the finding standing and call it fixed.
+ *
+ * `hold` says why a token a part settled on may not be applied unattended — off
+ * its declared scope on what the declaration styles, or not shown to be in it —
+ * and the first such reason comes back as `review`, naming the token. A part
+ * settles exactly as a whole value does, so it is held exactly as one is.
  */
 export function planValue(
 	set: TokenSet,
 	prop: string,
 	value: string,
-): 'none' | { parts: string[]; slots: Slot[] } | null {
+	hold?: (token: string) => string | null,
+): 'none' | { parts: string[]; slots: Slot[]; review?: string } | null {
 	const family = familyFor(set, prop);
 	// A token defined as another token has no literal to offer, but it is still a
 	// token for this property: "none" would be a false statement about the system.
@@ -358,6 +367,12 @@ export function planValue(
 	const measurable = family.some(([, fv]) => measure(fv));
 	const parts = measurable ? partsOf(value) : [value.trim()];
 	const slots: Slot[] = [];
+	let review: string | undefined;
+	const settle = (at: number, part: string, token: string): void => {
+		const why = review === undefined ? hold?.(token) : null;
+		if (why) review = `${token} ${why}`;
+		slots.push({ at, part, token });
+	};
 	for (const [at, part] of parts.entries()) {
 		// `calc(10px + 2px)` holds literals no token replaces, and rewriting the
 		// rest to `var()` would exempt the whole value from the rule.
@@ -367,16 +382,18 @@ export function planValue(
 		if (COLOR_SHORTHANDS.has(prop) && measure(part)?.kind !== 'color') continue;
 		const [only, ...more] = tokensFor(set, prop, part);
 		if (only !== undefined && !more.length) {
-			slots.push({ at, part, token: only });
+			settle(at, part, only);
 			continue;
 		}
 		const candidates = candidatesFor(set, prop, part);
 		if (!candidates) return null;
 		// One token equal to it in another unit is as settled as one written the same.
 		const [one, ...others] = candidates.tier === 'exact' ? candidates.options : [];
-		slots.push(one && !others.length ? { at, part, token: one[0] } : { at, part, candidates });
+		if (one && !others.length) settle(at, part, one[0]);
+		else slots.push({ at, part, candidates });
 	}
-	return slots.length ? { parts, slots } : null;
+	if (!slots.length) return null;
+	return review === undefined ? { parts, slots } : { parts, slots, review };
 }
 
 /**

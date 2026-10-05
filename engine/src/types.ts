@@ -423,6 +423,13 @@ export interface InlineStyleElement {
 	tag: string;
 	/** The canonical name of a design-system component, however the file imported it. */
 	component: string | null;
+	/**
+	 * What a profile's token-scope kinds call this element: the tag, or the
+	 * design-system component it is — `Button` under any alias, a namespace
+	 * import's member, a compound part as itself (`Card.Header`). Null for a
+	 * project component, whose own markup decides what it renders.
+	 */
+	element: string | null;
 	isSystem: boolean;
 	isText: boolean;
 	decls: Decl[];
@@ -635,10 +642,24 @@ export interface Control {
 	patternId: string;
 }
 
+/**
+ * An element carrying classes, for a token scope to know what a rule lands on:
+ * every class it carries, and what it is — the design-system component or the
+ * mapped raw tag the rest of the index records. Null where the index records
+ * nothing for it (a project component, a tag the element map does not name),
+ * so a class it shares with a recorded element cannot be taken to style only
+ * that one.
+ */
+export interface ClassCarrier {
+	element: string | null;
+	classes: string[];
+}
+
 export interface ScanResult {
 	controls: Control[];
 	bindings: Binding[];
 	rawEls: RawElement[];
+	carriers: ClassCarrier[];
 	inlineStyles: InlineStyleElement[];
 	cssInJs: CssInJsTemplate[];
 	composites: Composite[];
