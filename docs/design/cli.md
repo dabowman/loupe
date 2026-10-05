@@ -341,6 +341,15 @@ Resolution order, most explicit first:
 `extends` resolution is split out so a config that never touched disk — the one
 auto-detection produces — goes through the same resolution as a file.
 
+**`extends` can list several configs, and a shared ancestor is merged once.**
+Every shipped preset reaches `generic`, so `["wpds", "base-ui"]` is a diamond,
+not a cycle: a cycle is a config met again on its own ancestor chain, not one
+met twice on separate branches. The shared one is merged where it is first met
+and skipped after, so the order is still ancestors before descendants and left
+before right — `generic`, `wordpress-components`, `wpds`, `base-ui` — and the
+second branch's copy of `generic` cannot put back the `sources.references`
+that `wordpress-components` replaced.
+
 The deep merge **replaces arrays rather than concatenating**, so a preset can be
 overridden, and it is declared as returning the base's type: merging *onto*
 `DEFAULTS` is what makes every field present, and that is what keeps a settled

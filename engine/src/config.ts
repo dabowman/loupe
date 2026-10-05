@@ -162,15 +162,41 @@ interface Chain {
 	ruleFrom: Record<string, string>;
 }
 
-async function loadChain(path: string, seen = new Set<string>()): Promise<Chain> {
+/**
+ * Where a walk of `extends` has got to.
+ *
+ * `ancestors` is the path from the config being loaded down to this one, and a
+ * config met again on it is a cycle. It is not every config visited: a diamond
+ * — `extends: ["wpds", "base-ui"]`, both of which reach `generic` — meets the
+ * shared ancestor twice on separate branches, and that is no cycle.
+ *
+ * `applied` is every config merged in so far, across branches. A shared
+ * ancestor is merged once, where it is first met, and skipped after: merged
+ * again, the second branch's copy would land on top of the first branch and put
+ * back every setting the first branch's own configs had replaced — `generic`'s
+ * `sources.references` over `wordpress-components`'. Merged once, every config
+ * still lands after its ancestors and before its descendants, as in one chain.
+ */
+interface Walk {
+	ancestors: ReadonlySet<string>;
+	applied: Set<string>;
+}
+
+const freshWalk = (): Walk => ({ ancestors: new Set(), applied: new Set() });
+
+async function loadChain(path: string, walk = freshWalk()): Promise<Chain> {
 	const real = resolve(path);
-	if (seen.has(real)) throw new Error(`circular extends at ${real}`);
-	seen.add(real);
+	if (walk.ancestors.has(real)) throw new Error(`circular extends at ${real}`);
+	if (walk.applied.has(real)) return { raw: {}, ruleFrom: {} };
+	walk.applied.add(real);
 	const raw = (await readConfigFile(real)) ?? {};
 	const label = real.startsWith(PRESET_DIR)
 		? `preset ${real.slice(PRESET_DIR.length + 1).replace(/\.json$/, '')}`
 		: real;
-	return expandExtends(raw, dirname(real), label, seen);
+	return expandExtends(raw, dirname(real), label, {
+		ancestors: new Set([...walk.ancestors, real]),
+		applied: walk.applied,
+	});
 }
 
 /**
@@ -183,7 +209,7 @@ async function expandExtends(
 	raw: AuthoredConfig | undefined,
 	fromDir: string,
 	label: string,
-	seen = new Set<string>(),
+	walk = freshWalk(),
 ): Promise<Chain> {
 	const own = Object.fromEntries(Object.keys(isObj(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
 	if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
@@ -192,7 +218,7 @@ async function expandExtends(
 	let ruleFrom: Record<string, string> = {};
 	for (const spec of specs) {
 		const { path: p } = await resolveExtends(spec, fromDir);
-		const parent = await loadChain(p, seen);
+		const parent = await loadChain(p, walk);
 		base = mergeConfig(base, parent.raw);
 		ruleFrom = { ...ruleFrom, ...parent.ruleFrom };
 	}
