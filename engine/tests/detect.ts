@@ -371,6 +371,25 @@ await check('stylesheets past the count cap are not read, and the confidence say
 	}
 });
 
+await check('the count cap reads shallowest first, not alphabetically first', () => {
+	const root = scratch('dsh-budget-depth-');
+	try {
+		write(root, 'package.json', '{}');
+		write(root, 'src/A.jsx', 'export const A = () => <div className="acme-a acme-b acme-c acme-d" />;');
+		write(root, 'styles/main.css', '.acme-a{color:#1}\n.acme-b{color:#2}\n.acme-c{color:#3}\n.acme-d{color:#4}');
+		// `assets/` sorts before `styles/` by bytes, so a byte-ordered budget spends
+		// itself on these and never reaches the project's own sheet.
+		for (let i = 0; i < STYLE_FILE_BUDGET + 10; i++) write(root, `assets/gen/g${i}.css`, `.gen-g${i}{color:#000}`);
+		const got = detectConfig(root);
+		assert(
+			got.namespaces.project.includes('acme-'),
+			`the shallow stylesheet has to be read within the budget: ${JSON.stringify(got.namespaces)} ${JSON.stringify(got.namespaceNotes)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // ── possible external prefixes ──────────────────────────────────────────────
 // `namespaces.external` only ever came from presets, so a vendored bundle no
 // preset knows read as project code: `.ChatFooter-module_container` drew a

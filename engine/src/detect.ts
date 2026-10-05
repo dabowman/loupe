@@ -497,9 +497,15 @@ function detectNamespaces(
 	const cssCounts = new Map<string, number>();
 	const cssClasses = new Map<string, Set<string>>();
 	const generated = new Map<string, { classes: Set<string>; reason: string }>();
-	// Shallowest first, which is the order the walk found them in: the project's
-	// own stylesheets sit nearer the root than whatever generated the rest.
-	const read = files.styles.slice(0, STYLE_FILE_BUDGET);
+	// Shallowest first: the project's own stylesheets sit nearer the root than
+	// whatever generated the rest. `discover` sorts every list by path bytes, so
+	// without re-sorting a deep `assets/gen/` would spend the budget before
+	// `styles/` is reached. Bytes break ties so the pick is the tree's, not the
+	// machine's. A copy, because the byte order is what reports read.
+	const depth = (rel: string): number => rel.split('/').length;
+	const read = [...files.styles]
+		.sort((a, b) => depth(a.rel) - depth(b.rel) || byBytes(a.rel, b.rel))
+		.slice(0, STYLE_FILE_BUDGET);
 	let oversized = 0;
 	for (const { abs } of read) {
 		let text: string;
