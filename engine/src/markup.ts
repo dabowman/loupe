@@ -32,6 +32,7 @@ import { fewStaticOptions } from './checks/detectors/few-static-options.ts';
 import { judgeControl } from './checks/detectors/judge.ts';
 import type {
 	Binding,
+	ClassCarrier,
 	ComponentImport,
 	Composite,
 	Control,
@@ -393,6 +394,7 @@ export function scanMarkup(
 	const stems = harvestStems(text);
 	const bindings: Binding[] = [];
 	const rawEls: RawElement[] = [];
+	const carriers: ClassCarrier[] = [];
 	const inlineStyles: InlineStyleElement[] = [];
 	const cssInJs: CssInJsTemplate[] = [];
 	const composites: Composite[] = [];
@@ -403,6 +405,7 @@ export function scanMarkup(
 		controls,
 		bindings,
 		rawEls,
+		carriers,
 		inlineStyles,
 		cssInJs,
 		composites,
@@ -719,7 +722,9 @@ export function scanMarkup(
 			inlineStyles.push({
 				tag: isComponent ? root : tag.toLowerCase(),
 				component: isSystem ? (canonicals.get(root) ?? root) : null,
-				element: isSystem ? identityOf(root, member) : isComponent ? root : tag.toLowerCase(),
+				// A project component renders whatever its own markup says, and
+				// `?.Header` is a part of a namespace member no import names.
+				element: isSystem ? identityOf(root, member) : isComponent || tag.startsWith('?') ? null : tag.toLowerCase(),
 				isSystem,
 				isText: isSystem && isTextElement(root, member),
 				decls: style.decls,
@@ -729,10 +734,16 @@ export function scanMarkup(
 				line,
 			});
 
+		// Recorded as unknown first, and named below only where the element is
+		// recorded as what it is.
+		const carrier: ClassCarrier = { element: null, classes };
+		if (classes.length) carriers.push(carrier);
+
 		if (isComponent) {
 			if (!isSystem) return;
 			const isText = isTextElement(root, member);
 			const key = registryKey(root, member);
+			carrier.element = identityOf(root, member);
 			for (const cls of classes) bindings.push({ cls, tag: root, isSystem: true, isText, ...key, file: relPath, line });
 		} else {
 			// `render={ <h4 /> }` is not markup being rendered — it is the argument
@@ -768,6 +779,7 @@ export function scanMarkup(
 			// An inline style is styling too: a bare <div> laid out with
 			// style={{ display: 'flex' }} and no className is the shape agents write most.
 			if (mapped.styledOnly && !classes.length && !style?.present) return;
+			carrier.element = lower;
 			rawEls.push({
 				tag: lower,
 				classes,

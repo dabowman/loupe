@@ -559,6 +559,49 @@ export const A = () => (
 	);
 });
 
+// What a rule lands on is read from selector text and the markup the index
+// records, and every misreading of either named an element the rule does not
+// style: `.a.b` took the elements of each class, a class inside `:not()` counted,
+// an attribute value split into a tag, a nested group kept its last selector,
+// an interpolation read as `<dsh-e>`, and a class shared with an unrecorded
+// element was taken to style only the recorded one.
+await check('what a rule styles is read conservatively, and unknown where it is not shown', async () => {
+	const { findings, misapplied } = await run({
+		'src/A.jsx': `import styled from '@emotion/styled';
+const Icon = () => null;
+const Nav = styled.nav\`
+	& button, & a { cursor: var(--wpds-cursor-control); }
+	&:hover \${Icon} { background: var(--wpds-color-background-interactive-neutral); }
+\`;
+export const A = () => (
+	<Nav>
+		<section className="rp-panel is-active" />
+		<button className="is-active rp-x" aria-label="Close dialog" />
+		<ul>
+			<li className="rp-item" />
+			<li className="rp-item" />
+			<li className="rp-item" />
+		</ul>
+		<button className="rp-item" />
+		<dialog className="rp-n" />
+		<button className="rp-m" />
+	</Nav>
+);
+`,
+		'src/a.css': `.rp-panel.is-active { background: var(--wpds-color-background-surface-neutral-strong); }
+.rp-x[aria-label="Close dialog"] { border-radius: var(--wpds-border-radius-sm); }
+.rp-item { border-radius: 2px; }
+.rp-n:not(.rp-m) { border-radius: 8px; }
+`,
+	});
+	assert(!misapplied.length, misapplied.map((f) => `${f.file}:${f.line} ${f.message}`).join('\n'));
+	// Three list items and a button share the class: the button's radius is not
+	// the rule's to apply. A class inside `:not()` is one the element lacks.
+	const fixes = tokenFixes(findings).map((f) => `${f.line} ${f.to}`);
+	assert(fixes.join() === '4 var(--wpds-border-radius-lg)', `fixes: ${fixes.join(', ')}`);
+	assert(hardcoded(findings, 'src/a.css', 3).suggest?.[0]?.review, 'the shared class is held for review');
+});
+
 await check('nothing is misapplied where nothing declares a scope, or nothing shows the element', async () => {
 	const { misapplied } = await run({
 		'src/a.css': `.rp-a {

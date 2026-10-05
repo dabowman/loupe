@@ -193,6 +193,16 @@ listed only where its `className` lands on that element (`Dropdown`'s lands on
 the toggle's wrapper, so it is not an overlay). A kind declared empty is one no
 markup can show — "nested inside a control", "the app shell".
 
+A selector is read for what its key compound says about the element itself, and
+when unsure, what it styles is unknown. `.a.b` lands only on elements carrying
+both; a class inside `:not()`, `:is()` or `:has()`, or an attribute value, says
+nothing about the element; every selector of a list counts, a CSS-in-JS nested
+group's included. An interpolated compound (`${Icon}`), a class carried by an
+element the index records nothing for — a project component, a tag the element
+map does not name — and a project component's own inline style or template are
+not shown, so a rule reaching one of them is held for review, never reported as
+misapplied on the elements beside it.
+
 **A constraint is only held against what is shown.** `requires` (and a scale
 step's `on`) is satisfied when every element shown is one of the kinds; it is
 violated when every element is shown to be none of them; anything else —
