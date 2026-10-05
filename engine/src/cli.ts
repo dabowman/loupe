@@ -465,22 +465,25 @@ function resolveScope(
 	return null;
 }
 
+/** What a finding is matched by across an edit: its baseline key, and its message. */
+type Identity = Pick<Finding, 'rule' | 'file' | 'code' | 'message'>;
+
 /**
- * The touched file's finding keys as it stood before the edit, for PostToolUse
- * to tell what the edit introduced from what it walked past.
+ * The touched file's findings as it stood before the edit, for PostToolUse to
+ * tell what the edit introduced from what it walked past.
  *
  * Empty when there is nothing to compare against — a file the write created, a
  * payload with no pre-edit content, an analysis that failed — which is the
- * absolute check, the gate as it was. Keyed like the baseline, rule + file +
+ * absolute check, the gate as it was. Matched like the baseline, rule + file +
  * code, so a finding the edit merely moved down the file is not a new one.
  */
-async function keysBeforeEdit(
+async function findingsBeforeEdit(
 	config: Config,
 	touched: string,
 	before: string | null,
 	{ judge, suppress }: { judge: boolean; suppress: boolean },
-): Promise<Set<string>> {
-	if (before === null) return new Set();
+): Promise<Identity[]> {
+	if (before === null) return [];
 	try {
 		const prior = await analyze(config, {
 			scope: [touched],
@@ -488,16 +491,38 @@ async function keysBeforeEdit(
 			suppress,
 			contents: new Map([[touched, before]]),
 		});
-		const keys = new Set(prior.findings.map(findingKey));
 		// A judged redirect is written after analysis, from a control the analysis
 		// collected (`judgeRedirects`, keyed by its component). The control standing
 		// before the edit is the finding standing before it, without paying to ask
 		// the judge about a file the edit has already replaced.
-		for (const c of prior.controls ?? []) keys.add(findingKey({ ...redirectIdentity(c), message: '' }));
-		return keys;
+		return [...prior.findings, ...(prior.controls ?? []).map((c) => ({ ...redirectIdentity(c), message: '' }))];
 	} catch {
-		return new Set();
+		return [];
 	}
+}
+
+/**
+ * The findings in `after` that the edit introduced.
+ *
+ * Counted, not looked up: a file with one margin on a child that now has two
+ * gained one, though both share a key. Each finding standing before the edit
+ * accounts for at most one after it, one with the same message first, so where
+ * two differ only in their value the one reported is the one the edit wrote.
+ */
+function introducedBy(after: readonly Finding[], before: readonly Identity[]): Finding[] {
+	const pool = new Map<string, string[]>();
+	for (const f of before) {
+		const k = findingKey(f);
+		pool.set(k, [...(pool.get(k) ?? []), f.message]);
+	}
+	const take = (f: Finding, sameMessage: boolean): boolean => {
+		const left = pool.get(findingKey(f));
+		const i = !left ? -1 : sameMessage ? left.indexOf(f.message) : left.length - 1;
+		if (!left || i < 0) return false;
+		left.splice(i, 1);
+		return true;
+	};
+	return after.filter((f) => !take(f, true)).filter((f) => !take(f, false));
 }
 
 /**
@@ -1544,12 +1569,13 @@ async function main(): Promise<number> {
 		const errors = result.findings.filter((f) => f.severity === 'error');
 		let blocking: Finding[] = errors;
 		if (touched && errors.length) {
-			const before = await keysBeforeEdit(config, touched, preEditContent(payload), {
+			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
 				judge: Boolean(apiKey),
 				suppress: !args.flags['no-suppressions'],
 			});
-			blocking = errors.filter((f) => !before.has(findingKey(f)));
+			blocking = introducedBy(errors, before);
 		}
+		// What stood before the edit and still does: never more than stood before it.
 		const standing = errors.length - blocking.length;
 		// Said, not dropped: the agent should know what it is walking past, and that
 		// Stop will hold it to them.

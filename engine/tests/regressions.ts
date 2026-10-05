@@ -1223,6 +1223,39 @@ await check('PostToolUse blocks on what the edit introduced; Stop on everything'
 	}
 });
 
+// The pre-edit findings were a Set of keys, so an edit that added a second
+// finding under a key the file already had — a second margin on a child, whose
+// code is the bare property — passed as pre-existing, and the note counted both
+// as standing before the edit though one had.
+await check('PostToolUse counts a finding sharing a key with a standing one as introduced', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.b { margin-bottom: 16px; }\n',
+	});
+	const css = join(root, 'styles', 'a.css');
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		const before = readFileSync(css, 'utf8');
+		writeFileSync(css, `${before}.d { margin-bottom: 24px; }\n`);
+		const r = runCli(
+			['hook', '--root', root],
+			{ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+			JSON.stringify({
+				session_id: 'multiset',
+				hook_event_name: 'PostToolUse',
+				tool_name: 'Edit',
+				tool_input: { file_path: 'styles/a.css' },
+				tool_response: { filePath: css, originalFile: before },
+			}),
+		);
+		assert(r.status === 2, `an edit that added a second margin on a child did not block: ${r.status}\n${r.stdout}`);
+		assert(/24px/.test(r.stderr) && !/16px/.test(r.stderr), `blocked on the wrong one:\n${r.stderr}`);
+		assert(/ 1 blocking finding\(s\) already in/.test(r.stderr), `miscounted what stood before:\n${r.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `--changed` is the hook's default scope. `git diff --name-only` answers from
 // the repository root while `ls-files` answers from the cwd, so a project rooted
 // in a subdirectory of the worktree built a scope Set in two coordinate systems

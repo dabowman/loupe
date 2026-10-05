@@ -904,6 +904,14 @@ one stayed at 1.0s.
 above a finding moves it down the file, and a key with the line in it would
 call that finding new.
 
+**Counted, not looked up.** The keys are compared as a multiset: a file that
+had one `margin-bottom` on a child and now has two gained a finding, though both
+share a key, and a set lookup called the second one pre-existing. Each finding
+standing before the edit accounts for at most one after it — one with the same
+message first, so where two differ only in their value the one reported is the
+one the edit wrote — and the count of standing findings is never more than
+stood before the edit.
+
 **No "before", no subtraction.** A file the write created, a payload that does
 not carry `originalFile`, or a pre-edit analysis that fails compares against
 nothing — the absolute check, the gate as it was. A judged redirect is written
