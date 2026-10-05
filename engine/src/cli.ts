@@ -66,6 +66,7 @@ import {
 	emitBlocking,
 	emitClean,
 	hookRoot,
+	hookEvent,
 	hookOff,
 	hookSilenced,
 	parsePayload,
@@ -1459,6 +1460,12 @@ async function main(): Promise<number> {
 	// reported at write time. Stop payloads carry no file and fall through to
 	// the changed-file scope.
 	const touched = isHook ? payloadFile(payload, root) : null;
+	// A PostToolUse with no file in the project — a note in a scratchpad, a plan
+	// under ~/.claude — is not a Stop. Taken for one, it checked the whole changed
+	// set absolutely and spent the Stop gate's retry budget on an edit that could
+	// not have introduced anything here.
+	if (isHook && !touched && hookEvent(payload) === 'PostToolUse')
+		return emitClean('loupe: skipped \u2014 not a file in this project.');
 	if (touched && !isSource(config.sources, touched)) return emitClean('loupe: skipped \u2014 not a checked file type.');
 	const scope: ScopeResult = touched ? [touched] : resolveScope(config, args, { defaultChanged: isHook });
 	if (scope !== null && !Array.isArray(scope)) {

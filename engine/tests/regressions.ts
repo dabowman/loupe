@@ -1328,6 +1328,64 @@ await check('PostToolUse does not call a shrunk collapsed finding or a moved par
 	}
 });
 
+// A PostToolUse for a file outside the project got no touched file and took
+// the Stop path: the whole changed set, checked absolutely, on the Stop budget.
+// So a note written to a scratchpad blocked on a standing finding, and three of
+// them stood the Stop gate down for the turn. And the project spelled through
+// a symlink was "outside" itself.
+await check('PostToolUse for a file outside the project is clean and spends no Stop attempts', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.b { margin-bottom: 16px; }\n',
+	});
+	const elsewhere = scratch('dsh-notes-');
+	const link = `${root}-link`;
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		const hook = (payload: object, at = root) =>
+			runCli(['hook', '--root', at], { CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }, JSON.stringify(payload));
+		const note = join(elsewhere, 'notes.md');
+		writeFileSync(note, '# notes\n');
+		for (let i = 0; i < 4; i++) {
+			const r = hook({
+				session_id: 'outside',
+				hook_event_name: 'PostToolUse',
+				tool_name: 'Write',
+				tool_input: { file_path: note },
+				tool_response: { filePath: note, originalFile: null },
+			});
+			assert(r.status === 0, `an edit outside the project blocked: ${r.status}\n${r.stderr}`);
+		}
+		const stop = hook({ session_id: 'outside', hook_event_name: 'Stop', stop_hook_active: false });
+		assert(stop.status === 2, `Stop's budget was spent by edits outside the project: ${stop.status}\n${stop.stdout}`);
+
+		// The project through a symlink, the file by its real path: still this
+		// project's file, compared against what it was before the edit.
+		symlinkSync(root, link);
+		const css = join(root, 'styles', 'a.css');
+		const before = readFileSync(css, 'utf8');
+		writeFileSync(css, `/* note */\n${before}`);
+		const linked = hook(
+			{
+				session_id: 'linked',
+				hook_event_name: 'PostToolUse',
+				tool_name: 'Edit',
+				tool_input: { file_path: css },
+				tool_response: { filePath: css, originalFile: before },
+			},
+			link,
+		);
+		assert(
+			linked.status === 0 && /added no blocking findings/.test(linked.stdout),
+			`a file reached through another symlink was not this project's: ${linked.status}\n${linked.stdout}${linked.stderr}`,
+		);
+	} finally {
+		rmSync(link, { force: true });
+		cleanup(elsewhere);
+		cleanup(root);
+	}
+});
+
 // `--changed` is the hook's default scope. `git diff --name-only` answers from
 // the repository root while `ls-files` answers from the cwd, so a project rooted
 // in a subdirectory of the worktree built a scope Set in two coordinate systems
