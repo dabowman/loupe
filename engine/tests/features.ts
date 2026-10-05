@@ -1911,6 +1911,33 @@ await check('a property the component owns still blocks, and the message names t
 	);
 });
 
+await check('a class on several components keeps the first one in its code, whichever owns the property', async () => {
+	// Before surfaces, `system/override` named the first component the class is
+	// bound to, and that is what a baseline recorded then holds. The message may
+	// now name another binding — the one whose surface owns the property — but
+	// the identity must not move with it, or upgrading resurfaces accepted work.
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.css': '.acme-x { color: #f00; }',
+			'src/A.tsx': [
+				"import { Notice } from '@wordpress/components';",
+				'export const A = () => <Notice className="acme-x">x</Notice>;',
+			].join('\n'),
+			'src/B.tsx': [
+				"import { Button } from '@wordpress/components';",
+				'export const B = () => <Button className="acme-x">y</Button>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/override'), 'one override on the shared class');
+	assert(f.message.startsWith('<Button> ← color — set via'), `the message names the owner: ${f.message}`);
+	// The key a baseline recorded before surfaces: the first binding, by code.
+	const recorded = findingKey({ rule: 'system/override', file: f.file, code: '<Notice> ← color', message: '' });
+	assert(findingKey(f) === recorded, `the pre-surface key ${recorded} is not the finding's ${findingKey(f)}`);
+});
+
 await check('a component that sets a property with no prop for it says so, and still blocks', async () => {
 	const r = await run(
 		{

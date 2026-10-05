@@ -110,7 +110,10 @@ component could come from records a single surface, an appearance property on
 a class bound to it blocks as it did before surfaces existed, with the remedy
 it had then: `<Button> ← background — restyle via its props/tokens, not CSS`.
 `code` is `<Button> ← background` either way, so a baseline taken under one
-reading matches under the other.
+reading matches under the other. For a class bound to several components the
+message names the one whose surface owns the property, but `code` keeps the
+first component the class is bound to, as it did before surfaces, so a
+baseline recorded then still matches.
 
 The cost of the old reading is the one #13 was filed about — converting a raw
 element to a component turns its advisory CSS into blocking findings — so

@@ -75,8 +75,12 @@ export const UNREAD_REMEDY = 'restyle via its props/tokens, not CSS';
 export const systemOverride: DeclarationCheck = ({ prop }, { boundSystem, enabled, surfaceOf, surfaced }) => {
 	if (!boundSystem[0] || !APPEARANCE_PROPS.has(prop) || !enabled('system/override')) return undefined;
 	const owner = owningBinding(boundSystem, prop, surfaceOf);
-	// Identity is the component and the property, as it was before the message
-	// said why: a baseline entry must survive the explanation.
+	// Identity is the first bound component and the property, as it was before
+	// the message said why: a baseline entry must survive the explanation. The
+	// message names the binding whose surface owns the property, which for a
+	// class on several components need not be the first, but the code stays on
+	// the first so a baseline recorded before surfaces still matches.
+	const code = `<${boundSystem[0].tag}> ← ${prop}`;
 	if (owner) {
 		const head = `<${owner.binding.tag}> ← ${prop}`;
 		return {
@@ -84,13 +88,12 @@ export const systemOverride: DeclarationCheck = ({ prop }, { boundSystem, enable
 			message: owner.via.length
 				? `${head} — set via ${viaProps(owner.via)}`
 				: `${head} — it sets this itself and has no prop for it`,
-			code: head,
+			code,
 		};
 	}
 	const unread = boundSystem.find((b) => !surfaced(b));
 	if (!unread) return undefined;
-	const head = `<${unread.tag}> ← ${prop}`;
-	return { rule: 'system/override', message: `${head} — ${UNREAD_REMEDY}`, code: head };
+	return { rule: 'system/override', message: `<${unread.tag}> ← ${prop} — ${UNREAD_REMEDY}`, code };
 };
 
 /**
