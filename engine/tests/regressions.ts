@@ -628,6 +628,19 @@ await check('the hook is off until the project opts in', () => {
 		// proves it was read.
 		assert(silent(hook({ LOUPE: undefined }, 'x'.repeat(512 * 1024))), 'a large payload was not drained before opt-in');
 		assert(/hook:\s+OFF/.test(status()), 'status did not report the hook off before opt-in');
+		// The off switch silences an opted-in project. Asked ahead of the opt-in,
+		// it had every project that never opted in told it was skipped, on every
+		// edit, and `status` there called it silenced.
+		for (const off of [{ CLAUDE_PLUGIN_OPTION_OFF: 'true' }, { LOUPE_OFF: '1' }]) {
+			const r = hook({ LOUPE: undefined, ...off });
+			assert(silent(r), `a project that never opted in heard from ${Object.keys(off)[0]}: ${r.stdout}`);
+		}
+		const neverOn = execFileSync('node', [CLI, 'status', '--root', root], {
+			encoding: 'utf8',
+			env: env({ LOUPE: undefined, LOUPE_OFF: '1' }),
+			stdio: ['pipe', 'pipe', 'pipe'],
+		});
+		assert(/hook:\s+OFF .*not opted in/.test(neverOn), `status did not say "not opted in":\n${neverOn}`);
 
 		writeAll(root, { '.claude/settings.local.json': JSON.stringify({ env: { LOUPE: 'on' } }) });
 		assert(

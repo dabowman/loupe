@@ -608,7 +608,7 @@ async function main(): Promise<number> {
 	// other stand-down, or a stale switch disables the gate with no trace.
 	if (isHook) {
 		const off = hookOff(projectDir, resolved);
-		if (off) return hookSilenced(resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
+		if (off) return hookSilenced(projectDir, resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
 	}
 
 	// The project, not the directory you happen to be standing in: the hook roots

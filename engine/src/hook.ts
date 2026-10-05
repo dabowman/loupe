@@ -252,19 +252,24 @@ function optedIn(projectDir: string): boolean {
  * Why the hook says nothing, or null when it runs. Asked once, so a diagnostic
  * saying the hook is off is one that watched the same values the hook did.
  * `projectDir` is `claudeProjectDir()`'s answer, never the run's root.
+ *
+ * The opt-in is asked first: the `off` option is set once for every project
+ * its owner opens, and a project that never switched the gate on was not
+ * silenced by it.
  */
 export function hookOff(projectDir: string, resolved: ResolvedOptions = resolvedOptions(projectDir)): string | null {
-	if (hookSilenced(resolved)) {
+	if (!optedIn(projectDir))
+		return 'this project has not opted in; add "env": { "LOUPE": "on" } to .claude/settings.local.json';
+	if (resolved.options.off === true) {
 		const from = resolved.sources.off ?? '';
 		return `silenced by ${from.startsWith('LOUPE_OFF') ? from : `the plugin's "off" option (${from})`}`;
 	}
-	if (!optedIn(projectDir))
-		return 'this project has not opted in; add "env": { "LOUPE": "on" } to .claude/settings.local.json';
 	return null;
 }
 
 /** Opted in, then switched off — as opposed to never switched on. */
-export const hookSilenced = (resolved: ResolvedOptions): boolean => resolved.options.off === true;
+export const hookSilenced = (projectDir: string, resolved: ResolvedOptions): boolean =>
+	resolved.options.off === true && optedIn(projectDir);
 
 /** Each `userConfig` key, as `plugin.json` spells it, and the field it fills. */
 const FIELDS = {
