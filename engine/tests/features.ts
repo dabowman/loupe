@@ -1408,6 +1408,34 @@ await check('a 429 waits as long as retry-after says, then asks again', async ()
 	assert(Date.now() - started < 400, `waited ${Date.now() - started}ms for a 10ms retry-after`);
 });
 
+await check('a huge retry-after is capped, not slept for an hour', async () => {
+	let calls = 0;
+	const stub = (async () =>
+		++calls === 1
+			? new Response('slow down', { status: 429, headers: { 'retry-after': '3600' } })
+			: new Response(
+					JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }),
+				)) as unknown as typeof fetch;
+	const delays: number[] = [];
+	const realSetTimeout = globalThis.setTimeout;
+	// Fire at once, recording what was asked for.
+	globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+		delays.push(ms ?? 0);
+		return realSetTimeout(fn, 0);
+	}) as unknown as typeof setTimeout;
+	try {
+		await ask(
+			forceQuery(represents),
+			[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+			'key',
+			stub,
+		);
+	} finally {
+		globalThis.setTimeout = realSetTimeout;
+	}
+	assert(delays.length === 1 && delays[0] === 5000, `asked setTimeout for ${delays.join(',')}ms`);
+});
+
 await check('resolve runs on known forces, and stops at a row it cannot decide', async () => {
 	const table = [
 		{ when: { represents: 'command' }, redirect: 'menu' },

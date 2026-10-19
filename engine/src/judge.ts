@@ -56,6 +56,9 @@ const RETRIES = 4;
 // ponytail: per request, so a long full-repo run is still bounded only by its
 // item count. Give `ask` a whole-run deadline if that ever needs a ceiling too.
 const REQUEST_TIMEOUT_MS = 20_000;
+// The longest a retry waits on the server's say-so. A `retry-after: 3600` from a
+// server or proxy would otherwise hold a worker, and so the run, for an hour.
+const MAX_RETRY_WAIT_MS = 5_000;
 
 type Fetch = typeof fetch;
 
@@ -118,10 +121,11 @@ export async function ask<T>(
 			const transient = res.status === 429 || res.status >= 500;
 			if (!transient || attempt >= RETRIES)
 				throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
-			// The server's own wait when it names one, in seconds; a date or
-			// nothing falls back to doubling.
+			// The server's own wait when it names one, in seconds, capped; a date
+			// or nothing falls back to doubling.
 			const after = Number(res.headers.get('retry-after'));
-			await new Promise((r) => setTimeout(r, after > 0 ? after * 1000 : 500 * 2 ** attempt));
+			const wait = after > 0 ? after * 1000 : 500 * 2 ** attempt;
+			await new Promise((r) => setTimeout(r, Math.min(wait, MAX_RETRY_WAIT_MS)));
 		}
 	};
 

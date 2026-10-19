@@ -27813,6 +27813,7 @@ var FLOOR = 0.5;
 var CONCURRENCY = 6;
 var RETRIES = 4;
 var REQUEST_TIMEOUT_MS = 2e4;
+var MAX_RETRY_WAIT_MS = 5e3;
 async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
   const batches = [];
   for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
@@ -27837,7 +27838,8 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
       if (!transient || attempt >= RETRIES)
         throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
       const after = Number(res.headers.get("retry-after"));
-      await new Promise((r) => setTimeout(r, after > 0 ? after * 1e3 : 500 * 2 ** attempt));
+      const wait = after > 0 ? after * 1e3 : 500 * 2 ** attempt;
+      await new Promise((r) => setTimeout(r, Math.min(wait, MAX_RETRY_WAIT_MS)));
     }
   };
   const done = new Array(batches.length);
