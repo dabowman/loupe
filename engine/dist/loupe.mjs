@@ -25958,8 +25958,8 @@ async function analyze(config, {
     const body2 = tail && f.message.endsWith(tail) ? f.message.slice(0, -tail.length) : f.message;
     f.message = messageLine(body2, tail);
   }
-  unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
-  directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  unique.sort((a, b) => b.rank - a.rank || byBytes(a.file, b.file) || a.line - b.line);
+  directives.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
   const liveControls = judge && config.enabled["patterns/judged-redirect"] ? controls.filter((c) => {
     const supp = suppByFile.get(c.file);
     return reports(c.file) && !(supp && ledger.mute(supp, c.line, "patterns/judged-redirect"));
@@ -28559,7 +28559,7 @@ function nearMisses(result) {
 var tally = (keys) => {
   const counts = /* @__PURE__ */ new Map();
   for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
-  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return [...counts].sort((a, b) => b[1] - a[1] || byBytes(a[0], b[0]));
 };
 var TOP = 3;
 function densestLine(findings) {
@@ -28589,7 +28589,7 @@ function bucket(findings, key) {
 var byRank = (a, b) => RULES[b[0]].rank - RULES[a[0]].rank;
 var byWeight = (a, b) => {
   const blocking = (g) => g.filter((f) => f.severity === "error").length;
-  return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]);
+  return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || byBytes(a[0], b[0]);
 };
 var groupsOf = (findings, by) => by === "rule" ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
 function ruleHeading(id, group, title) {

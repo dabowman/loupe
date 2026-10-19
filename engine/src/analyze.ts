@@ -39,7 +39,7 @@ import { readFileSync, realpathSync, statSync } from 'node:fs';
 import type { Root } from 'postcss';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { RULES } from './rules.ts';
-import { discover, toPosix } from './discover.ts';
+import { byBytes, discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { scanMarkup, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
@@ -734,8 +734,8 @@ export async function analyze(
 	// `suffix` is not dropped here: `--judge` runs after this and recomposes the
 	// message of anything it settles. It is dropped where the output is built.
 
-	unique.sort((a, b) => b.rank - a.rank || a.file.localeCompare(b.file) || a.line - b.line);
-	directives.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+	unique.sort((a, b) => b.rank - a.rank || byBytes(a.file, b.file) || a.line - b.line);
+	directives.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
 
 	// Controls are muted here, before the ledger settles, so a directive for
 	// `patterns/judged-redirect` is credited on a `--judge` run.
