@@ -1,0 +1,10 @@
+{
+  "note": "block.json names acme/card, so .wp-block-acme-card is this block's wrapper and wp-block-acme- its namespace's prefix: the project's own under the external wp-block-. Neither the wrapper (line 1) nor .wp-block-acme-card__title (line 6) is a library internal, so their declarations get their own verdicts: the padding and background owe tokens, the margin belongs on the parent's gap, the font size is untokenized. Neither is dead: the wrapper exists only in rendered output. Core .wp-block-group, which no block.json here names, is still a library internal (line 7).",
+  "findings": [
+    { "rule": "tokens/hardcoded-value", "file": "blocks/card/style.css", "line": 2 },
+    { "rule": "layout/margin-on-child", "file": "blocks/card/style.css", "line": 3 },
+    { "rule": "tokens/hardcoded-value", "file": "blocks/card/style.css", "line": 4 },
+    { "rule": "typography/untokenized", "file": "blocks/card/style.css", "line": 6 },
+    { "rule": "system/override", "file": "blocks/card/style.css", "line": 7 }
+  ]
+}

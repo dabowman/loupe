@@ -1,0 +1,14 @@
+.acme-card p { margin: 0 0 1em; }
+.acme-card__title { margin-bottom: 8px; }
+.acme-card p { margin-top: -4px; }
+h2 { margin-bottom: var(--wpds-dimension-gap-md); }
+.acme-card h3 { margin-bottom: var(--wpds-dimension-gap-md); }
+.acme-card__body { margin-top: var(--wpds-dimension-gap-md); }
+.acme-list > li:not(.acme-list__more) { margin-bottom: 4px; }
+.acme-row > li.acme-row__item { margin-right: 8px; }
+.acme-stack > * + * { margin-top: 1rem; }
+.acme-card p, .acme-card__lead { margin-bottom: 1em; }
+.acme-quote {
+	p { margin-bottom: 1em; }
+	&__cite { margin-top: 8px; }
+}

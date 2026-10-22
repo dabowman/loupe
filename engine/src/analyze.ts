@@ -49,6 +49,7 @@ import { under } from './paths.ts';
 import { activeDelivery, activeProfiles } from './profiles.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { harvestTokens } from './markup.ts';
+import { blockClasses, blockName, isBlockManifest } from './blocks.ts';
 import { syntaxFor } from './syntax.ts';
 import { surfaceFor, surfacesRecorded } from './components.ts';
 import { boundMessage, oneLine, parseMessageOf, parseReasonOf, snippet } from './text.ts';
@@ -79,8 +80,9 @@ import {
 	isHardcodedTokenValue,
 	isLayoutDecl,
 	isMarginProp,
-	keyCompound,
+	keyClassesIn,
 	keySelector,
+	keysBareElement,
 	mediaQuery,
 	ownDecls,
 	ownLevel,
@@ -153,7 +155,7 @@ const realPath = (path: string): string | null => {
  * is missed — a missed override, never a false one.
  */
 const partClass = (sel: string): string | undefined =>
-	keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, '')).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+	ownLevel(keySelector(sel)).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
 
 /** The element a compound selector names, lowercased: `button.primary:hover` → `button`. */
 const tagOf = (compound: string): string | null => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
@@ -296,6 +298,7 @@ function classifyDeclaration(
 		boundSystem = [],
 		boundText = [],
 		isGrid = false,
+		bareElement = false,
 		surfaceOf = () => undefined,
 		surfaced = () => true,
 		enabled,
@@ -308,7 +311,7 @@ function classifyDeclaration(
 		TYPE_PROPS.has(prop) ||
 		isHardcodedTokenValue(prop, value) ||
 		APPEARANCE_PROPS.has(prop);
-	const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled };
+	const ctx = { boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled };
 	// Deliberately unbounded: `message` is part of what the dedupe tells two
 	// findings apart by. The line is bounded once, at the end of `analyze`.
 	for (const check of DECLARATIONS) {
@@ -692,7 +695,7 @@ export async function analyze(
 		if (!scopes) return [];
 		const out = new Set<string>();
 		for (const sel of selectors) {
-			const found = compoundElements(keyCompound(sel), carriersByClass);
+			const found = compoundElements(keySelector(sel), carriersByClass);
 			if (!found) return [];
 			for (const e of found) out.add(e);
 		}
@@ -705,14 +708,18 @@ export async function analyze(
 	 */
 	const nestedElements = (selector: string): string[] => {
 		const selectors = list.comma(selector);
-		return selectors.some((sel) => keyCompound(sel).includes('&')) ? [] : elementsOf(selectors);
+		return selectors.some((sel) => keySelector(sel).includes('&')) ? [] : elementsOf(selectors);
 	};
 
+	// The blocks the project's own `block.json` files name, read on the same
+	// pass: their wrapper classes are the project's, under an external prefix.
+	const blockNames = new Set<string>();
 	for (const { abs, rel } of files.references) {
 		const look = lookup(abs, rel);
 		if (oversized(abs, rel, look)) continue;
 		if (look?.entry?.refs) {
 			for (const t of look.entry.refs) referenced.add(t);
+			if (look.entry.block) blockNames.add(look.entry.block);
 			diagnostics.filesScanned++;
 			continue;
 		}
@@ -721,9 +728,16 @@ export async function analyze(
 		if (text === null) continue;
 		const found = harvestTokens(text);
 		for (const t of found) referenced.add(t);
+		const block = isBlockManifest(rel) ? blockName(text) : null;
+		if (block) blockNames.add(block);
 		diagnostics.filesScanned++;
-		if (look) cache?.store(look, rel, text, { d: false, refs: [...found] });
+		if (look) cache?.store(look, rel, text, { d: false, refs: [...found], ...(block ? { block } : {}) });
 	}
+	const ownBlocks = [...blockNames].flatMap((name) => blockClasses(name) ?? []);
+	/** A class under the wrapper prefix of one of the project's own blocks (`wp-block-acme-`). */
+	const isOwnBlock = (cls: string): boolean => ownBlocks.some((b) => cls.startsWith(b.prefix));
+	/** The wrapper class itself (`wp-block-acme-card`), which WordPress writes and no source spells. */
+	const isBlockWrapper = (cls: string): boolean => ownBlocks.some((b) => cls === b.wrapper);
 
 	// ── walk CSS ──────────────────────────────────────────────────────────────
 	const styledClasses = new Set<string>(); // classes CSS actually styles — feeds system/raw-element
@@ -814,16 +828,20 @@ export async function analyze(
 			const allClasses = [...new Set(selectors.flatMap(classesIn))];
 			// Kept per selector as well as pooled: deleting the rule for one dead
 			// class is only safe if every selector in the list names that class.
-			const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+			const keyClassesPer = selectors.map(keyClassesIn);
 			const keyClasses = [...new Set(keyClassesPer.flat())];
 			if (!allClasses.length) continue;
 
 			// Bindings correlate against the KEY selector only: `.card .title`
-			// styles `.title`, so `.card`'s component must not answer for it.
+			// styles `.title`, so `.card`'s component must not answer for it, and
+			// `li:not(.btn)` styles no `.btn`.
 			const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
 			const boundSystem = bound.filter((b) => b.isSystem);
 			const boundText = bound.filter((b) => b.isText);
 			const isGrid = cssRule.isGrid;
+			// Every selector: one classed selector in the list, and the margin lands
+			// on a component's part as well.
+			const bareElement = selectors.every(keysBareElement);
 			const scopeLines = nearby(ruleLine);
 			// Carried so a browser-side reader can resolve this rule to the elements
 			// it styles: the comma-joined selector list is a valid `querySelectorAll`
@@ -847,7 +865,7 @@ export async function analyze(
 				const line = decl.line;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive },
+					{ boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled: ruleIsLive },
 				);
 				if (onRawKeys.length)
 					classDecls.push({ prop, value: decl.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
@@ -861,10 +879,16 @@ export async function analyze(
 			if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
 
 			// Reaching into a third-party component's internals replaces the
-			// per-declaration findings rather than adding to them.
+			// per-declaration findings rather than adding to them. A class under a
+			// project block's wrapper prefix is not one: its declarations get their
+			// own verdicts.
 			const override =
 				touchesStyle && ruleIsLive('system/override')
-					? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject)
+					? libraryOverride(
+							keyClasses,
+							(c) => config.isExternal(c) || library.classes.has(c),
+							(c) => config.isProject(c) || isOwnBlock(c),
+						)
 					: null;
 			if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
 			else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
@@ -893,7 +917,8 @@ export async function analyze(
 		referenced,
 		stems: [...stems],
 		isProject: config.isProject,
-		isNeverDead: config.isNeverDead,
+		// A block's wrapper class exists only in rendered output, whatever namespace claims it.
+		isNeverDead: (c) => config.isNeverDead(c) || isBlockWrapper(c),
 	}))
 		report(f);
 

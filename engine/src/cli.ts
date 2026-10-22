@@ -18,6 +18,7 @@ import { isMainThread } from 'node:worker_threads';
 import { analyze, declarationKeys, dedupe, isBlocking } from './analyze.ts';
 import { statusFlaggedBy, supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
+import { blockPrefixes, blocksIn, describeBlocks } from './blocks.ts';
 import {
 	MODEL,
 	judgeClient,
@@ -1366,6 +1367,15 @@ async function main(): Promise<number> {
 		// system, and inferring it from a missing line recommends one that isn't there.
 		const ds = config.designSystem;
 		const delivery = activeDelivery(config);
+		// The blocks whose wrapper classes the analysis takes as the project's own,
+		// off the walk and the reference globs it uses. A tree too large to index
+		// is one the analysis refuses, so it recognises none.
+		const walked = discover({
+			root: config.root,
+			sources: config.sources,
+			limit: analyzeEntryBudget(config.maxEntries),
+		});
+		const blocks = walked.truncated ? [] : blockPrefixes(blocksIn(walked.references));
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
 		// `layout:`/`text:` get read as "what should I write", but they are
 		// recognition lists and carry the superseded spellings too. Mark those, so
@@ -1385,6 +1395,7 @@ async function main(): Promise<number> {
 			`${dim('text:       ')}${components(ds.textComponents)}`,
 			tokensLine(config),
 			`${dim('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
+			...(blocks.length ? [`${dim('blocks:     ')}${describeBlocks(blocks)}`] : []),
 			`${dim('suppress:   ')}${directive(config.suppression.keyword, '<ruleId>', '<reason>')}`,
 			`${dim('baseline:   ')}${base.path}${
 				base.found && base.baseline === null
@@ -1537,6 +1548,7 @@ async function main(): Promise<number> {
 			dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
 			// Why the confidence above is lower than the coverage alone would make it.
 			...info.namespaceNotes.map((n) => dim(`            ${n}`)),
+			...(info.blocks.length ? [`${dim('blocks:     ')}${describeBlocks(info.blocks)}`] : []),
 			// Listed, never written: `init` leaves `external` for somebody to confirm.
 			...(info.possibleExternal.length
 				? [

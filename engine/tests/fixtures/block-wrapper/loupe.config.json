@@ -1,0 +1,5 @@
+{
+  "extends": "wpds",
+  "namespaces": { "project": ["acme-"] },
+  "rules": { "css/dead-class": "error" }
+}

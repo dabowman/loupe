@@ -212,6 +212,12 @@ project's own namespace appears nowhere in `node_modules`.
   defines, and a prefix only stylesheets mention. The last is also exactly what
   dead CSS looks like, which is why the list is a question for whoever can read
   the enqueue code — `/loupe-init` asks it — and `init` writes none of them.
+- **Block wrapper prefixes are reported, never written.** Each `block.json` the
+  walk lists gives `wp-block-{namespace}-` (`acme/card` → `wp-block-acme-`),
+  printed under `blocks:` with the names it came from. The analysis recognises
+  them on its own walk; written into `namespaces.project`, they would make a
+  wrapper class no source spells eligible to be called dead — see
+  [checks.md](checks.md#a-blocks-own-wrapper-is-not-a-library-internal).
 - **`--profile <id>` beats a guess.** Inference's own verdict is still returned
   as `preset` so `status` and `init` can report it, but the config extends what
   the flag named — and everything derived from the preset has to follow, or the
@@ -918,6 +924,12 @@ The `tokens:` line says what the `tokenSources` yielded, per path, from the
 same `readTokenSources` read the analysis seeds its set with: a source that is
 not installed leaves `tokens/unknown-token` off and every hardcoded value
 unnamed, and `--wpds-*` printed alone read as a working set.
+
+And the blocks whose wrapper classes the analysis takes as the project's own,
+read off a walk with the analysis's own source globs and ceiling — for a
+config file too, where nothing else in `status` walks — because an exemption
+nobody can see reads exactly like a rule that has stopped working. The line is
+there only when a `block.json` is.
 
 And which profiles are in play, with their directories — "no composite findings"
 and "no composite registry" look identical in a report and must not look
