@@ -144,9 +144,10 @@ does not earn an unbounded walk. The caller that matters is the hook, which has
 60s for a PostToolUse and 120s for a Stop, and whose root is sometimes a home
 directory. 50,000 is several times the largest project this plugin plausibly
 meets — WordPress core is around 7,000 files and Gutenberg around 15,000 once
-`node_modules` is pruned — so a real repo reaches its own end long before the
-ceiling, and a tree that trips it is one where the answer was never going to be
-about a project anyway. It costs about a second of walking.
+`node_modules` is pruned, counting everything the walk visits rather than the
+files a run reads — so a real repo reaches its own end long before the ceiling,
+and a tree that trips it is one where the answer was never going to be about a
+project anyway. It costs about a second of walking.
 
 *Entries*, not files: a home directory is mostly directories that hold almost
 nothing — a package cache, a pnpm store, maildirs — and a file-counting budget

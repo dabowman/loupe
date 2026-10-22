@@ -137,8 +137,9 @@ the right call for a bookmarklet. A live UI needs the opposite, and the cost is
 real — a watcher is the classic source of a tool that reports on a tree that no
 longer exists.
 
-**Incremental analysis, eventually.** The numbers are already measured. A warm
-LSP re-runs a 613-file project in ~115ms and Gutenberg's 9,531 in ~2.4s, against
+**Incremental analysis, eventually.** The numbers are already measured, on
+2026-09-21 and before the index cache. A warm LSP re-ran a 613-file project in
+~115ms and Gutenberg, 9,531 files at the time, in ~2.4s, against
 380ms and 5.9s cold through the CLI. 115ms is instant; 2.4s is not, and a UI
 that re-renders on every save makes that felt. `lsp.ts` already names the fix in
 its own ponytail: split `analyze` into index and check phases and keep the index

@@ -1129,8 +1129,8 @@ check what you downloaded — every release carries `SHA256SUMS`:
     chmod +x loupe-linux-x64
 ```
 
-Verified equivalent, not assumed: the Linux binary and macOS Node produce
-byte-identical reports over Gutenberg's 9,822 files.
+Verified equivalent, not assumed: the Linux binary and macOS Node produced
+byte-identical reports over Gutenberg, 9,822 files at the time (September 2026).
 
 ## Remediation
 
@@ -1189,9 +1189,10 @@ correlates across files, so an unsaved buffer is a verdict on a tree that does
 not exist; a dirty file shows the last saved verdict until it is written. That
 is also why this doubles as the push channel for an agent working in the editor
 — every edit an agent makes *is* a save, so there is nothing to approximate.
-The cost was measured rather than assumed before settling on re-analyzing whole:
-a warm server re-runs a 613-file project in ~115ms and Gutenberg's 9,531 in
-~2.4s, against 380ms and 5.9s for the same runs cold through the CLI.
+The cost was measured rather than assumed before settling on re-analyzing whole,
+on 2026-09-21 and before the index cache: a warm server re-ran a 613-file
+project in ~115ms and Gutenberg, 9,531 files at the time, in ~2.4s, against
+380ms and 5.9s for the same runs cold through the CLI.
 
 **The suppress quick fix leaves the reason blank.** A directive with no reason
 does not mute — it reports as `suppression/malformed`, an error. So taking that
@@ -1241,8 +1242,8 @@ a README, a lockfile — returns without indexing anything. And a file over 1.5M
 is treated as generated and skipped, because a checked-in emscripten blob costs
 more to parse than every finding it could produce. A skipped *stylesheet* still
 reports as `stylesheet/unparsed`; a skipped markup file just contributes
-nothing. Gutenberg — 6,100 markup files, 1,300 stylesheets — indexes in about
-five seconds.
+nothing. On Gutenberg — 6,100 markup files, 1,300 stylesheets — a hook run takes
+about four seconds cold and about 0.8s once the index cache is warm.
 
 Past 200,000 entries the walk stops and the hook stands aside with a `skipped`
 message saying so, rather than reporting "clean" for the part it never read —
@@ -1258,7 +1259,7 @@ literals), the token set, both composite rules, all three skills, commands,
 hooks, the registries, profile selection, and the language server.
 
 A whole-repo scan of Gutenberg — 6,100 markup files, 1,300 stylesheets — takes
-about four seconds.
+about four seconds cold.
 
 Known limits, in rough priority order:
 
