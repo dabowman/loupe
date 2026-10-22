@@ -29,7 +29,10 @@
  * — a class the design system's stylesheets style, or one carrying an
  * external prefix. "Stop styling this" replaces every per-declaration remedy
  * inside it, so it is one finding in their place. That needs no surface: the
- * selector is past the element `className` reached.
+ * selector is past the element `className` reached. A class the project owns
+ * is never one of those parts: one in its namespace, or one under the wrapper
+ * prefix of a block its own `block.json` names (`.wp-block-acme-card`, under
+ * the external `wp-block-`), whose declarations get their own verdicts.
  *
  * Logic, per declaration:
  *   the key class is bound to no design-system component  → not ours, next check
@@ -97,19 +100,21 @@ export const systemOverride: DeclarationCheck = ({ prop }, { boundSystem, enable
 };
 
 /**
- * The whole-rule form, for a rule that styles anything at all. A project prefix
- * wins over a library one.
+ * The whole-rule form, for a rule that styles anything at all. The project's
+ * own class wins over a library one: a `namespaces.project` prefix, or the
+ * wrapper prefix of one of its blocks.
  *
  * Logic, per CSS rule that styles anything at all:
  *   the first key class the library styles or that carries an external
- *   prefix, and that the project's own namespace does not claim  → system/override
+ *   prefix, and that is not the project's own — in its namespace,
+ *   or under the wrapper prefix of a block its block.json names  → system/override
  *   no key class is one of those                                 → clean
  */
 export function libraryOverride(
 	keyClasses: readonly string[],
 	isLibrary: (cls: string) => boolean,
-	isProject: (cls: string) => boolean,
+	isOwn: (cls: string) => boolean,
 ): ClassifiedFinding | null {
-	const part = keyClasses.find((c) => isLibrary(c) && !isProject(c));
+	const part = keyClasses.find((c) => isLibrary(c) && !isOwn(c));
 	return part ? { rule: 'system/override', message: `.${part} (library internal)` } : null;
 }
