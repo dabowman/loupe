@@ -303,6 +303,45 @@ Other decisions there:
   so the fragment is self-sufficient: `/loupe-report` publishes exactly that span
   into an Artifact, which supplies its own document shell.
 
+### The pane
+
+The HTML page is read in a browser tab. Claude Code can now also draw a region
+beside the transcript — a *pane*, drawn by a plugin's hooks module — and the
+plugin draws the same report there (`hooks/register.tsx`). The pane is a few
+dozen cells wide, and the surfaces differ in what they can draw: the desktop
+and the editor take an SVG and no pixels, the terminal takes text (and pixels
+on a handful of terminals), the phone takes SVG and no input fields.
+
+So the engine ships a third reader's shape, `--format pane`
+(`engine/src/report-pane.ts`), rather than letting the mod re-derive the
+charts from the JSON on each surface:
+
+- **It is derived from the `json` payload and nothing else** — `panePayload`
+  is `paneFromPayload(reportPayload(…))` — for the reason the page embeds the
+  payload verbatim: two readers of one run must never see two different
+  reports. The test holds the pane's rule counts and directory counts to the
+  payload's finding count.
+- **The tallies are pre-shaped, and in the page's order.** Rules in frequency
+  order with rank breaking ties; directories capped at `DIR_CAP` with the tail
+  folded into a counted row; a baseline tile only when it hid something; the
+  unparsed count beside the scanned count. The page computes these client-side
+  in a script written as a string; the pane cannot share that code, so the
+  rules are written down a second time here and pinned by tests, and a change
+  to either is a change to both.
+- **The charts are SVG strings**, not a drawing instruction set. The desktop
+  draws an SVG as an image, so the page's custom properties do not reach it;
+  the SVG carries its own `<style>` with a `prefers-color-scheme` query, which
+  an SVG image does evaluate. Each bar's `<title>` is what the interactive
+  frame shows on hover. Severity keeps its glyph in the bar's label, never the
+  color alone. A rule's title reaches the `<title>` escaped, so a finding's own
+  text cannot close the document early — the page's `</script>` hazard, again.
+- **The terminal draws from the numbers, not the SVG.** The mod turns
+  `rules[].count` into block-glyph bars sized to the pane's columns. Same rows,
+  same order, same glyphs; only the medium differs.
+
+The pane is for the person. The model keeps the budgeted agent format: a pane
+the model read would be the context cost the agent format exists to avoid.
+
 ## Resolving a finding to elements
 
 `selector` is the one field on a finding that is not a source location. Every

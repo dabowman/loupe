@@ -7185,14 +7185,14 @@ var require_parse2 = __commonJS({
       };
       if (opts.fastpaths !== false && !/(^[*!]|[/()[\]{}"])/.test(input)) {
         let backslashes = false;
-        let output = input.replace(REGEX_SPECIAL_CHARS_BACKREF, (m, esc, chars, first, rest, index2) => {
+        let output = input.replace(REGEX_SPECIAL_CHARS_BACKREF, (m, esc2, chars, first, rest, index2) => {
           if (first === "\\") {
             backslashes = true;
             return m;
           }
           if (first === "?") {
-            if (esc) {
-              return esc + first + (rest ? QMARK.repeat(rest.length) : "");
+            if (esc2) {
+              return esc2 + first + (rest ? QMARK.repeat(rest.length) : "");
             }
             if (index2 === 0) {
               return qmarkNoDot + (rest ? QMARK.repeat(rest.length) : "");
@@ -7203,12 +7203,12 @@ var require_parse2 = __commonJS({
             return DOT_LITERAL.repeat(chars.length);
           }
           if (first === "*") {
-            if (esc) {
-              return esc + first + (rest ? star : "");
+            if (esc2) {
+              return esc2 + first + (rest ? star : "");
             }
             return star;
           }
-          return esc ? m : `\\${m}`;
+          return esc2 ? m : `\\${m}`;
         });
         if (backslashes === true) {
           if (opts.unescape === true) {
@@ -14505,12 +14505,12 @@ var require_lib = __commonJS({
               continue;
             }
             ++this.state.pos;
-            const esc = this.readCodePoint(true);
-            if (esc !== null) {
-              if (!identifierCheck(esc)) {
+            const esc2 = this.readCodePoint(true);
+            if (esc2 !== null) {
+              if (!identifierCheck(esc2)) {
                 this.raise(Errors.EscapedCharNotAnIdentifier, escStart);
               }
-              word += String.fromCodePoint(esc);
+              word += String.fromCodePoint(esc2);
             }
             chunkStart = this.state.pos;
           } else {
@@ -24626,7 +24626,7 @@ function loadPatterns(raw) {
     const authored2 = p?.instead_of_signature;
     const antiShapes = !Array.isArray(authored2) ? [] : typeof authored2[0] === "string" ? [authored2] : authored2;
     const avoid = antiShapes.map((shape) => toNode(shape)).filter((n) => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes);
-    const rules = ruleSpecs(p?.detector);
+    const rules2 = ruleSpecs(p?.detector);
     const summary = p?.summary ?? p?.note ?? "";
     const own = id ?? (shapes[0] ? signatureOf(shapes[0]) : null);
     if (own) {
@@ -24639,7 +24639,7 @@ function loadPatterns(raw) {
           node,
           size: node ? nodeCount(node) : 0,
           avoid: i === 0 ? avoid : [],
-          rules: i === 0 ? rules : []
+          rules: i === 0 ? rules2 : []
         });
       });
     }
@@ -24670,8 +24670,8 @@ function systemChildren(el, isSystemName, childrenOf, nameOf, packageOf) {
   return out.filter((n) => n !== null);
 }
 var SUBSTANTIAL = { minNodes: 4, minDepth: 2 };
-function resolveRule(rules, forces) {
-  for (const r of rules) {
+function resolveRule(rules2, forces) {
+  for (const r of rules2) {
     if (!r.when) return r;
     const conds = Object.entries(r.when);
     if (conds.some(([f, v]) => f in forces && forces[f] !== v)) continue;
@@ -24915,7 +24915,7 @@ function componentRanges(program) {
   });
   return out;
 }
-function scanMarkup(text2, relPath, ds, rules = []) {
+function scanMarkup(text2, relPath, ds, rules2 = []) {
   const referenced = harvestTokens(text2);
   const stems = harvestStems(text2);
   const bindings = [];
@@ -25053,12 +25053,12 @@ function scanMarkup(text2, relPath, ds, rules = []) {
     sourceOf: (el) => text2.slice(el.start ?? 0, el.end ?? 0)
   };
   const readRules = (el) => {
-    if (!rules.length) return;
+    if (!rules2.length) return;
     const canonical = canonicalOf(el);
     if (!canonical) return;
     const line = el.loc?.start?.line ?? 1;
     const ctx = { ...reading, canonical };
-    for (const { patternId, spec } of rules) {
+    for (const { patternId, spec } of rules2) {
       if (spec.rule === "judge") {
         const control = judgeControl(el, spec, ctx);
         if (control) controls.push({ file: relPath, line, ...control, patternId });
@@ -27688,8 +27688,8 @@ function workerCount(jobs) {
   if (cores < 2) return 0;
   return Math.min(cores - 1, 8, Math.ceil(jobs.length / BATCH));
 }
-var scanAll = (jobs, ds, rules) => jobs.map((j) => scanMarkup(j.text, j.rel, ds, rules));
-async function scanMany(jobs, ds, rules) {
+var scanAll = (jobs, ds, rules2) => jobs.map((j) => scanMarkup(j.text, j.rel, ds, rules2));
+async function scanMany(jobs, ds, rules2) {
   const debug = (line) => {
     if (isOn(process.env.LOUPE_DEBUG_SCAN)) process.stderr.write(`loupe: ${line}
 `);
@@ -27697,18 +27697,18 @@ async function scanMany(jobs, ds, rules) {
   const n = workerCount(jobs);
   if (n) {
     try {
-      const out2 = await inWorkers(jobs, ds, rules, n);
+      const out2 = await inWorkers(jobs, ds, rules2, n);
       debug(`scanned ${jobs.length} file(s) across ${n} worker(s)`);
       return out2;
     } catch (err) {
       debug(`workers failed (${err instanceof Error ? err.message : String(err)}), scanning in-process`);
     }
   }
-  const out = scanAll(jobs, ds, rules);
+  const out = scanAll(jobs, ds, rules2);
   if (jobs.length) debug(`scanned ${jobs.length} file(s) in-process`);
   return out;
 }
-function inWorkers(jobs, ds, rules, n) {
+function inWorkers(jobs, ds, rules2, n) {
   const out = new Array(jobs.length);
   let next = 0;
   let left = jobs.length;
@@ -27729,7 +27729,7 @@ function inWorkers(jobs, ds, rules, n) {
       w.postMessage(batch);
     };
     for (let k = 0; k < n; k++) {
-      const w = new Worker(new URL(import.meta.url), { workerData: { [TAG]: true, ds, rules } });
+      const w = new Worker(new URL(import.meta.url), { workerData: { [TAG]: true, ds, rules: rules2 } });
       workers.push(w);
       w.on("message", (done) => {
         for (const { i, scan } of done) out[i] = scan;
@@ -27746,10 +27746,10 @@ function inWorkers(jobs, ds, rules, n) {
   });
 }
 if (!isMainThread && workerData?.[TAG] && parentPort) {
-  const { ds, rules } = workerData;
+  const { ds, rules: rules2 } = workerData;
   const port = parentPort;
   port.on("message", (batch) => {
-    port.postMessage(batch.map((j) => ({ i: j.i, scan: scanMarkup(j.text, j.rel, ds, rules) })));
+    port.postMessage(batch.map((j) => ({ i: j.i, scan: scanMarkup(j.text, j.rel, ds, rules2) })));
   });
 }
 
@@ -27761,10 +27761,10 @@ function deadClasses(declared, {
   isNeverDead
 }) {
   const isReferenced = (cls) => referenced.has(cls) || isNeverDead(cls) || stems.some((s) => cls.startsWith(s));
-  const rules = /* @__PURE__ */ new Map();
+  const rules2 = /* @__PURE__ */ new Map();
   for (const d of declared) {
     const key = `${d.file}\0${d.cls}`;
-    rules.set(key, (rules.get(key) ?? 0) + 1);
+    rules2.set(key, (rules2.get(key) ?? 0) + 1);
   }
   const seen = /* @__PURE__ */ new Set();
   return declared.flatMap(({ file, line, cls, scopeLines, cut }) => {
@@ -27780,7 +27780,7 @@ function deadClasses(declared, {
         code: `.${cls}`,
         selector: `.${cls}`,
         scopeLines,
-        dead: rules.get(key) === 1 ? cut : void 0
+        dead: rules2.get(key) === 1 ? cut : void 0
       }
     ];
   });
@@ -28493,12 +28493,12 @@ function compoundElements(compound, carriersByClass) {
 }
 async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
   const classes = /* @__PURE__ */ new Set();
-  const dirs = [];
+  const dirs2 = [];
   const unread = [];
   for (const src of sources) {
     const dir = realPath(isAbsolute2(src) ? src : join7(root2, src));
     if (!dir) continue;
-    dirs.push(dir);
+    dirs2.push(dir);
     const budget = { left: 400 };
     for (const file of cssFilesUnder(dir, budget, [".css", ".scss", ".less"])) {
       const shown = toPosix(relative2(root2, file));
@@ -28529,7 +28529,7 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
     if (!budget.left)
       unread.push({ file: toPosix(relative2(root2, dir)), message: "read the first 400 stylesheets only" });
   }
-  return { classes, dirs, unread };
+  return { classes, dirs: dirs2, unread };
 }
 var DECLARATIONS = [
   typographyInCss,
@@ -28600,13 +28600,13 @@ function collapsePerRule(pending) {
 }
 function extractSheet(root2, text2, tokenPrefixes) {
   const srcLines = text2.split("\n");
-  const rules = [];
+  const rules2 = [];
   root2.walkRules((cssRule) => {
     const selectors = resolvedSelectors(cssRule);
     if (!selectors.some((s) => classesIn(s).length)) return;
     const line = cssRule.source?.start?.line ?? 1;
     const media = mediaQuery(cssRule) || void 0;
-    rules.push({
+    rules2.push({
       line,
       selectors,
       isGrid: ruleIsGrid(cssRule),
@@ -28615,7 +28615,7 @@ function extractSheet(root2, text2, tokenPrefixes) {
       cut: deletableRule(cssRule, srcLines)
     });
   });
-  return { rules, defs: tokenDefsIn(root2, tokenPrefixes) };
+  return { rules: rules2, defs: tokenDefsIn(root2, tokenPrefixes) };
 }
 async function analyze(config, {
   scope = null,
@@ -29315,8 +29315,8 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
       }
       const indent = /^[ \t]*/.exec(line)?.[0] ?? "";
       const eol = line.endsWith("\r") ? "\r" : "";
-      const rules = rulesOn.get(`${file}\0${k.line}`) ?? "tokens/hardcoded-value";
-      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} ${rules} -- ${k.reason} */${eol}`);
+      const rules2 = rulesOn.get(`${file}\0${k.line}`) ?? "tokens/hardcoded-value";
+      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} ${rules2} -- ${k.reason} */${eol}`);
       applied.push(k);
       last = k.line;
     }
@@ -29938,8 +29938,8 @@ var TIER_WORDS = {
   component: /^(components?|comps?|cmp|parts?|recipes?|patterns?)$/
 };
 var isTierWord = (word) => TIERS.some((t) => TIER_WORDS[t].test(word.toLowerCase()));
-function tierOf(segments, dirs = []) {
-  for (const d of dirs) {
+function tierOf(segments, dirs2 = []) {
+  for (const d of dirs2) {
     const tier = TIERS.find((t) => TIER_WORDS[t].test(d.toLowerCase()));
     if (tier) return { tier, tierFrom: "foldered" };
   }
@@ -30438,8 +30438,8 @@ function diffBaseline(result, prior) {
     for (const e of entries) if (!prior.set.has(e)) row(ruleOf(e)).added++;
     for (const e of prior.entries) if (!now.has(e)) row(ruleOf(e)).removed++;
   }
-  const rules = [...rows.values()].sort((a, b) => b.findings - a.findings || (a.rule < b.rule ? -1 : 1));
-  return { entries: entries.length, rules };
+  const rules2 = [...rows.values()].sort((a, b) => b.findings - a.findings || (a.rule < b.rule ? -1 : 1));
+  return { entries: entries.length, rules: rules2 };
 }
 function writeBaseline(full, result) {
   ensureDir(dirname5(full));
@@ -30459,7 +30459,7 @@ function writeBaseline(full, result) {
 }
 function applyBaseline(result, baseline, {
   scoped = false,
-  rules = null,
+  rules: rules2 = null,
   enabled: enabled2 = null
 } = {}) {
   if (!baseline) return { ...result, baselined: 0, baselinedFindings: [], fixed: null };
@@ -30480,7 +30480,7 @@ function applyBaseline(result, baseline, {
     baselinedFindings: accepted,
     fixed: scoped ? null : [...baseline.set].filter((k) => {
       const rule2 = ruleOf(k);
-      return !seen.has(k) && (!rules || rules.has(rule2)) && enabled2?.[rule2] !== false;
+      return !seen.has(k) && (!rules2 || rules2.has(rule2)) && enabled2?.[rule2] !== false;
     }).length
   };
 }
@@ -30663,12 +30663,12 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
   const ds = cfg.designSystem;
   const patterns = readRegistry(cfg.patterns, root2, ds.packages, loadPatterns, []);
   const componentRegistry = readRegistry(cfg.componentRegistry, root2, ds.packages, loadComponents, /* @__PURE__ */ new Map());
-  const rules = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity }]));
+  const rules2 = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity }]));
   const ruleOrigins = {};
   for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
     const id = canonicalRuleId(rawId);
     if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
-    rules[id] = ruleSetting(rawId, value);
+    rules2[id] = ruleSetting(rawId, value);
     const from = ruleFrom[rawId];
     ruleOrigins[id] = from === void 0 ? "config" : isAbsolute4(from) ? relative4(root2, from) || from : from;
   }
@@ -30762,9 +30762,9 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
     baselinePath: cfg.baseline || DEFAULT_BASELINE,
     hook: cfg.hook,
     ...typeof maxEntries === "number" ? { maxEntries } : {},
-    rules,
+    rules: rules2,
     ruleFrom: ruleOrigins,
-    severityOf: (id) => rules[id].severity,
+    severityOf: (id) => rules2[id].severity,
     isProject: (cls) => projectPrefixes.some((p) => cls.startsWith(p)),
     isExternal: (cls) => externalPrefixes.some((p) => cls.startsWith(p)),
     isNeverDead: (cls) => neverDead.some((re) => re.test(cls))
@@ -30903,11 +30903,11 @@ function nearMisses(result) {
   }
   return out;
 }
-var tally = (keys) => {
+function tally(keys) {
   const counts = /* @__PURE__ */ new Map();
   for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
   return [...counts].sort((a, b) => b[1] - a[1] || byBytes(a[0], b[0]));
-};
+}
 var TOP = 3;
 function densestLine(findings) {
   const files = tally(findings.map((f) => f.file));
@@ -30916,10 +30916,10 @@ function densestLine(findings) {
   return `Densest: ${files.slice(0, TOP).map(([file, n]) => `${file} (${n})`).join(", ")}${rest > 0 ? `, then ${rest} more file(s)` : ""}.`;
 }
 function suppressionLine(directives) {
-  const rules = tally(directives.flatMap((d) => d.rules));
-  const rest = rules.length - TOP;
+  const rules2 = tally(directives.flatMap((d) => d.rules));
+  const rest = rules2.length - TOP;
   const files = new Set(directives.map((d) => d.file)).size;
-  return `${directives.length} active suppression(s) in ${files} file(s), silencing ${rules.slice(0, TOP).map(([rule2, n]) => `${rule2} (${n})`).join(", ")}${rest > 0 ? `, +${rest} more rule(s)` : ""} \u2014 run \`loupe suppressions\` to read them.`;
+  return `${directives.length} active suppression(s) in ${files} file(s), silencing ${rules2.slice(0, TOP).map(([rule2, n]) => `${rule2} (${n})`).join(", ")}${rest > 0 ? `, +${rest} more rule(s)` : ""} \u2014 run \`loupe suppressions\` to read them.`;
 }
 var withNote = (f) => f.note ? messageLine(f.message, ` (${f.note})`) : f.message;
 var GROUP_BYS = ["rule", "file"];
@@ -31734,6 +31734,160 @@ function formatHtml(result, config) {
 ${body({ payload, clean: result.findings.length === 0, parseErrors: result.diagnostics.parseErrors.length })}
 </body>
 </html>
+`;
+}
+
+// src/report-pane.ts
+var DIR_CAP = 12;
+var FILE_CAP = 8;
+var dirOf = (file) => {
+  const i = file.lastIndexOf("/");
+  return i === -1 ? "." : file.slice(0, i);
+};
+function tiles(p) {
+  const s = p.summary;
+  const out = [
+    { key: "findings", value: s.total, isLead: true },
+    { key: "\u2717 blocking", value: s.error, ...s.error > 0 ? { isError: true } : {} },
+    { key: "\u2022 advisory", value: s.warn }
+  ];
+  if (s.baselined) out.push({ key: "baselined", value: s.baselined });
+  out.push({ key: "suppressions", value: s.suppressions });
+  out.push({ key: "files scanned", value: s.filesScanned });
+  out.push({ key: "files unparsed", value: s.parseErrors, ...s.parseErrors > 0 ? { isError: true } : {} });
+  return out;
+}
+function rules(p) {
+  const byId = new Map(p.rules.map((r) => [r.id, r]));
+  const files = /* @__PURE__ */ new Map();
+  for (const f of p.findings) {
+    if (!files.has(f.rule)) files.set(f.rule, /* @__PURE__ */ new Set());
+    files.get(f.rule)?.add(f.file);
+  }
+  return tally(p.findings.map((f) => f.rule)).sort((a, b) => b[1] - a[1] || (byId.get(b[0])?.rank ?? 0) - (byId.get(a[0])?.rank ?? 0)).map(([id, count]) => {
+    const r = byId.get(id);
+    return {
+      id,
+      title: r?.title ?? "",
+      severity: r?.severity ?? "warn",
+      count,
+      files: files.get(id)?.size ?? 0
+    };
+  });
+}
+function dirs(p) {
+  const counts = tally(p.findings.map((f) => dirOf(f.file)));
+  const shown = counts.slice(0, DIR_CAP).map(([label, count]) => ({ label, count }));
+  const tail = counts.slice(DIR_CAP);
+  if (tail.length) {
+    shown.push({
+      label: `${tail.length} more director${tail.length === 1 ? "y" : "ies"}`,
+      count: tail.reduce((t, c) => t + c[1], 0),
+      isTail: true
+    });
+  }
+  return shown;
+}
+function clusters(p) {
+  const m = /* @__PURE__ */ new Map();
+  for (const f of p.findings) {
+    if (!f.group) continue;
+    const k = `${f.rule}\0${f.group}`;
+    const c = m.get(k) ?? { rule: f.rule, group: f.group, files: [] };
+    if (!c.files.includes(f.file)) c.files.push(f.file);
+    m.set(k, c);
+  }
+  return [...m.values()].sort((a, b) => b.files.length - a.files.length);
+}
+var esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
+var ROW = 22;
+var WIDTH = 640;
+var LABEL_W = 236;
+var VALUE_W = 40;
+var PAD = 6;
+function clip2(label, max) {
+  return label.length <= max ? label : `\u2026${label.slice(label.length - max + 1)}`;
+}
+var SVG_CSS = `
+text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: #52514e; }
+.v { fill: #52514e; font-variant-numeric: tabular-nums; }
+.t { fill: #898781; }
+.track { fill: rgba(11,11,11,0.06); }
+.error { fill: #d03b3b; } .warn { fill: #fab219; } .seq { fill: #2a78d6; }
+.empty { fill: #898781; }
+@media (prefers-color-scheme: dark) {
+  text, .v { fill: #c3c2b7; } .t { fill: #898781; }
+  .track { fill: rgba(255,255,255,0.08); } .seq { fill: #3987e5; }
+}`;
+function barChart(rows, empty) {
+  const height = rows.length ? rows.length * ROW + PAD * 2 : ROW + PAD * 2;
+  const open = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${WIDTH} ${height}" width="${WIDTH}" height="${height}" role="img"><style>${SVG_CSS}</style>`;
+  if (!rows.length) {
+    return `${open}<text class="empty" x="${PAD}" y="${PAD + 15}">${esc(empty)}</text></svg>`;
+  }
+  const max = rows.reduce((m, r) => Math.max(m, r.count), 0);
+  const trackW = WIDTH - LABEL_W - VALUE_W - PAD * 2;
+  const body2 = rows.map((r, i) => {
+    const y = PAD + i * ROW;
+    const w = max > 0 ? Math.max(3, r.count / max * trackW) : 0;
+    const label = `${r.glyph ? `${r.glyph} ` : ""}${clip2(r.label, 34)}`;
+    return `<g><title>${esc(r.title)}</title><text x="${PAD}" y="${y + 15}">${esc(label)}</text><rect class="track" x="${LABEL_W}" y="${y + 6}" width="${trackW}" height="10" rx="0" /><rect class="${r.paint}" x="${LABEL_W}" y="${y + 6}" width="${w.toFixed(1)}" height="10" rx="2" /><text class="v" x="${WIDTH - PAD}" y="${y + 15}" text-anchor="end">${r.count}</text></g>`;
+  }).join("");
+  return `${open}${body2}</svg>`;
+}
+var GLYPH = { error: "\u2717", warn: "\u2022", off: "" };
+function paneFromPayload(p) {
+  const ruleRows = rules(p);
+  const dirRows = dirs(p);
+  const ruleChart = (rows, empty) => barChart(
+    rows.map((r) => ({
+      label: r.id,
+      count: r.count,
+      paint: r.severity,
+      glyph: GLYPH[r.severity],
+      title: `${r.count} \xD7 ${r.id}${r.title ? ` \u2014 ${r.title}` : ""}`
+    })),
+    empty
+  );
+  return {
+    version: 1,
+    tool: "loupe",
+    blocking: p.blocking,
+    summary: p.summary,
+    tiles: tiles(p),
+    rules: ruleRows,
+    dirs: dirRows,
+    files: Object.entries(p.summary.byFile).slice(0, FILE_CAP).map(([label, count]) => ({ label, count })),
+    clusters: clusters(p),
+    svg: {
+      rules: ruleChart(ruleRows, "No findings."),
+      rulesBySeverity: {
+        error: ruleChart(
+          ruleRows.filter((r) => r.severity === "error"),
+          "No blocking findings."
+        ),
+        warn: ruleChart(
+          ruleRows.filter((r) => r.severity === "warn"),
+          "No advisory findings."
+        )
+      },
+      dirs: barChart(
+        dirRows.map((d) => ({
+          label: d.label,
+          count: d.count,
+          paint: d.isTail ? "t" : "seq",
+          title: `${d.count} finding${d.count === 1 ? "" : "s"} in ${d.label}`
+        })),
+        "No findings."
+      )
+    }
+  };
+}
+function panePayload(result, config) {
+  return paneFromPayload(reportPayload(result, config));
+}
+function formatPane(result, config) {
+  return `${JSON.stringify(panePayload(result, config))}
 `;
 }
 
@@ -32948,20 +33102,20 @@ async function ui(opts) {
   };
   const watchers = /* @__PURE__ */ new Map();
   function rewatch() {
-    let dirs;
+    let dirs2;
     try {
       const found = discover({ root: root2, sources: config.sources, limit: analyzeEntryBudget(config.maxEntries) });
-      dirs = /* @__PURE__ */ new Set([root2]);
+      dirs2 = /* @__PURE__ */ new Set([root2]);
       for (const f of [...found.styles, ...found.markup, ...found.references])
-        for (let d = dirname8(f.abs); d.length > root2.length && !dirs.has(d); d = dirname8(d)) dirs.add(d);
+        for (let d = dirname8(f.abs); d.length > root2.length && !dirs2.has(d); d = dirname8(d)) dirs2.add(d);
     } catch (err) {
       log(`loupe: cannot establish a watch \u2014 ${messageOf(err)}
 `);
       watching = null;
       return;
     }
-    if (dirs.size > WATCH_CAP) {
-      log(`loupe: ${dirs.size} directories is past the watch ceiling of ${WATCH_CAP} \u2014 watching nothing.
+    if (dirs2.size > WATCH_CAP) {
+      log(`loupe: ${dirs2.size} directories is past the watch ceiling of ${WATCH_CAP} \u2014 watching nothing.
 `);
       for (const w of watchers.values()) w.close();
       watchers.clear();
@@ -32969,11 +33123,11 @@ async function ui(opts) {
       return;
     }
     for (const [dir, w] of watchers) {
-      if (dirs.has(dir)) continue;
+      if (dirs2.has(dir)) continue;
       w.close();
       watchers.delete(dir);
     }
-    for (const dir of dirs) {
+    for (const dir of dirs2) {
       if (watchers.has(dir)) continue;
       try {
         const w = watch(dir, { persistent: false }, (_event, name) => {
@@ -33358,7 +33512,7 @@ var prefixOf = (cls) => {
   const i = cls?.indexOf("-") ?? -1;
   return cls && i >= 1 ? cls.slice(0, i + 1) : null;
 };
-function libraryPrefixes(dirs, candidates) {
+function libraryPrefixes(dirs2, candidates) {
   const want = new Set(candidates);
   const found = /* @__PURE__ */ new Set();
   if (!want.size) return found;
@@ -33387,7 +33541,7 @@ function libraryPrefixes(dirs, candidates) {
       }
     }
   };
-  for (const dir of dirs) if (existsSync7(dir)) walk(dir, 0);
+  for (const dir of dirs2) if (existsSync7(dir)) walk(dir, 0);
   return found;
 }
 var IMPORT_RE = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](@[\w.-]+\/[\w.-]+)/g;
@@ -34054,7 +34208,7 @@ var VALUE_FLAGS = [
   "type",
   "editor"
 ];
-var FORMATS = ["agent", "json", "sarif", "html"];
+var FORMATS = ["agent", "json", "sarif", "html", "pane"];
 var isFormat = (f) => FORMATS.includes(f);
 var LIST_FLAGS = ["files", "rule"];
 function parseArgs(args) {
@@ -34109,8 +34263,9 @@ Options:
                         source files under it)
   --rule <id>           Only report (check) or fix (fix) this rule's findings;
                         repeat it, or give a comma list, for more than one
-  --format <f>          agent | json | sarif | html  (default: agent)
-                        html writes a self-contained page \u2014 redirect it to a file
+  --format <f>          agent | json | sarif | html | pane  (default: agent)
+                        html writes a self-contained page \u2014 redirect it to a file;
+                        pane is the pre-shaped model the Claude Code pane draws
   --group-by <g>        rule | file \u2014 what the agent format heads each block
                         with; the other becomes the sub-heading (default: rule).
                         For suppressions, groups the list (default: ungrouped)
@@ -34210,12 +34365,12 @@ function expandDirs(config, given) {
       return false;
     }
   };
-  const dirs = given.filter(isDir).map((d) => toPosix(relative6(config.root, resolve7(config.root, d))));
-  if (!dirs.length) return given.filter(Boolean);
+  const dirs2 = given.filter(isDir).map((d) => toPosix(relative6(config.root, resolve7(config.root, d))));
+  if (!dirs2.length) return given.filter(Boolean);
   const limit = analyzeEntryBudget(config.maxEntries);
   const found = discover({ root: config.root, sources: config.sources, limit });
   if (found.truncated) return { error: new TreeTooLarge(limit).message };
-  const under2 = (rel) => dirs.some((d) => d === "" || rel.startsWith(`${d}/`));
+  const under2 = (rel) => dirs2.some((d) => d === "" || rel.startsWith(`${d}/`));
   const files = [...found.styles, ...found.markup, ...found.references].map((f) => f.rel).filter(under2);
   return [.../* @__PURE__ */ new Set([...given.filter((f) => f && !isDir(f)), ...files])];
 }
@@ -34411,9 +34566,9 @@ function ruleScope(list2) {
   }
   return out;
 }
-function filterRules(result, rules) {
-  if (!rules) return result;
-  const findings = result.findings.filter((f) => rules.has(f.rule));
+function filterRules(result, rules2) {
+  if (!rules2) return result;
+  const findings = result.findings.filter((f) => rules2.has(f.rule));
   return { ...result, findings, blocking: findings.some((f) => f.severity === "error") };
 }
 function filterSeverity(result, min) {
@@ -34924,16 +35079,16 @@ ${dim("  Ctrl-C to stop.")}
     if (args.flags["dry-run"]) {
       const base = findExistingBaseline(root2, namedBaseline, config.baselinePath);
       const prior = base.found ? readBaseline(base.path) : null;
-      const { entries: entries2, rules: rules2 } = diffBaseline(result2, prior);
-      const width = Math.max(0, ...rules2.map((r) => r.rule.length));
+      const { entries: entries2, rules: rules3 } = diffBaseline(result2, prior);
+      const width = Math.max(0, ...rules3.map((r) => r.rule.length));
       const lines = [`Would record ${counted(result2.findings.length, entries2)} \u2192 ${target}`, ""];
-      for (const r of rules2) {
+      for (const r of rules3) {
         const split2 = [r.added ? yellow(`+${r.added} new`) : "", r.removed ? green(`-${r.removed} fixed`) : ""].filter(Boolean).join(", ");
         lines.push(
           `  ${magenta(r.rule.padEnd(width))}  ${String(r.findings).padStart(5)}${split2 ? `   (${split2})` : ""}`
         );
       }
-      if (!rules2.length) lines.push("  (nothing to record)");
+      if (!rules3.length) lines.push("  (nothing to record)");
       lines.push("");
       if (!base.found) lines.push(dim("No existing baseline \u2014 every entry would be new."));
       else if (!prior)
@@ -34943,7 +35098,7 @@ ${dim("  Ctrl-C to stop.")}
         lines.push(
           `Existing baseline: ${n} ${n === 1 ? "entry" : "entries"}, recorded ${prior.createdAt || "(no date)"}${base.path === target ? "" : ` \u2014 ${base.path}`}`
         );
-        if (!rules2.some((r) => r.added || r.removed))
+        if (!rules3.some((r) => r.added || r.removed))
           lines.push(dim("Nothing would change: recording now rewrites the same entries."));
       }
       const ignored = ignoredWarning(result2.findings.length);
@@ -35024,14 +35179,14 @@ ${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked
       );
     return exit;
   }
-  const rules = ruleScope(args.flags.rule);
-  if (rules && !(rules instanceof Set)) {
-    if (isHook) return emitClean(`loupe: skipped \u2014 ${rules.error}`);
-    fail(`loupe: ${rules.error}
+  const rules2 = ruleScope(args.flags.rule);
+  if (rules2 && !(rules2 instanceof Set)) {
+    if (isHook) return emitClean(`loupe: skipped \u2014 ${rules2.error}`);
+    fail(`loupe: ${rules2.error}
 `);
     return EXIT.CANNOT_RUN;
   }
-  for (const id of rules ?? [])
+  for (const id of rules2 ?? [])
     if (!config.enabled[id]) note(`loupe: ${id} is off in this config \u2014 it reports nothing.
 `);
     else if (id === "patterns/judged-redirect" && command === "check" && !args.flags.judge)
@@ -35052,7 +35207,7 @@ ${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked
     }
     let toFix;
     try {
-      toFix = filterRules(await analyze(config, { scope: fixScope, cache: useCache }), rules);
+      toFix = filterRules(await analyze(config, { scope: fixScope, cache: useCache }), rules2);
     } catch (err) {
       fail(`loupe: ${messageOf(err)}
 `);
@@ -35148,7 +35303,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
         suppress: !args.flags["no-suppressions"],
         cache: useCache
       }),
-      rules
+      rules2
     );
   } catch (err) {
     if (isHook) return emitClean(`loupe: skipped \u2014 ${messageOf(err)}`);
@@ -35166,7 +35321,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
       if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}
 `);
     }
-    result = applyBaseline(result, baseline, { scoped: scope !== null, rules, enabled: config.enabled });
+    result = applyBaseline(result, baseline, { scoped: scope !== null, rules: rules2, enabled: config.enabled });
   }
   if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   const budgetKey = `${payload.session_id ?? ""}${touched ? `\0${touched}` : ""}`;
@@ -35197,7 +35352,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
       cache: answerCache(root2, args.flags["no-cache"])
     });
     const redirectSeverity = config.severityOf("patterns/judged-redirect");
-    const askRedirects = Boolean(result.controls?.length) && (args.flags.severity !== "error" || redirectSeverity === "error") && (!isHook || redirectSeverity === "error") && (!rules || rules.has("patterns/judged-redirect"));
+    const askRedirects = Boolean(result.controls?.length) && (args.flags.severity !== "error" || redirectSeverity === "error") && (!isHook || redirectSeverity === "error") && (!rules2 || rules2.has("patterns/judged-redirect"));
     const redirects = askRedirects ? judgeRedirects(result.controls ?? [], client, redirectSeverity).catch((err) => {
       note(`loupe: --judge skipped \u2014 ${messageOf(err)}
 `);
@@ -35278,6 +35433,7 @@ ${report2}`, payload);
   else if (format === "sarif") process.stdout.write(`${formatSarif(result, config)}
 `);
   else if (format === "html") process.stdout.write(formatHtml(result, config));
+  else if (format === "pane") process.stdout.write(formatPane(result, config));
   else {
     process.stdout.write(`${formatAgent(result, config, { maxFindings, group, concise: !!args.flags.concise })}
 `);

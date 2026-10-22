@@ -61,6 +61,7 @@ import {
 	shownFindings,
 } from './report.ts';
 import { formatHtml } from './report-html.ts';
+import { formatPane } from './report-pane.ts';
 import { lsp } from './lsp.ts';
 import { serve } from './serve.ts';
 import { ui } from './ui.ts';
@@ -284,7 +285,7 @@ type ValueFlag = (typeof VALUE_FLAGS)[number];
  * `else`: a typo that printed the agent format and exited 0 reads as a
  * successful run to a CI job that then uploads an empty artifact.
  */
-const FORMATS = ['agent', 'json', 'sarif', 'html'] as const;
+const FORMATS = ['agent', 'json', 'sarif', 'html', 'pane'] as const;
 type Format = (typeof FORMATS)[number];
 const isFormat = (f: string): f is Format => (FORMATS as readonly string[]).includes(f);
 
@@ -374,8 +375,9 @@ Options:
                         source files under it)
   --rule <id>           Only report (check) or fix (fix) this rule's findings;
                         repeat it, or give a comma list, for more than one
-  --format <f>          agent | json | sarif | html  (default: agent)
-                        html writes a self-contained page — redirect it to a file
+  --format <f>          agent | json | sarif | html | pane  (default: agent)
+                        html writes a self-contained page — redirect it to a file;
+                        pane is the pre-shaped model the Claude Code pane draws
   --group-by <g>        rule | file — what the agent format heads each block
                         with; the other becomes the sub-heading (default: rule).
                         For suppressions, groups the list (default: ungrouped)
@@ -2166,6 +2168,9 @@ async function main(): Promise<number> {
 	// Already newline-terminated, and large: it is the one format most likely to
 	// be redirected, which is what the process.exitCode note below is about.
 	else if (format === 'html') process.stdout.write(formatHtml(result, config));
+	// The tallies and charts the Claude Code pane draws, derived from the same
+	// payload `json` prints: see report-pane.ts.
+	else if (format === 'pane') process.stdout.write(formatPane(result, config));
 	else {
 		process.stdout.write(`${formatAgent(result, config, { maxFindings, group, concise: !!args.flags.concise })}\n`);
 		if ('baselined' in result && result.baselined)

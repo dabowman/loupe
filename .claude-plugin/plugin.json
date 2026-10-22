@@ -33,6 +33,12 @@
       "description": "Governs the hook only. When on, error-severity findings stop the turn and hand the report back. When off, the hook reports only. A project with no loupe.config.json is always advisory in the hook unless this is on. `loupe check` exits 1 on error-severity findings either way, so CI and pre-commit still gate.",
       "default": false
     },
+    "pane": {
+      "type": "boolean",
+      "title": "Loupe pane",
+      "description": "Draws the conformance report in a pane beside the transcript, re-run after each edit the model makes to a UI file, with a status-line tally and a notification when a turn ends with blocking findings. Opens itself only in a project that opted the hooks in; /loupe-pane opens it anywhere. The hooks are unaffected either way.",
+      "default": true
+    },
     "preset": {
       "type": "string",
       "title": "Preset",
@@ -72,5 +78,6 @@
       "description": "Lets the hooks ask Jev (TypeSafe) the judgement questions. Kept in your system keychain. Hooks only: for /loupe-fix --judge and the terminal, also put TYPESAFE_API_KEY=... in ~/.config/loupe/.env. Leave empty to skip judging.",
       "sensitive": true
     }
-  }
+  },
+  "types": "./types/index.d.ts"
 }

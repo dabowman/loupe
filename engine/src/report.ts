@@ -128,12 +128,15 @@ function nearMisses(result: AnalyzeResult | BaselinedResult): string[] {
 	return out;
 }
 
-/** Tallies, densest first — the shape every "where does this concentrate" line wants. */
-const tally = (keys: readonly string[]): [string, number][] => {
-	const counts = new Map<string, number>();
+/**
+ * Tallies, densest first; code-unit order breaks ties — the shape every "where
+ * does this concentrate" line wants, and the order the pane's bars keep.
+ */
+export function tally<K extends string>(keys: readonly K[]): [K, number][] {
+	const counts = new Map<K, number>();
 	for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
 	return [...counts].sort((a, b) => b[1] - a[1] || byBytes(a[0], b[0]));
-};
+}
 
 /** How many entries a one-line tally may name before it starts counting the rest. */
 const TOP = 3;
