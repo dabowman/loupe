@@ -23494,7 +23494,7 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync10, writeFileSync as writeFileSync4 } from "node:fs";
+import { existsSync as existsSync10, statSync as statSync5, writeFileSync as writeFileSync4 } from "node:fs";
 import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join15, relative as relative5, resolve as resolve6 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
@@ -23808,6 +23808,12 @@ function reachNote(pkg, {
   if (entry?.provided === "bundled")
     return `bundling required: ${root2} is bundled into your build, not provided by ${delivery?.host ?? "the host"}`;
   return dependencies !== null && !dependencies.has(root2) ? `new dependency: ${root2} is not in package.json` : null;
+}
+function withoutReach(note2, pkg) {
+  if (!note2) return note2;
+  const root2 = packageRoot(pkg);
+  const kept = note2.split("; ").filter((n) => !n.startsWith(`bundling required: ${root2} `) && !n.startsWith(`new dependency: ${root2} `));
+  return kept.length ? kept.join("; ") : void 0;
 }
 function annotateReach(findings, {
   delivery,
@@ -25389,8 +25395,8 @@ function parseTokenScopes(raw) {
     const holes = [...pattern.matchAll(PLACEHOLDER)].map((m) => m[1] ?? "");
     const bad = holes.filter((h) => !/^[a-z][a-z-]*$/.test(h));
     if (bad.length) err(`${at}.pattern`, `a placeholder is a lowercase name: ${bad.map((b) => `{${b}}`).join(", ")}`);
-    for (const name of ["property", "target"])
-      if (holes.filter((h) => h === name).length > 1) err(`${at}.pattern`, `{${name}} appears more than once`);
+    const repeated = ["property", "target"].filter((name) => holes.filter((h) => h === name).length > 1);
+    for (const name of repeated) err(`${at}.pattern`, `{${name}} appears more than once`);
     if (/[^a-z0-9-]/.test(pattern.replace(/\.\.\.$/, "").replace(PLACEHOLDER, "")))
       err(`${at}.pattern`, "only lowercase letters, digits, `-`, placeholders and a trailing `...`");
     const hasProperty = holes.includes("property");
@@ -25430,6 +25436,7 @@ function parseTokenScopes(raw) {
           target.set(seg, { requires, not });
         }
     }
+    if (repeated.length) continue;
     const alternatives = [...property.keys()].sort((a, b) => b.length - a.length).map(escapeRe);
     const open = pattern.endsWith("...");
     const source = (open ? pattern.slice(0, -3) : pattern).split(/(\{[^}]*\})/).map((piece, k) => {
@@ -25547,7 +25554,7 @@ function fitOf(scopes, token, elements) {
     if (kinds.every((ks) => ks.some((k) => requires.includes(k))))
       return mixed ? { fit: "unknown", why: `${scope}; ${shown} do not agree`, elements: els } : { fit: "on" };
     const undeterminable = requires.some((k) => !scopes.kinds.get(k)?.size);
-    if (!undeterminable && kinds.every((ks) => !ks.some((k) => requires.includes(k))))
+    if (!undeterminable && kinds.every((ks) => ks.length && !ks.some((k) => requires.includes(k))))
       return { fit: "off", why: `${scope}; this styles ${shown}`, elements: els };
     return { fit: "unknown", why: `${scope}; ${shown} cannot be shown to be`, elements: els };
   }
@@ -25662,19 +25669,43 @@ function genericRole(names, prop) {
   return preferred.length ? preferred : onRole2;
 }
 function tokensFor(set, prop, value) {
-  const family = new Set(onRole([...set.known], prop, set.scopes));
+  const family = roleOf(set, prop);
   return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
 }
 function familyFor(set, prop) {
-  const all = [...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v]));
-  const keep = new Set(
-    onRole(
-      all.map(([n]) => n),
-      prop,
-      set.scopes
-    )
-  );
-  return all.filter(([n]) => keep.has(n));
+  const cache2 = familiesOf(set);
+  let family = cache2.literal.get(prop);
+  if (!family) {
+    const all = [...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v]));
+    const keep = new Set(
+      onRole(
+        all.map(([n]) => n),
+        prop,
+        set.scopes
+      )
+    );
+    family = all.filter(([n]) => keep.has(n));
+    cache2.literal.set(prop, family);
+  }
+  return family;
+}
+function roleOf(set, prop) {
+  const cache2 = familiesOf(set);
+  let family = cache2.all.get(prop);
+  if (!family) {
+    family = new Set(onRole([...set.known], prop, set.scopes));
+    cache2.all.set(prop, family);
+  }
+  return family;
+}
+var families = /* @__PURE__ */ new WeakMap();
+function familiesOf(set) {
+  let cache2 = families.get(set);
+  if (!cache2 || cache2.size !== set.known.size || cache2.scopes !== set.scopes) {
+    cache2 = { size: set.known.size, scopes: set.scopes, all: /* @__PURE__ */ new Map(), literal: /* @__PURE__ */ new Map() };
+    families.set(set, cache2);
+  }
+  return cache2;
 }
 function measure(value) {
   const v = normalizeValue(value);
@@ -25731,7 +25762,7 @@ var KEEP = "keep";
 var DELIBERATE = "deliberate, no token fits";
 function planValue(set, prop, value, hold) {
   const family = familyFor(set, prop);
-  if (!family.length) return onRole([...set.known], prop, set.scopes).length ? null : "none";
+  if (!family.length) return roleOf(set, prop).size ? null : "none";
   const measurable = family.some(([, fv]) => measure(fv));
   const parts = measurable ? partsOf2(value) : [value.trim()];
   const slots = [];
@@ -26174,6 +26205,21 @@ function argumentsAt(text2, open) {
   }
   return null;
 }
+function closingAt(text2, open) {
+  let depth = 0;
+  let quote = null;
+  const stop = Math.min(text2.length, open + ARGS_MAX);
+  for (let i = open; i < stop; i++) {
+    const c = text2[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+    } else if (c === "'" || c === '"') quote = c;
+    else if (c === "(" || c === "[" || c === "{") depth++;
+    else if ((c === ")" || c === "]" || c === "}") && --depth === 0) return i;
+  }
+  return -1;
+}
 var literal = (arg) => {
   const m = /^'((?:[^'\\]|\\.)*)'$|^"((?:[^"\\$]|\\.)*)"$/.exec(arg.trim());
   return m ? m[1] ?? m[2] ?? "" : null;
@@ -26182,8 +26228,10 @@ function dependencyList(arg) {
   if (arg === void 0 || arg === "") return { handles: [], complete: true };
   const text2 = arg.trim();
   const named2 = [...text2.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\$]|\\.)*)"/g)].map((m) => m[1] ?? m[2] ?? "");
-  const list2 = /^array\s*\(([\s\S]*)\)$/i.exec(text2)?.[1] ?? /^\[([\s\S]*)\]$/.exec(text2)?.[1];
-  if (list2 === void 0) return { handles: named2, complete: false };
+  const open = /^array\s*\(/i.exec(text2)?.[0].length ?? (text2.startsWith("[") ? 1 : 0);
+  const close = open ? closingAt(text2, open - 1) : -1;
+  if (close !== text2.length - 1) return { handles: named2, complete: false };
+  const list2 = text2.slice(open, close);
   const items = argumentsAt(`(${list2})`, 0) ?? [];
   const complete = items.every((item) => item === "" || literal(item) !== null);
   return { handles: named2, complete };
@@ -26222,13 +26270,13 @@ function enqueueVerdict(check, files) {
   if (unknown) return { state: "unknown" };
   return first ? { state: "missing", calls: seen, first } : { state: "silent" };
 }
-var SPECIFIERS = /@(?:import|use|forward)\s+(?:url\(\s*)?['"]([^'"]+)['"]|\bimport\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|\brequire\(\s*['"]([^'"]+)['"]/g;
+var SPECIFIERS = /@(?:import|use|forward)\s+(?:url\(\s*)?['"]([^'"]+)['"]|\bimport\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|\brequire\(\s*['"]([^'"]+)['"]|@import\s+url\(\s*([^'"()\s]+)\s*\)/g;
 var withoutExt = (s) => s.replace(/\.(?:s?css|sass|less)$/, "");
 function importVerdict(check, files) {
   const wanted = check.specifiers.map(withoutExt);
   for (const { text: text2 } of files)
     for (const m of text2.matchAll(SPECIFIERS)) {
-      const spec = withoutExt(String(m[1] ?? m[2] ?? m[3]).replace(/^~/, ""));
+      const spec = withoutExt(String(m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/^~/, ""));
       if (wanted.some((w) => spec === w || spec.endsWith(`/${w}`))) return { state: "delivered" };
     }
   return { state: "silent" };
@@ -26387,22 +26435,24 @@ function misappliedTokens(refs, scopes, known) {
   const seen = /* @__PURE__ */ new Set();
   for (const ref of refs) {
     const prop = ref.prop.toLowerCase();
-    if (prop.startsWith("--")) continue;
+    if (prop.startsWith("--") || prop.startsWith("$") || prop.startsWith("@")) continue;
+    const bare = prop.replace(/^-(?:webkit|moz|ms|o)-/, "");
+    const admits = (props) => propMatches(props, prop) || propMatches(props, bare);
     if (known.size && !known.has(ref.name)) continue;
     if (!plainRefs(ref.value).includes(ref.name)) continue;
     const at = place(scopes, ref.name);
     if (!at) continue;
     const key = `${ref.file}\0${ref.line}\0${prop}\0${ref.name}`;
     if (seen.has(key)) continue;
-    seen.add(key);
     let why = null;
-    if (at.property !== null && !propMatches(at.sets, prop) && !propMatches(at.also, prop))
+    if (at.property !== null && !admits(at.sets) && !admits(at.also))
       why = `${at.property.startsWith("--") ? "its family" : `a ${at.property} token`} sets ${at.sets.join(", ")}`;
     else {
       const fit = fitOf(scopes, ref.name, ref.elements);
       if (fit.fit === "off") why = fit.why;
     }
     if (why === null) continue;
+    seen.add(key);
     out.push({
       rule: "tokens/misapplied-token",
       file: ref.file,
@@ -26419,13 +26469,12 @@ function misappliedTokens(refs, scopes, known) {
 
 // src/checks/typography/in-css.ts
 var typographyInCss = ({ prop }, { boundText, enabled: enabled2, surfaceOf }) => {
-  const text2 = boundText[0];
-  if (!TYPE_PROPS.has(prop) || !text2 || !enabled2("typography/in-css")) return void 0;
-  const surface = surfaceOf(text2);
-  const owned = surface ? ownership(surface, prop) : void 0;
-  if (surface && !owned) return void 0;
+  if (!TYPE_PROPS.has(prop) || !boundText[0] || !enabled2("typography/in-css")) return void 0;
+  const owner = owningBinding(boundText, prop, surfaceOf);
+  const text2 = owner?.binding ?? boundText.find((b) => !surfaceOf(b));
+  if (!text2) return void 0;
   const head2 = `${prop} on <${text2.tag}>`;
-  return owned?.via.length ? { rule: "typography/in-css", message: `${head2} \u2014 set via ${viaProps(owned.via)}`, code: head2 } : { rule: "typography/in-css", message: head2 };
+  return owner?.via.length ? { rule: "typography/in-css", message: `${head2} \u2014 set via ${viaProps(owner.via)}`, code: head2 } : { rule: "typography/in-css", message: head2 };
 };
 
 // src/checks/typography/untokenized.ts
@@ -26901,8 +26950,15 @@ async function analyze(config, {
       });
   }
   for (const tpl of cssInJs) {
-    if (!reports(tpl.file)) continue;
     const supp = suppByFile.get(tpl.file);
+    if (!reports(tpl.file)) {
+      if (supp && !tpl.error)
+        for (const group of tpl.groups)
+          for (const d of group.decls)
+            for (const name of tokenRefsIn(d.value, tokenPrefixes))
+              tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
+      continue;
+    }
     if (tpl.error) {
       diagnostics.parseErrors.push({ file: tpl.file, message: `css-in-js at line ${tpl.line}: ${tpl.error}` });
       continue;
@@ -27027,7 +27083,7 @@ async function analyze(config, {
     if (f.rule === "tokens/hardcoded-value" && f.hints.length === 1) f.decl = f.hints[0];
     delete f.hints;
   }
-  for (const f of unknownTokens(tokenRefs, tokenSet.known)) report(f);
+  if (diagnostics.tokensKnown) for (const f of unknownTokens(tokenRefs, tokenSet.known)) report(f);
   for (const f of misappliedTokens(scopedRefs, scopes, tokenSet.known)) report(f);
   if (ruleIsLive("tokens/undelivered"))
     for (const f of undelivered({
@@ -27077,7 +27133,8 @@ function dedupe(findings) {
     return true;
   });
 }
-var findingKey = (f) => `${f.rule}|${f.file}|${oneLine(String(f.code ?? f.message))}`;
+var PROJECT_RULES = /* @__PURE__ */ new Set(["tokens/undelivered"]);
+var findingKey = (f) => `${f.rule}|${PROJECT_RULES.has(f.rule) ? "<project>" : f.file}|${oneLine(String(f.code ?? f.message))}`;
 
 // src/autofix.ts
 import { readFileSync as readFileSync5, writeFileSync } from "node:fs";
@@ -28919,7 +28976,7 @@ var MODEL = "jev-1.13.0";
 var FLOOR = 0.5;
 var CONCURRENCY = 6;
 var RETRIES = 4;
-var RETRY_WAIT_MAX_MS = 500 * 2 ** (RETRIES - 1);
+var RETRY_WAIT_MAX_MS = 5e3;
 var REQUEST_TIMEOUT_MS = 2e4;
 async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
   const batches = [];
@@ -28969,8 +29026,8 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
 var judgedTail = (confidence2) => `(judged ${confidence2.toFixed(2)})`;
 function targetOf(f, withVariants) {
   if (f.rule !== "system/raw-element") return void 0;
-  const analog = f.message.split("\u2192")[1] ?? "";
-  return withVariants.find((e) => new RegExp(`\\b${e.name}\\b`).test(analog));
+  const name = /^\s*<?([A-Za-z_$][\w.$]*)/.exec(f.message.split("\u2192")[1] ?? "")?.[1];
+  return name ? withVariants.find((e) => e.name === name) : void 0;
 }
 async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetch) {
   const withVariants = [...registry.values()].filter((e) => e.status === "recommended" && e.variants);
@@ -28993,6 +29050,7 @@ async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetc
     const tail = judgedTail(a.confidence);
     f.message = messageLine(`${element} \u2192 ${suggestion}`, ` ${tail}`);
     f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+    if (not) f.note = withoutReach(f.note, target.package);
     annotated++;
   });
   return annotated;
@@ -29205,11 +29263,7 @@ function ensureDir(dir) {
     return null;
   }
 }
-var attemptsPath = (root2) => join8(
-  process.env.CLAUDE_PLUGIN_DATA || join8(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`),
-  projectKey(root2),
-  "attempts.json"
-);
+var attemptsPath = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join8(data || join8(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`), projectKey(root2), "attempts.json");
 var DEFAULT_BASELINE = ".loupe-baseline.json";
 var baselinePath = (root2, p) => isAbsolute2(p) ? p : join8(root2, p);
 function legacyBaseline(root2) {
@@ -29240,7 +29294,8 @@ function readBaseline(path) {
   try {
     const parsed = JSON.parse(readFileSync9(path, "utf8"));
     if (!Array.isArray(parsed.entries)) return null;
-    return { createdAt: parsed.createdAt ?? "", entries: parsed.entries, set: new Set(parsed.entries) };
+    const entries = parsed.entries.filter((e) => typeof e === "string");
+    return { createdAt: parsed.createdAt ?? "", entries, set: new Set(entries) };
   } catch {
     return null;
   }
@@ -29283,7 +29338,11 @@ function writeBaseline(full, result) {
 `);
   return { path: full, findings: result.findings.length, entries: entries.length };
 }
-function applyBaseline(result, baseline, { scoped = false, rules = null } = {}) {
+function applyBaseline(result, baseline, {
+  scoped = false,
+  rules = null,
+  enabled: enabled2 = null
+} = {}) {
   if (!baseline) return { ...result, baselined: 0, baselinedFindings: [], fixed: null };
   const seen = /* @__PURE__ */ new Set();
   const kept = [];
@@ -29300,7 +29359,10 @@ function applyBaseline(result, baseline, { scoped = false, rules = null } = {}) 
     blocking: kept.some((f) => f.severity === "error"),
     baselined: accepted.length,
     baselinedFindings: accepted,
-    fixed: scoped ? null : [...baseline.set].filter((k) => !seen.has(k) && (!rules || rules.has(k.slice(0, k.indexOf("|"))))).length
+    fixed: scoped ? null : [...baseline.set].filter((k) => {
+      const rule2 = ruleOf(k);
+      return !seen.has(k) && (!rules || rules.has(rule2)) && enabled2?.[rule2] !== false;
+    }).length
   };
 }
 
@@ -29360,7 +29422,9 @@ var DEFAULTS = {
   // (the layout/text categorization) — same word, unrelated concern.
   componentRegistry: null,
   baseline: DEFAULT_BASELINE,
-  hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 12e4 }
+  // timeoutMs is the hook's whole judge phase, well inside the 60s Claude Code
+  // gives PostToolUse: the analysis on either side of it needs the rest.
+  hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 3e4 }
 };
 var isObj = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
 function merge(base, over) {
@@ -29759,12 +29823,13 @@ var byWeight = (a, b) => {
   return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || byBytes(a[0], b[0]);
 };
 var groupsOf = (findings, by) => by === "rule" ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
-var sameLine = (f) => `${f.rule}\0${f.file}\0${painted(f)}`;
+var sameText = (f) => `${f.code ?? ""}\0${f.message}\0${f.note ?? ""}`;
+var sameLine = (f) => `${f.rule}\0${f.file}\0${sameText(f)}`;
 var collapse = (findings) => bucket(findings, sameLine).map(([, run]) => run.sort((a, b) => a.line - b.line)).sort((a, b) => b.length - a.length);
 function concentration(group, nested) {
   if (group.length < 2) return String(group.length);
   const files = new Set(group.map((f) => f.file)).size;
-  const distinct = new Set(group.map(painted)).size;
+  const distinct = new Set(group.map(sameText)).size;
   return `${group.length}${nested ? "" : ` in ${files} ${files === 1 ? "file" : "files"}`}, ${distinct} distinct`;
 }
 function ruleHeading(id, group, title, nested) {
@@ -29780,7 +29845,7 @@ function findingLines(group) {
   return runs.map((run) => {
     const [f] = run;
     const at = run.map((g) => g.line);
-    const more = at.length > MAX_LINES ? ", \u2026" : "";
+    const more = at.length > MAX_LINES ? `, \u2026 +${at.length - MAX_LINES} more` : "";
     const times = run.length > 1 ? `  \xD7${run.length} ${dim(`(lines ${at.slice(0, MAX_LINES).join(", ")}${more})`)}` : "";
     return `      ${dim(String(f.line).padStart(width))}  ${painted(f)}${times}`;
   });
@@ -30533,14 +30598,19 @@ function lsp(opts) {
       return lines;
     };
   };
+  let shownFailure = null;
   async function publish() {
     let result;
     try {
       result = await run();
     } catch (err) {
-      log(`analysis failed: ${messageOf(err)}`);
+      const message = `loupe: analysis failed \u2014 ${messageOf(err)}`;
+      log(message);
+      if (message !== shownFailure) notify("window/showMessage", { type: 1, message });
+      shownFailure = message;
       return;
     }
+    shownFailure = null;
     const next = /* @__PURE__ */ new Map();
     for (const f of result.findings) next.set(f.file, [...next.get(f.file) ?? [], f]);
     findings = next;
@@ -31016,7 +31086,11 @@ var JS2 = `
   }
   function load() {
     fetch(ORIGIN + '/findings.json', { cache: 'no-store' })
-      .then(function (r) { return r.json(); })
+      // A refused analysis is a 500 carrying { error }: shown as the reason, never
+      // rendered as a payload it is not.
+      .then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j && j.error || 'HTTP ' + r.status); return j; });
+      })
       .then(function (j) { data = j; pinned = null; render(); })
       .catch(function (e) {
         panel.innerHTML = '<div class="head"><span class="title">loupe</span></div><div class="empty">' +
@@ -31481,13 +31555,12 @@ var under = (dir, rel) => isAbsolute4(rel) ? rel : join13(dir, rel);
 var asStrings2 = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString2 = (v) => typeof v === "string" && v !== "" ? v : null;
 function readScopes(dir, raw) {
-  if (typeof raw !== "string") return parseTokenScopes(raw);
   try {
-    return parseTokenScopes(readJson2(under(dir, raw)));
+    return parseTokenScopes(typeof raw === "string" ? readJson2(under(dir, raw)) : raw);
   } catch (err) {
     return {
       scopes: null,
-      errors: [`tokenScopes: could not read ${raw} \u2014 ${messageOf(err)}`]
+      errors: [`tokenScopes: could not read ${typeof raw === "string" ? raw : "the inline block"} \u2014 ${messageOf(err)}`]
     };
   }
 }
@@ -31939,7 +32012,8 @@ Commands:
 Options:
   --changed             Only report findings in files changed vs. HEAD (default for hook)
   --all                 Report across the whole repo (default for check)
-  --files a,b           Only report findings in these files
+  --files a,b           Only report findings in these files (a directory: the
+                        source files under it)
   --rule <id>           Only report (check) or fix (fix) this rule's findings;
                         repeat it, or give a comma list, for more than one
   --format <f>          agent | json | sarif | html  (default: agent)
@@ -32020,12 +32094,32 @@ var CEILING_WHY = "this root is larger than a project, so the namespaces are a g
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
 `;
 var CEILING_SUFFIX = ` (inference stopped at the ${CEILING}; namespaces are a guess)`;
+function expandDirs(config, given) {
+  const isDir = (rel) => {
+    try {
+      return statSync5(resolve6(config.root, rel)).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+  const dirs = given.filter(isDir).map((d) => toPosix(relative5(config.root, resolve6(config.root, d))));
+  if (!dirs.length) return given.filter(Boolean);
+  const limit = analyzeEntryBudget(config.maxEntries);
+  const found = discover({ root: config.root, sources: config.sources, limit });
+  if (found.truncated) return { error: new TreeTooLarge(limit).message };
+  const under2 = (rel) => dirs.some((d) => d === "" || rel.startsWith(`${d}/`));
+  const files = [...found.styles, ...found.markup, ...found.references].map((f) => f.rel).filter(under2);
+  return [.../* @__PURE__ */ new Set([...given.filter((f) => f && !isDir(f)), ...files])];
+}
 function resolveScope(config, args, { defaultChanged = false }) {
   const given = ["all", "changed", "files"].filter((f) => args.flags[f]);
   if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(" ")}` };
   if (args.flags.all) return null;
   if (args.flags.files)
-    return args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative5(config.root, resolve6(f)) : f)).filter((f) => f && !f.startsWith(".."));
+    return expandDirs(
+      config,
+      args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative5(config.root, resolve6(f)) : f)).filter((f) => !f.startsWith(".."))
+    );
   if (args.flags.changed || defaultChanged) {
     const changed = changedFiles(config.root);
     if (changed === null) return { error: NOT_A_WORKTREE };
@@ -32046,6 +32140,17 @@ async function findingsBeforeEdit(config, touched, before, { judge, suppress }) 
   } catch {
     return [];
   }
+}
+function deadlineFetch(deadline) {
+  return (input, init) => {
+    const both = new AbortController();
+    for (const s of [deadline, init?.signal]) {
+      if (!s) continue;
+      if (s.aborted) both.abort(s.reason);
+      else s.addEventListener("abort", () => both.abort(s.reason), { once: true });
+    }
+    return fetch(input, { ...init, signal: both.signal });
+  };
 }
 function introducedBy(after, before) {
   const pool = /* @__PURE__ */ new Map();
@@ -32078,7 +32183,9 @@ function filterRules(result, rules) {
 function filterSeverity(result, min) {
   if (min !== "error") return result;
   const findings = result.findings.filter((f) => f.severity === "error");
-  return { ...result, findings };
+  if (!("baselinedFindings" in result)) return { ...result, findings };
+  const baselinedFindings = result.baselinedFindings.filter((f) => f.severity === "error");
+  return { ...result, findings, baselinedFindings, baselined: baselinedFindings.length };
 }
 async function main() {
   const argv = process.argv.slice(2);
@@ -32304,6 +32411,13 @@ async function main() {
       // repo. The marker is computed, not assumed — a root above the temp
       // directory would contain it.
       `${dim("state:      ")}${state}${relative5(root2, state).startsWith("..") ? "  (retry counter only, outside your repo)" : ""}`,
+      // The Claude Code hook has CLAUDE_PLUGIN_DATA and a terminal does not, so
+      // the line above is not the hook's file unless this run has it too.
+      ...process.env.CLAUDE_PLUGIN_DATA ? [] : [
+        dim(
+          `            without CLAUDE_PLUGIN_DATA; the Claude Code hook's is ${toPosix(attemptsPath(root2, "$CLAUDE_PLUGIN_DATA"))}`
+        )
+      ],
       `${dim("options:    ")}${describeOptions(resolved)}`,
       `${dim("plugin:     ")}${isPluginContext() ? "running as a plugin" : "not running as a plugin"}`,
       // The hook passes `--judge` and then turns it off silently when there is no
@@ -32444,7 +32558,7 @@ ${green(`Wrote ${target}`)}
         notice(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
 `);
       }
-      return applyBaseline(fresh, baseline);
+      return applyBaseline(fresh, baseline, { enabled: config.enabled });
     };
   };
   if (command === "lsp") {
@@ -32591,12 +32705,16 @@ ${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked
   }
   const rules = ruleScope(args.flags.rule);
   if (rules && !(rules instanceof Set)) {
+    if (isHook) return emitClean(`loupe: skipped \u2014 ${rules.error}`);
     fail(`loupe: ${rules.error}
 `);
     return EXIT.CANNOT_RUN;
   }
   for (const id of rules ?? [])
     if (!config.enabled[id]) note(`loupe: ${id} is off in this config \u2014 it reports nothing.
+`);
+    else if (id === "patterns/judged-redirect" && command === "check" && !args.flags.judge)
+      note(`loupe: ${id} reports only under --judge \u2014 this run reports nothing for it.
 `);
   const apiKey = args.flags.judge ? judgeKey() : void 0;
   if (args.flags.judge && !apiKey && !isHook) {
@@ -32716,47 +32834,54 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
       if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}
 `);
     }
-    result = applyBaseline(result, baseline, { scoped: scope !== null, rules });
+    result = applyBaseline(result, baseline, { scoped: scope !== null, rules, enabled: config.enabled });
   }
   if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   if (apiKey) {
+    const deadline = isHook ? AbortSignal.timeout(config.hook.timeoutMs) : null;
+    const judgeFetch = deadline ? deadlineFetch(deadline) : fetch;
+    const inTime = () => !deadline?.aborted;
     try {
       const redirectSeverity = config.severityOf("patterns/judged-redirect");
-      if (result.controls?.length && (args.flags.severity !== "error" || redirectSeverity === "error") && (!rules || rules.has("patterns/judged-redirect"))) {
-        result.findings.push(...await judgeRedirects(result.controls, apiKey, redirectSeverity));
+      if (inTime() && result.controls?.length && (args.flags.severity !== "error" || redirectSeverity === "error") && (!rules || rules.has("patterns/judged-redirect"))) {
+        result.findings.push(...await judgeRedirects(result.controls, apiKey, redirectSeverity, judgeFetch));
         result.findings = dedupe(result.findings);
       }
-      await judgeVariants(root2, result.findings, config.componentRegistry, apiKey);
+      if (inTime()) await judgeVariants(root2, result.findings, config.componentRegistry, apiKey, judgeFetch);
     } catch (err) {
       note(`loupe: --judge skipped \u2014 ${messageOf(err)}
 `);
     }
     try {
-      if (result.findings.some((f) => f.suggest?.length))
+      if (inTime() && result.findings.some((f) => f.suggest?.length))
         await judgeValues(
           root2,
           result.findings,
           result.tokens,
           apiKey,
-          tokenDescriptions(config.profiles?.active ?? [])
+          tokenDescriptions(config.profiles?.active ?? []),
+          judgeFetch
         );
     } catch (err) {
       note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
 `);
     }
     try {
-      if (result.tokens && result.findings.some((f) => f.unknown))
+      if (inTime() && result.tokens && result.findings.some((f) => f.unknown))
         await judgeRenames(
           root2,
           result.findings,
           result.tokens,
           apiKey,
-          tokenDescriptions(config.profiles?.active ?? [])
+          tokenDescriptions(config.profiles?.active ?? []),
+          judgeFetch
         );
     } catch (err) {
       note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
 `);
     }
+    if (!inTime()) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)
+`);
     result.blocking = result.findings.some((f) => f.severity === "error");
   }
   if (isHook) {
@@ -32779,9 +32904,15 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     const standingNote = standing ? ` ${standing} blocking finding(s) already in ${touched} before this edit, left for the Stop check.` : "";
     if (!blocking.length) {
       clearAttempts(root2, budgetKey);
-      return emitClean(
-        standing ? `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}` : `${formatSummary(result)}${ceilingSuffix}`
-      );
+      if (!standing) return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
+      const message = `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`;
+      const report2 = formatAgent({ ...result, findings: errors }, config, {
+        maxFindings: config.hook.maxFindings,
+        terse: true
+      });
+      return emitAdvisory(message, `${message}
+
+${report2}`, payload);
     }
     const attempts = bumpAttempts(root2, budgetKey);
     const max = config.hook.maxAttempts;
