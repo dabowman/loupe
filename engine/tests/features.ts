@@ -1911,6 +1911,32 @@ await check('a property the component owns still blocks, and the message names t
 	);
 });
 
+// A class can be bound to several text components. `letter-spacing` is not
+// `@wordpress/ui` Text's, but `Truncate` records no surface, so its claim on the
+// type stands; reading only the first binding made the verdict follow file order.
+await check('typography/in-css reads every text component a class is bound to, whatever the file order', async () => {
+	const verdicts: string[] = [];
+	for (const [text, truncate] of [
+		['src/A.tsx', 'src/B.tsx'],
+		['src/C.tsx', 'src/B.tsx'],
+	] as const) {
+		const r = await run(
+			{
+				'loupe.config.json': CONFIG(),
+				'styles/a.scss': '.acme-l { letter-spacing: 1px; }',
+				[text]: 'import { Text } from \'@wordpress/ui\';\nexport const T = () => <Text className="acme-l">x</Text>;',
+				[truncate]:
+					'import { Truncate } from \'@wordpress/components\';\nexport const U = () => <Truncate className="acme-l">x</Truncate>;',
+			},
+			{ components: componentRegistry },
+		);
+		const css = r.findings.filter((f) => f.file.endsWith('.scss'));
+		verdicts.push(css.map((f) => `${f.severity} ${f.rule} ${f.message}`).join('; '));
+	}
+	assert(verdicts[0] === verdicts[1], `the verdict followed file order:\n${verdicts.join('\n')}`);
+	assert(verdicts[0] === 'error typography/in-css letter-spacing on <Truncate>', `verdict: ${verdicts[0]}`);
+});
+
 // `import * as UI` binds the package, so `<UI.Button>` is the package's Button.
 // Keyed as a part of `UI`, it found no surface while the package counted as
 // surfaced, and the override fell to an advisory hardcoded value.
