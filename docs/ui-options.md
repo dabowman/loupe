@@ -203,7 +203,7 @@ wants.
 - **Costs** Rust in the repo, seven more CI targets, code signing and Apple
   notarization (a paid developer account and a notarization step per release),
   Windows signing, and an update channel to keep alive. Bundle size is dominated
-  by the sidecar: the binaries are 60–100 MB each, so the shell's own few MB are
+  by the sidecar: the binaries are 60–110 MB each, so the shell's own few MB are
   a rounding error.
 - **Forecloses** nothing, but it is the option that adds the most permanent
   operational surface. A release pipeline with signing in it is a thing you own

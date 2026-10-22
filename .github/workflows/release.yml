@@ -3,7 +3,7 @@
 # These are the artifact for hosts that have no Node and should not be made to
 # grow one — somebody else's CI, a pre-commit hook in a repo that is not
 # JavaScript, a designer who wants the checker and not a dev environment. They
-# are 60-100 MB each, so they live on a release and never in the history;
+# are 60-110 MB each, so they live on a release and never in the history;
 # `engine/binaries/` is gitignored precisely so this is the only way they ship.
 #
 # This carries its own gate rather than trusting the branch build. `ci.yml`

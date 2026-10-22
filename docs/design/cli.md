@@ -1118,7 +1118,7 @@ build-time tool: nothing about the produced binary depends on Bun being
 installed anywhere else.
 
 Output is deliberately **not** `dist/`. That directory is committed, and these
-are 60–100 MB each — they belong on a release, never in the history.
+are 60–110 MB each — they belong on a release, never in the history.
 
 Linux is built twice on purpose. The default build links against glibc and exits
 "not found" on Alpine, which is what a lot of CI actually runs, and the failure

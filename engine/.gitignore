@@ -1,6 +1,6 @@
 node_modules/
 
-# Compiled executables: 60-100 MB each, built on demand and released, never committed.
+# Compiled executables: 60-110 MB each, built on demand and released, never committed.
 binaries/
 
 # An eval's own working file: `evals/counterparts/floor.ts` dumps its scored
