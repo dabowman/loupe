@@ -29939,6 +29939,7 @@ async function loadChain(path, walk = freshWalk()) {
   });
 }
 async function expandExtends(raw, fromDir, label, walk = freshWalk()) {
+  raw = anchorProfiles(raw, fromDir);
   const own = Object.fromEntries(Object.keys(isObj(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
   if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
   const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
@@ -29952,6 +29953,12 @@ async function expandExtends(raw, fromDir, label, walk = freshWalk()) {
   }
   const { extends: _drop, ...rest } = raw;
   return { raw: mergeConfig(base, rest), ruleFrom: { ...ruleFrom, ...own } };
+}
+function anchorProfiles(raw, fromDir) {
+  if (!raw || raw.profiles === void 0) return raw;
+  const at = (p) => typeof p === "string" && p !== "" ? resolve3(fromDir, p) : p;
+  const spec = raw.profiles;
+  return { ...raw, profiles: Array.isArray(spec) ? spec.map(at) : at(spec) };
 }
 function listPresets() {
   return presetNames().sort((a, b) => Number(a === "generic") - Number(b === "generic"));
@@ -30022,6 +30029,14 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
   const maxEntries = cfg.maxEntries;
   if (maxEntries !== void 0 && maxEntries !== null && !(Number.isInteger(maxEntries) && maxEntries > 0))
     throw new Error(`maxEntries must be a positive whole number of entries, got: ${JSON.stringify(maxEntries)}`);
+  const profileSpec = cfg.profiles ?? [];
+  const profileList = typeof profileSpec === "string" ? [profileSpec] : Array.isArray(profileSpec) ? profileSpec : [profileSpec];
+  if (profileList.some((p) => typeof p !== "string" || p === ""))
+    throw new Error(`profiles must be a directory or an array of directories, got: ${JSON.stringify(profileSpec)}`);
+  const profileDirs = profileList.map((p) => resolve3(root2, p));
+  const pin = cfg.profile;
+  if (pin !== void 0 && pin !== null && !(typeof pin === "string" && pin !== ""))
+    throw new Error(`profile must be a profile id or "none", got: ${JSON.stringify(pin)}`);
   const layoutComponents = ds.components?.layout ?? [];
   const textComponents = ds.components?.text ?? [];
   const shipped = shippedVocabulary();
@@ -30047,6 +30062,8 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
     // paths won. Normalizing a bare object is the inline case by definition.
     source: { kind: "inline" },
     inferred: false,
+    profileDirs,
+    profilePin: typeof pin === "string" ? pin : null,
     designSystem: {
       name: ds.name || "",
       packages: ds.packages ?? [],
@@ -32012,6 +32029,8 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 // src/profiles.ts
 import { existsSync as existsSync8, readFileSync as readFileSync16 } from "node:fs";
 import { isAbsolute as isAbsolute4, join as join14, resolve as resolve4 } from "node:path";
+var PROJECT_PROFILES = join14(".loupe", "profiles");
+var NO_PROFILE = "none";
 var readJson3 = (p) => JSON.parse(readFileSync16(p, "utf8"));
 var under = (dir, rel) => isAbsolute4(rel) ? rel : join14(dir, rel);
 var asStrings2 = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
@@ -32026,7 +32045,7 @@ function readScopes(dir, raw) {
     };
   }
 }
-function readProfiles(root2) {
+function readProfiles(root2, origin = "shipped", unreadable) {
   if (!root2 || !existsSync8(root2)) return [];
   const out = [];
   const seen = /* @__PURE__ */ new Set();
@@ -32038,7 +32057,7 @@ function readProfiles(root2) {
     try {
       const raw = readJson3(manifest);
       const id = asString2(raw.id) ?? e.name;
-      if (seen.has(id)) continue;
+      if (id === NO_PROFILE || seen.has(id)) continue;
       const patterns = asString2(raw.patterns);
       const components2 = asString2(raw.components);
       const tokenDescriptions2 = asString2(raw.tokenDescriptions);
@@ -32057,19 +32076,46 @@ function readProfiles(root2) {
         // Read now, not by path later: two consumers want it, and a block that
         // does not validate is no block rather than a profile that cannot load.
         delivery: delivery ? readDelivery(under(dir, delivery)) : null,
-        dir
+        dir,
+        origin
       });
       seen.add(id);
-    } catch {
+    } catch (err) {
+      unreadable?.push(`${manifest} \u2014 ${messageOf(err)}`);
     }
   }
   return out.sort((a, b) => byBytes(a.id, b.id));
 }
+function profileRoots({
+  root: root2,
+  configured = [],
+  flag = null
+}) {
+  const roots = [
+    ...configured.map((dir) => ({ dir: resolve4(dir), origin: "project" })),
+    { dir: resolve4(root2, PROJECT_PROFILES), origin: "project" },
+    ...flag ? [{ dir: resolve4(flag), origin: "shipped" }] : []
+  ];
+  const seen = /* @__PURE__ */ new Set();
+  return roots.filter((r) => !seen.has(r.dir) && Boolean(seen.add(r.dir)));
+}
+function readProfileRoots(roots, unreadable) {
+  const out = /* @__PURE__ */ new Map();
+  for (const { dir, origin } of roots)
+    for (const p of readProfiles(dir, origin, origin === "project" ? unreadable : void 0))
+      if (!out.has(p.id)) out.set(p.id, p);
+  return [...out.values()].sort((a, b) => byBytes(a.id, b.id));
+}
 function selectProfiles(profiles, config, force = null) {
+  if (force === NO_PROFILE) return [];
   if (force) return profiles.filter((p) => p.id === force);
   const pkgs = config.designSystem?.packages ?? [];
   if (!pkgs.length) return [];
-  return profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
+  const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
+  const claimed = new Set(
+    matched.filter((p) => p.origin === "project").flatMap((p) => p.packages.filter((pkg) => pkgs.includes(pkg)))
+  );
+  return matched.filter((p) => p.origin === "project" || !p.packages.some((pkg) => claimed.has(pkg)));
 }
 function applyRegistries(config, sources) {
   const applied = [];
@@ -32541,8 +32587,11 @@ Options:
   --patterns <path>     Composite pattern registry (JSON)
   --components <path>   Component currency registry (JSON)
   --profiles <dir>      Directory of design-system profiles; the ones matching
-                        this project's imports supply their registries
+                        this project's imports supply their registries. The
+                        project's own (config "profiles", .loupe/profiles/) are
+                        read as well, and win on a shared id or package
   --profile <id>        Use this profile regardless of what the project imports
+                        ("none" for no profile); outranks the config's "profile"
   --config <path>       Explicit config file
   --root <path>         Project root (default: the directory holding the config
                         that governs the cwd, or CLAUDE_PROJECT_DIR under hook)
@@ -32711,13 +32760,11 @@ async function main() {
 `);
     return EXIT.CANNOT_RUN;
   }
-  const profiles = readProfiles(args.flags.profiles ? resolve6(args.flags.profiles) : null);
-  const forced = args.flags.profile ? profiles.find((p) => p.id === args.flags.profile) ?? null : null;
-  if (args.flags.profile && !forced && !isHook)
-    note(
-      `loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve6(args.flags.profiles) : "any profiles directory (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
-`
-    );
+  const flagProfiles = args.flags.profiles ? resolve6(args.flags.profiles) : null;
+  let unreadable = [];
+  let profiles = readProfileRoots(profileRoots({ root: root2, flag: flagProfiles }), unreadable);
+  const byId = (id) => id && id !== NO_PROFILE ? profiles.find((p) => p.id === id) ?? null : null;
+  let forced = byId(args.flags.profile);
   let config;
   let detected = null;
   let profilePreset = null;
@@ -32766,14 +32813,31 @@ async function main() {
 `);
     return EXIT.CANNOT_RUN;
   }
-  const active = selectProfiles(profiles, config, args.flags.profile ?? null);
+  if (config.profileDirs.length) {
+    unreadable = [];
+    profiles = readProfileRoots(profileRoots({ root: root2, configured: config.profileDirs, flag: flagProfiles }), unreadable);
+    forced = byId(args.flags.profile);
+  }
+  const pin = args.flags.profile ?? config.profilePin;
+  const pinned = byId(pin);
+  if (pin && pin !== NO_PROFILE && !pinned && !isHook)
+    note(
+      `loupe: no profile "${pin}"${args.flags.profile ? "" : ` (the config's "profile")`} in ${profileRoots({
+        root: root2,
+        configured: config.profileDirs,
+        flag: flagProfiles
+      }).map((r) => r.dir).join(", ")}${flagProfiles ? "" : " (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
+`
+    );
+  const active = selectProfiles(profiles, config, pin);
   const sources = active.map((p) => ({
     label: `profile ${p.id}`,
     patterns: p.patterns,
     components: p.components,
     // Naming a profile has already answered the question its registries would
-    // be scope-checked against.
-    forced: p.id === forced?.id
+    // be scope-checked against — whether it was named on the command line or in
+    // the config.
+    forced: p.id === pinned?.id
   }));
   if (args.flags.patterns || args.flags.components)
     sources.push({
@@ -32785,6 +32849,8 @@ async function main() {
   config.profiles = { available: profiles, active, ...registries };
   if (!isHook) {
     for (const err of registries.errors) fail(`loupe: ${err}
+`);
+    for (const u of unreadable) note(`loupe: project profile skipped, could not load ${u}
 `);
     for (const p of active)
       for (const problem of p.problems) fail(`loupe: profile ${p.id} ${problem} \u2014 its token scopes are ignored
@@ -32928,7 +32994,7 @@ async function main() {
       // were on offer: "no composite findings" and "no composite registry" look
       // identical in a report and must not look identical here. The directory, not
       // just the id: a profile carries its authoring prose beside its registries.
-      `${dim("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(", ") : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
+      `${dim("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(", ") : (args.flags.profile ?? config.profilePin) === NO_PROFILE ? `none selected \u2014 pinned to "${NO_PROFILE}" by ${args.flags.profile ? "--profile" : `the config's "profile"`}` : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
       // What adopting the system costs this project: which packages the host
       // provides and which get bundled, and which sheet carries the tokens. A
       // remedy naming a bundled package is a new runtime dependency, and a token

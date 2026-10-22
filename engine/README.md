@@ -417,6 +417,47 @@ whatever design system a project is on.
 project actually imports; `--profile <id>` forces one. A profile declaring no
 packages is never selected automatically — there is nothing to recognize it by.
 
+#### A project's own profiles
+
+A project can carry profiles of its own, beside the shipped ones rather than
+instead of them. They are read from every directory the config lists under
+`profiles` (a path or an array of paths, each relative to the config file that
+wrote it) and from `.loupe/profiles/` under the project root, with no flag —
+so the hooks, the commands and a typed `loupe` all see them while still passing
+only the shipped `--profiles`. Like every array in the config, a `profiles` list
+in a config that `extends` another replaces the base's list rather than adding
+to it: repeat the base's directory if you mean both.
+
+```jsonc
+{
+  "extends": "generic",
+  "profiles": "./loupe/profiles",      // or ["./a", "./b"]; .loupe/profiles/ is read either way
+  "profile": "vip-v3",                 // optional: pin selection to one id, or "none"
+  "designSystem": { "packages": ["@automattic/vip-design-system"] }
+}
+```
+
+The project's profile wins:
+
+- **on an id** — the config's directories are read first, in order, then
+  `.loupe/profiles/`, then `--profiles`, and the first to carry an id keeps it;
+- **on a package** — a shipped profile claiming a package that a selected
+  project profile also claims is not selected. That is the case of a design
+  system rebuilt under its old package name: the shipped profile describes what
+  it used to be. It stays available by id, so `--profile vip` still reaches it.
+
+`loupe status` prints the project profile's directory on its `profile:` line,
+which is where the plugin's skills read `authoring.md` from.
+
+`profile` pins selection without touching `designSystem.packages`: `"none"`
+selects no profile while every rule that needs the packages stays on, and an id
+applies that profile as `--profile <id>` would — registries merged past the
+scope check, notes on stderr where that matters. `--profile` on the command line
+outranks it. A pin naming no profile says so on stderr.
+
+Selection is still by package name, not version: a profile cannot yet say it
+describes only `<3` of a package.
+
 Forcing one applies the whole bundle: its registries merge without the scope
 check the flag has already answered, and its preset configures the run. That
 preset is the least explicit statement anything makes about a project —
@@ -1119,6 +1160,8 @@ A library call writes nothing anywhere unless it passes `cache: true`.
 | `designSystem.allowedInlineStyles` | Inline-style properties a component's own API sanctions, as `{ "Text": ["color"] }` keyed by canonical component name. A `style` on that component made only of those properties is not `system/inline-style`; its values still go through the ordinary checks, so a raw colour there is still `tokens/hardcoded-value`. Any other property, a spread, or an opaque `style={obj}` reports the element as before, naming only the unsanctioned properties. The `wpds` preset sanctions `color` on `Text`, which has no color prop. |
 | `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. A `judge` detector (`components`, `unless`) names elements for `check --judge` to ask about, and reports `patterns/judged-redirect`. |
 | `maxEntries` | How many entries the analysis walk reads before it refuses (default 200,000). A positive whole number; anything else is a config error. `LOUPE_MAX_ENTRIES` outranks it for one run. |
+| `profiles` | The project's own profile directories: a path or an array of paths, each relative to the config file that wrote it. Read ahead of `.loupe/profiles/` and `--profiles`, and merged with them; see [A project's own profiles](#a-projects-own-profiles). Anything but non-empty strings is a config error. |
+| `profile` | Pins profile selection: a profile id, or `"none"` for no profile at all, without emptying `designSystem.packages`. `--profile` outranks it. |
 | `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package, and optionally each component's styling `surface` — `{ "properties": { "font-size": "variant", "border-radius": null } }` — which `system/override` and `typography/in-css` read; a registry recording none on any entry keeps `system/override`'s pre-surface reading, where every appearance property on a bound class blocks): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
 `scope` filters what is *reported*. The index is always built repo-wide —

@@ -60,9 +60,9 @@ import { lsp } from './lsp.ts';
 import { serve } from './serve.ts';
 import { messageOf, oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
-import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
+import { NO_PROFILE, applyRegistries, profileRoots, readProfileRoots, selectProfiles } from './profiles.ts';
 import { deliverySummary, mergeDeliveries, REMEDY_RULES } from './delivery.ts';
-import type { RegistrySource } from './profiles.ts';
+import type { Profile, RegistrySource } from './profiles.ts';
 import {
 	attemptsPath,
 	baselinePath,
@@ -378,8 +378,11 @@ Options:
   --patterns <path>     Composite pattern registry (JSON)
   --components <path>   Component currency registry (JSON)
   --profiles <dir>      Directory of design-system profiles; the ones matching
-                        this project's imports supply their registries
+                        this project's imports supply their registries. The
+                        project's own (config "profiles", .loupe/profiles/) are
+                        read as well, and win on a shared id or package
   --profile <id>        Use this profile regardless of what the project imports
+                        ("none" for no profile); outranks the config's "profile"
   --config <path>       Explicit config file
   --root <path>         Project root (default: the directory holding the config
                         that governs the cwd, or CLAUDE_PROJECT_DIR under hook)
@@ -721,17 +724,19 @@ async function main(): Promise<number> {
 	// Read before the config rather than with the other registry work below: a
 	// profile names the preset that configures its design system, and that has
 	// to be settled before the config it would configure is loaded.
-	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
-	const forced = args.flags.profile ? (profiles.find((p) => p.id === args.flags.profile) ?? null) : null;
-	// A named profile that resolves to nothing is not a no-op: it also suppresses
-	// the profile *selection* would have made, so a typo checks strictly less than
-	// no flag at all.
-	if (args.flags.profile && !forced && !isHook)
-		note(
-			`loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve(args.flags.profiles) : 'any profiles directory (--profiles was not given)'}${
-				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
-			}\n`,
-		);
+	//
+	// The project's own profiles are read here too, from `.loupe/profiles/`: a
+	// project's profile is what its hooks, commands and skills must see, and none
+	// of them passes anything but the shipped directory. The directories a config
+	// lists can only be added once it is loaded, below — but the preset a profile
+	// names matters only to a project with no config, which lists none.
+	const flagProfiles = args.flags.profiles ? resolve(args.flags.profiles) : null;
+	// Refilled by every read, so it names the failures of the read that counted.
+	let unreadable: string[] = [];
+	let profiles = readProfileRoots(profileRoots({ root, flag: flagProfiles }), unreadable);
+	const byId = (id: string | null | undefined): Profile | null =>
+		id && id !== NO_PROFILE ? (profiles.find((p) => p.id === id) ?? null) : null;
+	let forced = byId(args.flags.profile);
 
 	let config: Config;
 	let detected: DetectedConfig | null = null;
@@ -831,14 +836,42 @@ async function main(): Promise<number> {
 	// design-system profile that the project's own imports selected. Both merge
 	// with the project winning on id, because a repo that has written down its
 	// own `page-header` means that one, not the shipped generic.
-	const active = selectProfiles(profiles, config, args.flags.profile ?? null);
+	//
+	// The directories the config lists are read first, ahead of the convention and
+	// of `--profiles`, so on a shared id the project's own profile is the one kept.
+	if (config.profileDirs.length) {
+		unreadable = [];
+		profiles = readProfileRoots(profileRoots({ root, configured: config.profileDirs, flag: flagProfiles }), unreadable);
+		forced = byId(args.flags.profile);
+	}
+	// What selection is pinned to: `--profile`, typed at the moment of use, over
+	// the config's `profile`, over the packages the config declares.
+	const pin = args.flags.profile ?? config.profilePin;
+	const pinned = byId(pin);
+	// A named profile that resolves to nothing is not a no-op: it also suppresses
+	// the profile *selection* would have made, so a typo checks strictly less than
+	// no pin at all.
+	if (pin && pin !== NO_PROFILE && !pinned && !isHook)
+		note(
+			`loupe: no profile "${pin}"${args.flags.profile ? '' : ' (the config\'s "profile")'} in ${profileRoots({
+				root,
+				configured: config.profileDirs,
+				flag: flagProfiles,
+			})
+				.map((r) => r.dir)
+				.join(', ')}${flagProfiles ? '' : ' (--profiles was not given)'}${
+				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
+			}\n`,
+		);
+	const active = selectProfiles(profiles, config, pin);
 	const sources: RegistrySource[] = active.map((p) => ({
 		label: `profile ${p.id}`,
 		patterns: p.patterns,
 		components: p.components,
 		// Naming a profile has already answered the question its registries would
-		// be scope-checked against.
-		forced: p.id === forced?.id,
+		// be scope-checked against — whether it was named on the command line or in
+		// the config.
+		forced: p.id === pinned?.id,
 	}));
 	if (args.flags.patterns || args.flags.components)
 		sources.push({
@@ -851,6 +884,7 @@ async function main(): Promise<number> {
 	config.profiles = { available: profiles, active, ...registries };
 	if (!isHook) {
 		for (const err of registries.errors) fail(`loupe: ${err}\n`);
+		for (const u of unreadable) note(`loupe: project profile skipped, could not load ${u}\n`);
 		// A scope declaration refused at load leaves its profile on the generic token
 		// table, which reads exactly like one that declared nothing — so it says so.
 		for (const p of active)
@@ -1076,9 +1110,11 @@ async function main(): Promise<number> {
 			`${dim('profile:    ')}${
 				config.profiles?.active?.length
 					? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(', ')
-					: config.profiles?.available?.length
-						? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(', ')}`
-						: 'none available'
+					: (args.flags.profile ?? config.profilePin) === NO_PROFILE
+						? `none selected \u2014 pinned to "${NO_PROFILE}" by ${args.flags.profile ? '--profile' : 'the config\'s "profile"'}`
+						: config.profiles?.available?.length
+							? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(', ')}`
+							: 'none available'
 			}`,
 			// What adopting the system costs this project: which packages the host
 			// provides and which get bundled, and which sheet carries the tokens. A
