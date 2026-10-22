@@ -426,9 +426,6 @@ export function keySelector(sel: string): string {
 	return s.slice(start);
 }
 
-/** {@link keySelector} by the name #127 gave it: one key, whichever name a caller reads it by. */
-export const keyCompound = keySelector;
-
 /**
  * A compound with its attribute selectors and pseudo-class arguments taken out:
  * what it says about the element itself. A class inside `:not()` is one the
