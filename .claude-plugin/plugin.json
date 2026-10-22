@@ -75,7 +75,7 @@
     "typesafe_api_key": {
       "type": "string",
       "title": "TypeSafe API key",
-      "description": "Lets the hooks ask Jev (TypeSafe) the judgement questions. Kept in your system keychain. Hooks only: for /loupe-fix --judge and the terminal, also put TYPESAFE_API_KEY=... in ~/.config/loupe/.env. Leave empty to skip judging.",
+      "description": "Lets the hooks ask Jev (TypeSafe) the judgement questions. With a key, a hook run that blocks sends TypeSafe's API (api.typesafe.ai) the file path and the lines around each finding it prints (the flagged element or declaration and its neighbours, never a whole file); a PostToolUse that hands the agent advisory context judges those findings too, within the findings cap and the answer cache; and a Stop that does not block sends nothing unless you set patterns/judged-redirect to block. Leave empty to keep every run local. Kept in your system keychain. Hooks only: for /loupe-fix --judge and the terminal, also put TYPESAFE_API_KEY=... in ~/.config/loupe/.env.",
       "sensitive": true
     }
   },

@@ -255,6 +255,16 @@ project defines itself is added to the set. Findings then name the token:
       12  padding: 12px → --wpds-dimension-padding-md
 ```
 
+With none of those stylesheets installed the set is empty: findings name no
+token and `tokens/unknown-token` stays off. `loupe status` says which on its
+`tokens:` line:
+
+```
+tokens:     --wpds-* (171 definitions from node_modules/@wordpress/theme/prebuilt/css/design-tokens.css)
+```
+
+or `0 definitions read` and each path that was not found.
+
 Only an on-role token is offered. `1px` is both `--wpds-border-radius-xs` and
 `--wpds-border-width-xs`; suggesting the wrong one gives the right pixels and the
 wrong meaning, which survives review precisely because it looks correct. When
@@ -887,10 +897,12 @@ Or everywhere, with the plugin's *Silence the hook* option. All three set the
 same switch, and `loupe status` names which one did it on its `options:` line.
 
 The hook checks nothing — not advisory, silent to the agent; the user sees one
-`loupe: skipped — silenced by …` line. Advisory mode does not solve this:
-an advisory finding still lands in the agent's context, and an agent that sees a
-finding starts fixing it, which is usually the thing you were trying to avoid.
-`loupe` typed by hand still reports normally; the switch is only for the hook.
+`loupe: skipped — silenced by …` line. Advisory mode does not solve this: after
+each edit, `PostToolUse` still hands the agent the advisory findings that edit
+introduced (`Stop` shows you a tally and tells the agent nothing), and an agent
+that sees a finding starts fixing it, which is usually the thing you were trying
+to avoid. `loupe` typed by hand still reports normally; the switch is only for
+the hook.
 
 Both switches take `1`, `true`, `yes` and `on`, case-insensitively. Anything
 else is read as not on, so `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence the
@@ -914,16 +926,24 @@ of its own. A turn is still blocked by the same findings, decided the same way,
 with or without a key.
 
 The cost is a network round trip per flagged element, inside Claude Code's hook
-timeout — 60s on `PostToolUse`, 120s on `Stop`. Each request gives up after 20
-seconds and the run keeps the deterministic findings it already had. To stay
-offline, drop `--judge` from `hooks/hooks.json`, or just leave the key unset.
+timeout — 60s on `PostToolUse`, 120s on `Stop`. What leaves the machine is the
+file's path and the lines around each flagged element or declaration — never a
+whole file — posted to TypeSafe's API at `api.typesafe.ai`, and only for what
+the run prints (below). Each request gives up after 20 seconds and the run keeps
+the deterministic findings it already had. To stay offline, drop `--judge` from
+`hooks/hooks.json`, or just leave the key unset.
 
-The hook only pays for what it prints. A run that does not block prints a
-one-line tally, so it asks nothing; a blocking run asks only about the findings
-its cap has room to show. Answers are cached per project, keyed by the exact
-question, so the next write in the same file, and the `Stop` after it, re-ask
-only what changed. What a run spent rides on its summary line —
-`judge: 2 asked, 9 from cache` — and `--no-cache` asks everything fresh. See
+The hook only pays for what it prints. A blocking run asks only about the
+findings its cap has room to show. A `PostToolUse` that does not block hands the
+agent the advisory findings its edit introduced, so it asks about those, within
+the same cap and the answer cache; a `Stop` that does not block prints a
+one-line tally, so it asks nothing. The one exception is
+`patterns/judged-redirect` set to block: its answer decides whether the run
+blocks at all, so the controls it reads are asked about first. Answers are
+cached per project, keyed by the exact question, so the next write in the same
+file, and the `Stop` after it, re-ask only what changed. What a run spent rides
+on its summary line — `judge: 2 asked, 9 from cache` — and `--no-cache` asks
+everything fresh. See
 [What a judged run spends](docs/design/judge.md#what-a-judged-run-spends).
 
 ## Reading the report
@@ -1199,7 +1219,7 @@ Configured where you enable the plugin, read by the hook from the environment:
 
 | | |
 | --- | --- |
-| **Block turns on findings** | Governs the hook only. Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. `loupe check` is unaffected — it exits 1 on error-severity findings either way, so CI and pre-commit still gate. |
+| **Block turns on findings** | Governs the hook only. Off by default: the gate reports, it doesn't stop the turn — after each edit, `PostToolUse` hands the agent the findings that edit introduced as context, with a count of those it walked past, and at the end of the turn `Stop` shows you a tally, which the agent does not see. On, error-severity findings stop the turn and hand the report back. An inferred config never blocks unless this is on. `loupe check` is unaffected — it exits 1 on error-severity findings either way, so CI and pre-commit still gate. |
 | **Silence the hook** | Off by default. On, the hook checks nothing in any project and says only that it was skipped. `"env": { "LOUPE_OFF": "1" }` in a project's `.claude/settings.local.json` does the same for that project. |
 | **Preset** | `auto` infers per project. A project's own `loupe.config.json` always wins over both. |
 | **Project class prefixes** | Comma-separated, e.g. `vip-workflow-, wf-`. Empty infers them. Only these can be reported dead. |

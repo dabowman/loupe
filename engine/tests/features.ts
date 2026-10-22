@@ -109,6 +109,28 @@ await check("a property's own token family wins, and a mode's value is not the t
 	assert(tokens.includes('--wpds-border-radius-xl'), `a mode override made radius ambiguous: ${tokens}`);
 });
 
+// A design system kept outside the project — a sibling package, a shared
+// checkout — is named by an absolute path. Joined onto the root instead, it read
+// nothing, and every token check went quiet with no error to say why.
+await check('an absolute token source reads the same tokens as a relative one', async () => {
+	const outer = scratch('dsh-feat-');
+	try {
+		writeAll(outer, { 'ds/tokens.css': TOKENS, 'app/src/A.jsx': 'export const A = () => <div />;' });
+		const root = join(outer, 'app');
+		const known = async (source: string): Promise<number> => {
+			writeAll(root, { 'loupe.config.json': CONFIG({ designSystem: { tokenSources: [source] } }) });
+			const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+			return (await analyze(config, { scope: null })).diagnostics.tokensKnown;
+		};
+		const relative = await known('../ds/tokens.css');
+		const absolute = await known(join(outer, 'ds', 'tokens.css'));
+		assert(relative === 4, `the relative source read ${relative} tokens, not 4`);
+		assert(absolute === relative, `the absolute source read ${absolute} tokens, the relative one ${relative}`);
+	} finally {
+		cleanup(outer);
+	}
+});
+
 await check('unknown-token stays silent when no token set was found', async () => {
 	const r = await run({
 		'loupe.config.json': CONFIG(),
