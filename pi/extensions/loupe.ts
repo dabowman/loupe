@@ -253,7 +253,7 @@ It carries the per-rule remedy and the checks that stop a fix from silently chan
 ${loupe("fix", "--changed")}
 \`\`\`
 
-\`fix\` reads no baseline, so \`--changed\` keeps it off the accepted backlog; to work a named rule's backlog, pass \`--rule <id>\` in its place. Add \`--dry-run\` first if the repo has uncommitted work.
+\`fix\` reads no baseline, so \`--changed\` keeps it off the accepted backlog; to work a named rule's backlog, pass \`--rule <id>\` in its place, and for a named path \`--files <path>\` in its place — a directory stands for the source files under it, and every value in them is in reach, baselined or not. Add \`--dry-run\` first if the repo has uncommitted work.
 
 ## 2. Get the current state
 

@@ -41,8 +41,10 @@ choice. Review it first, and show the user the list:
 node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --changed --judge --dry-run --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
-scoped the same way as the step above. Each line is either a rewrite to a token or a `keep` that becomes a suppression.
-Apply it only after the user agrees, with the same command minus `--dry-run`.
+Scope it the same way as the step above: `--rule <id>` or `--files <path>` in
+place of `--changed` when the run names one. Each line is either a rewrite to a
+token or a `keep` that becomes a suppression. Apply it only after the user
+agrees, with the same command minus `--dry-run`.
 `--profiles` is what supplies the token descriptions the judgement is scored
 with. Whatever stays under the confidence floor is left for the passes below.
 
