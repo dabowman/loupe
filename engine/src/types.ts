@@ -697,6 +697,7 @@ export interface SuppressionConfig {
 export interface HookConfig {
 	maxAttempts: number;
 	maxFindings: number;
+	/** The deadline for the hook's whole judge phase, every stage and request in it. */
 	timeoutMs: number;
 }
 

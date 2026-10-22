@@ -41,13 +41,12 @@ export function ensureDir(dir: string): string | null {
  * Per user, never shared: on Linux `tmpdir()` is the one `/tmp`, where a
  * `loupe/` another user made first is not writable, so every count would be lost
  * and the gate would block at attempt 1 forever.
+ *
+ * `data` is the plugin data directory, from the environment unless named: a
+ * terminal has none, so `status` names the hook's own by passing it.
  */
-export const attemptsPath = (root: string): string =>
-	join(
-		process.env.CLAUDE_PLUGIN_DATA || join(tmpdir(), `loupe-${process.getuid?.() ?? 'user'}`),
-		projectKey(root),
-		'attempts.json',
-	);
+export const attemptsPath = (root: string, data = process.env.CLAUDE_PLUGIN_DATA): string =>
+	join(data || join(tmpdir(), `loupe-${process.getuid?.() ?? 'user'}`), projectKey(root), 'attempts.json');
 
 /** Where a baseline goes when nothing names one. Overridable via config `baseline`. */
 export const DEFAULT_BASELINE = '.loupe-baseline.json';

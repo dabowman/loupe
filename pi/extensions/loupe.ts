@@ -17,6 +17,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,11 +38,16 @@ function loupe(...args: string[]): string {
  * Run the engine the way Claude Code's hooks do, so the project opt-in,
  * LOUPE_OFF, advisory demotion and the retry stand-down all apply here too.
  * The payload goes on stdin, which pi.exec cannot write — hence execFile.
- * Exit 2 is blocking, with the agent's report on stderr; anything else is quiet.
+ * Exit 2 is blocking, with the agent's report on stderr. Otherwise the agent
+ * hears only what the hook addressed to it, `additionalContext` on stdout.
  */
 function runHook(
 	cwd: string,
-	payload: { session_id: string; tool_input?: { file_path: string } },
+	payload: {
+		session_id: string;
+		tool_input?: { file_path: string };
+		tool_response?: { filePath: string; originalFile: string | null };
+	},
 	files: string[],
 	signal?: AbortSignal,
 ): Promise<{ blocking: boolean; output: string }> {
@@ -51,7 +57,16 @@ function runHook(
 			"node",
 			[ENGINE, "hook", "--root", cwd, ...scope, "--profiles", PROFILES],
 			{ cwd, signal, timeout: 60_000 },
-			(err, _stdout, stderr) => done({ blocking: err?.code === 2, output: stderr.trim() }),
+			(err, stdout, stderr) => {
+				if (err?.code === 2) return done({ blocking: true, output: stderr.trim() });
+				let context = "";
+				try {
+					context = JSON.parse(stdout)?.hookSpecificOutput?.additionalContext ?? "";
+				} catch {
+					/* a crashed or silent hook has nothing for the agent */
+				}
+				done({ blocking: false, output: context });
+			},
 		);
 		child.stdin?.on("error", () => {}); // a child that failed to start has no reader
 		child.stdin?.end(JSON.stringify(payload));
@@ -61,6 +76,13 @@ function runHook(
 export default function (pi: ExtensionAPI) {
 	/** Files touched during the current agent run. */
 	const touched = new Set<string>();
+	/**
+	 * What each edit or write's file held before it ran, by call id; null for a
+	 * file the call creates. Claude Code hands its hook this as `originalFile`,
+	 * so PostToolUse blocks only on what the edit introduced; pi has no such
+	 * field, so the file is read here before the tool runs.
+	 */
+	const before = new Map<string, string | null>();
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────
 
@@ -69,8 +91,21 @@ export default function (pi: ExtensionAPI) {
 
 	// ── PostToolUse equivalent: check the file just written ────────────────
 
+	pi.on("tool_call", async (event, ctx) => {
+		if (event.toolName !== "edit" && event.toolName !== "write") return;
+		const filePath = event.input?.path;
+		if (typeof filePath !== "string" || !filePath || !UI_FILE.test(filePath)) return;
+		try {
+			before.set(event.toolCallId, await readFile(resolve(ctx.cwd, filePath), "utf8"));
+		} catch {
+			before.set(event.toolCallId, null);
+		}
+	});
+
 	pi.on("tool_result", async (event, ctx) => {
 		if (event.toolName !== "edit" && event.toolName !== "write") return;
+		const originalFile = before.get(event.toolCallId);
+		before.delete(event.toolCallId);
 		if (event.isError) return;
 
 		const filePath = event.input?.path;
@@ -86,25 +121,30 @@ export default function (pi: ExtensionAPI) {
 
 		const { blocking, output } = await runHook(
 			ctx.cwd,
-			{ session_id: ctx.sessionManager.getSessionId(), tool_input: { file_path: abs } },
+			{
+				session_id: ctx.sessionManager.getSessionId(),
+				tool_input: { file_path: abs },
+				...(originalFile === undefined ? {} : { tool_response: { filePath: abs, originalFile } }),
+			},
 			[],
 			ctx.signal,
 		);
 
 		if (!output) return;
 
-		if (blocking) {
-			// Hand the findings back to the LLM as additional tool result content.
-			return {
-				content: [
-					...event.content,
-					{
-						type: "text" as const,
-						text: `\n\n⚠️ Loupe — design-system conformance findings on ${filePath}:\n\n${output}`,
-					},
-				],
-			};
-		}
+		// Hand the findings back to the LLM as additional tool result content:
+		// what blocks, or what the edit walked past and the end-of-run check will hold.
+		return {
+			content: [
+				...event.content,
+				{
+					type: "text" as const,
+					text: blocking
+						? `\n\n⚠️ Loupe — design-system conformance findings on ${filePath}:\n\n${output}`
+						: `\n\nLoupe — ${output}`,
+				},
+			],
+		};
 	});
 
 	// ── Stop hook equivalent: check all changed files at agent_end ─────────
@@ -221,7 +261,7 @@ ${loupe("fix", "--changed")}
 ${loupe("check", "--all", "--format json")}
 \`\`\`
 
-${flags ? `Narrow to: ${flags}` : "Work upward through the layers: unparsed files, then malformed suppressions, then component overrides, then layout, then values, then dead classes."} Re-run between stages rather than working from a stale list.
+${flags ? `The arguments were: ${flags}. If they name a rule id, pass it as \`--rule <id>\` — to this check and to the \`fix\` in step 1 — and add \`--no-baseline\` to this check (and to the verifying one in step 4): naming a rule is working that rule's backlog on purpose, and a baseline would hide exactly the findings you were asked to clear. \`fix\` reads no baseline, so it needs no flag. A path goes in as \`--files <path>\`; both repeat. Naming only a path keeps the baseline: that is the new drift, not the accepted backlog. Don't filter the JSON yourself.` : "A bare /loupe-fix keeps the baseline: it works the new drift, not the accepted backlog. Work upward through the layers: unparsed files, then malformed suppressions, then the classes already dead, then component overrides, then layout, then values, then a last sweep for what that work left dead."} Re-run between stages rather than working from a stale list.
 
 ## 3. Fix inline
 
@@ -236,7 +276,7 @@ Count the files holding findings for the stage you are on and fix them. Re-run t
 
 ## 4. Verify
 
-Re-run the check once, repo-wide. Report what changed.`;
+Re-run the check once, repo-wide, with the same \`--rule\` and \`--no-baseline\` as step 2. Report what changed, and when a rule was named and its backlog is now empty, suggest re-recording the baseline with \`/loupe-baseline\`.`;
 
 			pi.sendUserMessage(prompt);
 		},
@@ -248,13 +288,15 @@ Re-run the check once, repo-wide. Report what changed.`;
 		handler: async (args, ctx) => {
 			const prompt = `Record the existing findings as a baseline, turning the backlog into a ratchet.
 
-Show the scale first:
+Show the scale first. \`--dry-run\` writes nothing:
 
 \`\`\`bash
-${loupe("check", "--all", "--format json")}
+${loupe("baseline", "--dry-run")}
 \`\`\`
 
-Report the count by rule and confirm before writing — a baseline is a decision to defer real work.
+It prints what would be recorded, by rule, and — when a baseline already exists — how each rule's entries differ from it: \`+N new\` is backlog accepted for the first time, \`-N fixed\` is work done since the last recording. (Do not use \`check\` for this: it applies the existing baseline, so on a repo that already has one it reports nothing to confirm.)
+
+Report that breakdown and confirm before writing — a baseline is a decision to defer real work. If the dry run says nothing would change, say so and stop.
 
 On confirmation:
 
@@ -264,7 +306,7 @@ ${loupe("baseline")}
 
 Then tell the user to commit \`.loupe-baseline.json\`, and note that entries key on rule + file + normalized code rather than line number, so reformatting will not resurrect the whole file.
 
-Suggest burning the backlog down one rule at a time with \`/loupe-fix <rule-id>\`, and deleting the baseline once it is empty.`;
+Suggest burning the backlog down one rule at a time with \`/loupe-fix <rule-id>\`, which works that rule's baselined findings deliberately — naming a rule makes its check run with \`--no-baseline\` — while a bare \`/loupe-fix\` keeps respecting the baseline and fixes new drift only. Delete the baseline once it is empty. \`${loupe("check", "--no-baseline", "--rule <rule-id>")}\` shows how much of one rule the baseline is holding; \`fix\` reads no baseline at all.`;
 
 			pi.sendUserMessage(prompt);
 		},

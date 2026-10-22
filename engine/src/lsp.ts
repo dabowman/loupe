@@ -252,6 +252,9 @@ export function lsp(opts: {
 		};
 	};
 
+	/** The failure last shown to the user, so a run of failed saves says it once. */
+	let shownFailure: string | null = null;
+
 	async function publish(): Promise<void> {
 		let result: AnalyzeResult | BaselinedResult;
 		try {
@@ -259,9 +262,15 @@ export function lsp(opts: {
 		} catch (err) {
 			// The last good set stands: a cleared panel is indistinguishable from a
 			// clean workspace, which is the one thing a failure must not look like.
-			log(`analysis failed: ${messageOf(err)}`);
+			// Before any set there is only the empty panel, so the user is told, once
+			// per distinct failure rather than on every save.
+			const message = `loupe: analysis failed — ${messageOf(err)}`;
+			log(message);
+			if (message !== shownFailure) notify('window/showMessage', { type: 1, message });
+			shownFailure = message;
 			return;
 		}
+		shownFailure = null;
 		const next = new Map<string, Finding[]>();
 		for (const f of result.findings) next.set(f.file, [...(next.get(f.file) ?? []), f]);
 		findings = next;

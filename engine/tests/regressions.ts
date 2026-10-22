@@ -16,7 +16,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
 import { TreeTooLarge, isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
@@ -1142,13 +1142,13 @@ await check('the hook keeps its retry counter out of the repo, and status says w
 	try {
 		const r = runCli(
 			['hook', '--root', root],
-			env({ CLAUDE_PLUGIN_DATA: undefined, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+			{ CLAUDE_PLUGIN_DATA: '', CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
 			'{"session_id":"tmp","tool_input":{"file_path":"styles/a.css"}}',
 		);
 		assert(r.status === 2, `the fixture should block (and so count an attempt), got ${r.status}:\n${r.stderr}`);
 		assert(!existsSync(join(root, '.loupe')), 'the hook wrote a .loupe/ directory into the project');
 
-		const status = runCli(['status', '--root', root], env({ CLAUDE_PLUGIN_DATA: undefined })).stdout;
+		const status = runCli(['status', '--root', root], { CLAUDE_PLUGIN_DATA: '' }).stdout;
 		const line = /state:\s+(\S+)(.*)/.exec(status);
 		assert(line, `status does not report the retry counter:\n${status}`);
 		const [, named = '', marker = ''] = line;
@@ -1156,6 +1156,24 @@ await check('the hook keeps its retry counter out of the repo, and status says w
 		assert(existsSync(where), `status names ${where}, which the hook did not write`);
 		assert(relative(root, where).startsWith('..'), `the retry counter is inside the repo: ${where}`);
 		assert(/outside your repo/.test(marker), `status did not mark the location:\n${status}`);
+		// Typed in a terminal, status has no CLAUDE_PLUGIN_DATA while the Claude
+		// Code hook does, so the path above is not the hook's file. It says so, and
+		// where the hook's is.
+		const key = basename(dirname(where));
+		assert(
+			status.includes(`$CLAUDE_PLUGIN_DATA/${key}/attempts.json`),
+			`status does not say where the Claude Code hook keeps its counter:\n${status}`,
+		);
+		const data = scratch('dsh-plugin-data-');
+		try {
+			const inPlugin = runCli(['status', '--root', root], env({ CLAUDE_PLUGIN_DATA: data })).stdout;
+			assert(
+				inPlugin.includes(join(data, key, 'attempts.json')) && !inPlugin.includes('$CLAUDE_PLUGIN_DATA'),
+				`with plugin data, status should name that file alone:\n${inPlugin}`,
+			);
+		} finally {
+			cleanup(data);
+		}
 	} finally {
 		cleanup(root);
 		if (where.endsWith('attempts.json')) cleanup(dirname(where));
@@ -1208,6 +1226,14 @@ await check('PostToolUse blocks on what the edit introduced; Stop on everything'
 				/1 blocking finding\(s\) already in styles\/a\.css/.test(past.stdout),
 			`the pre-existing finding was not named as context:\n${past.stdout}`,
 		);
+		// Named to the agent, not the user alone: it is the agent Stop will hold to it.
+		const context =
+			(JSON.parse(past.stdout) as { hookSpecificOutput?: { additionalContext?: string } }).hookSpecificOutput
+				?.additionalContext ?? '';
+		assert(
+			/already in styles\/a\.css/.test(context) && /margin-on-child/.test(context),
+			`the standing finding did not reach the agent:\n${past.stdout}`,
+		);
 
 		// An edit that adds one blocks on that one alone, and says what it walked past.
 		const middle = readFileSync(css, 'utf8');
@@ -1234,6 +1260,77 @@ await check('PostToolUse blocks on what the edit introduced; Stop on everything'
 	} finally {
 		cleanup(root);
 	}
+});
+
+// The pi extension sent only the file path, never the file before the edit, so
+// every pi edit still got the absolute check and blocked on what was already
+// there. It snapshots the file at `tool_call` and hands it over as Claude Code
+// does, as `tool_response.originalFile`.
+await check('the pi extension blocks only on what an edit introduced', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.b { margin-bottom: 16px; }\n',
+	});
+	const css = join(root, 'styles', 'a.css');
+	type Handler = (event: object, ctx: object) => Promise<{ content?: { text: string }[] } | undefined>;
+	const handlers = new Map<string, Handler>();
+	const pi = { on: (name: string, fn: Handler) => handlers.set(name, fn), registerCommand: () => {} };
+	// The extension runs the engine as a child with this environment.
+	const saved = { ...process.env };
+	Object.assign(process.env, env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }));
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		// Imported by URL, not by name: the extension's types come from pi, which
+		// this package does not install.
+		const extension = join(HERE, '..', '..', 'pi', 'extensions', 'loupe.ts');
+		const { default: register } = (await import(pathToFileURL(extension).href)) as {
+			default: (api: typeof pi) => void;
+		};
+		register(pi);
+		const ctx = { cwd: root, signal: undefined, sessionManager: { getSessionId: () => 'pi' } };
+		const call = { toolCallId: 'c1', toolName: 'edit', input: { path: 'styles/a.css' } };
+		await handlers.get('tool_call')?.({ ...call, type: 'tool_call' }, ctx);
+		writeFileSync(css, `/* spacing moves to the Stack next */\n${readFileSync(css, 'utf8')}`);
+		const result = await handlers.get('tool_result')?.(
+			{ ...call, type: 'tool_result', content: [], isError: false },
+			ctx,
+		);
+		const text = (result?.content ?? []).map((c) => c.text).join('');
+		assert(!/conformance findings on/.test(text), `blocked on a finding the edit did not introduce:\n${text}`);
+		assert(/already in styles\/a\.css/.test(text), `the standing finding was not named to the agent:\n${text}`);
+	} finally {
+		for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+		Object.assign(process.env, saved);
+		cleanup(root);
+	}
+});
+
+// The pi commands are a copy of the Claude Code ones and fell behind them:
+// `/loupe-fix <rule>` had no `--rule` or `--no-baseline`, so it worked a
+// filtered JSON by hand and saw none of the baselined backlog it was asked to
+// clear, and `/loupe-baseline` confirmed with a `check` that applies the
+// baseline it was about to replace.
+await check("the pi commands carry /loupe-fix's --rule and --no-baseline, and baseline --dry-run", async () => {
+	const commands = new Map<string, { handler: (args: string, ctx: object) => Promise<void> }>();
+	let sent = '';
+	const pi = {
+		on: () => {},
+		registerCommand: (name: string, c: { handler: (args: string, ctx: object) => Promise<void> }) =>
+			commands.set(name, c),
+		sendUserMessage: (text: string) => {
+			sent = text;
+		},
+	};
+	const extension = join(HERE, '..', '..', 'pi', 'extensions', 'loupe.ts');
+	const { default: register } = (await import(pathToFileURL(extension).href)) as {
+		default: (api: typeof pi) => void;
+	};
+	register(pi);
+	await commands.get('loupe-fix')?.handler('tokens/hardcoded-value', {});
+	assert(/--rule <id>/.test(sent) && /--no-baseline/.test(sent), `/loupe-fix <rule> lost the flags:\n${sent}`);
+	await commands.get('loupe-baseline')?.handler('', {});
+	assert(/ baseline --dry-run/.test(sent), `/loupe-baseline does not confirm with a dry run:\n${sent}`);
+	assert(!/ check --all --format json/.test(sent), `/loupe-baseline still sizes with check:\n${sent}`);
 });
 
 // The pre-edit findings were a Set of keys, so an edit that added a second
@@ -3045,6 +3142,79 @@ await check('the hook runs --judge without a key instead of refusing', () => {
 		}
 		assert(status === 2, `check --judge without a key exited ${status}`);
 		assert(stderr.includes('TYPESAFE_API_KEY'), `unexpected refusal: ${stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Each judge request had a 20s limit and the phase none: three or four stages
+// in a row against an endpoint that never answers ran the hook past Claude
+// Code's 60s timeout, which drops its result. One deadline covers the phase,
+// `hook.timeoutMs`, and the hook keeps the deterministic findings it has.
+await check('the hook bounds the whole judge phase by hook.timeoutMs', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({
+			extends: 'wpds',
+			namespaces: { project: ['wf-'] },
+			hook: { timeoutMs: 1500 },
+		}),
+		'node_modules/@wordpress/theme/prebuilt/css/design-tokens.css':
+			':root {\n\t--wpds-dimension-padding-sm: 8px;\n\t--wpds-dimension-padding-md: 12px;\n}',
+		// 6px sits between two padding steps, so the judge is asked about it.
+		'styles/a.css': '.wf-a {\n\tpadding: 6px;\n}',
+	});
+	const asked = join(root, 'asked');
+	// A socket that never answers: the request ends only when its signal aborts.
+	const hang = `data:text/javascript,${encodeURIComponent(
+		[
+			"import { appendFileSync } from 'node:fs';",
+			'globalThis.fetch = (_url, init) => new Promise((_, reject) => {',
+			"\tappendFileSync(process.env.LOUPE_TEST_ASKED, 'x');",
+			// A real socket holds the process open; an interval stands in for it.
+			'\tconst open = setInterval(() => {}, 1000);',
+			"\tinit?.signal?.addEventListener('abort', () => {",
+			'\t\tclearInterval(open);',
+			"\t\treject(init.signal.reason ?? new Error('aborted'));",
+			'\t});',
+			'});',
+		].join('\n'),
+	)}`;
+	try {
+		const t = Date.now();
+		const r = spawnSync(process.execPath, ['--import', hang, CLI, 'hook', '--root', root, '--judge'], {
+			encoding: 'utf8',
+			input: JSON.stringify({ session_id: 'x', tool_input: { file_path: 'styles/a.css' } }),
+			env: env({ TYPESAFE_API_KEY: 'key', LOUPE_TEST_ASKED: asked }),
+		});
+		const took = Date.now() - t;
+		assert(existsSync(asked), `the judge was never asked, so the deadline went untested: ${r.stdout}${r.stderr}`);
+		assert(r.status === 0, `exited ${r.status}: ${r.stderr}`);
+		assert(took < 10_000, `the judge phase ran ${took}ms against a 1.5s deadline`);
+		assert(JSON.parse(r.stdout).systemMessage, `unexpected output: ${r.stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A misspelled `--rule` is exit 2 when typed, and the hook carried that over:
+// every Stop blocked on a hook command the agent cannot edit, past the retry
+// budget, which counts only blocking findings.
+await check('a hook with an unknown --rule stands down instead of blocking every turn', () => {
+	const root = tmpRepo({
+		'package.json': JSON.stringify({ name: 'x' }),
+		'styles/a.css': '.a { color: #f00; }\n',
+	});
+	try {
+		for (let i = 0; i < 4; i++) {
+			const r = runCli(
+				['hook', '--root', root, '--rule', 'tokens/hardcode'],
+				{},
+				JSON.stringify({ session_id: 'x', hook_event_name: 'Stop', stop_hook_active: i > 0 }),
+			);
+			assert(r.status === 0, `run ${i + 1} exited ${r.status}: ${r.stderr}`);
+			const msg = (JSON.parse(r.stdout) as { systemMessage?: string }).systemMessage ?? '';
+			assert(msg.includes('skipped') && msg.includes('tokens/hardcode'), `run ${i + 1}: ${r.stdout}`);
+		}
 	} finally {
 		cleanup(root);
 	}
