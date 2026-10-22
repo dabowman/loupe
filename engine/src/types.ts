@@ -41,6 +41,11 @@ export interface RuleDef {
 	rank: number;
 	needs: readonly Capability[];
 	title: string;
+	/**
+	 * Written only by `--judge`: a run without it reports nothing for the rule,
+	 * which `status` and a `--rule` naming it both have to say.
+	 */
+	judgeOnly?: true;
 }
 
 // ── findings ────────────────────────────────────────────────────────────────

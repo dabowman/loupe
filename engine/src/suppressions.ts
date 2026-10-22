@@ -28,6 +28,13 @@ import type { Directive, MalformedDirective, SuppressionConfig, Suppressions } f
 
 const ID = '(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)';
 
+/**
+ * A directive as it is written: the grammar above, composed. Every writer of
+ * one — `loupe fix`, the UI's mute, the editor's quick fix, and the prose that
+ * tells a reader what to type — spells it through here.
+ */
+export const directive = (keyword: string, rules: string, reason: string): string => `${keyword} ${rules} -- ${reason}`;
+
 // Leading whitespace, jsdoc asterisks, then an optional comment opener. The JSX
 // opener admits a space before the comment (`{ /* … */ }`), the form WordPress's
 // prettier config mandates.
