@@ -3757,7 +3757,7 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync11, readFileSync: readFileSync20, realpathSync: realpathSync3 } = __require("fs");
+    var { existsSync: existsSync11, readFileSync: readFileSync21, realpathSync: realpathSync3 } = __require("fs");
     var { dirname: dirname11, isAbsolute: isAbsolute8, join: join19, relative: relative7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
@@ -3839,7 +3839,7 @@ var require_previous_map = __commonJS({
         this.root = dirname11(path);
         if (existsSync11(path)) {
           this.mapFile = path;
-          return readFileSync20(path, "utf-8").toString().trim();
+          return readFileSync21(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -23502,7 +23502,7 @@ import { parseArgs as parseArgv } from "node:util";
 import { isMainThread as isMainThread2 } from "node:worker_threads";
 
 // src/analyze.ts
-import { readFileSync as readFileSync7, realpathSync, statSync as statSync4 } from "node:fs";
+import { readFileSync as readFileSync8, realpathSync, statSync as statSync4 } from "node:fs";
 
 // node_modules/postcss/lib/postcss.mjs
 var import_postcss = __toESM(require_postcss(), 1);
@@ -25254,6 +25254,55 @@ function scanMarkup(text2, relPath, ds, rules2 = []) {
   return { ...result, componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })) };
 }
 
+// src/blocks.ts
+import { readFileSync as readFileSync2 } from "node:fs";
+var BLOCK_NAME = /^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/;
+var isBlockManifest = (rel) => rel === "block.json" || rel.endsWith("/block.json");
+function blockName(text2) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text2);
+  } catch {
+    return null;
+  }
+  const name = parsed?.name;
+  return typeof name === "string" && BLOCK_NAME.test(name) ? name : null;
+}
+function blockClasses(name) {
+  if (!BLOCK_NAME.test(name)) return null;
+  const wrapper = `wp-block-${name.replace("/", "-").replace(/^core-/, "")}`;
+  const prefix = wrapper.slice(0, wrapper.length - (name.length - name.indexOf("/") - 1));
+  return prefix === "wp-block-" ? null : { wrapper, prefix };
+}
+function blockPrefixes(names) {
+  const by = /* @__PURE__ */ new Map();
+  for (const name of names) {
+    const prefix = blockClasses(name)?.prefix;
+    if (prefix) by.set(prefix, (by.get(prefix) ?? /* @__PURE__ */ new Set()).add(name));
+  }
+  return [...by].sort(([a], [b]) => byBytes(a, b)).map(([prefix, blocks]) => ({ prefix, blocks: [...blocks].sort(byBytes) }));
+}
+function blocksIn(files) {
+  const out = [];
+  for (const { abs, rel } of files) {
+    if (!isBlockManifest(rel)) continue;
+    let text2;
+    try {
+      text2 = readFileSync2(abs, "utf8");
+    } catch {
+      continue;
+    }
+    const name = blockName(text2);
+    if (name) out.push(name);
+  }
+  return out;
+}
+var describeBlocks = (list2) => list2.map(({ prefix, blocks }) => {
+  const shown = blocks.slice(0, 3).join(", ");
+  const more = blocks.length > 3 ? `, +${blocks.length - 3} more` : "";
+  return `${prefix} (block.json: ${shown}${more})`;
+}).join("; ");
+
 // src/syntax.ts
 var SYNTAX_PACKAGES = {
   ".scss": "postcss-scss",
@@ -25346,7 +25395,7 @@ function ownership(surface, prop) {
 }
 
 // src/tokens.ts
-import { readFileSync as readFileSync2, statSync } from "node:fs";
+import { readFileSync as readFileSync3, statSync } from "node:fs";
 import { join as join3 } from "node:path";
 
 // src/scopes.ts
@@ -25696,7 +25745,7 @@ function readTokenSources(root2, sources, prefixes) {
   for (const rel of sources ?? []) {
     for (const file of cssFilesUnder(join3(root2, rel))) {
       try {
-        harvestTokenDefs(postcss_default.parse(readFileSync2(file, "utf8"), { from: file }), prefixes, set);
+        harvestTokenDefs(postcss_default.parse(readFileSync3(file, "utf8"), { from: file }), prefixes, set);
         set.sources++;
       } catch {
       }
@@ -25858,13 +25907,13 @@ function tokenRefsIn(value, prefixes) {
 }
 
 // src/index-cache.ts
-import { readdirSync as readdirSync3, readFileSync as readFileSync5, rmSync as rmSync2, statSync as statSync2 } from "node:fs";
+import { readdirSync as readdirSync3, readFileSync as readFileSync6, rmSync as rmSync2, statSync as statSync2 } from "node:fs";
 import { dirname as dirname4, join as join6 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/cache.ts
 import { createHash as createHash2 } from "node:crypto";
-import { readFileSync as readFileSync3, renameSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync as readFileSync4, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname as dirname2 } from "node:path";
 
 // src/paths.ts
@@ -25919,7 +25968,7 @@ function findExistingBaseline(root2, explicit, configured) {
 var sha256 = (text2) => createHash2("sha256").update(text2).digest("hex");
 function readJson(path) {
   try {
-    return JSON.parse(readFileSync3(path, "utf8"));
+    return JSON.parse(readFileSync4(path, "utf8"));
   } catch {
     return null;
   }
@@ -25983,7 +26032,7 @@ var AnswerCache = class _AnswerCache {
 };
 
 // src/embedded.ts
-import { existsSync as existsSync4, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "node:fs";
+import { existsSync as existsSync4, readFileSync as readFileSync5, readdirSync as readdirSync2 } from "node:fs";
 import { dirname as dirname3, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27567,7 +27616,7 @@ var readPreset = (name) => {
   const onDisk = join5(PRESET_DIR, `${name}.json`);
   if (existsSync4(onDisk)) {
     try {
-      return JSON.parse(readFileSync4(onDisk, "utf8"));
+      return JSON.parse(readFileSync5(onDisk, "utf8"));
     } catch {
       return void 0;
     }
@@ -27645,7 +27694,7 @@ ${stableJson(inputs)}`).slice(0, 16);
     if (entry.m === stat.mtimeMs && entry.m < entry.t - RACY_MS) return { at, stat, entry, text: null };
     let text2;
     try {
-      text2 = readFileSync5(abs, "utf8");
+      text2 = readFileSync6(abs, "utf8");
     } catch {
       return { at, stat, entry: null, text: null };
     }
@@ -28037,8 +28086,8 @@ var systemOverride = ({ prop }, { boundSystem, enabled: enabled2, surfaceOf, sur
   if (!unread) return void 0;
   return { rule: "system/override", message: `<${unread.tag}> \u2190 ${prop} \u2014 ${UNREAD_REMEDY}`, code };
 };
-function libraryOverride(keyClasses, isLibrary, isProject) {
-  const part = keyClasses.find((c) => isLibrary(c) && !isProject(c));
+function libraryOverride(keyClasses, isLibrary, isOwn) {
+  const part = keyClasses.find((c) => isLibrary(c) && !isOwn(c));
   return part ? { rule: "system/override", message: `.${part} (library internal)` } : null;
 }
 
@@ -28121,7 +28170,7 @@ var hardcodedValue = ({ prop, value }) => {
 
 // src/checks/tokens/undelivered.ts
 var import_picomatch2 = __toESM(require_picomatch2(), 1);
-import { readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
+import { readFileSync as readFileSync7, statSync as statSync3 } from "node:fs";
 var FALLBACKS = "fallbacks render but won't follow the theme";
 var WALK_LIMIT = 5e4;
 var FILE_LIMIT = 4e3;
@@ -28269,7 +28318,7 @@ function readEvidenceFiles(root2, checks, ignore) {
   for (const { abs, rel } of found.styles) {
     try {
       if (statSync3(abs).size > MAX_BYTES) return null;
-      out.push({ rel, text: readFileSync6(abs, "utf8") });
+      out.push({ rel, text: readFileSync7(abs, "utf8") });
     } catch {
       return null;
     }
@@ -28509,7 +28558,7 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
       }
       let sheet;
       try {
-        sheet = syntax.parse(readFileSync7(file, "utf8"), { from: file });
+        sheet = syntax.parse(readFileSync8(file, "utf8"), { from: file });
       } catch (err) {
         unread.push({ file: shown, message: parseMessageOf(err, file) });
         continue;
@@ -28644,7 +28693,7 @@ async function analyze(config, {
       return false;
     }
   };
-  const read = (abs, rel) => contents?.get(rel) ?? readFileSync7(abs, "utf8");
+  const read = (abs, rel) => contents?.get(rel) ?? readFileSync8(abs, "utf8");
   const tokenPrefixes = ds.tokenPrefixes ?? [];
   const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
   tokenSet.scopes = mergeScopes((config.profiles?.active ?? []).map((p) => p.tokenScopes));
@@ -28784,11 +28833,13 @@ async function analyze(config, {
     const selectors = list.comma(selector);
     return selectors.some((sel) => keySelector(sel).includes("&")) ? [] : elementsOf(selectors);
   };
+  const blockNames = /* @__PURE__ */ new Set();
   for (const { abs, rel } of files.references) {
     const look = lookup(abs, rel);
     if (oversized(abs, rel, look)) continue;
     if (look?.entry?.refs) {
       for (const t of look.entry.refs) referenced.add(t);
+      if (look.entry.block) blockNames.add(look.entry.block);
       diagnostics.filesScanned++;
       continue;
     }
@@ -28796,9 +28847,14 @@ async function analyze(config, {
     if (text2 === null) continue;
     const found = harvestTokens(text2);
     for (const t of found) referenced.add(t);
+    const block = isBlockManifest(rel) ? blockName(text2) : null;
+    if (block) blockNames.add(block);
     diagnostics.filesScanned++;
-    if (look) cache2?.store(look, rel, text2, { d: false, refs: [...found] });
+    if (look) cache2?.store(look, rel, text2, { d: false, refs: [...found], ...block ? { block } : {} });
   }
+  const ownBlocks = [...blockNames].flatMap((name) => blockClasses(name) ?? []);
+  const isOwnBlock = (cls) => ownBlocks.some((b) => cls.startsWith(b.prefix));
+  const isBlockWrapper = (cls) => ownBlocks.some((b) => cls === b.wrapper);
   const styledClasses = /* @__PURE__ */ new Set();
   const layoutClasses = /* @__PURE__ */ new Set();
   const declared = [];
@@ -28900,7 +28956,11 @@ async function analyze(config, {
       }
       if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
       if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
-      const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
+      const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(
+        keyClasses,
+        (c) => config.isExternal(c) || library.classes.has(c),
+        (c) => config.isProject(c) || isOwnBlock(c)
+      ) : null;
       if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
       else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
       if (!override)
@@ -28924,7 +28984,8 @@ async function analyze(config, {
     referenced,
     stems: [...stems],
     isProject: config.isProject,
-    isNeverDead: config.isNeverDead
+    // A block's wrapper class exists only in rendered output, whatever namespace claims it.
+    isNeverDead: (c) => config.isNeverDead(c) || isBlockWrapper(c)
   }))
     report(f);
   for (const el of inlineStyles) {
@@ -29161,7 +29222,7 @@ var PROJECT_RULES = /* @__PURE__ */ new Set(["tokens/undelivered"]);
 var findingKey = (f) => `${f.rule}|${PROJECT_RULES.has(f.rule) ? "<project>" : f.file}|${oneLine(String(f.code ?? f.message))}`;
 
 // src/autofix.ts
-import { readFileSync as readFileSync8, writeFileSync as writeFileSync2 } from "node:fs";
+import { readFileSync as readFileSync9, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join8 } from "node:path";
 var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 function tokenFixes(findings) {
@@ -29223,7 +29284,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
     const abs = join8(root2, file);
     let text2;
     try {
-      text2 = readFileSync8(abs, "utf8");
+      text2 = readFileSync9(abs, "utf8");
     } catch (err) {
       const why = messageLineOf(err);
       for (const fix of group) skipped.push({ ...fix, why });
@@ -29287,7 +29348,7 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
     const abs = join8(root2, file);
     let text2;
     try {
-      text2 = readFileSync8(abs, "utf8");
+      text2 = readFileSync9(abs, "utf8");
     } catch (err) {
       const why = messageLineOf(err);
       for (const k of group) skipped.push({ ...k, why });
@@ -29327,7 +29388,7 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
 }
 
 // src/judge.ts
-import { readFileSync as readFileSync10 } from "node:fs";
+import { readFileSync as readFileSync11 } from "node:fs";
 
 // src/judge/force.ts
 var forceQuery = (force) => ({
@@ -29372,10 +29433,10 @@ var valueQuery = (about) => ({
 });
 
 // src/judge/variant.ts
-import { readFileSync as readFileSync9 } from "node:fs";
+import { readFileSync as readFileSync10 } from "node:fs";
 import { join as join9 } from "node:path";
 function around(root2, file, line, before, after) {
-  const lines = readFileSync9(join9(root2, file), "utf8").split("\n");
+  const lines = readFileSync10(join9(root2, file), "utf8").split("\n");
   const i = line - 1;
   return {
     context_before: lines.slice(Math.max(0, i - before), i).join("\n"),
@@ -29627,7 +29688,7 @@ function tokenDescriptions(profiles) {
   for (const p of profiles) {
     if (!p.tokenDescriptions) continue;
     try {
-      const raw = JSON.parse(readFileSync10(p.tokenDescriptions, "utf8"));
+      const raw = JSON.parse(readFileSync11(p.tokenDescriptions, "utf8"));
       for (const [name, text2] of Object.entries(raw))
         if (!name.startsWith("$") && typeof text2 === "string") out.set(name, text2);
     } catch {
@@ -29756,7 +29817,7 @@ async function judgeRenames(root2, findings, set, auth, about = /* @__PURE__ */ 
 }
 
 // src/dtcg.ts
-import { readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
+import { readFileSync as readFileSync12, statSync as statSync5 } from "node:fs";
 import { basename, isAbsolute as isAbsolute3, join as join10, relative as relative3, resolve as resolvePath } from "node:path";
 var TIERS = ["base", "semantic", "component"];
 var ALL_TIERS = [...TIERS, "unknown"];
@@ -29962,7 +30023,7 @@ function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
   for (const file of files) {
     let raw;
     try {
-      raw = JSON.parse(readFileSync11(file, "utf8").replace(/^\uFEFF/, ""));
+      raw = JSON.parse(readFileSync12(file, "utf8").replace(/^\uFEFF/, ""));
     } catch (err) {
       throw new Error(`${file} is not readable JSON: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -30406,12 +30467,12 @@ function formatPlan(plan, show) {
 }
 
 // src/baseline.ts
-import { existsSync as existsSync5, readFileSync as readFileSync12, writeFileSync as writeFileSync3 } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync13, writeFileSync as writeFileSync3 } from "node:fs";
 import { dirname as dirname5 } from "node:path";
 function readBaseline(path) {
   if (!existsSync5(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync12(path, "utf8"));
+    const parsed = JSON.parse(readFileSync13(path, "utf8"));
     if (!Array.isArray(parsed.entries)) return null;
     const entries = parsed.entries.filter((e) => typeof e === "string");
     return { createdAt: parsed.createdAt ?? "", entries, set: new Set(entries) };
@@ -30486,7 +30547,7 @@ function applyBaseline(result, baseline, {
 }
 
 // src/config.ts
-import { existsSync as existsSync6, readFileSync as readFileSync13 } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync14 } from "node:fs";
 import { dirname as dirname6, isAbsolute as isAbsolute4, join as join11, relative as relative4, resolve as resolve4 } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -30567,7 +30628,7 @@ function findConfig(start) {
     const pkg = join11(dir, "package.json");
     if (existsSync6(pkg)) {
       try {
-        const parsed = JSON.parse(readFileSync13(pkg, "utf8"));
+        const parsed = JSON.parse(readFileSync14(pkg, "utf8"));
         if (isObj(parsed) && parsed.loupe) return pkg;
       } catch {
       }
@@ -30583,7 +30644,7 @@ async function readConfigFile(path) {
     if (embedded) return embedded;
   }
   if (path.endsWith(".json")) {
-    const parsed = JSON.parse(readFileSync13(path, "utf8"));
+    const parsed = JSON.parse(readFileSync14(path, "utf8"));
     return path.endsWith("package.json") ? parsed.loupe : parsed;
   }
   const mod = await import(pathToFileURL(path).href);
@@ -30792,7 +30853,7 @@ function readRegistry(spec, root2, packages, load, empty) {
   if (Array.isArray(spec)) return load(spec);
   if (typeof spec !== "string") return empty;
   try {
-    const raw = JSON.parse(readFileSync13(isAbsolute4(spec) ? spec : join11(root2, spec), "utf8"));
+    const raw = JSON.parse(readFileSync14(isAbsolute4(spec) ? spec : join11(root2, spec), "utf8"));
     return registryApplies(raw, packages) ? load(raw) : empty;
   } catch {
     return empty;
@@ -31892,7 +31953,7 @@ function formatPane(result, config) {
 }
 
 // src/lsp.ts
-import { readFileSync as readFileSync14 } from "node:fs";
+import { readFileSync as readFileSync15 } from "node:fs";
 import { join as join12 } from "node:path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL as pathToFileURL2 } from "node:url";
 var SEVERITY = { error: 1, warn: 2, off: 2 };
@@ -32000,7 +32061,7 @@ function lsp(opts) {
       let text2 = buffer;
       if (text2 === void 0) {
         try {
-          text2 = readFileSync14(join12(root2, rel), "utf8");
+          text2 = readFileSync15(join12(root2, rel), "utf8");
         } catch {
           text2 = "";
         }
@@ -32254,7 +32315,7 @@ ${renderTitle(rule2, config.designSystem, config.suppression.keyword)}`).join("\
 
 // src/serve.ts
 import { createServer } from "node:http";
-import { readFileSync as readFileSync15 } from "node:fs";
+import { readFileSync as readFileSync16 } from "node:fs";
 import { dirname as dirname7, join as join13 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -32804,7 +32865,7 @@ function serve(opts) {
       if (path === "/loupe-overlay.php") {
         let php;
         try {
-          php = readFileSync15(MU_PLUGIN, "utf8");
+          php = readFileSync16(MU_PLUGIN, "utf8");
         } catch {
           res.statusCode = 404;
           res.end(
@@ -32841,7 +32902,7 @@ function serve(opts) {
 
 // src/ui.ts
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync as readFileSync16, statSync as statSync6, watch, writeFileSync as writeFileSync4 } from "node:fs";
+import { readFileSync as readFileSync17, statSync as statSync6, watch, writeFileSync as writeFileSync4 } from "node:fs";
 import { createServer as createServer2 } from "node:http";
 import { dirname as dirname8, join as join14 } from "node:path";
 var TOKEN_HEADER = "x-loupe-token";
@@ -33014,7 +33075,7 @@ async function ui(opts) {
   const configFile = config.source.kind === "file" ? config.source.path : null;
   const readConfig = () => {
     try {
-      return configFile ? readFileSync16(configFile, "utf8") : null;
+      return configFile ? readFileSync17(configFile, "utf8") : null;
     } catch {
       return null;
     }
@@ -33256,7 +33317,7 @@ async function ui(opts) {
       const asked = Number(q.get("line") ?? 1);
       const at = Number.isInteger(asked) && asked > 0 ? asked : 1;
       try {
-        const lines = readFileSync16(join14(root2, want), "utf8").split("\n");
+        const lines = readFileSync17(join14(root2, want), "utf8").split("\n");
         const from = Math.max(1, at - PEEK);
         const to = Math.min(lines.length, at + PEEK);
         send(res, 200, { file: want, from, to, lines: lines.slice(from - 1, to) });
@@ -33315,7 +33376,7 @@ async function ui(opts) {
       const flat = oneLine(reason);
       const full = join14(root2, finding.file);
       try {
-        const lines = readFileSync16(full, "utf8").split("\n");
+        const lines = readFileSync17(full, "utf8").split("\n");
         const target = lines[finding.line - 1];
         if (target === void 0) return send(res, 409, { error: "that line is no longer in the file" });
         if (/(?:^|[^#])\{/.test(target))
@@ -33392,11 +33453,11 @@ async function ui(opts) {
 }
 
 // src/detect.ts
-import { existsSync as existsSync7, readFileSync as readFileSync17, statSync as statSync7 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync18, statSync as statSync7 } from "node:fs";
 import { join as join15 } from "node:path";
 var readJson2 = (p) => {
   try {
-    return JSON.parse(readFileSync17(p, "utf8"));
+    return JSON.parse(readFileSync18(p, "utf8"));
   } catch {
     return null;
   }
@@ -33529,7 +33590,7 @@ function libraryPrefixes(dirs2, candidates) {
         budget--;
         let text2;
         try {
-          text2 = readFileSync17(full, "utf8");
+          text2 = readFileSync18(full, "utf8");
         } catch {
           continue;
         }
@@ -33574,7 +33635,7 @@ function presetEvidence(root2, imports) {
     for (const e of assets) {
       let text2;
       try {
-        text2 = readFileSync17(join15(build, e.name), "utf8");
+        text2 = readFileSync18(join15(build, e.name), "utf8");
       } catch {
         continue;
       }
@@ -33627,7 +33688,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
         oversized++;
         continue;
       }
-      text2 = readFileSync17(abs, "utf8");
+      text2 = readFileSync18(abs, "utf8");
     } catch {
       continue;
     }
@@ -33650,7 +33711,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync17(abs, "utf8"));
+      markupText.push(readFileSync18(abs, "utf8"));
     } catch {
     }
   }
@@ -33698,6 +33759,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
     truncated: files.truncated,
     notes,
     external: foreign,
+    blocks: blockPrefixes(blocksIn(files.references)),
     imports
   };
 }
@@ -33723,17 +33785,18 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
     truncated: ns.truncated,
     namespaceNotes: ns.notes,
     possibleExternal: ns.external,
+    blocks: ns.blocks,
     presetEvidence: presetConfidence === "low" || presetConfidence === "none" ? presetEvidence(root2, ns.imports) : [],
     config
   };
 }
 
 // src/profiles.ts
-import { existsSync as existsSync8, readFileSync as readFileSync18 } from "node:fs";
+import { existsSync as existsSync8, readFileSync as readFileSync19 } from "node:fs";
 import { isAbsolute as isAbsolute5, join as join16, resolve as resolve5 } from "node:path";
 var PROJECT_PROFILES = join16(".loupe", "profiles");
 var NO_PROFILE = "none";
-var readJson3 = (p) => JSON.parse(readFileSync18(p, "utf8"));
+var readJson3 = (p) => JSON.parse(readFileSync19(p, "utf8"));
 var under = (dir, rel) => isAbsolute5(rel) ? rel : join16(dir, rel);
 var asStrings2 = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString2 = (v) => typeof v === "string" && v !== "" ? v : null;
@@ -33897,7 +33960,7 @@ function applyRegistries(config, sources) {
 }
 
 // src/hook.ts
-import { existsSync as existsSync9, readFileSync as readFileSync19, realpathSync as realpathSync2, writeFileSync as writeFileSync5 } from "node:fs";
+import { existsSync as existsSync9, readFileSync as readFileSync20, realpathSync as realpathSync2, writeFileSync as writeFileSync5 } from "node:fs";
 import { dirname as dirname9, isAbsolute as isAbsolute6, join as join17, relative as relative5, resolve as resolve6 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
@@ -33905,7 +33968,7 @@ var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var readStdin = async () => process.stdin.isTTY ? "" : text(process.stdin);
 function readState(root2) {
   try {
-    const raw = JSON.parse(readFileSync19(attemptsPath(root2), "utf8"));
+    const raw = JSON.parse(readFileSync20(attemptsPath(root2), "utf8"));
     const now = Date.now();
     const sessions = {};
     for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -34002,7 +34065,7 @@ function settingsEnv(projectDir, name) {
   ];
   for (const [file, label] of files) {
     try {
-      const v = JSON.parse(readFileSync19(file, "utf8")).env?.[name];
+      const v = JSON.parse(readFileSync20(file, "utf8")).env?.[name];
       if (v !== void 0) return { value: String(v), from: `${name} in ${label}` };
     } catch {
     }
@@ -34049,7 +34112,7 @@ function resolvedOptions(projectDir) {
   for (const file of ["settings.json", "settings.local.json"]) {
     let configs;
     try {
-      configs = JSON.parse(readFileSync19(join17(homedir(), ".claude", file), "utf8")).pluginConfigs;
+      configs = JSON.parse(readFileSync20(join17(homedir(), ".claude", file), "utf8")).pluginConfigs;
     } catch {
       continue;
     }
@@ -34803,6 +34866,12 @@ async function main() {
     const state = attemptsPath(hookDir);
     const ds = config.designSystem;
     const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+    const walked = discover({
+      root: config.root,
+      sources: config.sources,
+      limit: analyzeEntryBudget(config.maxEntries)
+    });
+    const blocks = walked.truncated ? [] : blockPrefixes(blocksIn(walked.references));
     const orNone = (arr) => arr?.length ? arr.join(", ") : "(none)";
     const components2 = (arr) => arr?.length ? arr.map((n) => supersededEverywhere(config.componentRegistry, n) ? `${n} (legacy)` : n).join(", ") : "(none)";
     const lines = [
@@ -34814,6 +34883,7 @@ async function main() {
       `${dim("text:       ")}${components2(ds.textComponents)}`,
       `${dim("tokens:     ")}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(", ") : "(none \u2014 token rules inactive)"}`,
       `${dim("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
+      ...blocks.length ? [`${dim("blocks:     ")}${describeBlocks(blocks)}`] : [],
       `${dim("suppress:   ")}${config.suppression.keyword} <ruleId> -- <reason>`,
       `${dim("baseline:   ")}${base.path}${base.found && readBaseline(base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
       ...legacy ? [yellow(`            ${legacyBaselineNotice(legacy)}`)] : [],
@@ -34913,6 +34983,7 @@ ${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id))
       dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
       // Why the confidence above is lower than the coverage alone would make it.
       ...info.namespaceNotes.map((n) => dim(`            ${n}`)),
+      ...info.blocks.length ? [`${dim("blocks:     ")}${describeBlocks(info.blocks)}`] : [],
       // Listed, never written: `init` leaves `external` for somebody to confirm.
       ...info.possibleExternal.length ? [
         ...info.possibleExternal.map(
