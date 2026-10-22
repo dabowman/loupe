@@ -11,12 +11,12 @@
  *
  * So the arithmetic goes first and the judgement goes second, the same division
  * `judge/value.ts` makes. `mapping.ts` narrows to the tokens of a compatible
- * type and ranks them by value distance, name overlap and tier; what arrives
- * here is a shortlist of plausible counterparts, and the question is the half
- * that is left — which of these plays the same *role*.
+ * type, and ranks them only where they are more than one question can carry;
+ * what arrives here is the pool of plausible counterparts, and the question is
+ * the half that is left — which of these plays the same *role*.
  *
- * What one token sends, whole — the request body `ask` posts, with four of the
- * eight candidates elided:
+ * What one token sends, whole — the request body `ask` posts, with most of its
+ * candidates elided:
  *
  *   {
  *     "model": "jev-1.13.0",
@@ -58,6 +58,16 @@ import type { Token } from '../dtcg.ts';
 
 /** What `map` answers for a token the other set has no counterpart for. */
 export const NONE = 'none';
+
+/**
+ * The key of the "no counterpart" option for a question offering `candidates`.
+ * `none` unless the target set has a token by that path — a border or shadow set
+ * may — which would otherwise be overwritten by it, and the model's pick of it
+ * read as no counterpart. A `$` cannot begin a DTCG path, so the fallback is
+ * never a token's.
+ */
+export const noneKey = (candidates: readonly { path: string }[]): string =>
+	candidates.some((c) => c.path === NONE) ? `$${NONE}` : NONE;
 
 /** One token to be mapped, with the shortlist it is choosing among. */
 export interface CounterpartItem {
@@ -207,7 +217,7 @@ export const counterpartQuery = (ctx: Context = DEFAULT_CONTEXT): Query<Counterp
 			'and still round the value differently, and two unrelated tokens can share a value by coincidence.',
 		criteria: {
 			...Object.fromEntries(candidates.map((c) => [c.path, describe(c, ctx.option)])),
-			[NONE]: NONE_CRITERION,
+			[noneKey(candidates)]: NONE_CRITERION,
 		},
 	}),
 });

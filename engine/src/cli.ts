@@ -163,9 +163,13 @@ function cacheLine(root: string): string {
 	return `${dir}  (${parts.join(', ')})`;
 }
 
-/** Answers already paid for, unless the run asked for every one to be fresh. */
-const answerCache = (root: string, noCache: boolean | undefined): AnswerCache | null =>
-	cacheDisabled(noCache) ? null : new AnswerCache(join(projectStateDir(root), 'judge-cache.json'));
+/**
+ * Answers already paid for, unless the run asked for every one to be fresh.
+ * `map` keeps its own file: its answers are many and large, and the judge cache
+ * is the one the hook reads on every edit.
+ */
+const answerCache = (root: string, noCache: boolean | undefined, file = 'judge-cache.json'): AnswerCache | null =>
+	cacheDisabled(noCache) ? null : new AnswerCache(join(projectStateDir(root), file));
 
 /**
  * How far a detection result is to be trusted, coloured to match. `detect`
@@ -697,9 +701,11 @@ async function runMap(args: Args): Promise<number> {
 	// already paid for. A map is hundreds of questions, and a run that failed
 	// halfway, or one re-run with the same sets, asks again only what it has
 	// no answer for. Kept beside the directory it was run from, since a map
-	// has no project; an answer is keyed by its exact request, so where it is
-	// kept never makes it the wrong one.
-	const client = judgeClient(apiKey ?? '', { cache: answerCache(resolve(process.cwd()), args.flags['no-cache']) });
+	// has no project, in a file of its own; an answer is keyed by its exact
+	// request, so where it is kept never makes it the wrong one.
+	const client = judgeClient(apiKey ?? '', {
+		cache: answerCache(resolve(process.cwd()), args.flags['no-cache'], 'map-cache.json'),
+	});
 	try {
 		({ mappings } = await askCounterparts(plan, client));
 	} catch (err) {

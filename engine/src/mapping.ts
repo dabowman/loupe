@@ -7,25 +7,27 @@
  * migration has a lookup table, and the tokens B is missing are exactly the rows
  * that come back with no counterpart.
  *
- * Two halves, split the way `judge/value.ts` splits its question. Here: the
- * arithmetic — which tokens are even of the same kind, how far apart two values
- * are, how much two names have in common, whether the tiers agree — which
- * narrows a 400-token set to a shortlist of eight. In `judge/counterpart.ts`:
- * the half arithmetic cannot do, which is which of those eight plays the same
- * *role*. Names across two systems are related by meaning and not by spelling,
- * and values agree by coincidence as often as by design, so neither side alone
- * is worth much — and neither is the model, asked to read 400 options.
+ * Two halves, split the way `judge/value.ts` splits its question. Here: which
+ * tokens are even of the same kind — the `$type` is the one filter — and, only
+ * where that pool is larger than one question can carry (`CANDIDATES`), the
+ * arithmetic that ranks it: how far apart two values are, how much two names
+ * have in common, whether the tiers agree. In `judge/counterpart.ts`: the half
+ * arithmetic cannot do, which is which of those plays the same *role*. Names
+ * across two systems are related by meaning and not by spelling, and values
+ * agree by coincidence as often as by design, so a ranking cut short drops
+ * right answers; `evals/counterparts` measured that, and is why the pool is
+ * offered whole wherever it fits.
  *
- * Nothing here is calibrated. The weights and the floor below are a starting
- * point chosen by argument, not by measurement, which is the one way this module
- * differs from the rest of the judge: there is no `evals/` for it yet.
+ * The ranking's weights are still argued rather than measured; the floor is
+ * measured (`evals/counterparts/floor.ts`). docs/design/map.md says which is
+ * which.
  *
  * Design notes: docs/design/map.md
  */
 
 import { ask } from './judge.ts';
 import type { Auth, Choice } from './judge.ts';
-import { DEFAULT_CONTEXT, NONE, counterpartQuery } from './judge/counterpart.ts';
+import { DEFAULT_CONTEXT, counterpartQuery, noneKey } from './judge/counterpart.ts';
 import type { Context, CounterpartItem } from './judge/counterpart.ts';
 import { bold, dim, green, yellow } from './color.ts';
 import { byBytes } from './discover.ts';
@@ -425,6 +427,12 @@ export interface MapPlan {
 	 * amount of model accuracy will fix.
 	 */
 	shortlists: Scored[][];
+	/**
+	 * Per job, whether its shortlist was ranked: false where every compatible
+	 * token fitted in the question and was offered as the set wrote them, so its
+	 * scores were never computed and say nothing.
+	 */
+	ranked?: boolean[];
 	/** The rows that needed no model, in source order. */
 	settled: Mapping[];
 	/** Tokens the `--tier`/`--type`/`--limit` scope left out. */
@@ -454,6 +462,7 @@ export function planMap(from: TokenDoc, to: TokenDoc, opts: PlanOptions = {}): M
 
 	const jobs: CounterpartItem[] = [];
 	const shortlists: Scored[][] = [];
+	const ranks: boolean[] = [];
 	const settled: Mapping[] = [];
 	for (const t of capped) {
 		const row = {
@@ -473,7 +482,7 @@ export function planMap(from: TokenDoc, to: TokenDoc, opts: PlanOptions = {}): M
 		const ranked =
 			pool.length <= size
 				? pool.map((token): Scored => ({ token, score: 0, value: 0, name: 0, sameTier: false }))
-				: rank(t, to.tokens, opts.typeGate !== false).slice(0, size);
+				: rank(t, pool, false).slice(0, size);
 		if (!ranked.length) {
 			settled.push({ ...row, to: null, confidence: 1, how: 'absent', considered: [] });
 			continue;
@@ -485,8 +494,9 @@ export function planMap(from: TokenDoc, to: TokenDoc, opts: PlanOptions = {}): M
 			toLabel: to.label,
 		});
 		shortlists.push(ranked);
+		ranks.push(pool.length > size);
 	}
-	return { jobs, shortlists, settled, skipped: from.tokens.length - capped.length, from, to };
+	return { jobs, shortlists, ranked: ranks, settled, skipped: from.tokens.length - capped.length, from, to };
 }
 
 /**
@@ -517,6 +527,7 @@ export async function askCounterparts(
 /** One answer, read against the shortlist it was chosen from. */
 function rowFor(job: CounterpartItem, answer: Choice | undefined): Mapping {
 	const { token, candidates } = job;
+	const none = noneKey(candidates);
 	const row = {
 		from: token.path,
 		type: token.type,
@@ -529,7 +540,7 @@ function rowFor(job: CounterpartItem, answer: Choice | undefined): Mapping {
 		// still shown. A row here is a question for a person, and `space.3xs, 0.41`
 		// is a question they can settle at a glance where a blank is one they have
 		// to start from scratch. `to` staying null is what keeps it a question.
-		const at = answer?.choice === NONE ? null : candidates.find((c) => c.path === answer?.choice);
+		const at = answer?.choice === none ? null : candidates.find((c) => c.path === answer?.choice);
 		return {
 			...row,
 			to: null,
@@ -544,10 +555,10 @@ function rowFor(job: CounterpartItem, answer: Choice | undefined): Mapping {
 	// The best option that is neither the pick nor `none`: how close the call was,
 	// which is the thing a reader of an uncalibrated map most wants to see.
 	const rest = Object.entries(answer.probabilities ?? {})
-		.filter(([k]) => k !== answer.choice && k !== NONE)
+		.filter(([k]) => k !== answer.choice && k !== none)
 		.sort((a, b) => b[1] - a[1])[0];
 	const runnerUp = rest ? { runnerUp: { to: rest[0], confidence: rest[1] } } : {};
-	if (answer.choice === NONE) return { ...row, to: null, confidence: answer.confidence, how: 'none', ...runnerUp };
+	if (answer.choice === none) return { ...row, to: null, confidence: answer.confidence, how: 'none', ...runnerUp };
 	const picked = candidates.find((c) => c.path === answer.choice);
 	// An answer that is not one of the options offered is not an answer: recorded
 	// as unsure rather than written into the map as a path the target set may not
@@ -693,7 +704,7 @@ function verdict(m: Mapping): string {
 	if (m.how === 'unsure') {
 		const lean = m.leaning
 			? ['leaning', m.leaning.to ?? 'no counterpart', m.leaning.value].filter(Boolean).join(' ')
-			: 'best was';
+			: 'no answer';
 		return `${yellow('unsettled')}  ${dim(`${lean}  ${m.confidence.toFixed(2)}`)}`;
 	}
 	return `${dim('no counterpart')}  ${sure}`;
@@ -712,6 +723,12 @@ export function formatPlan(plan: MapPlan, show: number): string {
 	for (const [i, job] of plan.jobs.entries()) {
 		const t = job.token;
 		out.push(`${t.path}  ${dim(`${t.literal}  ${t.tier}`)}\n`);
+		// Nothing was ranked, so there is no order to show: the scores would print
+		// as zeros, and read as a ranking that found nothing.
+		if (plan.ranked?.[i] === false) {
+			out.push(dim(`    all ${job.candidates.length} compatible token(s) offered, unranked\n\n`));
+			continue;
+		}
 		for (const c of (plan.shortlists[i] ?? []).slice(0, show))
 			out.push(
 				`    ${dim(c.score.toFixed(2))}  ${c.token.path}  ${dim(

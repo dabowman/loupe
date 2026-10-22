@@ -1687,6 +1687,27 @@ await check('a timed-out or aborted request is not retried', async () => {
 		assert(calls === 1, `${name}: ${calls} calls, expected one`);
 		assert(thrown instanceof Error && thrown.name === name, `${name}: threw ${String(thrown)}`);
 	}
+	// Nor a whole body that is not JSON: a proxy's page answers the same each time.
+	let pages = 0;
+	const proxy = (async () => {
+		pages++;
+		return new Response('<html>sign in to continue</html>', { status: 200 });
+	}) as unknown as typeof fetch;
+	let said = '';
+	try {
+		await ask(
+			forceQuery(represents),
+			[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+			'key',
+			proxy,
+			1,
+			0,
+		);
+	} catch (err) {
+		said = String(err);
+	}
+	assert(pages === 1, `a page that is not JSON was asked for ${pages} times`);
+	assert(/not JSON/.test(said), `said: ${said}`);
 });
 
 await check('a dropped connection is retried, not thrown away', async () => {

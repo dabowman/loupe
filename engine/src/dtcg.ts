@@ -17,7 +17,7 @@
  */
 
 import { readFileSync, statSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve as resolvePath } from 'node:path';
 import { readDir } from './discover.ts';
 
 /**
@@ -426,10 +426,10 @@ export const isTierWord = (word: string): boolean => TIERS.some((t) => TIER_WORD
  * every "base" and "core" variant of every scale as a primitive. Above the leaf
  * the outermost wins: in `component.button.base.padding`, `base` is a variant.
  *
- * Otherwise the alias depth answers, because a literal, a reference to a literal
- * and a reference to a reference are the three tiers restated. It is a weaker
- * signal — a set whose semantic tokens alias each other reads one tier too deep —
- * which is why `map` treats the tier as evidence and not as a gate.
+ * Otherwise the tier is `unknown`. Alias depth used to answer here, and read a
+ * component token that reaches past the common tier for a primitive as a tier
+ * too shallow; an unstated tier is not a fact about a token, so it is never
+ * guessed, never sent, and never counts as two sets agreeing.
  */
 export function tierOf(
 	segments: readonly string[],
@@ -479,7 +479,11 @@ export function tierOf(
  * `~/work/base/` would otherwise file every token in every set as a primitive.
  */
 function dirsOf(root: string, file: string): string[] {
-	const rel = file.startsWith(root) ? file.slice(root.length) : file;
+	// Resolved on both sides: the files are read through `join`, which drops the
+	// `./` a typed root keeps, and a root that never prefixed its own files filed
+	// every directory in the path as one the set placed its tokens in.
+	const within = relative(resolvePath(root), resolvePath(file));
+	const rel = within.startsWith('..') || isAbsolute(within) ? file : within;
 	return rel.split(/[/\\]/).slice(0, -1).filter(Boolean);
 }
 

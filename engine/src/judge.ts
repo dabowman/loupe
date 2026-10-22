@@ -222,10 +222,14 @@ export async function ask<T>(
 				if (res.ok) parsed = (await res.json()) as { answers: Record<string, Choice> };
 			} catch (err) {
 				// An abort is a deadline — the request's own, or the hook's — and a
-				// deadline retried is no deadline. Everything else thrown is the
-				// connection, as transient as a 503, so the retry budget covers both.
+				// deadline retried is no deadline. A body that arrived whole and is not
+				// JSON — a proxy's page, a misconfigured endpoint — answers the same
+				// way every time. Everything else thrown is the connection, as
+				// transient as a 503, so the retry budget covers both.
 				const name = err instanceof Error ? err.name : '';
 				if (name === 'AbortError' || name === 'TimeoutError') throw err;
+				if (err instanceof SyntaxError)
+					throw new Error(`TypeSafe answered with a body that is not JSON: ${messageOf(err)}`);
 				if (attempt >= RETRIES) {
 					const cause = err instanceof Error && err.cause ? `: ${messageOf(err.cause)}` : '';
 					throw new Error(`TypeSafe unreachable: ${messageOf(err)}${cause}`);

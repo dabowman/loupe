@@ -25,6 +25,7 @@ import {
 	collisionsIn,
 	comparable,
 	countBy,
+	formatPlan,
 	mapPayload,
 	nameScore,
 	planMap,
@@ -132,6 +133,20 @@ await check('a set that never states a tier gets no tier, rather than one guesse
 	// have not said the same thing.
 	const [top] = rank(find(alpha, 'semantic.text.muted'), beta.tokens);
 	assert(top && !top.sameTier, 'an unstated tier counted as a tier match');
+});
+
+// The files under a typed root are read through `join`, which drops a `./` the
+// root keeps, so a root compared as typed never prefixed its own files and every
+// directory in its path was read as one the set filed its tokens under.
+await check('a root typed with ./ counts only the folders below it', () => {
+	const root = scratch('loupe-map-dot-');
+	try {
+		write(root, 'core/set/a.json', JSON.stringify({ space: { $type: 'dimension', sm: { $value: '4px' } } }));
+		const t = one(readTokenDoc(`${root}/./core/set`, 'dot').tokens, 'one token');
+		assert(t.tier === 'unknown' && t.tierFrom === 'unstated', `read as ${t.tier}/${t.tierFrom}`);
+	} finally {
+		cleanup(root);
+	}
 });
 
 await check('a tier word in the leaf is a name, not a tier', () => {
@@ -297,6 +312,42 @@ await check('the options offered are the shortlist, plus a reasoned way to say t
 			beta.tokens.some((t) => t.path === c.path),
 			`${c.path} is not in beta`,
 		);
+});
+
+// A border or shadow set may define a token named `none`. Keyed as an option it
+// was overwritten by the escape hatch, and the model's pick of it was read as
+// "no counterpart".
+await check('a target token named none is still an option, and picking it maps to it', async () => {
+	const root = scratch('loupe-map-none-');
+	try {
+		write(root, 'a.json', JSON.stringify({ edge: { $type: 'color', $value: '#000000' } }));
+		write(
+			root,
+			'b.json',
+			JSON.stringify({ none: { $type: 'color', $value: '#000000' }, ink: { $type: 'color', $value: '#111111' } }),
+		);
+		const plan = planMap(readTokenDoc(join(root, 'a.json'), 'a'), readTokenDoc(join(root, 'b.json'), 'b'));
+		const job = one(plan.jobs, 'one question');
+		const offered = Object.keys((counterpartQuery().question(job, 0) as { criteria: object }).criteria);
+		assert(offered.includes('none') && offered.includes('$none'), `offered ${offered.join(', ')}`);
+		const stub = (async () =>
+			new Response(
+				JSON.stringify({ answers: { e0: { choice: 'none', confidence: 0.95, probabilities: { none: 0.95 } } } }),
+			)) as unknown as typeof fetch;
+		const { mappings } = await askCounterparts(plan, 'key', stub);
+		const row = one(mappings, 'one row');
+		assert(row.to === 'none' && row.how !== 'none', `mapped as ${row.how} to ${row.to}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Every compatible token fits in one question, so nothing was ranked: its scores
+// would print as rows of zeros, a ranking that found nothing.
+await check('a dry run says a pool offered whole was not ranked', () => {
+	const out = formatPlan(planMap(alpha, beta), 254);
+	assert(/compatible token\(s\) offered, unranked/.test(out), `no unranked line:\n${out.slice(0, 400)}`);
+	assert(!/value 0\.00 name 0\.00/.test(out), `printed zeros as scores:\n${out.slice(0, 400)}`);
 });
 
 await check('one request per token, each naming its own set and carrying its own options', async () => {
