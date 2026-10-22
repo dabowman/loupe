@@ -1636,11 +1636,14 @@ async function main(): Promise<number> {
 			: '';
 		if (!blocking.length) {
 			clearAttempts(root, budgetKey);
-			return emitClean(
-				standing
-					? `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`
-					: `${formatSummary(result)}${ceilingSuffix}`,
-			);
+			if (!standing) return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
+			// The agent hears it too, with the findings: it is the agent Stop holds to them.
+			const message = `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`;
+			const report = formatAgent({ ...result, findings: errors }, config, {
+				maxFindings: config.hook.maxFindings,
+				terse: true,
+			});
+			return emitAdvisory(message, `${message}\n\n${report}`, payload);
 		}
 		const attempts = bumpAttempts(root, budgetKey);
 		const max = config.hook.maxAttempts;

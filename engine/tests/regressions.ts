@@ -1208,6 +1208,14 @@ await check('PostToolUse blocks on what the edit introduced; Stop on everything'
 				/1 blocking finding\(s\) already in styles\/a\.css/.test(past.stdout),
 			`the pre-existing finding was not named as context:\n${past.stdout}`,
 		);
+		// Named to the agent, not the user alone: it is the agent Stop will hold to it.
+		const context =
+			(JSON.parse(past.stdout) as { hookSpecificOutput?: { additionalContext?: string } }).hookSpecificOutput
+				?.additionalContext ?? '';
+		assert(
+			/already in styles\/a\.css/.test(context) && /margin-on-child/.test(context),
+			`the standing finding did not reach the agent:\n${past.stdout}`,
+		);
 
 		// An edit that adds one blocks on that one alone, and says what it walked past.
 		const middle = readFileSync(css, 'utf8');
