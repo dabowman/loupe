@@ -24,8 +24,10 @@ import { assert, check, cleanup, finish, first, scratch, writeAll } from './harn
 const FILES = {
 	'loupe.config.json': '{ "extends": "wpds", "namespaces": { "project": ["wf-"] } }',
 	// The engine can only suggest a token it has seen defined, so the fixture
-	// defines the one this suite substitutes.
-	'styles/tokens.css': ':root {\n\t--wpds-color-foreground-content-neutral: #1e1e1e;\n}',
+	// defines the one this suite substitutes. Where the preset reads the design
+	// system's own: a project's sheet is not a set to call a token unknown against.
+	'node_modules/@wordpress/theme/prebuilt/css/design-tokens.css':
+		':root {\n\t--wpds-color-foreground-content-neutral: #1e1e1e;\n}',
 	// `.wf-note` is on a plain element, deliberately. A class bound to a
 	// design-system component reports `system/override` instead — one
 	// attribute-level finding supersedes the per-declaration ones there — and

@@ -844,8 +844,18 @@ export async function analyze(
 	// The third channel, through the same classifier. A `styled(Button)` template
 	// is the stylesheet pass's "class bound to a design-system component".
 	for (const tpl of cssInJs) {
-		if (!reports(tpl.file)) continue;
 		const supp = suppByFile.get(tpl.file);
+		if (!reports(tpl.file)) {
+			// Read for `tokens/undelivered` alone, which answers for the whole project:
+			// a token use outside the scope still decides where it is anchored, as a
+			// stylesheet's does. Nothing here is reported.
+			if (supp && !tpl.error)
+				for (const group of tpl.groups)
+					for (const d of group.decls)
+						for (const name of tokenRefsIn(d.value, tokenPrefixes))
+							tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
+			continue;
+		}
 		if (tpl.error) {
 			// Not a finding: an interpolation-driven template is opaque by design.
 			// It is still recorded, so a clean report can be checked against it.
@@ -1024,7 +1034,10 @@ export async function analyze(
 		// which part of it is the channel marker. Nothing downstream of that sees it.
 	}
 
-	for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
+	// Gated on the design system's own tokens, counted before the walk added the
+	// project's: one project-defined `--wpds-brand-color` is not a set to check
+	// the design system's names against.
+	if (diagnostics.tokensKnown) for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
 	for (const f of misappliedTokens(scopedRefs, scopes, tokenSet.known)) report(f);
 	if (ruleIsLive('tokens/undelivered'))
 		for (const f of undelivered({
@@ -1108,6 +1121,13 @@ export function dedupe(findings: readonly Finding[]): Finding[] {
 	});
 }
 
+/**
+ * Rules that answer for the project rather than a file. Their finding is shown
+ * at a file only so there is a line to open, and which file that is moves with
+ * edits elsewhere and with a run's scope, so it stays out of the identity.
+ */
+const PROJECT_RULES: ReadonlySet<string> = new Set(['tokens/undelivered']);
+
 /** Stable identity for baselining: survives reformatting and unrelated edits. */
 export const findingKey = (f: Pick<Finding, 'rule' | 'file' | 'code' | 'message'>): string =>
-	`${f.rule}|${f.file}|${oneLine(String(f.code ?? f.message))}`;
+	`${f.rule}|${PROJECT_RULES.has(f.rule) ? '<project>' : f.file}|${oneLine(String(f.code ?? f.message))}`;
