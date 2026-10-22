@@ -49,6 +49,33 @@ export function readDir(dir: string): Dirent[] {
 }
 
 /**
+ * `dir` and every directory above it, up to the filesystem root. For the walks
+ * that look upward for a marker — a config file, a `.git`, a `.claude/` — so
+ * each does not spell the "stop where `dirname` stands still" ending itself.
+ */
+export function* dirsUp(start: string): Generator<string> {
+	for (let dir = resolve(start); ; dir = dirname(dir)) {
+		yield dir;
+		if (dirname(dir) === dir) return;
+	}
+}
+
+/**
+ * Every file under `dir` whose name `wanted` accepts, depth first in
+ * {@link readDir}'s order, never descending into `node_modules`: a
+ * dependency's files are not this package's. Unbounded — the caller stops
+ * taking when it has had enough, which is what a generator is for.
+ */
+export function* filesUnder(dir: string, wanted: (name: string) => boolean): Generator<string> {
+	for (const e of readDir(dir)) {
+		const full = join(dir, e.name);
+		if (e.isDirectory()) {
+			if (e.name !== 'node_modules') yield* filesUnder(full, wanted);
+		} else if (wanted(e.name)) yield full;
+	}
+}
+
+/**
  * One `git` invocation, one place: both callers want the same cwd, the same
  * encoding, the same "stderr is not our business" wiring and the same timeout.
  */
@@ -228,13 +255,8 @@ export function isWorktree(root: string): boolean {
  * `git` on PATH. Walks up, because a subdirectory has no `.git` of its own.
  */
 export function hasGitDir(root: string): boolean {
-	let dir = resolve(root);
-	for (;;) {
-		if (existsSync(join(dir, '.git'))) return true;
-		const up = dirname(dir);
-		if (up === dir) return false;
-		dir = up;
-	}
+	for (const dir of dirsUp(root)) if (existsSync(join(dir, '.git'))) return true;
+	return false;
 }
 
 /**

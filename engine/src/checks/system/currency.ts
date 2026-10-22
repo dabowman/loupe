@@ -20,7 +20,22 @@
  */
 
 import type { Candidate } from '../../analyze.ts';
+import { registryKey } from '../../components.ts';
 import type { ComponentEntry, ComponentImport, RuleId } from '../../types.ts';
+
+/**
+ * Which rule a stale status reports under. `recommended` and `experimental`
+ * report under none: WPDS itself flags the latter as not yet safe to recommend,
+ * so that call is the authoring skill's, not a check's.
+ */
+export const RULE_FOR_STATUS: Partial<Record<ComponentEntry['status'], RuleId>> = {
+	locked: 'system/locked-component',
+	legacy: 'system/superseded-component',
+};
+
+/** The status a currency rule flags, or null for any other rule. */
+export const statusFlaggedBy = (id: RuleId): ComponentEntry['status'] | null =>
+	(Object.keys(RULE_FOR_STATUS) as ComponentEntry['status'][]).find((s) => RULE_FOR_STATUS[s] === id) ?? null;
 
 /**
  * Every `Name (@package)` a `supersededBy` string names. The field is prose, so
@@ -61,7 +76,9 @@ export function usableReplacement(
 	// Unknown to the registry is not a reason to stay silent, and a compound
 	// component's currency is its root's (`Menu.Group` is not its own entry).
 	return candidates.some((c) => {
-		const entry = registry.get(`${c.package}::${c.name}`) ?? registry.get(`${c.package}::${c.name.split('.')[0]}`);
+		const entry =
+			registry.get(registryKey(c.package, c.name)) ??
+			registry.get(registryKey(c.package, c.name.split('.')[0] ?? c.name));
 		return !entry || (entry.status !== 'locked' && entry.status !== 'experimental');
 	});
 }
@@ -75,10 +92,9 @@ export function currency(
 	const seen = new Set<string>(); // one finding per file+component+package, not per usage
 	for (const ci of imports) {
 		if (ci.file === undefined) continue;
-		const entry = registry.get(`${ci.package}::${ci.canonical}`);
-		if (!entry || (entry.status !== 'legacy' && entry.status !== 'locked')) continue;
-		const rule = entry.status === 'locked' ? 'system/locked-component' : 'system/superseded-component';
-		if (!enabled(rule)) continue;
+		const entry = registry.get(registryKey(ci.package, ci.canonical));
+		const rule = entry && RULE_FOR_STATUS[entry.status];
+		if (!entry || !rule || !enabled(rule)) continue;
 		// A replacement the registry itself will not recommend is not a replacement.
 		if (!usableReplacement(registry, entry.supersededBy)) continue;
 		const key = `${ci.file} ${rule} ${ci.canonical} ${ci.package}`;
