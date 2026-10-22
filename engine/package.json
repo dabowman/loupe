@@ -1,5 +1,5 @@
 {
-  "name": "@dvdbwmn/loupe",
+  "name": "@dabowman/loupe",
   "version": "0.8.0",
   "description": "Design-system conformance checking: correlates markup bindings with the CSS that styles them.",
   "type": "module",

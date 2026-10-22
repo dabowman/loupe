@@ -27451,7 +27451,7 @@ var patterns_default = {
 
 // package.json
 var package_default = {
-  name: "@dvdbwmn/loupe",
+  name: "@dabowman/loupe",
   version: "0.8.0",
   description: "Design-system conformance checking: correlates markup bindings with the CSS that styles them.",
   type: "module",
@@ -31132,7 +31132,7 @@ function formatSarif(result, config) {
           tool: {
             driver: {
               name: "Loupe",
-              informationUri: "https://github.com/dvdbwmn/loupe",
+              informationUri: "https://github.com/dabowman/loupe",
               rules: usedRules({ ...result, findings: all }, config).map((r) => ({
                 id: r.id,
                 shortDescription: { text: r.title },

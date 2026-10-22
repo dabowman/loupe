@@ -587,7 +587,7 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 					tool: {
 						driver: {
 							name: 'Loupe',
-							informationUri: 'https://github.com/dvdbwmn/loupe',
+							informationUri: 'https://github.com/dabowman/loupe',
 							rules: usedRules({ ...result, findings: all }, config).map((r) => ({
 								id: r.id,
 								shortDescription: { text: r.title },
