@@ -344,6 +344,12 @@ also inferred with no config at all:
 }
 ```
 
+`loupe status` prints what the `tokenSources` yielded on its `tokens:` line:
+`--acme-* (190 definitions from node_modules/@acme/tokens/dist/tokens.css)`, or
+`0 definitions read` and each path not found. A path that stops resolving turns
+`tokens/unknown-token` off, so check that line first when a report names no
+tokens.
+
 File markers work too, for a system that leaves no dependency — `"files": {
 "all": ["theme.json"], "any": ["templates/", "parts/"] }`, probed at the root and
 one level down, with `"confidence": { "full": "high", "partial": "medium" }` to
@@ -1302,7 +1308,7 @@ A library call writes nothing anywhere unless it passes `cache: true`.
 
 | key | |
 | --- | --- |
-| `designSystem.tokenSources` | Paths (file or directory) holding the token definitions. Read even under `node_modules`, which the project walk prunes — that is where a design system's tokens live. Missing paths are skipped. |
+| `designSystem.tokenSources` | Paths (file or directory) holding the token definitions, each relative to the project root or absolute. Read even under `node_modules`, which the project walk prunes — that is where a design system's tokens live. Missing paths are skipped, and `loupe status` names them on its `tokens:` line. |
 | `designSystem.styleSources` | Paths (file or directory) holding the design system's own stylesheets (`.css`, `.scss`, `.less`). Every class they define is a library internal: a project rule whose key selector is one of them reports `system/override (library internal)`, the way a `namespaces.external` prefix does. This is how an unprefixed system (`.field-label`, `.toast-viewport`) is recognised, since no JSX binds the classes a component renders itself. The sheets are not checked as project code, a `namespaces.project` prefix still wins, and custom properties set on a project class (a slot rebind) are not an override. Missing paths are skipped. |
 | `designSystem.cssInJsPackages` | Packages whose tagged templates are CSS. Defaults cover styled-components and emotion. |
 | `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element` when the carrier is a `components.text` or `components.layout` name; nothing nested inside it is, and a genuine render callback on any other component is not. Defaults to `render`, `as`, `component`; `[]` exempts nothing. A list replaces the default rather than extending it. |
