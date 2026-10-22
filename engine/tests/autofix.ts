@@ -1208,4 +1208,32 @@ await check('a superseded component import is reported and never rewritten', asy
 	assert(remaining.some(superseded), 'the finding must still stand afterwards');
 });
 
+// A bare `/loupe-fix` keeps the baseline in its check, so its first step must
+// not rewrite what the baseline accepted: it runs `fix --changed`, which has to
+// leave every file the working tree has not touched alone.
+await check('fix --changed rewrites only the files the working tree changed', () => {
+	const root = scratch('dsh-fix-changed-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			[DS_TOKENS]: ':root { --wpds-border-radius-md: 4px; }',
+			'styles/old.css': '.wf-a { border-radius: 4px; }',
+			'styles/new.css': '.wf-b { color: red; }',
+			'src/A.jsx': 'export const A = () => <><div className="wf-a" /><div className="wf-b" /></>;',
+		});
+		const git = (...argv: string[]): void => {
+			execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...argv], { cwd: root, stdio: 'ignore' });
+		};
+		git('init');
+		git('add', '-A');
+		git('commit', '-m', 'base');
+		write(root, 'styles/new.css', '.wf-b { border-radius: 4px; }');
+		const out = execFileSync('node', [CLI, 'fix', '--changed', '--dry-run', '--root', root], { encoding: 'utf8' });
+		assert(/styles\/new\.css:1/.test(out), `the changed file was not fixed:\n${out}`);
+		assert(!/styles\/old\.css/.test(out), `an unchanged file was rewritten:\n${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();

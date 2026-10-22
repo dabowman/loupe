@@ -210,10 +210,10 @@ It carries the per-rule remedy and the checks that stop a fix from silently chan
 ## 1. Apply what needs no judgement
 
 \`\`\`bash
-${loupe("fix")}
+${loupe("fix", "--changed")}
 \`\`\`
 
-Add \`--dry-run\` first if the repo has uncommitted work.
+\`fix\` reads no baseline, so \`--changed\` keeps it off the accepted backlog; to work a named rule's backlog, pass \`--rule <id>\` in its place. Add \`--dry-run\` first if the repo has uncommitted work.
 
 ## 2. Get the current state
 
