@@ -574,11 +574,11 @@ export async function analyze(
 	// The registry's AST rules, run per file by the scanner. They exist for the
 	// wrong choice the composite matcher cannot see: one control, under the
 	// four-node floor.
-	// Every rule, `judge` detectors included, whether or not this run judges: a
-	// scan is then the same either way, so one cached copy serves both. A
-	// detector only names controls, which are dropped below when nobody asks.
+	// `judge` detectors only when this run judges: one costs a walk of the file's
+	// component ranges, which no other run should pay for. The rules are in the
+	// cache's fingerprint, so a judged run and a plain one keep a copy each.
 	const patternRules: PatternRule[] = (config.patterns ?? []).flatMap((p) =>
-		p.rules.map((spec) => ({ patternId: p.id, spec })),
+		p.rules.filter((spec) => judge || spec.rule !== 'judge').map((spec) => ({ patternId: p.id, spec })),
 	);
 	const cache = useCache
 		? new IndexCache(config.root, {
@@ -680,7 +680,7 @@ export async function analyze(
 		cssInJs.push(...scanned.cssInJs);
 		composites.push(...scanned.composites);
 		for (const h of scanned.ruleHits) ruleHits.push({ ...h, file: rel });
-		if (judge) controls.push(...scanned.controls);
+		controls.push(...scanned.controls);
 		if (scanned.imports) importsByFile.set(rel, scanned.imports);
 		for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
 	}
