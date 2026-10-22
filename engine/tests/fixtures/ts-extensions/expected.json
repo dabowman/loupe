@@ -1,0 +1,9 @@
+{
+  "note": "Parser plugins follow the extension. A .ts file parses without JSX, so an angle-bracket type assertion no longer drops it and its styled(Text) template is still read. The .tsx and .js siblings keep JSX, so wf-field__label and wf-field__hint still bind to Text.",
+  "parseErrors": [],
+  "findings": [
+    { "rule": "typography/in-css", "file": "src/field.ts", "line": 8 },
+    { "rule": "typography/in-css", "file": "styles/field.css", "line": 1 },
+    { "rule": "typography/in-css", "file": "styles/field.css", "line": 2 }
+  ]
+}

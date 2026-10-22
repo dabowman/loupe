@@ -24730,7 +24730,9 @@ function judgeControl(el, spec, ctx) {
 }
 
 // src/markup.ts
-var PLUGINS = ["jsx", "typescript", "decorators-legacy", "classProperties", "importAttributes"];
+var TS_PLUGINS = ["typescript", "decorators-legacy", "classProperties", "importAttributes"];
+var JSX_PLUGINS = ["jsx", ...TS_PLUGINS];
+var pluginsFor = (relPath) => /\.[cm]?ts$/i.test(relPath) ? TS_PLUGINS : JSX_PLUGINS;
 var memberObject = (t) => t.type === "MemberExpression" && t.object.type === "Identifier" ? t.object.name : void 0;
 var memberProperty = (t) => t.type === "MemberExpression" && t.property.type === "Identifier" ? t.property.name : void 0;
 var calleeOf = (t) => t.type === "CallExpression" && t.callee.type === "Identifier" ? t.callee.name : void 0;
@@ -24948,7 +24950,7 @@ function scanMarkup(text2, relPath, ds, rules2 = []) {
       sourceType: "unambiguous",
       errorRecovery: true,
       attachComment: false,
-      plugins: PLUGINS
+      plugins: pluginsFor(relPath)
     });
   } catch (err) {
     return { ...result, parseError: messageLineOf(err) };
