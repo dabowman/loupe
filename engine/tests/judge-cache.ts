@@ -9,8 +9,8 @@
  * whole of this file is about.
  */
 
-import { execFile } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { execFile, execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -251,6 +251,47 @@ await check('a blocking hook run asks only about the findings it prints', async 
 		// The same turn's next write, and the Stop after it: nothing new to pay for.
 		const again = await judged(['hook', '--judge', '--profiles', PROFILES], hookEnv, hookPayload(root));
 		assert(again.n === 0, `the second hook run sent ${again.n}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The PostToolUse report prints what the edit introduced, not every blocking
+// finding the file has: the judgements go there, or the one finding the agent
+// is shown reaches it unjudged while the standing ones were paid for.
+await check('a PostToolUse asks about the finding the edit introduced, not the ones it walked past', async () => {
+	const { root, data } = project(
+		{
+			extends: 'wpds',
+			rules: { 'system/raw-element': 'error' },
+			hook: { maxFindings: 1 },
+		},
+		DISTINCT,
+	);
+	try {
+		const git = (...a: string[]) => execFileSync('git', a, { cwd: root, stdio: 'ignore' });
+		git('init', '-q');
+		git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'init');
+		git('add', '-A');
+		git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'before');
+		const file = join(root, 'src/P.jsx');
+		writeFileSync(file, `${DISTINCT}\nexport const E5 = () => <h5 className="e5">Line 5</h5>;`);
+		const payload = JSON.stringify({
+			session_id: 's1',
+			hook_event_name: 'PostToolUse',
+			tool_name: 'Write',
+			tool_input: { file_path: file },
+			tool_response: { filePath: file, originalFile: DISTINCT },
+		});
+		const before = requests.length;
+		await judged(['hook', '--judge', '--profiles', PROFILES], env(data, { CLAUDE_PROJECT_DIR: root }), payload);
+		const sent = requests.slice(before);
+		assert(sent.length === 1, `the hook sent ${sent.length} request(s), expected the one it prints`);
+		const asked = (JSON.parse(sent[0] ?? '{}') as { state?: { elements?: { source?: string }[] } }).state?.elements?.[0]
+			?.source;
+		// The element asked about opens its `source`; what follows it is context.
+		const opening = (asked ?? '').split('\n')[0] ?? '';
+		assert(/<h5/.test(opening), `it asked about a standing finding: ${opening}`);
 	} finally {
 		cleanup(root);
 	}

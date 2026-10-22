@@ -1646,15 +1646,50 @@ async function main(): Promise<number> {
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
 	const budgetKey = `${payload.session_id ?? ''}${touched ? `\u0000${touched}` : ''}`;
 	/**
+	 * What the hook blocks on: every blocking finding, or for a PostToolUse only
+	 * those the edit introduced. Settled once, before any judgement, so judging
+	 * pays for what the hook will print, and the comparison reads the messages
+	 * the engine wrote on both sides of the edit.
+	 *
+	 * Two questions, one per hook. PostToolUse asks whether this edit made the
+	 * file worse, and blocks only on what it introduced: a refactor passes
+	 * through states that are worse before they are better, and a finding the
+	 * edit walked past is not the edit's fault. Stop asks whether the turn's work
+	 * is conformant, absolutely — the JSX converted and the CSS left behind is an
+	 * omission by then, not an intermediate state.
+	 *
+	 * The "before" is only analyzed when the "after" would block, so a clean
+	 * edit pays nothing for the question.
+	 *
+	 * Passing a standing finding over is a deferral only where Stop will see it.
+	 * Where Stop cannot resolve the files the turn changed — no git worktree, or
+	 * a repository git refuses to read — it stands down, and a finding passed
+	 * over here is never enforced at all: that is the absolute check, as before.
+	 */
+	let verdict: Promise<{ errors: Finding[]; blocking: Finding[] }> | null = null;
+	const hookVerdict = (): Promise<{ errors: Finding[]; blocking: Finding[] }> =>
+		(verdict ??= (async () => {
+			const errors = result.findings.filter((f) => f.severity === 'error');
+			if (!touched || !errors.length) return { errors, blocking: errors };
+			const stopScope = resolveScope(config, args, { defaultChanged: true });
+			if (stopScope !== null && !Array.isArray(stopScope)) return { errors, blocking: errors };
+			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
+				judge: Boolean(apiKey),
+				suppress: !args.flags['no-suppressions'],
+			});
+			return { errors, blocking: introducedBy(errors, before) };
+		})());
+	/**
 	 * The findings the hook will print, decided the way the branch below decides
 	 * it: none when nothing blocks or the gate has stood down (a summary line
 	 * either way), else the blocking ones under the findings cap.
 	 */
-	const hookShows = (findings: Finding[]): Finding[] => {
-		const blocking = findings.filter((f) => f.severity === 'error');
+	const hookShows = async (): Promise<Finding[]> => {
+		const { blocking } = await hookVerdict();
 		if (!blocking.length) return [];
 		if (!payload.session_id && payload.stop_hook_active) return [];
-		if (payload.session_id && peekAttempts(root, budgetKey) + 1 > config.hook.maxAttempts) return [];
+		// Peeked under the key the branch below bumps, session id or not.
+		if (peekAttempts(root, budgetKey) + 1 > config.hook.maxAttempts) return [];
 		return shownFindings(blocking, config.hook.maxFindings);
 	};
 	let judged: string | null = null;
@@ -1702,7 +1737,7 @@ async function main(): Promise<number> {
 		// A redirect configured to block decides which of those it is, so the hook
 		// waits for it first; everywhere else every pass runs at once.
 		if (isHook) addRedirects(await redirects);
-		const targets = isHook ? hookShows(result.findings) : result.findings;
+		const targets = isHook ? await hookShows() : result.findings;
 		const about = tokenDescriptions(config.profiles?.active ?? []);
 		const settled = await Promise.all([
 			isHook ? Promise.resolve([]) : redirects,
@@ -1736,33 +1771,7 @@ async function main(): Promise<number> {
 	const spentSuffix = judged ? dim(` (${judged})`) : '';
 	if (isHook) {
 		const sessionId = payload.session_id ?? '';
-		// Two questions, one per hook. PostToolUse asks whether this edit made the
-		// file worse, and blocks only on what it introduced: a refactor passes
-		// through states that are worse before they are better, and a finding the
-		// edit walked past is not the edit's fault. Stop asks whether the turn's work
-		// is conformant, absolutely — the JSX converted and the CSS left behind is an
-		// omission by then, not an intermediate state.
-		//
-		// The "before" is only analyzed when the "after" would block, so a clean
-		// edit pays nothing for the question.
-		//
-		// Passing a standing finding over is a deferral only where Stop will see it.
-		// Where Stop cannot resolve the files the turn changed — no git worktree, or
-		// a repository git refuses to read — it stands down, and a finding passed
-		// over here is never enforced at all: that is the absolute check, as before.
-		const errors = result.findings.filter((f) => f.severity === 'error');
-		let blocking: Finding[] = errors;
-		const stopSees = (): boolean => {
-			const stopScope = resolveScope(config, args, { defaultChanged: true });
-			return stopScope === null || Array.isArray(stopScope);
-		};
-		if (touched && errors.length && stopSees()) {
-			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
-				judge: Boolean(apiKey),
-				suppress: !args.flags['no-suppressions'],
-			});
-			blocking = introducedBy(errors, before);
-		}
+		const { errors, blocking } = await hookVerdict();
 		// What stood before the edit and still does: never more than stood before it.
 		const standing = errors.length - blocking.length;
 		// Said, not dropped: the agent should know what it is walking past, and that
