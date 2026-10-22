@@ -27622,6 +27622,13 @@ ${stableJson(inputs)}`).slice(0, 16);
     return { at, stat, entry, text: text2 };
   }
   /**
+   * Keep a file's entry through `save` without asking about it: one whose bytes
+   * this run takes from somewhere other than the disk the entry describes.
+   */
+  keep(rel) {
+    this.#seen.add(rel);
+  }
+  /**
    * Record what a file contributed, from the bytes just analyzed. Stamped with
    * the lookup's time, not the time of storing: a scan can finish seconds after
    * the read, and the racy-mtime guard is measured from the read.
@@ -28708,7 +28715,11 @@ async function analyze(config, {
       return null;
     }
   };
-  const lookup = (abs, rel) => contents?.has(rel) ? null : cache2?.lookup(abs, rel) ?? null;
+  const lookup = (abs, rel) => {
+    if (!contents?.has(rel)) return cache2?.lookup(abs, rel) ?? null;
+    cache2?.keep(rel);
+    return null;
+  };
   const hasDirectives = (supp) => supp.directives.length > 0 || supp.malformed.length > 0;
   const oversized = (abs, rel, look) => look ? (look.stat?.size ?? 0) > MAX_BYTES2 : tooBig(abs, rel);
   const controls = [];
@@ -34518,13 +34529,14 @@ ${said}`);
   }
   return EXIT.OK;
 }
-async function findingsBeforeEdit(config, touched, before, { judge, suppress }) {
+async function findingsBeforeEdit(config, touched, before, { judge, suppress, cache: cache2 }) {
   if (before === null) return [];
   try {
     const prior = await analyze(config, {
       scope: [touched],
       judge,
       suppress,
+      cache: cache2,
       contents: /* @__PURE__ */ new Map([[touched, before]])
     });
     return [...prior.findings, ...(prior.controls ?? []).map((c) => ({ ...redirectIdentity(c), message: "" }))];
@@ -35333,7 +35345,8 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     if (stopScope !== null && !Array.isArray(stopScope)) return { errors, blocking: errors };
     const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
       judge: Boolean(apiKey),
-      suppress: !args.flags["no-suppressions"]
+      suppress: !args.flags["no-suppressions"],
+      cache: useCache
     });
     return { errors, blocking: introducedBy(errors, before) };
   })();
