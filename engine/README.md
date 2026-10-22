@@ -128,8 +128,9 @@ signed-off reason must never have.
 
 ## Config
 
-`loupe.config.json` (or `.mjs`, or a `loupe` key in `package.json`),
-discovered by walking up from the working directory.
+`loupe.config.mjs`, `loupe.config.js`, `loupe.config.json`, `.louperc.json`,
+or a `loupe` key in `package.json`, looked for in that order in each directory
+while walking up from the working directory. The first one found is the config.
 
 With no config file anywhere, the project is inspected and one is inferred —
 preset from the markers each preset declares for itself (`@wordpress/components`
@@ -636,10 +637,13 @@ the suggestion — `<p> → <Text variant="body-sm"> (judged 0.80)`,
 place of a wrong analog — and recorded as `judged: { answer, confidence, spans }`
 on the finding, the spans being what the agent format paints green. Anything
 below leaves the finding alone. Verdicts, severities and the
-baseline identity (`code`) are untouched. The key comes from
-`TYPESAFE_API_KEY` in the environment, or from the `.env` two directories above
-the engine entry point, which is the repo root of a checkout — and from the
-working directory for a compiled binary, which has no checkout above it. A
+baseline identity (`code`) are untouched. The key is `TYPESAFE_API_KEY`, and
+the first place it is found wins: the environment; the plugin's *TypeSafe API
+key* option, which Claude Code exports to hook processes only, as
+`CLAUDE_PLUGIN_OPTION_TYPESAFE_API_KEY`; the `.env` two directories above the
+engine entry point, which is the repo root of a checkout, or the working
+directory's `.env` for a compiled binary, which has no checkout above it; then
+`~/.config/loupe/.env` (`$XDG_CONFIG_HOME/loupe/.env` when that is set). A
 failed request prints a note and the report goes out unjudged.
 
 The key is always the caller's own. None is compiled into any artifact, and
@@ -1026,11 +1030,13 @@ guidance printed once per rule, a sample of each rule rather than a flood of
 the first one. On a clean run it exits 0 with a one-line tally.
 
 Installed as a Claude Code plugin, the hook reads its settings from
-`CLAUDE_PLUGIN_OPTION_*` — whether it may block, which preset to force, the
-class prefixes the project owns, and the attempt and finding caps. (Claude Code
-won't substitute `${user_config.*}` into a shell-form hook command, since the
-value would reach a shell, but it does export the options to the hook process.)
-The same options are read from `pluginConfigs` in `~/.claude/settings.json`, and
+`CLAUDE_PLUGIN_OPTION_*` — whether it may block, whether it is silenced
+(`off`), which preset to force, the class prefixes the project owns, the attempt
+and finding caps, and the judge key (`CLAUDE_PLUGIN_OPTION_TYPESAFE_API_KEY`;
+see [Judging](#judging)). (Claude Code won't substitute `${user_config.*}` into a
+shell-form hook command, since the value would reach a shell, but it does export
+the options to the hook process.) The same options, the key aside, are read from
+`pluginConfigs` in `~/.claude/settings.json`, and
 the two are merged per key with the environment winning, so the hook and a
 terminal resolve the same set; `loupe status` prints each option with where it
 came from.
