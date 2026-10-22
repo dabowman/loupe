@@ -3,10 +3,11 @@
  *
  * A hook run reports on one file but indexes every one, and three quarters of
  * that was re-parsing files nothing had touched. What a file contributes —
- * its markup scan, the class names a reference file mentions, a stylesheet's
- * rules reduced to the data the checks read — depends on the file's bytes and
- * the config, and on nothing else in the repo. The cross-file part, correlating
- * bindings with rules, is cheap and always runs live.
+ * its markup scan, the class names a reference file mentions and the block a
+ * `block.json` names, a stylesheet's rules reduced to the data the checks
+ * read — depends on the file's bytes and the config, and on nothing else in
+ * the repo. The cross-file part, correlating bindings with rules, is cheap and
+ * always runs live.
  *
  * Validity, per file:
  *
@@ -79,6 +80,8 @@ interface Entry {
 	d: boolean;
 	scan?: StoredScan;
 	refs?: string[];
+	/** The block a `block.json` reference names. */
+	block?: string;
 	sheet?: SheetExtract;
 }
 
@@ -201,7 +204,7 @@ export class IndexCache {
 	 * the lookup's time, not the time of storing: a scan can finish seconds after
 	 * the read, and the racy-mtime guard is measured from the read.
 	 */
-	store(look: Lookup, rel: string, text: string, data: Pick<Entry, 'd' | 'scan' | 'refs' | 'sheet'>): void {
+	store(look: Lookup, rel: string, text: string, data: Pick<Entry, 'd' | 'scan' | 'refs' | 'block' | 'sheet'>): void {
 		if (!look.stat) return;
 		this.#entries.set(rel, { m: look.stat.mtimeMs, s: look.stat.size, h: sha256(text), t: look.at, ...data });
 		this.#dirty = true;

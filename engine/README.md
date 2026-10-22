@@ -48,10 +48,10 @@ would work as a stylelint plugin, and are included because you want one report.
 | `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere |
 | `patterns/unregistered-composite` | The same composite in 3+ files, registered in none |
 | `tokens/hardcoded-value` | A literal colour/length where a design token exists |
-| `layout/margin-on-child` | Margin, which belongs on the parent's `gap` |
+| `layout/margin-on-child` | Margin, which belongs on the parent's `gap` — not on a bare element (`.card p`), which is prose |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own |
 | `typography/untokenized` | Raw type styling with no token and no text component |
-| `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals |
+| `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals — which a block's own `.wp-block-{namespace}-*` wrapper, named by its `block.json`, is not |
 | `system/raw-element` | A raw element that has a design-system analog |
 | `system/inline-style` | A style prop doing what a component prop or token already does |
 | `layout/negative-margin` | A negative margin pulling against the layout the system provides |
@@ -224,6 +224,14 @@ error-severity findings, so CI behaviour does not depend on this.
   }
 }
 ```
+
+`wp-block-` is external in the WordPress presets, which is right for core's
+`.wp-block-group`. Your own blocks need no config: the `name` in each
+`block.json` (`acme/card`) makes `.wp-block-acme-card`, and every class under
+`wp-block-acme-`, yours — never a library internal, so the findings inside the
+rule report as they would on any class — and the wrapper itself never dead,
+since only WordPress's rendered output carries it. `detect` and `status` list
+them under `blocks:`; nothing is written into `namespaces.project`.
 
 A rule takes a bare severity, or `{ "severity", "reason" }` to say why; any
 other key is a config error. The `["warn", { … }]` form was removed in 0.8.0,

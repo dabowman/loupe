@@ -3757,7 +3757,7 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync10, readFileSync: readFileSync15, realpathSync: realpathSync3 } = __require("fs");
+    var { existsSync: existsSync10, readFileSync: readFileSync16, realpathSync: realpathSync3 } = __require("fs");
     var { dirname: dirname10, isAbsolute: isAbsolute6, join: join18, relative: relative7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
@@ -3839,7 +3839,7 @@ var require_previous_map = __commonJS({
         this.root = dirname10(path);
         if (existsSync10(path)) {
           this.mapFile = path;
-          return readFileSync15(path, "utf-8").toString().trim();
+          return readFileSync16(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -23502,7 +23502,7 @@ import { parseArgs as parseArgv } from "node:util";
 import { isMainThread as isMainThread2 } from "node:worker_threads";
 
 // src/analyze.ts
-import { readFileSync as readFileSync7, realpathSync, statSync as statSync4 } from "node:fs";
+import { readFileSync as readFileSync8, realpathSync, statSync as statSync4 } from "node:fs";
 
 // node_modules/postcss/lib/postcss.mjs
 var import_postcss = __toESM(require_postcss(), 1);
@@ -24482,14 +24482,15 @@ function mediaQuery(rule2) {
   if (conds.length === 1) return conds[0] ?? "";
   return conds.some((c) => c.includes(",")) ? "" : conds.join(" and ");
 }
-var keySelector = (sel) => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() ?? sel;
 function eachTopLevel(sel, visit) {
   let depth = 0;
   let quote = "";
   for (let i = 0; i < sel.length; i++) {
     const ch = sel[i] ?? "";
-    if (ch === "\\") i++;
-    else if (quote) {
+    if (ch === "\\") {
+      if (!depth && !quote) visit(sel.slice(i, i + 2), i);
+      i++;
+    } else if (quote) {
       if (ch === quote) quote = "";
     } else if (ch === '"' || ch === "'") quote = ch;
     else if (ch === "(" || ch === "[") depth++;
@@ -24497,7 +24498,7 @@ function eachTopLevel(sel, visit) {
     else if (!depth) visit(ch, i);
   }
 }
-function keyCompound(sel) {
+function keySelector(sel) {
   const s = sel.trim();
   let start = 0;
   eachTopLevel(s, (ch, i) => {
@@ -24513,6 +24514,11 @@ function ownLevel(compound) {
   return out;
 }
 var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => m[1] === void 0 ? [] : [m[1]]);
+var keyClassesIn = (sel) => classesIn(ownLevel(keySelector(sel)));
+var keysBareElement = (sel) => {
+  const own = ownLevel(keySelector(sel));
+  return /^[a-z]/i.test(own) && !classesIn(own).length;
+};
 var ruleIsGrid = (rule2) => [...ownDecls(rule2)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
 function deletableRule(rule2, lines) {
   const end = rule2.source?.end;
@@ -27751,6 +27757,55 @@ function scanMarkup(text2, relPath, ds, rules2 = []) {
   return { ...result, componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })) };
 }
 
+// src/blocks.ts
+import { readFileSync as readFileSync4 } from "node:fs";
+var BLOCK_NAME = /^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/;
+var isBlockManifest = (rel) => rel === "block.json" || rel.endsWith("/block.json");
+function blockName(text2) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text2);
+  } catch {
+    return null;
+  }
+  const name = parsed?.name;
+  return typeof name === "string" && BLOCK_NAME.test(name) ? name : null;
+}
+function blockClasses(name) {
+  if (!BLOCK_NAME.test(name)) return null;
+  const wrapper = `wp-block-${name.replace("/", "-").replace(/^core-/, "")}`;
+  const prefix = wrapper.slice(0, wrapper.length - (name.length - name.indexOf("/") - 1));
+  return prefix === "wp-block-" ? null : { wrapper, prefix };
+}
+function blockPrefixes(names) {
+  const by = /* @__PURE__ */ new Map();
+  for (const name of names) {
+    const prefix = blockClasses(name)?.prefix;
+    if (prefix) by.set(prefix, (by.get(prefix) ?? /* @__PURE__ */ new Set()).add(name));
+  }
+  return [...by].sort(([a], [b]) => byBytes(a, b)).map(([prefix, blocks]) => ({ prefix, blocks: [...blocks].sort(byBytes) }));
+}
+function blocksIn(files) {
+  const out = [];
+  for (const { abs, rel } of files) {
+    if (!isBlockManifest(rel)) continue;
+    let text2;
+    try {
+      text2 = readFileSync4(abs, "utf8");
+    } catch {
+      continue;
+    }
+    const name = blockName(text2);
+    if (name) out.push(name);
+  }
+  return out;
+}
+var describeBlocks = (list2) => list2.map(({ prefix, blocks }) => {
+  const shown = blocks.slice(0, 3).join(", ");
+  const more = blocks.length > 3 ? `, +${blocks.length - 3} more` : "";
+  return `${prefix} (block.json: ${shown}${more})`;
+}).join("; ");
+
 // src/syntax.ts
 var SYNTAX_PACKAGES = {
   ".scss": "postcss-scss",
@@ -27790,7 +27845,7 @@ async function syntaxFor(path) {
 }
 
 // src/tokens.ts
-import { readFileSync as readFileSync4, statSync } from "node:fs";
+import { readFileSync as readFileSync5, statSync } from "node:fs";
 import { join as join7 } from "node:path";
 var GENERIC_ROLES = [
   [/^border-radius|radius$/, /radius/],
@@ -27877,7 +27932,7 @@ function readTokenSources(root2, sources, prefixes) {
   for (const rel of sources ?? []) {
     for (const file of cssFilesUnder(join7(root2, rel))) {
       try {
-        harvestTokenDefs(postcss_default.parse(readFileSync4(file, "utf8"), { from: file }), prefixes, set);
+        harvestTokenDefs(postcss_default.parse(readFileSync5(file, "utf8"), { from: file }), prefixes, set);
         set.sources++;
       } catch {
       }
@@ -28039,7 +28094,7 @@ function tokenRefsIn(value, prefixes) {
 }
 
 // src/index-cache.ts
-import { readdirSync as readdirSync3, readFileSync as readFileSync5, rmSync as rmSync2, statSync as statSync2 } from "node:fs";
+import { readdirSync as readdirSync3, readFileSync as readFileSync6, rmSync as rmSync2, statSync as statSync2 } from "node:fs";
 import { dirname as dirname5, join as join8 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var INDEX_FILE = /^index-[0-9a-f]+\.json$/;
@@ -28111,7 +28166,7 @@ ${stableJson(inputs)}`).slice(0, 16);
     if (entry.m === stat.mtimeMs && entry.m < entry.t - RACY_MS) return { at, stat, entry, text: null };
     let text2;
     try {
-      text2 = readFileSync5(abs, "utf8");
+      text2 = readFileSync6(abs, "utf8");
     } catch {
       return { at, stat, entry: null, text: null };
     }
@@ -28297,12 +28352,12 @@ var layoutInCss = ({ prop, value }, { boundSystem, isGrid }) => {
 };
 
 // src/checks/layout/margin.ts
-var margin = ({ prop, value }) => {
+var margin = ({ prop, value }, { bareElement }) => {
   if (!isMarginProp(prop)) return void 0;
   const kind = classifyMargin(value);
   const decl2 = `${prop}: ${value}`;
   if (kind === "negative") return { rule: "layout/negative-margin", message: decl2, code: prop };
-  return kind ? { rule: "layout/margin-on-child", message: decl2, code: prop } : null;
+  return kind && !bareElement ? { rule: "layout/margin-on-child", message: decl2, code: prop } : null;
 };
 
 // src/checks/patterns/composites.ts
@@ -28507,8 +28562,8 @@ var systemOverride = ({ prop }, { boundSystem, enabled: enabled2, surfaceOf, sur
   if (!unread) return void 0;
   return { rule: "system/override", message: `<${unread.tag}> \u2190 ${prop} \u2014 ${UNREAD_REMEDY}`, code };
 };
-function libraryOverride(keyClasses, isLibrary, isProject) {
-  const part = keyClasses.find((c) => isLibrary(c) && !isProject(c));
+function libraryOverride(keyClasses, isLibrary, isOwn) {
+  const part = keyClasses.find((c) => isLibrary(c) && !isOwn(c));
   return part ? { rule: "system/override", message: `.${part} (library internal)` } : null;
 }
 
@@ -28591,7 +28646,7 @@ var hardcodedValue = ({ prop, value }) => {
 
 // src/checks/tokens/undelivered.ts
 var import_picomatch2 = __toESM(require_picomatch2(), 1);
-import { readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
+import { readFileSync as readFileSync7, statSync as statSync3 } from "node:fs";
 var FALLBACKS = "fallbacks render but won't follow the theme";
 var WALK_LIMIT = 5e4;
 var FILE_LIMIT = 4e3;
@@ -28738,7 +28793,7 @@ function readEvidenceFiles(root2, checks, ignore) {
   for (const { abs, rel } of found.styles) {
     try {
       if (statSync3(abs).size > MAX_BYTES) return null;
-      out.push({ rel, text: readFileSync6(abs, "utf8") });
+      out.push({ rel, text: readFileSync7(abs, "utf8") });
     } catch {
       return null;
     }
@@ -28838,7 +28893,7 @@ function unknownTokens(refs, known) {
     }
     groups.set(`${ref.file}\0${ref.name}`, { ...ref, lines: [ref.line] });
   }
-  return [...groups.values()].map(({ file, line, name, prop, scopeLines, suffix, lines }) => {
+  return [...groups.values()].map(({ file, line, name, prop, scopeLines, lines }) => {
     const to = nearMiss(name, known);
     const rename = to === void 0 ? void 0 : { from: name, to, lines };
     return {
@@ -28848,10 +28903,8 @@ function unknownTokens(refs, known) {
       // The name alone: the rule's title already says a token is being named.
       // With the replacement beside it where one is settled, so a reader sees
       // what `fix` would write without having to run it.
-      message: `${to === void 0 ? name : `${name} \u2192 ${to}`}${suffix ?? ""}`,
-      // Never the marker: a name's identity is not the channel it was first read in.
+      message: to === void 0 ? name : `${name} \u2192 ${to}`,
       code: name,
-      suffix,
       scopeLines,
       rename,
       unknown: rename ? void 0 : { prop, lines }
@@ -28945,7 +28998,7 @@ var realPath = (path) => {
     return null;
   }
 };
-var partClass = (sel) => keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, "")).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+var partClass = (sel) => ownLevel(keySelector(sel)).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
 var tagOf = (compound) => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
 function compoundElements(compound, carriersByClass) {
   if (compound.includes("dsh-e") || compound.includes("\\")) return null;
@@ -28980,7 +29033,7 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
       }
       let sheet;
       try {
-        sheet = syntax.parse(readFileSync7(file, "utf8"), { from: file });
+        sheet = syntax.parse(readFileSync8(file, "utf8"), { from: file });
       } catch (err) {
         unread.push({ file: shown, message: parseMessageOf(err, file) });
         continue;
@@ -29015,12 +29068,13 @@ function classifyDeclaration({ prop, value }, {
   boundSystem = [],
   boundText = [],
   isGrid = false,
+  bareElement = false,
   surfaceOf = () => void 0,
   surfaced = () => true,
   enabled: enabled2
 }) {
   const styling = isMarginProp(prop) || isFlexDecl(prop, value) || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || isHardcodedTokenValue(prop, value) || APPEARANCE_PROPS.has(prop);
-  const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: enabled2 };
+  const ctx = { boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled: enabled2 };
   for (const check of DECLARATIONS) {
     const verdict2 = check({ prop, value }, ctx);
     if (verdict2 !== void 0) return { finding: verdict2, styling };
@@ -29028,7 +29082,6 @@ function classifyDeclaration({ prop, value }, {
   return { finding: null, styling };
 }
 var COLLAPSE_PER_RULE = /* @__PURE__ */ new Set(["layout/in-css", "typography/untokenized"]);
-var INLINE = " (inline)";
 var propOf = (message) => (message.split(":")[0] ?? message).trim();
 var declarationKeys = (f) => {
   if (!COLLAPSE_PER_RULE.has(f.rule)) return [findingKey(f)];
@@ -29076,7 +29129,7 @@ function extractSheet(root2, text2, tokenPrefixes) {
   const rules2 = [];
   root2.walkRules((cssRule) => {
     const selectors = resolvedSelectors(cssRule);
-    const unbound = !selectors.some((s) => classesIn(s).length);
+    if (!selectors.some((s) => classesIn(s).length)) return;
     const line = cssRule.source?.start?.line ?? 1;
     const media = mediaQuery(cssRule) || void 0;
     rules2.push({
@@ -29085,9 +29138,7 @@ function extractSheet(root2, text2, tokenPrefixes) {
       isGrid: ruleIsGrid(cssRule),
       ...media === void 0 ? {} : { media },
       decls: [...ownDecls(cssRule)].map((d) => ({ prop: d.prop, value: d.value, line: d.source?.start?.line ?? line })),
-      // No class, so nothing can be dead.
-      cut: unbound ? null : deletableRule(cssRule, srcLines),
-      ...unbound ? { unbound } : {}
+      cut: deletableRule(cssRule, srcLines)
     });
   });
   return { rules: rules2, defs: tokenDefsIn(root2, tokenPrefixes) };
@@ -29124,7 +29175,7 @@ async function analyze(config, {
       return false;
     }
   };
-  const read = (abs, rel) => contents?.get(rel) ?? readFileSync7(abs, "utf8");
+  const read = (abs, rel) => contents?.get(rel) ?? readFileSync8(abs, "utf8");
   const tokenPrefixes = ds.tokenPrefixes ?? [];
   const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
   tokenSet.scopes = mergeScopes(activeProfiles(config).map((p) => p.tokenScopes));
@@ -29261,7 +29312,7 @@ async function analyze(config, {
     if (!scopes) return [];
     const out = /* @__PURE__ */ new Set();
     for (const sel of selectors) {
-      const found = compoundElements(keyCompound(sel), carriersByClass);
+      const found = compoundElements(keySelector(sel), carriersByClass);
       if (!found) return [];
       for (const e of found) out.add(e);
     }
@@ -29269,13 +29320,15 @@ async function analyze(config, {
   };
   const nestedElements = (selector) => {
     const selectors = list.comma(selector);
-    return selectors.some((sel) => keyCompound(sel).includes("&")) ? [] : elementsOf(selectors);
+    return selectors.some((sel) => keySelector(sel).includes("&")) ? [] : elementsOf(selectors);
   };
+  const blockNames = /* @__PURE__ */ new Set();
   for (const { abs, rel } of files.references) {
     const look = lookup(abs, rel);
     if (oversized(abs, rel, look)) continue;
     if (look?.entry?.refs) {
       for (const t of look.entry.refs) referenced.add(t);
+      if (look.entry.block) blockNames.add(look.entry.block);
       diagnostics.filesScanned++;
       continue;
     }
@@ -29283,9 +29336,14 @@ async function analyze(config, {
     if (text2 === null) continue;
     const found = harvestTokens(text2);
     for (const t of found) referenced.add(t);
+    const block = isBlockManifest(rel) ? blockName(text2) : null;
+    if (block) blockNames.add(block);
     diagnostics.filesScanned++;
-    if (look) cache2?.store(look, rel, text2, { d: false, refs: [...found] });
+    if (look) cache2?.store(look, rel, text2, { d: false, refs: [...found], ...block ? { block } : {} });
   }
+  const ownBlocks = [...blockNames].flatMap((name) => blockClasses(name) ?? []);
+  const isOwnBlock = (cls) => ownBlocks.some((b) => cls.startsWith(b.prefix));
+  const isBlockWrapper = (cls) => ownBlocks.some((b) => cls === b.wrapper);
   const styledClasses = /* @__PURE__ */ new Set();
   const layoutClasses = /* @__PURE__ */ new Set();
   const declared = [];
@@ -29342,20 +29400,16 @@ async function analyze(config, {
     for (const cssRule of sheet.rules) {
       const ruleLine = cssRule.line;
       const selectors = cssRule.selectors;
-      const scopeLines = nearby(ruleLine);
-      if (cssRule.unbound) {
-        for (const decl2 of cssRule.decls)
-          for (const name of tokenRefsIn(decl2.value, tokenPrefixes))
-            tokenRefs.push({ file: rel, line: decl2.line, name, prop: decl2.prop.toLowerCase(), scopeLines });
-        continue;
-      }
       const allClasses = [...new Set(selectors.flatMap(classesIn))];
-      const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+      const keyClassesPer = selectors.map(keyClassesIn);
       const keyClasses = [...new Set(keyClassesPer.flat())];
+      if (!allClasses.length) continue;
       const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
       const boundSystem = bound.filter((b) => b.isSystem);
       const boundText = bound.filter((b) => b.isText);
       const isGrid = cssRule.isGrid;
+      const bareElement = selectors.every(keysBareElement);
+      const scopeLines = nearby(ruleLine);
       const selector = selectors.join(", ");
       const media = cssRule.media;
       const elements = elementsOf(selectors);
@@ -29369,7 +29423,7 @@ async function analyze(config, {
         const line = decl2.line;
         const { finding, styling } = classifyDeclaration(
           { prop, value: decl2.value },
-          { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive }
+          { boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled: ruleIsLive }
         );
         if (onRawKeys.length)
           classDecls.push({ prop, value: decl2.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
@@ -29380,7 +29434,11 @@ async function analyze(config, {
       }
       if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
       if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
-      const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
+      const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(
+        keyClasses,
+        (c) => config.isExternal(c) || library.classes.has(c),
+        (c) => config.isProject(c) || isOwnBlock(c)
+      ) : null;
       if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
       else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
       if (!override)
@@ -29404,15 +29462,13 @@ async function analyze(config, {
     referenced,
     stems: [...stems],
     isProject: config.isProject,
-    isNeverDead: config.isNeverDead
+    // A block's wrapper class exists only in rendered output, whatever namespace claims it.
+    isNeverDead: (c) => config.isNeverDead(c) || isBlockWrapper(c)
   }))
     report(f);
   for (const el of inlineStyles) {
-    const scopeLines = nearby(el.line);
-    for (const d of el.decls)
-      for (const name of tokenRefsIn(d.value, tokenPrefixes))
-        tokenRefs.push({ file: el.file, line: d.line ?? el.line, name, prop: d.prop, scopeLines, suffix: INLINE });
     if (!reports(el.file)) continue;
+    const scopeLines = nearby(el.line);
     const whole = ruleIsLive("system/inline-style") ? inlineStyle(el, ds.allowedInlineStyles) : null;
     if (whole) {
       report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
@@ -29434,7 +29490,7 @@ async function analyze(config, {
           hints: finding.hints?.map((h) => ({ ...h, span: d.span })),
           line: d.line ?? el.line,
           code: finding.code ?? finding.message,
-          suffix: INLINE
+          suffix: " (inline)"
         });
     }
     for (const f of collapsePerRule(pending))
@@ -29634,7 +29690,7 @@ var PROJECT_RULES = /* @__PURE__ */ new Set(["tokens/undelivered"]);
 var findingKey = (f) => `${f.rule}|${PROJECT_RULES.has(f.rule) ? "<project>" : f.file}|${oneLine(String(f.code ?? f.message))}`;
 
 // src/autofix.ts
-import { readFileSync as readFileSync8, writeFileSync as writeFileSync2 } from "node:fs";
+import { readFileSync as readFileSync9, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join10 } from "node:path";
 var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 var commentFor = (file, text2) => CSS_FILE.test(file) ? `/* ${text2} */` : `// ${text2}`;
@@ -29710,7 +29766,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
     const abs = join10(root2, file);
     let text2;
     try {
-      text2 = readFileSync8(abs, "utf8");
+      text2 = readFileSync9(abs, "utf8");
     } catch (err) {
       const why = messageLineOf(err);
       for (const fix of group) skipped.push({ ...fix, why });
@@ -29774,7 +29830,7 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
     const abs = join10(root2, file);
     let text2;
     try {
-      text2 = readFileSync8(abs, "utf8");
+      text2 = readFileSync9(abs, "utf8");
     } catch (err) {
       const why = messageLineOf(err);
       for (const k of group) skipped.push({ ...k, why });
@@ -29846,10 +29902,10 @@ var valueQuery = (about) => ({
 });
 
 // src/judge/variant.ts
-import { readFileSync as readFileSync9 } from "node:fs";
+import { readFileSync as readFileSync10 } from "node:fs";
 import { join as join11 } from "node:path";
 function around(root2, file, line, before, after) {
-  const lines = readFileSync9(join11(root2, file), "utf8").split("\n");
+  const lines = readFileSync10(join11(root2, file), "utf8").split("\n");
   const i = line - 1;
   return {
     context_before: lines.slice(Math.max(0, i - before), i).join("\n"),
@@ -30219,7 +30275,7 @@ async function judgeRenames(root2, findings, set, auth, about = /* @__PURE__ */ 
     if (!a || a.confidence < RENAME_FLOOR) return;
     const tail = judgedTail(a.confidence);
     const span = a.choice === NONE ? "no token means this" : a.choice;
-    f.message = messageLine(item.name, ` \u2192 ${span} ${tail}${f.suffix ?? ""}`);
+    f.message = messageLine(item.name, ` \u2192 ${span} ${tail}`);
     f.judged = judgedAs(a, [span, tail]);
     if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
     settled++;
@@ -30228,7 +30284,7 @@ async function judgeRenames(root2, findings, set, auth, about = /* @__PURE__ */ 
 }
 
 // src/dtcg.ts
-import { readFileSync as readFileSync10, statSync as statSync5 } from "node:fs";
+import { readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
 import { basename, isAbsolute as isAbsolute3, relative as relative4, resolve as resolvePath } from "node:path";
 var TIERS = ["base", "semantic", "component"];
 var ALL_TIERS = [...TIERS, "unknown"];
@@ -30425,7 +30481,7 @@ function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
   for (const file of files) {
     let raw;
     try {
-      raw = JSON.parse(readFileSync10(file, "utf8").replace(/^\uFEFF/, ""));
+      raw = JSON.parse(readFileSync11(file, "utf8").replace(/^\uFEFF/, ""));
     } catch (err) {
       throw new Error(`${file} is not readable JSON: ${messageOf(err)}`);
     }
@@ -32014,7 +32070,7 @@ function formatPane(result, config) {
 }
 
 // src/lsp.ts
-import { readFileSync as readFileSync11 } from "node:fs";
+import { readFileSync as readFileSync12 } from "node:fs";
 import { join as join12 } from "node:path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL as pathToFileURL2 } from "node:url";
 
@@ -32158,7 +32214,7 @@ function lsp(opts) {
       let text2 = buffer;
       if (text2 === void 0) {
         try {
-          text2 = readFileSync11(join12(root2, rel), "utf8");
+          text2 = readFileSync12(join12(root2, rel), "utf8");
         } catch {
           text2 = "";
         }
@@ -32390,7 +32446,7 @@ ${renderTitle(rule2, config.designSystem, config.suppression.keyword)}`).join("\
 
 // src/serve.ts
 import { createServer } from "node:http";
-import { readFileSync as readFileSync12 } from "node:fs";
+import { readFileSync as readFileSync13 } from "node:fs";
 import { dirname as dirname7, join as join13 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -32933,7 +32989,7 @@ function serve(opts) {
       if (path === "/loupe-overlay.php") {
         let php;
         try {
-          php = readFileSync12(MU_PLUGIN, "utf8");
+          php = readFileSync13(MU_PLUGIN, "utf8");
         } catch {
           return send(
             "text/plain",
@@ -32962,7 +33018,7 @@ function serve(opts) {
 
 // src/ui.ts
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync as readFileSync13, statSync as statSync6, watch, writeFileSync as writeFileSync4 } from "node:fs";
+import { readFileSync as readFileSync14, statSync as statSync6, watch, writeFileSync as writeFileSync4 } from "node:fs";
 import { createServer as createServer2 } from "node:http";
 import { dirname as dirname8, join as join14 } from "node:path";
 var TOKEN_HEADER = "x-loupe-token";
@@ -33126,7 +33182,7 @@ async function ui(opts) {
   const configFile = config.source.kind === "file" ? config.source.path : null;
   const readConfig = () => {
     try {
-      return configFile ? readFileSync13(configFile, "utf8") : null;
+      return configFile ? readFileSync14(configFile, "utf8") : null;
     } catch {
       return null;
     }
@@ -33348,7 +33404,7 @@ async function ui(opts) {
       const asked = Number(q.get("line") ?? 1);
       const at = Number.isInteger(asked) && asked > 0 ? asked : 1;
       try {
-        const lines = readFileSync13(join14(root2, want), "utf8").split("\n");
+        const lines = readFileSync14(join14(root2, want), "utf8").split("\n");
         const from = Math.max(1, at - PEEK);
         const to = Math.min(lines.length, at + PEEK);
         send(res, 200, { file: want, from, to, lines: lines.slice(from - 1, to) });
@@ -33407,7 +33463,7 @@ async function ui(opts) {
       const flat = oneLine(reason);
       const full = join14(root2, finding.file);
       try {
-        const lines = readFileSync13(full, "utf8").split("\n");
+        const lines = readFileSync14(full, "utf8").split("\n");
         if (lines[finding.line - 1] === void 0)
           return send(res, 409, { error: "that line is no longer in the file" });
         const why = directiveRefusal(
@@ -33483,7 +33539,7 @@ async function ui(opts) {
 }
 
 // src/detect.ts
-import { existsSync as existsSync7, readFileSync as readFileSync14, statSync as statSync7 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync15, statSync as statSync7 } from "node:fs";
 import { join as join15 } from "node:path";
 var preset = (name) => readPreset(name) ?? {};
 var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", ".git", "vendor", "build", "dist", ".claude"]);
@@ -33608,7 +33664,7 @@ function libraryPrefixes(dirs2, candidates) {
         budget--;
         let text2;
         try {
-          text2 = readFileSync14(full, "utf8");
+          text2 = readFileSync15(full, "utf8");
         } catch {
           continue;
         }
@@ -33653,7 +33709,7 @@ function presetEvidence(root2, imports) {
     for (const e of assets) {
       let text2;
       try {
-        text2 = readFileSync14(join15(build, e.name), "utf8");
+        text2 = readFileSync15(join15(build, e.name), "utf8");
       } catch {
         continue;
       }
@@ -33705,7 +33761,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
         oversized++;
         continue;
       }
-      text2 = readFileSync14(abs, "utf8");
+      text2 = readFileSync15(abs, "utf8");
     } catch {
       continue;
     }
@@ -33728,7 +33784,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync14(abs, "utf8"));
+      markupText.push(readFileSync15(abs, "utf8"));
     } catch {
     }
   }
@@ -33776,6 +33832,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
     truncated: files.truncated,
     notes,
     external: foreign,
+    blocks: blockPrefixes(blocksIn(files.references)),
     imports
   };
 }
@@ -33801,6 +33858,7 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
     truncated: ns.truncated,
     namespaceNotes: ns.notes,
     possibleExternal: ns.external,
+    blocks: ns.blocks,
     presetEvidence: presetConfidence === "low" || presetConfidence === "none" ? presetEvidence(root2, ns.imports) : [],
     config
   };
@@ -34714,6 +34772,12 @@ async function main() {
     const state = attemptsPath(hookDir);
     const ds = config.designSystem;
     const delivery = activeDelivery(config);
+    const walked = discover({
+      root: config.root,
+      sources: config.sources,
+      limit: analyzeEntryBudget(config.maxEntries)
+    });
+    const blocks = walked.truncated ? [] : blockPrefixes(blocksIn(walked.references));
     const orNone = (arr) => arr?.length ? arr.join(", ") : "(none)";
     const components2 = (arr) => arr?.length ? arr.map((n) => supersededEverywhere(config.componentRegistry, n) ? `${n} (legacy)` : n).join(", ") : "(none)";
     const lines = [
@@ -34725,6 +34789,7 @@ async function main() {
       `${dim("text:       ")}${components2(ds.textComponents)}`,
       `${dim("tokens:     ")}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(", ") : "(none \u2014 token rules inactive)"}`,
       `${dim("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
+      ...blocks.length ? [`${dim("blocks:     ")}${describeBlocks(blocks)}`] : [],
       `${dim("suppress:   ")}${directive(config.suppression.keyword, "<ruleId>", "<reason>")}`,
       `${dim("baseline:   ")}${base.path}${base.found && base.baseline === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
       ...legacy ? [yellow(`            ${legacyBaselineNotice(legacy)}`)] : [],
@@ -34824,6 +34889,7 @@ ${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id))
       dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
       // Why the confidence above is lower than the coverage alone would make it.
       ...info.namespaceNotes.map((n) => dim(`            ${n}`)),
+      ...info.blocks.length ? [`${dim("blocks:     ")}${describeBlocks(info.blocks)}`] : [],
       // Listed, never written: `init` leaves `external` for somebody to confirm.
       ...info.possibleExternal.length ? [
         ...info.possibleExternal.map(
