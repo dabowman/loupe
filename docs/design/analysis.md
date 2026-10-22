@@ -209,7 +209,10 @@ misapplied on the elements beside it.
 **A constraint is only held against what is shown.** `requires` (and a scale
 step's `on`) is satisfied when every element shown is one of the kinds; it is
 violated when every element is shown to be none of them; anything else —
-nothing shown, elements that disagree, a kind no markup can show — is unknown.
+nothing shown, elements that disagree, a kind no markup can show, an element no
+kind lists — is unknown. A kind's list says what an element is, never what it is
+not: a `<div>`, a `<span>` inside a button, or a component the profile has not
+read could be any kind.
 `not` is violated only when every element is shown to be the forbidden kind.
 Unknown is never reported. It is also never applied unattended, which is where
 this meets [fixing](report.md#fixing): one candidate whose scope is off, or

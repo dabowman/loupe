@@ -397,12 +397,14 @@ is shown to land on one it is not for? Only a definite no reports; see
 [token scopes](analysis.md#token-scopes) for what "shown" means and why unknown
 never reports.
 
-What it deliberately leaves alone: a custom property (`--ring:
-var(--wpds-…)` says nothing about what the ring is), a name no known token
-carries (that is `tokens/unknown-token`'s), and a `var()` inside `calc()`,
-`min()`, `max()` or `clamp()` — `margin: calc(-1 * var(--wpds-dimension-padding-md))`
-is the bleed out of a padded parent, arithmetic on the token rather than a use
-of its role.
+What it deliberately leaves alone: a custom property or a Sass `$` / Less `@`
+variable (`--ring: var(--wpds-…)` says nothing about what the ring is), a name
+no known token carries (that is `tokens/unknown-token`'s), and a `var()` inside
+`calc()`, `min()`, `max()` or `clamp()` — `margin: calc(-1 *
+var(--wpds-dimension-padding-md))` is the bleed out of a padded parent,
+arithmetic on the token rather than a use of its role. A vendor-prefixed
+property is checked as its unprefixed twin: `-webkit-box-shadow` is
+`box-shadow`.
 
 Advisory, and low in the report. It is a judgement the profile's author encoded,
 and a wrong scope declaration must not block a turn before the metadata has

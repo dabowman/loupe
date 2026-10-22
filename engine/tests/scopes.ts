@@ -110,6 +110,35 @@ await check('a profile with broken scopes still loads, and says what was wrong',
 	}
 });
 
+// `new RegExp` throws on a repeated named group. Inline, nothing caught it before
+// `readProfiles` dropped the whole profile; the same block as a file was kept.
+await check('a repeated placeholder is refused with a problem, inline or by path, and the profile still loads', () => {
+	const grammars = [{ pattern: '--a-{property}-{property}', property: { text: ['color'] } }];
+	const parsed = parseTokenScopes({ grammars });
+	assert(parsed.scopes === null, 'a repeated placeholder refuses the block');
+	assert(
+		parsed.errors.some((e) => e.includes('{property} appears more than once')),
+		`errors: ${parsed.errors.join('; ')}`,
+	);
+	const dir = scratch('loupe-scopes-repeat-');
+	try {
+		writeAll(dir, {
+			'inline/profile.json': JSON.stringify({ id: 'inline', packages: ['@i/ui'], tokenScopes: { grammars } }),
+			'path/profile.json': JSON.stringify({ id: 'path', packages: ['@p/ui'], tokenScopes: './scopes.json' }),
+			'path/scopes.json': JSON.stringify({ grammars }),
+		});
+		const read = readProfiles(dir);
+		assert(read.map((p) => p.id).join() === 'inline,path', `both profiles load: ${read.map((p) => p.id)}`);
+		for (const p of read)
+			assert(
+				p.tokenScopes === null && p.problems.some((e) => e.includes('appears more than once')),
+				`${p.id}: ${p.problems.join('; ')}`,
+			);
+	} finally {
+		cleanup(dir);
+	}
+});
+
 await check('the CLI says a selected profile’s scopes were refused', () => {
 	const dir = scratch('loupe-scopes-cli-');
 	try {
@@ -607,16 +636,19 @@ export const A = () => (
 `,
 	});
 	// The control cursor is on-role on every spelling of Button; the surface
-	// background is not, and a card's header is not the card.
+	// background is not.
 	const said = misapplied.map((f) => `${f.file}:${f.line} ${f.message}`).sort();
 	assert(
-		said.length === 2 &&
+		said.length === 1 &&
 			said[0]?.startsWith('src/a.css:2 background: --wpds-color-background-surface-neutral-strong') &&
-			said[0].endsWith('this styles <Button>') &&
-			said[1]?.startsWith('src/a.css:3 border-radius: --wpds-border-radius-lg') &&
-			said[1].endsWith('this styles <Card.Header>'),
+			said[0].endsWith('this styles <Button>'),
 		said.join('\n'),
 	);
+	// A card's header is not the card. No kind lists the part, so the container
+	// radius on it is unknown rather than reported or confirmed.
+	assert(WPDS, 'wpds scopes loaded');
+	assert(fitOf(WPDS, '--wpds-border-radius-lg', ['Card.Header']).fit === 'unknown', 'the header is not the card');
+	assert(fitOf(WPDS, '--wpds-border-radius-lg', ['Card']).fit === 'on', 'the card is a container');
 });
 
 // What a rule lands on is read from selector text and the markup the index
@@ -691,6 +723,87 @@ await check('elements that disagree, or a kind no markup can show, are never rep
 	assert(surface.fit === 'on', `"not interactive" holds by default where nothing is shown: ${surface.fit}`);
 	const on = fitOf(WPDS, '--wpds-border-radius-lg', ['Modal']);
 	assert(on.fit === 'on', `a Modal is a container: ${on.fit}`);
+});
+
+// Two references to one token on one line are two verdicts. Deduped before
+// the verdict, the clean first one hid a misapplied second one, which split
+// over two lines was reported.
+await check('a clean reference does not hide a misapplied one on the same line', async () => {
+	const T = 'var(--wpds-color-background-surface-neutral-strong)';
+	const { misapplied } = await run({
+		'src/A.jsx': `export const A = () => <><div style={{ background: '${T}' }} /><button style={{ background: '${T}' }} /></>;
+export const B = () => <><div className="rp-d" /><button className="rp-b" /></>;
+`,
+		'src/a.css': `.rp-d { background: ${T}; } .rp-b { background: ${T}; }\n`,
+	});
+	const where = misapplied.map((f) => `${f.file}:${f.line}`).sort();
+	assert(where.join() === 'src/A.jsx:1,src/a.css:1', `expected the button on each line: ${where.join(', ')}`);
+	assert(
+		misapplied.every((f) => f.message.endsWith('this styles <button>')),
+		misapplied.map((f) => f.message).join('\n'),
+	);
+});
+
+// `$bg:` and `@bg:` are preprocessor variables, which say no more about what
+// the value is for than a custom property does; a vendor-prefixed property is
+// its unprefixed twin.
+await check('a preprocessor variable or a vendor-prefixed property is not misapplied', async () => {
+	const { misapplied } = await run({
+		'src/a.scss': `$bg: var(--wpds-color-background-surface-neutral-strong);
+.rp-a {
+	$fg: var(--wpds-color-background-surface-neutral-strong);
+	-webkit-box-shadow: 0 0 0 1px var(--wpds-color-stroke-focus);
+	-moz-box-shadow: 0 0 0 1px var(--wpds-color-stroke-focus);
+	box-shadow: 0 0 0 1px var(--wpds-color-stroke-focus);
+	-webkit-border-radius: var(--wpds-border-radius-lg);
+	border-radius: var(--wpds-border-radius-lg);
+	-webkit-text-fill-color: var(--wpds-color-foreground-content-neutral);
+}
+`,
+		'src/a.less':
+			'@bg: var(--wpds-color-background-surface-neutral-strong);\n.rp-b { @fg: var(--wpds-color-background-surface-neutral-strong); }\n',
+	});
+	assert(!misapplied.length, misapplied.map((f) => `${f.file}:${f.line} ${f.message}`).join('\n'));
+	// Stripping the prefix does not excuse a wrong property.
+	const wrong = await run({ 'src/a.css': '.rp-a { -webkit-border-radius: var(--wpds-color-stroke-focus); }\n' });
+	assert(one(wrong.misapplied, 'a stroke colour on a radius').line === 1, 'the prefixed radius is still checked');
+});
+
+// A kind's list says what an element is, never what it is not: a `<div>`, a
+// `<span>` inside a button, or a component the profile has not read could be
+// any kind, and reading it as none reported a card's radius, an icon's
+// interactive colour and a menu's radius as misapplied.
+await check('an element no kind lists is unknown, never the wrong kind', async () => {
+	assert(WPDS, 'wpds scopes loaded');
+	for (const [token, els] of [
+		['--wpds-border-radius-lg', ['div']],
+		['--wpds-color-background-interactive-neutral', ['span']],
+		['--wpds-border-radius-md', ['div']],
+		['--wpds-border-radius-lg', ['Dialog.Popup']],
+		['--wpds-cursor-control', ['ToolbarButton']],
+		['--wpds-border-radius-lg', ['dialog', 'div']],
+	] as const) {
+		const fit = fitOf(WPDS, token, els);
+		assert(fit.fit === 'unknown', `${token} on ${els.join(', ')}: ${fit.fit}`);
+	}
+	const { misapplied } = await run({
+		'src/A.jsx': `export const A = () => (
+	<>
+		<div className="rp-card" />
+		<button className="rp-b"><svg className="rp-i" /><span className="rp-s" /></button>
+		<div className="rp-menu" />
+	</>
+);
+`,
+		'src/a.css': `.rp-card { border-radius: var(--wpds-border-radius-lg); }
+.rp-i { fill: var(--wpds-color-foreground-interactive-neutral); }
+.rp-s { background: var(--wpds-color-background-interactive-neutral); }
+.rp-menu { border-radius: var(--wpds-border-radius-md); }
+`,
+	});
+	assert(!misapplied.length, misapplied.map((f) => `${f.line} ${f.message}`).join('\n'));
+	// Every element listed and none the kind is still reported.
+	assert(fitOf(WPDS, '--wpds-border-radius-lg', ['button']).fit === 'off', 'a button is not a container');
 });
 
 await check('profile kinds of one name pool when two profiles are active', async () => {

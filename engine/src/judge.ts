@@ -24,6 +24,7 @@
 
 import { readFileSync } from 'node:fs';
 import { renameCandidates } from './checks/tokens/unknown-token.ts';
+import { withoutReach } from './delivery.ts';
 import { EMBEDDED_LANGUAGE } from './embedded.ts';
 import type { ForceJudge } from './judge/force.ts';
 import { forceQuery } from './judge/force.ts';
@@ -162,8 +163,11 @@ const judgedTail = (confidence: number): string => `(judged ${confidence.toFixed
 /** The registry entry with variants that a raw-element finding points at, if any. */
 function targetOf(f: Finding, withVariants: readonly ComponentEntry[]): ComponentEntry | undefined {
 	if (f.rule !== 'system/raw-element') return undefined;
-	const analog = f.message.split('→')[1] ?? '';
-	return withVariants.find((e) => new RegExp(`\\b${e.name}\\b`).test(analog));
+	// The analog's own leading name — `<Text …>`, or `Text (…)` where a legacy
+	// entry forwards — and nothing after it: the promotion tail names classes,
+	// and `.Text-label` on a button is not a Text question.
+	const name = /^\s*<?([A-Za-z_$][\w.$]*)/.exec(f.message.split('→')[1] ?? '')?.[1];
+	return name ? withVariants.find((e) => e.name === name) : undefined;
 }
 
 /**
@@ -213,6 +217,8 @@ export async function judgeVariants(
 		// before the answer was spliced into it.
 		f.message = messageLine(`${element} → ${suggestion}`, ` ${tail}`);
 		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+		// The reach note priced adopting the analog, which a `not_` answer withdrew.
+		if (not) f.note = withoutReach(f.note, target.package);
 		annotated++;
 	});
 	return annotated;

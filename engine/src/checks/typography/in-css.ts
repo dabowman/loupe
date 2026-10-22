@@ -24,18 +24,20 @@
  */
 
 import type { DeclarationCheck } from '../../analyze.ts';
-import { ownership } from '../../components.ts';
 import { TYPE_PROPS } from '../../styles.ts';
-import { viaProps } from '../system/override.ts';
+import { owningBinding, viaProps } from '../system/override.ts';
 
 export const typographyInCss: DeclarationCheck = ({ prop }, { boundText, enabled, surfaceOf }) => {
-	const text = boundText[0];
-	if (!TYPE_PROPS.has(prop) || !text || !enabled('typography/in-css')) return undefined;
-	const surface = surfaceOf(text);
-	const owned = surface ? ownership(surface, prop) : undefined;
-	if (surface && !owned) return undefined;
+	if (!TYPE_PROPS.has(prop) || !boundText[0] || !enabled('typography/in-css')) return undefined;
+	// Every binding is asked, as `owningBinding` does: the first one is only the
+	// first file the walk read, so it cannot decide alone. A surface that owns
+	// the property names its prop; failing that, a binding with no surface
+	// recorded keeps its claim on the type.
+	const owner = owningBinding(boundText, prop, surfaceOf);
+	const text = owner?.binding ?? boundText.find((b) => !surfaceOf(b));
+	if (!text) return undefined;
 	const head = `${prop} on <${text.tag}>`;
-	return owned?.via.length
-		? { rule: 'typography/in-css', message: `${head} — set via ${viaProps(owned.via)}`, code: head }
+	return owner?.via.length
+		? { rule: 'typography/in-css', message: `${head} — set via ${viaProps(owner.via)}`, code: head }
 		: { rule: 'typography/in-css', message: head };
 };
