@@ -18,14 +18,19 @@
  * with two placeholders punched out of it, and a substitution that stopped
  * firing would ship a script that parses, loads, and silently talks to the
  * wrong origin.
+ *
+ * The other is its bind. `/findings.json` has no auth and answers any origin,
+ * and the default URL says `localhost` whatever the socket is bound to — so a
+ * server open to the whole network looks exactly like one that is not.
  */
 
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { analyze } from '../src/analyze.ts';
 import { loadConfig } from '../src/config.ts';
 import { serve } from '../src/serve.ts';
 import type { AnalyzeResult, Config } from '../src/types.ts';
-import { assert, check, cleanup, finish, one, scratch, writeAll } from './harness.ts';
+import { CLI, PLUGIN_DATA, assert, check, cleanup, finish, one, scratch, writeAll } from './harness.ts';
 
 const FILES = {
 	'loupe.config.json': '{ "extends": "wordpress-components", "namespaces": { "project": ["wf-"] } }',
@@ -131,9 +136,60 @@ await check('a finding with no CSS rule carries no selector', () => {
 // `--port 0` lets the OS pick, which is the only way to run this without
 // gambling on a port being free on whatever machine the suite runs on. It also
 // exercises the read-back: the client is told where it actually landed.
-const { url, close } = await serve({ port: 0, config, run: () => analyze(config, { scope: null }) });
+const { url, address, close } = await serve({ port: 0, config, run: () => analyze(config, { scope: null }) });
 
 try {
+	await check('it binds loopback unless told otherwise', async () => {
+		assert(address === '127.0.0.1', `bound ${address}, not loopback`);
+		assert(url.startsWith('http://localhost:'), `the default URL moved off localhost: ${url}`);
+		// Node reads an empty host as no host, which is every interface — so an
+		// empty `--host=` handed through as-is would undo the default.
+		const empty = await serve({ port: 0, host: '', config, run: () => analyze(config, { scope: null }) });
+		try {
+			assert(empty.address === '127.0.0.1', `an empty host bound ${empty.address}`);
+		} finally {
+			await empty.close();
+		}
+	});
+
+	await check('--host is bound, and the banner and the client both name it', async () => {
+		// Through the CLI, because the flag has to survive parsing to reach the
+		// bind. 127.0.0.1 given explicitly is the case a test can bind safely, and
+		// it still separates the two namings: given, the URL is the bound address.
+		const child = spawn(
+			process.execPath,
+			[CLI, 'serve', '--root', root, '--port', '0', '--host', '127.0.0.1', '--no-color'],
+			{ stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CLAUDE_PLUGIN_DATA: PLUGIN_DATA } },
+		);
+		try {
+			const banner = await new Promise<string>((done, bad) => {
+				let out = '';
+				let err = '';
+				const timer = setTimeout(() => bad(new Error(`no banner after 20s:\n${out}${err}`)), 20_000);
+				child.stdout.on('data', (chunk) => {
+					out += String(chunk);
+					if (out.includes('\n')) {
+						clearTimeout(timer);
+						done(out);
+					}
+				});
+				child.stderr.on('data', (chunk) => {
+					err += String(chunk);
+				});
+				child.on('exit', (code) => {
+					clearTimeout(timer);
+					bad(new Error(`serve exited ${code} before listening:\n${out}${err}`));
+				});
+			});
+			const served = /loupe serve — (\S+)/.exec(banner)?.[1] ?? '';
+			assert(/^http:\/\/127\.0\.0\.1:\d+$/.test(served), `the banner named ${served || banner}, not the bound address`);
+			const js = await (await fetch(`${served}/overlay.js`)).text();
+			assert(js.includes(`'${served}'`), 'the client was told an origin other than the bound one');
+		} finally {
+			child.kill();
+		}
+	});
+
 	await check('the payload endpoint serves exactly what --format json would', async () => {
 		const res = await fetch(`${url}/findings.json`);
 		assert(res.ok, `findings.json answered ${res.status}`);

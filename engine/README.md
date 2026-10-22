@@ -1198,11 +1198,11 @@ do:
 - **`accept as baseline` is a button**, and it records the whole backlog rather
   than whatever the page still had on screen.
 
-It writes to your files, so unlike `loupe serve` it is not open to the network:
-it binds loopback, sends no CORS header, and holds every write to a secret minted
-at startup and handed only to the page it served. A write also names the run it
-was aimed at, so a click against a payload the tree has moved past is refused
-rather than applied to whatever now sits at that index.
+It writes to your files, so unlike `loupe serve` it answers no other origin: it
+binds loopback with no `--host` to widen it, sends no CORS header, and holds every
+write to a secret minted at startup and handed only to the page it served. A
+write also names the run it was aimed at, so a click against a payload the tree
+has moved past is refused rather than applied to whatever now sits at that index.
 
 The header says what it is doing — when it last ran, how long that took, how many
 files, and how many directories it is watching. Where a watch cannot be
@@ -1216,6 +1216,7 @@ For the terminal-shaped question — *which elements on screen* — see below.
 ```bash
 loupe serve                         # then open http://localhost:7331
 loupe serve --port 8100
+loupe serve --host 192.168.1.20     # for a browser on another machine
 ```
 
 A small server that hands the findings to the app you are developing: open the
@@ -1229,6 +1230,18 @@ you are at — resize and the list restates itself.
 It serves rather than integrates — stdlib HTTP and a bookmarklet, no bundler
 plugin — because the dev environments this has to work in are not all a Vite
 server with a middleware slot. One of them is webpack inside a Docker WordPress.
+
+It binds `127.0.0.1`. The findings name every path, selector and literal in the
+report, with no auth in front of them and a CORS header that lets any page read
+them, so the bind is what keeps them on this machine — and every client (the
+bookmarklet, the WordPress mu-plugin, the DevTools extension) runs in this
+machine's browser, so loopback is all they need. When the browser is on another
+machine, `--host <addr>` binds the address that machine reaches this one at, and
+the banner prints that address instead of `localhost`. The overlay fetches from
+the URL it was handed, so give an address the other browser can reach, not
+`0.0.0.0`; anyone else who can reach it can read the findings too. `--host`
+replaces loopback rather than adding to it, so the DevTools extension, which
+reads `127.0.0.1`, needs the default.
 
 A bookmarklet injects into the current document only, so on a multi-page app it
 is a click per navigation. For WordPress that is solved: `integrations/wordpress/`
