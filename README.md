@@ -970,8 +970,8 @@ those rules are off, and the report is silently clean of them.
 - run: |
     curl -fsSL -O https://github.com/dabowman/loupe/releases/latest/download/loupe-linux-x64
     chmod +x loupe-linux-x64
-    git clone --depth 1 https://github.com/dabowman/loupe .loupe
-    ./loupe-linux-x64 check --all --format sarif --profiles .loupe/profiles > loupe.sarif
+    git clone --depth 1 https://github.com/dabowman/loupe .loupe-engine
+    ./loupe-linux-x64 check --all --format sarif --profiles .loupe-engine/profiles > loupe.sarif
 ```
 
 `--judge` still needs `TYPESAFE_API_KEY` from the environment — no key is
