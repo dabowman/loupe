@@ -24482,14 +24482,15 @@ function mediaQuery(rule2) {
   if (conds.length === 1) return conds[0] ?? "";
   return conds.some((c) => c.includes(",")) ? "" : conds.join(" and ");
 }
-var keySelector = (sel) => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() ?? sel;
 function eachTopLevel(sel, visit) {
   let depth = 0;
   let quote = "";
   for (let i = 0; i < sel.length; i++) {
     const ch = sel[i] ?? "";
-    if (ch === "\\") i++;
-    else if (quote) {
+    if (ch === "\\") {
+      if (!depth && !quote) visit(sel.slice(i, i + 2), i);
+      i++;
+    } else if (quote) {
       if (ch === quote) quote = "";
     } else if (ch === '"' || ch === "'") quote = ch;
     else if (ch === "(" || ch === "[") depth++;
@@ -24497,7 +24498,7 @@ function eachTopLevel(sel, visit) {
     else if (!depth) visit(ch, i);
   }
 }
-function keyCompound(sel) {
+function keySelector(sel) {
   const s = sel.trim();
   let start = 0;
   eachTopLevel(s, (ch, i) => {
@@ -24513,6 +24514,7 @@ function ownLevel(compound) {
   return out;
 }
 var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => m[1] === void 0 ? [] : [m[1]]);
+var keyClassesIn = (sel) => classesIn(ownLevel(keySelector(sel)));
 var ruleIsGrid = (rule2) => [...ownDecls(rule2)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
 function deletableRule(rule2, lines) {
   const end = rule2.source?.end;
@@ -28943,7 +28945,7 @@ var realPath = (path) => {
     return null;
   }
 };
-var partClass = (sel) => keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, "")).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+var partClass = (sel) => ownLevel(keySelector(sel)).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
 var tagOf = (compound) => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
 function compoundElements(compound, carriersByClass) {
   if (compound.includes("dsh-e") || compound.includes("\\")) return null;
@@ -29256,7 +29258,7 @@ async function analyze(config, {
     if (!scopes) return [];
     const out = /* @__PURE__ */ new Set();
     for (const sel of selectors) {
-      const found = compoundElements(keyCompound(sel), carriersByClass);
+      const found = compoundElements(keySelector(sel), carriersByClass);
       if (!found) return [];
       for (const e of found) out.add(e);
     }
@@ -29264,7 +29266,7 @@ async function analyze(config, {
   };
   const nestedElements = (selector) => {
     const selectors = list.comma(selector);
-    return selectors.some((sel) => keyCompound(sel).includes("&")) ? [] : elementsOf(selectors);
+    return selectors.some((sel) => keySelector(sel).includes("&")) ? [] : elementsOf(selectors);
   };
   for (const { abs, rel } of files.references) {
     const look = lookup(abs, rel);
@@ -29338,7 +29340,7 @@ async function analyze(config, {
       const ruleLine = cssRule.line;
       const selectors = cssRule.selectors;
       const allClasses = [...new Set(selectors.flatMap(classesIn))];
-      const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+      const keyClassesPer = selectors.map(keyClassesIn);
       const keyClasses = [...new Set(keyClassesPer.flat())];
       if (!allClasses.length) continue;
       const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
