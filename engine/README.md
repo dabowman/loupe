@@ -1164,6 +1164,45 @@ are not at". A comma binds looser than `and`, so a combination that would need
 the query rewritten to stay correct is omitted rather than guessed at; an
 unconditional rule omits the field.
 
+## The live UI
+
+```bash
+loupe ui                            # then open http://127.0.0.1:7332
+loupe ui --port 8200
+loupe ui --editor 'cursor://file{path}:{line}'
+```
+
+The findings, live on the working tree. Same page as `--format html` — the same
+rollups, the same charts, the same grouping — with the four things a file cannot
+do:
+
+- **It re-runs.** A watcher over the directories the analysis actually read,
+  pushed to the page over SSE. Save a file, the page restates itself; it crosses
+  into clean and back out again without a reload.
+- **Every location is a link** into your editor, at the line. `--editor` takes a
+  template; `{path}` is the file's absolute path and `{line}` its line, so
+  `cursor://file{path}:{line}`, `zed://file{path}:{line}` and
+  `idea://open?file={path}&line={line}` all work.
+- **`fix` and `mute` are on the row.** `fix` appears only where the engine
+  settled on exactly one on-role token — the same predicate `loupe fix` uses, run
+  where the files are, so the button cannot offer a substitution the writer would
+  refuse. `mute` asks for a reason and writes the directive.
+- **`accept as baseline` is a button**, and it records the whole backlog rather
+  than whatever the page still had on screen.
+
+It writes to your files, so unlike `loupe serve` it is not open to the network:
+it binds loopback, sends no CORS header, and holds every write to a secret minted
+at startup and handed only to the page it served. A write also names the run it
+was aimed at, so a click against a payload the tree has moved past is refused
+rather than applied to whatever now sits at that index.
+
+The header says what it is doing — when it last ran, how long that took, how many
+files, and how many directories it is watching. Where a watch cannot be
+established it says so and leaves the re-run button, rather than showing a stale
+page under a live-looking indicator.
+
+For the terminal-shaped question — *which elements on screen* — see below.
+
 ## In the browser
 
 ```bash
@@ -1205,7 +1244,32 @@ as a verdict rather than a view:
   hidden.
 
 The terminal remains the complete report. This answers the one question it
-cannot: *which elements on screen*.
+cannot: *which elements on screen*. `loupe ui` answers a different one — what is
+wrong right now, and can I fix it from here — and the two are separate commands
+because that one writes to your files and this one answers any origin.
+
+### In DevTools
+
+`integrations/devtools/` is a Manifest V3 extension that reads this same server and
+puts it where the inspector already is. Load it unpacked; `integrations/devtools/README.md`
+has the steps.
+
+It adds two surfaces. The **Loupe panel** is this overlay without the
+bookmarklet — same list, same resolution, same ordering — and it gains the two
+things injection costs you: it survives a navigation, and it is not a fixed panel
+over the app intercepting the clicks of the thing you are testing. That is the
+same problem the WordPress mu-plugin above solves, answered generally rather than
+for one host: nothing is installed in the app, so nothing has to be gated off for
+browser tests.
+
+The **Loupe pane in the Elements panel** is the one that could not be a
+bookmarklet. Select a node, and it lists the findings that style *that node*.
+Every other output here starts from the findings and asks where they are; a
+person who has opened DevTools has already found the thing that looks wrong, and
+this is the only surface that answers the question they actually have.
+
+Both read `/findings.json` from this server. They cannot read `loupe ui` — that
+one writes to your files, so it answers only the page it served.
 
 ## Programmatic use
 
@@ -1342,19 +1406,22 @@ off for everyone.
 ## Tests
 
 ```bash
-npm test        # typecheck, then all six suites
+npm test        # typecheck, then every suite
 ```
 
-Six suites, in the order `npm test` runs them: `tests/run.ts` (fixtures, one
+Eleven suites, in the order `npm test` runs them: `tests/run.ts` (fixtures, one
 directory per behaviour), `tests/detect.ts` (inference), `tests/regressions.ts`
 (failures that reported success), `tests/features.ts` (the three channels and the
 two cross-file rules), `tests/autofix.ts` (the fix path, where a wrong
-substitution is invisible), and `tests/multi-ds.ts` (registry scoping and profile
-selection — which design system answers for a file). `tests/scopes.ts` covers
-token scopes: the schema's validation, the generic table's parity with what it
-replaced, `fix` holding back an off-role token, and `tokens/misapplied-token`.
-`tests/harness.ts` is not a
-suite: it holds the `check`/`assert`/scratch-repo helpers the six share, typed
-once instead of copied six times.
+substitution is invisible), `tests/multi-ds.ts` (registry scoping and profile
+selection — which design system answers for a file), `tests/scopes.ts` (token
+scopes: the schema's validation, the generic table's parity with what it
+replaced, `fix` holding back an off-role token, and `tokens/misapplied-token`),
+`tests/report.ts` (the formatters and the HTML artifact), `tests/dom-match.ts`
+(the shared matcher's escaping, and whether the extension's vendored copy has
+drifted), `tests/serve.ts` (the read-only overlay server), `tests/ui.ts` (the
+writing server, mostly its refusals), and `tests/lsp.ts` (the language server).
+`tests/harness.ts` is not a suite: it holds the `check`/`assert`/scratch-repo
+helpers they share, typed once instead of copied into each.
 Once behaviour is config-driven, these are the only thing standing between a
 preset edit and a rule silently switching itself off.

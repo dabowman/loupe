@@ -160,13 +160,15 @@ try {
 		// Lifted out of the served client rather than reimplemented, so this
 		// tests the code the browser runs.
 		const js = await (await fetch(`${url}/overlay.js`)).text();
-		const state = /var STATE = (\/.*?\/g);/s.exec(js);
-		const body = /function domSelector\(sel\) \{([\s\S]*?)\n {2}\}/.exec(js);
-		assert(state?.[1] && body?.[1], 'could not find domSelector in the served client');
-		const domSelector = new Function('STATE', `return function (sel) {${body[1]}\n}`)(
-			// biome-ignore lint/security/noGlobalEval: the pattern is this repo's own source, read back from its own server.
-			eval(state[1]),
-		) as (s: string) => string;
+		// The whole served script, run against a bare `window`: the matcher installs
+		// itself first and touches no DOM doing it, and the overlay that follows
+		// throws on the first `document.createElement` — which is why the throw is
+		// swallowed. Lifting the function's body out instead would test a
+		// reassembled copy, and would go on passing while the real one lost a helper.
+		const w: { __loupeMatch?: { domSelector: (s: string) => string } } = {};
+		new Function('window', 'document', `try {${js}\n} catch (e) {}`)(w, undefined);
+		const domSelector = w.__loupeMatch?.domSelector;
+		assert(domSelector, 'the served client installed no matcher');
 
 		// The hyphenated ones are the whole point. A word boundary sits between
 		// `focus` and the `-` of `:focus-visible`, so a `\b`-terminated pattern
