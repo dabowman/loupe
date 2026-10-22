@@ -1621,7 +1621,7 @@ await check('a retry-after of an hour is capped at a few seconds', async () => {
 	}
 	assert(calls === 2, `${calls} calls`);
 	const wait = one(waits, 'one wait between the two attempts');
-	assert(wait > 0 && wait <= 5_000, `waited ${wait}ms for a retry-after of 3600s`);
+	assert(wait === 5_000, `waited ${wait}ms for a retry-after of 3600s, not the 5s cap`);
 });
 
 await check('resolve runs on known forces, and stops at a row it cannot decide', async () => {

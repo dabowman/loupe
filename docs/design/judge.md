@@ -223,9 +223,9 @@ decoration.
   failure and keeps what it had.
 - **Overload is transient.** A run is a hundred requests, so one 529 should not
   lose the other ninety-nine — retried with the server's own wait where it names
-  one, doubling otherwise. The server's wait is capped at the longest the
-  doubling would pick (4s): a `retry-after: 3600` is not a wait a run, or a hook
-  inside Claude Code's timeout, can afford.
+  one, doubling otherwise. The server's wait is capped at 5s, a little past the
+  longest the doubling would pick (4s): a `retry-after: 3600` is not a wait a
+  run, or a hook inside Claude Code's timeout, can afford.
 
 ## The evals
 
