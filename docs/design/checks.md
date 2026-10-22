@@ -40,7 +40,8 @@ with a cheaper remedy. See [whole-rule findings](analysis.md#whole-rule-findings
 
 ## `system/override`
 
-Restricted to appearance properties. Layout and box-model props are deliberately
+Restricted to appearance properties, and — per declaration — to the ones the
+component owns; see below. Layout and box-model props are deliberately
 excluded: on a layout primitive that exposes no padding or per-child sizing prop,
 a styling-hook class carrying them is the *intended* usage, not an override, so
 flagging them just manufactures suppressions.
@@ -49,6 +50,107 @@ It supersedes the ordinary verdict on a declaration, so it has to step aside
 when it is off. On a headless library a class on a component is how you are
 meant to style it — and the `background: #fff` still owes its token, so the
 declaration must fall through to `tokens/hardcoded-value` rather than vanish.
+
+### It blocks only where the component owns the property
+
+The rule used to fire on any appearance property on any class bound to a
+component. Its remedy — restyle via the props — was then false most of the
+time: `@wordpress/ui`'s `Text` has one styling prop, `variant`, and no colour,
+letter-spacing or text-transform axis at all, so `<Text> ← color` offered a
+prop that does not exist, and the only exits were a suppression or the
+baseline. Worse, it punished taking the tool's own advice. `<h4
+className="rp-title">` with a colour, a text-transform and a letter-spacing
+was three advisory findings; converting it to `<Text render={ <h4 /> }>`, as
+`system/raw-element` asks, turned the same unchanged CSS into three blocking
+ones. On a real plugin that conversion cost 41 new blockers, none with a prop
+to move to, and the session ended by baselining all of them.
+
+`className` is a public prop on both WPDS and Base UI — the sanctioned
+styling channel, not an override. So a declaration only blocks when the
+component *owns* the property: its own styles set it on the element the class
+lands on, or a prop does. That is what the component registry's `surface`
+records per entry:
+
+```json
+"surface": {
+  "properties": { "font-size": "variant", "border-radius": null, "color": ["variant", "tone"] },
+  "verifiedAgainst": "@wordpress/ui 0.23.0 (npm), src/text/text.tsx and style.module.css, read 2026-10-02",
+  "note": "where className lands, and anything a reader needs to act on it"
+}
+```
+
+Each listed property maps to the prop (or props) that controls it, or to
+`null` where the component sets it and no prop does. The finding says which:
+`<Text> ← font-size — set via its variant prop`, or `<TextControl> ←
+font-size — it sets this itself and has no prop for it`. The second is still
+blocking — that is the declaration most likely to break on a version bump —
+but it no longer sends anyone to look for a prop; the decision it leaves is
+keep the component's styling, or suppress with the reason the design needs
+otherwise. A property the surface does not list falls through to the verdict
+the declaration would get on a plain element: `tokens/hardcoded-value` or
+`typography/untokenized`, advisory. Shorthands overlap their longhands both
+ways, so a surface owning `border-color` owns what `border: 0` would reset,
+and `font` reaches `font-size`.
+
+**No surface fails safe — in a registry that records them.** An entry
+without `surface` — or a component the registry does not list — has not been
+read for one, and a blocking finding that promises a prop nobody checked
+exists is the failure above. Its declarations get the plain-element verdict.
+`"properties": {}` is different: it is a verified answer that the component
+owns nothing there (`Stack`, `Field.Root`, every `@wordpress/ui` `*Control`
+root), and it is recorded so that absence keeps meaning "unreviewed".
+
+**A registry that records no surfaces keeps the old reading.** Failing safe
+on every gap is right where someone has read the components and the gaps are
+the ones they have not reached yet. Where nobody has read any — the VIP and
+Archer registries today, a run with no profile, a project's own registry — it
+would switch the per-declaration form off for the whole design system, and a
+class restyling a `Button` would block nowhere. So where no registry a
+component could come from records a single surface, an appearance property on
+a class bound to it blocks as it did before surfaces existed, with the remedy
+it had then: `<Button> ← background — restyle via its props/tokens, not CSS`.
+`code` is `<Button> ← background` either way, so a baseline taken under one
+reading matches under the other. For a class bound to several components the
+message names the one whose surface owns the property, but `code` keeps the
+first component the class is bound to, as it did before surfaces, so a
+baseline recorded then still matches.
+
+The cost of the old reading is the one #13 was filed about — converting a raw
+element to a component turns its advisory CSS into blocking findings — so
+`system/raw-element` names those declarations before the conversion; see
+[below](#what-the-conversion-would-promote-is-said-before-it).
+
+"The registry" is decided per component, because several profiles can be
+active and only some of them record surfaces. The component's own entry
+decides (a part goes by its namespace's entry), so a project overriding one
+WPDS entry with its own surface-less copy gets the old reading for that
+component alone. A component no registry lists goes by the other entries from
+its package; one from a package nobody lists, or bound where the channel
+cannot say the package, goes by whether anything in the run records surfaces.
+The flag is the loader's (`surfaced` on each entry it loads), set when any
+entry in the same file carries a surface that reads; a malformed surface is
+not a recorded one, and a file cannot claim the flag for itself.
+
+**A surface describes one element.** It is what the component styles where its
+`className` lands — for most `@wordpress/components` controls that is
+`BaseControl`'s wrapper around label, input and help, not the input, so
+`border` on a `TextControl` class is a border around the whole field and owns
+nothing. A compound part is its own element: `Card.Content` does not inherit
+the surface `Card` records (for `Card.Root`). Reaching past that element into
+the component's internals is the whole-rule form below, which needs no surface.
+
+**`typography/in-css` reads the same surface.** Being a declared text
+component is the claim that it owns its type; a recorded surface narrows the
+claim. `Text` sets family, size, line height and weight through `variant` and
+never sets `letter-spacing`, so a letter-spacing on a `Text` class is
+`typography/untokenized` again. With no surface recorded, a text component's
+type declarations still report as before — `designSystem.components.text` is
+itself a declaration, which `APPEARANCE_PROPS` never was.
+
+The surface lives on the component registry entry, beside currency, rather
+than in the profile: it is a fact about one component in one package, read
+from that package's source, and it carries its own provenance because it is a
+separate reading from the currency one.
 
 **A project prefix wins over a library one** in the whole-rule form.
 `wp-parsely-*` matches the `wp-` external prefix, and reporting a project's own
@@ -87,11 +189,51 @@ analog. This is what a parser buys over a tag regex: wpds-guard, the
 regex-based check this coverage came from, flags hidden inputs and offers every
 input control at once.
 
-**Every analog must be in the registry.** A test fails when an element-map
-name is not a registry component, so a suggestion cannot outlive the component
-it names. Keeping the registry current against trunk is the other half.
+**An element can keep its semantics.** A heading's analog is not `Text`
+alone: on WPDS it is `Text` rendered as the heading, and a bare component name
+leaves the agent to research the rest. A mapping may name a `render` element,
+and the suggestion carries it — `<h4> → <Text render={ <h4 /> }>`. The variant
+is deliberately not mapped: WPDS separates the tag (structure) from `variant`
+(visual size), and pinning one to the other would re-couple them.
+
+**Every analog must be one the registry recommends.** A test fails, per shipped
+profile against its own preset, when an element-map name is unknown to the
+registry or only `legacy` there, so a suggestion cannot outlive the component
+it names. Forwarding hid the drift rather than preventing it: `h1`–`h6` →
+`Heading` read fine with the registry loaded and sent a preset-only project to
+`__experimentalHeading`, a private API. Keeping the registry current against
+trunk is the other half.
 
 The variant is left to `--judge`; see [judge.md](judge.md#which-variant).
+
+### What the conversion would promote is said before it
+
+The element's classes come along to the component, and a declaration that was
+advisory on a plain element can block on a component — where the surface owns
+the property, or anywhere at all where the registry records no surfaces. #13's
+plugin found that out by converting: 41 new blockers in one session, each one
+taking the tool's own advice. So the finding says it first:
+
+```
+<h4> → <Text render={ <h4 /> }> (@wordpress/ui) — converted, would block: font-size (.acme-title)
+```
+
+It is read off the classifier the stylesheet walk already ran: every
+declaration in a rule whose *key* selector names one of the element's classes
+is classified again with the analog bound beside whatever the rule's classes
+are bound to already, and only a change of severity is named — grouped by
+where it would land (`would block`, `would warn`, `would clear`), up to four
+properties and two classes, the rest counted. A rule the whole-rule
+library-internal form reports is skipped; it reports the same either way. The
+analog is the one the message names, keyed to the registry by the package of
+its single `recommended` entry; one forwarded to a `supersededBy` replacement,
+or a `A / B` choice, names no one component and gets no tail.
+
+It rides in the message rather than `note`, because the report's one line
+spares a note only its last clause, and the reachability note (`bundling
+required: …`) is appended after it — the two are the two costs of the same
+conversion, and both have to survive. `code` stays `<h4>`, so a baseline
+recorded before the tail matches after it.
 
 ## `system/inline-style`
 
@@ -209,6 +351,13 @@ verdict. The finding carries the declaration as a hint rather than a remedy; the
 analyzer's token pass names the token that carries the value, and `--judge`
 settles the ones no single token does. See [tokens](analysis.md#the-token-set).
 
+Where the active profile scopes that one token to a kind of element, the pass
+also checks it against what the declaration styles. Off its scope, or scoped to
+a kind nothing shows this element to be, it is still named — with `(review: …)`
+and the reason — but `loupe fix` leaves it: one off-role candidate is a
+question, the way two on-role ones are. See
+[token scopes](analysis.md#token-scopes).
+
 ## `tokens/unknown-token`
 
 Runs only once every stylesheet has been read: a set that is still being built
@@ -230,6 +379,105 @@ written instead, and `--judge` asks which real token was meant — see
 [judge.md](judge.md#which-token-was-meant-judgetokents). Unjudged, it stands for
 a reader. The defence of that threshold — and why a scale step is
 never read as a spelling — is in [fixing](report.md#fixing).
+
+## `tokens/misapplied-token`
+
+The other half of `tokens/unknown-token`: the name is real, and it is used
+outside the scope the profile declares for it — a foreground colour on a
+`background`, a `surface` background on a clickable control, the menu radius on
+a button. The agent session that motivated it found exactly this by reading the
+token documentation: `background-surface-*` approved for a radio, then backed
+out because `surface` is "not for clickable parts". Nothing in the engine
+could say that.
+
+Two questions, in order. Does the token's property segment `set` the
+declaration's property, or may it `also` appear there? Then, where its target
+segment or scale step names kinds of element, is every element the declaration
+is shown to land on one it is not for? Only a definite no reports; see
+[token scopes](analysis.md#token-scopes) for what "shown" means and why unknown
+never reports.
+
+What it deliberately leaves alone: a custom property or a Sass `$` / Less `@`
+variable (`--ring: var(--wpds-…)` says nothing about what the ring is), a name
+no known token carries (that is `tokens/unknown-token`'s), and a `var()` inside
+`calc()`, `min()`, `max()` or `clamp()` — `margin: calc(-1 *
+var(--wpds-dimension-padding-md))` is the bleed out of a padded parent,
+arithmetic on the token rather than a use of its role. A vendor-prefixed
+property is checked as its unprefixed twin: `-webkit-box-shadow` is
+`box-shadow`.
+
+Advisory, and low in the report. It is a judgement the profile's author encoded,
+and a wrong scope declaration must not block a turn before the metadata has
+been exercised on real repos. No profile declaring scopes, no findings.
+
+## `tokens/undelivered`
+
+The token half of [delivery](#delivery). Neither `tokens/hardcoded-value` nor
+`tokens/unknown-token` can see it: every `var()` names a real token, and the page
+still renders without one of them, because the sheet defining them never loaded.
+
+**The profile says what counts as evidence; the engine only runs it.** Three
+kinds, each a bounded, literal read of the files its globs name, none a parser:
+
+| kind | evidence | can it say "no"? |
+|---|---|---|
+| `enqueue-dependency` | a call in `calls` whose dependency argument (`argument`, 0-based, or a named `deps:`) lists one of `handles` — or an `enqueues` call whose own handle is one | yes: calls found, every one read, none qualifies |
+| `import` | an `@import`/`@use`/`import`/`require` of one of `specifiers` | no |
+| `pattern` | any match of `pattern` | no |
+
+```jsonc
+{ "kind": "enqueue-dependency", "files": ["**/*.php"],
+  "calls": ["wp_enqueue_style", "wp_register_style"], "enqueues": ["wp_enqueue_style"],
+  "argument": 2, "handles": ["wp-theme"] }
+```
+
+**Only the handle itself counts.** `wp-components`, `wp-block-editor`,
+`wp-edit-blocks` and `wp-commands` depend on `wp-theme` in WordPress 7.1 and
+with the Gutenberg plugin active, and not on 6.9 or 7.0 without it — where they
+load, and the tokens do not. A plugin whose CSS reaches its tokens through one
+of them works on the developer's site and drops every declaration on an older
+customer's, so WPDS counts `wp-theme` named directly, in an enqueue or a
+`block.json`, and nothing that only implies it.
+
+**Build-time fallbacks are not delivery.** `@wordpress/build` (and the
+`ds-token-fallbacks` plugins it applies) write the default theme's value into
+every bare `var(--wpds-*)`, so a page without the sheet renders instead of
+dropping — but at the default theme's values, whatever theme the site runs. A
+token that never follows the theme is doing nothing a literal would not. The
+profile declares those builds under `tokens.fallbacks`, checks of the same
+kinds, and finding one changes what the finding says, never whether it
+reports: the note becomes `fallbacks render but won't follow the theme; add
+'wp-theme' to this CSS's enqueue dependencies`, short enough that both
+clauses survive the report line's tail.
+
+The PHP read is the smallest thing that answers the question: comments blanked
+(a commented-out `'wp-theme'` is not a dependency), the call's argument list
+split at top-level commas with strings and brackets respected, and the
+dependency argument accepted as complete only when it is a literal `array( … )`
+or `[ … ]` of plain strings. `$deps`, `array_merge( … )` or a list holding a
+variable could name anything, so a run that meets one cannot conclude.
+
+**One finding per project, and only on a positive "no".** Any evidence →
+silent. Anything unreadable — a walk past 50,000 entries, more than 4,000
+candidate files, a file over 1.5MB, a list that does not close or is not a
+literal → silent. No enqueue at all → silent: nothing shows this project is the
+one that delivers the sheet (a component library's consumer does that). Only
+enqueues found, every one read, none qualifying, reports — at the first `var()`
+of the namespace, in byte order of path, so the anchor is stable across runs.
+Every token use counts towards that anchor, in scope or not, CSS-in-JS included.
+The anchor still moves when another file starts using tokens, so the baseline
+key leaves it out: `tokens/undelivered|<project>|tokens/undelivered:<handle>`.
+A token the project's own stylesheets define is excluded: it arrives with the
+sheet that defines it.
+
+The evidence walk is the rule's only cost, so it runs only when the anchor is in
+the run's scope — a scoped hook run that cannot report the finding does not pay
+for it.
+
+Starts at `warn`. The evidence list is WPDS's best statement of how a page gets
+`wp-theme`, and a page can also get it from WordPress itself — the block
+editor's content iframe loads it through `wp-edit-blocks`. A plugin whose CSS
+only ever renders there suppresses the finding with that reason.
 
 ## `css/dead-class`
 
@@ -298,3 +546,78 @@ as big as the tree it describes — a five-column card runs past the line bound 
 its own. The remedy goes in `suffix`, which that bound is built to spare: eliding
 the shape still names the file count and what to do about it, where eliding the
 end left neither. See [message bounding](report.md#bounding).
+
+## Delivery
+
+Two of the cheapest remedies to write are the most expensive to ship. A
+`system/raw-element` finding that names `Stack (@wordpress/ui)` reads like an
+advisory nit, and in a plugin that has never imported `@wordpress/ui` it is the
+plugin's first bundled runtime dependency: WordPress registers no `wp-ui` script
+handle, so `@wordpress/dependency-extraction-webpack-plugin` keeps the package in
+`BUNDLED_PACKAGES` and webpack compiles it in. And a `var(--wpds-*)`
+substitution is correct CSS that does nothing on a page that never loads the
+`wp-theme` stylesheet — an unresolvable `var()` makes its declaration invalid at
+computed-value time, so it drops instead of falling back.
+
+Neither fact generalizes. "The token sheet is delivered" is a
+`wp_enqueue_style` dependency in WordPress, a CSS import in a Vite app, a
+provider component somewhere else; "this package is reachable" depends on an
+externals list a build plugin owns. An engine rule would need a delivery model
+per ecosystem, which is the thing profiles exist to avoid — so the profile
+declares it, in `delivery.json` beside its registries:
+
+```jsonc
+{
+  "host": "WordPress",
+  "packages": {
+    "@wordpress/ui":         { "provided": "bundled" },
+    "@wordpress/components": { "provided": "external", "handle": "wp-components" }
+  },
+  "tokens": {
+    "stylesheet": "@wordpress/theme/design-tokens.css",
+    "handle": "wp-theme",
+    "prefixes": ["--wpds-"],
+    "evidence": [ /* see tokens/undelivered */ ],
+    "fallbacks": [ /* builds writing fallback values: not delivery */ ]
+  }
+}
+```
+
+It carries `verifiedAgainst` the way the component registry does — which
+release of which file each fact was read from — because `BUNDLED_PACKAGES` moves
+between releases and a stale entry is worse than none.
+
+**Read strictly, per field.** A package entry whose `provided` is neither
+`external` nor `bundled`, or a check missing a field its kind runs on, is
+dropped; a block with nothing usable left is no block. A profile whose delivery
+file is missing or broken still loads — its registries do not depend on it.
+
+`loupe status` prints it as `delivery:`, the line the remediation skill reads
+before it converts anything: what the host provides, what gets bundled, and
+which sheet the tokens come from.
+
+### Reachability notes
+
+`system/raw-element`, `system/superseded-component` and
+`system/locked-component` name the component to move to, and the package it
+comes from, after the arrow. Each package named there is asked what adopting it
+would cost:
+
+| the package | note |
+|---|---|
+| already imported somewhere in the project | none — that cost is paid |
+| `external` in the profile | none — the host provides it |
+| `bundled` in the profile | `bundling required: <pkg> is bundled into your build, not provided by <host>` |
+| undeclared, and a readable `package.json` does not list it | `new dependency: <pkg> is not in package.json` |
+| undeclared, and no `package.json` to ask (or a workspace root) | none — unknown is not a cost |
+
+**The note rides in `note`, never in `message` or `code`.** The baseline keys on
+`code`, falling back to `message`; a remedy that grew a clause would resurrect
+every accepted finding the day a profile gained a delivery block. `note` is
+shipped whole by JSON, SARIF, the HTML report and the language server, and the
+agent format spares it as the tail of the line — which is why it comes after any
+registry note rather than before it, and why it stops at one clause: the tail
+budget is 100 characters, and the clause is what has to survive it.
+
+The bundle impact itself is not claimed. Measuring it needs the project's build,
+and a number the engine guessed at would be read as one it measured.

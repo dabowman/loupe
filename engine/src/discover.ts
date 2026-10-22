@@ -8,7 +8,8 @@
  *
  * The walk is unbounded by default: a scan that quietly stopped halfway would
  * report "clean" for the half it never read. A caller that is only guessing
- * passes a `limit` and reads `truncated` back.
+ * passes a `limit` and reads `truncated` back; `analyze`, which is not guessing,
+ * passes one too and refuses outright when it trips ({@link TreeTooLarge}).
  *
  * Design notes: docs/design/cli.md#file-discovery
  */
@@ -58,6 +59,55 @@ const KINDS = ['styles', 'markup', 'references'] as const satisfies readonly Sou
 
 /** Directory names always skipped, regardless of config — cheap traversal guard. */
 const HARD_SKIP = new Set(['.git', 'node_modules']);
+
+/**
+ * How many entries `analyze` walks before it refuses to report at all.
+ *
+ * Inference stops at `DETECT_ENTRY_BUDGET` and carries on with a guess; an
+ * analysis cannot, because a partial index reports "clean" for whatever it never
+ * reached. So this ceiling is a refusal, not a truncation, and it sits well
+ * above the inference one — four times a budget that is itself several times the
+ * largest project this plugin plausibly meets, counted with `node_modules`, the
+ * ignore globs and dot-directories already pruned — at about two seconds of
+ * walking. Past it the root is a home directory with a stray `package.json`, and
+ * walking on was 30s and more of a 60s hook timeout.
+ */
+export const ANALYZE_ENTRY_BUDGET = 200_000;
+
+/**
+ * The analysis ceiling: `LOUPE_MAX_ENTRIES` where it is a positive whole number,
+ * then the config's `maxEntries`, then {@link ANALYZE_ENTRY_BUDGET}.
+ *
+ * The config key is how a project genuinely larger than the default says so
+ * for every run; the variable outranks it because it is the per-run escape
+ * hatch — and how a test trips the refusal without building a tree of that size.
+ * `normalize` has already refused a `maxEntries` that is not a positive whole
+ * number, so one that arrives here is used as it is.
+ */
+export function analyzeEntryBudget(configured?: number | null): number {
+	const set = Number(process.env.LOUPE_MAX_ENTRIES);
+	if (Number.isInteger(set) && set > 0) return set;
+	return configured ?? ANALYZE_ENTRY_BUDGET;
+}
+
+/**
+ * The analysis walk reached its ceiling. Thrown rather than returned so no caller
+ * can report from what it got — under the hook it becomes a visible `skipped`,
+ * and a typed command exits with "could not run".
+ */
+export class TreeTooLarge extends Error {
+	readonly limit: number;
+	constructor(limit: number) {
+		super(
+			`tree too large to index: the walk stopped at ${limit.toLocaleString('en-US')} entries without finishing, ` +
+				'and a partial index would call the rest clean. Point --root at the project, or narrow `sources` ' +
+				'(or extend `sources.ignore`) in loupe.config.json; `maxEntries` there (or LOUPE_MAX_ENTRIES for one run) ' +
+				'raises the ceiling.',
+		);
+		this.name = 'TreeTooLarge';
+		this.limit = limit;
+	}
+}
 
 /**
  * Could any of these globs match something *inside* a dot-directory?
@@ -184,6 +234,24 @@ export function hasGitDir(root: string): boolean {
 		const up = dirname(dir);
 		if (up === dir) return false;
 		dir = up;
+	}
+}
+
+/**
+ * Does git ignore `path`? `true`/`false` when git answers; `null` when it cannot
+ * — no repository, no `git`, or a path outside the repository — so a caller
+ * warns on a real yes and says nothing otherwise.
+ *
+ * `check-ignore` answers in its exit code: 0 ignored, 1 not, 128 for everything
+ * it could not decide. A tracked file is never reported, which is right: one
+ * already committed reaches every clone whatever `.gitignore` says.
+ */
+export function gitIgnores(root: string, path: string): boolean | null {
+	try {
+		git(root, ['check-ignore', '-q', '--', path]);
+		return true;
+	} catch (err) {
+		return (err as { status?: unknown }).status === 1 ? false : null;
 	}
 }
 

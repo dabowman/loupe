@@ -24,7 +24,7 @@ import type {
 } from '@babel/types';
 import { keyName, toCssProp, toCssValue, valueSpan } from './inline.ts';
 import { isLayoutDecl } from './styles.ts';
-import { messageOf } from './text.ts';
+import { messageLineOf } from './text.ts';
 import { cssInJsLocals, fromPackage, importedName, parseTemplate, templateText } from './cssinjs.ts';
 import { depthOf, nodeCount, signatureOf, systemTree } from './patterns.ts';
 import { confirmPair } from './checks/detectors/confirm-pair.ts';
@@ -32,6 +32,7 @@ import { fewStaticOptions } from './checks/detectors/few-static-options.ts';
 import { judgeControl } from './checks/detectors/judge.ts';
 import type {
 	Binding,
+	ClassCarrier,
 	ComponentImport,
 	Composite,
 	Control,
@@ -244,6 +245,7 @@ function systemImports(
 	componentImports: ComponentImport[];
 	packages: Map<string, string>;
 	canonicals: Map<string, string>;
+	namespaces: Set<string>;
 } {
 	// local name -> canonical name, so a rule written against `SelectControl`
 	// finds it under whatever alias the file bound.
@@ -257,6 +259,9 @@ function systemImports(
 	// local name -> the package it came from, so a composite signature can say
 	// *whose* `Stack` this is. Names are the one thing design systems share.
 	const packages = new Map<string, string>();
+	// `import * as UI` binds the package, not a component: `<UI.Button>` is the
+	// package's `Button`, where `<Card.Header>` is a part of `Card`.
+	const namespaces = new Set<string>();
 	const canonical = (name: string): string => canonicalName(name, ds.normalizeExports);
 
 	for (const node of ast.program.body) {
@@ -268,6 +273,7 @@ function systemImports(
 			if (ds.textComponents.includes(c)) text.add(local);
 			if (ds.layoutComponents.includes(c)) layout.add(local);
 			packages.set(local, node.source.value);
+			if (spec.type === 'ImportNamespaceSpecifier') namespaces.add(local);
 			// The specifier's line, not the declaration's: the placement a reader
 			// reaches for is the comment above the offending name, and one directive
 			// on the `import {` line mutes every other name in the declaration.
@@ -280,7 +286,7 @@ function systemImports(
 			});
 		}
 	}
-	return { text, layout, componentImports, packages, canonicals };
+	return { text, layout, componentImports, packages, canonicals, namespaces };
 }
 
 /** An expression with any type assertion peeled off; the value is the same. */
@@ -388,6 +394,7 @@ export function scanMarkup(
 	const stems = harvestStems(text);
 	const bindings: Binding[] = [];
 	const rawEls: RawElement[] = [];
+	const carriers: ClassCarrier[] = [];
 	const inlineStyles: InlineStyleElement[] = [];
 	const cssInJs: CssInJsTemplate[] = [];
 	const composites: Composite[] = [];
@@ -398,6 +405,7 @@ export function scanMarkup(
 		controls,
 		bindings,
 		rawEls,
+		carriers,
 		inlineStyles,
 		cssInJs,
 		composites,
@@ -414,14 +422,14 @@ export function scanMarkup(
 		// errorRecovery keeps one malformed file from blanking the whole run.
 		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
 	} catch (err) {
-		return { ...result, parseError: messageOf(err) };
+		return { ...result, parseError: messageLineOf(err) };
 	}
 
-	const { text: textLike, layout, componentImports, packages, canonicals } = systemImports(ast, ds);
+	const { text: textLike, layout, componentImports, packages, canonicals, namespaces } = systemImports(ast, ds);
 	const tags = cssInJsLocals(ast, ds.cssInJsPackages);
 	// `<Button css={css`…`}>` binds a template to an element the walk sees
 	// first, so the owner is recorded before the template is reached.
-	const cssPropOwner = new Map<number, { target: string; isSystem: boolean; isText: boolean }>();
+	const cssPropOwner = new Map<number, { target: string; member: string | null; isSystem: boolean }>();
 	// Opening elements handed to a substitution prop. Recorded while the carrying
 	// element's attributes are read, which the walk reaches first, and held by
 	// node identity — `walkAst` visits these very objects, so nothing has to be
@@ -581,14 +589,42 @@ export function scanMarkup(
 		}
 	};
 
+	/**
+	 * The component a design-system element is, whatever the file called it: the
+	 * canonical name, with the part a compound element names (`Card.Content`),
+	 * since each part is its own element. Under a namespace import the member is
+	 * the component — `<UI.Button>` is `Button`, not a part of `UI`.
+	 */
+	const identityOf = (local: string, member: string | null = null): string => {
+		if (member && namespaces.has(local)) return canonicalName(member, ds.normalizeExports);
+		const name = canonicals.get(local) ?? local;
+		return member ? `${name}.${member}` : name;
+	};
+	/** Whether a design-system element is one of the text components, under a namespace too. */
+	const isTextElement = (local: string, member: string | null = null): boolean =>
+		member && namespaces.has(local)
+			? ds.textComponents.includes(canonicalName(member, ds.normalizeExports))
+			: textLike.has(local);
+
+	// What keys the component registry: its identity and the package the local
+	// came from. A name with no recorded package keys nothing.
+	const registryKey = (
+		local: string,
+		member: string | null = null,
+	): { component: string; package: string } | Record<string, never> => {
+		const pkg = packages.get(local);
+		return pkg ? { component: identityOf(local, member), package: pkg } : {};
+	};
+
 	const readTaggedTemplate = (node: TaggedTemplateExpression): void => {
 		if (!tags.any) return;
 		const t = node.tag;
 		const owner = typeof node.start === 'number' ? cssPropOwner.get(node.start) : undefined;
 		let target: string | null = null;
+		let member: string | null = null;
 		let isSystem = false;
 		if (owner) {
-			({ target, isSystem } = owner);
+			({ target, member, isSystem } = owner);
 			if (!held(tags.bare, identifierOf(t)) && !held(tags.styled, memberObject(t)) && !held(tags.styled, calleeOf(t)))
 				return;
 		} else if (held(tags.styled, memberObject(t))) {
@@ -609,7 +645,8 @@ export function scanMarkup(
 			line,
 			target,
 			isSystem,
-			isText: isSystem && target !== null && textLike.has(target),
+			isText: isSystem && target !== null && isTextElement(target, member),
+			...(isSystem && target ? registryKey(target, member) : {}),
 			groups,
 			error,
 		});
@@ -677,16 +714,19 @@ export function scanMarkup(
 		if (owned?.type === 'TaggedTemplateExpression' && typeof owned.start === 'number')
 			cssPropOwner.set(owned.start, {
 				target: isComponent ? root : tag.toLowerCase(),
+				member: isComponent ? member : null,
 				isSystem,
-				isText: isSystem && textLike.has(root),
 			});
 
 		if (style?.present)
 			inlineStyles.push({
 				tag: isComponent ? root : tag.toLowerCase(),
 				component: isSystem ? (canonicals.get(root) ?? root) : null,
+				// A project component renders whatever its own markup says, and
+				// `?.Header` is a part of a namespace member no import names.
+				element: isSystem ? identityOf(root, member) : isComponent || tag.startsWith('?') ? null : tag.toLowerCase(),
 				isSystem,
-				isText: isSystem && textLike.has(root),
+				isText: isSystem && isTextElement(root, member),
 				decls: style.decls,
 				dynamic: style.dynamic,
 				dynamicProps: style.dynamicProps,
@@ -694,10 +734,17 @@ export function scanMarkup(
 				line,
 			});
 
+		// Recorded as unknown first, and named below only where the element is
+		// recorded as what it is.
+		const carrier: ClassCarrier = { element: null, classes };
+		if (classes.length) carriers.push(carrier);
+
 		if (isComponent) {
 			if (!isSystem) return;
-			const isText = textLike.has(root);
-			for (const cls of classes) bindings.push({ cls, tag: root, isSystem: true, isText, file: relPath, line });
+			const isText = isTextElement(root, member);
+			const key = registryKey(root, member);
+			carrier.element = identityOf(root, member);
+			for (const cls of classes) bindings.push({ cls, tag: root, isSystem: true, isText, ...key, file: relPath, line });
 		} else {
 			// `render={ <h4 /> }` is not markup being rendered — it is the argument
 			// telling a design-system component which tag to emit. Its children are
@@ -709,6 +756,7 @@ export function scanMarkup(
 			// `<input type="checkbox">` has its own analog and `type="hidden"` has
 			// none. A computed or absent value falls back to the element's own.
 			let suggest: string | null = mapped.component;
+			let render = mapped.render;
 			if (mapped.attribute && mapped.values) {
 				const attr = node.attributes.find(
 					(a) => a.type === 'JSXAttribute' && a.name.type === 'JSXIdentifier' && a.name.name === mapped.attribute,
@@ -721,18 +769,24 @@ export function scanMarkup(
 							? staticString(v.expression)
 							: null;
 				const value = raw?.trim().toLowerCase();
-				if (value !== undefined && Object.hasOwn(mapped.values, value)) suggest = mapped.values[value] ?? null;
+				if (value !== undefined && Object.hasOwn(mapped.values, value)) {
+					suggest = mapped.values[value] ?? null;
+					// `render` is the element's own analog's; a picked one renders itself.
+					render = undefined;
+				}
 				if (suggest === null) return;
 			}
 			// An inline style is styling too: a bare <div> laid out with
 			// style={{ display: 'flex' }} and no className is the shape agents write most.
 			if (mapped.styledOnly && !classes.length && !style?.present) return;
+			carrier.element = lower;
 			rawEls.push({
 				tag: lower,
 				classes,
 				file: relPath,
 				line,
 				suggest,
+				render,
 				styledOnly: mapped.styledOnly,
 				inlineStyled: Boolean(style?.present),
 				inlineLayout: Boolean(style?.decls?.some(isLayoutDecl)),

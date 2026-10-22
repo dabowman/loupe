@@ -82,6 +82,17 @@ not in a file. A project that wants it on can snapshot the custom properties
 once (`getComputedStyle(document.documentElement)` in each colour mode) into a
 CSS file and list it under `designSystem.tokenSources`.
 
+## `tokens/misapplied-token`
+
+`token-scopes.json` beside this file declares the colour roles by the first
+segment after `--theme-ui-colors-`: `texts`, `heading`, `links` for `color`;
+`icon` for `fill` and `stroke`; `layer` and `backgrounds` for backgrounds;
+`borders` for borders and outlines (and `support-<role>-<status>`,
+`tag-<colour>-<role>` the same way). A `layer-2` on a `color` gives the right
+grey in light mode and the wrong role everywhere: use the `texts.*` key that
+says what the text is. Nothing else is scoped — spacing, radii and shadows are
+`sx` theme keys with no custom property to check.
+
 ## `system/superseded-component`
 
 - `Tooltip` → `NewTooltip`. The text moves to `content`; the trigger becomes the

@@ -59,6 +59,7 @@ export const failures = (): number => failed;
 
 /** Print the tally and set the exit code. Every test file ends with this. */
 export function finish(summary?: string): never {
+	cleanup(PLUGIN_DATA);
 	console.log(summary ?? `\n${failed ? `${failed} failed` : 'all passed'}`);
 	process.exit(failed ? 1 : 0);
 }
@@ -113,3 +114,14 @@ export function writeAll(root: string, files: Record<string, string>): void {
 
 /** Remove a scratch repo, whatever state it is in. */
 export const cleanup = (root: string): void => rmSync(root, { recursive: true, force: true });
+
+/**
+ * The plugin data directory for every CLI a suite starts — hand it over as
+ * `CLAUDE_PLUGIN_DATA`.
+ *
+ * Without one the hook keeps its retry counter in a temp directory of the
+ * user's, keyed by the project's path, and a scratch repo's path is new every
+ * run: each run left its counters behind for good, under a directory no
+ * `cleanup` of the repo reaches. One per suite, removed by `finish`.
+ */
+export const PLUGIN_DATA = scratch('loupe-plugin-data-');

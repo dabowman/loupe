@@ -30,7 +30,7 @@ hardcoded hex next to your token, a `<p>` where the system has a `<Text>`, an
 override reaching into a third-party component's internals. None of that is a
 syntax error. All of it is drift.
 
-Most of the seventeen rules need cross-file correlation to decide. The rest
+Most of the twenty-one rules need cross-file correlation to decide. The rest
 would work as a stylelint plugin, and are included because you want one report.
 
 ## Rules
@@ -41,6 +41,8 @@ would work as a stylelint plugin, and are included because you want one report.
 | `stylesheet/unparsed` | A stylesheet the parser could not read, so nothing in it was checked |
 | `css/dead-class` | A project-namespaced class referenced in no markup or reference file |
 | `tokens/unknown-token` | A `var()` naming no token any known source defines |
+| `tokens/misapplied-token` | A real token used outside the scope the profile declares for it — another property, or another kind of element |
+| `tokens/undelivered` | Tokens used with no evidence their stylesheet reaches the page — from the profile's delivery block |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the file that built it |
 | `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere |
@@ -49,7 +51,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `layout/margin-on-child` | Margin, which belongs on the parent's `gap` |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own |
 | `typography/untokenized` | Raw type styling with no token and no text component |
-| `system/override` | CSS restyling a design-system component, or reaching into a library's internals |
+| `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals |
 | `system/raw-element` | A raw element that has a design-system analog |
 | `system/inline-style` | A style prop doing what a component prop or token already does |
 | `layout/negative-margin` | A negative margin pulling against the layout the system provides |
@@ -175,6 +177,21 @@ false, blocking comes back on by default and `css/dead-class` returns to its
 configured severity — so persisting a namespace list drawn from part of a tree
 turns a guess into a rule that deletes code.
 
+It refuses the `generic` fallback the same way. When no preset's markers match,
+`init` prints what it determined, the available presets, and the evidence it
+saw but could not rank — `@wordpress/*` imports no manifest declares,
+`@types/wordpress__*` packages, `build/*.asset.php` dependencies, `.wp-env.json`,
+`composer.json` — and writes nothing. Name the design system with
+`init --preset <name>` (which keeps the inferred namespaces), or pass `--force`
+to write the guess anyway. Until a config exists, `check` ends its report with a
+line saying it ran on that guess.
+
+`detect` also lists **possible external** prefixes: CSS-module and hashed class
+names, prefixes an installed dependency defines, and prefixes only stylesheets
+mention. They are never written — a prefix nothing references is also what dead
+CSS looks like — so confirm them into `namespaces.external` by hand, or let
+`/loupe-init` ask.
+
 ```bash
 loupe detect   # what would be inferred, and why
 loupe init     # write it to loupe.config.json
@@ -199,10 +216,34 @@ error-severity findings, so CI behaviour does not depend on this.
 
   "rules": {
     "css/dead-class": "error",
-    "layout/margin-on-child": "off"
+    "layout/margin-on-child": "off",
+    "system/raw-element": {
+      "severity": "off",
+      "reason": "Stack/Text require bundling @wordpress/ui; this plugin ships zero runtime deps by design"
+    }
   }
 }
 ```
+
+A rule takes a bare severity, or `{ "severity", "reason" }` to say why; any
+other key is a config error. The `["warn", { … }]` form was removed in 0.8.0,
+and a config still using it does not load — under the hook that means the gate
+checks nothing until it is fixed. The rewrite is one line per rule; see
+[MIGRATION.md](MIGRATION.md#upgrading-a-loupe-config-from-before-080).
+
+Turning a rule off in config is a suppression of the whole rule, everywhere, so
+`loupe suppressions` lists it beside the inline directives —
+`loupe.config.json  system/raw-element  (rule off)  <reason>`, or
+`no reason given` — and `loupe status` prints the reason beside the rule. A
+preset's setting is replaced whole by the project's, so a preset's reason never
+outlives the setting it explained, and one a preset turned off is listed under
+`preset <name>` rather than your config file.
+
+`maxEntries`, top level, moves the ceiling on the analysis walk — 200,000
+entries by default, past which analysis refuses rather than report on part of
+the tree (see [Programmatic use](#programmatic-use)) — for a project genuinely
+larger than that, or lowers it. It must be a positive whole number; anything
+else is a config error. `LOUPE_MAX_ENTRIES` outranks it for a single run.
 
 Defaults are `DEFAULTS` in `src/config.ts`; `presets/generic.json` adds the
 ignore globs and CSS-in-JS packages every shipped preset inherits. The
@@ -218,6 +259,7 @@ design-system block is what makes a preset:
     "components": { "layout": ["Stack"], "text": ["Text"] },
     "elementMap": {
       "p": "Text",
+      "h4": { "component": "Text", "render": "h4" },    // <h4> → <Text render={ <h4 /> }>
       "div": { "component": "Stack", "styledOnly": true }
     }
   }
@@ -350,13 +392,21 @@ it, and the registries describing its components and composites:
 ```
 profiles/
   acme/
-    profile.json       { id, name, packages, preset, patterns, components, tokenDescriptions }
+    profile.json       { id, name, packages, preset, patterns, components,
+                         tokenDescriptions, tokenScopes, delivery }
     patterns/index.json
     components/index.json
+    delivery.json      how its packages and tokens reach a page
     authoring.md       read by the plugin's skills, not by this engine
     patterns.md
     remediation.md
 ```
+
+`delivery.json` says what adopting the system costs a project: which packages
+the host provides at runtime (`external`, with its handle) and which the build
+compiles in (`bundled`), and which stylesheet defines the tokens. `loupe status`
+prints it as `delivery:`. See
+[delivery](../docs/design/checks.md#delivery).
 
 The three `.md` files are the design system's own authoring prose. The engine
 never opens them — it prints the profile's directory in `loupe status`, and the
@@ -393,6 +443,70 @@ checked by the rules that need no registry at all. `loupe status` prints which
 profile is active, and a registry passed but not applied says so on stderr
 rather than looking like a registry that found nothing.
 
+### Token scopes
+
+A profile can say what each of its tokens is *for*, which a token's type does
+not: a stroke colour and a text colour are both colours. `tokenScopes` — inline
+in `profile.json`, or a profile-relative path to a JSON file holding it — is a
+naming grammar plus what its segments mean, and an explicit list for any scale
+whose role is not in the name. WPDS's is `profiles/wpds/token-scopes.json`:
+
+```jsonc
+{
+  "kinds": {                                   // what markup can show an element to be
+    "interactive": ["a", "button", "input", "Button", "Link"],
+    "control": ["button", "input", "Button"],
+    "overlay": ["Popover"],
+    "nested-in-control": []                    // empty: no markup can show it
+  },
+  "grammars": [
+    {
+      "pattern": "--wpds-color-{property}-{target}...",
+      "property": {                            // segment → the CSS properties it sets
+        "background": ["background", "background-color", "background-image"],
+        "stroke": { "sets": ["border-color", "border-*-color", "outline-color"], "also": ["box-shadow"] }
+      },
+      "target": {                              // segment → where it may sit
+        "surface": { "not": ["interactive"] },
+        "interactive": { "requires": ["interactive"] }
+      }
+    },
+    { "pattern": "--wpds-cursor-{target}", "properties": ["cursor"], "target": { "control": { "requires": ["control"] } } }
+  ],
+  "scales": { "--wpds-border-radius-md": { "on": ["overlay"] } }
+}
+```
+
+- **`pattern`** is a custom-property name with placeholders. `{property}`
+  matches one of the segments the entry maps (so `surface-width` and `font-size`
+  can be one segment); every other placeholder is one word; a trailing `...`
+  allows any further segments. The first grammar that matches a token places it.
+- **`property`** maps each segment to the CSS properties it `sets` — what the
+  token is suggested for — and optionally those it may `also` appear in without
+  being what it is for (a stroke inside a focus-ring `box-shadow`). A list is
+  `sets` alone. `*` matches within a name: `padding-*`, `border-*-radius`. A
+  pattern with no `{property}` names its family's properties under `properties`.
+- **`target`** maps a segment to the kinds of element it `requires` or must
+  `not` sit on. **`kinds`** names those kinds by tag (lowercase) and component
+  (capitalised). **`scales`** gives a token with no role in its name the kinds it
+  is `on`.
+- Keys beginning with `$` are comments.
+
+What it changes. Wherever a declared segment `sets` a property, the declared
+grammar — not the engine's generic table — decides which of the tokens under its
+patterns' prefixes are suggested for it; a token no pattern's prefix claims (a
+project's own `--acme-*`), every other property, and a profile declaring
+nothing get the generic table exactly as before. A single suggested token scoped to a kind of element
+is applied by `loupe fix` only where the declaration is shown to style that kind
+(see [Fixing](#fixing)), and `tokens/misapplied-token` reports a real token used
+off its declared property or kind. Where nothing shows what an element is, a
+scope is never reported and never applied unattended.
+
+It is validated as the profile loads, and refused whole if any of it is wrong:
+`loupe` names every problem on stderr and the profile falls back to the generic
+table, its registries still applied. Design notes:
+[token scopes](../docs/design/analysis.md#token-scopes).
+
 ## Fixing
 
 ```bash
@@ -405,6 +519,25 @@ candidate tokens is a semantic choice — the right pixels with the wrong meanin
 is the failure the suggestion machinery exists to prevent. A type property in a
 stylesheet is where the rule's first remedy — use the text component — is not
 available, which is the case its second one is for.
+
+So is one token outside the scope its profile declares. `border-radius: 4px` is
+`--wpds-border-radius-md` by value on a dialog and on a button alike, and `md`
+is the radius for menus and popovers. Where the [token scopes](#token-scopes)
+tie the one candidate to a kind of element and the declaration is not shown to
+style that kind, the finding names it with `(review: …)` and the reason, and
+`fix` prints a `review` line instead of writing it:
+
+```
+review src/a.scss:2  border-radius: 4px → --wpds-border-radius-md — for overlay; this styles <dialog>
+```
+
+The same holds for a token that settles one part of a value, or equals it in
+another unit — `4px 4px 0 0`, `border: 1px solid #ddd`, `0.25rem` — which
+`--judge` would otherwise write without asking; the review names the token:
+
+```
+review src/a.scss:3  border-radius: 4px 4px 0 0 — --wpds-border-radius-md for overlay; this styles <dialog>
+```
 
 `tokens/unknown-token` is fixed on the same terms. A `var()` naming a token
 nothing defines is usually a misspelling, so where exactly **one** known token
@@ -453,10 +586,11 @@ loupe check --judge
 
 This covers the `system/raw-element` findings whose analog has `variants` in
 the component registry: `Text (@wordpress/ui)` in the WPDS profile. It sends
-each element's source and parent lines to TypeSafe in one request per 40
-elements, and asks which variant fits, or `not_<name>` when the element is not
+each element's source and parent lines to TypeSafe in a request of its own, six
+in flight, and asks which variant fits, or `not_<name>` when the element is not
 that component's content. A pick at 0.5 confidence or above is written into
-the suggestion — `<p> → <Text variant="body-sm"> (judged 0.80)`, a
+the suggestion — `<p> → <Text variant="body-sm"> (judged 0.80)`,
+`<h3> → <Text variant="heading-lg" render={ <h3 /> }>`, a
 `variant="heading-*"` placeholder filled, or `no analog, not Text content` in
 place of a wrong analog — and recorded as `judged: { answer, confidence, spans }`
 on the finding, the spans being what the agent format paints green. Anything
@@ -520,9 +654,13 @@ someone would accept. Past the end of the scale spacing may still be kept:
 48px of page padding snapped to 32px is a different layout.
 
 An empty token set is refused outright rather than read as "no token for
-anything". Every family would come back empty, and `fix --judge` would
+anything". Empty means the design system's `tokenSources` yielded nothing;
+tokens the project defines under the same prefix do not fill it. Every family
+would come back empty, and `fix --judge` would
 suppress every value as tokenless, so `check --judge` leaves values unjudged
-and says so, and `fix --judge` stops. A negative length, a `%` or an `hsl()` on
+and says so. So does `fix --judge`, and a failed request is handled the same
+way: what the judge could not settle is left alone, and every fix that needed
+no model is still written. A negative length, a `%` or an `hsl()` on
 a px or colour family is a literal no token can stand for. That value is not
 asked about, since rewriting the rest would leave the finding standing. A property whose family is empty
 (`box-shadow` in WPDS) is settled without a model, as kept.
@@ -541,17 +679,23 @@ the replacement text — `var()` and all, since that is what `fix --judge`
 writes — or `keep`. The message names the tokens without it.
 
 `fix --judge` applies a replacement through the same substitution as `fix`, in
-whichever channel the declaration came from. A kept value gets a directive on
-its own line above the declaration, with the judgement as its reason:
+whichever channel the declaration came from. A value kept because the design
+system has no token for its property at all gets a directive on its own line
+above the declaration, with that as its reason:
 
 ```css
-	/* wpds-allow tokens/hardcoded-value -- deliberate, no token fits (judged 0.98) */
-	background: rgba(0, 0, 0, 0.55);
+	/* wpds-allow tokens/hardcoded-value -- no box-shadow token in the design system */
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 ```
 
+A value the model judged deliberate is not suppressed. `deliberate, no token
+fits` is the judgement, not a reason: what the value is (a scrim, a pill, a
+brand colour) is for a reader to write, so `fix --judge` reports it as skipped
+and the finding stays.
+
 A directive mutes its whole next line. So one is written only where every
-flagged value on that line was kept, and otherwise the value is reported as
-skipped. It names the rules the kept declarations on that line were reported
+flagged value on that line was kept without a judgement, and otherwise the
+value is reported as skipped. It names the rules the kept declarations on that line were reported
 under, which on a minified stylesheet is not always one. Suppressions are
 stylesheets only: a substitution replaces bytes already there, while a directive
 adds a line, and a comment line above a JSX element is rendered text rather than
@@ -587,11 +731,13 @@ measurements shaped the design:
   buttons. Offering the sizes had the model put `size-5xs` on `top: 4px`, and
   took the score from 97% to 95%.
 
-Applied to that plugin, `fix --judge` rewrites 156 declarations and writes 20
-suppressions, taking `tokens/hardcoded-value` from 183 findings to 70 and
-`typography/untokenized` from 43 to 12, with no other finding moved. What is
-left is mostly the coin-flips — `10px` between 8 and 12, `3px` between 2 and
-4 — and the unitless line heights nobody is asked about.
+Applied to that plugin, what `fix --judge` leaves is the values judged
+deliberate — left for review now, rather than suppressed with the judgement as
+their reason — the coin-flips, `10px` between 8 and 12 or `3px` between 2 and
+4, and the unitless line heights nobody is asked about. Its rewrite and
+suppression counts there were last taken while deliberate values were still
+suppressed, against a checkout this repository does not carry, so none is
+given here: `evals/values` above is the measurement that reproduces.
 
 ### Judged renames
 
@@ -695,9 +841,17 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
-loupe baseline          # record the current findings
-loupe check --changed   # only what's new
+loupe baseline --dry-run  # what would be recorded, by rule — writes nothing
+loupe baseline            # record the current findings
+loupe check --changed     # only what's new
 ```
+
+`--dry-run` prints the count each rule would record and, against a baseline
+already in force, how many entries are new (`+N new`, backlog being accepted)
+and how many it holds that nothing matches any more (`-N fixed`), followed by
+that baseline's entry count and when it was recorded. `check` cannot answer
+this: it applies the existing baseline, and `--no-baseline` shows everything
+rather than what would change.
 
 Entries key on rule + file + normalized code, not line number, so reformatting
 doesn't resurrect the whole file.
@@ -710,9 +864,23 @@ a gate that blocks on findings it was told to accept. Set `baseline` in the
 config, or pass `--baseline <path>`, to put it elsewhere. `loupe status` prints
 the path in use, and says so when that path is a fallback.
 
+The hook's retry counter is the opposite case, and never lands in the project:
+it goes in `$CLAUDE_PLUGIN_DATA` under the plugin, and otherwise in a temp
+directory of this user's own, keyed by project — so running the engine directly
+from `.claude/settings.local.json` leaves no `.loupe/` in your tree. `loupe
+status` prints the location on its `state:` line.
+
+`loupe baseline` ends by saying to commit the file: until it is tracked, CI and
+every other clone run with no baseline at all. When the path is ignored it says
+that instead, with the number of findings those runs will report; outside a
+repository it does not ask.
+
 A committed `.loupe-baseline.json` the config has since pointed away from is
 still read. 0.1.x baseline locations (`.loupe/baseline.json`, the plugin data
-directory) are not: re-run `loupe baseline` to record one in the project.
+directory) are not: re-run `loupe baseline` to record one in the project, then
+delete the old file. Until a current baseline exists, `check` says so on stderr
+(never in JSON or SARIF on stdout) and `status` says so under its `baseline:`
+line; the hook does not.
 
 ## Claude Code hook
 
@@ -731,6 +899,17 @@ directory) are not: re-run `loupe baseline` to record one in the project.
 Hook mode reads the payload on stdin, scopes to changed files, and emits the
 hook protocol directly — no `jq`, no wrapper script.
 
+A `PostToolUse` payload names the file just written, and there the hook asks
+whether *this edit* made it worse: it blocks only on findings the edit
+introduced, compared by baseline key against the content Claude Code hands back
+as `tool_response.originalFile`. Findings the file already had are named in the
+message, not blocked on — a refactor passes through states that are worse before
+they are better. `Stop` keeps the absolute check over everything changed. With
+no pre-edit content to compare against (a file the write created, or an older
+payload), `PostToolUse` checks absolutely too — and likewise outside a git
+worktree, where `Stop` has no changed files to check and would never see what
+was passed over.
+
 On blocking findings it exits 2 and hands a budgeted report back to the agent:
 guidance printed once per rule, a sample of each rule rather than a flood of
 the first one. On a clean run it exits 0 with a one-line tally.
@@ -740,6 +919,10 @@ Installed as a Claude Code plugin, the hook reads its settings from
 class prefixes the project owns, and the attempt and finding caps. (Claude Code
 won't substitute `${user_config.*}` into a shell-form hook command, since the
 value would reach a shell, but it does export the options to the hook process.)
+The same options are read from `pluginConfigs` in `~/.claude/settings.json`, and
+the two are merged per key with the environment winning, so the hook and a
+terminal resolve the same set; `loupe status` prints each option with where it
+came from.
 
 Each session gets `hook.maxAttempts` gated passes (default 3), then the gate
 stands down and says so. Bailing out entirely on `stop_hook_active` — the
@@ -751,12 +934,21 @@ which Claude Code supplies from `"env": { "LOUPE": "on" }` in the project's
 `.claude/settings.local.json`. When the environment doesn't set `LOUPE`, the
 engine reads that same key from `.claude/settings.local.json`,
 `.claude/settings.json` and `~/.claude/settings.json`, in that order, so that
-`loupe status` in a terminal agrees with the hook.
+`loupe status` in a terminal agrees with the hook. `.claude/` is the Claude Code
+project's, not the run's root: `CLAUDE_PROJECT_DIR` when it is set, otherwise the
+nearest `.claude/` above `--root` or the working directory, looking no further
+than the repository's top — so `status` run from inside a monorepo package reads
+the same file the hook does.
 
-Set `LOUPE_OFF=1` in the hook's environment to silence an opted-in hook for a session —
-`LOUPE_OFF=1 claude`. It produces no output at all rather than downgrading to
-advisory, because an advisory finding still reaches the agent and an agent that
-sees a finding starts fixing it. `loupe` run by hand ignores the switch.
+To silence an opted-in hook, turn on the plugin's `off` option (every project),
+put `"env": { "LOUPE_OFF": "1" }` in the project's `.claude/settings.local.json`
+(one project, read on every run, so it takes effect mid-session), or start a
+session as `LOUPE_OFF=1 claude`. All three feed the same option. The hook then
+checks nothing and says only `loupe: skipped — silenced by …` to the user,
+rather than downgrading to advisory, because an advisory finding still reaches
+the agent and an agent that sees a finding starts fixing it. `loupe status`
+reports the switch on its `options:` line with where it was set. `loupe` run by
+hand ignores it.
 
 Both read the same on/off spelling as every plugin option: `1`, `true`, `yes`,
 `on`, case-insensitively. `LOUPE_OFF=0` is not one of them and leaves the hook
@@ -774,12 +966,41 @@ no reader.
 loupe check --all --format json     # stable, versioned schema
 loupe check --all --format sarif    # GitHub code scanning
 loupe check --changed --max-findings 20
-loupe suppressions                  # audit every active directive
+loupe check --rule layout/margin-on-child --format json   # one rule, every finding
+loupe suppressions                  # audit every active directive, and every rule off in config
 loupe suppressions --stale          # only the ones muting nothing; exit 1 if any
 ```
 
 Exit codes are a contract: `0` clean or advisory-only, `1` blocking findings,
 `2` could not run.
+
+The JSON payload carries a `version`, bumped whenever a field it already emitted
+changes meaning or goes away; adding a field does not bump it, so a consumer
+should ignore keys it does not know. Version `2` dropped `options` from every
+`config.rules` entry, which is now `{ severity }`, since a rule no longer takes
+the `[severity, {opts}]` form; an entry whose setting says why also carries
+`reason`, an addition.
+
+A baseline hides findings from `findings`, not from the record. The JSON
+`summary` carries `baselined` — findings the baseline hid — whenever a baseline
+step ran, and `fixed` — baseline *entries* nothing matches any more, the unit a
+baseline stores and the same `-N fixed` `baseline --dry-run` prints — on a
+whole-repo run that read a baseline file (under `--rule`, only those rules'
+entries). Both are additive: absent rather than
+0 when the question was not asked. SARIF lists each baselined finding as a
+result carrying `suppressions: [{ "kind": "external", "justification":
+"accepted in the loupe baseline" }]`, after the live ones, so code scanning
+shows it as suppressed rather than as fixed, and puts the same two counts in the
+run's `properties`.
+
+`--rule <id>` scopes `check` and `fix` to the rules it names: repeat it, or give
+a comma list. The exit code answers for what is left, the baselined count is the
+same rule's, and `fix` rewrites only that rule's findings. An id that is not a
+rule is exit `2` — filtering on it would report `clean` — and one this config
+has off runs with a note saying so. `--rule <id> --format json` is every
+occurrence, for a fix scripted in one pass; the agent format collapses identical
+findings onto one line with `×N` and their lines, and says on each rule heading
+how concentrated it is (`25 in 9 files, 11 distinct`).
 
 JSON findings that flag a declaration carry `suggest`: `[{ prop, value, tokens,
 line? }]`, one entry per declaration, tokens most specific first. `tokens` is
@@ -875,7 +1096,8 @@ const { findings, blocking, directives } = analyze(config, { scope: null });
 | `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element` when the carrier is a `components.text` or `components.layout` name; nothing nested inside it is, and a genuine render callback on any other component is not. Defaults to `render`, `as`, `component`; `[]` exempts nothing. A list replaces the default rather than extending it. |
 | `designSystem.allowedInlineStyles` | Inline-style properties a component's own API sanctions, as `{ "Text": ["color"] }` keyed by canonical component name. A `style` on that component made only of those properties is not `system/inline-style`; its values still go through the ordinary checks, so a raw colour there is still `tokens/hardcoded-value`. Any other property, a spread, or an opaque `style={obj}` reports the element as before, naming only the unsanctioned properties. The `wpds` preset sanctions `color` on `Text`, which has no color prop. |
 | `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. A `judge` detector (`components`, `unless`) names elements for `check --judge` to ask about, and reports `patterns/judged-redirect`. |
-| `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
+| `maxEntries` | How many entries the analysis walk reads before it refuses (default 200,000). A positive whole number; anything else is a config error. `LOUPE_MAX_ENTRIES` outranks it for one run. |
+| `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package, and optionally each component's styling `surface` — `{ "properties": { "font-size": "variant", "border-radius": null } }` — which `system/override` and `typography/in-css` read; a registry recording none on any entry keeps `system/override`'s pre-surface reading, where every appearance property on a bound class blocks): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
 `scope` filters what is *reported*. The index is always built repo-wide —
 building it from changed files alone would make every unchanged reference look
@@ -885,6 +1107,16 @@ Two guards bound the cost: a hook payload naming a file no source glob matches
 returns before indexing, and any file over 1.5MB is skipped as generated (a
 stylesheet skipped this way still reports `stylesheet/unparsed`, so the hole is
 never silent).
+
+And a ceiling bounds the walk itself: past 200,000 entries (pruned directories
+not counted) analysis refuses rather than reporting on part of the tree, since
+a partial index calls everything it never reached clean. The hook stands aside
+with a `skipped` message naming the count; a typed command exits 2. Point
+`--root` at the project, or narrow `sources` / extend `sources.ignore`.
+A project that really is that large sets the ceiling in `loupe.config.json` —
+`"maxEntries": 500000`, a positive whole number, anything else a config error —
+and `LOUPE_MAX_ENTRIES` overrides that for one run: the variable, then the
+config, then 200,000.
 
 ## Source and bundle
 
@@ -983,7 +1215,10 @@ directory per behaviour), `tests/detect.ts` (inference), `tests/regressions.ts`
 (failures that reported success), `tests/features.ts` (the three channels and the
 two cross-file rules), `tests/autofix.ts` (the fix path, where a wrong
 substitution is invisible), and `tests/multi-ds.ts` (registry scoping and profile
-selection — which design system answers for a file). `tests/harness.ts` is not a
+selection — which design system answers for a file). `tests/scopes.ts` covers
+token scopes: the schema's validation, the generic table's parity with what it
+replaced, `fix` holding back an off-role token, and `tokens/misapplied-token`.
+`tests/harness.ts` is not a
 suite: it holds the `check`/`assert`/scratch-repo helpers the six share, typed
 once instead of copied six times.
 Once behaviour is config-driven, these are the only thing standing between a

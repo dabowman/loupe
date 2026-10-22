@@ -24,6 +24,7 @@
 
 import { readFileSync } from 'node:fs';
 import { renameCandidates } from './checks/tokens/unknown-token.ts';
+import { withoutReach } from './delivery.ts';
 import { EMBEDDED_LANGUAGE } from './embedded.ts';
 import type { ForceJudge } from './judge/force.ts';
 import { forceQuery } from './judge/force.ts';
@@ -33,7 +34,8 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import { KEEP, declarationMessage, planValue } from './tokens.ts';
+import { boundMessage, messageLine } from './text.ts';
+import { DELIBERATE, KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
 
@@ -49,6 +51,11 @@ const FLOOR = 0.5;
 const CONCURRENCY = 6;
 // Overload is transient and a run is a hundred requests.
 const RETRIES = 4;
+// The longest a server's `retry-after` is honoured for: a little past the
+// longest wait the doubling picks on its own (4s), so a server asking for a
+// few seconds gets them. A proxy answering `retry-after: 3600` would otherwise
+// hold the whole run, hook included, for an hour.
+const RETRY_WAIT_MAX_MS = 5_000;
 // The hook runs this inside Claude Code's 60s timeout, and `fetch` has no
 // deadline of its own: one socket that never answers is otherwise a killed hook
 // on every write. An abort throws, the caller notes it, the run keeps the
@@ -118,10 +125,11 @@ export async function ask<T>(
 			const transient = res.status === 429 || res.status >= 500;
 			if (!transient || attempt >= RETRIES)
 				throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
-			// The server's own wait when it names one, in seconds; a date or
-			// nothing falls back to doubling.
+			// The server's own wait when it names one, in seconds and capped; a
+			// date or nothing falls back to doubling.
 			const after = Number(res.headers.get('retry-after'));
-			await new Promise((r) => setTimeout(r, after > 0 ? after * 1000 : 500 * 2 ** attempt));
+			const wait = after > 0 ? Math.min(after * 1000, RETRY_WAIT_MAX_MS) : 500 * 2 ** attempt;
+			await new Promise((r) => setTimeout(r, wait));
 		}
 	};
 
@@ -155,8 +163,11 @@ const judgedTail = (confidence: number): string => `(judged ${confidence.toFixed
 /** The registry entry with variants that a raw-element finding points at, if any. */
 function targetOf(f: Finding, withVariants: readonly ComponentEntry[]): ComponentEntry | undefined {
 	if (f.rule !== 'system/raw-element') return undefined;
-	const analog = f.message.split('→')[1] ?? '';
-	return withVariants.find((e) => new RegExp(`\\b${e.name}\\b`).test(analog));
+	// The analog's own leading name — `<Text …>`, or `Text (…)` where a legacy
+	// entry forwards — and nothing after it: the promotion tail names classes,
+	// and `.Text-label` on a button is not a Text question.
+	const name = /^\s*<?([A-Za-z_$][\w.$]*)/.exec(f.message.split('→')[1] ?? '')?.[1];
+	return name ? withVariants.find((e) => e.name === name) : undefined;
 }
 
 /**
@@ -190,19 +201,24 @@ export async function judgeVariants(
 		const arrow = f.message.indexOf(' → ');
 		const element = f.message.slice(0, arrow);
 		const analog = f.message.slice(arrow + 3);
-		const tag = `<${target.name}>`;
+		// `<Text>`, or `<Text render={ <h4 /> }>` when the mapping keeps the element.
+		const tag = new RegExp(`<${target.name.replace(/[.$]/g, '\\$&')}(?=[ >])`);
 		const not = a.choice === notKey(target);
 		const span = not ? `no analog, not ${target.name} content` : `variant="${a.choice}"`;
 		const suggestion = not
 			? span
 			: /variant="[^"]*"/.test(analog)
 				? analog.replace(/variant="[^"]*"/, span)
-				: analog.includes(tag)
-					? analog.replace(tag, `<${target.name} ${span}>`)
+				: tag.test(analog)
+					? analog.replace(tag, `<${target.name} ${span}`)
 					: `${analog} with ${span}`;
 		const tail = judgedTail(a.confidence);
-		f.message = `${element} → ${suggestion} ${tail}`;
+		// Bounded again, with the judgement kept last: `analyze` bounded this line
+		// before the answer was spliced into it.
+		f.message = messageLine(`${element} → ${suggestion}`, ` ${tail}`);
 		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+		// The reach note priced adopting the analog, which a `not_` answer withdrew.
+		if (not) f.note = withoutReach(f.note, target.package);
 		annotated++;
 	});
 	return annotated;
@@ -225,6 +241,20 @@ export const LANGUAGE = EMBEDDED_LANGUAGE as Language;
 // measured, and what would have to change to lower it, is in
 // docs/design/judge.md#the-redirect-floor-is-090.
 const REDIRECT_FLOOR = 0.9;
+
+/**
+ * What identifies the redirect a control would produce: everything its baseline
+ * and hook-delta key is built from. Shared with the hook's pre-edit comparison,
+ * which stands a control in for the redirect without paying to ask the judge,
+ * so the two cannot drift into keys that never match.
+ */
+export const redirectIdentity = (
+	c: Pick<Control, 'file' | 'component'>,
+): { rule: 'patterns/judged-redirect'; file: string; code: string } => ({
+	rule: 'patterns/judged-redirect',
+	file: c.file,
+	code: `<${c.component}>`,
+});
 
 /**
  * The findings the abstract language's redirects produce on these controls.
@@ -276,16 +306,15 @@ export async function judgeRedirects(
 		const reading = `(${when.map(([f, v]) => `${f}: ${String(v)}`).join(', ')})`;
 		const confidence = Math.min(...when.map(([f]) => sure[i]?.[f] ?? 0));
 		const tail = judgedTail(confidence);
+		const id = redirectIdentity(c);
 		return [
 			{
-				rule: 'patterns/judged-redirect',
+				...id,
 				severity,
-				rank: RULES['patterns/judged-redirect'].rank,
-				file: c.file,
+				rank: RULES[id.rule].rank,
 				line: c.line,
-				message: `<${c.component}> ${reading} \u2192 \`${r.redirect}\` ${tail}`,
+				message: `${id.code} ${reading} \u2192 \`${r.redirect}\` ${tail}`,
 				note: r.because,
-				code: `<${c.component}>`,
 				judged: { answer: when.map(([, v]) => String(v)).join(', '), confidence, spans: [reading, tail] },
 			},
 		];
@@ -322,11 +351,12 @@ export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescrip
  *
  * Every settled declaration is rendered by the same `declarationMessage` the
  * token pass used, so a judged finding and an unjudged one read by one set of
- * rules. The channel marker comes off `suffix`, where the walk put it.
+ * rules. The channel marker comes off `suffix`, where the walk put it, and the
+ * line is bounded again, since the bound in `analyze` ran before this did.
  */
 function restate(f: Finding): void {
 	const parts = f.suggest ?? [];
-	f.message = declarationMessage(parts, f.suffix ?? '');
+	f.message = boundMessage(declarationMessage(parts, f.suffix ?? ''), f.suffix);
 	const judged = parts.flatMap((s) => (s.judged ? [s.judged] : []));
 	if (!judged.length) return;
 	// The least certain answer speaks for the finding: it is the one a floor
@@ -357,17 +387,19 @@ function restate(f: Finding): void {
 export async function judgeValues(
 	root: string,
 	findings: readonly Finding[],
-	set: TokenSet,
+	set: TokenSet | undefined,
 	apiKey: string,
 	about: ReadonlyMap<string, string> = new Map(),
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
 	// An empty set proves nothing about the system: with nothing read, every
 	// property's family is empty, and "no padding token in the design system" would
-	// be said of every value and suppressed by `fix --judge` as fact.
+	// be said of every value and suppressed by `fix --judge` as fact. `analyze`
+	// hands back no set at all when the design system's sources yielded nothing,
+	// so a set the project's own definitions alone filled never reaches here.
 	// ponytail: a set read only partly passes this; a per-family check is the
 	// upgrade if a token source that half-resolves turns up.
-	if (!set.known.size)
+	if (!set?.known.size)
 		throw new Error(
 			'no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships',
 		);
@@ -381,8 +413,10 @@ export async function judgeValues(
 	// the text component, is not available.
 	for (const f of findings) {
 		for (const decl of f.suggest ?? []) {
-			// The single exact token is plain `fix`'s already.
-			if (decl.tokens.length === 1) continue;
+			// The single exact token is plain `fix`'s already. One held for review —
+			// a whole value's or a part's — is outside its declared scope here, or
+			// not shown to be inside it, and no answer here is in a position to say.
+			if (decl.tokens.length === 1 || decl.review) continue;
 			const plan = planValue(set, decl.prop, decl.value);
 			if (plan === 'none') {
 				decl.judged = { answer: KEEP, confidence: 1, spans: [`no ${decl.prop} token in the design system`] };
@@ -433,9 +467,8 @@ export async function judgeValues(
 		// the rest would exempt the kept literal. Left for review.
 		if (kept && got.some((a) => a?.choice !== KEEP)) continue;
 		if (kept) {
-			const why = 'deliberate, no token fits';
 			const tail = judgedTail(kept.confidence);
-			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [DELIBERATE, tail] };
 		} else {
 			const out = [...parts];
 			const named = [...parts];
@@ -480,7 +513,7 @@ export function renameOptions(
 	about: ReadonlyMap<string, string> = new Map(),
 ): [string, string][] {
 	const values = new Map([...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v])));
-	return renameCandidates(name, prop, set.known).map((n) => [
+	return renameCandidates(name, prop, set.known, set.scopes).map((n) => [
 		n,
 		[values.get(n), about.get(n)].filter(Boolean).join(' \u2014 ') || n,
 	]);
@@ -521,7 +554,9 @@ export async function judgeRenames(
 		if (!a || a.confidence < RENAME_FLOOR) return;
 		const tail = judgedTail(a.confidence);
 		const span = a.choice === NONE ? 'no token means this' : a.choice;
-		f.message = `${item.name} \u2192 ${span} ${tail}`;
+		// The unknown name is source text, and nothing bounds this line after here.
+		// It is what gives way: the answer is the half a reader acts on.
+		f.message = messageLine(item.name, ` \u2192 ${span} ${tail}`);
 		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
 		if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
 		settled++;

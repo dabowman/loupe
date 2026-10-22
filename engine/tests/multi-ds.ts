@@ -511,6 +511,51 @@ await check('a headless system composes without a layout or text layer', async (
 	}
 });
 
+// Every shipped preset reaches `generic`, so two of them side by side share an
+// ancestor. One `seen` set threaded through sibling entries called that a cycle,
+// and the config would not load — under the hook, the gate checked nothing
+// while telling the agent to fix a cycle that was not there.
+await check('extends can list two configs that share an ancestor', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: ['wpds', 'base-ui', './team.json'] }),
+		'team.json': JSON.stringify({ extends: 'generic', namespaces: { project: ['acme-'] } }),
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		assert(config.designSystem.name === 'Base UI', `the later entry wins: ${config.designSystem.name}`);
+		assert(config.isProject('acme-x'), 'the team config, which also extends generic, is merged');
+		assert(config.ruleFrom['system/override'] === 'preset base-ui', `ruleFrom: ${config.ruleFrom['system/override']}`);
+		// `generic` is merged once, where it is first met. Merged again under
+		// base-ui, its `references` would land over the WordPress ones wpds carries.
+		const wp = JSON.parse(readFileSync(join(PRESET_DIR, 'wordpress-components.json'), 'utf8')) as {
+			sources: { references: string[] };
+		};
+		assert(
+			JSON.stringify(config.sources.references) === JSON.stringify(wp.sources.references),
+			`a later branch's copy of generic undid wordpress-components: ${JSON.stringify(config.sources.references)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a real extends cycle is still refused, through sibling entries too', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: ['generic', './a.json'] }),
+		'a.json': JSON.stringify({ extends: ['./b.json'] }),
+		'b.json': JSON.stringify({ extends: ['generic', './a.json'] }),
+	});
+	try {
+		const err = await loadConfig({ root, configPath: join(root, 'loupe.config.json') }).then(
+			() => undefined,
+			(e: unknown) => (e instanceof Error ? e.message : String(e)),
+		);
+		assert(err?.startsWith('circular extends at ') && err.endsWith('a.json'), `expected a cycle at a.json, got ${err}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // ── a second shipped design system ──────────────────────────────────────────
 // The claim the profiles directory makes is that adding a design system is
 // adding a directory. Archer is the second one shipped, and it is the first
@@ -544,9 +589,24 @@ await check('the archer profile reaches a project that imports it, and only that
 // covered: it inherits Base UI's parts but not its licence to restyle them.
 // Turning the override rules off — which is what the headless preset does — was
 // the easy wrong answer, and it silently stops reporting real overrides.
+//
+// With a registry that records surfaces, the per-declaration form needs one to
+// say the component owns what the class sets; this fixture states one for the
+// component it restyles. The shipped Archer registry records none, which is the
+// case the checks after the VIP one cover.
 await check('a styled system on a headless library keeps its override rules', async () => {
 	const root = repo({
-		'loupe.config.json': JSON.stringify({ extends: 'archer' }),
+		'loupe.config.json': JSON.stringify({
+			extends: 'archer',
+			componentRegistry: [
+				{
+					name: 'Button',
+					package: '@dabowman/archer',
+					status: 'recommended',
+					surface: { properties: { background: 'variant' } },
+				},
+			],
+		}),
 		'src/A.jsx': `import { Button } from '@dabowman/archer';\nexport const A = () => <Button className="save">Save</Button>;\n`,
 		'styles/a.css': '.save { background: #c24300; }\n',
 	});
@@ -592,6 +652,121 @@ export const A = () => (
 	} finally {
 		cleanup(root);
 	}
+});
+
+// #13 narrowed the per-declaration form to what a registry `surface` says the
+// component owns, failing safe to advisory where none is recorded. That is
+// right for a registry read for surfaces, whose gaps are gaps; for one that
+// records none at all — VIP and Archer today, a run with no profile, a
+// project's own registry — it switched the rule off. There, a class restyling a
+// component blocks as it always did, with the remedy it always had.
+
+/** Analyze through profiles' shipped registries, the way `--profiles` merges them. */
+async function withProfiles(
+	files: Record<string, string>,
+	config: Record<string, unknown>,
+	ids: readonly string[],
+): Promise<AnalyzeResult> {
+	const root = repo({ 'loupe.config.json': JSON.stringify(config), ...files });
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const profiles = readProfiles(PROFILES).filter((p) => ids.includes(p.id));
+		assert(profiles.length === ids.length, `missing a profile: ${ids}`);
+		applyRegistries(
+			config,
+			profiles.map((p) => ({ label: `profile ${p.id}`, patterns: null, components: p.components, forced: true })),
+		);
+		return await analyze(config, { scope: null });
+	} finally {
+		cleanup(root);
+	}
+}
+
+const UNREAD = (tag: string, prop: string): string => `<${tag}> ← ${prop} — restyle via its props/tokens, not CSS`;
+
+for (const [id, pkg] of [
+	['archer', '@dabowman/archer'],
+	['vip', '@automattic/vip-design-system'],
+] as const)
+	await check(`the ${id} registry records no surfaces, so an override there reads as it did before them`, async () => {
+		const shipped = loadComponents(JSON.parse(readFileSync(join(PROFILES, id, 'components', 'index.json'), 'utf8')));
+		assert(
+			[...shipped.values()].every((e) => !e.surface && !e.surfaced),
+			`the ${id} registry now records surfaces; this check no longer covers the fallback`,
+		);
+		const r = await withProfiles(
+			{
+				'src/A.jsx': `import { Button } from '${pkg}';\nexport const A = () => <Button className="save">Save</Button>;\n`,
+				'styles/a.css': '.save { background: #c24300; border-radius: 4px; }\n',
+			},
+			{ extends: id },
+			[id],
+		);
+		const overrides = r.findings.filter((f) => f.rule === 'system/override');
+		const want = [UNREAD('Button', 'background'), UNREAD('Button', 'border-radius')];
+		assert(
+			overrides.map((f) => f.message).join('|') === want.join('|'),
+			`every appearance property should report, with the props/tokens remedy: ${overrides.map((f) => f.message)}`,
+		);
+		// The identity it had before surfaces existed, so a baseline still matches.
+		assert(
+			overrides.every((f) => f.code === f.message.split(' — ')[0]),
+			`code: ${overrides.map((f) => f.code)}`,
+		);
+		const preset = JSON.parse(readFileSync(join(PRESET_DIR, `${id}.json`), 'utf8')) as {
+			rules: Record<string, string>;
+		};
+		assert(
+			overrides.every((f) => f.severity === preset.rules['system/override']),
+			`at the preset's severity: ${overrides.map((f) => f.severity)}`,
+		);
+	});
+
+await check('with no registry at all, an override reads as it did before surfaces', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'src/A.jsx':
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;\n',
+		'styles/a.css': '.acme-t { color: #f00; }\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root, configPath: join(root, 'loupe.config.json') }), { scope: null });
+		const f = one(
+			r.findings.filter((x) => x.rule === 'system/override'),
+			'a colour on a bound Text should block',
+		);
+		assert(f.message === UNREAD('Text', 'color') && f.severity === 'error', `${f.severity} ${f.message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Two profiles active, one read for surfaces and one not: each component is read
+// by the registry it came from, not by whether the run has surfaces somewhere.
+await check('with WPDS and VIP both active, each component is read by its own registry', async () => {
+	const r = await withProfiles(
+		{
+			'src/A.jsx': [
+				"import { Notice } from '@wordpress/components';",
+				"import { Text } from '@wordpress/ui';",
+				"import { Button } from '@automattic/vip-design-system';",
+				'export const A = () => <><Notice className="acme-n">x</Notice><Text className="acme-t">t</Text><Button className="acme-b">b</Button></>;',
+			].join('\n'),
+			'styles/a.css': '.acme-n { color: #333; }\n.acme-t { color: #333; }\n.acme-b { color: #333; }\n',
+		},
+		{
+			extends: 'wpds',
+			designSystem: { packages: ['@wordpress/components', '@wordpress/ui', '@automattic/vip-design-system'] },
+		},
+		['wpds', 'vip'],
+	);
+	const overrides = r.findings.filter((f) => f.rule === 'system/override').map((f) => f.message);
+	// Notice has no surface in a registry that records them: a gap, advisory.
+	// Text's surface does not list colour: `className` doing its job. VIP's
+	// Button comes from a registry that records none: blocking, as before.
+	assert(overrides.join('|') === UNREAD('Button', 'color'), `only the VIP component should report: ${overrides}`);
+	const plain = r.findings.filter((f) => f.rule === 'tokens/hardcoded-value').map((f) => f.line);
+	assert(plain.join() === '1,2', `the WPDS colours fall through to the plain verdict: ${plain}`);
 });
 
 // A title interpolates one token namespace. With seventeen prefixes there is no

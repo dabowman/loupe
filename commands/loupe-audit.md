@@ -16,7 +16,9 @@ Adjust for the arguments given in `$ARGUMENTS`:
   whole repo; scoping the index would make every unchanged reference look absent)
 - a path — pass as `--files <path>`
 - `--suppressions` — run the `suppressions` subcommand instead, listing every
-  active directive with its reason, so stale escape hatches surface
+  active directive with its reason, and every rule turned off in config with
+  the reason its setting gives (or `no reason given`), so stale escape hatches
+  surface
 - `--format json` — not a user argument; add it when the summary needs more
   than the default report prints: per-file counts past the densest three, or a
   finding's registry note in full. The default report already opens with the
@@ -37,7 +39,8 @@ Then summarize for the user rather than pasting raw output:
 3. **Call out `stylesheet/unparsed` first if present** — those files were not
    checked at all, so the rest of the report is incomplete until they are.
 4. **Say so if a baseline is hiding findings.** `N baselined finding(s) hidden`
-   below the report means an accepted backlog is being filtered out, so what you
+   below the report (`summary.baselined` under `--format json`) means an
+   accepted backlog is being filtered out, so what you
    are looking at is new drift rather than the state of the repo — re-run with
    `--no-baseline` for the real total. Unsaid, a near-empty report reads as a
    clean codebase. Suppression directives hide findings the same way: add
@@ -51,6 +54,7 @@ a report the reader has to guess at.
 
 If the repo has no config, say so — the run still worked, against one inferred
 from what the project imports. `loupe detect` prints that inferred config so the
-user can see what was assumed and `loupe init` writes it to `loupe.config.json`;
-`loupe presets` lists the bundled rulesets, any of which runs without one
-(`--preset <name>`).
+user can see what was assumed, and `/loupe-init` settles it with the user and
+writes `loupe.config.json` — offer it, especially when the report ends by saying
+no design system was recognised. `loupe presets` lists the bundled rulesets, any
+of which runs without one (`--preset <name>`).

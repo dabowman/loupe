@@ -193,7 +193,8 @@ At 0.80 none of them does.
 ## Reporting a judgement
 
 The answer goes where the reader would otherwise have had to put it: `<p> →
-<Text>` becomes `<p> → <Text variant="body-sm"> (judged 0.81)`, and a suggestion
+<Text>` becomes `<p> → <Text variant="body-sm"> (judged 0.81)`, a heading's
+`<Text render={ <h4 /> }>` gains its `variant` in the same tag, and a suggestion
 already naming a placeholder — `variant="heading-*"` — has it filled. A `not_`
 answer replaces the suggestion, since the analog was the wrong call.
 
@@ -213,13 +214,18 @@ decoration.
 
 - **An empty token set proves nothing about the system.** With nothing read,
   every property's family is empty, and "no padding token in the design system"
-  would be said of every value and suppressed by `fix --judge` as fact.
+  would be said of every value and suppressed by `fix --judge` as fact. Empty
+  is reckoned on what the design system's sources yielded: the walk adds what
+  the project itself defines under the prefix to the same set, so `analyze`
+  hands back no set at all when `diagnostics.tokensKnown` is 0.
 - **One failure fails the whole ask.** The pool stops its other workers rather
   than pay for answers that are about to be thrown away; the caller reports the
   failure and keeps what it had.
 - **Overload is transient.** A run is a hundred requests, so one 529 should not
   lose the other ninety-nine — retried with the server's own wait where it names
-  one, doubling otherwise.
+  one, doubling otherwise. The server's wait is capped at 5s, a little past the
+  longest the doubling would pick (4s): a `retry-after: 3600` is not a wait a
+  run, or a hook inside Claude Code's timeout, can afford.
 
 ## The evals
 
@@ -255,9 +261,14 @@ either — so "right" is "one of those", and an item whose right answer was not
 among the candidates is **a miss the narrowing made, not the model**, counted
 separately as coverage.
 
-The two ways to be wrong cost differently: a wrong token changes the design, a
-wrong keep suppresses a mistake for good. Scoring mirrors how `fix --judge`
-acts, including the spacing-in-scale case it applies whatever the confidence.
+The two ways to be wrong cost differently: a wrong token changes the design
+under a clean report; a wrong keep leaves a mistake in place, labelled for its
+reviewer as a deliberate choice. `fix --judge` no longer suppresses a value
+judged deliberate — it is left for a reader to suppress with what the value
+actually is — so a wrong keep is a fix missed and a label that invites the
+wrong suppression, not a mistake muted for good. Scoring counts an answer over
+the floor as acted on, whichever way `fix --judge` then takes it, and includes
+the spacing-in-scale case it applies whatever the confidence.
 
 **`evals/renames`** — 158 names no WPDS token defines, each set in a real
 declaration from `site-foundry/src` or `gutenberg/packages` where a real token

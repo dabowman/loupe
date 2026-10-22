@@ -80,7 +80,11 @@ represent: `Menu` (commands, actions, navigation destinations — `Menu.Item`
 for commands, `Menu.LinkItem` for navigation, `Menu.CheckboxItem`/
 `Menu.RadioItem` for settings within the menu) vs. `SelectControl`/`Select`
 (choosing one predefined value — the trigger represents the current value)
-vs. `Autocomplete` (free-form filtering of suggestions). The
+vs. `Autocomplete` (free-form filtering of suggestions). The select to write
+is `@wordpress/ui`'s `SelectControl` (`Select` for a borderless trigger or a
+select you compose yourself): both are `recommended` there since 0.23.0, and
+`@wordpress/components`' `SelectControl` is `legacy` — its options move to
+`items`, and `onChange` becomes `onValueChange`. The
 `@wordpress/components` `Menu` is `locked` — a private API, never use it.
 The `@wordpress/ui` `Menu` is real but `experimental` — same
 not-yet-safe-alongside-`@wordpress/components` gate as the Button family.
@@ -185,6 +189,16 @@ Other families, all `--wpds-` prefixed:
 | Type | `typography-font-size-{xs…2xl}`, `-line-height-*`, `-font-weight-{default,emphasis}` |
 | Corners, borders | `border-radius-{xs…xl}`, `border-width-{xs…lg,focus}` |
 | Animation | `motion-duration-{xs…xl}`, `motion-easing-{subtle,balanced,expressive}` |
+
+**Radius is by role, not by size**, and nothing in the name says which: `xs`
+for elements nested inside controls, `sm` standalone buttons, inputs and
+compact controls, `md` menus, popovers and small overlays, `lg` cards, dialogs
+and notices, `xl` the page and app shell. A dialog's corner is `lg` even where
+the design measured 4px.
+
+`token-scopes.json` beside this file is that grammar and that scale as data:
+Loupe holds a suggested token to it before `loupe fix` applies one, and
+`tokens/misapplied-token` reports a real token used off its property or target.
 
 The set is role-based, not a full matrix. A combination that does not exist
 usually should not — that is a signal to re-examine the design, not to invent a

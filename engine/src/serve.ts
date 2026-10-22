@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { reportPayload } from './report.ts';
+import { messageOf } from './text.ts';
 import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
 
 /**
@@ -290,7 +291,15 @@ const JS = `
   }
   function load() {
     fetch(ORIGIN + '/findings.json', { cache: 'no-store' })
-      .then(function (r) { return r.json(); })
+      // A refused analysis is a 500 carrying { error }: shown as the reason, never
+      // rendered as a payload it is not. Any other failure, a proxy's HTML among
+      // them, is shown by its status.
+      .then(function (r) {
+        if (r.ok) return r.json();
+        return r.json().catch(function () { return null; }).then(function (j) {
+          throw new Error(j && j.error || 'HTTP ' + r.status);
+        });
+      })
       .then(function (j) { data = j; pinned = null; render(); })
       .catch(function (e) {
         panel.innerHTML = '<div class="head"><span class="title">loupe</span></div><div class="empty">' +
@@ -393,7 +402,7 @@ export function serve(opts: {
 						// shows the message; the status keeps it out of `.json()`.
 						res.statusCode = 500;
 						res.setHeader('content-type', 'application/json; charset=utf-8');
-						res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+						res.end(JSON.stringify({ error: messageOf(err) }));
 					});
 				return;
 			}

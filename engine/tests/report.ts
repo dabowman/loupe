@@ -19,15 +19,16 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { analyze } from '../src/analyze.ts';
+import { analyze, findingKey } from '../src/analyze.ts';
+import { applyBaseline } from '../src/baseline.ts';
 import { setColor } from '../src/color.ts';
 import { loadConfig } from '../src/config.ts';
 import { formatAgent, formatSarif, reportPayload } from '../src/report.ts';
 import { formatHtml } from '../src/report-html.ts';
-import { CLI, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
+import { CLI, PLUGIN_DATA, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-import type { AnalyzeResult, Config } from '../src/types.ts';
+import type { AnalyzeResult, Baseline, Config, Finding } from '../src/types.ts';
 
 async function run(files: Record<string, string>): Promise<{ result: AnalyzeResult; config: Config; root: string }> {
 	const root = scratch('loupe-report-');
@@ -124,11 +125,112 @@ await check('the page is one file — no external requests', () => {
 	assert(!/<(script|link|img)[^>]+(src|href)=/i.test(html), 'the page loads something over the network');
 });
 
+await check('the palette has a plain value under every light-dark() one', () => {
+	// A custom property accepts any value, so an unguarded `light-dark()` wins in
+	// a browser that cannot compute it, and every colour reading it is lost.
+	const css = /<style>([\s\S]*?)<\/style>/.exec(formatHtml(result, config))?.[1] ?? '';
+	const at = css.indexOf('@supports (color: light-dark(#000, #000))');
+	assert(at > 0, 'no @supports guard around the light-dark() palette');
+	const plain = css.slice(0, at);
+	assert(!plain.includes('light-dark('), 'a light-dark() value sits outside the @supports guard');
+	const themed = [...css.slice(at).matchAll(/(--[\w-]+): light-dark\(/g)].map((m) => m[1] ?? '');
+	assert(themed.length > 0, 'the guard declares no themed properties');
+	for (const name of themed) assert(plain.includes(`${name}: `), `${name} has no plain fallback`);
+});
+
 await check('summary.baselined is absent when no baseline step ran', () => {
 	const bare = reportPayload(result, config);
 	assert(!('baselined' in bare.summary), 'an un-baselined run reported a baselined count');
 	const withBaseline = reportPayload({ ...result, baselined: 4, fixed: 0 }, config);
 	assert(withBaseline.summary.baselined === 4, 'the baselined count did not survive');
+});
+
+await check('the payload version names the shape config.rules has', () => {
+	// Version 2 is the one without `options`: a shape change that ships under an
+	// unchanged version is one no consumer can detect.
+	const payload = reportPayload(result, config);
+	assert(payload.version === 2, `the payload is version ${payload.version}`);
+	for (const [id, setting] of Object.entries(payload.config.rules))
+		assert(
+			JSON.stringify(Object.keys(setting)) === '["severity"]',
+			`${id} carries ${JSON.stringify(setting)} — a new shape needs a new version`,
+		);
+});
+
+// A repo whose whole backlog is accepted printed `total: 0` and `results: []`,
+// with nothing to tell it from a clean one. The counts go in the JSON summary;
+// SARIF lists the accepted findings as suppressed, which is what its
+// suppression model is for.
+/** The run above with its first finding accepted, plus one entry nothing matches any more. */
+const baselineOf = (keys: string[]): Baseline => {
+	const entries = [...keys, 'tokens/hardcoded-value|styles/gone.css|.wf-gone { color: #000; }'];
+	return { createdAt: '', entries, set: new Set(entries) };
+};
+
+await check('json carries the baselined finding count and the fixed entry count', () => {
+	const accepted = result.findings[0];
+	assert(accepted, 'no findings to baseline');
+	const baseline = baselineOf([findingKey(accepted)]);
+	const whole = reportPayload(applyBaseline(result, baseline), config);
+	const hidden = result.findings.filter((f) => findingKey(f) === findingKey(accepted)).length;
+	assert(whole.summary.baselined === hidden, `baselined ${whole.summary.baselined}, expected ${hidden}`);
+	assert(whole.summary.total === result.findings.length - hidden, 'the accepted findings are still in the total');
+	assert(whole.summary.fixed === 1, `fixed ${whole.summary.fixed}, expected the one entry nothing matched`);
+	// A scoped run cannot tell fixed from out of scope, so it does not guess.
+	const scoped = reportPayload(applyBaseline(result, baseline, { scoped: true }), config);
+	assert(!('fixed' in scoped.summary), 'a scoped run reported a fixed count');
+	// `--rule` reads every file but filters the other rules out: their entries
+	// are absent, not fixed, so only the named rules' entries are counted.
+	const other = reportPayload(applyBaseline(result, baseline, { rules: new Set(['layout/margin-on-child']) }), config);
+	assert(other.summary.fixed === 0, `fixed ${other.summary.fixed} under --rule for another rule`);
+	const same = reportPayload(applyBaseline(result, baseline, { rules: new Set(['tokens/hardcoded-value']) }), config);
+	assert(same.summary.fixed === 1, `fixed ${same.summary.fixed} under --rule for the gone entry's rule`);
+	assert(!('fixed' in reportPayload(applyBaseline(result, null), config).summary), 'no baseline, yet a fixed count');
+});
+
+await check('sarif lists baselined findings as externally suppressed results', () => {
+	const accepted = result.findings[0];
+	assert(accepted, 'no findings to baseline');
+	const applied = applyBaseline(result, baselineOf([findingKey(accepted)]));
+	const sarif = JSON.parse(formatSarif(applied, config)) as {
+		runs: {
+			tool: { driver: { rules: { id: string }[] } };
+			results: {
+				ruleId: string;
+				partialFingerprints: { loupeCode: string };
+				suppressions?: { kind: string; justification: string }[];
+			}[];
+			properties?: { baselined: number; fixed?: number };
+		}[];
+	};
+	const runOut = sarif.runs[0];
+	assert(runOut, 'no sarif run');
+	const suppressed = runOut.results.filter((r) => r.suppressions);
+	assert(runOut.results.length === result.findings.length, 'baselined findings were dropped, not listed');
+	assert(suppressed.length === applied.baselined, `${suppressed.length} suppressed, ${applied.baselined} baselined`);
+	for (const r of suppressed) {
+		const [s] = r.suppressions ?? [];
+		assert(s?.kind === 'external' && /baseline/.test(s.justification), `wrong suppression: ${JSON.stringify(s)}`);
+		assert(
+			runOut.tool.driver.rules.some((d) => d.id === r.ruleId),
+			`${r.ruleId} is suppressed but not in the driver`,
+		);
+	}
+	assert(
+		runOut.results.slice(0, applied.findings.length).every((r) => !r.suppressions),
+		'a live finding was marked suppressed',
+	);
+	assert(
+		new Set(runOut.results.map((r) => r.partialFingerprints.loupeCode)).size === runOut.results.length,
+		'a suppressed result shares a fingerprint',
+	);
+	assert(
+		runOut.properties?.baselined === applied.baselined && runOut.properties.fixed === 1,
+		`run properties: ${JSON.stringify(runOut.properties)}`,
+	);
+	// Unbaselined output is unchanged: no suppressions, no run properties.
+	const plain = JSON.parse(formatSarif(result, config)) as typeof sarif;
+	assert(!plain.runs[0]?.properties, 'a run with no baseline step carries baseline counts');
 });
 
 await check('the rules roster resolves title placeholders', () => {
@@ -186,6 +288,91 @@ await check('sarif rules carry a namespace tag and a pointer to the guidance', (
 });
 
 cleanup(root);
+
+await check('an unparsed stylesheet is keyed without the path it was read from', async () => {
+	// postcss opens its error with the absolute path it was handed, and `code`
+	// is part of the baseline key: left in, the key holds one machine's checkout
+	// and a committed baseline matches on no other.
+	const { result, root } = await run({
+		'loupe.config.json': CONFIG,
+		'styles/broken.css': '.wf-row { color: #757575;',
+	});
+	try {
+		const f = one(
+			result.findings.filter((x) => x.rule === 'stylesheet/unparsed'),
+			'stylesheet/unparsed finding',
+		);
+		assert(f.file === 'styles/broken.css', `the finding names ${f.file}`);
+		for (const text of [f.message, ...result.diagnostics.parseErrors.map((e) => e.message)])
+			assert(!text.includes('broken.css') && /^\d+:\d+: /.test(text), `a parse error kept its path: ${text}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The code was the message, position and all, so a line added above the error
+// made it a different finding — to the baseline and to the hook's pre-edit
+// comparison alike. And a sheet naming its source map reported the error at
+// the original file's absolute path, which no other clone has.
+await check('an unparsed stylesheet is keyed on the reason, not the position or a source map', async () => {
+	const { result, root } = await run({
+		'loupe.config.json': CONFIG,
+		'css/a.css': '/* built */\n.a { color: red; }\n.b { color: blue;\n/*# sourceMappingURL=a.css.map */\n',
+		'css/a.css.map': JSON.stringify({
+			version: 3,
+			file: 'a.css',
+			sources: ['../scss/a.scss'],
+			names: [],
+			mappings: 'AAAA;AACA;AACA',
+		}),
+	});
+	try {
+		const f = one(
+			result.findings.filter((x) => x.rule === 'stylesheet/unparsed'),
+			'stylesheet/unparsed finding',
+		);
+		assert(f.code === 'Unclosed block', `the code is not the bare reason: ${f.code}`);
+		assert(!/scss|\//.test(f.message), `the message names the source map's original: ${f.message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('findings, directives and tallies are in byte order, not the locale’s', async () => {
+	// `localeCompare` puts `a` before `B` and may skip the `-`, and answers
+	// differently under another `LANG`: the same run would print in a different
+	// order on a CI box than on a laptop.
+	const sheet =
+		'.wf-x { color: #757575; }\n/* wpds-allow tokens/hardcoded-value -- kept */\n.wf-y { color: #757575; }\n';
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'styles/a.css': sheet,
+		'styles/B.css': sheet,
+		'styles/-c.css': sheet,
+	});
+	try {
+		const expected = ['styles/-c.css', 'styles/B.css', 'styles/a.css'];
+		const order = (files: readonly string[]): string[] => files.filter((f, i) => files.indexOf(f) === i);
+		const first = result.findings[0];
+		assert(first, 'the fixture produced no findings');
+		const findings = order(result.findings.filter((f) => f.rule === first.rule).map((f) => f.file));
+		assert(JSON.stringify(findings) === JSON.stringify(expected), `findings ran ${findings.join(', ')}`);
+		const directives = order(result.directives.map((d) => d.file));
+		assert(JSON.stringify(directives) === JSON.stringify(expected), `directives ran ${directives.join(', ')}`);
+		const byFile = Object.keys(reportPayload(result, config).summary.byFile);
+		assert(JSON.stringify(byFile) === JSON.stringify(expected), `the tally ran ${byFile.join(', ')}`);
+		assert(!formatHtml(result, config).includes('localeCompare'), 'the page sorts by the reader’s locale');
+		const grouped = execFileSync(process.execPath, [CLI, 'suppressions', '--group-by', 'file'], {
+			cwd: root,
+			encoding: 'utf8',
+			env: { ...process.env, NO_COLOR: '1' },
+		});
+		const heads = grouped.split('\n').flatMap((l) => /^(\S+\.css) \(\d+\)$/.exec(l)?.[1] ?? []);
+		assert(JSON.stringify(heads) === JSON.stringify(expected), `suppressions --group-by ran ${heads.join(', ')}`);
+	} finally {
+		cleanup(root);
+	}
+});
 
 await check('composite findings carry the key their cluster is grouped on', async () => {
 	// Three files assembling the same shape: one defect, reported three times,
@@ -258,6 +445,96 @@ await check('an unknown --group-by is rejected, not silently treated as rule', (
 	}
 });
 
+// ── --rule ──────────────────────────────────────────────────────────────────
+// Batch remediation is one rule across the repo, and the way an agent narrowed to
+// one was piping `--format json` through an inline script. A flag now, scoping
+// `check` and `fix` alike.
+
+const RULED = {
+	'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'error' } }),
+	'styles/a.css': '.a { margin-bottom: 8px; padding: 13px; }\n.b { margin-bottom: 8px; }',
+	'styles/b.css': '.c { margin-top: 2px; padding: 7px; }',
+};
+
+/** Exit code and both streams, whichever way the run ended. */
+function cli(dir: string, ...argv: string[]): { status: number | null; stdout: string; stderr: string } {
+	const r = spawnSync(process.execPath, [CLI, ...argv], { cwd: dir, encoding: 'utf8' });
+	return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+await check('--rule scopes check to the rules it names, and may repeat', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		const rules = (...argv: string[]): string[] =>
+			(JSON.parse(cli(dir, 'check', '--all', '--format', 'json', ...argv).stdout) as { findings: Finding[] }).findings
+				.map((f) => f.rule)
+				.sort();
+		const all = rules();
+		assert(new Set(all).size === 2, `fixture should fire two rules: ${all.join(', ')}`);
+		const scoped = rules('--rule', 'layout/margin-on-child');
+		assert(
+			scoped.length === 3 && scoped.every((r) => r === 'layout/margin-on-child'),
+			`scoped to: ${scoped.join(', ')}`,
+		);
+		// The same two ways `--files` takes a list, and the legacy alias.
+		assert(
+			rules('--rule', 'layout/margin-on-child', '--rule', 'tokens/hardcoded-value').join() === all.join(),
+			'a repeat dropped a rule',
+		);
+		assert(
+			rules('--rule', 'layout/margin-on-child,tokens/hardcoded-value').join() === all.join(),
+			'a comma list dropped a rule',
+		);
+		assert(rules('--rule', 'R3').join() === scoped.join(), 'the alias did not resolve');
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// The gate answers for what was reported: a run scoped away from the only
+// blocking rule has nothing blocking in it.
+await check('--rule decides the exit code from what it kept', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'check', '--all').status === 1, 'the fixture should block unscoped');
+		const advisory = cli(dir, 'check', '--all', '--rule', 'tokens/hardcoded-value');
+		assert(advisory.status === 0, `advisory-only exited ${String(advisory.status)}:\n${advisory.stdout}`);
+		assert(!/margin/.test(advisory.stdout), `the scoped report kept another rule:\n${advisory.stdout}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// A misspelled id filters every finding out, and the report would say `clean`.
+await check('an unknown --rule is rejected before the walk, not read as clean', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		for (const command of ['check', 'fix']) {
+			const r = cli(dir, command, '--all', '--rule', 'layout/margin-on-chld');
+			assert(r.status === 2, `${command}: expected exit 2 (cannot run), got ${String(r.status)}`);
+			assert(r.stderr.includes('layout/margin-on-chld'), `${command}: stderr did not name the id: ${r.stderr}`);
+			assert(!r.stdout, `${command} reported anyway:\n${r.stdout}`);
+		}
+	} finally {
+		cleanup(dir);
+	}
+});
+
+await check('--rule scopes fix to the findings it names', () => {
+	const dir = scratch('loupe-rule-');
+	writeAll(dir, RULED);
+	try {
+		const r = cli(dir, 'fix', '--all', '--dry-run', '--rule', 'tokens/hardcoded-value');
+		assert(r.status === 0, `fix exited ${String(r.status)}: ${r.stderr}`);
+		assert(/ of 2 finding\(s\) left/.test(r.stdout), `fix counted findings outside the rule:\n${r.stdout}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
 await check('--format html writes a whole document to stdout', () => {
 	const dir = scratch('loupe-html-');
 	writeAll(dir, DRIFTY);
@@ -301,7 +578,7 @@ function runColor(argv: readonly string[], extra: NodeJS.ProcessEnv, input?: str
 		const r = spawnSync(process.execPath, [CLI, ...argv], {
 			cwd: dir,
 			encoding: 'utf8',
-			env: { ...process.env, ...extra },
+			env: { ...process.env, CLAUDE_PLUGIN_DATA: PLUGIN_DATA, ...extra },
 			...(input === undefined ? {} : { input }),
 		});
 		if (r.error) throw r.error;
@@ -507,7 +784,7 @@ await check('a registry note keeps its last clause on screen and ships whole in 
 	const out = formatAgent(noted, config);
 	assert(/not Grid\.\)/.test(out), `the actionable end of the note was cut:\n${out}`);
 	assert(
-		/\(\d+\) (blocking|advisory) \u2014/.test(out),
+		/\(\d+(?: in \d+ files?)?(?:, \d+ distinct)?\) (blocking|advisory) \u2014/.test(out),
 		`a rule group that only says its severity in a glyph:\n${out}`,
 	);
 	const shipped = reportPayload(noted, config).findings[0]?.note;
@@ -570,7 +847,8 @@ await check('a prefix with no tokens behind it is said out loud, not failed open
 // The axes swap and nothing else about the report does — which is the half that
 // is easy to break, so it is the half asserted hardest.
 
-const RULE_HEAD = /^([✗•]) (\S+\/\S+) \((\d+)\) (blocking|advisory) — /;
+/** The count, and how it concentrates once there is more than one. */
+const RULE_HEAD = /^([✗•]) (\S+\/\S+) \((\d+)(?:(?: in \d+ files?)?, \d+ distinct)?\) (blocking|advisory) — /;
 const FILE_HEAD = /^(\S+\.(?:css|jsx)) \((\d+)\)$/;
 /** A finding line: six spaces, a right-aligned line number, the message. */
 const NUMBERED = /^ {6} *\d+ {2}\S/;
@@ -645,6 +923,103 @@ await check('a capped report spreads its budget across the axis it groups on', (
 	assert(/\d+ finding\(s\) not shown/.test(capped), `no way back to the full list:\n${capped}`);
 });
 
+// ── collapsing ──────────────────────────────────────────────────────────────
+// The same declaration seven times in one file is the ordinary case, and listed
+// one by one it spent seven of the hook's twelve lines on one decision. One line
+// with a count now, and the heading says how concentrated the rule is.
+
+const dupes = await run({
+	'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'warn' } }),
+	'styles/step.css': [
+		'.a { margin-bottom: 8px; }',
+		'.b { margin-top: 2px; }',
+		'.c { margin-bottom: 8px; }',
+		'.d { margin-top: 12px; }',
+		'.e { margin-bottom: 8px; }',
+		'.f { margin-bottom: 8px; }',
+		'.g { margin-bottom: 8px; }',
+	].join('\n'),
+	'styles/other.css': '.x { margin-bottom: 8px; }\n.y { margin-bottom: 8px; }',
+});
+const margins = dupes.result.findings.filter((f) => f.rule === 'layout/margin-on-child');
+
+await check('identical findings print once, with a count and every line they stand for', () => {
+	assert(margins.length === 9, `fixture produced ${margins.length} margin findings, not 9`);
+	const out = formatAgent(dupes.result, dupes.config);
+	assert(
+		/layout\/margin-on-child \(9 in 2 files, 3 distinct\)/.test(out),
+		`the heading did not say how the rule concentrates:\n${out}`,
+	);
+	assert(
+		/ {6}1 {2}margin-bottom: 8px {2}×5 \(lines 1, 3, 5, 6, 7\)$/m.test(out),
+		`five became one line badly:\n${out}`,
+	);
+	assert(
+		/ {6}1 {2}margin-bottom: 8px {2}×2 \(lines 1, 2\)$/m.test(out),
+		`the other file's pair did not collapse:\n${out}`,
+	);
+	// `code` is the property alone for a margin, so these share it — and are still
+	// two declarations, which a line printing one under the other's count would hide.
+	assert(/ {6}2 {2}margin-top: 2px$/m.test(out), `a singleton was folded into something:\n${out}`);
+	assert(/ {6}4 {2}margin-top: 12px$/m.test(out), `a different value collapsed by its code:\n${out}`);
+	const numbered = out.split('\n').filter((l) => NUMBERED.test(l));
+	assert(numbered.length === 4, `expected 4 lines for 9 findings, got ${numbered.length}:\n${out}`);
+	// Grouped by file the rule is the sub-heading, and its file is the heading.
+	const byFile = formatAgent(dupes.result, dupes.config, { group: 'file' });
+	assert(/^ {2}• layout\/margin-on-child \(7, 3 distinct\) advisory/m.test(byFile), `nested heading:\n${byFile}`);
+});
+
+// Collapsing makes the budget go further; it does not change what it is.
+await check('the budget counts printed lines, so duplicates do not eat it', () => {
+	const two = formatAgent(dupes.result, dupes.config, { maxFindings: 2 });
+	// Two lines of budget, seven findings on them: the two singletons are what is left.
+	assert(/×5/.test(two) && /×2/.test(two), `the budget did not reach both batches:\n${two}`);
+	assert(/2 finding\(s\) not shown/.test(two), `two lines did not stand for seven findings:\n${two}`);
+	// One line: the largest batch is the one that tells the reader the most.
+	const single = formatAgent(dupes.result, dupes.config, { maxFindings: 1 });
+	assert(/×5/.test(single), `the largest batch was not the one shown:\n${single}`);
+	assert(single.split('\n').filter((l) => NUMBERED.test(l)).length === 1, `the cap of one printed more:\n${single}`);
+	assert(/… 4 more/.test(single), `the count of what the cap hid is not in findings:\n${single}`);
+	assert(/4 finding\(s\) not shown/.test(single), `the total hidden is not in findings:\n${single}`);
+});
+
+// The collapse keyed on the painted line, which the line bound caps: two
+// findings with different codes and the same capped text merged into one
+// "×2", counted as one distinct. And past ten lines the rest went unlisted with
+// nothing to say how many.
+await check('a collapsed line is the same finding, and says how many lines it did not list', () => {
+	const { config } = dupes;
+	const at = (line: number, code: string): Finding => ({
+		rule: 'layout/margin-on-child',
+		severity: 'warn',
+		rank: 1,
+		file: 'styles/x.css',
+		line,
+		code,
+		message: 'margin-bottom: 8px (.acme-card-h\u2026',
+	});
+	const apart = formatAgent(
+		{ ...dupes.result, findings: [at(4, '.acme-card-head'), at(6, '.acme-card-hint')] },
+		config,
+	);
+	assert(!/×2/.test(apart), `two codes collapsed onto one line:\n${apart}`);
+	assert(/\(2 distinct\)|, 2 distinct\)/.test(apart), `two codes counted as one distinct:\n${apart}`);
+	const many = Array.from({ length: 13 }, (_, i) => at(i + 1, 'same'));
+	const listed = formatAgent({ ...dupes.result, findings: many }, config);
+	assert(
+		/×13 \(lines 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, \u2026 \+3 more\)/.test(listed),
+		`hidden lines uncounted:\n${listed}`,
+	);
+});
+
+await check('json and sarif stay one entry per finding', () => {
+	const { result, config } = dupes;
+	assert(reportPayload(result, config).findings.length === result.findings.length, 'json collapsed findings');
+	const sarif = JSON.parse(formatSarif(result, config)) as { runs: { results: unknown[] }[] };
+	assert(sarif.runs[0]?.results.length === result.findings.length, 'sarif collapsed findings');
+});
+cleanup(dupes.root);
+
 // ── concise ─────────────────────────────────────────────────────────────────
 // Defined by subtraction: every finding line gone, every heading and the tally
 // kept, on either axis.
@@ -688,6 +1063,131 @@ await check('--concise still reports what could not be parsed', async () => {
 		assert(/could not be parsed/.test(out), `--concise swallowed the parse errors:\n${out}`);
 	} finally {
 		cleanup(root);
+	}
+});
+
+// `--severity error` dropped the live warnings and left the baselined ones, so
+// SARIF still listed accepted warnings as suppressed results and counted them.
+await check('--severity error filters the baselined findings too', () => {
+	const dir = scratch('loupe-severity-baseline-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
+		const out = cli(dir, 'check', '--all', '--severity', 'error', '--format', 'sarif');
+		const run0 = (
+			JSON.parse(out.stdout) as {
+				runs: { results: { level: string; suppressions?: unknown[] }[]; properties?: { baselined: number } }[];
+			}
+		).runs[0];
+		assert(run0, 'no sarif run');
+		const suppressed = run0.results.filter((r) => r.suppressions);
+		assert(suppressed.length === 3, `${suppressed.length} suppressed, expected the 3 margin errors`);
+		assert(
+			suppressed.every((r) => r.level === 'error'),
+			`a baselined warning survived --severity error: ${JSON.stringify(suppressed)}`,
+		);
+		assert(run0.properties?.baselined === 3, `baselined ${run0.properties?.baselined}, expected 3`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// An entry of a rule the config has off matches nothing, because the rule
+// reports nothing: that is not work done, and `fixed` counted it as such.
+await check('a rule switched off does not count its baseline entries as fixed', () => {
+	const dir = scratch('loupe-off-fixed-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
+		writeAll(dir, {
+			'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'off' } }),
+		});
+		const fixed = (...argv: string[]): unknown =>
+			(JSON.parse(cli(dir, 'check', '--all', '--format', 'json', ...argv).stdout) as { summary: { fixed?: number } })
+				.summary.fixed;
+		assert(fixed() === 0, `fixed ${fixed()} with the rule off`);
+		assert(fixed('--rule', 'layout/margin-on-child') === 0, 'fixed counted under --rule for the rule that is off');
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// `patterns/judged-redirect` reports only under `--judge`, so naming it alone
+// printed "clean" and exited 0 with nothing to say it could not have reported.
+await check('--rule patterns/judged-redirect without --judge says it reports only under --judge', () => {
+	const dir = scratch('loupe-rule-judged-');
+	writeAll(dir, {
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '*', '@wordpress/ui': '*' } }),
+		'src/A.jsx': 'export const A = () => <p className="acme-x">x</p>;\n',
+	});
+	const profiles = ['--profiles', join(HERE, '..', '..', 'profiles'), '--profile', 'wpds'];
+	try {
+		const r = cli(dir, 'check', '--all', '--rule', 'patterns/judged-redirect', ...profiles);
+		assert(/only under --judge/.test(r.stderr), `no note that the rule needs --judge:\n${r.stderr}${r.stdout}`);
+		// Another rule says nothing of the kind.
+		const other = cli(dir, 'check', '--all', '--rule', 'system/raw-element', ...profiles);
+		assert(!/only under --judge/.test(other.stderr), `noted for a rule that needs no --judge:\n${other.stderr}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// `readBaseline` took any `entries` array, so a `null` in it reached `ruleOf`
+// and threw: `baseline --dry-run` and `check --rule` exited 2 on a file a plain
+// `check` read without complaint.
+await check('a baseline entry that is not a string is dropped, not thrown on', () => {
+	const dir = scratch('loupe-baseline-null-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
+		const path = join(dir, '.loupe-baseline.json');
+		const file = JSON.parse(readFileSync(path, 'utf8')) as { entries: unknown[] };
+		writeAll(dir, { '.loupe-baseline.json': JSON.stringify({ ...file, entries: [...file.entries, null, 3] }) });
+		for (const argv of [
+			['baseline', '--dry-run'],
+			['check', '--all', '--rule', 'layout/margin-on-child'],
+		]) {
+			const r = cli(dir, ...argv);
+			assert(r.status !== 2, `${argv.join(' ')} exited 2:\n${r.stderr}`);
+		}
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// `--files` took a directory as a file name: nothing is keyed by it, so
+// `--files styles` reported "clean. 1 file(s) scanned." on a tree whose
+// stylesheets had findings in them.
+await check('--files expands a directory to the source files under it', () => {
+	const dir = scratch('loupe-files-dir-');
+	writeAll(dir, { ...RULED, 'vendor/skip.css': '.v { margin-bottom: 8px; }' });
+	writeAll(dir, {
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			rules: { 'layout/margin-on-child': 'error' },
+			sources: { ignore: ['vendor/**'] },
+		}),
+	});
+	try {
+		const files = (...argv: string[]): string[] =>
+			[
+				...new Set(
+					(
+						JSON.parse(cli(dir, 'check', '--no-baseline', '--format', 'json', ...argv).stdout) as {
+							findings: Finding[];
+						}
+					).findings.map((f) => f.file),
+				),
+			].sort();
+		const all = files('--all');
+		assert(all.join() === 'styles/a.css,styles/b.css', `fixture: ${all.join()}`);
+		for (const given of ['styles', 'styles/', '.', join(dir, 'styles')])
+			assert(files('--files', given).join() === all.join(), `--files ${given}: ${files('--files', given).join()}`);
+		// A file beside a directory, and the ignore globs still apply under it.
+		assert(files('--files', 'styles/b.css').join() === 'styles/b.css', 'a plain file is no longer taken as given');
+	} finally {
+		cleanup(dir);
 	}
 });
 
