@@ -18,8 +18,7 @@
  * Design notes: docs/design/report.md#the-pane
  */
 
-import { byBytes } from './discover.ts';
-import { reportPayload } from './report.ts';
+import { reportPayload, tally } from './report.ts';
 import type { AnalyzeResult, BaselinedResult, Config, ReportPayload, RuleId, Severity } from './types.ts';
 
 /** One stat tile; `isError` paints the value in the error color, `isLead` enlarges it. */
@@ -73,6 +72,8 @@ export interface PanePayload {
 	clusters: PaneCluster[];
 	svg: {
 		rules: string;
+		/** The rule chart narrowed to one severity, for a reader with a severity picker. */
+		rulesBySeverity: { error: string; warn: string };
 		dirs: string;
 	};
 }
@@ -86,13 +87,6 @@ const dirOf = (file: string): string => {
 	const i = file.lastIndexOf('/');
 	return i === -1 ? '.' : file.slice(0, i);
 };
-
-/** Tallies, densest first; code-unit order breaks ties, as every other tally here does. */
-function tally<K extends string>(keys: readonly K[]): [K, number][] {
-	const counts = new Map<K, number>();
-	for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
-	return [...counts].sort((a, b) => b[1] - a[1] || byBytes(a[0], b[0]));
-}
 
 /**
  * The tiles, as `renderKpis` in the page draws them: the lead number, the
@@ -239,6 +233,17 @@ const GLYPH: Record<Severity, string> = { error: '✗', warn: '•', off: '' };
 export function paneFromPayload(p: ReportPayload): PanePayload {
 	const ruleRows = rules(p);
 	const dirRows = dirs(p);
+	const ruleChart = (rows: readonly PaneRule[], empty: string): string =>
+		barChart(
+			rows.map((r) => ({
+				label: r.id,
+				count: r.count,
+				paint: r.severity,
+				glyph: GLYPH[r.severity],
+				title: `${r.count} × ${r.id}${r.title ? ` — ${r.title}` : ''}`,
+			})),
+			empty,
+		);
 	return {
 		version: 1,
 		tool: 'loupe',
@@ -252,16 +257,17 @@ export function paneFromPayload(p: ReportPayload): PanePayload {
 			.map(([label, count]) => ({ label, count })),
 		clusters: clusters(p),
 		svg: {
-			rules: barChart(
-				ruleRows.map((r) => ({
-					label: r.id,
-					count: r.count,
-					paint: r.severity,
-					glyph: GLYPH[r.severity],
-					title: `${r.count} × ${r.id}${r.title ? ` — ${r.title}` : ''}`,
-				})),
-				'No findings.',
-			),
+			rules: ruleChart(ruleRows, 'No findings.'),
+			rulesBySeverity: {
+				error: ruleChart(
+					ruleRows.filter((r) => r.severity === 'error'),
+					'No blocking findings.',
+				),
+				warn: ruleChart(
+					ruleRows.filter((r) => r.severity === 'warn'),
+					'No advisory findings.',
+				),
+			},
 			dirs: barChart(
 				dirRows.map((d) => ({
 					label: d.label,

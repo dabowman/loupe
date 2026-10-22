@@ -46,6 +46,10 @@ const REPORT: LoupeReport = {
 	clusters: [],
 	svg: {
 		rules: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 50"><text>rules</text></svg>',
+		rulesBySeverity: {
+			error: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 28"><text>error rules</text></svg>',
+			warn: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 28"><text>warn rules</text></svg>',
+		},
 		dirs: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 28"><text>dirs</text></svg>',
 	},
 };
@@ -150,6 +154,20 @@ test('a surface with no Svg gets the bars as text, one with Svg gets the chart',
 	const chart = await desktop.find({ type: 'Svg' });
 	expect(chart === undefined).toBe(false);
 	await desktop.unmount();
+});
+
+test('the severity picker narrows the chart, not only the list', async ($, on) => {
+	engine(on, { calls: [], opened: 0 });
+	await $.session.start({ cwd: '/project', surface: 'desktop', isInteractive: true });
+	await $.command.run(LOUPE_PANE);
+
+	const ui = await $.ui.mount({ ...PANE, surface: 'desktop' });
+	await ui.select({ key: 'filter', value: 'error' });
+	const chart = await ui.find({ type: 'Svg' });
+	expect(String(chart?.props.source).includes('error rules')).toBe(true);
+	const warnRule = await ui.find({ type: 'Button', key: 'rule:tokens/hardcoded-value' });
+	expect(warnRule === undefined).toBe(true);
+	await ui.unmount();
 });
 
 test('the pane opens itself only where the project opted the hooks in', async ($, on) => {

@@ -29792,11 +29792,11 @@ function nearMisses(result) {
   }
   return out;
 }
-var tally = (keys) => {
+function tally(keys) {
   const counts = /* @__PURE__ */ new Map();
   for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
   return [...counts].sort((a, b) => b[1] - a[1] || byBytes(a[0], b[0]));
-};
+}
 var TOP = 3;
 function densestLine(findings) {
   const files = tally(findings.map((f) => f.file));
@@ -30491,11 +30491,6 @@ var dirOf = (file) => {
   const i = file.lastIndexOf("/");
   return i === -1 ? "." : file.slice(0, i);
 };
-function tally2(keys) {
-  const counts = /* @__PURE__ */ new Map();
-  for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
-  return [...counts].sort((a, b) => b[1] - a[1] || byBytes(a[0], b[0]));
-}
 function tiles(p) {
   const s = p.summary;
   const out = [
@@ -30516,7 +30511,7 @@ function rules(p) {
     if (!files.has(f.rule)) files.set(f.rule, /* @__PURE__ */ new Set());
     files.get(f.rule)?.add(f.file);
   }
-  return tally2(p.findings.map((f) => f.rule)).sort((a, b) => b[1] - a[1] || (byId.get(b[0])?.rank ?? 0) - (byId.get(a[0])?.rank ?? 0)).map(([id, count]) => {
+  return tally(p.findings.map((f) => f.rule)).sort((a, b) => b[1] - a[1] || (byId.get(b[0])?.rank ?? 0) - (byId.get(a[0])?.rank ?? 0)).map(([id, count]) => {
     const r = byId.get(id);
     return {
       id,
@@ -30528,7 +30523,7 @@ function rules(p) {
   });
 }
 function dirs(p) {
-  const counts = tally2(p.findings.map((f) => dirOf(f.file)));
+  const counts = tally(p.findings.map((f) => dirOf(f.file)));
   const shown = counts.slice(0, DIR_CAP).map(([label, count]) => ({ label, count }));
   const tail = counts.slice(DIR_CAP);
   if (tail.length) {
@@ -30591,6 +30586,16 @@ var GLYPH = { error: "\u2717", warn: "\u2022", off: "" };
 function paneFromPayload(p) {
   const ruleRows = rules(p);
   const dirRows = dirs(p);
+  const ruleChart = (rows, empty) => barChart(
+    rows.map((r) => ({
+      label: r.id,
+      count: r.count,
+      paint: r.severity,
+      glyph: GLYPH[r.severity],
+      title: `${r.count} \xD7 ${r.id}${r.title ? ` \u2014 ${r.title}` : ""}`
+    })),
+    empty
+  );
   return {
     version: 1,
     tool: "loupe",
@@ -30602,16 +30607,17 @@ function paneFromPayload(p) {
     files: Object.entries(p.summary.byFile).slice(0, FILE_CAP).map(([label, count]) => ({ label, count })),
     clusters: clusters(p),
     svg: {
-      rules: barChart(
-        ruleRows.map((r) => ({
-          label: r.id,
-          count: r.count,
-          paint: r.severity,
-          glyph: GLYPH[r.severity],
-          title: `${r.count} \xD7 ${r.id}${r.title ? ` \u2014 ${r.title}` : ""}`
-        })),
-        "No findings."
-      ),
+      rules: ruleChart(ruleRows, "No findings."),
+      rulesBySeverity: {
+        error: ruleChart(
+          ruleRows.filter((r) => r.severity === "error"),
+          "No blocking findings."
+        ),
+        warn: ruleChart(
+          ruleRows.filter((r) => r.severity === "warn"),
+          "No advisory findings."
+        )
+      },
       dirs: barChart(
         dirRows.map((d) => ({
           label: d.label,

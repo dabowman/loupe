@@ -50,7 +50,6 @@ const FILE_ROWS = 5;
 const isOn = (v: unknown): boolean => v !== undefined && /^(1|true|yes|on)$/i.test(String(v));
 
 const GLYPH: Record<string, string> = { error: '✗', warn: '•' };
-const WORD: Record<string, string> = { error: 'blocking', warn: 'advisory' };
 
 /** Clip a label to `max` cells, keeping its end — the specific part of a path or a rule id. */
 const clip = (s: string, max: number): string => (s.length <= max ? s : `…${s.slice(s.length - max + 1)}`);
@@ -140,9 +139,13 @@ function refresh($: EngineInterface): Promise<void> {
 				// 0 clean, 1 blocking — both are the report working. 2 is the engine
 				// unable to run, and then stderr is the message.
 				next =
-					r.exitCode <= 1 && r.stdout.trim()
+					r.exitCode <= 1 && r.stdout.trim() && !r.isStdoutTruncated
 						? { report: JSON.parse(r.stdout) as LoupeReport, error: null }
-						: { error: r.stderr.trim() || `loupe exited ${r.exitCode}` };
+						: {
+								error: r.isStdoutTruncated
+									? 'the pane document was cut at 4 MiB'
+									: r.stderr.trim() || `loupe exited ${r.exitCode}`,
+							};
 			} catch (err) {
 				next = { error: err instanceof Error ? err.message : String(err) };
 			}
@@ -162,17 +165,37 @@ function refresh($: EngineInterface): Promise<void> {
 	return inFlight;
 }
 
+/**
+ * The report that saw the last edit, without paying for a run the debounce
+ * already paid for: a pending timer runs now; a run in flight is waited for
+ * (it began after the last edit, or an edit since re-armed the timer); a
+ * settled run is the answer as it stands.
+ */
+function settle($: EngineInterface): Promise<void> {
+	if (timer) {
+		timer.cancel();
+		timer = null;
+		return refresh($);
+	}
+	return inFlight ?? Promise.resolve();
+}
+
 /** Puts a command in the prompt box for the person to send — never sends it. */
 async function draft($: EngineInterface, text: string): Promise<void> {
 	const box = await $.prompt.read();
-	await $.prompt.fill({ text, mode: box.text.trim() ? 'append' : 'replace' });
+	const hasText = box.text.trim().length > 0;
+	await $.prompt.fill({ text: hasText ? ` ${text}` : text, mode: hasText ? 'append' : 'replace' });
 }
 
 /** The HTML report, written under the project where a path click opens it, its path on the clipboard. */
 async function writeHtml($: EngineInterface, surface: RenderSurface): Promise<void> {
 	const r = await $.process.run(engine('check', '--all', '--format', 'html'), { cwd, timeoutMs: ENGINE_TIMEOUT_MS });
-	if (r.exitCode > 1 || !r.stdout) {
-		$.ui.toast(`loupe: could not render the report${r.stderr ? ` — ${r.stderr.trim().split('\n')[0]}` : ''}`);
+	if (r.exitCode > 1 || !r.stdout || r.isStdoutTruncated) {
+		// A page cut at the 4 MiB stdout cap is not a page; /loupe-report writes it from a shell.
+		const why = r.isStdoutTruncated
+			? 'the page is over 4 MiB — use /loupe-report --local'
+			: (r.stderr.trim().split('\n')[0] ?? '');
+		$.ui.toast(`loupe: could not render the report${why ? ` — ${why}` : ''}`);
 		return;
 	}
 	const path = `${cwd}/.loupe/report.html`;
@@ -220,7 +243,7 @@ export const register: Register = (on, options) => {
 	// and a matcher may name only tools it knows.
 	on('tool.call', { tool: /^(Edit|Write|MultiEdit)$/ }, async ($, e, next) => {
 		const ran = await next(e);
-		if (!enabled || 'deny' in ran || ran.isError) return ran;
+		if (!enabled || ran.deny !== undefined || ran.isError) return ran;
 		const path = (e as { file_path?: unknown }).file_path;
 		if (typeof path !== 'string' || !UI_FILE.test(path)) return ran;
 		touched += 1;
@@ -237,12 +260,13 @@ export const register: Register = (on, options) => {
 	// blocking findings remain, which is the case the person would want to hear
 	// about without watching.
 	on('turn.complete', async ($, e, next) => {
+		// A subagent's turn ends while the main turn is still running, its edits
+		// still being fixed: they count toward the main turn, which settles them.
+		if (e.agentId) return next(e);
 		const edited = touched;
 		touched = 0;
 		if (enabled && edited > 0) {
-			timer?.cancel();
-			timer = null;
-			void refresh($)
+			void settle($)
 				.then(async () => {
 					const s = (await read($, run)).report?.summary;
 					if (s && s.error > 0) {
@@ -420,7 +444,11 @@ export const register: Register = (on, options) => {
 				{controls}
 				<Box flexDirection="column">
 					<Text dimColor>By rule</Text>
-					<Svg source={report.svg.rules} alt={`Findings by rule: ${report.rules.map((r) => `${r.id} ${r.count}`).join(', ')}`} isInteractive />
+					<Svg
+						source={which === 'all' ? report.svg.rules : report.svg.rulesBySeverity[which]}
+						alt={`Findings by rule: ${shownRules.map((r) => `${r.id} ${r.count}`).join(', ')}`}
+						isInteractive
+					/>
 					{ruleRows.length > 0 ? (
 						<Box gap={1} flexWrap="wrap">
 							<Text dimColor>draft a fix:</Text>

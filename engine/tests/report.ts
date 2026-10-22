@@ -1278,6 +1278,14 @@ await check('pane charts are self-contained SVG with a glyph beside every severi
 			`${r.id} is drawn without its glyph`,
 		);
 	}
+	// One chart per severity, for a reader with a picker: each names only its own rules.
+	for (const sev of ['error', 'warn'] as const) {
+		const chart = pane.svg.rulesBySeverity[sev];
+		for (const r of pane.rules) {
+			const named = chart.includes(`× ${r.id}`);
+			assert(named === (r.severity === sev), `${r.id} (${r.severity}) ${named ? 'is' : 'is not'} in the ${sev} chart`);
+		}
+	}
 	// A finding's text reaches the chart's <title>; it must not reach its markup.
 	const hostile = reportPayload(result, config);
 	const doctored = {

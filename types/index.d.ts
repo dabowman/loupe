@@ -38,7 +38,7 @@ export type LoupeReport = {
 	dirs: LoupeBar[];
 	files: LoupeBar[];
 	clusters: LoupeCluster[];
-	svg: { rules: string; dirs: string };
+	svg: { rules: string; rulesBySeverity: { error: string; warn: string }; dirs: string };
 };
 
 /** Where the last run stands: a report, a run in flight, or the engine's refusal. */
