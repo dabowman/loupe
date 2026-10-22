@@ -77,9 +77,11 @@ import {
 	isHardcodedTokenValue,
 	isLayoutDecl,
 	isMarginProp,
+	keyClassesIn,
 	keySelector,
 	mediaQuery,
 	ownDecls,
+	ownLevel,
 	resolvedSelectors,
 	ruleIsGrid,
 } from './styles.ts';
@@ -149,56 +151,10 @@ const realPath = (path: string): string | null => {
  * is missed — a missed override, never a false one.
  */
 const partClass = (sel: string): string | undefined =>
-	keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, '')).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+	ownLevel(keySelector(sel)).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
 
 /** The element a compound selector names, lowercased: `button.primary:hover` → `button`. */
 const tagOf = (compound: string): string | null => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
-
-/**
- * The last compound of a selector — the element it styles. Cut only at a
- * combinator outside brackets, parentheses and quotes: `.x[aria-label="Close
- * dialog"]` is one compound, and so is `.x:has(> .y)`.
- */
-function keyCompound(sel: string): string {
-	let depth = 0;
-	let quote = '';
-	let start = 0;
-	const s = sel.trim();
-	for (let i = 0; i < s.length; i++) {
-		const ch = s[i];
-		if (ch === '\\') i++;
-		else if (quote) {
-			if (ch === quote) quote = '';
-		} else if (ch === '"' || ch === "'") quote = ch;
-		else if (ch === '(' || ch === '[') depth++;
-		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
-		else if (!depth && (ch === ' ' || ch === '\n' || ch === '\t' || ch === '>' || ch === '+' || ch === '~'))
-			start = i + 1;
-	}
-	return s.slice(start);
-}
-
-/**
- * A compound with its attribute selectors and pseudo-class arguments taken out:
- * what it says about the element itself. A class inside `:not()` is one the
- * element does not carry, and one inside `:is()` or `:has()` one it may not.
- */
-function ownLevel(compound: string): string {
-	let depth = 0;
-	let quote = '';
-	let out = '';
-	for (let i = 0; i < compound.length; i++) {
-		const ch = compound[i] ?? '';
-		if (quote) {
-			if (ch === '\\') i++;
-			else if (ch === quote) quote = '';
-		} else if (ch === '"' || ch === "'") quote = ch;
-		else if (ch === '(' || ch === '[') depth++;
-		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
-		else if (!depth) out += ch;
-	}
-	return out;
-}
 
 /**
  * The elements a key compound lands on, or null where that is not known: the
@@ -695,7 +651,7 @@ export async function analyze(
 		if (!scopes) return [];
 		const out = new Set<string>();
 		for (const sel of selectors) {
-			const found = compoundElements(keyCompound(sel), carriersByClass);
+			const found = compoundElements(keySelector(sel), carriersByClass);
 			if (!found) return [];
 			for (const e of found) out.add(e);
 		}
@@ -708,7 +664,7 @@ export async function analyze(
 	 */
 	const nestedElements = (selector: string): string[] => {
 		const selectors = list.comma(selector);
-		return selectors.some((sel) => keyCompound(sel).includes('&')) ? [] : elementsOf(selectors);
+		return selectors.some((sel) => keySelector(sel).includes('&')) ? [] : elementsOf(selectors);
 	};
 
 	for (const { abs, rel } of files.references) {
@@ -825,12 +781,13 @@ export async function analyze(
 			const allClasses = [...new Set(selectors.flatMap(classesIn))];
 			// Kept per selector as well as pooled: deleting the rule for one dead
 			// class is only safe if every selector in the list names that class.
-			const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+			const keyClassesPer = selectors.map(keyClassesIn);
 			const keyClasses = [...new Set(keyClassesPer.flat())];
 			if (!allClasses.length) continue;
 
 			// Bindings correlate against the KEY selector only: `.card .title`
-			// styles `.title`, so `.card`'s component must not answer for it.
+			// styles `.title`, so `.card`'s component must not answer for it, and
+			// `li:not(.btn)` styles no `.btn`.
 			const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
 			const boundSystem = bound.filter((b) => b.isSystem);
 			const boundText = bound.filter((b) => b.isText);

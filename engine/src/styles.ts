@@ -367,15 +367,62 @@ export function mediaQuery(rule: Rule): string {
  * Rightmost compound of a selector — the element the rule actually styles.
  * Component bindings must correlate against this, or a descendant rule
  * attributes its declarations to the ancestor's component.
+ *
+ * Cut only at a combinator outside brackets, parentheses and quotes:
+ * `.x[aria-label="Close dialog"]` is one compound, and so are `.x:has(> .y)`
+ * and `.x:nth-child(2n+1)`.
+ *
+ * Design notes: docs/design/analysis.md#reading-a-stylesheet
  */
-export const keySelector = (sel: string): string =>
-	sel
-		.split(/\s*[>+~]\s*|\s+/)
-		.filter(Boolean)
-		.pop() ?? sel;
+export function keySelector(sel: string): string {
+	let depth = 0;
+	let quote = '';
+	let start = 0;
+	const s = sel.trim();
+	for (let i = 0; i < s.length; i++) {
+		const ch = s[i];
+		if (ch === '\\') i++;
+		else if (quote) {
+			if (ch === quote) quote = '';
+		} else if (ch === '"' || ch === "'") quote = ch;
+		else if (ch === '(' || ch === '[') depth++;
+		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+		else if (!depth && (ch === ' ' || ch === '\n' || ch === '\t' || ch === '>' || ch === '+' || ch === '~'))
+			start = i + 1;
+	}
+	return s.slice(start);
+}
+
+/**
+ * A compound with its attribute selectors and pseudo-class arguments taken out:
+ * what it says about the element itself. A class inside `:not()` is one the
+ * element does not carry, and one inside `:is()` or `:has()` one it may not.
+ */
+export function ownLevel(compound: string): string {
+	let depth = 0;
+	let quote = '';
+	let out = '';
+	for (let i = 0; i < compound.length; i++) {
+		const ch = compound[i] ?? '';
+		if (quote) {
+			if (ch === '\\') i++;
+			else if (ch === quote) quote = '';
+		} else if (ch === '"' || ch === "'") quote = ch;
+		else if (ch === '(' || ch === '[') depth++;
+		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+		else if (!depth) out += ch;
+	}
+	return out;
+}
 
 export const classesIn = (sel: string): string[] =>
 	[...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
+
+/**
+ * The classes a selector styles: those its key compound puts on the element
+ * itself. `.list > li:not(.btn)` styles none, `.x:nth-child(2n+1)` styles `x`.
+ */
+export const keyClassesIn = (sel: string): string[] => classesIn(ownLevel(keySelector(sel)));
 
 /** Does this rule establish a CSS Grid? */
 export const ruleIsGrid = (rule: Container): boolean =>
