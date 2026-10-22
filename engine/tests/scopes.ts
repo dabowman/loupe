@@ -715,6 +715,31 @@ export const B = () => <><div className="rp-d" /><button className="rp-b" /></>;
 	);
 });
 
+// `$bg:` and `@bg:` are preprocessor variables, which say no more about what
+// the value is for than a custom property does; a vendor-prefixed property is
+// its unprefixed twin.
+await check('a preprocessor variable or a vendor-prefixed property is not misapplied', async () => {
+	const { misapplied } = await run({
+		'src/a.scss': `$bg: var(--wpds-color-background-surface-neutral-strong);
+.rp-a {
+	$fg: var(--wpds-color-background-surface-neutral-strong);
+	-webkit-box-shadow: 0 0 0 1px var(--wpds-color-stroke-focus);
+	-moz-box-shadow: 0 0 0 1px var(--wpds-color-stroke-focus);
+	box-shadow: 0 0 0 1px var(--wpds-color-stroke-focus);
+	-webkit-border-radius: var(--wpds-border-radius-lg);
+	border-radius: var(--wpds-border-radius-lg);
+	-webkit-text-fill-color: var(--wpds-color-foreground-content-neutral);
+}
+`,
+		'src/a.less':
+			'@bg: var(--wpds-color-background-surface-neutral-strong);\n.rp-b { @fg: var(--wpds-color-background-surface-neutral-strong); }\n',
+	});
+	assert(!misapplied.length, misapplied.map((f) => `${f.file}:${f.line} ${f.message}`).join('\n'));
+	// Stripping the prefix does not excuse a wrong property.
+	const wrong = await run({ 'src/a.css': '.rp-a { -webkit-border-radius: var(--wpds-color-stroke-focus); }\n' });
+	assert(one(wrong.misapplied, 'a stroke colour on a radius').line === 1, 'the prefixed radius is still checked');
+});
+
 // A kind's list says what an element is, never what it is not: a `<div>`, a
 // `<span>` inside a button, or a component the profile has not read could be
 // any kind, and reading it as none reported a card's radius, an icon's
