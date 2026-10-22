@@ -32,7 +32,10 @@ export function readBaseline(path: string): Baseline | null {
 		// Defaulting it to `[]` says "nothing was accepted", which reads as a healthy
 		// empty baseline and puts the whole backlog live.
 		if (!Array.isArray(parsed.entries)) return null;
-		return { createdAt: parsed.createdAt ?? '', entries: parsed.entries, set: new Set(parsed.entries) };
+		// An entry that is not a string is no key a finding could match, and every
+		// reader past here takes one apart as text.
+		const entries = (parsed.entries as unknown[]).filter((e): e is string => typeof e === 'string');
+		return { createdAt: parsed.createdAt ?? '', entries, set: new Set(entries) };
 	} catch {
 		return null;
 	}
@@ -134,12 +137,22 @@ export function writeBaseline(
  * entries are mostly just out of scope — so it is null there, and with no
  * baseline to compare against. A run narrowed to some rules (`--rule`) still
  * read every file, so it counts only those rules' entries: another rule's are
- * absent because they were filtered out, not because they were fixed.
+ * absent because they were filtered out, not because they were fixed. The same
+ * goes for a rule the config has off (`enabled`): it reports nothing, so its
+ * entries match nothing.
  */
 export function applyBaseline(
 	result: AnalyzeResult,
 	baseline: Baseline | null,
-	{ scoped = false, rules = null }: { scoped?: boolean; rules?: ReadonlySet<string> | null } = {},
+	{
+		scoped = false,
+		rules = null,
+		enabled = null,
+	}: {
+		scoped?: boolean;
+		rules?: ReadonlySet<string> | null;
+		enabled?: Readonly<Record<string, boolean>> | null;
+	} = {},
 ): BaselinedResult {
 	if (!baseline) return { ...result, baselined: 0, baselinedFindings: [], fixed: null };
 	const seen = new Set<string>();
@@ -159,6 +172,9 @@ export function applyBaseline(
 		baselinedFindings: accepted,
 		fixed: scoped
 			? null
-			: [...baseline.set].filter((k) => !seen.has(k) && (!rules || rules.has(k.slice(0, k.indexOf('|'))))).length,
+			: [...baseline.set].filter((k) => {
+					const rule = ruleOf(k);
+					return !seen.has(k) && (!rules || rules.has(rule)) && enabled?.[rule] !== false;
+				}).length,
 	};
 }

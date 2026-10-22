@@ -16,8 +16,16 @@ The engine resolved some findings to exactly one on-role token when it ran. Let
 it apply those itself rather than reading files back to retype them:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --changed
 ```
+
+`fix` reads no baseline, so scope it to what this run is working on. A bare
+`/loupe-fix` works new drift only: it fixes the files the working tree changed
+(`--changed`) and leaves the accepted backlog as it is. If that reports no git
+worktree, skip this step. Naming a rule id is working that rule's backlog on
+purpose: pass `--rule <id>` in place of `--changed`. Naming a path, pass
+`--files <path>` in its place; a directory stands for the source files under
+it, and every value in them is in reach, baselined or not.
 
 Add `--dry-run` first if the repo has uncommitted work. This only substitutes
 values the engine matched unambiguously; anything with two candidate tokens, or
@@ -30,10 +38,10 @@ ambiguous ones, and the values that are either a mistake or a deliberate
 choice. Review it first, and show the user the list:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --judge --dry-run --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --changed --judge --dry-run --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
-Each line is either a rewrite to a token or a `keep` that becomes a suppression.
+scoped the same way as the step above. Each line is either a rewrite to a token or a `keep` that becomes a suppression.
 Apply it only after the user agrees, with the same command minus `--dry-run`.
 `--profiles` is what supplies the token descriptions the judgement is scored
 with. Whatever stays under the confidence floor is left for the passes below.
@@ -48,8 +56,7 @@ If `$ARGUMENTS` names a rule id, pass it as `--rule <id>` — to this check and 
 the `fix` in step 1 — and add `--no-baseline` to this check (and to the
 verifying one in step 4): naming a rule is working that rule's backlog on
 purpose, and a baseline would hide exactly the findings you were asked to clear.
-`fix` reads no baseline, so it needs no flag. A path goes in as
-`--files <path>`; both repeat. A bare `/loupe-fix`, or one naming only a path,
+A path, a file or a directory, goes in as `--files <path>`; both repeat. A bare `/loupe-fix`, or one naming only a path,
 keeps the baseline: that is the new drift, not the accepted backlog. Don't
 filter the JSON yourself. Add `--severity error`
 to cut the run down to what the hook actually blocks on, which is the subset to

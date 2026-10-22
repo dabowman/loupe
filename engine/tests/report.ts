@@ -983,6 +983,35 @@ await check('the budget counts printed lines, so duplicates do not eat it', () =
 	assert(/4 finding\(s\) not shown/.test(single), `the total hidden is not in findings:\n${single}`);
 });
 
+// The collapse keyed on the painted line, which the line bound caps: two
+// findings with different codes and the same capped text merged into one
+// "×2", counted as one distinct. And past ten lines the rest went unlisted with
+// nothing to say how many.
+await check('a collapsed line is the same finding, and says how many lines it did not list', () => {
+	const { config } = dupes;
+	const at = (line: number, code: string): Finding => ({
+		rule: 'layout/margin-on-child',
+		severity: 'warn',
+		rank: 1,
+		file: 'styles/x.css',
+		line,
+		code,
+		message: 'margin-bottom: 8px (.acme-card-h\u2026',
+	});
+	const apart = formatAgent(
+		{ ...dupes.result, findings: [at(4, '.acme-card-head'), at(6, '.acme-card-hint')] },
+		config,
+	);
+	assert(!/×2/.test(apart), `two codes collapsed onto one line:\n${apart}`);
+	assert(/\(2 distinct\)|, 2 distinct\)/.test(apart), `two codes counted as one distinct:\n${apart}`);
+	const many = Array.from({ length: 13 }, (_, i) => at(i + 1, 'same'));
+	const listed = formatAgent({ ...dupes.result, findings: many }, config);
+	assert(
+		/×13 \(lines 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, \u2026 \+3 more\)/.test(listed),
+		`hidden lines uncounted:\n${listed}`,
+	);
+});
+
 await check('json and sarif stay one entry per finding', () => {
 	const { result, config } = dupes;
 	assert(reportPayload(result, config).findings.length === result.findings.length, 'json collapsed findings');
@@ -1034,6 +1063,131 @@ await check('--concise still reports what could not be parsed', async () => {
 		assert(/could not be parsed/.test(out), `--concise swallowed the parse errors:\n${out}`);
 	} finally {
 		cleanup(root);
+	}
+});
+
+// `--severity error` dropped the live warnings and left the baselined ones, so
+// SARIF still listed accepted warnings as suppressed results and counted them.
+await check('--severity error filters the baselined findings too', () => {
+	const dir = scratch('loupe-severity-baseline-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
+		const out = cli(dir, 'check', '--all', '--severity', 'error', '--format', 'sarif');
+		const run0 = (
+			JSON.parse(out.stdout) as {
+				runs: { results: { level: string; suppressions?: unknown[] }[]; properties?: { baselined: number } }[];
+			}
+		).runs[0];
+		assert(run0, 'no sarif run');
+		const suppressed = run0.results.filter((r) => r.suppressions);
+		assert(suppressed.length === 3, `${suppressed.length} suppressed, expected the 3 margin errors`);
+		assert(
+			suppressed.every((r) => r.level === 'error'),
+			`a baselined warning survived --severity error: ${JSON.stringify(suppressed)}`,
+		);
+		assert(run0.properties?.baselined === 3, `baselined ${run0.properties?.baselined}, expected 3`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// An entry of a rule the config has off matches nothing, because the rule
+// reports nothing: that is not work done, and `fixed` counted it as such.
+await check('a rule switched off does not count its baseline entries as fixed', () => {
+	const dir = scratch('loupe-off-fixed-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
+		writeAll(dir, {
+			'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'off' } }),
+		});
+		const fixed = (...argv: string[]): unknown =>
+			(JSON.parse(cli(dir, 'check', '--all', '--format', 'json', ...argv).stdout) as { summary: { fixed?: number } })
+				.summary.fixed;
+		assert(fixed() === 0, `fixed ${fixed()} with the rule off`);
+		assert(fixed('--rule', 'layout/margin-on-child') === 0, 'fixed counted under --rule for the rule that is off');
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// `patterns/judged-redirect` reports only under `--judge`, so naming it alone
+// printed "clean" and exited 0 with nothing to say it could not have reported.
+await check('--rule patterns/judged-redirect without --judge says it reports only under --judge', () => {
+	const dir = scratch('loupe-rule-judged-');
+	writeAll(dir, {
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '*', '@wordpress/ui': '*' } }),
+		'src/A.jsx': 'export const A = () => <p className="acme-x">x</p>;\n',
+	});
+	const profiles = ['--profiles', join(HERE, '..', '..', 'profiles'), '--profile', 'wpds'];
+	try {
+		const r = cli(dir, 'check', '--all', '--rule', 'patterns/judged-redirect', ...profiles);
+		assert(/only under --judge/.test(r.stderr), `no note that the rule needs --judge:\n${r.stderr}${r.stdout}`);
+		// Another rule says nothing of the kind.
+		const other = cli(dir, 'check', '--all', '--rule', 'system/raw-element', ...profiles);
+		assert(!/only under --judge/.test(other.stderr), `noted for a rule that needs no --judge:\n${other.stderr}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// `readBaseline` took any `entries` array, so a `null` in it reached `ruleOf`
+// and threw: `baseline --dry-run` and `check --rule` exited 2 on a file a plain
+// `check` read without complaint.
+await check('a baseline entry that is not a string is dropped, not thrown on', () => {
+	const dir = scratch('loupe-baseline-null-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
+		const path = join(dir, '.loupe-baseline.json');
+		const file = JSON.parse(readFileSync(path, 'utf8')) as { entries: unknown[] };
+		writeAll(dir, { '.loupe-baseline.json': JSON.stringify({ ...file, entries: [...file.entries, null, 3] }) });
+		for (const argv of [
+			['baseline', '--dry-run'],
+			['check', '--all', '--rule', 'layout/margin-on-child'],
+		]) {
+			const r = cli(dir, ...argv);
+			assert(r.status !== 2, `${argv.join(' ')} exited 2:\n${r.stderr}`);
+		}
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// `--files` took a directory as a file name: nothing is keyed by it, so
+// `--files styles` reported "clean. 1 file(s) scanned." on a tree whose
+// stylesheets had findings in them.
+await check('--files expands a directory to the source files under it', () => {
+	const dir = scratch('loupe-files-dir-');
+	writeAll(dir, { ...RULED, 'vendor/skip.css': '.v { margin-bottom: 8px; }' });
+	writeAll(dir, {
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			rules: { 'layout/margin-on-child': 'error' },
+			sources: { ignore: ['vendor/**'] },
+		}),
+	});
+	try {
+		const files = (...argv: string[]): string[] =>
+			[
+				...new Set(
+					(
+						JSON.parse(cli(dir, 'check', '--no-baseline', '--format', 'json', ...argv).stdout) as {
+							findings: Finding[];
+						}
+					).findings.map((f) => f.file),
+				),
+			].sort();
+		const all = files('--all');
+		assert(all.join() === 'styles/a.css,styles/b.css', `fixture: ${all.join()}`);
+		for (const given of ['styles', 'styles/', '.', join(dir, 'styles')])
+			assert(files('--files', given).join() === all.join(), `--files ${given}: ${files('--files', given).join()}`);
+		// A file beside a directory, and the ignore globs still apply under it.
+		assert(files('--files', 'styles/b.css').join() === 'styles/b.css', 'a plain file is no longer taken as given');
+	} finally {
+		cleanup(dir);
 	}
 });
 

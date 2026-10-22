@@ -9,7 +9,7 @@
  * Design notes: docs/design/cli.md
  */
 
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -31,8 +31,10 @@ import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
 import {
 	TreeTooLarge,
+	analyzeEntryBudget,
 	byBytes,
 	changedFiles,
+	discover,
 	gitIgnores,
 	hasGitDir,
 	isSource,
@@ -290,7 +292,8 @@ Commands:
 Options:
   --changed             Only report findings in files changed vs. HEAD (default for hook)
   --all                 Report across the whole repo (default for check)
-  --files a,b           Only report findings in these files
+  --files a,b           Only report findings in these files (a directory: the
+                        source files under it)
   --rule <id>           Only report (check) or fix (fix) this rule's findings;
                         repeat it, or give a comma list, for more than one
   --format <f>          agent | json | sarif | html  (default: agent)
@@ -439,6 +442,32 @@ const TRUNCATED_NOTE =
 /** The same fact, sized for a hook message that has to stay one line. */
 const CEILING_SUFFIX = ` (inference stopped at the ${CEILING}; namespaces are a guess)`;
 
+/**
+ * `--files`, with each directory replaced by the source files under it.
+ *
+ * Findings are keyed by file, so a directory taken as given matched nothing and
+ * the run reported clean. Read off the same walk the analysis makes, so the
+ * source globs and `sources.ignore` decide what is under it exactly as they
+ * decide what `--all` covers.
+ */
+function expandDirs(config: Config, given: readonly string[]): ScopeResult {
+	const isDir = (rel: string): boolean => {
+		try {
+			return statSync(resolve(config.root, rel)).isDirectory();
+		} catch {
+			return false;
+		}
+	};
+	const dirs = given.filter(isDir).map((d) => toPosix(relative(config.root, resolve(config.root, d))));
+	if (!dirs.length) return given.filter(Boolean);
+	const limit = analyzeEntryBudget(config.maxEntries);
+	const found = discover({ root: config.root, sources: config.sources, limit });
+	if (found.truncated) return { error: new TreeTooLarge(limit).message };
+	const under = (rel: string): boolean => dirs.some((d) => d === '' || rel.startsWith(`${d}/`));
+	const files = [...found.styles, ...found.markup, ...found.references].map((f) => f.rel).filter(under);
+	return [...new Set([...given.filter((f) => f && !isDir(f)), ...files])];
+}
+
 function resolveScope(
 	config: Config,
 	args: Args,
@@ -448,7 +477,8 @@ function resolveScope(
 	if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(' ')}` };
 	if (args.flags.all) return null;
 	if (args.flags.files)
-		return (
+		return expandDirs(
+			config,
 			args.flags.files
 				.split(',')
 				.map((f) => f.trim())
@@ -456,7 +486,7 @@ function resolveScope(
 				// Findings are keyed repo-relative, so an absolute path matches nothing and the
 				// run reports clean.
 				.map((f) => toPosix(isAbsolute(f) ? relative(config.root, resolve(f)) : f))
-				.filter((f) => f && !f.startsWith('..'))
+				.filter((f) => !f.startsWith('..')),
 		);
 	if (args.flags.changed || defaultChanged) {
 		const changed = changedFiles(config.root);
@@ -552,10 +582,14 @@ function filterRules<T extends AnalyzeResult>(result: T, rules: ReadonlySet<Rule
 	return { ...result, findings, blocking: findings.some((f) => f.severity === 'error') };
 }
 
-function filterSeverity<T extends AnalyzeResult>(result: T, min: string): T {
+function filterSeverity<T extends AnalyzeResult | BaselinedResult>(result: T, min: string): T {
 	if (min !== 'error') return result;
 	const findings = result.findings.filter((f) => f.severity === 'error');
-	return { ...result, findings };
+	if (!('baselinedFindings' in result)) return { ...result, findings };
+	// The accepted findings too: SARIF lists them as suppressed results, and a
+	// warning the filter asked to leave out is no more wanted there.
+	const baselinedFindings = result.baselinedFindings.filter((f) => f.severity === 'error');
+	return { ...result, findings, baselinedFindings, baselined: baselinedFindings.length };
 }
 
 async function main(): Promise<number> {
@@ -1134,7 +1168,7 @@ async function main(): Promise<number> {
 				warned = true;
 				notice(`loupe: baseline at ${bPath} is unreadable — ignoring it.\n`);
 			}
-			return applyBaseline(fresh, baseline);
+			return applyBaseline(fresh, baseline, { enabled: config.enabled });
 		};
 	};
 
@@ -1345,6 +1379,9 @@ async function main(): Promise<number> {
 	// silence is not a clean bill either.
 	for (const id of rules ?? [])
 		if (!config.enabled[id]) note(`loupe: ${id} is off in this config \u2014 it reports nothing.\n`);
+		// Nor is a rule only the judge reports, named on a run that does not judge.
+		else if (id === 'patterns/judged-redirect' && command === 'check' && !args.flags.judge)
+			note(`loupe: ${id} reports only under --judge \u2014 this run reports nothing for it.\n`);
 
 	// The one network call in the engine, so the key is checked before the walk.
 	// Typed by hand, a `--judge` that cannot judge is a mistake worth refusing.
@@ -1510,7 +1547,7 @@ async function main(): Promise<number> {
 			const legacy = legacyBaseline(root);
 			if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}\n`);
 		}
-		result = applyBaseline(result, baseline, { scoped: scope !== null, rules });
+		result = applyBaseline(result, baseline, { scoped: scope !== null, rules, enabled: config.enabled });
 	}
 	// Before the judgements: a finding the filter drops is not worth a paid question.
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);

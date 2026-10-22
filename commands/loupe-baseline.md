@@ -43,4 +43,5 @@ which works that rule's baselined findings deliberately — naming a rule makes
 its check run with `--no-baseline` — while a bare `/loupe-fix` keeps respecting
 the baseline and fixes new drift only. Delete the baseline once it is empty.
 `check --no-baseline --rule <rule-id>` shows how much of one rule the baseline
-is holding; `fix` reads no baseline at all.
+is holding. `fix` reads no baseline at all, which is why a bare `/loupe-fix`
+runs it on the changed files only.
