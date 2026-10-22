@@ -928,11 +928,12 @@ async function main(): Promise<number> {
 
 	// Off unless the project opted in, or silenced.
 	//
-	// Silence, not advisory mode: an advisory finding still lands in the agent's
-	// context, and an agent that sees a finding starts fixing it. Hook-only —
-	// `loupe check` typed by hand is someone asking. A project that never opted in
-	// hears nothing; one that opted in and was switched off is told so, like every
-	// other stand-down, or a stale switch disables the gate with no trace.
+	// Silence, not advisory mode: on PostToolUse an advisory finding still lands
+	// in the agent's context, and an agent that sees a finding starts fixing it.
+	// Hook-only — `loupe check` typed by hand is someone asking. A project that
+	// never opted in hears nothing; one that opted in and was switched off is told
+	// so, like every other stand-down, or a stale switch disables the gate with no
+	// trace.
 	if (isHook) {
 		const off = hookOff(projectDir, resolved);
 		if (off) return hookSilenced(projectDir, resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
@@ -2024,13 +2025,22 @@ async function main(): Promise<number> {
 			return { errors, blocking: introducedBy(errors, before) };
 		})());
 	/**
+	 * Whether the event has a way into the agent's context that does not block:
+	 * PostToolUse's `additionalContext`. Stop's only one is `decision: "block"`.
+	 *
+	 * Design notes: docs/design/cli.md#advisory-findings-reach-the-agent-on-posttooluse-only
+	 */
+	const hookAdvises = hookEvent(payload) === 'PostToolUse';
+	/**
 	 * The findings the hook will print, decided the way the branch below decides
-	 * it: none when nothing blocks or the gate has stood down (a summary line
-	 * either way), else the blocking ones under the findings cap.
+	 * it. When nothing blocks: on PostToolUse every finding under the findings
+	 * cap, handed to the agent as context, and on Stop none (a tally). When
+	 * something does: the blocking ones under the cap, or none once the gate has
+	 * stood down (a summary line).
 	 */
 	const hookShows = async (): Promise<Finding[]> => {
 		const { blocking } = await hookVerdict();
-		if (!blocking.length) return [];
+		if (!blocking.length) return hookAdvises ? shownFindings(result.findings, config.hook.maxFindings) : [];
 		if (!payload.session_id && payload.stop_hook_active) return [];
 		// Peeked under the key the branch below bumps, session id or not.
 		if (peekAttempts(root, budgetKey) + 1 > config.hook.maxAttempts) return [];
@@ -2054,9 +2064,10 @@ async function main(): Promise<number> {
 			cache: answerCache(root, args.flags['no-cache']),
 		});
 		const redirectSeverity = config.severityOf('patterns/judged-redirect');
-		// The same filters, for the findings the redirects add. In the hook a
-		// redirect that cannot block is never printed: only blocking findings are
-		// handed back.
+		// The same filters, for the findings the redirects add. In the hook only a
+		// redirect that can block is asked for: the pass asks about every control in
+		// scope before there is a finding to choose among, so it cannot be held to
+		// what the hook prints.
 		const askRedirects =
 			Boolean(result.controls?.length) &&
 			(args.flags.severity !== 'error' || redirectSeverity === 'error') &&
@@ -2076,8 +2087,9 @@ async function main(): Promise<number> {
 			result.findings = dedupe(result.findings);
 		};
 		// What the rest is asked about. A typed run prints everything; the hook
-		// prints a tally when nothing blocks, and only the blocking findings it has
-		// room for when something does — so that is all it pays to have judged.
+		// prints only the findings it has room for — the blocking ones when
+		// something blocks, every one on a PostToolUse when nothing does — and a
+		// tally otherwise, so that is all it pays to have judged.
 		// A redirect configured to block decides which of those it is, so the hook
 		// waits for it first; everywhere else every pass runs at once.
 		if (isHook) addRedirects(await redirects);
@@ -2125,14 +2137,16 @@ async function main(): Promise<number> {
 			: '';
 		if (!blocking.length) {
 			clearAttempts(root, budgetKey);
-			if (!standing) return emitClean(`${formatSummary(result)}${spentSuffix}${ceilingSuffix}`);
-			// The agent hears it too, with the findings: it is the agent Stop holds to them.
-			const message = `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`;
-			const report = formatAgent({ ...result, findings: errors }, config, {
-				maxFindings: config.hook.maxFindings,
-				terse: true,
-			});
-			return emitAdvisory(message, `${message}\n\n${report}`, payload);
+			const message = standing
+				? `loupe: this edit added no blocking findings.${standingNote}${spentSuffix}${ceilingSuffix}`
+				: `${formatSummary(result)}${spentSuffix}${ceilingSuffix}`;
+			if (!hookAdvises || !result.findings.length) return emitClean(message);
+			// The agent hears every finding in the blocking report's format and under
+			// its cap: the standing ones, which Stop will hold it to, and the advisory
+			// ones. The report opens with the tally, so the message leads it only
+			// where it says more.
+			const report = formatAgent(result, config, { maxFindings: config.hook.maxFindings, terse: true });
+			return emitAdvisory(message, standing || ceilingSuffix ? `${message}\n\n${report}` : report, payload);
 		}
 		const attempts = bumpAttempts(root, budgetKey);
 		const max = config.hook.maxAttempts;

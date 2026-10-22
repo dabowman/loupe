@@ -172,8 +172,12 @@ const env = (data: string, extra: Record<string, string> = {}) => ({
 	...extra,
 });
 
-/** Runs the CLI and returns how many requests reached the endpoint, with its stderr. */
-async function judged(args: string[], e: NodeJS.ProcessEnv, input?: string): Promise<{ n: number; stderr: string }> {
+/** Runs the CLI and returns how many requests reached the endpoint, with its output. */
+async function judged(
+	args: string[],
+	e: NodeJS.ProcessEnv,
+	input?: string,
+): Promise<{ n: number; stdout: string; stderr: string }> {
 	const before = requests.length;
 	const child = run('node', [CLI, ...args], { env: e, encoding: 'utf8' });
 	if (input !== undefined) {
@@ -185,7 +189,7 @@ async function judged(args: string[], e: NodeJS.ProcessEnv, input?: string): Pro
 		if (err.code !== (args[0] === 'hook' ? 2 : 1)) throw new Error(`exit ${err.code}: ${err.stderr}`);
 		return err;
 	});
-	return { n: requests.length - before, stderr: out.stderr };
+	return { n: requests.length - before, stdout: out.stdout, stderr: out.stderr };
 }
 
 const hookPayload = (root: string, session = 's1') =>
@@ -215,25 +219,33 @@ await check('check --judge asks once, then answers the same run from the cache',
 	}
 });
 
-await check('an advisory hook run prints a tally, so it asks nothing', async () => {
-	// No config: inferred, so every finding is advisory.
-	const { root, data } = project();
-	try {
-		const { n } = await judged(
-			['hook', '--judge', '--profiles', PROFILES],
-			env(data, { CLAUDE_PROJECT_DIR: root }),
-			hookPayload(root),
-		);
-		assert(n === 0, `the advisory hook sent ${n} request(s)`);
-	} finally {
-		cleanup(root);
-	}
-});
-
 // Five tags, five different lines: the report has room for two of them.
 const DISTINCT = ['p', 'h1', 'h2', 'h3', 'h4']
 	.map((tag, i) => `export const E${i} = () => <${tag} className="e${i}">Line ${i}</${tag}>;`)
 	.join('\n');
+
+// A PostToolUse that blocks nothing hands the agent the findings its cap has
+// room for, so it asks about those; a Stop that blocks nothing prints a tally.
+await check('an advisory hook run asks only about what it hands the agent, and Stop nothing', async () => {
+	// No config: inferred, so every finding is advisory.
+	const { root, data } = project(undefined, DISTINCT);
+	try {
+		execFileSync('git', ['init', '-q'], { cwd: root, stdio: 'ignore' });
+		const hookEnv = env(data, { CLAUDE_PROJECT_DIR: root, CLAUDE_PLUGIN_OPTION_MAX_FINDINGS: '2' });
+		const post = await judged(['hook', '--judge', '--profiles', PROFILES], hookEnv, hookPayload(root));
+		assert(post.n === 2, `the PostToolUse sent ${post.n} request(s), expected the 2 it has room to hand over`);
+		// Uncached, so a Stop that asked could not hide behind the answers above.
+		const stop = await judged(
+			['hook', '--judge', '--profiles', PROFILES, '--no-cache'],
+			hookEnv,
+			JSON.stringify({ session_id: 's1', hook_event_name: 'Stop', stop_hook_active: false }),
+		);
+		assert(/advisory/.test(stop.stdout), `the Stop did not tally the findings: ${stop.stdout}`);
+		assert(stop.n === 0, `the advisory Stop sent ${stop.n} request(s)`);
+	} finally {
+		cleanup(root);
+	}
+});
 
 await check('a blocking hook run asks only about the findings it prints', async () => {
 	const { root, data } = project(

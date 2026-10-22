@@ -2,7 +2,9 @@
  * Claude Code Stop-hook mode.
  *
  * Exit protocol:
- *   0 + {systemMessage}  clean, or advisory-only, or gave up after N attempts
+ *   0 + {systemMessage}  clean, or advisory-only, or gave up after N attempts;
+ *                        on PostToolUse, findings that do not block also reach
+ *                        the agent as hookSpecificOutput.additionalContext
  *   2 + stderr           blocking findings; stderr is handed back to the agent
  *
  * Bounded retry rather than an absolute bail on `stop_hook_active`: skipping
@@ -120,7 +122,10 @@ export function parsePayload(raw: string): HookPayload {
  * The file a PostToolUse payload just touched, as a repo-relative path.
  *
  * Scoping to it is what turns this from a review-time gate into a write-time
- * one: the drift is reported while the agent still has the decision in hand.
+ * one: the drift reaches the agent while it still has the decision in hand — a
+ * blocking finding as the block, an advisory one as context. Stop has no
+ * channel for the second, so on Stop advisory findings are a tally the person
+ * sees.
  *
  * Returns null for a payload with no file (a Stop event, or a non-file tool),
  * which the caller maps to the changed-files scope, and for a file outside the
@@ -423,13 +428,14 @@ export function emitClean(message: string): number {
 }
 
 /**
- * A stand-down the agent has to hear about as well as the user: exit 0, never
- * blocking, with `message` for the user and `context` for the agent.
+ * What the agent has to hear as well as the user, without blocking — findings
+ * that do not block, or a stand-down: exit 0, with `message` for the user and
+ * `context` for the agent.
  *
  * PostToolUse has a non-blocking way into the agent's context,
  * `hookSpecificOutput.additionalContext`. Stop has none — its only channel to
- * the agent is `decision: "block"`, which is exactly what a gate that cannot
- * configure itself must not do — so there it is the user's message alone.
+ * the agent is `decision: "block"`, which stays reserved for blocking — so
+ * there it is the user's message alone.
  */
 export function emitAdvisory(message: string, context: string, payload: HookPayload): number {
 	const event = hookEvent(payload);

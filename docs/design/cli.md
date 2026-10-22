@@ -14,8 +14,9 @@ CI jobs, hooks and quality runners branch on these, so they are part of the
 public surface and change like one.
 
 The hook's protocol sits on top of them: `0` with a `systemMessage` for clean,
-advisory-only, or gave-up-after-N-attempts; `2` with stderr for blocking
-findings, where stderr is what gets handed back to the agent.
+advisory-only, or gave-up-after-N-attempts, and on PostToolUse findings that do
+not block also go to the agent as `additionalContext`; `2` with stderr for
+blocking findings, where stderr is what gets handed back to the agent.
 
 **Bounded retry, not an absolute bail on `stop_hook_active`.** Skipping every
 hook-triggered turn means the turn that *fixes* a finding is never checked, so
@@ -802,10 +803,11 @@ fix.
 
 ### Silence, not advisory mode
 
-The `off` switch makes the hook check nothing. An advisory finding still lands
-in the agent's context, and an agent that sees a finding starts fixing it —
-which is the whole complaint. Deliberately hook-only: `loupe check` typed by
-hand is someone asking, and answering "nothing" would be a lie.
+The `off` switch makes the hook check nothing. On PostToolUse an advisory
+finding still lands in the agent's context (on Stop it is a tally the person
+sees), and an agent that sees a finding starts fixing it — which is the whole
+complaint. Deliberately hook-only: `loupe check` typed by hand is someone
+asking, and answering "nothing" would be a lie.
 
 It tells the user, though — a `skipped` systemMessage, the path every other
 stand-down takes. When it said nothing at all, a stale `export LOUPE_OFF=1` in
@@ -1046,6 +1048,35 @@ standing findings says how many in its message, and a blocking report names the
 count beneath the new ones — the agent should know what Stop will hold it to.
 The retry budget is untouched: it counts the runs that blocked, keyed as before
 on session and file.
+
+## Advisory findings reach the agent on PostToolUse only
+
+With `blocking` off — the plugin's default — every finding is advisory, and both
+hooks used to say so with a `systemMessage` tally alone. Claude Code shows that
+to the person, not the model, so a write-time gate told nothing at write time to
+the one reader who could act on it.
+
+A PostToolUse that blocks nothing now hands the agent the report a blocking one
+would, as `hookSpecificOutput.additionalContext`, beside the tally: the touched
+file's findings under the same `maxFindings` cap and round-robin sample
+(`shownFindings`), in the same terse agent format, so the agent reads one shape
+whether or not the turn stopped. Standing blocking findings the edit walked past
+ride in the same report, after the line naming them. The selection is the one
+the judge phase reads, so with a key the findings handed over carry the judged
+suggestions a blocking report would. A redirect that cannot block is still never
+asked for: that pass asks about every control in scope, before there is a
+finding to choose among, so it cannot be held to what is shown.
+
+**Stop keeps the tally.** Its only channel to the model is `decision: "block"`,
+which refuses the stop and hands the reason back as the next instruction. Using
+it for advisory findings would make every Stop with one a blocked Stop —
+`blocking` on in all but name, spending the retry budget on findings nobody chose
+to enforce — so it stays reserved for blocking. Turning `blocking` on by default
+for a project with a written config would reach the model on Stop too, at the
+price of stopping turns in every such project; the default stays off, and a
+project that wants Stop to hand findings back turns it on. Most of what Stop's
+tally counts already reached the agent once, at the PostToolUse of the write
+that left it.
 
 ## The stand-down latches
 

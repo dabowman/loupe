@@ -887,8 +887,9 @@ Or everywhere, with the plugin's *Silence the hook* option. All three set the
 same switch, and `loupe status` names which one did it on its `options:` line.
 
 The hook checks nothing — not advisory, silent to the agent; the user sees one
-`loupe: skipped — silenced by …` line. Advisory mode does not solve this:
-an advisory finding still lands in the agent's context, and an agent that sees a
+`loupe: skipped — silenced by …` line. Advisory mode does not solve this: after
+each edit, `PostToolUse` still hands the agent that file's advisory findings
+(`Stop` shows you a tally and tells the agent nothing), and an agent that sees a
 finding starts fixing it, which is usually the thing you were trying to avoid.
 `loupe` typed by hand still reports normally; the switch is only for the hook.
 
@@ -918,11 +919,12 @@ timeout — 60s on `PostToolUse`, 120s on `Stop`. Each request gives up after 20
 seconds and the run keeps the deterministic findings it already had. To stay
 offline, drop `--judge` from `hooks/hooks.json`, or just leave the key unset.
 
-The hook only pays for what it prints. A run that does not block prints a
-one-line tally, so it asks nothing; a blocking run asks only about the findings
-its cap has room to show. Answers are cached per project, keyed by the exact
-question, so the next write in the same file, and the `Stop` after it, re-ask
-only what changed. What a run spent rides on its summary line —
+The hook only pays for what it prints. A `Stop` that does not block prints a
+one-line tally, so it asks nothing; a blocking run, and a `PostToolUse` handing
+the agent findings that do not block, ask only about the findings the cap has
+room to show. Answers are cached per project, keyed by the exact question, so
+the next write in the same file, and the `Stop` after it, re-ask only what
+changed. What a run spent rides on its summary line —
 `judge: 2 asked, 9 from cache` — and `--no-cache` asks everything fresh. See
 [What a judged run spends](docs/design/judge.md#what-a-judged-run-spends).
 
@@ -1199,7 +1201,7 @@ Configured where you enable the plugin, read by the hook from the environment:
 
 | | |
 | --- | --- |
-| **Block turns on findings** | Governs the hook only. Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. `loupe check` is unaffected — it exits 1 on error-severity findings either way, so CI and pre-commit still gate. |
+| **Block turns on findings** | Governs the hook only. Off by default: the gate reports, it doesn't stop the turn — after each edit, `PostToolUse` hands the agent that file's findings as context, and at the end of the turn `Stop` shows you a tally, which the agent does not see. On, error-severity findings stop the turn and hand the report back. An inferred config never blocks unless this is on. `loupe check` is unaffected — it exits 1 on error-severity findings either way, so CI and pre-commit still gate. |
 | **Silence the hook** | Off by default. On, the hook checks nothing in any project and says only that it was skipped. `"env": { "LOUPE_OFF": "1" }` in a project's `.claude/settings.local.json` does the same for that project. |
 | **Preset** | `auto` infers per project. A project's own `loupe.config.json` always wins over both. |
 | **Project class prefixes** | Comma-separated, e.g. `vip-workflow-, wf-`. Empty infers them. Only these can be reported dead. |

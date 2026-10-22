@@ -133,7 +133,8 @@ export default function (pi: ExtensionAPI) {
 		if (!output) return;
 
 		// Hand the findings back to the LLM as additional tool result content:
-		// what blocks, or what the edit walked past and the end-of-run check will hold.
+		// what blocks, or the findings that do not, among them what the edit
+		// walked past and the end-of-run check will hold.
 		return {
 			content: [
 				...event.content,

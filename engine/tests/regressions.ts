@@ -492,6 +492,66 @@ await check('with blocking off, check still exits 1 and status says so', () => {
 	}
 });
 
+// With blocking off — the plugin's default — both hooks printed only a
+// `systemMessage` tally, which Claude Code shows the person and not the model,
+// so no rule, file or line reached the agent at write time. PostToolUse hands
+// it the report as `additionalContext`; Stop has no channel to the agent that
+// does not block the turn, so it keeps the tally.
+await check('with blocking off, PostToolUse hands the agent its advisory findings and Stop keeps a tally', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
+		// Two blocking findings with blocking on: demoted here, and still the agent's to hear.
+		'styles/a.css': '.acme-t { font-size: 13px; color: #f00; }',
+	});
+	const css = join(root, 'styles', 'a.css');
+	type Out = { systemMessage?: string; hookSpecificOutput?: { hookEventName?: string; additionalContext?: string } };
+	const hook = (payload: object, extra: NodeJS.ProcessEnv = {}): Out => {
+		const r = runCli(
+			['hook'],
+			{ CLAUDE_PROJECT_DIR: root, CLAUDE_PLUGIN_OPTION_BLOCKING: 'false', ...extra },
+			JSON.stringify({ session_id: 'adv', cwd: root, ...payload }),
+		);
+		assert(r.status === 0, `an advisory run blocked the turn: exit ${r.status}\n${r.stderr}`);
+		return JSON.parse(r.stdout) as Out;
+	};
+	const edit = {
+		hook_event_name: 'PostToolUse',
+		tool_name: 'Write',
+		tool_input: { file_path: css },
+		tool_response: { filePath: css, originalFile: '.acme-t {}\n' },
+	};
+	try {
+		execFileSync('git', ['init', '-q'], { cwd: root, stdio: 'ignore' });
+		const post = hook(edit);
+		assert(/advisory/.test(post.systemMessage ?? ''), `the person was not shown the tally: ${JSON.stringify(post)}`);
+		assert(
+			post.hookSpecificOutput?.hookEventName === 'PostToolUse',
+			`no context for the agent: ${JSON.stringify(post)}`,
+		);
+		const context = post.hookSpecificOutput?.additionalContext ?? '';
+		assert(
+			/system\/override/.test(context) && /typography\/in-css/.test(context) && context.includes('styles/a.css'),
+			`the agent was not handed the report:\n${context}`,
+		);
+		assert(
+			/advisory/.test(context) && !/blocking —/.test(context),
+			`the report called a finding blocking:\n${context}`,
+		);
+
+		// Under the cap the blocking report has.
+		const capped = hook(edit, { CLAUDE_PLUGIN_OPTION_MAX_FINDINGS: '1' }).hookSpecificOutput?.additionalContext ?? '';
+		assert(/1 finding\(s\) not shown/.test(capped), `the findings cap did not apply to the context:\n${capped}`);
+
+		const stop = hook({ hook_event_name: 'Stop', stop_hook_active: false });
+		assert(/advisory/.test(stop.systemMessage ?? ''), `Stop did not tally the findings: ${JSON.stringify(stop)}`);
+		assert(stop.hookSpecificOutput === undefined, `a Stop hook was handed context: ${JSON.stringify(stop)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `loupe baseline` from a shell has no CLAUDE_PLUGIN_DATA; the Stop hook always
 // has one. State keyed off that variable meant the two processes read different
 // files, so a recorded backlog was invisible to the gate that was supposed to

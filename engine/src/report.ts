@@ -367,7 +367,8 @@ function findingLines(group: readonly Finding[]): string[] {
 /**
  * The report a reader gets.
  *
- * `terse` is the hook's version: blocking findings handed back mid-turn. The
+ * `terse` is the hook's version, handed to the agent mid-turn: the blocking
+ * findings, or on a PostToolUse that blocks nothing, the file's findings. The
  * lines it drops answer questions only somebody auditing a whole repo asks, and
  * the suppression inventory is repo-wide where a hook run has looked at two
  * files. The tally, the severity words and the next-step line stay.
