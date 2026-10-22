@@ -9,9 +9,11 @@
  * Design notes: docs/design/report.md#baseline
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { findingKey } from './analyze.ts';
+import { findingKey, isBlocking } from './analyze.ts';
+import { byBytes } from './discover.ts';
+import { isRecord, readJson } from './json.ts';
 import { ensureDir } from './paths.ts';
 import type { AnalyzeResult, Baseline, BaselineFile, BaselinedResult } from './types.ts';
 
@@ -25,20 +27,16 @@ import type { AnalyzeResult, Baseline, BaselineFile, BaselinedResult } from './t
  */
 export function readBaseline(path: string): Baseline | null {
 	if (!existsSync(path)) return null;
-	try {
-		const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<BaselineFile>;
-		// A file whose `entries` is missing or not an array is as unreadable as one
-		// that doesn't parse: both mean "we cannot tell you what was accepted".
-		// Defaulting it to `[]` says "nothing was accepted", which reads as a healthy
-		// empty baseline and puts the whole backlog live.
-		if (!Array.isArray(parsed.entries)) return null;
-		// An entry that is not a string is no key a finding could match, and every
-		// reader past here takes one apart as text.
-		const entries = (parsed.entries as unknown[]).filter((e): e is string => typeof e === 'string');
-		return { createdAt: parsed.createdAt ?? '', entries, set: new Set(entries) };
-	} catch {
-		return null;
-	}
+	const parsed = readJson(path) as Partial<BaselineFile> | null;
+	// A file whose `entries` is missing or not an array is as unreadable as one
+	// that doesn't parse: both mean "we cannot tell you what was accepted".
+	// Defaulting it to `[]` says "nothing was accepted", which reads as a healthy
+	// empty baseline and puts the whole backlog live.
+	if (!isRecord(parsed) || !Array.isArray(parsed.entries)) return null;
+	// An entry that is not a string is no key a finding could match, and every
+	// reader past here takes one apart as text.
+	const entries = (parsed.entries as unknown[]).filter((e): e is string => typeof e === 'string');
+	return { createdAt: parsed.createdAt ?? '', entries, set: new Set(entries) };
 }
 
 /** One entry per distinct key, sorted, so a re-record rewrites the same bytes. */
@@ -84,7 +82,7 @@ export function diffBaseline(
 		for (const e of entries) if (!prior.set.has(e)) row(ruleOf(e)).added++;
 		for (const e of prior.entries) if (!now.has(e)) row(ruleOf(e)).removed++;
 	}
-	const rules = [...rows.values()].sort((a, b) => b.findings - a.findings || (a.rule < b.rule ? -1 : 1));
+	const rules = [...rows.values()].sort((a, b) => b.findings - a.findings || byBytes(a.rule, b.rule));
 	return { entries: entries.length, rules };
 }
 
@@ -167,7 +165,7 @@ export function applyBaseline(
 	return {
 		...result,
 		findings: kept,
-		blocking: kept.some((f) => f.severity === 'error'),
+		blocking: isBlocking(kept),
 		baselined: accepted.length,
 		baselinedFindings: accepted,
 		fixed: scoped
