@@ -136,10 +136,13 @@ export function cssFilesUnder(
 	}
 	if (st.isFile()) return wanted(path) ? [path] : [];
 	const out: string[] = [];
+	// Checked before the walk and right after each take: pulling one more file
+	// from the generator reads every directory up to it, which a spent budget
+	// must not pay for.
+	if (budget.left <= 0) return out;
 	for (const file of filesUnder(path, wanted)) {
-		if (budget.left <= 0) break;
 		out.push(file);
-		budget.left--;
+		if (--budget.left <= 0) break;
 	}
 	return out;
 }

@@ -3757,7 +3757,7 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync10, readFileSync: readFileSync17, realpathSync: realpathSync3 } = __require("fs");
+    var { existsSync: existsSync10, readFileSync: readFileSync15, realpathSync: realpathSync3 } = __require("fs");
     var { dirname: dirname10, isAbsolute: isAbsolute6, join: join18, relative: relative7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
@@ -3839,7 +3839,7 @@ var require_previous_map = __commonJS({
         this.root = dirname10(path);
         if (existsSync10(path)) {
           this.mapFile = path;
-          return readFileSync17(path, "utf-8").toString().trim();
+          return readFileSync15(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -23502,7 +23502,7 @@ import { parseArgs as parseArgv } from "node:util";
 import { isMainThread as isMainThread2 } from "node:worker_threads";
 
 // src/analyze.ts
-import { readFileSync as readFileSync8, realpathSync, statSync as statSync4 } from "node:fs";
+import { readFileSync as readFileSync7, realpathSync, statSync as statSync4 } from "node:fs";
 
 // node_modules/postcss/lib/postcss.mjs
 var import_postcss = __toESM(require_postcss(), 1);
@@ -24124,7 +24124,7 @@ function changedFiles(root2) {
 }
 
 // src/profiles.ts
-import { existsSync as existsSync5, readFileSync as readFileSync4 } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync3 } from "node:fs";
 import { join as join6, resolve as resolve4 } from "node:path";
 
 // src/patterns.ts
@@ -24176,8 +24176,7 @@ function partsOf(root2, tree) {
 }
 var bindName = (c) => typeof c === "string" && c ? c.split(".", 1)[0] ?? c : null;
 var ruleSpecs = (detector) => {
-  const list2 = Array.isArray(detector) ? detector : [detector];
-  return list2.filter(
+  return listOf(detector).filter(
     (d) => typeof d === "object" && d !== null && typeof d.rule === "string"
   );
 };
@@ -24584,13 +24583,12 @@ function surfacesRecorded(registry) {
 }
 function ownership(surface, prop) {
   for (const [owned, control] of Object.entries(surface.properties))
-    if (propsOverlap(prop, owned))
-      return { owned, via: control === null ? [] : Array.isArray(control) ? control : [control] };
+    if (propsOverlap(prop, owned)) return { owned, via: listOf(control) };
   return void 0;
 }
 
 // src/config.ts
-import { existsSync as existsSync4, readFileSync as readFileSync3 } from "node:fs";
+import { existsSync as existsSync4, readFileSync as readFileSync2 } from "node:fs";
 import { dirname as dirname4, isAbsolute as isAbsolute2, join as join5, relative as relative2, resolve as resolve3 } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -24606,7 +24604,7 @@ function registryApplies(raw, dsPackages) {
 }
 
 // src/embedded.ts
-import { existsSync as existsSync3, readFileSync as readFileSync2, readdirSync as readdirSync2 } from "node:fs";
+import { existsSync as existsSync3, readdirSync as readdirSync2 } from "node:fs";
 import { dirname as dirname3, join as join4 } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26190,13 +26188,7 @@ var presetNames = () => {
 };
 var readPreset = (name) => {
   const onDisk = presetPath(name);
-  if (existsSync3(onDisk)) {
-    try {
-      return JSON.parse(readFileSync2(onDisk, "utf8"));
-    } catch {
-      return void 0;
-    }
-  }
+  if (existsSync3(onDisk)) return readJson(onDisk) ?? void 0;
   return EMBEDDED_PRESETS[name];
 };
 var hasPreset = (spec) => existsSync3(presetPath(spec)) || Boolean(EMBEDDED_PRESETS[presetKey(spec)]);
@@ -26257,19 +26249,16 @@ function mergeConfig(base, over) {
   return out;
 }
 function findConfig(start) {
-  let dir = resolve3(start);
-  for (; ; ) {
+  for (const dir of dirsUp(start)) {
     for (const name of CONFIG_NAMES) {
       const p = join5(dir, name);
       if (existsSync4(p)) return p;
     }
     const pkg = join5(dir, "package.json");
-    const parsed = readJson(pkg);
+    const parsed = existsSync4(pkg) ? readJson(pkg) : null;
     if (isRecord(parsed) && parsed.loupe) return pkg;
-    const up = dirname4(dir);
-    if (up === dir) return null;
-    dir = up;
   }
+  return null;
 }
 async function readConfigFile(path) {
   const preset2 = presetOf(path);
@@ -26278,7 +26267,7 @@ async function readConfigFile(path) {
     if (embedded) return embedded;
   }
   if (path.endsWith(".json")) {
-    const parsed = JSON.parse(readFileSync3(path, "utf8"));
+    const parsed = JSON.parse(readFileSync2(path, "utf8"));
     return path.endsWith("package.json") ? parsed.loupe : parsed;
   }
   const mod = await import(pathToFileURL(path).href);
@@ -26395,7 +26384,7 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
   if (maxEntries !== void 0 && maxEntries !== null && !(Number.isInteger(maxEntries) && maxEntries > 0))
     throw new Error(`maxEntries must be a positive whole number of entries, got: ${JSON.stringify(maxEntries)}`);
   const profileSpec = cfg.profiles ?? [];
-  const profileList = typeof profileSpec === "string" ? [profileSpec] : Array.isArray(profileSpec) ? profileSpec : [profileSpec];
+  const profileList = listOf(profileSpec);
   if (profileList.some((p) => typeof p !== "string" || p === ""))
     throw new Error(`profiles must be a directory or an array of directories, got: ${JSON.stringify(profileSpec)}`);
   const profileDirs = profileList.map((p) => resolve3(root2, p));
@@ -26487,7 +26476,7 @@ function readRegistry(spec, root2, packages, load, empty) {
   if (Array.isArray(spec)) return load(spec);
   if (typeof spec !== "string") return empty;
   try {
-    const raw = JSON.parse(readFileSync3(under(root2, spec), "utf8"));
+    const raw = JSON.parse(readFileSync2(under(root2, spec), "utf8"));
     return registryApplies(raw, packages) ? load(raw) : empty;
   } catch {
     return empty;
@@ -26814,7 +26803,7 @@ function fitOf(scopes, token, elements) {
 // src/profiles.ts
 var PROJECT_PROFILES = join6(".loupe", "profiles");
 var NO_PROFILE = "none";
-var readJsonStrict = (p) => JSON.parse(readFileSync4(p, "utf8"));
+var readJsonStrict = (p) => JSON.parse(readFileSync3(p, "utf8"));
 var activeProfiles = (config) => config.profiles?.active ?? [];
 var activeDelivery = (config) => mergeDeliveries(activeProfiles(config).map((p) => p.delivery));
 function readScopes(dir, raw) {
@@ -27801,7 +27790,7 @@ async function syntaxFor(path) {
 }
 
 // src/tokens.ts
-import { readFileSync as readFileSync5, statSync } from "node:fs";
+import { readFileSync as readFileSync4, statSync } from "node:fs";
 import { join as join7 } from "node:path";
 var GENERIC_ROLES = [
   [/^border-radius|radius$/, /radius/],
@@ -27875,10 +27864,10 @@ function cssFilesUnder(path, budget = { left: 200 }, exts = [".css"]) {
   }
   if (st.isFile()) return wanted(path) ? [path] : [];
   const out = [];
+  if (budget.left <= 0) return out;
   for (const file of filesUnder(path, wanted)) {
-    if (budget.left <= 0) break;
     out.push(file);
-    budget.left--;
+    if (--budget.left <= 0) break;
   }
   return out;
 }
@@ -27888,7 +27877,7 @@ function readTokenSources(root2, sources, prefixes) {
   for (const rel of sources ?? []) {
     for (const file of cssFilesUnder(join7(root2, rel))) {
       try {
-        harvestTokenDefs(postcss_default.parse(readFileSync5(file, "utf8"), { from: file }), prefixes, set);
+        harvestTokenDefs(postcss_default.parse(readFileSync4(file, "utf8"), { from: file }), prefixes, set);
         set.sources++;
       } catch {
       }
@@ -28050,7 +28039,7 @@ function tokenRefsIn(value, prefixes) {
 }
 
 // src/index-cache.ts
-import { readdirSync as readdirSync3, readFileSync as readFileSync6, rmSync as rmSync2, statSync as statSync2 } from "node:fs";
+import { readdirSync as readdirSync3, readFileSync as readFileSync5, rmSync as rmSync2, statSync as statSync2 } from "node:fs";
 import { dirname as dirname5, join as join8 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var INDEX_FILE = /^index-[0-9a-f]+\.json$/;
@@ -28122,7 +28111,7 @@ ${stableJson(inputs)}`).slice(0, 16);
     if (entry.m === stat.mtimeMs && entry.m < entry.t - RACY_MS) return { at, stat, entry, text: null };
     let text2;
     try {
-      text2 = readFileSync6(abs, "utf8");
+      text2 = readFileSync5(abs, "utf8");
     } catch {
       return { at, stat, entry: null, text: null };
     }
@@ -28602,7 +28591,7 @@ var hardcodedValue = ({ prop, value }) => {
 
 // src/checks/tokens/undelivered.ts
 var import_picomatch2 = __toESM(require_picomatch2(), 1);
-import { readFileSync as readFileSync7, statSync as statSync3 } from "node:fs";
+import { readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
 var FALLBACKS = "fallbacks render but won't follow the theme";
 var WALK_LIMIT = 5e4;
 var FILE_LIMIT = 4e3;
@@ -28749,7 +28738,7 @@ function readEvidenceFiles(root2, checks, ignore) {
   for (const { abs, rel } of found.styles) {
     try {
       if (statSync3(abs).size > MAX_BYTES) return null;
-      out.push({ rel, text: readFileSync7(abs, "utf8") });
+      out.push({ rel, text: readFileSync6(abs, "utf8") });
     } catch {
       return null;
     }
@@ -28989,7 +28978,7 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
       }
       let sheet;
       try {
-        sheet = syntax.parse(readFileSync8(file, "utf8"), { from: file });
+        sheet = syntax.parse(readFileSync7(file, "utf8"), { from: file });
       } catch (err) {
         unread.push({ file: shown, message: parseMessageOf(err, file) });
         continue;
@@ -29130,7 +29119,7 @@ async function analyze(config, {
       return false;
     }
   };
-  const read = (abs, rel) => contents?.get(rel) ?? readFileSync8(abs, "utf8");
+  const read = (abs, rel) => contents?.get(rel) ?? readFileSync7(abs, "utf8");
   const tokenPrefixes = ds.tokenPrefixes ?? [];
   const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
   tokenSet.scopes = mergeScopes(activeProfiles(config).map((p) => p.tokenScopes));
@@ -29632,7 +29621,7 @@ var PROJECT_RULES = /* @__PURE__ */ new Set(["tokens/undelivered"]);
 var findingKey = (f) => `${f.rule}|${PROJECT_RULES.has(f.rule) ? "<project>" : f.file}|${oneLine(String(f.code ?? f.message))}`;
 
 // src/autofix.ts
-import { readFileSync as readFileSync9, writeFileSync as writeFileSync2 } from "node:fs";
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync2 } from "node:fs";
 import { join as join10 } from "node:path";
 var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
 var commentFor = (file, text2) => CSS_FILE.test(file) ? `/* ${text2} */` : `// ${text2}`;
@@ -29708,7 +29697,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
     const abs = join10(root2, file);
     let text2;
     try {
-      text2 = readFileSync9(abs, "utf8");
+      text2 = readFileSync8(abs, "utf8");
     } catch (err) {
       const why = messageLineOf(err);
       for (const fix of group) skipped.push({ ...fix, why });
@@ -29772,7 +29761,7 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
     const abs = join10(root2, file);
     let text2;
     try {
-      text2 = readFileSync9(abs, "utf8");
+      text2 = readFileSync8(abs, "utf8");
     } catch (err) {
       const why = messageLineOf(err);
       for (const k of group) skipped.push({ ...k, why });
@@ -29844,10 +29833,10 @@ var valueQuery = (about) => ({
 });
 
 // src/judge/variant.ts
-import { readFileSync as readFileSync10 } from "node:fs";
+import { readFileSync as readFileSync9 } from "node:fs";
 import { join as join11 } from "node:path";
 function around(root2, file, line, before, after) {
-  const lines = readFileSync10(join11(root2, file), "utf8").split("\n");
+  const lines = readFileSync9(join11(root2, file), "utf8").split("\n");
   const i = line - 1;
   return {
     context_before: lines.slice(Math.max(0, i - before), i).join("\n"),
@@ -30226,7 +30215,7 @@ async function judgeRenames(root2, findings, set, auth, about = /* @__PURE__ */ 
 }
 
 // src/dtcg.ts
-import { readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
+import { readFileSync as readFileSync10, statSync as statSync5 } from "node:fs";
 import { basename, isAbsolute as isAbsolute3, relative as relative4, resolve as resolvePath } from "node:path";
 var TIERS = ["base", "semantic", "component"];
 var ALL_TIERS = [...TIERS, "unknown"];
@@ -30423,7 +30412,7 @@ function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
   for (const file of files) {
     let raw;
     try {
-      raw = JSON.parse(readFileSync11(file, "utf8").replace(/^\uFEFF/, ""));
+      raw = JSON.parse(readFileSync10(file, "utf8").replace(/^\uFEFF/, ""));
     } catch (err) {
       throw new Error(`${file} is not readable JSON: ${messageOf(err)}`);
     }
@@ -30906,18 +30895,14 @@ var AnswerCache = class _AnswerCache {
 };
 
 // src/baseline.ts
-import { existsSync as existsSync6, readFileSync as readFileSync12, writeFileSync as writeFileSync3 } from "node:fs";
+import { existsSync as existsSync6, writeFileSync as writeFileSync3 } from "node:fs";
 import { dirname as dirname6 } from "node:path";
 function readBaseline(path) {
   if (!existsSync6(path)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync12(path, "utf8"));
-    if (!Array.isArray(parsed.entries)) return null;
-    const entries = parsed.entries.filter((e) => typeof e === "string");
-    return { createdAt: parsed.createdAt ?? "", entries, set: new Set(entries) };
-  } catch {
-    return null;
-  }
+  const parsed = readJson(path);
+  if (!isRecord(parsed) || !Array.isArray(parsed.entries)) return null;
+  const entries = parsed.entries.filter((e) => typeof e === "string");
+  return { createdAt: parsed.createdAt ?? "", entries, set: new Set(entries) };
 }
 var entriesOf = (result) => [...new Set(result.findings.map(findingKey))].sort();
 var ruleOf = (entry) => entry.slice(0, entry.indexOf("|"));
@@ -32016,7 +32001,7 @@ function formatPane(result, config) {
 }
 
 // src/lsp.ts
-import { readFileSync as readFileSync13 } from "node:fs";
+import { readFileSync as readFileSync11 } from "node:fs";
 import { join as join12 } from "node:path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL as pathToFileURL2 } from "node:url";
 
@@ -32160,7 +32145,7 @@ function lsp(opts) {
       let text2 = buffer;
       if (text2 === void 0) {
         try {
-          text2 = readFileSync13(join12(root2, rel), "utf8");
+          text2 = readFileSync11(join12(root2, rel), "utf8");
         } catch {
           text2 = "";
         }
@@ -32392,7 +32377,7 @@ ${renderTitle(rule2, config.designSystem, config.suppression.keyword)}`).join("\
 
 // src/serve.ts
 import { createServer } from "node:http";
-import { readFileSync as readFileSync14 } from "node:fs";
+import { readFileSync as readFileSync12 } from "node:fs";
 import { dirname as dirname7, join as join13 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -32935,7 +32920,7 @@ function serve(opts) {
       if (path === "/loupe-overlay.php") {
         let php;
         try {
-          php = readFileSync14(MU_PLUGIN, "utf8");
+          php = readFileSync12(MU_PLUGIN, "utf8");
         } catch {
           return send(
             "text/plain",
@@ -32964,7 +32949,7 @@ function serve(opts) {
 
 // src/ui.ts
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync as readFileSync15, statSync as statSync6, watch, writeFileSync as writeFileSync4 } from "node:fs";
+import { readFileSync as readFileSync13, statSync as statSync6, watch, writeFileSync as writeFileSync4 } from "node:fs";
 import { createServer as createServer2 } from "node:http";
 import { dirname as dirname8, join as join14 } from "node:path";
 var TOKEN_HEADER = "x-loupe-token";
@@ -33128,7 +33113,7 @@ async function ui(opts) {
   const configFile = config.source.kind === "file" ? config.source.path : null;
   const readConfig = () => {
     try {
-      return configFile ? readFileSync15(configFile, "utf8") : null;
+      return configFile ? readFileSync13(configFile, "utf8") : null;
     } catch {
       return null;
     }
@@ -33350,7 +33335,7 @@ async function ui(opts) {
       const asked = Number(q.get("line") ?? 1);
       const at = Number.isInteger(asked) && asked > 0 ? asked : 1;
       try {
-        const lines = readFileSync15(join14(root2, want), "utf8").split("\n");
+        const lines = readFileSync13(join14(root2, want), "utf8").split("\n");
         const from = Math.max(1, at - PEEK);
         const to = Math.min(lines.length, at + PEEK);
         send(res, 200, { file: want, from, to, lines: lines.slice(from - 1, to) });
@@ -33409,7 +33394,7 @@ async function ui(opts) {
       const flat = oneLine(reason);
       const full = join14(root2, finding.file);
       try {
-        const lines = readFileSync15(full, "utf8").split("\n");
+        const lines = readFileSync13(full, "utf8").split("\n");
         if (lines[finding.line - 1] === void 0)
           return send(res, 409, { error: "that line is no longer in the file" });
         const why = directiveRefusal(
@@ -33485,7 +33470,7 @@ async function ui(opts) {
 }
 
 // src/detect.ts
-import { existsSync as existsSync7, readFileSync as readFileSync16, statSync as statSync7 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync14, statSync as statSync7 } from "node:fs";
 import { join as join15 } from "node:path";
 var preset = (name) => readPreset(name) ?? {};
 var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", ".git", "vendor", "build", "dist", ".claude"]);
@@ -33610,7 +33595,7 @@ function libraryPrefixes(dirs2, candidates) {
         budget--;
         let text2;
         try {
-          text2 = readFileSync16(full, "utf8");
+          text2 = readFileSync14(full, "utf8");
         } catch {
           continue;
         }
@@ -33655,7 +33640,7 @@ function presetEvidence(root2, imports) {
     for (const e of assets) {
       let text2;
       try {
-        text2 = readFileSync16(join15(build, e.name), "utf8");
+        text2 = readFileSync14(join15(build, e.name), "utf8");
       } catch {
         continue;
       }
@@ -33707,7 +33692,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
         oversized++;
         continue;
       }
-      text2 = readFileSync16(abs, "utf8");
+      text2 = readFileSync14(abs, "utf8");
     } catch {
       continue;
     }
@@ -33730,7 +33715,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync16(abs, "utf8"));
+      markupText.push(readFileSync14(abs, "utf8"));
     } catch {
     }
   }
@@ -33856,7 +33841,7 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute4(raw) ? raw : join16(root2, raw);
+  const abs = under(root2, raw);
   const inside = (from, to) => {
     const rel2 = relative5(from, to);
     return rel2 && !rel2.startsWith("..") && !isAbsolute4(rel2) ? rel2 : null;

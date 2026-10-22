@@ -11,6 +11,7 @@
  * class fighting a component from a class doing what `className` is for.
  */
 
+import { listOf } from './json.ts';
 import { propsOverlap } from './styles.ts';
 import type { ComponentEntry, StylingSurface } from './types.ts';
 
@@ -119,7 +120,6 @@ export function surfacesRecorded(
  */
 export function ownership(surface: StylingSurface, prop: string): { owned: string; via: string[] } | undefined {
 	for (const [owned, control] of Object.entries(surface.properties))
-		if (propsOverlap(prop, owned))
-			return { owned, via: control === null ? [] : Array.isArray(control) ? control : [control] };
+		if (propsOverlap(prop, owned)) return { owned, via: listOf(control) };
 	return undefined;
 }

@@ -12,9 +12,10 @@
  * Design notes: docs/design/cli.md#presets-and-data-files-compiled-in
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readJson } from './json.ts';
 
 import archer from '../presets/archer.json' with { type: 'json' };
 import baseUi from '../presets/base-ui.json' with { type: 'json' };
@@ -78,15 +79,9 @@ export const presetNames = (): string[] => {
 /** One preset by name, disk first. `undefined` if neither half has it. */
 export const readPreset = (name: string): unknown => {
 	const onDisk = presetPath(name);
-	if (existsSync(onDisk)) {
-		try {
-			return JSON.parse(readFileSync(onDisk, 'utf8'));
-		} catch {
-			// A preset that will not parse is reported where it is extended, not
-			// here, where it would take the whole list down with it.
-			return undefined;
-		}
-	}
+	// A preset that will not parse is reported where it is extended, not here,
+	// where it would take the whole list down with it.
+	if (existsSync(onDisk)) return readJson(onDisk) ?? undefined;
 	return EMBEDDED_PRESETS[name];
 };
 

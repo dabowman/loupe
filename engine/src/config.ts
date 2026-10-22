@@ -15,6 +15,7 @@ import { RULES, RULE_IDS, canonicalRuleId, isRuleId, isSeverity } from './rules.
 import { loadPatterns } from './patterns.ts';
 import { registryApplies } from './registry.ts';
 import { loadComponents } from './components.ts';
+import { dirsUp } from './discover.ts';
 import { isRecord as isObj, listOf, readJson } from './json.ts';
 import { DEFAULT_BASELINE, under } from './paths.ts';
 import { escapeRe } from './text.ts';
@@ -107,20 +108,17 @@ function mergeConfig(base: AuthoredConfig, over: AuthoredConfig): AuthoredConfig
 
 /** Walk up from `start` looking for a config file or a `loupe` package.json key. */
 export function findConfig(start: string): string | null {
-	let dir = resolve(start);
-	for (;;) {
+	for (const dir of dirsUp(start)) {
 		for (const name of CONFIG_NAMES) {
 			const p = join(dir, name);
 			if (existsSync(p)) return p;
 		}
 		// An unreadable package.json is not this walk's problem: it reads as one with no `loupe` key.
 		const pkg = join(dir, 'package.json');
-		const parsed = readJson(pkg);
+		const parsed = existsSync(pkg) ? readJson(pkg) : null;
 		if (isObj(parsed) && parsed.loupe) return pkg;
-		const up = dirname(dir);
-		if (up === dir) return null;
-		dir = up;
 	}
+	return null;
 }
 
 async function readConfigFile(path: string): Promise<AuthoredConfig | undefined> {
@@ -370,8 +368,7 @@ export function normalize(
 	// list of characters; anything else is a mistake, and read as "none" it would
 	// quietly hand the project the shipped profile it wrote its own to replace.
 	const profileSpec: unknown = cfg.profiles ?? [];
-	const profileList: unknown[] =
-		typeof profileSpec === 'string' ? [profileSpec] : Array.isArray(profileSpec) ? profileSpec : [profileSpec];
+	const profileList: unknown[] = listOf(profileSpec);
 	if (profileList.some((p) => typeof p !== 'string' || p === ''))
 		throw new Error(`profiles must be a directory or an array of directories, got: ${JSON.stringify(profileSpec)}`);
 	// Normally absolute already (see `anchorProfiles`); an object normalized

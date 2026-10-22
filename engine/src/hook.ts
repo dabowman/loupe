@@ -19,7 +19,7 @@ import { homedir } from 'node:os';
 import { text } from 'node:stream/consumers';
 import { dirsUp, toPosix } from './discover.ts';
 import { readJson, writeJsonAtomic } from './json.ts';
-import { attemptsPath, isOn } from './paths.ts';
+import { attemptsPath, isOn, under } from './paths.ts';
 
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
@@ -125,7 +125,7 @@ export function parsePayload(raw: string): HookPayload {
 export function payloadFile(payload: HookPayload | null | undefined, root: string): string | null {
 	const raw = payload?.tool_input?.file_path;
 	if (typeof raw !== 'string' || !raw) return null;
-	const abs = isAbsolute(raw) ? raw : join(root, raw);
+	const abs = under(root, raw);
 	const inside = (from: string, to: string): string | null => {
 		const rel = relative(from, to);
 		return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel : null;
