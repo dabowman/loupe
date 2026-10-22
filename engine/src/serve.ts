@@ -346,27 +346,21 @@ export function serve(opts: {
 			// entirely. The permissive header is the feature, not an oversight.
 			res.setHeader('access-control-allow-origin', '*');
 			const path = (req.url ?? '/').split('?')[0];
-
-			if (path === '/overlay.js') {
-				res.setHeader('content-type', 'text/javascript; charset=utf-8');
+			/** One answer: its type, never cached, and the status it goes out under. */
+			const send = (type: string, text: string, status = 200): void => {
+				res.statusCode = status;
+				res.setHeader('content-type', `${type}; charset=utf-8`);
 				res.setHeader('cache-control', 'no-store');
-				res.end(client(origin));
-				return;
-			}
+				res.end(text);
+			};
+
+			if (path === '/overlay.js') return send('text/javascript', client(origin));
 			if (path === '/findings.json') {
 				run()
-					.then((result) => {
-						res.setHeader('content-type', 'application/json; charset=utf-8');
-						res.setHeader('cache-control', 'no-store');
-						res.end(JSON.stringify(reportPayload(result, config)));
-					})
-					.catch((err: unknown) => {
-						// A failed analysis must not read as a clean page. The client
-						// shows the message; the status keeps it out of `.json()`.
-						res.statusCode = 500;
-						res.setHeader('content-type', 'application/json; charset=utf-8');
-						res.end(JSON.stringify({ error: messageOf(err) }));
-					});
+					.then((result) => send('application/json', JSON.stringify(reportPayload(result, config))))
+					// A failed analysis must not read as a clean page. The client shows
+					// the message; the status keeps it out of `.json()`.
+					.catch((err: unknown) => send('application/json', JSON.stringify({ error: messageOf(err) }), 500));
 				return;
 			}
 			if (path === '/loupe-overlay.php') {
@@ -374,27 +368,19 @@ export function serve(opts: {
 				try {
 					php = readFileSync(MU_PLUGIN, 'utf8');
 				} catch {
-					res.statusCode = 404;
-					res.end(
+					return send(
+						'text/plain',
 						'loupe: the WordPress mu-plugin is not readable from this build — copy it from integrations/wordpress/.\n',
+						404,
 					);
-					return;
 				}
 				// text/plain, not application/x-httpd-php: this is handed to `curl -o`
 				// and to people reading it, and nothing here should tempt a browser
 				// into treating it as anything but bytes.
-				res.setHeader('content-type', 'text/plain; charset=utf-8');
-				res.setHeader('cache-control', 'no-store');
-				res.end(php);
-				return;
+				return send('text/plain', php);
 			}
-			if (path === '/') {
-				res.setHeader('content-type', 'text/html; charset=utf-8');
-				res.end(INDEX(origin));
-				return;
-			}
-			res.statusCode = 404;
-			res.end('not found');
+			if (path === '/') return send('text/html', INDEX(origin));
+			send('text/plain', 'not found', 404);
 		});
 		server.on('error', reject);
 		server.listen(port, () => {

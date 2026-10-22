@@ -20,6 +20,7 @@ import type { BlockPrefix } from './blocks.ts';
 import { DEFAULTS, compilePatterns, merge } from './config.ts';
 import { byBytes, discover, readDir } from './discover.ts';
 import { presetKey, presetNames, readPreset } from './embedded.ts';
+import { listOf, readJson } from './json.ts';
 import type { AuthoredConfig } from './types.ts';
 
 /** How much a match is worth. Presets name these; nothing else interprets them. */
@@ -115,18 +116,30 @@ export interface DetectedConfig {
 	config: AuthoredConfig;
 }
 
-const readJson = (p: string): unknown => {
-	try {
-		return JSON.parse(readFileSync(p, 'utf8'));
-	} catch {
-		return null;
-	}
-};
-
 const preset = (name: string): PresetFile => (readPreset(name) as PresetFile) ?? {};
 
 /** Directories never worth descending into when looking for a manifest. */
 const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'build', 'dist', '.claude']);
+
+/** The subdirectories worth looking in: not the skipped ones, not the dot-directories. */
+const childDirs = (dir: string): string[] =>
+	readDir(dir)
+		.filter((e) => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
+		.map((e) => e.name);
+
+/** The dependency fields of a manifest, as `package.json` spells them. */
+interface Manifest {
+	dependencies?: Record<string, string>;
+	devDependencies?: Record<string, string>;
+	peerDependencies?: Record<string, string>;
+}
+
+/** The manifest at `rel` under the root, or an empty one where there is none to read. */
+const readManifest = (root: string, rel: string): Manifest =>
+	(readJson(join(root, rel, 'package.json')) as Manifest | null) ?? {};
+
+/** How a reason names a manifest: `pkg/package.json`, or the root's by its bare name. */
+const manifestLabel = (rel: string): string => (rel ? `${rel}/package.json` : 'package.json');
 
 /**
  * How many directory entries inference will look at before it gives up and
@@ -154,10 +167,7 @@ function manifests(root: string, maxDepth = 3, budget = 60): { dir: string; rel:
 		const pkg = join(dir, 'package.json');
 		if (existsSync(pkg)) out.push({ dir, rel });
 		if (depth === maxDepth) return;
-		for (const e of readDir(dir)) {
-			if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
-			walk(join(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
-		}
+		for (const name of childDirs(dir)) walk(join(dir, name), rel ? `${rel}/${name}` : name, depth + 1);
 	};
 	walk(root, '', 0);
 	return out;
@@ -181,12 +191,7 @@ function markerAt(dir: string, marker: string): boolean {
 
 /** The root and each immediate subdirectory, which is as deep as file markers look. */
 function probeDirs(root: string): { dir: string; rel: string }[] {
-	const out = [{ dir: root, rel: '' }];
-	for (const e of readDir(root)) {
-		if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith('.')) continue;
-		out.push({ dir: join(root, e.name), rel: e.name });
-	}
-	return out;
+	return [{ dir: root, rel: '' }, ...childDirs(root).map((name) => ({ dir: join(root, name), rel: name }))];
 }
 
 const confidenceOf = (detect: DetectBlock, kind: string): string | null =>
@@ -207,17 +212,12 @@ function matchPreset(
 		// Shallowest manifest declaring the library wins, and `packageDir` names where
 		// its `node_modules` — and therefore the token stylesheet — will be.
 		for (const { rel } of found) {
-			const pkg =
-				(readJson(join(root, rel, 'package.json')) as {
-					dependencies?: Record<string, string>;
-					devDependencies?: Record<string, string>;
-					peerDependencies?: Record<string, string>;
-				} | null) ?? {};
+			const pkg = readManifest(root, rel);
 			const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
 			const hit = detect.dependencies.filter((d) => deps[d] !== undefined);
 			const first = hit[0];
 			if (first === undefined) continue;
-			const reasons = [`${first} in ${rel ? `${rel}/package.json` : 'package.json'}`];
+			const reasons = [`${first} in ${manifestLabel(rel)}`];
 			if (found.length > 1) reasons.push(`${found.length} package.json files scanned`);
 			return { preset: name, reasons, confidence: confidenceOf(detect, 'full') ?? 'high', packageDir: rel };
 		}
@@ -419,16 +419,12 @@ function presetEvidence(root: string, imports: ReadonlyMap<string, number>): str
 	// `@types/wordpress__components` types `@wordpress/components`: the project
 	// writes against the library even where the build supplies it at runtime.
 	for (const { rel } of manifests(root)) {
-		const pkg =
-			(readJson(join(root, rel, 'package.json')) as {
-				dependencies?: Record<string, string>;
-				devDependencies?: Record<string, string>;
-			} | null) ?? {};
+		const pkg = readManifest(root, rel);
 		const typed = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })
 			.map((dep) => /^@types\/([\w.-]+)__([\w.-]+)$/.exec(dep))
 			.filter((m): m is RegExpExecArray => m !== null && known(`@${m[1]}/${m[2]}`))
 			.map((m) => `${m[0]} \u2192 ${named(`@${m[1]}/${m[2]}`)}`);
-		if (typed.length) out.push(`${rel ? `${rel}/package.json` : 'package.json'}: ${typed.join(', ')}`);
+		if (typed.length) out.push(`${manifestLabel(rel)}: ${typed.join(', ')}`);
 	}
 
 	// `@wordpress/scripts` writes the script handles a bundle needs beside it.
@@ -468,8 +464,7 @@ function resolvePreset(name: string, seen = new Set<string>()): PresetFile {
 	if (seen.has(name)) return {};
 	seen.add(name);
 	const { extends: parents, ...raw } = preset(name);
-	const specs = parents === undefined ? [] : Array.isArray(parents) ? parents : [parents];
-	const base = specs.reduce<PresetFile>((acc, spec) => merge(acc, resolvePreset(presetKey(spec), seen)), {});
+	const base = listOf(parents).reduce<PresetFile>((acc, spec) => merge(acc, resolvePreset(presetKey(spec), seen)), {});
 	return merge(base, raw);
 }
 
