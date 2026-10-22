@@ -590,7 +590,7 @@ profiles are read as well — see [Your own profile](#your-own-profile).
   "id": "wpds",
   "name": "WordPress Design System",
   "preset": "wpds",
-  "packages": ["@wordpress/components", "@wordpress/ui"],
+  "packages": ["@wordpress/components", "@wordpress/ui", "@wordpress/dataviews", "@wordpress/admin-ui", "@wordpress/global-styles-ui"],
   "patterns": "./patterns/index.json",
   "components": "./components/index.json"
 }
