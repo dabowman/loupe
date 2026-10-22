@@ -1,9 +1,17 @@
 {
-  "note": "The margin rule fires only where a gap remedy actually exists. Zero (any form), `auto` centering, and keywords have nothing to move to a parent, so reporting them just trains people to suppress the one rule that matters most. Negative margins are a real bleed technique and get their own rule, because 'move it to gap' would be wrong advice.",
+  "note": "The margin rule fires only where a gap remedy actually exists. Zero (any form), `auto` centering, and keywords have nothing to move to a parent, so reporting them just trains people to suppress the one rule that matters most. Negative margins are a real bleed technique and get their own rule, because 'move it to gap' would be wrong advice. A bleed written as arithmetic on a token is one too, part of a shorthand or not: a `calc()` negative by inspection (a `var()` is a positive token) is a negative margin. One whose sign cannot be told is not guessed at and keeps its whitespace-part reading: `calc(-8px + var(--x))` stays spacing, and `calc(var(--a) - var(--b))` stays negative only because its binary minus reads as a negative part.",
   "findings": [
     { "rule": "layout/margin-on-child", "file": "styles/m.css", "line": 6 },
     { "rule": "layout/margin-on-child", "file": "styles/m.css", "line": 7 },
     { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 8 },
-    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 9 }
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 9 },
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 10 },
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 11 },
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 12 },
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 13 },
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 14 },
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 15 },
+    { "rule": "layout/margin-on-child", "file": "styles/m.css", "line": 16 },
+    { "rule": "layout/negative-margin", "file": "styles/m.css", "line": 17 }
   ]
 }
