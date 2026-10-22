@@ -689,7 +689,9 @@ async function main(): Promise<number> {
 	// lists can only be added once it is loaded, below — but the preset a profile
 	// names matters only to a project with no config, which lists none.
 	const flagProfiles = args.flags.profiles ? resolve(args.flags.profiles) : null;
-	let profiles = readProfileRoots(profileRoots({ root, flag: flagProfiles }));
+	// Refilled by every read, so it names the failures of the read that counted.
+	let unreadable: string[] = [];
+	let profiles = readProfileRoots(profileRoots({ root, flag: flagProfiles }), unreadable);
 	const byId = (id: string | null | undefined): Profile | null =>
 		id && id !== NO_PROFILE ? (profiles.find((p) => p.id === id) ?? null) : null;
 	let forced = byId(args.flags.profile);
@@ -796,7 +798,8 @@ async function main(): Promise<number> {
 	// The directories the config lists are read first, ahead of the convention and
 	// of `--profiles`, so on a shared id the project's own profile is the one kept.
 	if (config.profileDirs.length) {
-		profiles = readProfileRoots(profileRoots({ root, configured: config.profileDirs, flag: flagProfiles }));
+		unreadable = [];
+		profiles = readProfileRoots(profileRoots({ root, configured: config.profileDirs, flag: flagProfiles }), unreadable);
 		forced = byId(args.flags.profile);
 	}
 	// What selection is pinned to: `--profile`, typed at the moment of use, over
@@ -839,6 +842,7 @@ async function main(): Promise<number> {
 	config.profiles = { available: profiles, active, ...registries };
 	if (!isHook) {
 		for (const err of registries.errors) fail(`loupe: ${err}\n`);
+		for (const u of unreadable) note(`loupe: project profile skipped, could not load ${u}\n`);
 		// A scope declaration refused at load leaves its profile on the generic token
 		// table, which reads exactly like one that declared nothing — so it says so.
 		for (const p of active)

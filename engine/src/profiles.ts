@@ -122,8 +122,14 @@ function readScopes(dir: string, raw: unknown): ReturnType<typeof parseTokenScop
 /**
  * Every `<root>/<id>/profile.json`. A malformed or unreadable profile is
  * skipped rather than thrown: one bad directory must not take the gate down.
+ * Skipped is not silent, though, when `unreadable` is passed: each one is named
+ * there, for the caller to say.
  */
-export function readProfiles(root: string | null | undefined, origin: ProfileOrigin = 'shipped'): Profile[] {
+export function readProfiles(
+	root: string | null | undefined,
+	origin: ProfileOrigin = 'shipped',
+	unreadable?: string[],
+): Profile[] {
 	if (!root || !existsSync(root)) return [];
 	const out: Profile[] = [];
 	// Sorted, and one profile per id. Sorting is what makes "the first one wins" a
@@ -169,8 +175,11 @@ export function readProfiles(root: string | null | undefined, origin: ProfileOri
 			// Claimed only once the entry is on the list: reserving it above let a
 			// directory that threw on the way to `push` lock the id out.
 			seen.add(id);
-		} catch {
-			/* a profile that cannot be parsed contributes nothing */
+		} catch (err) {
+			// It contributes nothing — but a project profile that fails to load leaves
+			// the shipped one it was written to replace selected in its place, which
+			// reads exactly like the bug the project profile exists to fix.
+			unreadable?.push(`${manifest} \u2014 ${messageOf(err)}`);
 		}
 	}
 	// Output order only — which duplicate won was settled by directory name above.
@@ -206,10 +215,16 @@ export function profileRoots({
 /**
  * Every profile under `roots`, one per id, the first root to carry an id
  * winning it — which, in {@link profileRoots}' order, is the project's.
+ *
+ * `unreadable` collects the project's profiles that failed to load. The shipped
+ * set's are left out: a broken shipped profile is the plugin's bug, and every
+ * project would otherwise repeat it.
  */
-export function readProfileRoots(roots: readonly ProfileRoot[]): Profile[] {
+export function readProfileRoots(roots: readonly ProfileRoot[], unreadable?: string[]): Profile[] {
 	const out = new Map<string, Profile>();
-	for (const { dir, origin } of roots) for (const p of readProfiles(dir, origin)) if (!out.has(p.id)) out.set(p.id, p);
+	for (const { dir, origin } of roots)
+		for (const p of readProfiles(dir, origin, origin === 'project' ? unreadable : undefined))
+			if (!out.has(p.id)) out.set(p.id, p);
 	return [...out.values()].sort((a, b) => byBytes(a.id, b.id));
 }
 

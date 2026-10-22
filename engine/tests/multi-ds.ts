@@ -1157,6 +1157,24 @@ await check('a pin naming no profile says so', () => {
 	}
 });
 
+await check('a project profile that fails to load says so, rather than leaving the shipped one silently', () => {
+	const root = vipV3({ profiles: './loupe/profiles' });
+	try {
+		writeFileSync(join(root, 'loupe', 'profiles', 'vip-v3', 'profile.json'), '{ "id": "vip-v3", ');
+		const { line, stderr } = profileLine(root);
+		assert(
+			stderr.includes(
+				`project profile skipped, could not load ${join(root, 'loupe', 'profiles', 'vip-v3', 'profile.json')}`,
+			),
+			`got: ${stderr}`,
+		);
+		// What it warns about: the shipped profile it was written to replace is back.
+		assert(/\bvip \(/.test(line), `the shipped vip profile selects in its place: ${line}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('a malformed profiles or profile key is a config error, not "none"', async () => {
 	for (const bad of [{ profiles: 3 }, { profiles: [''] }, { profile: '' }, { profile: ['vip'] }]) {
 		const root = repo({ 'loupe.config.json': JSON.stringify(bad) });

@@ -31592,7 +31592,7 @@ function readScopes(dir, raw) {
     };
   }
 }
-function readProfiles(root2, origin = "shipped") {
+function readProfiles(root2, origin = "shipped", unreadable) {
   if (!root2 || !existsSync8(root2)) return [];
   const out = [];
   const seen = /* @__PURE__ */ new Set();
@@ -31627,7 +31627,8 @@ function readProfiles(root2, origin = "shipped") {
         origin
       });
       seen.add(id);
-    } catch {
+    } catch (err) {
+      unreadable?.push(`${manifest} \u2014 ${messageOf(err)}`);
     }
   }
   return out.sort((a, b) => byBytes(a.id, b.id));
@@ -31645,9 +31646,11 @@ function profileRoots({
   const seen = /* @__PURE__ */ new Set();
   return roots.filter((r) => !seen.has(r.dir) && Boolean(seen.add(r.dir)));
 }
-function readProfileRoots(roots) {
+function readProfileRoots(roots, unreadable) {
   const out = /* @__PURE__ */ new Map();
-  for (const { dir, origin } of roots) for (const p of readProfiles(dir, origin)) if (!out.has(p.id)) out.set(p.id, p);
+  for (const { dir, origin } of roots)
+    for (const p of readProfiles(dir, origin, origin === "project" ? unreadable : void 0))
+      if (!out.has(p.id)) out.set(p.id, p);
   return [...out.values()].sort((a, b) => byBytes(a.id, b.id));
 }
 function selectProfiles(profiles, config, force = null) {
@@ -32282,7 +32285,8 @@ async function main() {
     return EXIT.CANNOT_RUN;
   }
   const flagProfiles = args.flags.profiles ? resolve6(args.flags.profiles) : null;
-  let profiles = readProfileRoots(profileRoots({ root: root2, flag: flagProfiles }));
+  let unreadable = [];
+  let profiles = readProfileRoots(profileRoots({ root: root2, flag: flagProfiles }), unreadable);
   const byId = (id) => id && id !== NO_PROFILE ? profiles.find((p) => p.id === id) ?? null : null;
   let forced = byId(args.flags.profile);
   let config;
@@ -32334,7 +32338,8 @@ async function main() {
     return EXIT.CANNOT_RUN;
   }
   if (config.profileDirs.length) {
-    profiles = readProfileRoots(profileRoots({ root: root2, configured: config.profileDirs, flag: flagProfiles }));
+    unreadable = [];
+    profiles = readProfileRoots(profileRoots({ root: root2, configured: config.profileDirs, flag: flagProfiles }), unreadable);
     forced = byId(args.flags.profile);
   }
   const pin = args.flags.profile ?? config.profilePin;
@@ -32368,6 +32373,8 @@ async function main() {
   config.profiles = { available: profiles, active, ...registries };
   if (!isHook) {
     for (const err of registries.errors) fail(`loupe: ${err}
+`);
+    for (const u of unreadable) note(`loupe: project profile skipped, could not load ${u}
 `);
     for (const p of active)
       for (const problem of p.problems) fail(`loupe: profile ${p.id} ${problem} \u2014 its token scopes are ignored

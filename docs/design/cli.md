@@ -576,9 +576,12 @@ reaches it.
 The config's `profiles` paths are resolved against the file that wrote them, as
 `extends` is resolved, and before the merge — once `extends` is merged nothing
 says which file a path came from, and a shared base config's `./profiles` means
-the directory beside it. The directories a config lists are known only once it
-is loaded, after the point where a profile's preset is settled; that is fine,
-because a profile's preset matters only to a project with no config at all.
+the directory beside it. A child's `profiles` then replaces its base's, as every
+array does in the merge (see above): an exception for one key would be one more
+thing to remember about all of them. The directories a config lists are known
+only once it is loaded, after the point where a profile's preset is settled;
+that is fine, because a profile's preset matters only to a project with no
+config at all.
 
 **`profile` pins selection without emptying the packages.** Before it, the only
 way out of a wrong profile was `"packages": []`, which also switches off every

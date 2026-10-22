@@ -424,7 +424,9 @@ instead of them. They are read from every directory the config lists under
 `profiles` (a path or an array of paths, each relative to the config file that
 wrote it) and from `.loupe/profiles/` under the project root, with no flag —
 so the hooks, the commands and a typed `loupe` all see them while still passing
-only the shipped `--profiles`.
+only the shipped `--profiles`. Like every array in the config, a `profiles` list
+in a config that `extends` another replaces the base's list rather than adding
+to it: repeat the base's directory if you mean both.
 
 ```jsonc
 {
