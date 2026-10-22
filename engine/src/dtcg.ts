@@ -17,8 +17,11 @@
  */
 
 import { readFileSync, statSync } from 'node:fs';
-import { basename, isAbsolute, join, relative, resolve as resolvePath } from 'node:path';
-import { readDir } from './discover.ts';
+import { basename, isAbsolute, relative, resolve as resolvePath } from 'node:path';
+import { filesUnder } from './discover.ts';
+import { isRecord } from './json.ts';
+import { isColorLiteral } from './styles.ts';
+import { messageOf } from './text.ts';
 
 /**
  * Where a token sits in the three-tier architecture.
@@ -84,10 +87,8 @@ export interface TokenDoc {
 
 // ── reading ─────────────────────────────────────────────────────────────────
 
-/** A DTCG group or token: a plain JSON object. Everything else is a leaf value. */
+/** A DTCG group or token: a plain JSON object (`isRecord`). Everything else is a leaf value. */
 type Node = Record<string, unknown>;
-
-const isNode = (v: unknown): v is Node => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
  * Every `.json` under a path, which may be a file or a directory.
@@ -105,21 +106,13 @@ export function tokenFilesUnder(path: string, budget = 200): string[] {
 	}
 	if (!isDir) return [path];
 	const out: string[] = [];
-	const walk = (dir: string): void => {
-		for (const e of readDir(dir)) {
-			const full = join(dir, e.name);
-			if (e.isDirectory()) {
-				if (e.name !== 'node_modules') walk(full);
-			} else if (e.name.endsWith('.json') && !e.name.startsWith('.')) {
-				// Refused rather than cut short: the files left unread would report
-				// their tokens as missing from the system.
-				if (out.length >= budget)
-					throw new Error(`more than ${budget} .json files under ${path}; point at the token sources`);
-				out.push(full);
-			}
-		}
-	};
-	walk(path);
+	for (const file of filesUnder(path, (name) => name.endsWith('.json') && !name.startsWith('.'))) {
+		// Refused rather than cut short: the files left unread would report
+		// their tokens as missing from the system.
+		if (out.length >= budget)
+			throw new Error(`more than ${budget} .json files under ${path}; point at the token sources`);
+		out.push(file);
+	}
 	if (!out.length) throw new Error(`no .json token files under ${path}`);
 	return out;
 }
@@ -149,13 +142,13 @@ function walkFile(
 	into: Map<string, Omit<Token, 'tier' | 'tierFrom' | 'siblings'>>,
 	groupOf: Map<string, string>,
 ): void {
-	if (!isNode(raw)) return;
+	if (!isRecord(raw)) return;
 	const walk = (node: Node, trail: string[], inheritedType: string | undefined): void => {
 		const declared = typeof node.$type === 'string' ? node.$type : inheritedType;
 		for (const [key, child] of Object.entries(node)) {
 			// `$`-prefixed keys are the spec's own metadata, except `$root`: the
 			// group's own token, referenced as `{group.$root}`.
-			if ((key.startsWith('$') && key !== '$root') || !isNode(child)) continue;
+			if ((key.startsWith('$') && key !== '$root') || !isRecord(child)) continue;
 			const trailNext = [...trail, key];
 			if (!isToken(child)) {
 				walk(child, trailNext, declared);
@@ -259,7 +252,7 @@ export function literalOf(value: unknown): string {
 	if (typeof value === 'string') return value.trim();
 	if (typeof value === 'number' || typeof value === 'boolean') return String(value);
 	if (Array.isArray(value)) return JSON.stringify(value);
-	if (!isNode(value)) return String(value);
+	if (!isRecord(value)) return String(value);
 	// `{ value, unit }` — dimension and duration.
 	if (typeof value.value === 'number' && typeof value.unit === 'string') return `${value.value}${value.unit}`;
 	// `{ colorSpace, components, alpha }` — the 2025 colour object.
@@ -371,7 +364,7 @@ function hexOf(components: readonly number[], alpha: number): string {
  * comparable to it.
  */
 export function inferType(value: unknown): string {
-	if (isNode(value)) {
+	if (isRecord(value)) {
 		if (Array.isArray(value.components)) return 'color';
 		if (typeof value.value === 'number' && typeof value.unit === 'string')
 			return value.unit === 'ms' || value.unit === 's' ? 'duration' : 'dimension';
@@ -383,7 +376,7 @@ export function inferType(value: unknown): string {
 	if (typeof value === 'number') return 'number';
 	if (typeof value !== 'string') return '';
 	const v = value.trim().toLowerCase();
-	if (/^#[0-9a-f]{3,8}$/.test(v) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/.test(v)) return 'color';
+	if (isColorLiteral(v)) return 'color';
 	if (/^-?[\d.]+(px|rem|em|%|vh|vw|pt)$/.test(v)) return 'dimension';
 	if (/^[\d.]+m?s$/.test(v)) return 'duration';
 	if (/^cubic-bezier\(/.test(v)) return 'cubicBezier';
@@ -507,7 +500,7 @@ export function readTokenDoc(path: string, label = basename(path).replace(/\.jso
 		try {
 			raw = JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 		} catch (err) {
-			throw new Error(`${file} is not readable JSON: ${err instanceof Error ? err.message : String(err)}`);
+			throw new Error(`${file} is not readable JSON: ${messageOf(err)}`);
 		}
 		walkFile(raw, file, flat, groupOf);
 	}
