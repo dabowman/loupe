@@ -179,8 +179,10 @@ One floor for every value, though the eval argues for less on `destination` — 
 of 27 picks under 0.90 were right there. Gutenberg says otherwise: of its 19
 destination picks between 0.5 and 0.9, **11 were pagination buttons**, a control
 the eval has no label for, and only 2 were plainly links. The cost of holding
-0.90 is site-foundry's one real case, `onClick={ () => navigate( '#/new' ) }`,
-at 0.83. **Label pagination into the eval before lowering it.**
+0.90 is one real case in site-foundry, a private WPDS app whose controls are
+committed in `evals/represents` so the case reproduces without it:
+`onClick={ () => navigate( '#/new' ) }`, at 0.83. **Label pagination into the
+eval before lowering it.**
 
 The floor is on the pick's confidence, not the class's own probability. That was
 scored as the gate too, on the same answers: at 0.90 it acts on one more
@@ -298,9 +300,10 @@ its floor is that class's precision, not the whole question's.
 about in `vip-digital-asset-manager`: an un-remediated WPDS plugin whose
 stylesheets were written against the wp-admin palette (`#1d2327`, `#646970`,
 `#2271b1`), so nearly none of its values are exactly a WPDS token and most are
-close to one. `tokens.json` is that token set; **candidates are worked out live
-by `candidatesFor`**, so a change to how they are narrowed is scored by this
-rather than frozen out of it.
+close to one. The plugin is private; its literals are committed here, so the
+eval reproduces without it. `tokens.json` is that token set; **candidates are
+worked out live by `candidatesFor`**, so a change to how they are narrowed is
+scored by this rather than frozen out of it.
 
 `labels.json` lists every answer a careful reader would accept — `10px` of
 padding is `padding-sm` or `padding-md`, a scrim is `keep`, a pill's `3px` is

@@ -90,7 +90,8 @@ stated in the extension's README rather than hidden.
 ## Why re-analyze whole, with no incremental index
 
 The obvious objection to on-save analysis is cost, so it was measured rather
-than assumed, on 2026-09-21:
+than assumed, on 2026-09-21. site-foundry is a private WPDS app, so its row
+cannot be rerun from here; the Gutenberg row can:
 
 | | cold, through the CLI | warm, in the server process |
 | --- | --- | --- |

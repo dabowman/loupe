@@ -508,8 +508,8 @@ Entries are keyed by user need, not component name — `confirm`,
 language in the top-level `patterns/index.json` that every profile realizes in
 its own way. The reach-for table in each profile's `patterns.md` is generated
 from the two files (`npm run patterns-doc` in `engine/`), so the prose an agent
-reads and the registry the engine checks cannot drift apart. The reasoning is
-in `docs/patterns-v2.md`.
+reads and the registry the engine checks cannot drift apart. The format, field
+by field, and what was left out of it, is in `docs/patterns-v2.md`.
 
 The registry reaches the engine through the `wpds` profile, which the hooks and
 commands pass automatically and which applies only to projects importing
