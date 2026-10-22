@@ -24,6 +24,7 @@ import os from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { scanMarkup } from './markup.ts';
 import { isOn } from './paths.ts';
+import { messageOf } from './text.ts';
 import type { DesignSystem, PatternRule, ScanResult } from './types.ts';
 
 const TAG = 'loupe-scan-worker';
@@ -85,7 +86,7 @@ export async function scanMany(
 			debug(`scanned ${jobs.length} file(s) across ${n} worker(s)`);
 			return out;
 		} catch (err) {
-			debug(`workers failed (${err instanceof Error ? err.message : String(err)}), scanning in-process`);
+			debug(`workers failed (${messageOf(err)}), scanning in-process`);
 		}
 	}
 	const out = scanAll(jobs, ds, rules);

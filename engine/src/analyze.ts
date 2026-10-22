@@ -41,10 +41,12 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { list } from 'postcss';
 import type { Root } from 'postcss';
-import { isAbsolute, join, relative, sep } from 'node:path';
-import { RULES } from './rules.ts';
-import { annotateReach, mergeDeliveries, projectDependencies } from './delivery.ts';
+import { join, relative, sep } from 'node:path';
+import { JUDGE_ONLY_RULES, RULES } from './rules.ts';
+import { annotateReach, projectDependencies } from './delivery.ts';
 import { TreeTooLarge, analyzeEntryBudget, byBytes, discover, toPosix } from './discover.ts';
+import { under } from './paths.ts';
+import { activeDelivery, activeProfiles } from './profiles.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
@@ -203,7 +205,7 @@ async function readLibrary(
 	const dirs: string[] = [];
 	const unread: ParseError[] = [];
 	for (const src of sources) {
-		const dir = realPath(isAbsolute(src) ? src : join(root, src));
+		const dir = realPath(under(root, src));
 		if (!dir) continue; // not installed: nothing to recognise, and not an error
 		dirs.push(dir);
 		const budget = { left: 400 };
@@ -247,6 +249,13 @@ async function readLibrary(
  * suppression for it may sit on.
  */
 export type Candidate = Omit<Finding, 'severity' | 'rank'> & { scopeLines?: readonly number[] | undefined };
+
+/**
+ * The lines a directive for a finding at `line` may sit on besides the
+ * finding's own: the line above it. The one spelling of "the element's own
+ * line and the one above" every channel anchors its suppressions to.
+ */
+const nearby = (line: number): number[] => [line, line - 1];
 
 /**
  * One rule's verdict on one CSS declaration, whichever channel it came from.
@@ -430,12 +439,18 @@ export async function analyze(
 ): Promise<AnalyzeResult> {
 	const ds = config.designSystem;
 	const ruleIsLive = (rule: RuleId): boolean => config.enabled[rule];
+	/** A candidate completed into a finding: the severity the config sets and the rank the catalog gives. */
+	const complete = <C extends Omit<Finding, 'severity' | 'rank'>>(c: C): C & Pick<Finding, 'severity' | 'rank'> => ({
+		...c,
+		severity: config.severityOf(c.rule),
+		rank: RULES[c.rule].rank,
+	});
 	const surfaceOf = (b: Binding): StylingSurface | undefined =>
 		surfaceFor(config.componentRegistry, b.package, b.component);
 	const recorded = surfacesRecorded(config.componentRegistry);
 	const surfaced = (b: Binding): boolean => recorded(b.package, b.component);
 	// How the active profiles say their packages and tokens reach a page.
-	const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+	const delivery = activeDelivery(config);
 	const parseSuppressions = makeSuppressionParser(config.suppression);
 	// Bounded, and loud when the bound trips: the index is repo-wide whatever the
 	// scope, so a hook on one file under a home directory with a `package.json`
@@ -465,7 +480,7 @@ export async function analyze(
 	const tokenSet: TokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
 	// What the active profiles say each token is for. Absent, every suggestion
 	// below is made from the generic table exactly as before.
-	tokenSet.scopes = mergeScopes((config.profiles?.active ?? []).map((p) => p.tokenScopes));
+	tokenSet.scopes = mergeScopes(activeProfiles(config).map((p) => p.tokenScopes));
 	const scopes = tokenSet.scopes;
 	// Real paths on both sides: the walk never follows a symlink below the root,
 	// so the root is the only link a discovered path can have come through.
@@ -513,7 +528,29 @@ export async function analyze(
 		const supp = suppByFile.get(file);
 		if (supp && ledger.mute(supp, line, rule, scopeLines)) return;
 		// Keys in one order whichever channel built the candidate, so `--format json` reads alike.
-		findings.push({ rule, severity: config.severityOf(rule), file, line, message, ...f, rank: RULES[rule].rank });
+		const { severity, rank } = complete({ rule, file, line, message });
+		findings.push({ rule, severity, file, line, message, ...f, rank });
+	};
+
+	/**
+	 * Every `var(--prefix-…)` a declaration's value names, recorded for the
+	 * token rules: `tokens/unknown-token` and `tokens/undelivered` read the
+	 * reference, `tokens/misapplied-token` reads it with the value and what the
+	 * declaration lands on — only where a profile declares scopes to hold it to.
+	 *
+	 * `elements` is what the declaration is shown to style; null where this
+	 * channel contributes to the first two rules alone.
+	 */
+	const noteTokenRefs = (
+		value: string,
+		at: Omit<TokenRef, 'name'>,
+		elements: readonly string[] | null,
+		{ refs = true }: { refs?: boolean } = {},
+	): void => {
+		for (const name of tokenRefsIn(value, tokenPrefixes)) {
+			if (refs) tokenRefs.push({ ...at, name });
+			if (scopes && elements) scopedRefs.push({ ...at, name, value, elements: [...elements] });
+		}
 	};
 
 	// ── index markup, repo-wide ───────────────────────────────────────────────
@@ -717,15 +754,7 @@ export async function analyze(
 		const unparsed = (message: string, code?: string): void => {
 			diagnostics.parseErrors.push({ file: rel, message });
 			if (config.enabled['stylesheet/unparsed'] && reports(rel))
-				findings.push({
-					rule: 'stylesheet/unparsed',
-					severity: config.severityOf('stylesheet/unparsed'),
-					file: rel,
-					line: 1,
-					message,
-					code: code ?? message,
-					rank: RULES['stylesheet/unparsed'].rank,
-				});
+				findings.push(complete({ rule: 'stylesheet/unparsed', file: rel, line: 1, message, code: code ?? message }));
 		};
 
 		if (oversized(abs, rel, look)) {
@@ -792,7 +821,7 @@ export async function analyze(
 			const boundSystem = bound.filter((b) => b.isSystem);
 			const boundText = bound.filter((b) => b.isText);
 			const isGrid = cssRule.isGrid;
-			const scopeLines = [ruleLine, ruleLine - 1];
+			const scopeLines = nearby(ruleLine);
 			// Carried so a browser-side reader can resolve this rule to the elements
 			// it styles: the comma-joined selector list is a valid `querySelectorAll`
 			// argument, the media condition what `matchMedia` takes. `undefined`
@@ -821,11 +850,7 @@ export async function analyze(
 					classDecls.push({ prop, value: decl.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
 				if (styling) touchesStyle = true;
 				if (isLayoutDecl({ prop, value: decl.value })) touchesLayout = true;
-				for (const name of tokenRefsIn(decl.value, tokenPrefixes)) {
-					const ref = { file: rel, line, name, prop, scopeLines };
-					tokenRefs.push(ref);
-					if (scopes) scopedRefs.push({ ...ref, value: decl.value, elements });
-				}
+				noteTokenRefs(decl.value, { file: rel, line, prop, scopeLines }, elements);
 				if (finding) pending.push({ ...finding, line, scopeLines });
 			}
 
@@ -875,7 +900,7 @@ export async function analyze(
 		// `report` would drop it anyway; skipping first keeps a scoped hook run
 		// from classifying every inline style in the repo on every edit.
 		if (!reports(el.file)) continue;
-		const scopeLines = [el.line, el.line - 1];
+		const scopeLines = nearby(el.line);
 		const whole = ruleIsLive('system/inline-style') ? inlineStyle(el, ds.allowedInlineStyles) : null;
 		if (whole) {
 			report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
@@ -888,17 +913,11 @@ export async function analyze(
 		// that element is is known.
 		const elements = el.element ? [el.element] : [];
 		for (const d of el.decls) {
-			if (scopes)
-				for (const name of tokenRefsIn(d.value, tokenPrefixes))
-					scopedRefs.push({
-						file: el.file,
-						line: d.line ?? el.line,
-						name,
-						prop: d.prop,
-						scopeLines,
-						value: d.value,
-						elements,
-					});
+			// Scopes only: an inline style's `var()` is this element's own business
+			// for the two rules that answer for a file or the project.
+			noteTokenRefs(d.value, { file: el.file, line: d.line ?? el.line, prop: d.prop, scopeLines }, elements, {
+				refs: false,
+			});
 			const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
 			if (finding)
 				pending.push({
@@ -934,8 +953,11 @@ export async function analyze(
 			if (supp && !tpl.error)
 				for (const group of tpl.groups)
 					for (const d of group.decls)
-						for (const name of tokenRefsIn(d.value, tokenPrefixes))
-							tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
+						noteTokenRefs(
+							d.value,
+							{ file: tpl.file, line: d.line ?? tpl.line, prop: d.prop, scopeLines: [tpl.line] },
+							null,
+						);
 			continue;
 		}
 		if (tpl.error) {
@@ -970,11 +992,11 @@ export async function analyze(
 			else if (group.selector) elements = nestedElements(group.selector);
 			for (const d of group.decls) {
 				if (supp)
-					for (const name of tokenRefsIn(d.value, tokenPrefixes)) {
-						const ref = { file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] };
-						tokenRefs.push(ref);
-						if (scopes) scopedRefs.push({ ...ref, value: d.value, elements });
-					}
+					noteTokenRefs(
+						d.value,
+						{ file: tpl.file, line: d.line ?? tpl.line, prop: d.prop, scopeLines: [tpl.line] },
+						elements,
+					);
 				const { finding } = classifyDeclaration(d, {
 					boundSystem: onTarget ? boundSystem : [],
 					boundText: onTarget ? boundText : [],
@@ -997,7 +1019,7 @@ export async function analyze(
 					message: `${f.message}${where} (css-in-js)`,
 					code: `css-in-js:${f.code ?? f.message}`,
 					suffix: `${where} (css-in-js)`,
-					scopeLines: [tpl.line, tpl.line - 1],
+					scopeLines: nearby(tpl.line),
 					elements,
 				});
 		}
@@ -1053,13 +1075,7 @@ export async function analyze(
 	for (const [file, s] of suppByFile) {
 		directives.push(...s.directives);
 		if (!config.enabled['suppression/malformed'] || !reports(file)) continue;
-		for (const m of s.malformed)
-			findings.push({
-				...m,
-				severity: config.severityOf('suppression/malformed'),
-				code: m.message,
-				rank: RULES['suppression/malformed'].rank,
-			});
+		for (const m of s.malformed) findings.push(complete({ ...m, code: m.message }));
 	}
 
 	// ── the token pass ────────────────────────────────────────────────────────
@@ -1165,7 +1181,7 @@ export async function analyze(
 	if (suppress)
 		ledger.settle(
 			directives.filter((d) => reports(d.file)),
-			new Set(judge ? [] : ['patterns/judged-redirect']),
+			judge ? new Set() : JUDGE_ONLY_RULES,
 		);
 
 	cache?.save();
@@ -1174,7 +1190,7 @@ export async function analyze(
 		findings: unique,
 		directives,
 		diagnostics,
-		blocking: unique.some((f) => f.severity === 'error'),
+		blocking: isBlocking(unique),
 		// Only when the design system's own sources yielded tokens. The walk adds
 		// whatever the project defines under the same prefix to this same set, and
 		// one `--wpds-brand-color` of the project's own would otherwise pass for a
@@ -1185,6 +1201,10 @@ export async function analyze(
 		...(liveControls ? { controls: liveControls } : {}),
 	};
 }
+
+/** Whether a set of findings stops a turn, or fails `check`: any one of them at error severity. */
+export const isBlocking = (findings: readonly Pick<Finding, 'severity'>[]): boolean =>
+	findings.some((f) => f.severity === 'error');
 
 /**
  * The findings with each repeat dropped, first one kept. Nesting and

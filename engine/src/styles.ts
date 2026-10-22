@@ -189,10 +189,26 @@ export function propsOverlap(a: string, b: string): boolean {
 
 const KEYWORD = /^(inherit|initial|unset|revert|revert-layer|none|auto|transparent|currentcolor|normal)$/i;
 const ZERO = /^0([a-z%]*)$/i;
+/** A part with nothing to tokenize: a zero, or a CSS-wide keyword. */
+const isInertPart = (p: string): boolean => ZERO.test(p) || KEYWORD.test(p);
 
 export const usesToken = (value: string): boolean => /var\(\s*--/.test(value);
-const isLiteralColor = (v: string): boolean =>
-	/#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|hwb|oklch|oklab|lab|lch|color)\(/i.test(v);
+
+/** The CSS colour functions, each with its legacy `a` form. One alternation, however it is anchored. */
+const COLOR_FUNCTIONS = '(?:rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\\(';
+const HEX = /^#[0-9a-f]{3,8}$/i;
+const COLOR_FUNCTION_AT_START = new RegExp(`^${COLOR_FUNCTIONS}`, 'i');
+const COLOR_FUNCTION_WITHIN = new RegExp(`\\b${COLOR_FUNCTIONS}`, 'i');
+
+/**
+ * A part that is a colour literal on its own: a hex, or a colour function call.
+ * The one reading of "this is a colour" the token pass, the DTCG reader and
+ * the value classifier share.
+ */
+export const isColorLiteral = (part: string): boolean => HEX.test(part) || COLOR_FUNCTION_AT_START.test(part);
+
+/** A value with a colour literal somewhere in it. */
+const isLiteralColor = (v: string): boolean => /#[0-9a-f]{3,8}\b/i.test(v) || COLOR_FUNCTION_WITHIN.test(v);
 
 /**
  * The value with every `var()` and `url()` cut out, nested parentheses and all.
@@ -274,7 +290,7 @@ export function classifyMargin(value: string): MarginKind {
 	// spaces prettier writes.
 	if (parts.some((p) => /^-(?!-)/.test(p) && !ZERO.test(p))) return 'negative';
 	if (parts.some((p) => p === 'auto')) return null;
-	if (parts.every((p) => ZERO.test(p) || KEYWORD.test(p))) return null;
+	if (parts.every(isInertPart)) return null;
 	return 'spacing';
 }
 
@@ -285,7 +301,7 @@ export function classifyMargin(value: string): MarginKind {
  */
 export const isInertValue = (value: string): boolean => {
 	const parts = String(value).trim().split(/\s+/).filter(Boolean);
-	return parts.length > 0 && parts.every((p) => ZERO.test(p) || KEYWORD.test(p));
+	return parts.length > 0 && parts.every(isInertPart);
 };
 
 /** A token-backed prop carrying a raw literal instead of a token reference. */
@@ -364,9 +380,36 @@ export function mediaQuery(rule: Rule): string {
 }
 
 /**
+ * Each character of a selector outside brackets, parentheses and quotes, with
+ * its index. The one scanner behind the helpers below: nesting is what is
+ * being tracked, and that is the one thing a regex cannot do.
+ *
+ * An escape is visited as its two characters together, so it reads as part of
+ * the name it sits in and never as structure: `.md\:flex` keeps its `\:`, and
+ * `\(` opens nothing.
+ */
+function eachTopLevel(sel: string, visit: (ch: string, i: number) => void): void {
+	let depth = 0;
+	let quote = '';
+	for (let i = 0; i < sel.length; i++) {
+		const ch = sel[i] ?? '';
+		if (ch === '\\') {
+			if (!depth && !quote) visit(sel.slice(i, i + 2), i);
+			i++;
+		} else if (quote) {
+			if (ch === quote) quote = '';
+		} else if (ch === '"' || ch === "'") quote = ch;
+		else if (ch === '(' || ch === '[') depth++;
+		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+		else if (!depth) visit(ch, i);
+	}
+}
+
+/**
  * Rightmost compound of a selector — the element the rule actually styles.
  * Component bindings must correlate against this, or a descendant rule
- * attributes its declarations to the ancestor's component.
+ * attributes its declarations to the ancestor's component. Every check that
+ * keys reads this one key.
  *
  * Cut only at a combinator outside brackets, parentheses and quotes:
  * `.x[aria-label="Close dialog"]` is one compound, and so are `.x:has(> .y)`
@@ -375,23 +418,16 @@ export function mediaQuery(rule: Rule): string {
  * Design notes: docs/design/analysis.md#reading-a-stylesheet
  */
 export function keySelector(sel: string): string {
-	let depth = 0;
-	let quote = '';
-	let start = 0;
 	const s = sel.trim();
-	for (let i = 0; i < s.length; i++) {
-		const ch = s[i];
-		if (ch === '\\') i++;
-		else if (quote) {
-			if (ch === quote) quote = '';
-		} else if (ch === '"' || ch === "'") quote = ch;
-		else if (ch === '(' || ch === '[') depth++;
-		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
-		else if (!depth && (ch === ' ' || ch === '\n' || ch === '\t' || ch === '>' || ch === '+' || ch === '~'))
-			start = i + 1;
-	}
+	let start = 0;
+	eachTopLevel(s, (ch, i) => {
+		if (ch === ' ' || ch === '\n' || ch === '\t' || ch === '>' || ch === '+' || ch === '~') start = i + 1;
+	});
 	return s.slice(start);
 }
+
+/** {@link keySelector} by the name #127 gave it: one key, whichever name a caller reads it by. */
+export const keyCompound = keySelector;
 
 /**
  * A compound with its attribute selectors and pseudo-class arguments taken out:
@@ -399,19 +435,10 @@ export function keySelector(sel: string): string {
  * element does not carry, and one inside `:is()` or `:has()` one it may not.
  */
 export function ownLevel(compound: string): string {
-	let depth = 0;
-	let quote = '';
 	let out = '';
-	for (let i = 0; i < compound.length; i++) {
-		const ch = compound[i] ?? '';
-		if (quote) {
-			if (ch === '\\') i++;
-			else if (ch === quote) quote = '';
-		} else if (ch === '"' || ch === "'") quote = ch;
-		else if (ch === '(' || ch === '[') depth++;
-		else if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
-		else if (!depth) out += ch;
-	}
+	eachTopLevel(compound, (ch) => {
+		out += ch;
+	});
 	return out;
 }
 
