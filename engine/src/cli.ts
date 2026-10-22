@@ -539,6 +539,8 @@ async function findingsBeforeEdit(
 function deadlineFetch(deadline: AbortSignal): typeof fetch {
 	return (input, init) => {
 		const both = new AbortController();
+		// Left attached once `fetch` resolves: the body is read after that, and has
+		// to stay abortable by both. The deadline ends the phase, and them with it.
 		for (const s of [deadline, init?.signal]) {
 			if (!s) continue;
 			if (s.aborted) both.abort(s.reason);
@@ -945,7 +947,10 @@ async function main(): Promise<number> {
 						: config.source.kind;
 		const base = findExistingBaseline(root, namedBaseline, config.baselinePath);
 		const legacy = base.found ? null : legacyBaseline(root);
-		const state = attemptsPath(root);
+		// The hook keys its counter on the Claude Code project — its `--root`, else
+		// CLAUDE_PROJECT_DIR — not on the config a package's status roots at.
+		const hookDir = args.flags.root ? root : claudeProjectDir();
+		const state = attemptsPath(hookDir);
 		// What design system this run thinks it is checking, in the terms the rules are
 		// written against — the half a skill has to read before it writes a line of UI.
 		// Empty fields are printed as such: "no layout primitive" is a fact about the
@@ -993,7 +998,7 @@ async function main(): Promise<number> {
 				? []
 				: [
 						dim(
-							`            without CLAUDE_PLUGIN_DATA; the Claude Code hook's is ${toPosix(attemptsPath(root, '$CLAUDE_PLUGIN_DATA'))}`,
+							`            without CLAUDE_PLUGIN_DATA; the Claude Code hook's is ${toPosix(attemptsPath(hookDir, '$CLAUDE_PLUGIN_DATA'))}`,
 						),
 					]),
 			`${dim('options:    ')}${describeOptions(resolved)}`,

@@ -20,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
 import { TreeTooLarge, isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
+import { attemptsPath } from '../src/paths.ts';
 import { RULES } from '../src/rules.ts';
 import { analyze } from '../src/analyze.ts';
 import { CLI, PLUGIN_DATA, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
@@ -3310,4 +3311,31 @@ await check('an engine copied out of the repo runs its bundle, not its source', 
 
 // Module-scope, so no test's own `finally` reaches it.
 cleanup(EMPTY_HOME);
+// The hook keys its counter on the Claude Code project (CLAUDE_PROJECT_DIR), and
+// `status` typed in a monorepo package roots at the package's config. Named from
+// the package, the hook's file was one it never writes.
+await check("status names the hook's retry counter by the Claude Code project, not the package", () => {
+	const top = scratch('dsh-monorepo-');
+	try {
+		writeAll(top, {
+			'.claude/settings.local.json': '{}',
+			'packages/ui/loupe.config.json': JSON.stringify({ extends: 'generic' }),
+			'packages/ui/package.json': '{}',
+		});
+		const pkg = join(top, 'packages', 'ui');
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: scratch('dsh-home-'), CLAUDE_PLUGIN_DATA: '' };
+		delete env.CLAUDE_PROJECT_DIR;
+		const status = (extra: NodeJS.ProcessEnv): string =>
+			spawnSync(process.execPath, [CLI, 'status'], { cwd: pkg, env: { ...env, ...extra }, encoding: 'utf8' }).stdout;
+		const want = attemptsPath(top, '$CLAUDE_PLUGIN_DATA');
+		const typed = status({});
+		assert(typed.includes(want), `expected ${want}, the project's key:\n${typed}`);
+		assert(!typed.includes(attemptsPath(pkg, '$CLAUDE_PLUGIN_DATA')), `named the package's key:\n${typed}`);
+		const inClaude = status({ CLAUDE_PROJECT_DIR: top });
+		assert(inClaude.includes(want), `with CLAUDE_PROJECT_DIR, expected ${want}:\n${inClaude}`);
+	} finally {
+		cleanup(top);
+	}
+});
+
 finish();
