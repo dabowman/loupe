@@ -35337,9 +35337,10 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     });
     return { errors, blocking: introducedBy(errors, before) };
   })();
+  const hookAdvises = hookEvent(payload) === "PostToolUse";
   const hookShows = async () => {
     const { blocking } = await hookVerdict();
-    if (!blocking.length) return [];
+    if (!blocking.length) return hookAdvises ? shownFindings(result.findings, config.hook.maxFindings) : [];
     if (!payload.session_id && payload.stop_hook_active) return [];
     if (peekAttempts(root2, budgetKey) + 1 > config.hook.maxAttempts) return [];
     return shownFindings(blocking, config.hook.maxFindings);
@@ -35398,15 +35399,12 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     const standingNote = standing ? ` ${standing} blocking finding(s) already in ${touched} before this edit, left for the Stop check.` : "";
     if (!blocking.length) {
       clearAttempts(root2, budgetKey);
-      if (!standing) return emitClean(`${formatSummary(result)}${spentSuffix}${ceilingSuffix}`);
-      const message = `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`;
-      const report2 = formatAgent({ ...result, findings: errors }, config, {
-        maxFindings: config.hook.maxFindings,
-        terse: true
-      });
-      return emitAdvisory(message, `${message}
+      const message = standing ? `loupe: this edit added no blocking findings.${standingNote}${spentSuffix}${ceilingSuffix}` : `${formatSummary(result)}${spentSuffix}${ceilingSuffix}`;
+      if (!hookAdvises || !result.findings.length) return emitClean(message);
+      const report2 = formatAgent(result, config, { maxFindings: config.hook.maxFindings, terse: true });
+      return emitAdvisory(message, standing || ceilingSuffix ? `${message}
 
-${report2}`, payload);
+${report2}` : report2, payload);
     }
     const attempts = bumpAttempts(root2, budgetKey);
     const max = config.hook.maxAttempts;
