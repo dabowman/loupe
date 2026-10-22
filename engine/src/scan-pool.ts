@@ -20,7 +20,7 @@
  * Design notes: docs/design/cli.md#caches
  */
 
-import { availableParallelism } from 'node:os';
+import os from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { scanMarkup } from './markup.ts';
 import { isOn } from './paths.ts';
@@ -52,7 +52,9 @@ export function workerCount(jobs: readonly ScanJob[]): number {
 	let bytes = 0;
 	for (const j of jobs) bytes += j.text.length;
 	if (bytes < MIN_BYTES) return 0;
-	const cores = availableParallelism();
+	// `availableParallelism` is Node 18.14: named, it would fail the whole bundle
+	// at link time on an older 18, which `engines` still admits.
+	const cores = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
 	if (cores < 2) return 0;
 	// One core stays with the main thread, which is reading files and will
 	// consume the results.
