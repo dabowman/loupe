@@ -18,8 +18,10 @@
  * Design notes: docs/design/report.md#the-pane
  */
 
-import { reportPayload, tally } from './report.ts';
+import { DIR_CAP, SEV_MARK, reportPayload, tally } from './report.ts';
 import type { AnalyzeResult, BaselinedResult, Config, ReportPayload, RuleId, Severity } from './types.ts';
+
+export { DIR_CAP };
 
 /** One stat tile; `isError` paints the value in the error color, `isLead` enlarges it. */
 export interface PaneTile {
@@ -78,8 +80,6 @@ export interface PanePayload {
 	};
 }
 
-/** How many directories the rollup names before it starts counting the rest. Matches `report-view.ts`. */
-export const DIR_CAP = 12;
 /** How many files the densest-files list names. */
 const FILE_CAP = 8;
 
@@ -227,9 +227,6 @@ function barChart(
 	return `${open}${body}</svg>`;
 }
 
-// `off` never reaches a finding; the record is total because `Severity` is.
-const GLYPH: Record<Severity, string> = { error: '✗', warn: '•', off: '' };
-
 export function paneFromPayload(p: ReportPayload): PanePayload {
 	const ruleRows = rules(p);
 	const dirRows = dirs(p);
@@ -239,7 +236,7 @@ export function paneFromPayload(p: ReportPayload): PanePayload {
 				label: r.id,
 				count: r.count,
 				paint: r.severity,
-				glyph: GLYPH[r.severity],
+				glyph: SEV_MARK[r.severity] ?? '',
 				title: `${r.count} × ${r.id}${r.title ? ` — ${r.title}` : ''}`,
 			})),
 			empty,
