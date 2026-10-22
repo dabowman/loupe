@@ -406,8 +406,10 @@ export async function judgeRedirects(
 	const known = controls.map((): Record<string, string> => ({}));
 	const sure = controls.map((): Record<string, number> => ({}));
 	// Every force at once: each writes only its own name, and the client's slots
-	// bound what is on the wire.
-	await Promise.all(
+	// bound what is on the wire. Settled, not raced: a failed force fails the
+	// call, but only once the others have finished, so what they spent lands in
+	// the client's tally before anyone reads it.
+	const settled = await Promise.allSettled(
 		Object.entries(LANGUAGE.vocabulary.forces).map(async ([name, force]) => {
 			if (!force.judge) return;
 			const asked = controls.flatMap((c, i) => (tableOf(c).some((r) => r.when && name in r.when) ? [i] : []));
@@ -425,6 +427,7 @@ export async function judgeRedirects(
 			});
 		}),
 	);
+	for (const r of settled) if (r.status === 'rejected') throw r.reason;
 
 	// `<Button> (represents: destination) \u2192 \`navigate-hierarchy\` (judged 0.97)`:
 	// what it was read as, where that sends it, and the least certain reading
