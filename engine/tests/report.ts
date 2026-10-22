@@ -1083,4 +1083,25 @@ await check('a rule switched off does not count its baseline entries as fixed', 
 	}
 });
 
+// `patterns/judged-redirect` reports only under `--judge`, so naming it alone
+// printed "clean" and exited 0 with nothing to say it could not have reported.
+await check('--rule patterns/judged-redirect without --judge says it reports only under --judge', () => {
+	const dir = scratch('loupe-rule-judged-');
+	writeAll(dir, {
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '*', '@wordpress/ui': '*' } }),
+		'src/A.jsx': 'export const A = () => <p className="acme-x">x</p>;\n',
+	});
+	const profiles = ['--profiles', join(HERE, '..', '..', 'profiles'), '--profile', 'wpds'];
+	try {
+		const r = cli(dir, 'check', '--all', '--rule', 'patterns/judged-redirect', ...profiles);
+		assert(/only under --judge/.test(r.stderr), `no note that the rule needs --judge:\n${r.stderr}${r.stdout}`);
+		// Another rule says nothing of the kind.
+		const other = cli(dir, 'check', '--all', '--rule', 'system/raw-element', ...profiles);
+		assert(!/only under --judge/.test(other.stderr), `noted for a rule that needs no --judge:\n${other.stderr}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
 finish();

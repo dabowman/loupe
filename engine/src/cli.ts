@@ -1349,6 +1349,9 @@ async function main(): Promise<number> {
 	// silence is not a clean bill either.
 	for (const id of rules ?? [])
 		if (!config.enabled[id]) note(`loupe: ${id} is off in this config \u2014 it reports nothing.\n`);
+		// Nor is a rule only the judge reports, named on a run that does not judge.
+		else if (id === 'patterns/judged-redirect' && command === 'check' && !args.flags.judge)
+			note(`loupe: ${id} reports only under --judge \u2014 this run reports nothing for it.\n`);
 
 	// The one network call in the engine, so the key is checked before the walk.
 	// Typed by hand, a `--judge` that cannot judge is a mistake worth refusing.
