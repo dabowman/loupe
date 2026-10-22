@@ -914,13 +914,18 @@ of its own. A turn is still blocked by the same findings, decided the same way,
 with or without a key.
 
 The cost is a network round trip per flagged element, inside Claude Code's hook
-timeout — 60s on `PostToolUse`, 120s on `Stop`. Each request gives up after 20
-seconds and the run keeps the deterministic findings it already had. To stay
-offline, drop `--judge` from `hooks/hooks.json`, or just leave the key unset.
+timeout — 60s on `PostToolUse`, 120s on `Stop`. What leaves the machine is the
+file's path and the lines around each flagged element or declaration — never a
+whole file — posted to TypeSafe's API at `api.typesafe.ai`, and only for what
+the run prints (below). Each request gives up after 20 seconds and the run keeps
+the deterministic findings it already had. To stay offline, drop `--judge` from
+`hooks/hooks.json`, or just leave the key unset.
 
 The hook only pays for what it prints. A run that does not block prints a
 one-line tally, so it asks nothing; a blocking run asks only about the findings
-its cap has room to show. Answers are cached per project, keyed by the exact
+its cap has room to show. The one exception is `patterns/judged-redirect` set to
+block: its answer decides whether the run blocks at all, so the controls it
+reads are asked about first. Answers are cached per project, keyed by the exact
 question, so the next write in the same file, and the `Stop` after it, re-ask
 only what changed. What a run spent rides on its summary line —
 `judge: 2 asked, 9 from cache` — and `--no-cache` asks everything fresh. See
