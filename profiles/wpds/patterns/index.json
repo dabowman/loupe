@@ -43,7 +43,7 @@
     "menu": {
       "import": "@wordpress/ui",
       "canonical": "Menu",
-      "note": "Menu in @wordpress/components is locked (system/locked-component). Outside Gutenberg core the shape is the same and the import is @wordpress/ui."
+      "note": "Menu in @wordpress/components is a private API (system/locked-component), and privateApis.Menu is deprecated since WordPress 7.2. The @wordpress/ui Menu is experimental, and it is not the same shape under another import: Menu.Root, Menu.Trigger and Menu.Popup stand where the locked one has Menu, Menu.TriggerButton and Menu.Popover, and radio items sit inside a Menu.RadioGroup."
     }
   },
   "realizations": [
@@ -372,10 +372,10 @@
       "canonical": "Menu",
       "detector": ["signature", { "rule": "judge", "components": ["Menu.Item", "MenuItem"], "unless": ["href", "render"] }],
       "signature": [
-        "Menu",
-        "Menu.TriggerButton",
+        "Menu.Root",
+        "Menu.Trigger",
         [
-          "Menu.Popover",
+          "Menu.Popup",
           "Menu.Item"
         ]
       ],
@@ -510,12 +510,15 @@
           "import": "@wordpress/ui",
           "canonical": "Menu.RadioItem",
           "signature": [
-            "Menu",
-            "Menu.TriggerButton",
+            "Menu.Root",
+            "Menu.Trigger",
             [
-              "Menu.Popover",
-              "Menu.RadioItem",
-              "Menu.RadioItem"
+              "Menu.Popup",
+              [
+                "Menu.RadioGroup",
+                "Menu.RadioItem",
+                "Menu.RadioItem"
+              ]
             ]
           ],
           "instead_of": [
@@ -575,9 +578,9 @@
       "signature": [
         "Stack|VStack|HStack|Flex",
         [
-          "Menu",
-          "Menu.TriggerButton",
-          "Menu.Popover"
+          "Menu.Root",
+          "Menu.Trigger",
+          "Menu.Popup"
         ],
         [
           "ItemGroup",

@@ -705,6 +705,82 @@ await check('a file already importing the answer is not told to use it', async (
 	assert(!at(r, 'patterns/superseded-composite').length, 'canonical import means the choice was deliberate');
 });
 
+// The @wordpress/ui Menu is `Menu.Root`, `Menu.Trigger` and `Menu.Popup`;
+// `Menu.TriggerButton` and `Menu.Popover` are the locked @wordpress/components
+// Menu's parts, and signatures spelled in them matched nothing the recommended
+// import produces.
+const uiMenus = (n: string): string =>
+	[
+		"import { Menu } from '@wordpress/ui';",
+		`export const Actions${n} = () => (`,
+		'\t<Menu.Root>',
+		'\t\t<Menu.Trigger>More</Menu.Trigger>',
+		'\t\t<Menu.Popup>',
+		'\t\t\t<Menu.Item>Rename</Menu.Item>',
+		'\t\t\t<Menu.Item>Delete</Menu.Item>',
+		'\t\t</Menu.Popup>',
+		'\t</Menu.Root>',
+		');',
+		`export const Filter${n} = () => (`,
+		'\t<Menu.Root>',
+		'\t\t<Menu.Trigger>Status</Menu.Trigger>',
+		'\t\t<Menu.Popup>',
+		'\t\t\t<Menu.RadioGroup value="all">',
+		'\t\t\t\t<Menu.RadioItem value="all">All</Menu.RadioItem>',
+		'\t\t\t\t<Menu.RadioItem value="draft">Drafts</Menu.RadioItem>',
+		'\t\t\t</Menu.RadioGroup>',
+		'\t\t</Menu.Popup>',
+		'\t</Menu.Root>',
+		');',
+	].join('\n');
+
+await check('the WPDS menus are spelled in the @wordpress/ui Menu parts', async () => {
+	const files = { 'loupe.config.json': CONFIG(), 'src/A.jsx': uiMenus('A'), 'src/B.jsx': uiMenus('B') };
+	const shipped = await run(files, { patterns: registry });
+	assert(!at(shipped, 'patterns/duplicate-composite').length, 'importing Menu is using the pattern');
+	// Both entries bind `Menu`, which every file composing one imports; with that
+	// lifted, the duplicate rule shows what each signature matched in real JSX.
+	const ids = ['action-cluster.overflow', 'browse-collection.list#toolbar.filter'];
+	const lifted = registry.map((p) => (ids.includes(p.id) ? { ...p, canonical: null } : p));
+	const dup = at(await run(files, { patterns: lifted }), 'patterns/duplicate-composite');
+	for (const id of ids) {
+		const named = dup.filter((f) => f.message.includes(`\`${id}\``));
+		assert(named.length === 2, `expected ${id} in both files, got ${named.length}: ${dup.map((f) => f.message)}`);
+	}
+	const overflow = registry.find((p) => p.id === 'action-cluster.overflow');
+	assert(overflow?.node, 'the shipped registry should carry action-cluster.overflow');
+	const locked = node(['Menu', 'Menu.TriggerButton', ['Menu.Popover', 'Menu.Item', 'Menu.Item']]);
+	assert(!matches(overflow.node, locked), 'the locked @wordpress/components Menu is not the recommended shape');
+});
+
+// No canonical, so nothing lifted: the shipped entry reports as it stands.
+await check('a grouped list with a @wordpress/ui Menu above its rows is browse-collection.grouped-list', async () => {
+	const presets = (n: string): string =>
+		[
+			"import { Menu, Stack } from '@wordpress/ui';",
+			"import { __experimentalItemGroup as ItemGroup, Navigator } from '@wordpress/components';",
+			`export const Presets${n} = () => (`,
+			'\t<Stack>',
+			'\t\t<Menu.Root>',
+			'\t\t\t<Menu.Trigger>Theme</Menu.Trigger>',
+			'\t\t\t<Menu.Popup><Menu.Item>Reset</Menu.Item></Menu.Popup>',
+			'\t\t</Menu.Root>',
+			'\t\t<ItemGroup><Navigator.Button path="/preset/a">A</Navigator.Button></ItemGroup>',
+			'\t</Stack>',
+			');',
+		].join('\n');
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': presets('A'), 'src/B.jsx': presets('B') },
+		{ patterns: registry },
+	);
+	const dup = at(r, 'patterns/duplicate-composite');
+	assert(dup.length === 2, `expected one per file, got ${dup.length}: ${dup.map((f) => f.message)}`);
+	assert(
+		dup.every((f) => f.message.includes('`browse-collection.grouped-list`')),
+		`named the wrong pattern: ${dup.map((f) => f.message)}`,
+	);
+});
+
 // ── registry v2 ─────────────────────────────────────────────────────────────
 
 await check('a v2 entry loads under its pattern key, and its parts under id#part', () => {
