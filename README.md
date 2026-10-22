@@ -165,16 +165,17 @@ there. A plain terminal reports `command not found` until you symlink it
 somewhere on your `PATH`:
 
 ```bash
-ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
+ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe   # a plugin install
+ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe                               # a checkout, from its root
 ```
 
-Link the marketplace clone, not the copy Claude Code runs: that one sits under
-`~/.claude/plugins/cache/loupe/loupe/<commit>/`, and the commit changes on every
-update. The clone moves with `/plugin marketplace update`, so it can be a
-commit ahead of the installed plugin between updates. From a checkout of this
-repository, link its `bin/loupe` the same way. Loupe is not on npm yet, so a
-`lint:loupe` script in a project's `package.json` works only for people who
-have made this link.
+Either link works: the shim follows its own symlinks to find the engine. For a
+plugin install, link the marketplace clone, not the copy Claude Code runs: that
+one sits under `~/.claude/plugins/cache/loupe/loupe/<commit>/`, and the commit
+changes on every update. The clone moves with `/plugin marketplace update`, so
+it can be a commit ahead of the installed plugin between updates. Loupe is not
+on npm yet, so a `lint:loupe` script in a project's `package.json` works only
+for people who have made this link.
 
 A terminal sees none of the plugin's settings (blocking, preset, API key) —
 Claude Code passes them to hooks only. `loupe status` says where it found its
@@ -1164,7 +1165,7 @@ class, the only rule inside an `@media`, a class several rules declare — no
 action is offered and nothing says why.
 
 ```bash
-ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe
+ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe   # or the marketplace clone; either works
 cd editors/vscode && npm install && npx @vscode/vsce package
 code --install-extension loupe-vscode-0.7.0.vsix   # or: cursor --install-extension
 ```
