@@ -376,9 +376,13 @@ await check('tokens used, and the only enqueue does not depend on wp-theme: one 
 
 /** A CLI run in `root` with the shipped profiles, its JSON findings and summary. */
 function runJson(root: string, args: string[]): { findings: Finding[]; summary: { fixed?: number | null } } {
-	const r = spawnSync('node', [CLI, ...args, '--format', 'json', '--root', root, '--preset', 'wpds', '--profiles', PROFILES], {
-		encoding: 'utf8',
-	});
+	const r = spawnSync(
+		'node',
+		[CLI, ...args, '--format', 'json', '--root', root, '--preset', 'wpds', '--profiles', PROFILES],
+		{
+			encoding: 'utf8',
+		},
+	);
 	assert(r.status === 0 || r.status === 1, `loupe could not run (${r.status}): ${r.stderr}`);
 	return JSON.parse(r.stdout);
 }
@@ -413,7 +417,8 @@ await check('a run scoped to another file neither re-anchors tokens/undelivered 
 	try {
 		writeAll(root, {
 			'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '^30.0.0' } }),
-			'src/Card.jsx': "import styled from 'styled-components';\nexport const Card = styled.div`\n\tbackground: var(--wpds-color-background-surface-neutral-strong);\n`;\n",
+			'src/Card.jsx':
+				"import styled from 'styled-components';\nexport const Card = styled.div`\n\tbackground: var(--wpds-color-background-surface-neutral-strong);\n`;\n",
 			'style.css': '.x {\n  color: var(--wpds-color-foreground-content-neutral);\n}\n',
 			'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
 		});
@@ -558,7 +563,10 @@ await check('what cannot be read is not a finding', () => {
 		['a list holding a variable', { 'includes/admin.php': enqueue("array( 'a', $more )") }],
 		['no enqueue at all', { 'src/index.js': 'export {};\n' }],
 		['an argument list that never closes', { 'includes/admin.php': "<?php\nwp_enqueue_style( 'a', 'b', array( 'c'" }],
-		['a literal list added to a call', { 'includes/admin.php': enqueue("array( 'wp-components' ) + acme_style_deps()") }],
+		[
+			'a literal list added to a call',
+			{ 'includes/admin.php': enqueue("array( 'wp-components' ) + acme_style_deps()") },
+		],
 		['a short list added to a method', { 'includes/admin.php': enqueue("[ 'wp-components' ] + $this->deps()") }],
 	];
 	for (const [label, files] of cases) {
