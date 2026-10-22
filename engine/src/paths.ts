@@ -11,10 +11,10 @@
  * Design notes: docs/design/cli.md#where-state-lives
  */
 
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
+import { sha256 } from './text.ts';
 
 /**
  * One spelling of "on" for every switch this tool reads. Written out per door,
@@ -28,10 +28,17 @@ export const isPluginContext = (): boolean => Boolean(process.env.CLAUDE_PLUGIN_
 /** Stable per-project key: basename for legibility, path hash for uniqueness. */
 function projectKey(root: string): string {
 	const full = resolve(root);
-	const hash = createHash('sha256').update(full).digest('hex').slice(0, 10);
+	const hash = sha256(full).slice(0, 10);
 	const name = full.split(/[/\\]/).filter(Boolean).pop() ?? 'project';
 	return `${name.replace(/[^\w.-]/g, '-')}-${hash}`;
 }
+
+/**
+ * A path as a config, a profile or a flag wrote it, anchored under `dir` where
+ * it is relative and taken as given where it is absolute. The one spelling of
+ * that rule: every file a run is pointed at resolves through here.
+ */
+export const under = (dir: string, p: string): string => (isAbsolute(p) ? p : join(dir, p));
 
 export function ensureDir(dir: string): string | null {
 	try {
@@ -79,7 +86,7 @@ export const DEFAULT_BASELINE = '.loupe-baseline.json';
  * `--baseline=` is normalized to "unnamed" once, in `main()`, and an empty
  * config `baseline` to the default name once, in `loadConfig`.
  */
-export const baselinePath = (root: string, p: string): string => (isAbsolute(p) ? p : join(root, p));
+export const baselinePath = (root: string, p: string): string => under(root, p);
 
 /**
  * A 0.1.x baseline, which nothing reads any more: `<root>/.loupe/baseline.json`,

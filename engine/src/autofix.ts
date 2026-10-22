@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { byBytes } from './discover.ts';
+import { directive } from './suppressions.ts';
 import { DELIBERATE, KEEP } from './tokens.ts';
 import { escapeRe, messageLineOf } from './text.ts';
 import type { Directive, FixCandidate, KeptValue, SkippedFix, SkippedKeep, Suggestion, TokenFix } from './types.ts';
@@ -31,6 +32,46 @@ import type { Directive, FixCandidate, KeptValue, SkippedFix, SkippedKeep, Sugge
  * text.
  */
 export const CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
+
+/** The comment a suppression directive has to be written in, per file type. */
+export const commentFor = (file: string, text: string): string =>
+	CSS_FILE.test(file) ? `/* ${text} */` : `// ${text}`;
+
+/**
+ * Why a directive may not be written above line `at` (1-based) of `lines`, or
+ * null where it may. Every surface that splices one in — `fix --judge`, the
+ * UI's mute — refuses the same two writes, or the two would disagree about
+ * what a mute means.
+ *
+ * `taken` says whether a line already carries a directive: only the nearest
+ * line above is read, so splicing in front of one pushes it off what it names,
+ * and the finding somebody already accepted comes back.
+ */
+export function directiveRefusal(
+	lines: readonly string[],
+	at: number,
+	taken: (line: number) => boolean,
+): string | null {
+	const line = lines[at - 1];
+	if (line === undefined) return 'line out of range';
+	if (taken(at - 1)) return 'the line above already carries a directive — add the rule to it by hand';
+	// A brace that opens a rule, not Sass's `#{…}` interpolation. A directive above
+	// a rule's opening line covers the rule's whole scope.
+	if (/(?:^|[^#])\{/.test(line)) return "on the rule's opening line, where a directive would mute the whole rule";
+	return null;
+}
+
+/**
+ * Splice `text` in above line `at`, in that line's own indent and with its own
+ * ending. Spaces and tabs only: `\s` would copy a byte-order mark onto the
+ * directive. The line's own ending, so a CRLF file stays one.
+ */
+export function writeAbove(lines: string[], at: number, text: string): void {
+	const line = lines[at - 1] ?? '';
+	const indent = /^[ \t]*/.exec(line)?.[0] ?? '';
+	const eol = line.endsWith('\r') ? '\r' : '';
+	lines.splice(at - 1, 0, `${indent}${text}${eol}`);
+}
 
 /**
  * Every declaration with one rewrite for it: a single exact token, or — only
@@ -295,29 +336,14 @@ export function applyKeeps(
 				applied.push(k);
 				continue;
 			}
-			const line = lines[k.line - 1];
-			if (line === undefined) {
-				skipped.push({ ...k, why: 'line out of range' });
+			const why = directiveRefusal(lines, k.line, (line) => taken.has(`${file}\u0000${line}`));
+			if (why) {
+				skipped.push({ ...k, why });
 				continue;
 			}
-			// Only the nearest line above is read: a directive already there for
-			// this line would be pushed off it, and what it names would come back.
-			if (taken.has(`${file}\u0000${k.line - 1}`)) {
-				skipped.push({ ...k, why: 'the line above already carries a directive — add the rule to it by hand' });
-				continue;
-			}
-			// A brace that opens a rule, not Sass's `#{…}` interpolation.
-			if (/(?:^|[^#])\{/.test(line)) {
-				skipped.push({ ...k, why: "on the rule's opening line, where a directive would mute the whole rule" });
-				continue;
-			}
-			// Spaces and tabs only: `\s` would copy a byte-order mark onto the
-			// directive. And the line's own ending, so a CRLF file stays one.
-			const indent = /^[ \t]*/.exec(line)?.[0] ?? '';
-			const eol = line.endsWith('\r') ? '\r' : '';
 			// Whichever rules that line was reported under, not just this one's.
 			const rules = rulesOn.get(`${file}\u0000${k.line}`) ?? 'tokens/hardcoded-value';
-			lines.splice(k.line - 1, 0, `${indent}/* ${keyword} ${rules} -- ${k.reason} */${eol}`);
+			writeAbove(lines, k.line, commentFor(file, directive(keyword, rules, k.reason)));
 			applied.push(k);
 			last = k.line;
 		}
