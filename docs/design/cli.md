@@ -907,6 +907,11 @@ fields are printed as such**: "no layout primitive" is a fact about the system,
 and inferring it from a missing line is how a skill ends up recommending one
 that isn't there.
 
+The `tokens:` line says what the `tokenSources` yielded, per path, from the
+same `readTokenSources` read the analysis seeds its set with: a source that is
+not installed leaves `tokens/unknown-token` off and every hardcoded value
+unnamed, and `--wpds-*` printed alone read as a working set.
+
 And which profiles are in play, with their directories — "no composite findings"
 and "no composite registry" look identical in a report and must not look
 identical here. The directory, not just the id, because a profile carries the

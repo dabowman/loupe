@@ -492,6 +492,76 @@ await check('with blocking off, check still exits 1 and status says so', () => {
 	}
 });
 
+// `status` printed `tokens: --wpds-*` whether or not one definition was read.
+// With `@wordpress/theme` not installed, `tokens/unknown-token` is off and
+// `tokens/hardcoded-value` names no token, and the command a reader runs first
+// said nothing. The count is the analysis's own read: it agrees with `tokensKnown`.
+await check('status says whether the token sources resolved', async () => {
+	const wpds = JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } });
+	const sheet = 'node_modules/@wordpress/theme/prebuilt/css/design-tokens.css';
+	const css = { 'styles/a.css': '.acme-a { color: var(--wpds-nope); }' };
+	const roots = {
+		// `--wpds-a` twice: a token's first definition is the one the set keeps.
+		read: tmpRepo({
+			'loupe.config.json': wpds,
+			[sheet]: ':root { --wpds-a: 1px; --wpds-b: 2px; --wpds-a: 3px; }',
+			...css,
+		}),
+		missing: tmpRepo({ 'loupe.config.json': wpds, ...css }),
+		empty: tmpRepo({
+			'loupe.config.json': JSON.stringify({
+				extends: 'wpds',
+				namespaces: { project: ['acme-'] },
+				designSystem: { tokenSources: ['vendor/theme'] },
+			}),
+			'vendor/theme/style.css': '.x { color: red; }',
+			...css,
+		}),
+		unsourced: tmpRepo({
+			'loupe.config.json': JSON.stringify({ extends: 'wordpress-components', namespaces: { project: ['acme-'] } }),
+			...css,
+		}),
+	};
+	const tokensLine = (root: string): string =>
+		runCli(['status', '--root', root])
+			.stdout.split('\n')
+			.find((l) => l.startsWith('tokens:')) ?? '';
+	const known = async (root: string): Promise<number> => {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		return (await analyze(config, { scope: null })).diagnostics.tokensKnown;
+	};
+	try {
+		const read = tokensLine(roots.read);
+		assert(read === `tokens:     --wpds-* (2 definitions from ${sheet})`, `unexpected tokens line:\n${read}`);
+		assert((await known(roots.read)) === 2, 'status and the analysis read different token sets');
+
+		// Every configured path, as configured: the reader checks each against the install.
+		const config = await loadConfig({ root: roots.missing, configPath: join(roots.missing, 'loupe.config.json') });
+		const paths = config.designSystem.tokenSources;
+		assert(paths[0] === sheet && paths.length > 1, `the wpds preset's sources moved: ${paths.join(', ')}`);
+		const missing = tokensLine(roots.missing);
+		assert(
+			missing === `tokens:     --wpds-* (0 definitions read; ${paths.join(', ')} not found)`,
+			`unexpected tokens line:\n${missing}`,
+		);
+		assert((await known(roots.missing)) === 0, 'the analysis read tokens status says are not there');
+
+		const empty = tokensLine(roots.empty);
+		assert(
+			empty === 'tokens:     --wpds-* (0 definitions read; vendor/theme defines none)',
+			`unexpected tokens line:\n${empty}`,
+		);
+
+		const unsourced = tokensLine(roots.unsourced);
+		assert(
+			unsourced === 'tokens:     --wp-admin-theme-*, --wp-components-* (no token sources configured)',
+			`unexpected tokens line:\n${unsourced}`,
+		);
+	} finally {
+		for (const root of Object.values(roots)) cleanup(root);
+	}
+});
+
 // `loupe baseline` from a shell has no CLAUDE_PLUGIN_DATA; the Stop hook always
 // has one. State keyed off that variable meant the two processes read different
 // files, so a recorded backlog was invisible to the gate that was supposed to
