@@ -1034,7 +1034,10 @@ export async function analyze(
 		// which part of it is the channel marker. Nothing downstream of that sees it.
 	}
 
-	for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
+	// Gated on the design system's own tokens, counted before the walk added the
+	// project's: one project-defined `--wpds-brand-color` is not a set to check
+	// the design system's names against.
+	if (diagnostics.tokensKnown) for (const f of unknownTokenFindings(tokenRefs, tokenSet.known)) report(f);
 	for (const f of misappliedTokens(scopedRefs, scopes, tokenSet.known)) report(f);
 	if (ruleIsLive('tokens/undelivered'))
 		for (const f of undelivered({

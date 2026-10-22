@@ -118,6 +118,22 @@ await check('unknown-token stays silent when no token set was found', async () =
 	assert(!at(r, 'tokens/unknown-token').length, 'declared a token unknown with nothing to check against');
 });
 
+// The walk adds the project's own definitions to the token set. One of them is
+// not the design system's set, and checking against it calls every real token
+// unknown, beside the notice that unknown ones cannot be reported.
+await check("unknown-token stays silent when the only tokens found are the project's own", async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/brand.css': ':root { --wpds-brand-color: #c00; }',
+		'styles/a.css':
+			'.acme-card { color: var(--wpds-color-foreground-content-neutral); background: var(--wpds-color-background-surface-neutral); }',
+		'src/A.jsx': 'export const A = () => <div className="acme-card" />;',
+	});
+	assert(r.diagnostics.tokensKnown === 0, `the design system's sources yielded nothing: ${r.diagnostics.tokensKnown}`);
+	const unknown = at(r, 'tokens/unknown-token');
+	assert(!unknown.length, `checked against the project's own token: ${unknown.map((f) => f.code)}`);
+});
+
 await check('unknown-token fires once a token set exists', async () => {
 	const r = await run({
 		'loupe.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
