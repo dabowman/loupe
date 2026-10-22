@@ -2,6 +2,7 @@
   "name": "@dabowman/loupe",
   "version": "0.8.0",
   "description": "Design-system conformance checking — keeps agent-written UI on its design system.",
+  "license": "MIT",
   "keywords": ["pi-package"],
   "pi": {
     "extensions": ["./pi/extensions/loupe.ts"],
