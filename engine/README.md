@@ -1306,6 +1306,8 @@ A library call writes nothing anywhere unless it passes `cache: true`.
 | `profile` | Pins profile selection: a profile id, or `"none"` for no profile at all, without emptying `designSystem.packages`. `--profile` outranks it. |
 | `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package, and optionally each component's styling `surface` — `{ "properties": { "font-size": "variant", "border-radius": null } }` — which `system/override` and `typography/in-css` read; a registry recording none on any entry keeps `system/override`'s pre-surface reading, where every appearance property on a bound class blocks): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
+A `patterns` or `componentRegistry` path naming no file is no registry, and the rules that need one stay off; a file that is there but does not parse, or is not a registry — an array of entries, or an object holding them under `components` (`realizations` or `patterns` for a composite registry) — is a config error naming the file: `check` exits 2, and the hook stands aside and tells the agent.
+
 `scope` filters what is *reported*. The index is always built repo-wide —
 building it from changed files alone would make every unchanged reference look
 absent and every class look dead.

@@ -169,10 +169,20 @@ export const numParam = (spec: RuleSpec, key: string, fallback: number): number 
 export const listParam = (spec: RuleSpec, key: string): string[] =>
 	Array.isArray(spec[key]) ? (spec[key] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
 
-/** Normalize a registry file or inline array into matchable patterns. */
+/**
+ * Normalize a registry file or inline array into matchable patterns.
+ *
+ * Throws on a registry with no entry list where one belongs: read as empty, it
+ * switches the `patterns/*` rules off and reports clean.
+ */
 export function loadPatterns(raw: unknown): Pattern[] {
-	const rec = raw as { patterns?: RawPattern[]; realizations?: RawPattern[] } | null;
-	const list: RawPattern[] = Array.isArray(raw) ? raw : (rec?.realizations ?? rec?.patterns ?? []);
+	const rec = raw as { patterns?: unknown; realizations?: unknown } | null;
+	const found: unknown = Array.isArray(raw) ? raw : (rec?.realizations ?? rec?.patterns);
+	if (!Array.isArray(found))
+		throw new Error(
+			'not a pattern registry: expected an array of entries, or an object with a "realizations" or "patterns" array',
+		);
+	const list: RawPattern[] = found;
 	const out: Pattern[] = [];
 	const load = (p: RawPattern, id: string | null, inheritedCanonical: string | null): void => {
 		// An explicit null opts a part out of its parent's canonical: a toolbar

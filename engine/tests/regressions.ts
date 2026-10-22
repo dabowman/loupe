@@ -20,6 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
 import { TreeTooLarge, isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
+import { applyRegistries } from '../src/profiles.ts';
 import { attemptsPath, projectStateDir } from '../src/paths.ts';
 import { RULES } from '../src/rules.ts';
 import { analyze } from '../src/analyze.ts';
@@ -333,6 +334,102 @@ await check("an error in the project's own config reaches the agent, without blo
 	} finally {
 		cleanup(root);
 		cleanup(bare);
+	}
+});
+
+// A config's `componentRegistry` or `patterns` path read every failure as "no
+// registry", so a JSON syntax error in the project's own registry switched off
+// `system/locked-component`, `system/superseded-component` and `patterns/*` and
+// the run reported clean. Only a missing file is no registry; one that is there
+// and does not load is a config error, the same one a profile's registry reports.
+await check('a registry file that does not load is a config error, and a missing one is no registry', async () => {
+	const broken = '{ "components": [ { "name": "Old", } ] }';
+	let parseMessage = '';
+	try {
+		JSON.parse(broken);
+	} catch (err) {
+		parseMessage = err instanceof Error ? err.message : String(err);
+	}
+	assert(parseMessage, 'the fixture has to be malformed JSON');
+	const configWith = (registry: object): string =>
+		JSON.stringify({ extends: 'generic', designSystem: { packages: ['@acme/ui'] }, ...registry });
+	const configError = (root: string): Promise<string> =>
+		loadConfig({ root }).then(
+			() => 'loaded',
+			(err: unknown) => (err instanceof Error ? err.message : String(err)),
+		);
+	const root = tmpRepo({
+		'package.json': '{}',
+		'loupe.config.json': configWith({ componentRegistry: './registry.json' }),
+		'registry.json': broken,
+		'src/App.jsx': 'export const App = () => <div />;',
+	});
+	try {
+		const path = join(root, 'registry.json');
+		for (const key of ['componentRegistry', 'patterns']) {
+			writeFileSync(join(root, 'loupe.config.json'), configWith({ [key]: './registry.json' }));
+			const message = await configError(root);
+			assert(
+				message.startsWith(`${key}:`) && message.includes(path) && message.includes(parseMessage),
+				`${key}: the error should name the key, the file and the parse error: ${message}`,
+			);
+		}
+
+		// Parsed, but nothing where the loader looks for entries: a misspelled list key
+		// is the same silent switch-off.
+		for (const [key, body, says] of [
+			['componentRegistry', '{ "component": [] }', 'not a component registry'],
+			['patterns', '{ "pattern": [] }', 'not a pattern registry'],
+		] as const) {
+			writeFileSync(join(root, 'loupe.config.json'), configWith({ [key]: './registry.json' }));
+			writeFileSync(path, body);
+			const message = await configError(root);
+			assert(message.includes(path) && message.includes(says), `${key} ${body}: ${message}`);
+		}
+
+		// `check` could not run, and says why; the hook never blocks on it, and the
+		// agent is told.
+		writeFileSync(path, broken);
+		const ran = runCli(['check', '--all', '--root', root]);
+		assert(ran.status === 2, `check exited ${ran.status}, not 2:\n${ran.stderr}`);
+		assert(/config error/.test(ran.stderr) && ran.stderr.includes(path), `check did not say why: ${ran.stderr}`);
+		const hook = runCli(
+			['hook', '--root', root],
+			{},
+			JSON.stringify({ session_id: 'reg', hook_event_name: 'PostToolUse', tool_input: { file_path: 'src/App.jsx' } }),
+		);
+		assert(hook.status === 0, `a broken registry blocked the turn: exit ${hook.status}\n${hook.stderr}`);
+		const post = JSON.parse(hook.stdout) as { hookSpecificOutput?: { additionalContext?: string } };
+		assert(
+			post.hookSpecificOutput?.additionalContext?.includes(path),
+			`the agent was not told: ${JSON.stringify(post)}`,
+		);
+
+		// A profile's registry failing the same check is reported, not merged as empty.
+		writeFileSync(join(root, 'loupe.config.json'), configWith({}));
+		writeFileSync(path, '{ "component": [] }');
+		const config = await loadConfig({ root });
+		const error = one(
+			applyRegistries(config, [{ label: 'profile acme', components: path }]).errors,
+			'one registry error',
+		);
+		assert(
+			error.startsWith('could not read profile acme components') && error.includes('not a component registry'),
+			`the profile reader disagreed: ${error}`,
+		);
+
+		// No file at all is no registry: the rules that need one are off, and the run is clean.
+		writeFileSync(
+			join(root, 'loupe.config.json'),
+			configWith({ componentRegistry: './missing.json', patterns: './missing.json' }),
+		);
+		const none = await loadConfig({ root });
+		assert(none.componentRegistry.size === 0 && none.patterns.length === 0, 'a missing registry should load empty');
+		assert(!none.enabled['system/locked-component'], 'no registry, so the currency rules are off');
+		const clean = runCli(['check', '--all', '--root', root]);
+		assert(clean.status === 0, `a missing registry should not stop the run: exit ${clean.status}\n${clean.stderr}`);
+	} finally {
+		cleanup(root);
 	}
 });
 

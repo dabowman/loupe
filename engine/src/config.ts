@@ -16,6 +16,7 @@ import { loadPatterns } from './patterns.ts';
 import { registryApplies } from './registry.ts';
 import { loadComponents } from './components.ts';
 import { DEFAULT_BASELINE } from './paths.ts';
+import { messageOf } from './text.ts';
 import type {
 	AuthoredConfig,
 	Capability,
@@ -301,8 +302,15 @@ export function normalize(
 ): Config {
 	const cfg = merge(DEFAULTS, raw ?? {});
 	const ds = cfg.designSystem;
-	const patterns = readRegistry(cfg.patterns, root, ds.packages, loadPatterns, []);
-	const componentRegistry = readRegistry(cfg.componentRegistry, root, ds.packages, loadComponents, new Map());
+	const patterns = readRegistry('patterns', cfg.patterns, root, ds.packages, loadPatterns, []);
+	const componentRegistry = readRegistry(
+		'componentRegistry',
+		cfg.componentRegistry,
+		root,
+		ds.packages,
+		loadComponents,
+		new Map(),
+	);
 
 	// Rule severities. Seeded for every rule first, so the record is complete by
 	// construction and the cast is describing what the loop guarantees.
@@ -493,12 +501,16 @@ function ruleSetting(rawId: string, value: unknown): RuleSetting {
 }
 
 /**
- * A registry given inline or as a path. A path that does not resolve leaves it
- * empty, which disables the rules that need one rather than throwing. So does a
+ * A registry given inline or as a path. A path naming no file leaves it empty,
+ * which disables the rules that need one rather than throwing. So does a
  * registry scoped to packages this project does not import: it describes some
  * other design system that happens to name its components the same.
+ *
+ * A file that is there and does not load — unreadable, not JSON, or not a
+ * registry — is a config error, naming the file.
  */
 function readRegistry<T>(
+	key: 'patterns' | 'componentRegistry',
 	spec: string | unknown[] | null,
 	root: string,
 	packages: readonly string[],
@@ -507,12 +519,15 @@ function readRegistry<T>(
 ): T {
 	// Inline, it is the config itself, and a malformed one is a config error.
 	if (Array.isArray(spec)) return load(spec);
-	if (typeof spec !== 'string') return empty;
+	// An empty path names nothing, as an empty `baseline` does.
+	if (typeof spec !== 'string' || !spec) return empty;
+	const path = isAbsolute(spec) ? spec : join(root, spec);
 	try {
-		const raw: unknown = JSON.parse(readFileSync(isAbsolute(spec) ? spec : join(root, spec), 'utf8'));
+		const raw: unknown = JSON.parse(readFileSync(path, 'utf8'));
 		return registryApplies(raw, packages) ? load(raw) : empty;
-	} catch {
-		return empty;
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException | null)?.code === 'ENOENT') return empty;
+		throw new Error(`${key}: could not read ${path} — ${messageOf(err)}`);
 	}
 }
 

@@ -42,11 +42,17 @@ function readSurface(raw: unknown): StylingSurface | undefined {
 	};
 }
 
-/** Normalize a registry file or inline array into a `package::name` -> entry map. */
+/**
+ * Normalize a registry file or inline array into a `package::name` -> entry map.
+ *
+ * Throws on a registry with no entry list where one belongs: read as empty, it
+ * switches the currency rules off and reports clean.
+ */
 export function loadComponents(raw: unknown): Map<string, ComponentEntry> {
-	const list: MaybeEntry[] = Array.isArray(raw)
-		? raw
-		: ((raw as { components?: MaybeEntry[] } | null)?.components ?? []);
+	const found: unknown = Array.isArray(raw) ? raw : (raw as { components?: unknown } | null)?.components;
+	if (!Array.isArray(found))
+		throw new Error('not a component registry: expected an array of entries, or an object with a "components" array');
+	const list: MaybeEntry[] = found;
 	const read = list.filter(isEntry).map((c): ComponentEntry => {
 		// `surfaced` is the loader's to say, whatever the file claims.
 		const { surface, surfaced: _claimed, ...rest } = c;
