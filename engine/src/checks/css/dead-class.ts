@@ -12,7 +12,9 @@
  *   already reported for this file                        → skipped
  *   not in a namespace the project owns                   → clean
  *   some markup or reference file mentions the name       → clean
- *   the profile lists the name as never-dead              → clean
+ *   the profile lists the name as never-dead, or it is
+ *   the wrapper class of a block the project's block.json
+ *   names (`wp-block-acme-card`)                          → clean
  *   the name starts with a stem built at runtime (`is-`)  → clean
  *   otherwise                                             → css/dead-class
  *
