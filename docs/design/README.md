@@ -24,8 +24,9 @@ points at it.
 
 Three other documents sit outside this set:
 
-- [patterns-v2.md](../patterns-v2.md) — the abstract pattern language: what it is
-  for and what was deliberately left out.
+- [patterns-v2.md](../patterns-v2.md) — the pattern-language format: every field
+  of the abstract file and of a realization, what reads it, and what was
+  deliberately left out.
 - [ui-options.md](../ui-options.md) — the option space for a UI past the static
   report, what each option unlocks and costs, and a staged recommendation.
   Stages 1 and 2 shipped — `loupe ui` and the DevTools extension; the rest is
