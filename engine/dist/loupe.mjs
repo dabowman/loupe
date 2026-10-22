@@ -31604,7 +31604,7 @@ function readProfiles(root2, origin = "shipped") {
     try {
       const raw = readJson2(manifest);
       const id = asString2(raw.id) ?? e.name;
-      if (seen.has(id)) continue;
+      if (id === NO_PROFILE || seen.has(id)) continue;
       const patterns = asString2(raw.patterns);
       const components2 = asString2(raw.components);
       const tokenDescriptions2 = asString2(raw.tokenDescriptions);
@@ -31656,7 +31656,9 @@ function selectProfiles(profiles, config, force = null) {
   const pkgs = config.designSystem?.packages ?? [];
   if (!pkgs.length) return [];
   const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
-  const claimed = new Set(matched.filter((p) => p.origin === "project").flatMap((p) => p.packages));
+  const claimed = new Set(
+    matched.filter((p) => p.origin === "project").flatMap((p) => p.packages.filter((pkg) => pkgs.includes(pkg)))
+  );
   return matched.filter((p) => p.origin === "project" || !p.packages.some((pkg) => claimed.has(pkg)));
 }
 function applyRegistries(config, sources) {

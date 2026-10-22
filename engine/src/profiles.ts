@@ -140,7 +140,9 @@ export function readProfiles(root: string | null | undefined, origin: ProfileOri
 			// `--profile` match and a sort key — and that sort runs outside every `try`
 			// here, so a manifest carrying `"id": 3` would throw past all of it.
 			const id = asString(raw.id) ?? e.name;
-			if (seen.has(id)) continue;
+			// `none` is reserved: it is what pins selection to no profile, so a profile
+			// by that name could be listed and selected by package but never named.
+			if (id === NO_PROFILE || seen.has(id)) continue;
 			const patterns = asString(raw.patterns);
 			const components = asString(raw.components);
 			const tokenDescriptions = asString(raw.tokenDescriptions);
@@ -236,7 +238,12 @@ export function selectProfiles(
 	const pkgs = config.designSystem?.packages ?? [];
 	if (!pkgs.length) return [];
 	const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
-	const claimed = new Set(matched.filter((p) => p.origin === 'project').flatMap((p) => p.packages));
+	// Only the packages the project imports: a project profile also claiming one
+	// it does not import describes nothing here, and must not shadow a shipped
+	// profile over it.
+	const claimed = new Set(
+		matched.filter((p) => p.origin === 'project').flatMap((p) => p.packages.filter((pkg) => pkgs.includes(pkg))),
+	);
 	return matched.filter((p) => p.origin === 'project' || !p.packages.some((pkg) => claimed.has(pkg)));
 }
 

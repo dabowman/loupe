@@ -569,8 +569,9 @@ An id is not enough, because selection is by package and a design system can
 be rebuilt under its old name: VIP v3 is `@automattic/vip-design-system` and
 nothing like the Theme UI system the shipped `vip` profile describes. A project
 profile is the project saying what its package means *now*, so a shipped profile
-claiming a package a selected project profile claims is not selected. It is
-shadowed, not removed: `--profile vip` still reaches it.
+claiming a package the project imports that a selected project profile also
+claims is not selected. It is shadowed, not removed: `--profile vip` still
+reaches it.
 
 The config's `profiles` paths are resolved against the file that wrote them, as
 `extends` is resolved, and before the merge — once `extends` is merged nothing

@@ -1048,6 +1048,34 @@ await check('project profiles are merged with the shipped set, not swapped for i
 	}
 });
 
+await check('a project profile shadows a shipped one only over packages the project imports', () => {
+	const all = [
+		{ id: 'acme', packages: ['@acme/ui', '@wordpress/components'], origin: 'project' },
+		{ id: 'wpds', packages: ['@wordpress/components', '@wordpress/ui'], origin: 'shipped' },
+	] as unknown as Parameters<typeof selectProfiles>[0];
+	const ids = (pkgs: string[]): string =>
+		selectProfiles(all, { designSystem: { packages: pkgs } })
+			.map((p) => p.id)
+			.join();
+	const apart = ids(['@acme/ui', '@wordpress/ui']);
+	assert(apart === 'acme,wpds', `no package imported by both, both select: ${apart}`);
+	const shared = ids(['@acme/ui', '@wordpress/components']);
+	assert(shared === 'acme', `a package imported by both shadows the shipped one: ${shared}`);
+});
+
+await check('a profile with the reserved id "none" is not read', () => {
+	const root = repo({
+		'none/profile.json': JSON.stringify({ packages: ['@acme/ui'] }),
+		'acme/profile.json': JSON.stringify({ id: 'none', packages: ['@acme/ui'] }),
+	});
+	try {
+		const ids = readProfiles(root).map((p) => p.id);
+		assert(ids.length === 0, `got ${ids.join(', ')}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('a project profile wins on a shared id', () => {
 	const root = repo({
 		'package.json': JSON.stringify({ name: 'repro', dependencies: { [VIP]: '^3.0.0' } }),
