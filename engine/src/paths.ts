@@ -16,6 +16,13 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
+/**
+ * One spelling of "on" for every switch this tool reads. Written out per door,
+ * it let `status` disagree with the gate: `LOUPE_OFF=0` reported the hook OFF
+ * while the hook went right on blocking.
+ */
+export const isOn = (v: string | undefined): boolean => v !== undefined && /^(1|true|yes|on)$/i.test(v);
+
 export const isPluginContext = (): boolean => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
 
 /** Stable per-project key: basename for legibility, path hash for uniqueness. */
@@ -36,18 +43,29 @@ export function ensureDir(dir: string): string | null {
 }
 
 /**
- * The hook's retry counter. Writers create the directory.
+ * This project's directory for state that is about runs rather than about the
+ * repo: the retry counter and the caches. Writers create it.
  *
  * Per user, never shared: on Linux `tmpdir()` is the one `/tmp`, where a
  * `loupe/` another user made first is not writable, so every count would be lost
  * and the gate would block at attempt 1 forever.
+ *
+ * `data` is the plugin data directory, from the environment unless named: a
+ * terminal has none, so `status` names the hook's own by passing it.
  */
-export const attemptsPath = (root: string): string =>
-	join(
-		process.env.CLAUDE_PLUGIN_DATA || join(tmpdir(), `loupe-${process.getuid?.() ?? 'user'}`),
-		projectKey(root),
-		'attempts.json',
-	);
+export const projectStateDir = (root: string, data = process.env.CLAUDE_PLUGIN_DATA): string =>
+	join(data || join(tmpdir(), `loupe-${process.getuid?.() ?? 'user'}`), projectKey(root));
+
+/** The hook's retry counter. */
+export const attemptsPath = (root: string, data = process.env.CLAUDE_PLUGIN_DATA): string =>
+	join(projectStateDir(root, data), 'attempts.json');
+
+/**
+ * Whether the caches are bypassed: `--no-cache`, or `LOUPE_NO_CACHE` set to any
+ * of the spellings of "on". A cache is an optimisation, so turning it off never
+ * changes an answer, only what it costs.
+ */
+export const cacheDisabled = (flag: boolean | undefined): boolean => Boolean(flag) || isOn(process.env.LOUPE_NO_CACHE);
 
 /** Where a baseline goes when nothing names one. Overridable via config `baseline`. */
 export const DEFAULT_BASELINE = '.loupe-baseline.json';
@@ -56,13 +74,35 @@ export const DEFAULT_BASELINE = '.loupe-baseline.json';
  * Resolve the baseline path — always project-relative, never plugin data. The
  * CLI and the hook are the same tool and must read the same file. A named path
  * is honored as given.
+ *
+ * The one place a baseline path is resolved. `p` is never empty: an empty
+ * `--baseline=` is normalized to "unnamed" once, in `main()`, and an empty
+ * config `baseline` to the default name once, in `loadConfig`.
  */
-export function baselinePath(root: string, named?: string | null): string {
-	// Falsy, not nullish: `--baseline=` reaches here as an empty string, and the
-	// readers below treat that as "nobody named one".
-	const p = named || DEFAULT_BASELINE;
-	return isAbsolute(p) ? p : join(root, p);
+export const baselinePath = (root: string, p: string): string => (isAbsolute(p) ? p : join(root, p));
+
+/**
+ * A 0.1.x baseline, which nothing reads any more: `<root>/.loupe/baseline.json`,
+ * or the plugin data directory's `projects/<key>/baseline.json`. Null when
+ * neither is there.
+ *
+ * Asked only where no current baseline exists, so a backlog accepted under
+ * 0.1.x does not come back as live findings with no word as to why. Two stats,
+ * and never from the hook: the hook's own feedback is the agent's, and the
+ * remedy is a person's decision.
+ */
+export function legacyBaseline(root: string): string | null {
+	const data = process.env.CLAUDE_PLUGIN_DATA;
+	const candidates = [
+		join(root, '.loupe', 'baseline.json'),
+		...(data ? [join(data, 'projects', projectKey(root), 'baseline.json')] : []),
+	];
+	return candidates.find((path) => existsSync(path)) ?? null;
 }
+
+/** What `check` and `status` say about a {@link legacyBaseline}. */
+export const legacyBaselineNotice = (path: string): string =>
+	`${path} is a 0.1.x baseline, which this version no longer reads — re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
 
 /**
  * The baseline to read, or the one to write if none exists yet.
@@ -76,10 +116,10 @@ export function baselinePath(root: string, named?: string | null): string {
  */
 export function findExistingBaseline(
 	root: string,
-	explicit?: string | null,
-	configured?: string | null,
+	explicit: string | null,
+	configured: string,
 ): { path: string; found: boolean; fallback: 'none' | 'default-name' } {
-	if (explicit) {
+	if (explicit !== null) {
 		const path = baselinePath(root, explicit);
 		return { path, found: existsSync(path), fallback: 'none' };
 	}

@@ -34,6 +34,23 @@ The budget is spent **round-robin across the groups being shown**. Filling it
 first-come buries every other group behind whichever one sorts highest, and an
 agent that only ever sees one rule only ever fixes one rule.
 
+**Identical findings print once**, with `×N` and the lines they stand for.
+Duplicates are the ordinary case in a real stylesheet — the same `margin-bottom:
+8px` seven times in one file — and listed one by one they spent seven of the
+hook's twelve lines on one decision and crowded out every other rule. The budget
+counts printed lines, so collapsing stretches it rather than replacing it; the
+largest batches are spent first, since they say the most per line. Identical
+means the same rule, file and *printed* text, not the same `code`: `code` is the
+baselining identity and for a margin it is the property alone, so collapsing on
+it would print `margin-top: 2px` under the count of a `margin-top: 12px`.
+
+A rule's heading says how its findings concentrate — `(25 in 9 files, 11
+distinct)` — because the total alone cannot tell 25 decisions from the same
+three repeated, and the two want different remedies: a count says write a
+script, singletons say read each one. Distinct is counted repo-wide, so one
+declaration copied into nine files is one. JSON and SARIF stay one entry per
+finding: their consumers count, fingerprint and fix findings, not lines.
+
 ### The lines that are not findings
 
 - **The tally comes first, always, findings or none** — the count, the split,
@@ -260,7 +277,10 @@ Other decisions there:
 - The client is written **without template literals**: the whole string is itself
   inside one, and a stray `${` would be interpolated by the bundler rather than
   shipped — a failure that shows up as a broken page, not a build error.
-- Every themed value is `light-dark(light, dark)`. Severity uses reserved status
+- Every themed value is `light-dark(light, dark)`, declared under
+  `@supports (color: light-dark(#000, #000))` over plain light values. Unguarded,
+  a custom property holding a value the browser cannot compute still wins, and
+  every `var()` reading it falls back to nothing. Severity uses reserved status
   colors rather than a series hue, because severity is a state, not an identity.
   On the light surface the advisory amber falls below 3:1, which carries an
   obligation: **every severity is rendered with its glyph and the word, never
@@ -482,7 +502,10 @@ collapse into one entry whenever they share a key, and `check` reports the
 findings it hid, not the entries that hid them. A file reporting only entries
 under a name a reader hears as "findings" is how 194 came to be quoted against
 `check`'s 253. `count` keeps its meaning so 0.1.x files still parse; `findings`
-says the rest.
+says the rest. Nothing reads `count` any more, and it is removed in 0.9.0: the
+0.1.x baseline locations, its other reason to stay, are already gone — they are
+not read, so a deleted baseline cannot be replaced by one an older version
+wrote.
 
 A *configured* baseline may name a directory that doesn't exist yet; the default
 one sits in the project root, which the caller already proved exists. The
@@ -586,6 +609,20 @@ value is a semantic choice, and picking one by array order is exactly how you
 get the right pixels with the wrong meaning — the failure the token suggestion
 machinery exists to prevent.
 
+**So is one token outside its declared scope.** Matching by property and value
+made `border-radius: 4px` "unambiguous" on a dialog and on a button alike — `md`,
+both times, both wrong: WPDS's radius scale is role-based, and `md` is for menus
+and popovers. Where the active profile scopes the single candidate to a kind of
+element, it is applied only when every element the declaration is shown to
+style is that kind. Off its scope, or with nothing shown, the suggestion carries
+`review` and its reason, the message says `(review: …)`, and `fix` prints it as
+a `review` line instead of writing it. The judge skips it too: it is a single
+candidate, and what it needs is a reader, not a choice among options. A token
+that settles one part of a value (`border-radius: 4px 4px 0 0`, `border: 1px
+solid #ddd`), or equals the value in another unit (`0.25rem` for a `4px` step),
+is one `--judge` would write without a question, so it is held the same way,
+with the review naming the token. See [token scopes](analysis.md#token-scopes).
+
 **All three channels, two ways in.** A stylesheet declaration and a CSS-in-JS
 one are both matched as text on the line they were reported at: what is inside a
 template *is* literal CSS, and a declaration whose value comes from an
@@ -623,7 +660,9 @@ editor are acting on one list and not on two fix paths.
 **The threshold is one keystroke, and never a digit.** A candidate has to be one
 insertion, deletion or substitution from the name as written — a slip, not a
 guess — and exactly one known token may be. Two is a question, and answering it
-by array order is how a rename lands on a real token with the wrong meaning. A
+by array order is how a rename lands on a real token with the wrong meaning.
+`--judge` is where it gets asked instead
+([judge.md](judge.md#which-token-was-meant-judgetokents)). A
 transposition is two edits under this rule and so is not offered; it stays
 reported, which is the cheap half of the trade.
 
@@ -661,15 +700,21 @@ is never spliced at a span.
 **Findings cleared, not fixes applied**, is what gets counted. A collapsed
 finding holding one settled declaration and one nobody could settle is still
 there, and so is a misspelled name still written on a line the rewrite could not
-reach. Settled means rewritten *or* suppressed: a value `--judge` kept is as
-done with as one it replaced. The tally keys on file, line and property; a
+reach. Settled means rewritten *or* suppressed: a value suppressed as kept is
+as done with as one it replaced. The tally keys on file, line and property; a
 rename has no property and takes the empty slot, which no declaration fix can
 collide with, because every declaration a fix or a keep names came out of a
 parse and a parse has no nameless property.
 
+Only a value kept for a reason that is a fact is suppressed: its property has
+no token in the design system at all. One the model judged deliberate is
+reported as skipped. `deliberate, no token fits` is the judgement, and what
+the value actually is (a scrim, a pill, a brand colour), which is what a
+suppression's reason should say, is not something it says.
+
 Suppressions written for a kept value follow the grammar's own constraints. A
 directive mutes its whole next line, so one is written only where **every**
-flagged value on that line was kept — muting a line that also carries an
+flagged value on that line was suppressible — muting a line that also carries an
 unsettled value would hide it along with the one that was. Not above a rule's
 opening line, where a directive covers the whole rule, and not between an
 existing directive and the line it is for. Only the nearest line above is read,
@@ -679,8 +724,8 @@ come back.
 The directive names **every** rule the kept declarations on that line were
 reported under: a minified stylesheet can put a kept colour and a kept
 font-weight on the same line, and one naming only the first leaves the second
-reported under a comment that claims to cover it. The reason is what the
-judgement said, so the comment records that a model made the call, not a person.
+reported under a comment that claims to cover it. The reason is the one the
+keep was settled with, so the comment records how it was decided.
 
 Indentation is copied with spaces and tabs only — `\s` would copy a byte-order
 mark onto the directive — and the line's own ending, so a CRLF file stays one.

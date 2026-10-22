@@ -195,6 +195,22 @@ project's own namespace appears nowhere in `node_modules`.
   against what was read — which is why it can look convincing and still be
   wrong. `none` is a different and still-true claim, and swallowing it printed
   "(none found) [low confidence]".
+- **Stylesheets are read on a budget, and a tripped budget demotes the same
+  way.** The walk ceiling bounds entries visited, not bytes read, and a tree can
+  be nothing but large generated CSS. Inference reads 600 stylesheets, shallowest
+  first (the same count `libraryPrefixes` allows itself), since the project's
+  own sheets sit nearer the root than generated ones, and skips any
+  over 1.5MB (the size `analyze` treats as generated). Either one answering from
+  less than was found is a guess from part of the evidence, so it demotes `high`
+  and says what it skipped under the namespace line. It is not `truncated`,
+  though: the walk saw the whole tree, so `init` does not refuse over it.
+- **External prefixes are proposed, never written.** `namespaces.external` used
+  to come only from presets, so a vendored bundle no preset knew read as project
+  code. `detect` now lists candidates as `possible external`: a generated shape
+  (`Name-module_thing`, `Name_local__hash`), a prefix an installed dependency
+  defines, and a prefix only stylesheets mention. The last is also exactly what
+  dead CSS looks like, which is why the list is a question for whoever can read
+  the enqueue code — `/loupe-init` asks it — and `init` writes none of them.
 - **`--profile <id>` beats a guess.** Inference's own verdict is still returned
   as `preset` so `status` and `init` can report it, but the config extends what
   the flag named — and everything derived from the preset has to follow, or the
@@ -227,8 +243,34 @@ pruned against the ignore globs *during* traversal rather than filtered
 afterwards, so a large `node_modules` is never enumerated.
 
 **The walk is unbounded by default**, because a scan that quietly stopped
-halfway would report "clean" for the half it never read. Only a caller that is
-merely guessing passes a `limit`, and it reads `truncated` back.
+halfway would report "clean" for the half it never read. A caller that is
+merely guessing — inference — passes a `limit`, reads `truncated` back, and
+carries on with a guess it labels as one.
+
+**Analysis is bounded too, and refuses at the bound.** The index is repo-wide
+whatever the scope, so a `PostToolUse` on one file indexed the whole tree first
+— and the project-shape guard is one `npm init` wide: a `package.json` in a home
+directory says "project", after which a hook run on a 1.66M-file tree took 30s
+of its 60s timeout (38s from source). Passing inference's ceiling down would
+not have done: a truncated *analysis* reports "clean" for what it never read,
+which is the one failure a gate must not have. So `analyze` walks to
+`ANALYZE_ENTRY_BUDGET` (200,000 entries, four times the inference budget, about
+two seconds of walking) and, if the walk has not finished, throws `TreeTooLarge`
+instead of returning anything. Under the hook that is a `skipped` system message
+naming the count and the remedy — point `--root` at the project, or narrow
+`sources` / extend `sources.ignore` — and typed it is exit 2. On the same tree
+the hook now stands down in about 4s. A project that is genuinely larger sets
+`maxEntries` in its config (a positive whole number; anything else is a config
+error, because a ceiling misread as "unset" refuses at the default or walks a
+home directory). `LOUPE_MAX_ENTRIES` outranks the config — it is the per-run
+escape hatch, and how the tests trip the refusal without building the tree — so
+the order is the variable, then the config, then `ANALYZE_ENTRY_BUDGET`. The
+refusal names both.
+
+The other options were weighed and left for later: stat-ing a known file list
+instead of walking (the cross-file rules — `css/dead-class`, the composites —
+are why the index is repo-wide, and which of them stay meaningful on a partial
+index is its own question), and keeping an index between hook runs.
 
 **Dot-directories are pruned unless a glob names one.** With picomatch's `dot:
 false`, nothing inside `.venv`, `.cache`, `.cargo`, `.yarn/cache` or a pnpm
@@ -298,6 +340,15 @@ Resolution order, most explicit first:
 
 `extends` resolution is split out so a config that never touched disk — the one
 auto-detection produces — goes through the same resolution as a file.
+
+**`extends` can list several configs, and a shared ancestor is merged once.**
+Every shipped preset reaches `generic`, so `["wpds", "base-ui"]` is a diamond,
+not a cycle: a cycle is a config met again on its own ancestor chain, not one
+met twice on separate branches. The shared one is merged where it is first met
+and skipped after, so the order is still ancestors before descendants and left
+before right — `generic`, `wordpress-components`, `wpds`, `base-ui` — and the
+second branch's copy of `generic` cannot put back the `sources.references`
+that `wordpress-components` replaced.
 
 The deep merge **replaces arrays rather than concatenating**, so a preset can be
 overridden, and it is declared as returning the base's type: merging *onto*
@@ -413,13 +464,73 @@ project's own `.loupe-baseline.json` answers instead and the fallback is
 reported: dropping it lost every accepted finding in the window between a config
 change landing and the file actually moving.
 
-A `--baseline=` that reaches the resolver as an empty string is treated as
-"nobody named one" — falsy, not nullish. A writer taking it as a path would put
-the backlog somewhere the readers never look, which is the same split the module
-exists to close.
+A `--baseline=` arrives as an empty string and means "nobody named one" —
+falsy, not nullish. A writer taking it as a path would put the backlog somewhere
+the readers never look, which is the same split the module exists to close. So
+it is normalized once, at the top of `main()`, and the writer and every reader
+are handed the same `string | null`; an empty config `baseline` is normalized to
+the default name once, in `loadConfig`. Nothing downstream re-derives either
+rule, so none of them can drift to `??` on its own.
 
 **No writable state directory just means no retry-budget tracking.** Bookkeeping
 failure never takes down the gate.
+
+## Caches
+
+Two caches live beside the retry counter, in the same per-user, per-project
+state directory (`projectStateDir` in `paths.ts`). Both are optimisations and
+nothing else: a missing, corrupt or unwritable cache file costs time and changes
+no answer, and `--no-cache` or `LOUPE_NO_CACHE=1` bypasses both. `status` prints
+where they are and what they hold.
+
+**The index cache** (`index-cache.ts`) keeps each file's contribution to the
+index: its markup scan, the class names a reference file mentions, a
+stylesheet's rules reduced to plain data. A hook run reports on one file but
+indexes every one, and before this three quarters of every run was re-parsing
+files nothing had touched — 3.8s per edit on a Gutenberg-sized tree, now about
+0.8s from the bundle, about half of that Node starting up and the cache file
+loading. The cross-file half (bindings against rules, dead classes, composites)
+always runs live; it is cheap, and it is the half no single file can answer.
+
+- **Per file**, an entry is trusted on `stat` alone when mtime and size match and
+  the mtime is more than two seconds older than the read that produced the
+  entry: a later write landing in the same mtime tick is the only way past that,
+  and a tick that old had already ended. Otherwise the bytes are hashed and
+  compared. This is git's racy-index rule, and the same limit applies: a tool
+  that rewrites a file with identical size and puts the old mtime back is not
+  seen. `--no-cache` is the remedy.
+- **Per cache**, the file is named by a fingerprint of the engine's own code (the
+  bundle's stat, or every `src/` file's while someone is editing it) and of
+  every config input a scan reads. A different config is a different file, so
+  switching presets does not thrash one; files unused for a week are deleted.
+- A cached file with no suppression directive is never opened. One with a
+  directive is read for it, because a ledger of mutes is per run.
+- Whether a Sass or Less syntax plugin is installed is asked even of a cached
+  sheet: that is about the machine now, not about the bytes.
+- **`tests/index-cache.ts` is the contract.** Every fixture, cold and warm, with
+  fresh and aged mtimes, after an edit, a same-size edit with the mtime put
+  back, a new directive, an added and a deleted file, a judged run and a config
+  change, must produce a result byte-identical to an uncached run.
+
+**Scan workers** (`scan-pool.ts`) spread the misses of a cold run — a first run,
+CI, an audit after a branch switch — across worker threads. Below 150 files or
+600 kB of markup they are not started: a worker's start-up is a module load,
+about 100ms from the bundle. The worker is the same module loaded again (from
+the bundle, the bundle itself, whose CLI entry stands aside off the main
+thread), and results are consumed in discovery order, so where a scan was made
+never shows in the report. Anything going wrong with a worker falls back to
+scanning in-process; `LOUPE_DEBUG_SCAN=1` says which happened, which is what
+the tests and CI check, since a silent fallback would pass every comparison.
+Compiled binaries never start workers, and `LOUPE_NO_WORKERS=1` turns them off.
+
+What the workers buy depends on the machine more than anything here. On the
+4-vCPU cloud VM this was built on, a cold Gutenberg run went from 3.8s to 3.1s
+and no further — and separate *processes* scaled no better there, so the limit
+is that machine's memory bandwidth, not threads. Parsing is allocation-heavy;
+expect more on a laptop with real cores, and measure before quoting a number.
+
+**The answer cache** is `judge.ts`'s, described in
+[the judge notes](judge.md#what-a-judged-run-spends).
 
 ## Turning the gate on
 
@@ -438,9 +549,13 @@ The same applies to plugin options. Claude Code refuses to substitute
 *hook processes* as `CLAUDE_PLUGIN_OPTION_<KEY>` — to hook processes only. So
 `status`, whose entire job is to say what the gate will actually do, could not
 see the blocking switch from a terminal. The values are also in the settings
-file under the plugin's key; they are read there when the environment has
-nothing to say, and the source is reported so a stale answer is recognizable as
-one.
+file under the plugin's key, and the two are **merged key by key**, the
+environment over the file. Choosing between them — the environment if it said
+anything, the file otherwise — let one exported key discard every other option
+the file carried, so the hook and a terminal resolved different options for the
+same project. Each key's source is reported, so a stale answer is recognizable
+as one, and a `pluginConfigs` lookup whose name guess missed says so rather than
+reading as "configured nothing".
 
 **One spelling of "on" for every switch.** The set was written out three times —
 plugin options from the environment, the same options from the settings file,
@@ -497,6 +612,45 @@ claiming it was dropped too.
 Sorting, here as in `discover`, is what makes "the first one wins" a fact rather
 than a filesystem accident.
 
+**A project can bring its own profile, and it outranks the shipped one.** Every
+entry point passes the shipped directory as `--profiles`, and nothing else; a
+project-local profile was reachable only by typing `--profiles` by hand, which
+also *replaced* the shipped set. So the engine reads the project's profiles
+itself, wherever it runs: the directories the config lists under `profiles`,
+then `.loupe/profiles/` under the root, then `--profiles`. No hook, command or
+skill had to change. The order is the precedence — the first directory to
+carry an id keeps it — and a directory named twice is read once, under the
+more authoritative origin.
+
+An id is not enough, because selection is by package and a design system can
+be rebuilt under its old name: VIP v3 is `@automattic/vip-design-system` and
+nothing like the Theme UI system the shipped `vip` profile describes. A project
+profile is the project saying what its package means *now*, so a shipped profile
+claiming a package the project imports that a selected project profile also
+claims is not selected. It is shadowed, not removed: `--profile vip` still
+reaches it.
+
+The config's `profiles` paths are resolved against the file that wrote them, as
+`extends` is resolved, and before the merge — once `extends` is merged nothing
+says which file a path came from, and a shared base config's `./profiles` means
+the directory beside it. A child's `profiles` then replaces its base's, as every
+array does in the merge (see above): an exception for one key would be one more
+thing to remember about all of them. The directories a config lists are known
+only once it is loaded, after the point where a profile's preset is settled;
+that is fine, because a profile's preset matters only to a project with no
+config at all.
+
+**`profile` pins selection without emptying the packages.** Before it, the only
+way out of a wrong profile was `"packages": []`, which also switches off every
+rule that needs them. `"profile": "none"` selects nothing and leaves the
+packages alone; `"profile": "<id>"` is `--profile <id>` written down, registries
+merged past the scope check like the flag's. The flag, typed at the moment of
+use, outranks it, and a pin naming nothing says so, for the same reason a
+mistyped `--profile` does. `none` is a reserved id.
+
+Selection is still by name, not version. A profile that could say it describes
+`<3` of a package would let the shipped `vip` claim only v2 — left for later.
+
 **The project always wins a registry merge**: a repo that has written down its
 own `page-header` means that one, not the shipped generic. What was applied and
 what was skipped both come back, so the CLI can say why a registry it was handed
@@ -504,6 +658,20 @@ did nothing — a registry silently ignored looks exactly like a registry with n
 findings. Each source is reported with what it actually contributed, not just its
 label, or a forced registry whose every id collided with the project's own reads
 as fine because some *other* source filled the same list.
+
+**A component registry says what it covers.** The file's `scope` lists the
+component families it was read against (`covers`), the ones it was not
+(`notCovered`), and what absence means (`absent`): unreviewed, never fine.
+Without it a reader cannot tell a component nobody looked at from one judged
+unremarkable, and since a registry entry is what turns a `system/override` from
+advisory into blocking — through its `surface`, see
+[checks.md](checks.md#it-blocks-only-where-the-component-owns-the-property) —
+that difference is load-bearing. The merge is per entry, `package::name`, so an
+entry's `surface` travels with it: a project's own entry for a shipped
+component replaces the shipped surface along with the shipped currency. So
+does whether the entry is read by surface at all: an entry from a registry
+that records none keeps `system/override`'s pre-surface reading (see
+[checks.md](checks.md#it-blocks-only-where-the-component-owns-the-property)).
 
 Merging a registry by fiat is not the same as its rules coming on: a composite
 signature still needs a component layer to match against, and a registry that
@@ -553,6 +721,21 @@ makes the two agree, because it is the same config file the hook resolves.
 Related: an absolute path in `--files` matched nothing, because findings are
 keyed repo-relative — and the run reported clean, which is the worst answer a
 gate can give.
+
+### `--rule` scopes after the walk, and refuses an id it does not know
+
+Batch remediation is one rule across the repo, and before the flag an agent
+narrowed to one by piping `--format json` through an inline script. `--rule`
+repeats and takes a comma list, the way `--files` does. It filters the findings
+the analysis produced rather than switching rules off: the cross-file rules need
+the whole index whatever is reported. The filter runs before the baseline, so
+`N baselined finding(s) hidden` counts the same rule, and before `--judge`, so a
+rule left out costs no paid question. `blocking` is recomputed from what is
+left — the exit code answers for the report printed.
+
+An id that is not a rule is exit 2 before the walk, for the same reason as
+`--format`: it filters every finding out and the report says `clean`. A real id
+for a rule this config has off runs, with a note saying it reports nothing.
 
 ### Which preset wins
 
@@ -608,12 +791,35 @@ Under the hook, `EXIT.CANNOT_RUN` is exit 2, which blocks the turn. A mistyped
 preset in the plugin settings would otherwise block every turn in every project,
 with nothing the agent could do about it.
 
+Standing aside is not telling no one. An error in the project's *own* config —
+a rule still written in the `[severity, {opts}]` form 0.8.0 removed — turns the
+gate off on every turn, and a `systemMessage` reaches only the user, in the slot
+a clean run's tally fills. So that one also goes to the agent, as PostToolUse
+`additionalContext`: advisory, exit 0, and specific enough to offer the rewrite.
+A Stop hook has no non-blocking channel to the agent, so there it stays the
+user's message; so does a plugin setting's error, which is not the agent's to
+fix.
+
 ### Silence, not advisory mode
 
-`LOUPE_OFF` makes the hook say nothing at all. An advisory finding still lands
+The `off` switch makes the hook check nothing. An advisory finding still lands
 in the agent's context, and an agent that sees a finding starts fixing it —
 which is the whole complaint. Deliberately hook-only: `loupe check` typed by
 hand is someone asking, and answering "nothing" would be a lie.
+
+It tells the user, though — a `skipped` systemMessage, the path every other
+stand-down takes. When it said nothing at all, a stale `export LOUPE_OFF=1` in
+a shell profile disabled the gate in every project with no trace but a
+`loupe status` nobody had a reason to run.
+
+**One switch, several doors.** `off` is a plugin option like `blocking`, the
+same axis — block, advise, say nothing — so it is resolved, sourced and
+reported with the others. `LOUPE_OFF` stays as an escape hatch feeding the same
+field, from the environment (`LOUPE_OFF=1 claude`) or from a project's own
+`.claude/settings.local.json` `env`, which is read on every run — the
+per-project, mid-session switch a process environment cannot be. A project
+that never opted in still hears nothing: that is every repo the plugin is
+installed for.
 
 ### The payload is drained before anything can return
 
@@ -640,6 +846,20 @@ config is no longer a guess: `inferred` goes false, which turns blocking back on
 by default and lifts the `css/dead-class` demotion. A namespace list drawn from
 part of a tree would then block turns and tell an agent to delete classes it
 never read the stylesheet for.
+
+**Nor write the fallback down as a decision.** When no preset's markers match,
+detection answers `generic` at low confidence, and that is the absence of an
+answer. Written, it is worse than no config: once the file exists inference never
+runs again, so the day the project gains a dependency detection would recognise,
+nothing notices — and `generic` has most rules off, which only `status` says.
+So `init` refuses it unless `--preset` names the design system or `--force`
+accepts the guess, and prints the evidence it could not rank instead (imports no
+manifest declares, `@types/*` packages, build asset manifests, `.wp-env.json`,
+`composer.json`). Detection does not have to decide from those; it only has to
+surface them, which is the half that does not need to catch every project shape.
+`/loupe-init` is the agent-side half of the same idea. Until a config is
+written, `check` ends its agent-format report with one line saying it ran on the
+guess — not in JSON or SARIF, which are parsed.
 
 ### A silently-ignored registry looks exactly like a clean one
 
@@ -748,6 +968,85 @@ its retry budget on findings nobody asked it to fix.
 judged finding never enters a baseline, since its confidence moves between runs
 and a baselined finding that comes and goes is noise in both directions.
 
+## The hook gates what an edit introduced
+
+The two hooks answer different questions. **PostToolUse asks whether this edit
+made the file worse**, and blocks only on findings the edit introduced. **Stop
+asks whether the turn's work is conformant**, absolutely, unchanged.
+
+Blocking PostToolUse on the touched file's absolute state interrupted every
+multi-step remediation partway through. Converting `<div className="x">` to
+`<Stack>` and *then* moving the CSS off `.x` is two edits, and the state between
+them is genuinely non-conformant — so the gate blocked the first edit on
+findings that predated it, with feedback that was true but premature. The retry
+budget kept it from being fatal, but it is per file, so a seven-file conversion
+paid for three interruptions in each. It also meant every edit to a legacy file
+in a repo with no baseline blocked. Stop is the right place for "you converted
+the JSX and left the CSS behind": by then it is an omission, not an
+intermediate state.
+
+**The "before" comes from the payload.** Claude Code hands PostToolUse the
+tool's own result, and Edit and Write both return the content they replaced as
+`tool_response.originalFile` — `null` when Write created the file. The hook
+analyzes that content in the touched file's place (`analyze`'s `contents`
+option) and subtracts its findings. Two alternatives were weighed and passed
+over:
+
+- *A PreToolUse hook snapshotting the file into the state directory.* A second
+  process on every Edit and Write, paid before the tool runs, whether or not
+  anything is wrong: about 0.35s just to start the bundle and 1s from source,
+  plus a full analysis if it recorded findings rather than bytes.
+- *Reconstructing the file by reversing `old_string`/`new_string`.* Ambiguous
+  wherever the new text occurs more than once — a deletion's empty
+  `new_string` occurs everywhere — and impossible for a Write.
+
+**Only when it would block.** The "before" is analyzed only when the "after"
+has a blocking finding, so an edit that leaves the file clean pays nothing for
+the question. One that would block pays a second analysis: on a synthetic
+2,460-file project, a blocking hook run went from 0.94s to 1.41s, and a clean
+one stayed at 1.0s.
+
+**Keyed like the baseline**: rule + file + normalized code, not line. An edit
+above a finding moves it down the file, and a key with the line in it would
+call that finding new.
+
+**Counted, not looked up.** The keys are compared as a multiset: a file that
+had one `margin-bottom` on a child and now has two gained a finding, though both
+share a key, and a set lookup called the second one pre-existing. Each finding
+standing before the edit accounts for at most one after it — one with the same
+message first, so where two differ only in their value the one reported is the
+one the edit wrote — and the count of standing findings is never more than
+stood before the edit.
+
+**Per declaration, where a finding is several.** A collapsed `layout/in-css` or
+`typography/untokenized` finding's code is its sorted property list, and a lone
+one's is its declaration, so `.c { display: flex; gap: 8px }` losing its `gap`
+changed the code and read as new. The comparison counts a collapsed finding as
+each of its declarations instead: that edit removed one, and adding `gap` to a
+lone `display: flex` adds one. A `stylesheet/unparsed` code is postcss's reason
+alone (`Unclosed block`), with no `line:column` to move when a line is added
+above the error, and the sheet is parsed without its source map, whose original
+file would otherwise open the message with an absolute path.
+
+**No "before", no subtraction.** A file the write created, a payload that does
+not carry `originalFile`, or a pre-edit analysis that fails compares against
+nothing — the absolute check, the gate as it was. A judged redirect is written
+after analysis from a control the analysis collected, so the control standing
+before the edit counts as the finding standing before it; the judge is never
+asked about content the edit has already replaced.
+
+**Only where Stop will look.** Passing a standing finding over is a deferral to
+Stop, and Stop checks the files the turn changed. Where it cannot resolve them —
+not a git worktree, or a repository git refuses to read — it stands down, so
+PostToolUse keeps the absolute check there rather than defer a finding to a
+check that never runs.
+
+**What it walked past is said, not dropped.** A PostToolUse that passes over
+standing findings says how many in its message, and a blocking report names the
+count beneath the new ones — the agent should know what Stop will hold it to.
+The retry budget is untouched: it counts the runs that blocked, keyed as before
+on session and file.
+
 ## The stand-down latches
 
 Clearing the retry counter when the gate stands down reset the budget, so "gate
@@ -785,6 +1084,12 @@ checkout someone is editing never runs the bundle — pinning it to one would me
 edits to `src/` silently doing nothing until a rebuild, a gate reporting
 yesterday's verdict on today's code — and `--check` re-bundles and compares,
 which is what CI runs to reject a commit whose `dist/` no longer matches.
+
+"Installed" means the repo checkout, not just `node_modules/picomatch` beside
+the engine. Node strips no types under `node_modules`, and `src/` imports the
+pattern language from `../../patterns/`, outside the engine package, so an npm
+install or a vendored copy of `engine/` runs the bundle even with every
+dependency present.
 
 esbuild transpiles TypeScript itself; it strips types, it does not check them.
 Type checking is `npm run typecheck`, and both run in CI: a bundle that builds

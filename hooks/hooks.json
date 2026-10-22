@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs\" hook --profiles \"${CLAUDE_PLUGIN_ROOT}/profiles\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs\" hook --profiles \"${CLAUDE_PLUGIN_ROOT}/profiles\" --judge",
             "timeout": 60
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs\" hook --profiles \"${CLAUDE_PLUGIN_ROOT}/profiles\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs\" hook --profiles \"${CLAUDE_PLUGIN_ROOT}/profiles\" --judge",
             "timeout": 120
           }
         ]

@@ -5,16 +5,39 @@
 # runs commands in, so this shim is reachable by name from any project without
 # an alias, an npm link, or anything added to the project itself. For plain
 # terminals, symlink this file onto PATH yourself — from a checkout, or from
-# wherever the marketplace install put the plugin:
+# the marketplace clone a plugin install leaves behind:
 #
 #     ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe
-#     ln -s ~/.claude/plugins/<marketplace>/loupe/bin/loupe ~/.local/bin/loupe
+#     ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
+#
+# Not the copy Claude Code itself runs: that one lives under
+# ~/.claude/plugins/cache/loupe/loupe/<commit>/, and the commit changes on every
+# update, so a link into it dangles after the next one.
 #
 # Both routes reach it through a symlink, but different ones: Claude Code
-# symlinks the plugin *directory*, ~/.local/bin symlinks this *file*. `realpath`
-# resolves both — otherwise the ~/.local/bin route looks for the engine in
+# symlinks the plugin *directory*, ~/.local/bin symlinks this *file*. Both have
+# to resolve — otherwise the ~/.local/bin route looks for the engine in
 # ~/.local/engine.
-here=$(dirname -- "$(realpath -- "$0")")
+#
+# Not `realpath`: macOS 12 and earlier ship no such binary, and the shim died on
+# "command not found" before loupe ever ran. The loop follows the file's own
+# links with `readlink`, one hop at a time (a relative target is relative to the
+# link's directory); `cd -P` then resolves a linked directory anywhere above it.
+# Physically, not just in `pwd`: the target is built from the link's directory as
+# written, so `~/bin/../../src/…` through a linked `~/bin` has to climb from where
+# `~/bin` points, and a logical `cd` (dash, any POSIX sh) would drop `bin/..` as
+# text and look somewhere else. `CDPATH=` keeps `cd` from searching elsewhere and
+# printing where it went.
+resolve() {
+	p=$1
+	while [ -h "$p" ]; do
+		d=$(dirname -- "$p")
+		p=$(readlink -- "$p")
+		case $p in /*) ;; *) p="$d/$p" ;; esac
+	done
+	CDPATH= cd -P -- "$(dirname -- "$p")" && pwd -P
+}
+here=$(resolve "$0") || exit 2
 
 # Default to the shipped design-system profiles, the same ones the hooks and
 # commands pass. A profile only supplies its registries to a project that
@@ -22,7 +45,9 @@ here=$(dirname -- "$(realpath -- "$0")")
 # different design system selects no profile and gets no registry.
 #
 # An explicit --profiles/--patterns still wins: the flag is only added when the
-# caller named none of them.
+# caller named none of them. A project's own profiles need neither — the engine
+# reads them from the config's `profiles` and from .loupe/profiles/ itself, on
+# top of whatever --profiles names.
 #
 # `--profile <id>` is deliberately NOT in that list. It selects *among* the
 # profiles this line supplies rather than supplying any of its own, so treating

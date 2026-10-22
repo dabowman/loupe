@@ -21,6 +21,7 @@ import baseUi from '../presets/base-ui.json' with { type: 'json' };
 import generic from '../presets/generic.json' with { type: 'json' };
 import wordpressBlockTheme from '../presets/wordpress-block-theme.json' with { type: 'json' };
 import wordpressComponents from '../presets/wordpress-components.json' with { type: 'json' };
+import vip from '../presets/vip.json' with { type: 'json' };
 import wpds from '../presets/wpds.json' with { type: 'json' };
 import patternLanguage from '../../patterns/index.json' with { type: 'json' };
 import manifest from '../package.json' with { type: 'json' };
@@ -35,6 +36,7 @@ export const EMBEDDED_PRESETS: Readonly<Record<string, unknown>> = Object.assign
 	generic,
 	'wordpress-block-theme': wordpressBlockTheme,
 	'wordpress-components': wordpressComponents,
+	vip,
 	wpds,
 });
 

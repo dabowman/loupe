@@ -19,15 +19,26 @@ import { join } from 'node:path';
 import { readDir } from './discover.ts';
 import postcss from 'postcss';
 import type { Root } from 'postcss';
+import { scopedFamily } from './scopes.ts';
+import type { TokenScopes } from './scopes.ts';
+import { COLOR_SHORTHANDS } from './styles.ts';
 import { messageParts, snippet } from './text.ts';
 import type { Suggestion, TokenSet } from './types.ts';
 
 /**
- * Which token names could plausibly answer for this property. Naming the wrong
- * one is worse advice than naming none: `1px` is both `--wpds-border-radius-xs`
- * and `--wpds-border-width-xs`, and the agent applies whichever it is given.
+ * Which token names could plausibly answer for this property, when no profile
+ * says. Naming the wrong one is worse advice than naming none: `1px` is both
+ * `--wpds-border-radius-xs` and `--wpds-border-width-xs`, and the agent applies
+ * whichever it is given.
+ *
+ * This is the fallback, not the source of truth. Its alternate spellings
+ * (`fg|text|content|foreground`) are a guess at several systems' conventions at
+ * once; a profile's `tokenScopes` states its own system's, and wherever it
+ * declares what a property's tokens are, it decides instead — see `scopes.ts`.
+ * A profile declaring nothing, and every property it does not cover, gets
+ * exactly this table.
  */
-const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
+export const GENERIC_ROLES: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	[/^border-radius|radius$/, /radius/],
 	[/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
 	// Colour roles are split finer than the rest: a background token suggested for
@@ -35,8 +46,13 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	[/^color$/, /colou?r-(fg|text|content|foreground)/],
 	[/^background(-color)?$|^background-image$/, /colou?r-(bg|background|surface)/],
 	[/border.*-color$|^border-color$|^outline-color$/, /colou?r-(border|line|stroke)/],
+	// A shorthand's token is its colour's: the width and style stay as written.
+	[
+		/^(border|outline|column-rule)(-(top|right|bottom|left|block|inline)(-(start|end))?)?(-color)?$/,
+		/colou?r-(border|line|stroke)/,
+	],
 	[/shadow/, /shadow/],
-	[/^fill$|^stroke$|caret-color|accent-color|text-decoration-color/, /colou?r/],
+	[/^fill$|^stroke$|caret-color|accent-color|^text-decoration(-color)?$/, /colou?r/],
 	[/^font-size$/, /font-size/],
 	[/^font-weight$/, /font-weight/],
 	[/^line-height$/, /line-height/],
@@ -50,6 +66,8 @@ const ROLE_HINTS: readonly (readonly [RegExp, RegExp, RegExp?])[] = [
 	// the sizes (icons, buttons) and surface widths a system also ships under it.
 	[/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
 	[/^cursor$/, /cursor/],
+	// Never flagged as a hardcoded value; here for the token a name in one meant.
+	[/^(min-|max-)?(width|height|inline-size|block-size)$/, /(?<!font-)size|surface-width/],
 	// By role word, not by one system's spelling: WPDS writes `motion-duration-*`,
 	// Archer `duration-*`.
 	[/^transition-duration$|^animation-duration$/, /duration/],
@@ -70,24 +88,36 @@ function normalizeValue(value: unknown): string {
 /** An empty set, in the shape `read` returns. */
 export const emptyTokenSet = (): TokenSet => ({ known: new Set(), byValue: new Map(), sources: 0 });
 
+/**
+ * Record one custom-property definition. A token's value is its first
+ * definition: later ones are modes — `[data-wpds-corner-radius="moderate"]`
+ * makes `radius-md` 12px — and indexing them offers `12px` as "md or xl" when
+ * the default md is 4px.
+ */
+export function addTokenDef(into: TokenSet, name: string, value: string): void {
+	if (into.known.has(name)) return;
+	into.known.add(name);
+	const v = normalizeValue(value);
+	// A token defined as another token tells us nothing about literal values.
+	if (!v || v.includes('var(')) return;
+	const names = into.byValue.get(v) ?? [];
+	if (!names.includes(name)) names.push(name);
+	into.byValue.set(v, names);
+}
+
+/** Every `--prefix-*: value` declaration in a parsed stylesheet, in source order. */
+export function tokenDefsIn(root: Root, prefixes: readonly string[]): [string, string][] {
+	const out: [string, string][] = [];
+	if (!prefixes.length) return out;
+	root.walkDecls((decl) => {
+		if (decl.prop.startsWith('--') && prefixes.some((p) => decl.prop.startsWith(p))) out.push([decl.prop, decl.value]);
+	});
+	return out;
+}
+
 /** Record every `--prefix-*: value` declaration in a parsed stylesheet. */
 export function harvestTokenDefs(root: Root, prefixes: readonly string[], into: TokenSet): TokenSet {
-	if (!prefixes.length) return into;
-	root.walkDecls((decl) => {
-		const name = decl.prop;
-		if (!name.startsWith('--') || !prefixes.some((p) => name.startsWith(p))) return;
-		// A token's value is its first definition. Later ones are modes —
-		// `[data-wpds-corner-radius="moderate"]` makes `radius-md` 12px — and
-		// indexing them offers `12px` as "md or xl" when the default md is 4px.
-		if (into.known.has(name)) return;
-		into.known.add(name);
-		const v = normalizeValue(decl.value);
-		// A token defined as another token tells us nothing about literal values.
-		if (!v || v.includes('var(')) return;
-		const names = into.byValue.get(v) ?? [];
-		if (!names.includes(name)) names.push(name);
-		into.byValue.set(v, names);
-	});
+	for (const [name, value] of tokenDefsIn(root, prefixes)) addTokenDef(into, name, value);
 	return into;
 }
 
@@ -147,9 +177,18 @@ export function readTokenSources(
 	return set;
 }
 
-/** The names that answer for `prop`: on-role, and the property's own family when the set has one. */
-function onRole(names: readonly string[], prop: string): string[] {
-	const [, hint, own] = ROLE_HINTS.find(([p]) => p.test(prop)) ?? [];
+/**
+ * The names that answer for `prop`: on-role, and the property's own family when
+ * the set has one. Declared scopes decide wherever they cover the property; the
+ * generic table everywhere else.
+ */
+export function onRole(names: readonly string[], prop: string, scopes?: TokenScopes | undefined): string[] {
+	return (scopes ? scopedFamily(scopes, names, prop, genericRole) : null) ?? genericRole(names, prop);
+}
+
+/** The names the generic table puts on `prop`. */
+function genericRole(names: readonly string[], prop: string): string[] {
+	const [, hint, own] = GENERIC_ROLES.find(([p]) => p.test(prop)) ?? [];
 	if (!hint) return [];
 	const onRole = names.filter((n) => hint.test(n));
 	const preferred = own ? onRole.filter((n) => own.test(n)) : [];
@@ -161,19 +200,64 @@ function onRole(names: readonly string[], prop: string): string[] {
  * Empty when nothing matches, or when only off-role tokens do.
  */
 export function tokensFor(set: TokenSet, prop: string, value: string): string[] {
-	return onRole(set.byValue.get(normalizeValue(value)) ?? [], prop);
+	// The role is decided over the whole set, not over the tokens that happen to
+	// carry the value: a padding scale that stops at 32px makes `padding: 40px`
+	// a question, not `gap-3xl` because only a gap step is 40px.
+	const family = roleOf(set, prop);
+	return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
 }
 
 /** Every on-role token for `prop` that has a literal value, as `[name, value]`, whatever the value. */
 function familyFor(set: TokenSet, prop: string): [string, string][] {
-	const all = [...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v]));
-	const keep = new Set(
-		onRole(
-			all.map(([n]) => n),
-			prop,
-		),
-	);
-	return all.filter(([n]) => keep.has(n));
+	const cache = familiesOf(set);
+	let family = cache.literal.get(prop);
+	if (!family) {
+		const all = [...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v]));
+		const keep = new Set(
+			onRole(
+				all.map(([n]) => n),
+				prop,
+				set.scopes,
+			),
+		);
+		family = all.filter(([n]) => keep.has(n));
+		cache.literal.set(prop, family);
+	}
+	return family;
+}
+
+/** `onRole` over the whole set, as a set. */
+function roleOf(set: TokenSet, prop: string): ReadonlySet<string> {
+	const cache = familiesOf(set);
+	let family = cache.all.get(prop);
+	if (!family) {
+		family = new Set(onRole([...set.known], prop, set.scopes));
+		cache.all.set(prop, family);
+	}
+	return family;
+}
+
+// Which tokens answer for a property depends only on the set's names and its
+// scopes, yet `tokensFor` and `planValue` asked it again for every finding —
+// with a profile loaded, the whole grammar over every token, each time. Cached
+// per set and property. A set only grows (the walk adds project tokens as it
+// finds them, names and values together), so its size is the version, and
+// assigning new scopes starts over.
+interface Families {
+	size: number;
+	scopes: TokenScopes | undefined;
+	all: Map<string, ReadonlySet<string>>;
+	literal: Map<string, [string, string][]>;
+}
+const families = new WeakMap<TokenSet, Families>();
+
+function familiesOf(set: TokenSet): Families {
+	let cache = families.get(set);
+	if (!cache || cache.size !== set.known.size || cache.scopes !== set.scopes) {
+		cache = { size: set.known.size, scopes: set.scopes, all: new Map(), literal: new Map() };
+		families.set(set, cache);
+	}
+	return cache;
 }
 
 // ── what a literal could be replaced with ───────────────────────────────────
@@ -295,6 +379,15 @@ const isLiteralPart = (p: string): boolean =>
 /** What `check --judge` answers for a value that should stay as written. */
 export const KEEP = 'keep';
 
+/**
+ * What a `keep` the model chose says. It is a judgement, not a reason: what the
+ * value actually is (a scrim, a pill, a brand colour) is for a reader to write,
+ * so `fix --judge` leaves these unsuppressed. A `keep` written without a model,
+ * for a property the design system has no token for at all, states a fact and
+ * is suppressed with it.
+ */
+export const DELIBERATE = 'deliberate, no token fits';
+
 /** One literal in a flagged value: settled by a single exact token, or put to a judgement. */
 export type Slot = { at: number; part: string } & ({ token: string } | { candidates: Candidates });
 
@@ -305,38 +398,54 @@ export type Slot = { at: number; part: string } & ({ token: string } | { candida
  * to choose, so the value stays, whatever anyone thinks of it. Null when a part
  * is a literal no token here can stand for (`5%`, `-4px`, `hsl()`) — rewriting
  * the rest would leave the finding standing and call it fixed.
+ *
+ * `hold` says why a token a part settled on may not be applied unattended — off
+ * its declared scope on what the declaration styles, or not shown to be in it —
+ * and the first such reason comes back as `review`, naming the token. A part
+ * settles exactly as a whole value does, so it is held exactly as one is.
  */
 export function planValue(
 	set: TokenSet,
 	prop: string,
 	value: string,
-): 'none' | { parts: string[]; slots: Slot[] } | null {
+	hold?: (token: string) => string | null,
+): 'none' | { parts: string[]; slots: Slot[]; review?: string } | null {
 	const family = familyFor(set, prop);
 	// A token defined as another token has no literal to offer, but it is still a
 	// token for this property: "none" would be a false statement about the system.
-	if (!family.length) return onRole([...set.known], prop).length ? null : 'none';
+	if (!family.length) return roleOf(set, prop).size ? null : 'none';
 	// A family the engine can measure takes a value apart; one it cannot —
 	// shadows, easings — is matched whole.
 	const measurable = family.some(([, fv]) => measure(fv));
 	const parts = measurable ? partsOf(value) : [value.trim()];
 	const slots: Slot[] = [];
+	let review: string | undefined;
+	const settle = (at: number, part: string, token: string): void => {
+		const why = review === undefined ? hold?.(token) : null;
+		if (why) review = `${token} ${why}`;
+		slots.push({ at, part, token });
+	};
 	for (const [at, part] of parts.entries()) {
 		// `calc(10px + 2px)` holds literals no token replaces, and rewriting the
 		// rest to `var()` would exempt the whole value from the rule.
 		if (measurable && /^(calc|min|max|clamp)\(/i.test(part)) return null;
 		if (measurable && !isLiteralPart(part)) continue;
+		// A shorthand is flagged for its colour alone; its width is not this rule's.
+		if (COLOR_SHORTHANDS.has(prop) && measure(part)?.kind !== 'color') continue;
 		const [only, ...more] = tokensFor(set, prop, part);
 		if (only !== undefined && !more.length) {
-			slots.push({ at, part, token: only });
+			settle(at, part, only);
 			continue;
 		}
 		const candidates = candidatesFor(set, prop, part);
 		if (!candidates) return null;
 		// One token equal to it in another unit is as settled as one written the same.
 		const [one, ...others] = candidates.tier === 'exact' ? candidates.options : [];
-		slots.push(one && !others.length ? { at, part, token: one[0] } : { at, part, candidates });
+		if (one && !others.length) settle(at, part, one[0]);
+		else slots.push({ at, part, candidates });
 	}
-	return slots.length ? { parts, slots } : null;
+	if (!slots.length) return null;
+	return review === undefined ? { parts, slots } : { parts, slots, review };
 }
 
 /**
@@ -358,7 +467,9 @@ const stated = (s: Suggestion): string => {
 	// spend the whole line, and a remedy the reader is meant to act on has to
 	// arrive whole.
 	const decl = snippet(`${s.prop}: ${s.value}`);
-	return s.judged ? `${decl} → ${s.judged.spans.join(' ')}` : `${decl}${remedyFor(s.tokens)}`;
+	if (s.judged) return `${decl} → ${s.judged.spans.join(' ')}`;
+	// A token held back for review says why, so the reader checks the right thing.
+	return `${decl}${remedyFor(s.tokens)}${s.review ? ` (review: ${s.review})` : ''}`;
 };
 
 /**

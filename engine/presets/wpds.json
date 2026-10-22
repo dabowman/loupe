@@ -38,6 +38,11 @@
         "Truncate"
       ]
     },
+    "allowedInlineStyles": {
+      "Text": [
+        "color"
+      ]
+    },
     "tokenSources": [
       "node_modules/@wordpress/theme/prebuilt/css/design-tokens.css",
       "node_modules/@wordpress/theme/build-style",
@@ -66,6 +71,7 @@
     "tokens/hardcoded-value": "warn",
     "css/dead-class": "warn",
     "tokens/unknown-token": "warn",
+    "tokens/undelivered": "warn",
     "patterns/duplicate-composite": "warn",
     "patterns/superseded-composite": "warn",
     "patterns/unregistered-composite": "warn"

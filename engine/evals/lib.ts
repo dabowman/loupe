@@ -1,4 +1,4 @@
-/** What both evals share: the key, the run loop, stability, and how a ratio prints. */
+/** What every eval shares: the key, the run loop, stability, and how a ratio prints. */
 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

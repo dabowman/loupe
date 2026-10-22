@@ -630,7 +630,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 		'POST /baseline': async (_req, res) => {
 			if (!fresh) return send(res, 503, { error: 'still analyzing' });
 			try {
-				send(res, 200, writeBaseline(root, baselineTarget, fresh));
+				send(res, 200, writeBaseline(baselineTarget, fresh));
 			} catch (err) {
 				return send(res, 500, { error: messageOf(err) });
 			}

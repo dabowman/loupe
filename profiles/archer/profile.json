@@ -4,5 +4,6 @@
   "preset": "archer",
   "packages": ["@dabowman/archer"],
   "patterns": "./patterns/index.json",
-  "components": "./components/index.json"
+  "components": "./components/index.json",
+  "tokenScopes": "./token-scopes.json"
 }

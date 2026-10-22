@@ -9,12 +9,21 @@
  *
  *   profiles/
  *     wpds/
- *       profile.json          { id, name, packages, preset, patterns, components }
+ *       profile.json          { id, name, packages, preset, patterns, components,
+ *                               tokenDescriptions, tokenScopes, delivery }
  *       patterns/index.json
  *       components/index.json
+ *       delivery.json         how its packages and tokens reach a page (delivery.ts)
  *
  * A profile with no `packages` is never selected automatically — there is
  * nothing to recognize it by — and has to be named with `--profile <id>`.
+ *
+ * Profiles come from two places. `--profiles` hands over the shipped set; the
+ * project adds its own, from the directories its config lists under `profiles`
+ * and from `.loupe/profiles/`. A project's own profile outranks a shipped one
+ * claiming the same id or the same package: a design system rebuilt under its
+ * old package name ships the profile that describes it *now*, and the shipped
+ * one describes what it used to be.
  *
  * Design notes: docs/design/cli.md#profiles
  */
@@ -24,11 +33,34 @@ import { byBytes, readDir } from './discover.ts';
 import { isAbsolute, join, resolve } from 'node:path';
 import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
+import { readDelivery } from './delivery.ts';
 import { setComponentRegistry, setPatterns } from './config.ts';
 import { declaredPackages, registryApplies } from './registry.ts';
-import type { ComponentEntry, Config, Pattern, Profile, RegistryNote, SkippedRegistry } from './types.ts';
+import { parseTokenScopes } from './scopes.ts';
+import { messageOf } from './text.ts';
+import type {
+	ComponentEntry,
+	Config,
+	Pattern,
+	Profile,
+	ProfileOrigin,
+	RegistryNote,
+	SkippedRegistry,
+} from './types.ts';
 
-export type { Profile, RegistryNote, SkippedRegistry };
+export type { Profile, ProfileOrigin, RegistryNote, SkippedRegistry };
+
+/** Where a project keeps its own profiles when its config does not say. */
+export const PROJECT_PROFILES = join('.loupe', 'profiles');
+
+/** The `profile` / `--profile` value that pins selection to no profile at all. */
+export const NO_PROFILE = 'none';
+
+/** One directory of profiles, and whose they are. */
+export interface ProfileRoot {
+	dir: string;
+	origin: ProfileOrigin;
+}
 
 /** A registry pair to merge in, labelled for the report. */
 export interface RegistrySource {
@@ -65,13 +97,39 @@ interface RawProfile {
 	patterns?: unknown;
 	components?: unknown;
 	tokenDescriptions?: unknown;
+	tokenScopes?: unknown;
+	delivery?: unknown;
+}
+
+/**
+ * A profile's `tokenScopes`: the block inline, or a profile-relative path to a
+ * file holding it. A file that cannot be read is a problem with the profile,
+ * named like any other, not a reason to drop the profile's registries.
+ */
+function readScopes(dir: string, raw: unknown): ReturnType<typeof parseTokenScopes> {
+	// Inline too: a throw from parsing would otherwise reach `readProfiles`'s
+	// catch and drop the whole profile, where the same block by path is kept.
+	try {
+		return parseTokenScopes(typeof raw === 'string' ? readJson(under(dir, raw)) : raw);
+	} catch (err) {
+		return {
+			scopes: null,
+			errors: [`tokenScopes: could not read ${typeof raw === 'string' ? raw : 'the inline block'} — ${messageOf(err)}`],
+		};
+	}
 }
 
 /**
  * Every `<root>/<id>/profile.json`. A malformed or unreadable profile is
  * skipped rather than thrown: one bad directory must not take the gate down.
+ * Skipped is not silent, though, when `unreadable` is passed: each one is named
+ * there, for the caller to say.
  */
-export function readProfiles(root: string | null | undefined): Profile[] {
+export function readProfiles(
+	root: string | null | undefined,
+	origin: ProfileOrigin = 'shipped',
+	unreadable?: string[],
+): Profile[] {
 	if (!root || !existsSync(root)) return [];
 	const out: Profile[] = [];
 	// Sorted, and one profile per id. Sorting is what makes "the first one wins" a
@@ -88,10 +146,16 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 			// `--profile` match and a sort key — and that sort runs outside every `try`
 			// here, so a manifest carrying `"id": 3` would throw past all of it.
 			const id = asString(raw.id) ?? e.name;
-			if (seen.has(id)) continue;
+			// `none` is reserved: it is what pins selection to no profile, so a profile
+			// by that name could be listed and selected by package but never named.
+			if (id === NO_PROFILE || seen.has(id)) continue;
 			const patterns = asString(raw.patterns);
 			const components = asString(raw.components);
 			const tokenDescriptions = asString(raw.tokenDescriptions);
+			// Validated here, once, so a mistake surfaces as the profile loads rather than
+			// as suggestions that quietly fell back to the generic table.
+			const scopes = raw.tokenScopes === undefined ? null : readScopes(dir, raw.tokenScopes);
+			const delivery = asString(raw.delivery);
 			out.push({
 				id,
 				name: asString(raw.name) ?? asString(raw.id) ?? e.name,
@@ -100,13 +164,22 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 				patterns: patterns ? under(dir, patterns) : null,
 				components: components ? under(dir, components) : null,
 				tokenDescriptions: tokenDescriptions ? under(dir, tokenDescriptions) : null,
+				tokenScopes: scopes?.scopes ?? null,
+				problems: scopes?.errors ?? [],
+				// Read now, not by path later: two consumers want it, and a block that
+				// does not validate is no block rather than a profile that cannot load.
+				delivery: delivery ? readDelivery(under(dir, delivery)) : null,
 				dir,
+				origin,
 			});
 			// Claimed only once the entry is on the list: reserving it above let a
 			// directory that threw on the way to `push` lock the id out.
 			seen.add(id);
-		} catch {
-			/* a profile that cannot be parsed contributes nothing */
+		} catch (err) {
+			// It contributes nothing — but a project profile that fails to load leaves
+			// the shipped one it was written to replace selected in its place, which
+			// reads exactly like the bug the project profile exists to fix.
+			unreadable?.push(`${manifest} \u2014 ${messageOf(err)}`);
 		}
 	}
 	// Output order only — which duplicate won was settled by directory name above.
@@ -114,11 +187,59 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 }
 
 /**
+ * Where profiles are read from, most authoritative first: the directories the
+ * config lists, then `.loupe/profiles/` under the root, then `--profiles`.
+ *
+ * The convention is read whether or not the config names other directories —
+ * it is where a profile is found with no config at all — and a directory named
+ * twice is read once, under the first, most authoritative, origin.
+ */
+export function profileRoots({
+	root,
+	configured = [],
+	flag = null,
+}: {
+	root: string;
+	configured?: readonly string[];
+	flag?: string | null;
+}): ProfileRoot[] {
+	const roots: ProfileRoot[] = [
+		...configured.map((dir) => ({ dir: resolve(dir), origin: 'project' as const })),
+		{ dir: resolve(root, PROJECT_PROFILES), origin: 'project' },
+		...(flag ? [{ dir: resolve(flag), origin: 'shipped' as const }] : []),
+	];
+	const seen = new Set<string>();
+	return roots.filter((r) => !seen.has(r.dir) && Boolean(seen.add(r.dir)));
+}
+
+/**
+ * Every profile under `roots`, one per id, the first root to carry an id
+ * winning it — which, in {@link profileRoots}' order, is the project's.
+ *
+ * `unreadable` collects the project's profiles that failed to load. The shipped
+ * set's are left out: a broken shipped profile is the plugin's bug, and every
+ * project would otherwise repeat it.
+ */
+export function readProfileRoots(roots: readonly ProfileRoot[], unreadable?: string[]): Profile[] {
+	const out = new Map<string, Profile>();
+	for (const { dir, origin } of roots)
+		for (const p of readProfiles(dir, origin, origin === 'project' ? unreadable : undefined))
+			if (!out.has(p.id)) out.set(p.id, p);
+	return [...out.values()].sort((a, b) => byBytes(a.id, b.id));
+}
+
+/**
  * The profiles that apply to `config`.
  *
  * Selection is by package: the project imports `@wordpress/components`, so the
  * profile that claims it is the one whose composites can legitimately match.
- * `force` names a profile explicitly and skips the question.
+ * `force` names a profile explicitly and skips the question; `none` names no
+ * profile, without the project having to stop declaring its packages — which
+ * would switch off every rule that needs them.
+ *
+ * A shipped profile claiming a package that a selected project profile also
+ * claims is left out: two descriptions of one package, and the project wrote
+ * its own because the shipped one is wrong for it.
  */
 export function selectProfiles(
 	profiles: readonly Profile[],
@@ -127,10 +248,18 @@ export function selectProfiles(
 	config: { designSystem?: { packages?: readonly string[] } },
 	force: string | null = null,
 ): Profile[] {
+	if (force === NO_PROFILE) return [];
 	if (force) return profiles.filter((p) => p.id === force);
 	const pkgs = config.designSystem?.packages ?? [];
 	if (!pkgs.length) return [];
-	return profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
+	const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
+	// Only the packages the project imports: a project profile also claiming one
+	// it does not import describes nothing here, and must not shadow a shipped
+	// profile over it.
+	const claimed = new Set(
+		matched.filter((p) => p.origin === 'project').flatMap((p) => p.packages.filter((pkg) => pkgs.includes(pkg))),
+	);
+	return matched.filter((p) => p.origin === 'project' || !p.packages.some((pkg) => claimed.has(pkg)));
 }
 
 /**
@@ -186,7 +315,7 @@ export function applyRegistries(
 				saw[kind] = used = true;
 				if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
 			} catch (err) {
-				errors.push(`could not read ${src.label} ${kind} — ${err instanceof Error ? err.message : String(err)}`);
+				errors.push(`could not read ${src.label} ${kind} — ${messageOf(err)}`);
 			}
 		}
 		if (used) applied.push(src.label);

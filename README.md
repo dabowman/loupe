@@ -14,9 +14,10 @@ None of it is an error. All of it is drift, and it is expensive to unwind once
 the pattern is load-bearing — because by then every argument for keeping it is
 locally true.
 
-Two design systems ship with it — the WordPress Design System and
-[Archer](#profiles), a Base UI–based system — and a third is a directory
-rather than a fork: nothing about either is compiled into the engine.
+Three design systems ship with it — the WordPress Design System,
+[Archer](#profiles), a Base UI–based system, and the
+[VIP Design System](#profiles), built on Theme UI — and a fourth is a directory
+rather than a fork: nothing about any of them is compiled into the engine.
 
 This plugin works at two moments: **before** the code is written (skills that
 set the rules and the sanctioned compositions) and **as** it is written (hooks
@@ -53,12 +54,13 @@ than using it.
 | `skills/loupe-patterns` | How the composite registry works, and the discipline of checking it. Load before assembling a header, modal, action bar, sidebar. |
 | `skills/loupe-remediation` | Per-rule remedies, and the checks that stop a "fix" from silently changing rendering. |
 | `agents/loupe-fixer` | Per-file remediation agent. `/loupe-fix` fans it out once the work spans enough files to be worth it. |
-| `commands/` | `/loupe-audit`, `/loupe-fix`, `/loupe-baseline`, `/loupe-report` |
-| `hooks/hooks.json` | `PostToolUse` on the file just written, `Stop` across changed files |
+| `commands/` | `/loupe-init`, `/loupe-audit`, `/loupe-fix`, `/loupe-baseline`, `/loupe-report` |
+| `hooks/hooks.json` | `PostToolUse` on what the edit just introduced, `Stop` across changed files |
 | `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, its two registries and its three authoring docs |
 | `profiles/archer/` | The Archer profile — the same, for a styled system built on Base UI, with its own layout and text components |
+| `profiles/vip/` | The VIP Design System profile — the same, for `@automattic/vip-design-system` on Theme UI |
 | `profiles/*/patterns/index.json` | The composite registry |
-| `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package |
+| `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package, and the styling surface each verified component owns |
 | `engine/` | `loupe` — the conformance engine |
 | `editors/vscode/` | The VS Code / Cursor launcher for `loupe lsp`. Other editors need no extension |
 | `integrations/wordpress/` | A dev mu-plugin that loads the `serve` overlay itself, so wp-admin is not a bookmarklet click per screen |
@@ -109,7 +111,7 @@ line. `--group-by` picks which of the two heads a block — the other becomes th
 sub-heading, and the findings under it are bare line numbers:
 
 ```
-• tokens/hardcoded-value (4) advisory — hardcoded value — replace with a --wpds-* token
+• tokens/hardcoded-value (4 in 2 files, 3 distinct) advisory — hardcoded value — replace with a --wpds-* token
   styles/card.css (3)
        2  color: #1e1e1e → --wpds-color-foreground-content-neutral
        3  border-radius: 4px → --wpds-border-radius-md
@@ -124,6 +126,22 @@ swaps the two — path at the margin, rule indented under it, files that block
 the gate first — which is the shape of the work when you are already in an
 editor rather than auditing a repo. Nothing else about the report changes, and
 `--max-findings` spreads its budget across whichever axis you grouped on.
+
+Identical findings — the same rule, file and text — print once, with a count
+and every line they stand for, and a rule's heading says how its findings
+concentrate:
+
+```
+✗ layout/margin-on-child (25 in 9 files, 11 distinct) blocking — margin — move spacing to the parent layout primitive's gap prop
+  src/components/step-row.scss (8)
+      31  margin-bottom: 8px  ×7 (lines 31, 44, 58, 77, 91, 104, 118)
+      62  margin-top: 12px
+```
+
+`×7` in one file says write a script; eleven singletons say read each one. The
+budget counts printed lines, so duplicates stretch it rather than spend it.
+`--rule <id>` scopes `check` or `fix` to one rule — repeat it for more — so
+`loupe check --rule layout/margin-on-child --format json` is the whole batch.
 
 `--concise` keeps the tally and the headings of whichever axis you grouped on,
 and drops the findings underneath them — the shape of the report when the
@@ -141,12 +159,25 @@ Parse errors and a token set that came back empty still print — a run that
 quietly skipped half the CSS reads as a clean one at either verbosity.
 
 `bin/loupe` is on PATH inside any Claude Code session — Claude Code adds each
-enabled plugin's `bin/` to the environment it runs commands in. For plain
-terminals, symlink it somewhere on your `PATH`:
+enabled plugin's `bin/` to the environment it runs commands in, and only
+there. A plain terminal reports `command not found` until you symlink it
+somewhere on your `PATH`:
 
 ```bash
-ln -s "$HOME/.claude/plugins/<marketplace>/loupe/bin/loupe" ~/.local/bin/loupe
+ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
 ```
+
+Link the marketplace clone, not the copy Claude Code runs: that one sits under
+`~/.claude/plugins/cache/loupe/loupe/<commit>/`, and the commit changes on every
+update. The clone moves with `/plugin marketplace update`, so it can be a
+commit ahead of the installed plugin between updates. From a checkout of this
+repository, link its `bin/loupe` the same way. Loupe is not on npm yet, so a
+`lint:loupe` script in a project's `package.json` works only for people who
+have made this link.
+
+A terminal sees none of the plugin's settings (blocking, preset, API key) —
+Claude Code passes them to hooks only. `loupe status` says where it found its
+settings, and a hand-run `loupe check` exits 1 on errors either way.
 
 It runs against the project you are in — the directory holding the
 `loupe.config.json` that governs your cwd, so a command typed in
@@ -173,7 +204,7 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `layout/margin-on-child` | Spacing margin, which belongs on the parent's `gap` | error |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own | error |
 | `typography/in-css` | A text component typed in CSS instead of via props | error |
-| `system/override` | CSS restyling a design-system component, or reaching into a library's internals | error |
+| `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals | error |
 | `system/inline-style` | `style={{ … }}` on a design-system component — it overrides the props | error |
 | `system/locked-component` | A private API the design system does not recommend outside its own core | error |
 | `layout/negative-margin` | A bleed — confirm it is deliberate | warn |
@@ -183,6 +214,8 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `tokens/hardcoded-value` | A literal colour or length where a token exists | warn |
 | `css/dead-class` | A namespaced class referenced in no markup or reference file | warn |
 | `tokens/unknown-token` | A `var()` naming no token the design system defines | warn |
+| `tokens/misapplied-token` | A real token used outside its declared scope — a `surface` background on a button | warn |
+| `tokens/undelivered` | Tokens used, and nothing shows the stylesheet defining them reaches the page | warn |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in more than one file | warn |
 | `patterns/superseded-composite` | A shape a registered pattern exists to replace, in the one file that built it | warn |
 | `patterns/unregistered-composite` | The same composite built in three or more files, registered in none | warn |
@@ -191,6 +224,12 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 Rules disable themselves when the config cannot support them — a block theme
 with no component layer leaves the component rules inert rather than firing on
 nothing.
+
+`system/raw-element` says what the conversion would cost: where a declaration
+on the element's classes would block once the class sits on the component, the
+message names it — `<h4> → <Text render={ <h4 /> }> (@wordpress/ui) —
+converted, would block: font-size (.acme-title)` — so the change is weighed
+before it is made, not discovered after.
 
 `system/raw-element` skips the element a text or layout component's
 substitution prop is handed: `<Text variant="heading-md" render={ <h4 /> }>` is
@@ -212,7 +251,7 @@ project defines itself is added to the set. Findings then name the token:
 ```
 • tokens/hardcoded-value (1) advisory — hardcoded value — replace with a --wpds-* token
   styles/card.scss (1)
-      12  border-radius: 4px → --wpds-border-radius-md
+      12  padding: 12px → --wpds-dimension-padding-md
 ```
 
 Only an on-role token is offered. `1px` is both `--wpds-border-radius-xs` and
@@ -221,10 +260,26 @@ wrong meaning, which survives review precisely because it looks correct. When
 nothing on-role matches, the finding names no token rather than a plausible one.
 
 `tokens/unknown-token` catches the other direction — a `var()` naming nothing the
-design system defines. It stays silent when no definitions were found at all,
+design system defines.
+
+`tokens/undelivered` asks whether the tokens arrive at all. An undefined custom
+property makes its whole declaration invalid, so `background:
+var(--wpds-color-…)` on a page that never loads `wp-theme` does not fall back —
+it drops. How a sheet is delivered is the design system's fact, so the profile's
+`delivery.json` declares the evidence (for WPDS: a `wp_enqueue_style` whose
+dependency array lists `wp-theme` or a style that depends on it, a `block.json`
+naming `wp-theme`, or an import of the sheet — `wp-components` and the editor
+handles do not count, since they depend on `wp-theme` only on some cores, and a
+build that writes fallbacks is not delivery either: the finding says it found
+one, because those values render but never follow the theme) and the
+engine runs it with a bounded, literal read — no PHP parser. It reports once per
+project, at the first token use, and only when it found enqueues, read every one,
+and none qualifies. It stays silent when no definitions were found at all,
 because an empty token set proves nothing. A name that is one keystroke from
 exactly one real token is a misspelling the engine can settle, and `loupe fix`
-renames it wherever the file writes it.
+renames it wherever the file writes it. With `--judge`, a name an agent made up
+in another system's vocabulary, like `--wpds-color-text-muted`, is renamed to the
+token it meant when the answer is confident enough.
 
 Because the engine resolved that substitution itself, it can also apply it:
 
@@ -236,7 +291,8 @@ Only where exactly one on-role token carries the value — or, for a misspelled
 name, where exactly one known token is a single keystroke away and that
 keystroke is not a digit, since `--wpds-dimension-space-20` and
 `--wpds-dimension-space-30` are one edit apart and mean different amounts. Two
-candidates is a semantic choice, so it is left alone. All three channels are
+candidates is a semantic choice, so it is left alone — and so is one the profile
+scopes to another kind of element, below. All three channels are
 rewritten: a
 stylesheet and a CSS-in-JS template are matched as the CSS they are, and a
 `style={{ padding: 13 }}` object is spliced at the literal the scan recorded,
@@ -245,19 +301,56 @@ a copy of it. Paying a model to read a file back and retype an answer nothing
 had to reason about is the expensive way to apply a substitution, and this is
 usually the highest-volume rule in a report.
 
+### Token scopes
+
+A token's type says what kind of value it is, not what it is *for*. The WPDS
+radius scale is role-based — xs nested inside controls, sm standalone buttons
+and inputs, md menus and popovers, lg cards and dialogs, xl the page shell — so
+`border-radius: 4px` is `md` by value on a dialog and on a button alike, and
+wrong on both. Matching by value alone applied it to both, unattended.
+
+So a profile declares its system's naming grammar and what each segment means
+(`profiles/wpds/token-scopes.json`, from WPDS's own published grammar,
+`--wpds-color-<property>-<target>-<tone>…`), plus an explicit list for a scale
+whose role is not in the name. A single suggested token scoped to a kind of
+element is now applied only where the markup shows the declaration styles that
+kind; otherwise it is held for review, with the reason:
+
+```
+$ loupe fix --dry-run
+review src/a.scss:2  border-radius: 4px → --wpds-border-radius-md — for overlay; what this styles is not known
+review src/a.scss:4  border-radius: 4px → --wpds-border-radius-md — for overlay; this styles <button>
+```
+
+And `tokens/misapplied-token` (advisory) catches a real token used off its
+scope — the case only a reader of the token docs caught before:
+
+```
+• tokens/misapplied-token (2) advisory — misapplied token — it exists, but WordPress scopes it to another property or another kind of element; use the token whose role matches
+  src/preflight-card.scss (2)
+      63  background: --wpds-color-background-surface-neutral-strong — not for interactive; this styles <input>
+      71  color: --wpds-color-background-interactive-neutral — a background token sets background, background-color, background-image
+```
+
+A profile that declares no scopes behaves exactly as before, and so does every
+token its grammar does not place. See
+[token scopes](engine/README.md#token-scopes) for the schema. Archer and VIP
+declare their colour roles (`--color-text-*`, `--theme-ui-colors-texts-*`); their
+other families carry no role in the name and stay on the generic table.
+
 ### Judged variants
 
 `<p> → <Text>` names the component, not the variant, and sometimes the
 component is wrong too: a `<span>` that is a colour swatch, or a `<p>` that
-only wraps a button. `loupe check --judge` sends those elements to
-[TypeSafe](https://docs.typesafe.ai) in one request. It picks from the
+only wraps a button. `loupe check --judge` sends each of those elements to
+[TypeSafe](https://docs.typesafe.ai) in a request of its own. It picks from the
 `variants` the profile's component registry declares for the analog, or says
 the element is not text at all:
 
 ```
-• system/raw-element (3) advisory — raw element — use its design-system analog
+• system/raw-element (3 in 2 files, 3 distinct) advisory — raw element — use its design-system analog
   src/components/build-summary.tsx (2)
-      131  <h3> → Text (@wordpress/ui) with variant="heading-lg" and render for the semantic element (judged 0.66)
+      131  <h3> → <Text variant="heading-lg" render={ <h3 /> }> (@wordpress/ui) (judged 0.66)
       142  <p> → <Text variant="body-sm"> (judged 0.80)
   src/components/brand-picker.tsx (1)
       101  <span> → no analog, not Text content (judged 1.00)
@@ -267,9 +360,16 @@ The answer is written into the suggestion, confidence last, and what the model
 supplied is green in a terminal. Below 0.5 confidence the finding is left as it
 was, and no judgement changes a verdict. `--format json` carries the answer as
 data, `judged: { answer, confidence, spans }`, so a tool can act on a judgement
-without parsing the sentence. The hook never calls it, so the gate stays
-deterministic and offline. It needs `TYPESAFE_API_KEY`, from the environment
-or a `.env` beside the checkout (see `.env.example`).
+without parsing the sentence. It needs `TYPESAFE_API_KEY`, found in this order:
+the environment, the plugin's *TypeSafe API key* option (hooks only), a `.env`
+beside the checkout, then `~/.config/loupe/.env` (see `.env.example`). As a
+plugin, the option covers the hooks and the user-level `.env` covers everything
+else; the checkout's `.env` is inside the plugin cache, which updates replace.
+
+The hook passes `--judge` too, so the advice an agent is handed at write time is
+the same advice `loupe check --judge` gives. Without a key it judges nothing and
+reports as it always did — the verdicts were never the judged part. See
+[Judging in the hook](#judging-in-the-hook).
 
 ### Judged values
 
@@ -280,7 +380,7 @@ for `tokens/hardcoded-value` and for the type properties of
 `typography/untokenized`:
 
 ```
-• tokens/hardcoded-value (4) advisory — hardcoded value — replace with a --wpds-* token
+• tokens/hardcoded-value (4 in 3 files, 4 distinct) advisory — hardcoded value — replace with a --wpds-* token
   assets/css/admin-panels.css (2)
        33  color: #1d2327 → --wpds-color-foreground-content-neutral (judged 0.77)
        85  background: #fcf0f1 → --wpds-color-background-surface-error-weak (judged 0.81)
@@ -307,18 +407,18 @@ Then apply it:
 
 ```bash
 loupe fix --judge --dry-run   # review what it would write
-loupe fix --judge             # rewrite the settled values, suppress the kept ones
+loupe fix --judge             # rewrite the settled values, suppress the tokenless ones
 ```
 
 Only picks at 0.5 confidence or above are applied. The exception is spacing
 (padding, gap, `top`/`left`/…) that falls between two steps of the scale:
 it always snaps to one of them, and is never judged deliberate. Settled values
-are rewritten in place. Kept ones get a `wpds-allow` directive naming the rule
-they were reported under, with a reason that says a model made the call.
-Everything else is left for review. On an un-remediated WPDS plugin that
-rewrote 156 declarations and wrote 20 suppressions, taking
-`tokens/hardcoded-value` from 183 findings to 70 and `typography/untokenized`
-from 43 to 12. See `engine/README.md` for how it scored.
+are rewritten in place. A value whose property has no token in the design
+system at all gets a `wpds-allow` directive naming the rule it was reported
+under, with that as its reason. One the model judged deliberate is left for
+review, since what it actually is — a scrim, a pill — is a reason only a reader
+can write. Everything else is left for review too. See `engine/README.md` for
+how the judgement scores on the literals of an un-remediated WPDS plugin.
 
 ### Judged redirects
 
@@ -335,8 +435,8 @@ answer. A button that navigates is a link however it is styled, so:
 ```
 
 That is `patterns/judged-redirect`, reported only at 0.90 confidence or above,
-advisory, never baselined and never run by the hook. A control that already
-carries `href` is not asked. See `engine/README.md` for how it decides and how
+advisory and never baselined. A control that already carries `href` is not
+asked. See `engine/README.md` for how it decides and how
 it scored.
 
 ### Composites
@@ -418,6 +518,21 @@ name `variant` for a different set of values, `Spinner` loses a margin at every
 call site. The registry records that verdict in a `dropIn` field, and today
 carries it on nothing.
 
+An entry can also carry a styling `surface`: the CSS properties the component
+styles itself on the element its `className` reaches, each mapped to the prop
+that controls it, or to `null` where no prop does. `system/override` blocks only
+on a property a surface lists, and names the prop — `<Text> ← font-size — set
+via its variant prop` — or says there is none. A class setting anything else is
+`className` doing its job, and gets the verdict it would get on a plain
+element. An entry with no `surface` has not been read for one, so it fails safe
+to that advisory verdict too — in a registry that records surfaces at all.
+Where none the component could come from records one (the VIP and Archer
+registries, a run with no profile, a project's own registry), the rule keeps
+its earlier reading: any appearance property on a class bound to the component
+blocks, with "restyle via its props/tokens, not CSS"; the registry's `scope` field says which component
+families the file covers at all, so a missing entry reads as unreviewed rather
+than fine.
+
 The MCP has no maturity signal at all — it presents an `experimental`
 component with the same confidence as a `recommended` one, and it's
 measurably behind trunk for several `@wordpress/ui` additions besides. Use it
@@ -433,7 +548,8 @@ design system is never mistaken for one of these.
 Everything above that is specific to WPDS — the two registries, the preset that
 configures them, the packages that identify it — lives in `profiles/wpds/`. The
 engine takes `--profiles`, which the hooks, commands and `bin/loupe` all pass,
-and applies a profile only to a project importing its packages.
+and applies a profile only to a project importing its packages. A project's own
+profiles are read as well — see [Your own profile](#your-own-profile).
 
 ```jsonc
 // profiles/wpds/profile.json
@@ -484,9 +600,45 @@ instead of `Dialog.Root`, and unprefixed tokens in seventeen families. It exists
 every place the plugin still assumed WordPress showed up as something Archer
 could not express.
 
-Adding a third is adding a directory here plus a preset in `engine/presets/` —
+The third is the **VIP Design System** (`@automattic/vip-design-system`), and
+it is the first on Theme UI. Its components are styled through an `sx` prop of
+theme keys, which the engine does not read — so on a VIP codebase the value
+rules see only stylesheets, `style` and CSS-in-JS, and the profile earns its
+keep on component currency (`Dialog`, `ConfirmationDialog` and `Tooltip` are
+deprecated), raw elements and composites. Its `authoring.md` carries the theme
+scales so an agent holds the `sx` half by hand.
+
+Adding a fourth is adding a directory here plus a preset in `engine/presets/` —
 see **Adding a design system** in the
 [engine README](engine/README.md#adding-a-design-system).
+
+#### Your own profile
+
+A design system that ships its own profile, in its own repo, does not need a
+fork of this one. Put the profile directory in `.loupe/profiles/`, or list
+wherever it lives under `profiles` in `loupe.config.json` (relative to the
+config file):
+
+```jsonc
+{
+  "extends": "generic",
+  "profiles": "./loupe/profiles",
+  "designSystem": { "name": "VIP v3", "packages": ["@automattic/vip-design-system"] }
+}
+```
+
+Both are read on every run — the hooks, the commands and a typed `loupe` alike
+— alongside the shipped profiles, not instead of them. A project profile wins
+over a shipped one with the same `id`, and over one claiming the same package,
+which is what a design system rebuilt under its old package name needs: the
+shipped `vip` profile describes VIP's Theme UI system, not the v3 rebuild. The
+shadowed profile is still there to name with `--profile`.
+
+`"profile"` pins the choice outright: an id, or `"none"` for no profile, while
+`designSystem.packages` — and every rule that needs it — stays as it is.
+
+`loupe status` prints the chosen profile's directory, and the skills read its
+`authoring.md`, `patterns.md` and `remediation.md` from there.
 
 ### Config
 
@@ -508,6 +660,7 @@ see **Adding a design system** in the
 Presets: `wpds` (WPDS tokens + a severity policy that actually blocks),
 `wordpress-components` (the older admin surface), `wordpress-block-theme`,
 `archer` (a styled system on Base UI, with its own layout and text components),
+`vip` (the VIP Design System, on Theme UI),
 `base-ui` (a starting point for any system built on Base UI), `generic`.
 
 `base-ui` is a parent, the way `wordpress-components` is: Base UI is headless,
@@ -584,10 +737,14 @@ block at all unless you turn blocking on. Run `status` when a gate isn't
 behaving — it names the preset, the namespaces and the blocking switch, which is
 the whole space of reasons a gate misbehaves.
 
-`status` reads the plugin settings from `~/.claude` and says where it got them,
-because Claude Code exports plugin options to hook processes only — a terminal
-sees none of them, and a diagnostic that silently guesses at the switch it is
-diagnosing is worse than no diagnostic.
+`status` reads the plugin settings from `~/.claude` and says where it got each
+one, because Claude Code exports plugin options to hook processes only — a
+terminal sees none of them, and a diagnostic that silently guesses at the switch
+it is diagnosing is worse than no diagnostic. The two are merged key by key, the
+environment over the file, so an option the hook was handed does not hide the
+rest of the file from it. When `~/.claude/settings.json` has `pluginConfigs` but
+none of them is keyed `loupe` or `loupe@…`, `status` names the keys it found
+rather than reporting no options at all.
 
 ### Sass, Less
 
@@ -609,10 +766,15 @@ being skipped in silence — a clean run should mean *checked and clean*, never
 
 Rule id and reason are both mandatory; anything looser is its own finding. That
 inversion keeps the escape hatch available and legible. Audit with
-`loupe suppressions`.
+`loupe suppressions`, which also lists every rule turned off in config, with
+the reason its setting gives (`"<rule>": { "severity": "off", "reason": "..." }`)
+or `no reason given`; `loupe suppressions --stale` lists only the directives
+naming a rule that muted nothing on the run — the finding fixed, the rule off,
+or an id that is not a rule — and exits 1 if there are any, so CI can keep them
+from piling up.
 
 The keyword comes from the preset — `generic` asks for `ds-allow`, `wpds` for
-`wpds-allow`, `archer` for `archer-allow`; `loupe status` prints the active one
+`wpds-allow`, `archer` for `archer-allow`, `vip` for `vip-allow`; `loupe status` prints the active one
 under `suppress:` — and every preset's keyword is *read* whichever one is active, so
 switching preset never orphans the directives already written.
 `loupe suppressions` names the keyword such a directive was written with. It is
@@ -629,6 +791,7 @@ The first run on an existing codebase is the adoption blocker. Record the
 backlog and ratchet from there:
 
 ```bash
+./bin/loupe baseline --dry-run   # by rule: what would be recorded, +new / -fixed
 ./bin/loupe baseline
 ```
 
@@ -645,8 +808,9 @@ The baseline is written to `.loupe-baseline.json` in the project and is meant to
 be committed: it is a statement about this repo, and the CLI and the hook are
 different processes that have to read the same file. Set `baseline` in the
 config, or pass `--baseline <path>`, to move it. The hook's retry counter is the
-one piece of state that does not live in the project: it goes in the OS temp
-directory, keyed by project, and expires after six hours.
+one piece of state that does not live in the project: it goes in the plugin's
+data directory, or a temp directory of your own, keyed by project, and expires
+after six hours. `loupe status` prints where, on its `state:` line.
 
 One fallback is read, and `status` says when it answered: a committed
 `.loupe-baseline.json` in a project whose config has since pointed `baseline`
@@ -679,7 +843,18 @@ To silence a project that has opted in, for one session:
 LOUPE_OFF=1 claude
 ```
 
-The hook says nothing — not advisory, silent. Advisory mode does not solve this:
+Or for one project, mid-session — the hook reads this file on every run:
+
+```jsonc
+// .claude/settings.local.json
+{ "env": { "LOUPE": "on", "LOUPE_OFF": "1" } }
+```
+
+Or everywhere, with the plugin's *Silence the hook* option. All three set the
+same switch, and `loupe status` names which one did it on its `options:` line.
+
+The hook checks nothing — not advisory, silent to the agent; the user sees one
+`loupe: skipped — silenced by …` line. Advisory mode does not solve this:
 an advisory finding still lands in the agent's context, and an agent that sees a
 finding starts fixing it, which is usually the thing you were trying to avoid.
 `loupe` typed by hand still reports normally; the switch is only for the hook.
@@ -688,6 +863,35 @@ Both switches take `1`, `true`, `yes` and `on`, case-insensitively. Anything
 else is read as not on, so `LOUPE_OFF=0` and `LOUPE_OFF=false` do not silence the
 hook. `loupe status` prints a `hook: OFF` line with the reason whenever the hook
 will say nothing.
+
+### Judging in the hook
+
+Both hooks run `--judge`, and the key is the switch. With a key — the plugin's
+*TypeSafe API key* option, asked for when the plugin is enabled, or any of the
+places listed under `--judge` above — a write-time report carries the same
+judged variants and judged token names `loupe check --judge` prints, and
+`patterns/judged-redirect` can fire. With no key the hook judges nothing and
+says nothing about it — the deterministic report is the whole report, which is
+what it was before. `loupe status` prints a `judge:` line either way, so a run
+that quietly stopped asking does not read as one that found nothing to ask.
+
+What this does not change: judging never moves a verdict. It fills in the
+suggestion a deterministic finding already carries, and adds one advisory rule
+of its own. A turn is still blocked by the same findings, decided the same way,
+with or without a key.
+
+The cost is a network round trip per flagged element, inside Claude Code's hook
+timeout — 60s on `PostToolUse`, 120s on `Stop`. Each request gives up after 20
+seconds and the run keeps the deterministic findings it already had. To stay
+offline, drop `--judge` from `hooks/hooks.json`, or just leave the key unset.
+
+The hook only pays for what it prints. A run that does not block prints a
+one-line tally, so it asks nothing; a blocking run asks only about the findings
+its cap has room to show. Answers are cached per project, keyed by the exact
+question, so the next write in the same file, and the `Stop` after it, re-ask
+only what changed. What a run spent rides on its summary line —
+`judge: 2 asked, 9 from cache` — and `--no-cache` asks everything fresh. See
+[What a judged run spends](docs/design/judge.md#what-a-judged-run-spends).
 
 ## Reading the report
 
@@ -807,6 +1011,10 @@ SARIF results carry a `partialFingerprints` entry derived from the same identity
 the baseline ratchets on: rule, file, and normalized code, deliberately not the
 line number. An edit above a finding moves its line without re-opening its alert.
 
+Findings your baseline accepted are uploaded too, as results marked suppressed
+(`kind: external`, "accepted in the loupe baseline"), so code scanning shows the
+backlog as suppressed alerts rather than reading it as a clean repository.
+
 #### Without Node
 
 The reusable workflow needs neither an npm install nor a published package, but
@@ -823,8 +1031,8 @@ those rules are off, and the report is silently clean of them.
 - run: |
     curl -fsSL -O https://github.com/dabowman/loupe/releases/latest/download/loupe-linux-x64
     chmod +x loupe-linux-x64
-    git clone --depth 1 https://github.com/dabowman/loupe .loupe
-    ./loupe-linux-x64 check --all --format sarif --profiles .loupe/profiles > loupe.sarif
+    git clone --depth 1 https://github.com/dabowman/loupe .loupe-engine
+    ./loupe-linux-x64 check --all --format sarif --profiles .loupe-engine/profiles > loupe.sarif
 ```
 
 `--judge` still needs `TYPESAFE_API_KEY` from the environment — no key is
@@ -925,7 +1133,8 @@ Configured where you enable the plugin, read by the hook from the environment:
 
 | | |
 | --- | --- |
-| **Block turns on findings** | Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. |
+| **Block turns on findings** | Governs the hook only. Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. `loupe check` is unaffected — it exits 1 on error-severity findings either way, so CI and pre-commit still gate. |
+| **Silence the hook** | Off by default. On, the hook checks nothing in any project and says only that it was skipped. `"env": { "LOUPE_OFF": "1" }` in a project's `.claude/settings.local.json` does the same for that project. |
 | **Preset** | `auto` infers per project. A project's own `loupe.config.json` always wins over both. |
 | **Project class prefixes** | Comma-separated, e.g. `vip-workflow-, wf-`. Empty infers them. Only these can be reported dead. |
 | **Fix attempts** / **Findings shown** | The retry budget and the per-report cap. |
@@ -936,6 +1145,14 @@ The plugin ships both, and both are off until the project opts in (see
 [Install](#install)). `PostToolUse` scopes to the file just written, which is
 what makes this a write-time gate rather than a review-time one. `Stop` covers
 everything changed in the turn.
+
+They ask different questions. `PostToolUse` blocks only on findings the edit
+*introduced*, against the file as it was before the write; what the file already
+had is mentioned, not blocked on, so a refactor that is worse before it is
+better is not stopped halfway (outside a git worktree, where `Stop` cannot
+tell what changed, `PostToolUse` blocks on everything in the file). `Stop` asks whether the turn's work is
+conformant, absolutely — the place for "you converted the JSX and left the CSS
+behind".
 
 Each gets `hook.maxAttempts` gated passes (default 3, budgeted per file for
 `PostToolUse`), then the gate stands down and says so. Bailing out entirely on
@@ -955,6 +1172,13 @@ reports as `stylesheet/unparsed`; a skipped markup file just contributes
 nothing. Gutenberg — 6,100 markup files, 1,300 stylesheets — indexes in about
 five seconds.
 
+Past 200,000 entries the walk stops and the hook stands aside with a `skipped`
+message saying so, rather than reporting "clean" for the part it never read —
+the case is a home directory with a stray `package.json`, not a project. Point
+the root at the project, or narrow `sources` in `loupe.config.json`; a
+project that really is that large raises the ceiling with `"maxEntries"` there
+(`LOUPE_MAX_ENTRIES` overrides it for one run).
+
 ## Status
 
 Working: all three channels (stylesheets, `style={{ … }}`, CSS-in-JS template
@@ -970,10 +1194,12 @@ Known limits, in rough priority order:
    plugins, so any React-based design system works and Vue SFCs, Svelte and
    Angular templates do not — their markup never parses, so the correlation
    rules have nothing to bind a class to. The stylesheet-only rules still run.
-2. **Prop maps.** A finding can now name the token that replaces a value, but
-   not the *prop* that replaces a declaration: `system/override` says "restyle
-   via its props" without naming which one. That needs a per-component prop map,
-   which the WPDS MCP could generate.
+2. **Styling surfaces are hand-read.** `system/override` names the prop that
+   owns a declaration, or says there is none, only for components whose
+   registry entry records a `surface` — read from the package source, per
+   component. In a registry that records them, everything else gets the
+   plain-element verdict, advisory. The VIP and Archer registries record none
+   yet, so there every appearance property on a bound class still blocks.
 3. **Structural interpolation.** A template whose shape depends on an
    interpolation (``styled.div`${mixin}` ``) parses only when the interpolation
    sits where a whole statement would. Anything else is recorded as a parse
@@ -982,13 +1208,14 @@ Known limits, in rough priority order:
 4. **Composite matching is greedy.** A registered child claims the first node it
    fits. For registries of a handful of nodes this is exact; a large pattern with
    several interchangeable children could in principle miss a match.
-5. **No index cache.** Every hook run rebuilds the repo index, and the language
-   server re-analyzes whole on every save. At ~115ms warm on an ordinary project
-   this has not been worth the complexity; Gutenberg's ~2.4s is the case that
-   would justify splitting `analyze` into index and check phases.
+5. **The index is cached per file, not held in memory.** Each unchanged file's
+   scan is reused from the last run (see [Caches](docs/design/cli.md#caches)),
+   which took a hook run on a Gutenberg-sized tree from 3.8s to about 0.8s. What
+   is left is mostly Node starting and the cache file loading; a long-lived
+   process holding the index would remove that, and has not been needed yet.
 6. **The editor reports on save.** A dirty buffer shows the previous verdict.
    Diagnosing unsaved text means threading a buffer overlay through every read
-   in the analyzer, which is what (5) would also want.
+   in the analyzer.
 
 ## Working on the engine
 

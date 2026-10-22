@@ -11,6 +11,37 @@
 import type { ChildNode, Container, Declaration, Rule } from 'postcss';
 import type { DeadRule, Decl, MarginKind } from './types.ts';
 
+/**
+ * Shorthands whose colour part has a token, whatever their other parts are.
+ * Exported for the token pass, which offers a border colour for the colour and
+ * leaves the width and style as written.
+ */
+export const COLOR_SHORTHANDS = new Set([
+	'border',
+	'border-top',
+	'border-right',
+	'border-bottom',
+	'border-left',
+	'border-block',
+	'border-block-start',
+	'border-block-end',
+	'border-inline',
+	'border-inline-start',
+	'border-inline-end',
+	'border-block-color',
+	'border-inline-color',
+	'border-block-start-color',
+	'border-block-end-color',
+	'border-inline-start-color',
+	'border-inline-end-color',
+	'outline',
+	'column-rule',
+	'column-rule-color',
+	'text-decoration',
+	'text-shadow',
+	'background-image',
+]);
+
 /** Token-backed props whose literal values duplicate a design token. */
 const COLOR_PROPS = new Set([
 	'color',
@@ -114,12 +145,82 @@ export const APPEARANCE_PROPS = new Set([
 	'backdrop-filter',
 ]);
 
+const SIDES = ['top', 'right', 'bottom', 'left'];
+const LOGICAL = ['block', 'inline', 'block-start', 'block-end', 'inline-start', 'inline-end'];
+const BORDER_PARTS = ['width', 'style', 'color'];
+
+/** The longhands one level below a shorthand. Only the appearance families. */
+const LONGHANDS: ReadonlyMap<string, readonly string[]> = new Map<string, string[]>([
+	['font', ['font-size', 'font-weight', 'font-family', 'line-height', 'font-style', 'font-variant', 'font-stretch']],
+	['background', ['background-color', 'background-image']],
+	['outline', ['outline-color', 'outline-width', 'outline-style']],
+	['text-decoration', ['text-decoration-color', 'text-decoration-line', 'text-decoration-style']],
+	['border', [...[...SIDES, ...LOGICAL].map((s) => `border-${s}`), ...BORDER_PARTS.map((p) => `border-${p}`)]],
+	...[...SIDES, ...LOGICAL].map((s): [string, string[]] => [
+		`border-${s}`,
+		BORDER_PARTS.map((p) => `border-${s}-${p}`),
+	]),
+	...BORDER_PARTS.map((p): [string, string[]] => [`border-${p}`, SIDES.map((s) => `border-${s}-${p}`)]),
+	[
+		'border-radius',
+		['border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius'],
+	],
+]);
+
+/** A property and every longhand beneath it, however deep. */
+function withLonghands(prop: string): Set<string> {
+	const out = new Set([prop]);
+	for (const p of out) for (const l of LONGHANDS.get(p) ?? []) out.add(l);
+	return out;
+}
+
+/**
+ * Do two properties set any of the same thing? A shorthand overlaps each of
+ * its longhands in both directions — `border` resets `border-top-color`, and a
+ * component owning `border-color` owns what `border` would overwrite — while
+ * `border` and `border-radius` share a prefix and nothing else.
+ */
+export function propsOverlap(a: string, b: string): boolean {
+	if (a === b) return true;
+	const below = withLonghands(a);
+	for (const p of withLonghands(b)) if (below.has(p)) return true;
+	return false;
+}
+
 const KEYWORD = /^(inherit|initial|unset|revert|revert-layer|none|auto|transparent|currentcolor|normal)$/i;
 const ZERO = /^0([a-z%]*)$/i;
 
 export const usesToken = (value: string): boolean => /var\(\s*--/.test(value);
 const isLiteralColor = (v: string): boolean =>
-	/#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|oklch|lab|color)\(/i.test(v);
+	/#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|hwb|oklch|oklab|lab|lch|color)\(/i.test(v);
+
+/**
+ * The value with every `var()` and `url()` cut out, nested parentheses and all.
+ *
+ * A token beside a literal does not make the literal a token: `border:
+ * var(--border-width-xs) solid #dcdcde` still carries a raw colour. A `var()`
+ * fallback goes with it — the token is what renders — and a `url()` is cut so
+ * `icon.svg#face` is not read as a hex.
+ */
+export function withoutRefs(value: string): string {
+	let out = '';
+	for (let i = 0; i < value.length; ) {
+		const m = /^(var|url)\(/i.exec(value.slice(i));
+		if (!m) {
+			out += value[i++];
+			continue;
+		}
+		let depth = 0;
+		let j = i + m[0].length - 1;
+		for (; j < value.length; j++) {
+			if (value[j] === '(') depth++;
+			else if (value[j] === ')' && --depth === 0) break;
+		}
+		out += ' ';
+		i = j + 1;
+	}
+	return out;
+}
 const isLiteralLength = (v: string): boolean =>
 	/(^|\s|,)-?\d*\.?\d+(px|rem|em|%|vh|vw|vmin|vmax|pt|ch)\b/.test(v) || /(^|\s)-?\d+(\s|$)/.test(v);
 const isLiteralDuration = (v: string): boolean => /^-?\d*\.?\d+m?s$/i.test(v.trim());
@@ -133,7 +234,16 @@ export const isMarginProp = (prop: string): boolean => prop === 'margin' || prop
 export const isFlexDecl = (prop: string, value: string): boolean =>
 	FLEX_PROPS.has(prop) || (prop === 'display' && /\b(inline-)?(flex|grid)\b/.test(value));
 
-/** A declaration that establishes a CSS Grid. Grid is a genuine keep: flex primitives can't replace it. */
+/**
+ * A declaration that establishes a CSS Grid. Grid is a genuine keep: flex primitives can't replace it.
+ *
+ * The bare `grid` shorthand counts in every channel, and that is a decision, not
+ * a by-product of folding three checks into this one (#65): the inline-style and
+ * markup channels once skipped it while stylesheets did not, so the same
+ * declaration laid an element out in one and not the other. In effect a
+ * `grid:`-only `<div>` can draw `system/raw-element`, and an inline style with
+ * one is `isGrid`, which keeps `layout/in-css` off its `gap`.
+ */
 export const isGridDecl = (prop: string, value: string): boolean =>
 	(prop === 'display' && /\bgrid\b/.test(value)) ||
 	prop === 'grid' ||
@@ -181,9 +291,13 @@ export const isInertValue = (value: string): boolean => {
 /** A token-backed prop carrying a raw literal instead of a token reference. */
 export function isHardcodedTokenValue(prop: string, value: string): boolean {
 	const v = value.trim();
+	// Colour first, and past the token bail-out: a colour is one part of a
+	// shorthand, and the token beside it says nothing about it.
+	// Only the colour of a shorthand is judged here: `border: 1px solid #dcdcde`
+	// is flagged for the hex, not the width.
+	if (COLOR_PROPS.has(prop) || COLOR_SHORTHANDS.has(prop)) return isLiteralColor(withoutRefs(value));
 	if (usesToken(value) || KEYWORD.test(v)) return false;
 	if (v.split(/\s+/).every((part) => ZERO.test(part))) return false;
-	if (COLOR_PROPS.has(prop)) return isLiteralColor(value);
 	if (SPACING_PROPS.has(prop) || RADIUS_PROPS.has(prop) || BORDER_WIDTH_PROPS.has(prop)) return isLiteralLength(value);
 	if (MOTION_PROPS.has(prop)) return isLiteralDuration(value) || isLiteralEasing(value);
 	// Cursor has no length/color shape to check — anything left after the var()

@@ -1,0 +1,74 @@
+{
+  "packages": ["@automattic/vip-design-system"],
+  "version": 1,
+  "note": "Sanctioned VIP Design System compositions. `signature` is the normalized component tree — a node is `[name, ...children]`, matching is containment rather than equality, and anything under four nodes the engine ignores as too generic to check. Namespaced parts are written as the code writes them (`Dropdown.Item`, `Accordion.Root`); `canonical` is always the name the file imports (`Dropdown`, `Accordion`). **Anatomy entries** record a shape the library requires — a `Table` is rows of cells in every file that has one — and carry `canonical` set to the root import, so they keep `patterns/unregistered-composite` quiet about mandatory structure and never produce a finding of their own. **Judgement entries** record a composite with a right and a wrong form. `NewDialog.Root` and `Drawer` take their regions as props (`trigger`, `title`, `description`, `content`), which a signature does not see, so neither has an anatomy entry. Entries with no `canonical` are shapes the package does not ship: the first project to need one extracts it and fills `canonical` in. Seeded from the composites vip-dashboard actually repeats (2026-09-24).",
+  "patterns": [
+    {
+      "id": "table-anatomy",
+      "summary": "The parts a Table is made of.",
+      "use": "Every table. Recorded so rows of cells are not reported as an unregistered composite — including a row component that renders `TableRow(TableCell, …)` without importing `Table` itself.",
+      "import": "@automattic/vip-design-system",
+      "canonical": "Table",
+      "signature": ["Table", ["TableRow", "TableCell", "TableCell", "TableCell"]]
+    },
+    {
+      "id": "dropdown-anatomy",
+      "summary": "The parts a Dropdown menu is made of.",
+      "use": "Commands on a thing. The trigger is `Dropdown.Root`'s `trigger` prop; the items are its children.",
+      "import": "@automattic/vip-design-system",
+      "canonical": "Dropdown",
+      "signature": ["Dropdown.Root", "Dropdown.Item", "Dropdown.Item", "Dropdown.Item"]
+    },
+    {
+      "id": "accordion-anatomy",
+      "summary": "The parts an Accordion is made of.",
+      "use": "Several independently expandable sections.",
+      "import": "@automattic/vip-design-system",
+      "canonical": "Accordion",
+      "signature": ["Accordion.Root", ["Accordion.Item", "Accordion.Trigger", "Accordion.Content"]],
+      "rendered_signature": ["Accordion.Root", ["Accordion.Item", "Accordion.TriggerWithIcon", "Accordion.Content"]]
+    },
+    {
+      "id": "tabs-anatomy",
+      "summary": "The parts a Tabs set is made of.",
+      "use": "Peer views of one subject.",
+      "import": "@automattic/vip-design-system",
+      "canonical": "Tabs",
+      "signature": ["Tabs", ["TabsList", "TabsTrigger", "TabsTrigger"], "TabsContent"]
+    },
+    {
+      "id": "confirmation-dialog",
+      "summary": "Asking the user to confirm an action before it happens.",
+      "use": "Any destructive or irreversible action, and any action that needs a second look. `trigger`, `title`, `description`, `label` for the confirm button, `buttonVariant`, `onConfirm`.",
+      "import": "@automattic/vip-design-system",
+      "canonical": "NewConfirmationDialog",
+      "instead_of": [
+        "A NewDialog.Root whose content is a message and a Cancel/Confirm Button pair — NewConfirmationDialog already is that, with the button order and focus handling fixed",
+        "ConfirmationDialog, which is deprecated",
+        "window.confirm()"
+      ],
+      "note": "The anti-shape is prose rather than an `instead_of_signature`: `NewDialog.Root` carries its content as a prop, so the Cancel/Confirm pair never appears as its JSX child, and a form dialog also ends in two buttons."
+    },
+    {
+      "id": "busy-button",
+      "summary": "A button whose action is in flight.",
+      "use": "`<Button loading>` — or `ButtonSubmit` for a form's submit — which draws the spinner beside the label, disables the button and sets `aria-busy`.",
+      "import": "@automattic/vip-design-system",
+      "instead_of": [
+        "A Spinner rendered inside a Button's children while a flag is set — `{ loading && <Spinner size={ 14 } sx={ { mr: 2 } } /> }`"
+      ],
+      "instead_of_signature": ["Flex", "Button", ["Button", "Spinner"]],
+      "note": "The anti-shape is the action row it usually sits in, because `Button(Spinner)` alone is under the four-node floor. No `canonical`: every file that builds it already imports `Button`, which would read as deliberate."
+    },
+    {
+      "id": "labelled-toggle",
+      "summary": "A setting switched on and off in place: a Label and a Toggle on one row, with help text under them.",
+      "use": "Settings forms. The Label's `htmlFor` names the Toggle's `id`, and the help text's `id` is the Toggle's `aria-describedby`.",
+      "signature": ["Box", ["Flex", "Label", "Toggle"], "Text"],
+      "instead_of": [
+        "Rebuilding the row per form, with the label/toggle/description wiring re-typed each time"
+      ],
+      "note": "Not shipped. `ToggleRow` is a different shape — a list row with a `Heading` title, an optional image and badge, and no `<label>` association — so it is not a drop-in for this. vip-dashboard assembles this row by hand in 17 files; the first one extracted becomes `canonical`, and the rest import it."
+    }
+  ]
+}

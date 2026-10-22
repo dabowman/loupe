@@ -16,8 +16,16 @@ The engine resolved some findings to exactly one on-role token when it ran. Let
 it apply those itself rather than reading files back to retype them:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --changed
 ```
+
+`fix` reads no baseline, so scope it to what this run is working on. A bare
+`/loupe-fix` works new drift only: it fixes the files the working tree changed
+(`--changed`) and leaves the accepted backlog as it is. If that reports no git
+worktree, skip this step. Naming a rule id is working that rule's backlog on
+purpose: pass `--rule <id>` in place of `--changed`. Naming a path, pass
+`--files <path>` in its place; a directory stands for the source files under
+it, and every value in them is in reach, baselined or not.
 
 Add `--dry-run` first if the repo has uncommitted work. This only substitutes
 values the engine matched unambiguously; anything with two candidate tokens, or
@@ -30,11 +38,13 @@ ambiguous ones, and the values that are either a mistake or a deliberate
 choice. Review it first, and show the user the list:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --judge --dry-run --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --changed --judge --dry-run --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
-Each line is either a rewrite to a token or a `keep` that becomes a suppression.
-Apply it only after the user agrees, with the same command minus `--dry-run`.
+Scope it the same way as the step above: `--rule <id>` or `--files <path>` in
+place of `--changed` when the run names one. Each line is either a rewrite to a
+token or a `keep` that becomes a suppression. Apply it only after the user
+agrees, with the same command minus `--dry-run`.
 `--profiles` is what supplies the token descriptions the judgement is scored
 with. Whatever stays under the confidence floor is left for the passes below.
 
@@ -44,13 +54,22 @@ with. Whatever stays under the confidence floor is left for the passes below.
 node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" check --all --format json --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
-If `$ARGUMENTS` names a rule id or a path, narrow to that; add `--severity error`
+If `$ARGUMENTS` names a rule id, pass it as `--rule <id>` — to this check and to
+the `fix` in step 1 — and add `--no-baseline` to this check (and to the
+verifying one in step 4): naming a rule is working that rule's backlog on
+purpose, and a baseline would hide exactly the findings you were asked to clear.
+A path, a file or a directory, goes in as `--files <path>`; both repeat. A bare `/loupe-fix`, or one naming only a path,
+keeps the baseline: that is the new drift, not the accepted backlog. Don't
+filter the JSON yourself. Add `--severity error`
 to cut the run down to what the hook actually blocks on, which is the subset to
 clear first when the backlog is too large for one pass. Otherwise work upward
 through the layers, because lower fixes change what the higher findings say:
-unparsed files, then malformed suppressions, then component overrides, then
-layout, then values, then dead classes. Re-run between stages rather than
-working from a stale list.
+unparsed files, then malformed suppressions, then the classes already dead —
+pruned first so no later stage tokenizes a rule about to be deleted — then
+component overrides, then layout, then values, then a last sweep for what that
+work left dead. Both dead-class passes are cross-file and yours to make, never
+dispatched (see below). Re-run between stages rather than working from a stale
+list.
 
 ## 3. Fix — inline, or fan out
 
@@ -97,7 +116,10 @@ it would need to see. Handle those yourself.
 ## 4. Verify
 
 Re-run the check once, repo-wide — not once per file; every run re-indexes the
-whole repo regardless of scope. Report what changed. If any fix could have
+whole repo regardless of scope — with the same `--rule` and `--no-baseline` as
+step 2. Report what changed, and when a rule was named and its backlog is now
+empty, suggest re-recording the baseline with `/loupe-baseline` so it stops
+carrying entries for findings that are gone. If any fix could have
 altered rendering, say which ones and why, rather than folding it into a cleanup
 summary. Agents report their own rendering risks; carry those through instead of
 dropping them.

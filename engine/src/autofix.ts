@@ -10,7 +10,9 @@
  *
  * Only the unambiguous case is applied: two on-role tokens carrying the same
  * value is a semantic choice, not an array lookup, and a misspelling one
- * keystroke from two real tokens is a question, not a typo.
+ * keystroke from two real tokens is a question, not a typo. So is one token the
+ * profile scopes to another kind of element — the menu radius on a dialog — or
+ * to a kind nothing shows this element to be.
  *
  * Design notes: docs/design/report.md#fixing
  */
@@ -18,9 +20,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { byBytes } from './discover.ts';
-import { KEEP } from './tokens.ts';
-import { escapeRe } from './text.ts';
-import type { Directive, FixCandidate, KeptValue, SkippedFix, SkippedKeep, TokenFix } from './types.ts';
+import { DELIBERATE, KEEP } from './tokens.ts';
+import { escapeRe, messageLineOf } from './text.ts';
+import type { Directive, FixCandidate, KeptValue, SkippedFix, SkippedKeep, Suggestion, TokenFix } from './types.ts';
 
 /**
  * Where a suppression comment can be written. A kept value outside a stylesheet
@@ -47,7 +49,9 @@ export function tokenFixes(findings: readonly FixCandidate[]): TokenFix[] {
 		for (const s of f.suggest ?? []) {
 			// The exact token first: `--judge` is never asked about a declaration
 			// code already settled, so at most one of these is ever there.
-			const to = s.tokens.length === 1 ? `var(${s.tokens[0]})` : s.judged?.answer;
+			// A single token held for `review` is outside its declared scope here, or
+			// not shown to be inside it — a question, as two candidates are.
+			const to = s.tokens.length === 1 && !s.review ? `var(${s.tokens[0]})` : s.judged?.answer;
 			if (to === undefined || to === KEEP) continue;
 			out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to, span: s.span });
 		}
@@ -177,7 +181,7 @@ export function applyTokenFixes(
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch (err) {
-			const why = err instanceof Error ? err.message : String(err);
+			const why = messageLineOf(err);
 			for (const fix of group) skipped.push({ ...fix, why });
 			continue;
 		}
@@ -222,8 +226,13 @@ export function applyTokenFixes(
  *
  * It names every rule the kept declarations on that line were reported under,
  * which is not always one: a minified stylesheet can put a kept colour and a
- * kept font-weight on the same line. The reason is what the judgement said, so
- * the comment records that a model made the call, not a person.
+ * kept font-weight on the same line. The reason is what the keep was settled
+ * with.
+ *
+ * Only a keep whose reason is a fact is written: no token for the property in
+ * the design system at all. One the model judged {@link DELIBERATE} is left
+ * for review, since what the value is — the reason a suppression should give —
+ * is not something the judgement says.
  */
 export function applyKeeps(
 	root: string,
@@ -247,6 +256,7 @@ export function applyKeeps(
 	);
 	const byFile = new Map<string, KeptValue[]>();
 	const skipped: SkippedKeep[] = [];
+	const deliberate = (s: Suggestion): boolean => s.judged?.spans[0] === DELIBERATE;
 	for (const { f, s: decl, line } of all) {
 		if (decl.judged?.answer !== KEEP) continue;
 		const kept: KeptValue = {
@@ -256,9 +266,12 @@ export function applyKeeps(
 			value: decl.value,
 			reason: decl.judged.spans.join(' '),
 		};
-		if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: 'not a stylesheet' });
-		else if (onLine.get(`${f.file}\u0000${line}`)?.some((o) => o.s.judged?.answer !== KEEP))
-			skipped.push({ ...kept, why: 'shares its line with a value that was not kept' });
+		if (deliberate(decl))
+			skipped.push({ ...kept, why: 'judged deliberate — suppress it by hand, saying what the value is' });
+		else if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: 'not a stylesheet' });
+		// A value left for review mutes nothing, so it cannot share a directive's line.
+		else if (onLine.get(`${f.file}\u0000${line}`)?.some((o) => o.s.judged?.answer !== KEEP || deliberate(o.s)))
+			skipped.push({ ...kept, why: 'shares its line with a value that is not suppressed' });
 		else byFile.set(f.file, [...(byFile.get(f.file) ?? []), kept]);
 	}
 
@@ -269,7 +282,7 @@ export function applyKeeps(
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch (err) {
-			const why = err instanceof Error ? err.message : String(err);
+			const why = messageLineOf(err);
 			for (const k of group) skipped.push({ ...k, why });
 			continue;
 		}

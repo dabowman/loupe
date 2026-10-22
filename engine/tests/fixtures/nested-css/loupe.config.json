@@ -1,1 +1,12 @@
-{ "extends": "wordpress-components", "namespaces": { "project": ["wf-"] } }
+{
+  "extends": "wordpress-components",
+  "namespaces": { "project": ["wf-"] },
+  "componentRegistry": [
+    {
+      "name": "Text",
+      "package": "@wordpress/components",
+      "status": "recommended",
+      "surface": { "properties": { "color": "color", "font-size": "size" } }
+    }
+  ]
+}

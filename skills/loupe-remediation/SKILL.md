@@ -1,7 +1,7 @@
 ---
 name: loupe-remediation
 description: >-
-  Load when fixing design-system conformance findings — output from `loupe`, the `/loupe-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/negative-margin`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `patterns/duplicate-composite`, `patterns/superseded-composite`, `patterns/judged-redirect`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Works on whatever design system the project is on — WordPress Design System, Archer, or one declared in the project's own config — reading the system-specific half of each remedy from the active profile. Carries the order to fix in, the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the loupe findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `loupe-authoring` for the underlying rules.
+  Load when fixing design-system conformance findings — output from `loupe`, the `/loupe-audit` command, or a blocked Stop/PostToolUse hook reporting `layout/margin-on-child`, `layout/negative-margin`, `layout/in-css`, `typography/in-css`, `typography/untokenized`, `system/override`, `system/inline-style`, `system/raw-element`, `system/locked-component`, `system/superseded-component`, `tokens/hardcoded-value`, `tokens/unknown-token`, `tokens/misapplied-token`, `tokens/undelivered`, `patterns/duplicate-composite`, `patterns/superseded-composite`, `patterns/judged-redirect`, `patterns/unregistered-composite`, `css/dead-class`, `stylesheet/unparsed`, or `suppression/malformed`. Works on whatever design system the project is on — WordPress Design System, Archer, or one declared in the project's own config — reading the system-specific half of each remedy from the active profile. Carries the order to fix in, the per-rule remedy, the checks that stop a "fix" from silently changing rendering, and the rule for when suppressing beats changing code. Use it whenever a design-system check blocks a turn or a cleanup pass is requested over existing UI. Triggers on "fix the loupe findings", "the quality gate is blocking", "clean up this component's CSS", "why is this flagged", or a pasted finding list. Pair with `loupe-authoring` for the underlying rules.
 compatibility: "Any React-family design system Loupe can be configured for. Needs the plugin's engine (node >=18)."
 ---
 
@@ -39,6 +39,36 @@ exist.
   `<profile dir>/remediation.md`** — it carries the system-specific half of
   every rule below, and `<profile dir>/authoring.md` carries the token families
   a value has to come from.
+- `delivery:` says how the system reaches a page: which packages the host
+  provides, which get bundled into the project's own build, and which
+  stylesheet defines the tokens. Absent means the profile declares nothing —
+  not that everything is free. `<profile dir>/delivery.json` carries the same
+  facts with their sources.
+
+## Before converting or tokenizing: state the cost
+
+A remedy is a proposal to *this* project, and two of them can cost more than
+the finding is worth. Say so before the edit, not after it:
+
+- **A component from a bundled package.** A remedy naming a package that
+  `delivery:` lists as bundled is asking the project to take its first runtime
+  dependency on it, unless it already imports it: a bigger bundle, the
+  package's own dependencies with it, and possibly test config for its ESM
+  build. The engine cannot measure the bundle, so it does not claim a number.
+  Such a finding's note says so — `bundling required: <pkg> is bundled into
+  your build, not provided by <host>` — and the note is absent once the project
+  imports the package anywhere. `new dependency: <pkg> is not in package.json`
+  is the same question for a package the profile says nothing about. Check
+  whether the project is deliberately dependency-free; when the cost is new,
+  state it to the user and let them choose before converting.
+- **Tokens whose stylesheet never loads.** A `var()` naming a token the page
+  never defines is invalid at computed-value time: the declaration drops, it
+  does not fall back. Before substituting tokens, confirm the stylesheet
+  `delivery:` names reaches the page the CSS styles — for a WordPress plugin, a
+  dependency on its handle in the enqueue that loads the CSS. `tokens/undelivered`
+  reports a project where the profile's evidence says it does not. Until it does,
+  every token substitution is dead on the page, and "rendering change: none" is
+  false.
 
 When the finding rather than the fix is what needs explaining, `loupe explain
 <ruleId>` prints the rule's guidance and whether it is live in this config — and
@@ -53,14 +83,22 @@ findings say:
 
 1. `stylesheet/unparsed` — a file nobody read, so its findings do not exist yet
 2. `suppression/malformed` — a broken directive is muting nothing
-3. `system/locked-component`, `system/superseded-component` — is this even the
+3. `css/dead-class`, pruning — delete what is already dead. Nothing below can
+   revive a class no markup references today, and every later stage gets a
+   smaller input instead of tokenizing rules about to be deleted. Still a
+   cross-file call: a class can be assembled at runtime, in PHP or a template
+   string, so confirm it is not before deleting
+4. `system/locked-component`, `system/superseded-component` — is this even the
    right component; swapping it can change what every finding below says
-4. `system/override`, `system/inline-style`, `typography/in-css` — the
+5. `system/override`, `system/inline-style`, `typography/in-css` — the
    component is being fought
-5. `layout/*` — structure
-6. `patterns/*` — composites, once individual components are conformant
-7. `tokens/hardcoded-value`, `tokens/unknown-token`, `typography/untokenized` — values
-8. `css/dead-class` — once the rest has settled
+6. `layout/*` — structure
+7. `patterns/*` — composites, once individual components are conformant
+8. `tokens/undelivered`, then `tokens/hardcoded-value`, `tokens/unknown-token`,
+   `tokens/misapplied-token`, `typography/untokenized` — values; the first
+   decides whether any of the rest render
+9. `css/dead-class`, sweep — what the work above left dead, once the rest has
+   settled. The same cross-file check applies
 
 Re-run between stages rather than fixing from a stale list.
 
@@ -128,7 +166,9 @@ tokens. CSS Grid is never reported.
 ### `typography/in-css`
 
 The class is on a text component, and that component already has a prop
-carrying the whole type style. Delete the type declarations and use it. If the
+carrying the whole type style — the message names it where the registry
+records one (`font-size on <Text> — set via its variant prop`). Delete the type
+declarations and use it. If the
 finding is on `color` and the styling prop has no colour axis, that is a system
 gap — set colour separately with a foreground token and leave a comment naming
 the missing prop.
@@ -150,11 +190,28 @@ does not clear until every declaration in it does.
 
 ### `system/override`
 
-CSS restyling a design-system component, or reaching into another library's
-internals.
+CSS setting a property a design-system component owns, or reaching into
+another library's internals.
 
-For a component of your own design system, restyle through props, and through
-whatever tokens that component declares as its own contract. For a library
+The per-declaration form fires only where the component registry records that
+the component owns the property, and the message says what controls it:
+
+- `<Text> ← font-size — set via its variant prop` — delete the declaration and
+  use that prop.
+- `<TextControl> ← font-size — it sets this itself and has no prop for it` —
+  there is nothing to move to. Keep the component's own styling, or keep the
+  declaration with a suppression whose reason says why the design needs it;
+  that override is what a version bump breaks first.
+
+- `<Button> ← background — restyle via its props/tokens, not CSS` — the
+  registry this component comes from records no styling surfaces at all, so
+  nothing says what it owns and every appearance property on its class
+  reports. Look for the prop or token in the component's docs; where there
+  is none, the same two exits as above.
+
+Where the registry does record surfaces, a class setting a property the
+component does not own is not reported here — it gets the same verdict it
+would on a plain element, usually `tokens/hardcoded-value`. For a library
 internal, there is no supported fix: the selector depends on markup that will
 change without notice. Find the supported API, or accept the default. If you
 must keep it, the suppression reason should say it is a known-fragile coupling.
@@ -179,11 +236,31 @@ leave the computed ones, then suppress with a reason naming what is computed.
 
 The element has a design-system analog and the finding names it. Convert it.
 
+A message ending `— converted, would block: font-size, color (.acme-title)`
+names the declarations on the element's classes that will block once those
+classes sit on the component — because the component owns the property, or
+because its registry records nothing about what it owns. Convert, and in the
+same edit settle each named declaration the way `system/override` and
+`typography/in-css` would ask: move it to the prop, drop it, or keep it with a
+suppression whose reason says why the design needs it. Converting and leaving
+them is trading advisory findings for blocking ones.
+
 An element handed to a text or layout component's substitution prop — `render`,
 `as`, `component` — is not flagged: it names the tag that component emits, so
 converting an `<h4>` to the text component with `render={<h4 />}` settles the
 finding rather than moving it. Markup nested inside such a prop still counts, as
 does an element handed to a genuine render callback.
+
+That conversion trips `jsx-a11y/heading-has-content`. The lint rule reads
+`<h4 />` statically and cannot follow the children through `render` to the
+element that actually renders, which has them. It is a false positive: disable
+it on that line, with the reason in the directive —
+
+```
+eslint-disable-next-line jsx-a11y/heading-has-content -- children pass through render
+```
+
+— not by dropping the semantic element, and not by reverting the conversion.
 
 Not every raw element should convert. Content rendered from an editor, docs
 prose, and third-party render props are legitimately raw — suppress those with
@@ -205,6 +282,9 @@ which picked it by what the rule styles among the tokens near the value. It is
 usually right but check it against the role. `deliberate, no token fits
 (judged …)` means the model read the value as a decision: suppress it with
 what it actually is (a scrim, a pill, a brand colour), not with the judgement.
+`fix --judge` leaves these unsuppressed and lists them as skipped for exactly
+that reason. `no <property> token in the design system` is a fact, not a
+judgement, and `fix --judge` suppresses it with that as the reason.
 
 When it names none, the engine found no token on-role for that value. Do not
 substitute one that merely matches: a token is chosen by what the value is
@@ -219,6 +299,14 @@ layer exists to prevent.
 If no token fits the role, the value may be genuinely outside the system.
 Suppress with that reason rather than forcing an approximate token — a wrong
 token is worse than a literal, because it will move when the system moves.
+
+A token followed by `(review: …)` matched by value, but the active profile
+scopes it to another kind of element, or to one nothing shows this element to
+be — `--wpds-border-radius-md` is for menus and popovers, whatever the pixels.
+`loupe fix` left it on purpose. Read the reason, find what the element actually
+is, and use the token its role names (a dialog's radius is `lg`), even where
+that changes the value; or keep the value if the design meant it. Do not apply
+the named token because it is the one offered.
 
 ### `tokens/unknown-token`
 
@@ -235,6 +323,47 @@ If the token is real but defined somewhere the engine cannot see — including
 custom properties a library sets at runtime rather than in a stylesheet — the
 fix is `designSystem.tokenSources` in config, which fixes every finding of this
 shape at once.
+
+### `tokens/misapplied-token`
+
+The token is real and the pixels are probably right; the meaning is not. The
+finding says which half is wrong. *"a background token sets background, …"* —
+it is on a property its family is not for: use the token of the right family
+(`foreground` for `color`, `stroke` for a border). *"not for interactive; this
+styles `<button>`"* or *"for overlay; this styles `<button>`"* — it is on a kind
+of element its role excludes: a surface colour on a clickable control, a menu
+radius on a button. Pick the token whose target or step names what the element
+is (`background-interactive-*`, `radius-sm`), keeping tone and emphasis aligned
+with the rest of the element.
+
+It is advisory, and the scope is the profile author's reading of the system. If
+the element really is what the token says — a card that is also a link, say —
+suppress it with that reason; and if the profile's scope is simply wrong, that
+is the profile's `token-scopes.json` to fix, not the code.
+
+### `tokens/undelivered`
+
+The project uses the design system's tokens, and nothing the profile counts as
+evidence shows the stylesheet defining them reaches the page. Every `var()` of
+them resolves to nothing there, and each declaration drops — the element loses
+its background, not just its colour.
+
+Fix the delivery, not the tokens: the finding's note names the handle, and
+`loupe explain tokens/undelivered` prints what counts as delivery here and the
+profile's own advice. Usually that is one line — the handle added to the
+dependency array of the enqueue that loads the CSS. Name the handle itself: a
+dependency that only implies it on some host versions does not count. Do not
+paste the token definitions into the project's own stylesheet to silence it;
+that forks the design system and stops following its themes.
+
+A note beginning `fallbacks render but won't follow the theme` means the build
+writes the default theme's values into each `var()`. The page renders, which
+can look like there is nothing to fix, but every token is pinned to one theme;
+the remedy after the semicolon still applies.
+
+It reports only on a positive no: enqueues found, every one read, none
+qualifying. If the CSS genuinely renders only where the host already loads the
+sheet (inside the block editor's iframe, say), suppress it with that reason.
 
 ### `patterns/duplicate-composite`
 
@@ -334,7 +463,25 @@ A good reason names the constraint that makes the finding wrong here. "Legacy
 code", "intentional", "matches existing style" are not reasons — the first two
 describe nothing and the third is the drift restating itself.
 
-Audit them periodically; constraints expire:
+When the reason is a property of the project rather than of a line — the only
+conformant target needs a library the project deliberately does not ship — turn
+the rule off in config instead of writing the same directive thirty times, and
+record the reason there, once:
+
+```json
+"rules": {
+  "system/raw-element": {
+    "severity": "off",
+    "reason": "Stack/Text require bundling @wordpress/ui; this plugin ships zero runtime deps by design"
+  }
+}
+```
+
+The same bar applies: a config-scope off silences every finding of the rule,
+everywhere, so it needs the reason more than a directive does, not less.
+
+Audit them periodically; constraints expire. This lists the inline directives
+and every rule turned off in config, with its reason or `no reason given`:
 
 ```bash
 loupe suppressions
@@ -355,12 +502,19 @@ the registry-backed rules only fire when it is there. Baselining without it
 reports `baselined 0 finding(s)` and leaves the gate blocking on findings this
 backlog never recorded.
 
-Then burn it down by rule — one rule across the whole codebase is a far more
-reviewable diff than one file across all rules, and the mechanical repetition
-makes a mistake obvious.
+Then burn it down by rule (`--rule <id>` scopes both `check` and `fix`) — one
+rule across the whole codebase is a far more reviewable diff than one file
+across all rules, and the mechanical repetition makes a mistake obvious.
 
 ## Verify
 
 Re-run the check, then confirm the UI still renders as before. A conformance
 pass that changes what the user sees needs to be flagged as such, not folded
 into a cleanup commit.
+
+Then run the project's own linters. A conformance fix that trips another tool is
+still a fix, not a regression — but prove it, the same way you prove rendering
+did not change, rather than assume it. Formatter churn is the common case: a
+conversion that adds a JSX prop often reflows onto several lines, and the
+project's fix script (`lint:js:fix` on a `wp-scripts` project) settles it. Run
+that instead of hand-formatting.

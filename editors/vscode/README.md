@@ -14,7 +14,7 @@ install:
 
 ```bash
 ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe        # from a checkout
-ln -s ~/.claude/plugins/<marketplace>/loupe/bin/loupe ~/.local/bin/loupe
+ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
 ```
 
 Use `bin/loupe`, not `engine/bin/loupe.mjs` — the shim is what passes the

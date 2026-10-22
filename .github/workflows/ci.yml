@@ -61,3 +61,19 @@ jobs:
           # which is the only outcome this step is looking for.
           [ "$status" -le 1 ] || { echo "loupe could not run (exit $status)"; exit 1; }
           grep -q 'id="loupe-data"' /tmp/report.html
+      # The bundle's scan workers are the bundle itself, reloaded off the main
+      # thread. A worker that cannot start falls back to scanning in-process,
+      # silently, so this asks the run to say which happened and fails on a
+      # fallback: enough markup to clear the pool's floor, and nothing installed.
+      - name: the bundle scans across workers
+        run: |
+          mkdir -p /tmp/many/src
+          pad=$(printf 'x%.0s' $(seq 1 4000))
+          for i in $(seq 1 180); do
+            printf '// %s\nexport const C%s = () => <p style={{ marginBottom: 4 }}>%s</p>;\n' "$pad" "$i" "$i" > /tmp/many/src/C$i.jsx
+          done
+          status=0
+          LOUPE_NO_CACHE=1 LOUPE_DEBUG_SCAN=1 node engine/bin/loupe.mjs check --root /tmp/many --all --preset generic > /dev/null 2> /tmp/scan.log || status=$?
+          [ "$status" -le 1 ] || { cat /tmp/scan.log; exit 1; }
+          cat /tmp/scan.log
+          grep -q 'across [0-9]* worker' /tmp/scan.log

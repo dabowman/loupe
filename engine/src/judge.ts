@@ -12,25 +12,32 @@
  *   judge/variant.ts   system/raw-element — which variant of the analog
  *   judge/force.ts     a pattern force, for patterns/judged-redirect
  *   judge/value.ts     a flagged value — which token, or deliberate
+ *   judge/token.ts     tokens/unknown-token — which real token was meant
  *
  * None changes a deterministic verdict. A variant or a token is written into the
  * finding's suggestion; a redirect is its own advisory finding, written after
- * the baseline and never by the hook. Each records the answer as data on
- * `Finding.judged`. The gate stays deterministic and offline.
+ * the baseline. Each records the answer as data on `Finding.judged`. The
+ * verdicts stay deterministic; only the advice they carry is judged.
  *
  * Design notes, and every measurement behind the floors: docs/design/judge.md
  */
 
 import { readFileSync } from 'node:fs';
+import type { AnswerCache } from './cache.ts';
+import { sha256 } from './cache.ts';
+import { renameCandidates } from './checks/tokens/unknown-token.ts';
+import { withoutReach } from './delivery.ts';
 import { EMBEDDED_LANGUAGE } from './embedded.ts';
 import type { ForceJudge } from './judge/force.ts';
 import { forceQuery } from './judge/force.ts';
+import { NONE, renameQuery } from './judge/token.ts';
 import { valueQuery } from './judge/value.ts';
 import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import { KEEP, declarationMessage, planValue } from './tokens.ts';
+import { boundMessage, messageLine } from './text.ts';
+import { DELIBERATE, KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
 
@@ -46,8 +53,27 @@ const FLOOR = 0.5;
 const CONCURRENCY = 6;
 // Overload is transient and a run is a hundred requests.
 const RETRIES = 4;
+// The longest a server's `retry-after` is honoured for: a little past the
+// longest wait the doubling picks on its own (4s), so a server asking for a
+// few seconds gets them. A proxy answering `retry-after: 3600` would otherwise
+// hold the whole run, hook included, for an hour.
+const RETRY_WAIT_MAX_MS = 5_000;
+// The hook runs this inside Claude Code's 60s timeout, and `fetch` has no
+// deadline of its own: one socket that never answers is otherwise a killed hook
+// on every write. An abort throws, the caller notes it, the run keeps the
+// deterministic findings it already has.
+// ponytail: per request, so a long full-repo run is still bounded only by its
+// item count. Give `ask` a whole-run deadline if that ever needs a ceiling too.
+const REQUEST_TIMEOUT_MS = 20_000;
 
 type Fetch = typeof fetch;
+
+// Overridable for tests only, and only to this machine: an endpoint is where the
+// key is sent, and a project's own settings can put variables in the hook's
+// environment.
+const ENDPOINT_OVERRIDE = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(process.env.LOUPE_JUDGE_ENDPOINT ?? '')
+	? (process.env.LOUPE_JUDGE_ENDPOINT as string)
+	: null;
 
 export interface Choice {
 	choice: string;
@@ -65,6 +91,85 @@ export interface Query<T> {
 	question: (item: T, index: number) => object;
 }
 
+/** What a run spent, for the line that says so. */
+export interface JudgeStats {
+	/** Requests sent. */
+	asked: number;
+	/** Requests answered from the cache instead. */
+	cached: number;
+	/** Requests identical to one already in flight this run, which waited for it. */
+	shared: number;
+}
+
+/**
+ * Everything the asks in one run share: the key, the transport, one limit on
+ * requests in flight however many passes are asking at once, the answers
+ * already paid for, and the tally of what was spent.
+ *
+ * A bare key string where a client is expected builds a private one with no
+ * cache — which is what the evals and the unit tests want: every request real,
+ * none remembered.
+ */
+export interface JudgeClient {
+	apiKey: string;
+	fetchImpl: Fetch;
+	cache: AnswerCache | null;
+	/** Runs `fn` once a request slot is free. */
+	slot: <R>(fn: () => Promise<R>) => Promise<R>;
+	/** Requests in flight by key, so two passes asking the same thing pay once. */
+	inflight: Map<string, Promise<(Choice | undefined)[]>>;
+	stats: JudgeStats;
+}
+
+export type Auth = string | JudgeClient;
+
+/**
+ * A slot pool. A released slot is handed straight to the next waiter rather
+ * than freed, so nothing arriving in between can take it and run one over.
+ */
+function limiter(size: number): JudgeClient['slot'] {
+	let active = 0;
+	const waiting: (() => void)[] = [];
+	return async (fn) => {
+		if (active < size) active++;
+		else await new Promise<void>((resolve) => waiting.push(resolve));
+		try {
+			return await fn();
+		} finally {
+			const next = waiting.shift();
+			if (next) next();
+			else active--;
+		}
+	};
+}
+
+export function judgeClient(
+	apiKey: string,
+	{ fetchImpl = fetch, cache = null }: { fetchImpl?: Fetch; cache?: AnswerCache | null } = {},
+): JudgeClient {
+	return {
+		apiKey,
+		fetchImpl,
+		cache,
+		slot: limiter(CONCURRENCY),
+		inflight: new Map(),
+		stats: { asked: 0, cached: 0, shared: 0 },
+	};
+}
+
+const clientOf = (auth: Auth, fetchImpl: Fetch): JudgeClient =>
+	typeof auth === 'string' ? judgeClient(auth, { fetchImpl }) : auth;
+
+/** `judge: 4 asked, 37 from cache` — or null when nothing was judged at all. */
+export function judgeSummary(client: JudgeClient): string | null {
+	const { asked, cached, shared } = client.stats;
+	if (!asked && !cached && !shared) return null;
+	const parts = [`${asked} asked`];
+	if (cached) parts.push(`${cached} from cache`);
+	if (shared) parts.push(`${shared} shared`);
+	return `judge: ${parts.join(', ')}`;
+}
+
 /**
  * Batch, post, align.
  *
@@ -77,16 +182,46 @@ export interface Query<T> {
  * `size` is how many items share one request; see docs/design/judge.md for why
  * it is 1. Throws on a failed request; the caller reports it and keeps what it
  * had.
+ *
+ * A request is keyed by its own bytes — model, endpoint, elements and questions
+ * — so an answer is reused only for exactly the question it answered. Context
+ * lines are part of the element, so an edit near what was asked is a new
+ * question; an edit anywhere else is not.
  */
 export async function ask<T>(
 	query: Query<T>,
 	items: readonly T[],
-	apiKey: string,
+	auth: Auth,
 	fetchImpl: Fetch = fetch,
 	size = 1,
 ): Promise<(Choice | undefined)[]> {
+	const client = clientOf(auth, fetchImpl);
+	const endpoint = ENDPOINT_OVERRIDE ?? ENDPOINT;
 	const batches: T[][] = [];
 	for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
+
+	const post = async (body: string, n: number): Promise<(Choice | undefined)[]> => {
+		for (let attempt = 0; ; attempt++) {
+			const res = await client.fetchImpl(endpoint, {
+				method: 'POST',
+				headers: { authorization: `Bearer ${client.apiKey}`, 'content-type': 'application/json' },
+				body,
+				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+			});
+			if (res.ok) {
+				const parsed = (await res.json()) as { answers: Record<string, Choice> };
+				return Array.from({ length: n }, (_, i) => parsed.answers[`e${i}`]);
+			}
+			const transient = res.status === 429 || res.status >= 500;
+			if (!transient || attempt >= RETRIES)
+				throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
+			// The server's own wait when it names one, in seconds and capped; a
+			// date or nothing falls back to doubling.
+			const after = Number(res.headers.get('retry-after'));
+			const wait = after > 0 ? Math.min(after * 1000, RETRY_WAIT_MAX_MS) : 500 * 2 ** attempt;
+			await new Promise((r) => setTimeout(r, wait));
+		}
+	};
 
 	const sendBatch = async (batch: readonly T[]): Promise<(Choice | undefined)[]> => {
 		const body = JSON.stringify({
@@ -94,28 +229,36 @@ export async function ask<T>(
 			state: { elements: batch.map(query.element) },
 			questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)])),
 		});
-		for (let attempt = 0; ; attempt++) {
-			const res = await fetchImpl(ENDPOINT, {
-				method: 'POST',
-				headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-				body,
-			});
-			if (res.ok) {
-				const parsed = (await res.json()) as { answers: Record<string, Choice> };
-				return batch.map((_, i) => parsed.answers[`e${i}`]);
-			}
-			const transient = res.status === 429 || res.status >= 500;
-			if (!transient || attempt >= RETRIES)
-				throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
-			// The server's own wait when it names one, in seconds; a date or
-			// nothing falls back to doubling.
-			const after = Number(res.headers.get('retry-after'));
-			await new Promise((r) => setTimeout(r, after > 0 ? after * 1000 : 500 * 2 ** attempt));
+		const key = sha256(`${endpoint}\n${body}`);
+		const hit = client.cache?.get(key);
+		if (hit && hit.length === batch.length) {
+			client.stats.cached++;
+			return hit;
+		}
+		const pending = client.inflight.get(key);
+		if (pending) {
+			client.stats.shared++;
+			return pending;
+		}
+		const request = client.slot(async () => {
+			client.stats.asked++;
+			const answers = await post(body, batch.length);
+			// Only a whole answer is worth keeping: a gap would be served as one forever.
+			if (answers.every((a) => a !== undefined)) client.cache?.set(key, answers as Choice[]);
+			return answers;
+		});
+		client.inflight.set(key, request);
+		try {
+			return await request;
+		} finally {
+			client.inflight.delete(key);
 		}
 	};
 
 	// Bounded pool. Results are written by index, so the answers come back in
-	// the order the items went in however the requests interleave.
+	// the order the items went in however the requests interleave. The client's
+	// slots bound what is on the wire across every ask sharing it; this bounds
+	// how far ahead one ask runs.
 	const done: (Choice | undefined)[][] = new Array(batches.length);
 	let next = 0;
 	await Promise.all(
@@ -144,8 +287,11 @@ const judgedTail = (confidence: number): string => `(judged ${confidence.toFixed
 /** The registry entry with variants that a raw-element finding points at, if any. */
 function targetOf(f: Finding, withVariants: readonly ComponentEntry[]): ComponentEntry | undefined {
 	if (f.rule !== 'system/raw-element') return undefined;
-	const analog = f.message.split('→')[1] ?? '';
-	return withVariants.find((e) => new RegExp(`\\b${e.name}\\b`).test(analog));
+	// The analog's own leading name — `<Text …>`, or `Text (…)` where a legacy
+	// entry forwards — and nothing after it: the promotion tail names classes,
+	// and `.Text-label` on a button is not a Text question.
+	const name = /^\s*<?([A-Za-z_$][\w.$]*)/.exec(f.message.split('→')[1] ?? '')?.[1];
+	return name ? withVariants.find((e) => e.name === name) : undefined;
 }
 
 /**
@@ -161,7 +307,7 @@ export async function judgeVariants(
 	root: string,
 	findings: readonly Finding[],
 	registry: ReadonlyMap<string, ComponentEntry>,
-	apiKey: string,
+	auth: Auth,
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
 	const withVariants = [...registry.values()].filter((e) => e.status === 'recommended' && e.variants);
@@ -170,7 +316,7 @@ export async function judgeVariants(
 		return target ? [{ f, target }] : [];
 	});
 
-	const answers = await ask(variantQuery(root), jobs, apiKey, fetchImpl);
+	const answers = await ask(variantQuery(root), jobs, auth, fetchImpl);
 
 	let annotated = 0;
 	jobs.forEach(({ f, target }, i) => {
@@ -179,19 +325,24 @@ export async function judgeVariants(
 		const arrow = f.message.indexOf(' → ');
 		const element = f.message.slice(0, arrow);
 		const analog = f.message.slice(arrow + 3);
-		const tag = `<${target.name}>`;
+		// `<Text>`, or `<Text render={ <h4 /> }>` when the mapping keeps the element.
+		const tag = new RegExp(`<${target.name.replace(/[.$]/g, '\\$&')}(?=[ >])`);
 		const not = a.choice === notKey(target);
 		const span = not ? `no analog, not ${target.name} content` : `variant="${a.choice}"`;
 		const suggestion = not
 			? span
 			: /variant="[^"]*"/.test(analog)
 				? analog.replace(/variant="[^"]*"/, span)
-				: analog.includes(tag)
-					? analog.replace(tag, `<${target.name} ${span}>`)
+				: tag.test(analog)
+					? analog.replace(tag, `<${target.name} ${span}`)
 					: `${analog} with ${span}`;
 		const tail = judgedTail(a.confidence);
-		f.message = `${element} → ${suggestion} ${tail}`;
+		// Bounded again, with the judgement kept last: `analyze` bounded this line
+		// before the answer was spliced into it.
+		f.message = messageLine(`${element} → ${suggestion}`, ` ${tail}`);
 		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+		// The reach note priced adopting the analog, which a `not_` answer withdrew.
+		if (not) f.note = withoutReach(f.note, target.package);
 		annotated++;
 	});
 	return annotated;
@@ -216,6 +367,20 @@ export const LANGUAGE = EMBEDDED_LANGUAGE as Language;
 const REDIRECT_FLOOR = 0.9;
 
 /**
+ * What identifies the redirect a control would produce: everything its baseline
+ * and hook-delta key is built from. Shared with the hook's pre-edit comparison,
+ * which stands a control in for the redirect without paying to ask the judge,
+ * so the two cannot drift into keys that never match.
+ */
+export const redirectIdentity = (
+	c: Pick<Control, 'file' | 'component'>,
+): { rule: 'patterns/judged-redirect'; file: string; code: string } => ({
+	rule: 'patterns/judged-redirect',
+	file: c.file,
+	code: `<${c.component}>`,
+});
+
+/**
  * The findings the abstract language's redirects produce on these controls.
  *
  * Each control is an instance of the pattern its registry entry realizes. The
@@ -227,7 +392,7 @@ const REDIRECT_FLOOR = 0.9;
  */
 export async function judgeRedirects(
 	controls: readonly Control[],
-	apiKey: string,
+	auth: Auth,
 	severity: Severity,
 	fetchImpl: Fetch = fetch,
 ): Promise<Finding[]> {
@@ -235,25 +400,34 @@ export async function judgeRedirects(
 	const abstractOf = (patternId: string): string => patternId.split('#', 1)[0]?.split('.', 1)[0] ?? patternId;
 	const tableOf = (c: Control): ResolveRule[] => byId.get(abstractOf(c.patternId))?.resolve ?? [];
 
+	// One client for every force, so they share its slots rather than each
+	// bringing a pool of its own.
+	const client = clientOf(auth, fetchImpl);
 	const known = controls.map((): Record<string, string> => ({}));
 	const sure = controls.map((): Record<string, number> => ({}));
-	for (const [name, force] of Object.entries(LANGUAGE.vocabulary.forces)) {
-		if (!force.judge) continue;
-		const asked = controls.flatMap((c, i) => (tableOf(c).some((r) => r.when && name in r.when) ? [i] : []));
-		if (!asked.length) continue;
-		const answers = await ask(
-			forceQuery(force.judge),
-			asked.map((i) => controls[i] as Control),
-			apiKey,
-			fetchImpl,
-		);
-		asked.forEach((ci, k) => {
-			const a = answers[k];
-			if (!a || a.confidence < REDIRECT_FLOOR) return;
-			(known[ci] as Record<string, string>)[name] = a.choice;
-			(sure[ci] as Record<string, number>)[name] = a.confidence;
-		});
-	}
+	// Every force at once: each writes only its own name, and the client's slots
+	// bound what is on the wire. Settled, not raced: a failed force fails the
+	// call, but only once the others have finished, so what they spent lands in
+	// the client's tally before anyone reads it.
+	const settled = await Promise.allSettled(
+		Object.entries(LANGUAGE.vocabulary.forces).map(async ([name, force]) => {
+			if (!force.judge) return;
+			const asked = controls.flatMap((c, i) => (tableOf(c).some((r) => r.when && name in r.when) ? [i] : []));
+			if (!asked.length) return;
+			const answers = await ask(
+				forceQuery(force.judge),
+				asked.map((i) => controls[i] as Control),
+				client,
+			);
+			asked.forEach((ci, k) => {
+				const a = answers[k];
+				if (!a || a.confidence < REDIRECT_FLOOR) return;
+				(known[ci] as Record<string, string>)[name] = a.choice;
+				(sure[ci] as Record<string, number>)[name] = a.confidence;
+			});
+		}),
+	);
+	for (const r of settled) if (r.status === 'rejected') throw r.reason;
 
 	// `<Button> (represents: destination) \u2192 \`navigate-hierarchy\` (judged 0.97)`:
 	// what it was read as, where that sends it, and the least certain reading
@@ -265,16 +439,15 @@ export async function judgeRedirects(
 		const reading = `(${when.map(([f, v]) => `${f}: ${String(v)}`).join(', ')})`;
 		const confidence = Math.min(...when.map(([f]) => sure[i]?.[f] ?? 0));
 		const tail = judgedTail(confidence);
+		const id = redirectIdentity(c);
 		return [
 			{
-				rule: 'patterns/judged-redirect',
+				...id,
 				severity,
-				rank: RULES['patterns/judged-redirect'].rank,
-				file: c.file,
+				rank: RULES[id.rule].rank,
 				line: c.line,
-				message: `<${c.component}> ${reading} \u2192 \`${r.redirect}\` ${tail}`,
+				message: `${id.code} ${reading} \u2192 \`${r.redirect}\` ${tail}`,
 				note: r.because,
-				code: `<${c.component}>`,
 				judged: { answer: when.map(([, v]) => String(v)).join(', '), confidence, spans: [reading, tail] },
 			},
 		];
@@ -311,11 +484,12 @@ export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescrip
  *
  * Every settled declaration is rendered by the same `declarationMessage` the
  * token pass used, so a judged finding and an unjudged one read by one set of
- * rules. The channel marker comes off `suffix`, where the walk put it.
+ * rules. The channel marker comes off `suffix`, where the walk put it, and the
+ * line is bounded again, since the bound in `analyze` ran before this did.
  */
 function restate(f: Finding): void {
 	const parts = f.suggest ?? [];
-	f.message = declarationMessage(parts, f.suffix ?? '');
+	f.message = boundMessage(declarationMessage(parts, f.suffix ?? ''), f.suffix);
 	const judged = parts.flatMap((s) => (s.judged ? [s.judged] : []));
 	if (!judged.length) return;
 	// The least certain answer speaks for the finding: it is the one a floor
@@ -346,17 +520,19 @@ function restate(f: Finding): void {
 export async function judgeValues(
 	root: string,
 	findings: readonly Finding[],
-	set: TokenSet,
-	apiKey: string,
+	set: TokenSet | undefined,
+	auth: Auth,
 	about: ReadonlyMap<string, string> = new Map(),
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
 	// An empty set proves nothing about the system: with nothing read, every
 	// property's family is empty, and "no padding token in the design system" would
-	// be said of every value and suppressed by `fix --judge` as fact.
+	// be said of every value and suppressed by `fix --judge` as fact. `analyze`
+	// hands back no set at all when the design system's sources yielded nothing,
+	// so a set the project's own definitions alone filled never reaches here.
 	// ponytail: a set read only partly passes this; a per-family check is the
 	// upgrade if a token source that half-resolves turns up.
-	if (!set.known.size)
+	if (!set?.known.size)
 		throw new Error(
 			'no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships',
 		);
@@ -370,8 +546,10 @@ export async function judgeValues(
 	// the text component, is not available.
 	for (const f of findings) {
 		for (const decl of f.suggest ?? []) {
-			// The single exact token is plain `fix`'s already.
-			if (decl.tokens.length === 1) continue;
+			// The single exact token is plain `fix`'s already. One held for review —
+			// a whole value's or a part's — is outside its declared scope here, or
+			// not shown to be inside it, and no answer here is in a position to say.
+			if (decl.tokens.length === 1 || decl.review) continue;
 			const plan = planValue(set, decl.prop, decl.value);
 			if (plan === 'none') {
 				decl.judged = { answer: KEEP, confidence: 1, spans: [`no ${decl.prop} token in the design system`] };
@@ -402,7 +580,7 @@ export async function judgeValues(
 				: [],
 		),
 	);
-	const answers = await ask(valueQuery(about), asked, apiKey, fetchImpl);
+	const answers = await ask(valueQuery(about), asked, auth, fetchImpl);
 	const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
 
 	for (const { f, decl, parts, slots } of open) {
@@ -422,9 +600,8 @@ export async function judgeValues(
 		// the rest would exempt the kept literal. Left for review.
 		if (kept && got.some((a) => a?.choice !== KEEP)) continue;
 		if (kept) {
-			const why = 'deliberate, no token fits';
 			const tail = judgedTail(kept.confidence);
-			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [why, tail] };
+			decl.judged = { answer: KEEP, confidence: kept.confidence, spans: [DELIBERATE, tail] };
 		} else {
 			const out = [...parts];
 			const named = [...parts];
@@ -449,4 +626,73 @@ export async function judgeValues(
 	// Once, per finding, after every answer it is waiting on has landed.
 	for (const f of touched) restate(f);
 	return written;
+}
+
+// ── tokens/unknown-token: which token was meant? ───────────────────────────
+
+// A rename rewrites every line of the file naming it, and a wrong one paints
+// from a token that means something else under a clean report. What was
+// measured: docs/design/judge.md#the-rename-floor-is-080.
+const RENAME_FLOOR = 0.8;
+
+/**
+ * What an unknown name is asked to be chosen among, as `[token, meaning]`: its
+ * value where it has a literal one, and what the design system says it is for.
+ */
+export function renameOptions(
+	name: string,
+	prop: string,
+	set: TokenSet,
+	about: ReadonlyMap<string, string> = new Map(),
+): [string, string][] {
+	const values = new Map([...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v])));
+	return renameCandidates(name, prop, set.known, set.scopes).map((n) => [
+		n,
+		[values.get(n), about.get(n)].filter(Boolean).join(' \u2014 ') || n,
+	]);
+}
+
+/**
+ * Settle every unknown token name the check could not: the rename `fix` applies,
+ * or that no real token was meant. Returns how many were settled.
+ *
+ * `<name> → <token> (judged 0.94)` carries a `rename` exactly like one the check
+ * settled by spelling, so `fix` and the report treat the two alike.
+ */
+export async function judgeRenames(
+	root: string,
+	findings: readonly Finding[],
+	set: TokenSet,
+	auth: Auth,
+	about: ReadonlyMap<string, string> = new Map(),
+	fetchImpl: Fetch = fetch,
+): Promise<number> {
+	const jobs = findings.flatMap((f) => {
+		if (f.rule !== 'tokens/unknown-token' || f.rename || !f.unknown || !f.code) return [];
+		const { prop, lines } = f.unknown;
+		const options = renameOptions(f.code, prop, set, about);
+		if (!options.length) return [];
+		return [{ f, lines, item: { file: f.file, ...around(root, f.file, f.line, 8, 3), name: f.code, prop, options } }];
+	});
+	const answers = await ask(
+		renameQuery,
+		jobs.map((j) => j.item),
+		auth,
+		fetchImpl,
+	);
+
+	let settled = 0;
+	jobs.forEach(({ f, lines, item }, i) => {
+		const a = answers[i];
+		if (!a || a.confidence < RENAME_FLOOR) return;
+		const tail = judgedTail(a.confidence);
+		const span = a.choice === NONE ? 'no token means this' : a.choice;
+		// The unknown name is source text, and nothing bounds this line after here.
+		// It is what gives way: the answer is the half a reader acts on.
+		f.message = messageLine(item.name, ` \u2192 ${span} ${tail}`);
+		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+		if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
+		settled++;
+	});
+	return settled;
 }
