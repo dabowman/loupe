@@ -1036,12 +1036,14 @@ case you want to hear about without watching.
 
 What it draws depends on where Claude Code is drawing. The desktop app and the
 VS Code panel get the engine's SVG charts, with a tooltip per bar. The terminal
-gets the same rows as block-glyph bars sized to the pane, docked beside the
-transcript in a fullscreen terminal from 110 columns and inline above the
-prompt otherwise. Pressing a rule drafts `/loupe-fix <rule>` into the prompt —
-it never sends it. A `show` picker narrows the list to blocking or advisory,
-and `HTML report` writes `.loupe/report.html` and puts the path on the
-clipboard.
+gets the same rows as block-glyph bars sized to the pane. Where the pane sits is
+Claude Code's call, not this module's; checked against 2.1.308, it docks beside
+the transcript in a fullscreen terminal from 110 columns and sits inline above
+the prompt otherwise, and the pane that opens itself waits undrawn below 144
+columns (110 once you have opened it with `/loupe-pane`). Pressing a rule
+drafts `/loupe-fix <rule>` into the prompt — it never sends it. A `show` picker
+narrows the list to blocking or advisory, and `HTML report` writes
+`.loupe/report.html` and puts the path on the clipboard.
 
 `/loupe-pane` opens it in any project, opted in or not, and from then on edits
 refresh it. The plugin's `pane` option turns the automatic pane off while
