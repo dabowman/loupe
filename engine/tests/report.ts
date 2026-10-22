@@ -792,6 +792,51 @@ await check('a registry note keeps its last clause on screen and ships whole in 
 	assert(shipped === note, `json shipped a note the reader cannot act on: ${String(shipped)}`);
 });
 
+// The note was cut a character count from its end, so the line read
+// "…t` names a typographic scale" — mid-word, inside a backticked name. It is
+// cut between clauses now, or left to JSON when not even its last one fits,
+// and the message it follows is never what gives way.
+await check('a long registry note is cut between clauses or left off, never mid-word', () => {
+	/** What the report printed after `message`, which it must print whole. */
+	const after = (message: string, note: string): string => {
+		const noted: AnalyzeResult = {
+			...result,
+			findings: result.findings.map((f, i) => (i === 0 ? { ...f, message, note } : f)),
+		};
+		const out = formatAgent(noted, config);
+		const line = out.split('\n').find((l) => l.includes(message));
+		assert(line, `the message was not printed whole:\n${out}`);
+		return line.slice(line.indexOf(message) + message.length);
+	};
+	/** Nothing, or the note's last whole clauses in brackets, an ellipsis standing for the rest. */
+	const wholeClauses = (shown: string, note: string): boolean => {
+		if (shown === '') return true;
+		const m = /^ \((…?)(.+)\)$/.exec(shown);
+		if (!m?.[2] || !note.endsWith(m[2])) return false;
+		const dropped = note.slice(0, note.length - m[2].length);
+		if (!m[1]) return dropped === '';
+		return /(?:\. |; | -- |: )$/.test(dropped) && (dropped.match(/`/g) ?? []).length % 2 === 0;
+	};
+
+	const text =
+		"Not a specifier swap: @wordpress/ui's Text has only `variant` -- no size/weight/color/align/truncate -- " +
+		"and its `variant` names a typographic scale (`body-md`, `heading-lg`) where the old one's only value was `muted`.";
+	const shown = after('Text (@wordpress/components) → Text (@wordpress/ui)', text);
+	assert(wholeClauses(shown, text), `the note was cut inside a clause: ${shown}`);
+
+	const short = 'Use Stack, not Grid.';
+	const whole = after('Grid (@wordpress/components) → Stack (@wordpress/ui)', short);
+	assert(whole === ` (${short})`, `a note that fits was shortened: ${whole}`);
+
+	// The note takes only what a long message leaves, and keeps its last clause in it.
+	const long = `<div> → <Stack> (@wordpress/ui) — ${'x'.repeat(130)}`;
+	const squeezed = after(long, 'Planned for deprecation. It wanted Stack, not Grid.');
+	assert(squeezed === ' (…It wanted Stack, not Grid.)', `the last clause did not take what was left: ${squeezed}`);
+	// A colon inside a backticked value is not a clause boundary.
+	const quoted = after(long, 'Set `display: grid` on the parent instead of here');
+	assert(quoted === '', `the note was cut inside a backtick span: ${quoted}`);
+});
+
 // A reading is not a parse, and the report says which is which at a glance —
 // without nesting a colour, which would end the green at the component name.
 await check('what --judge wrote is painted green, and nothing else on the line is', () => {

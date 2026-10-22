@@ -327,7 +327,8 @@ export function undelivered({
 			// The remedy, short enough to survive as the line's tail. The profile's
 			// own prose on it is `loupe explain`'s to print, whole. With fallbacks
 			// the page does render, so the note says why that is not enough, and
-			// stays short enough for both clauses to survive the tail's bound.
+			// stays short enough for both clauses to fit the tail's bound — the
+			// remedy last, so it is the one kept when the message leaves less.
 			note: fallbacks
 				? `${FALLBACKS}${tokens.handle ? `; add '${tokens.handle}' to this CSS's enqueue dependencies` : ''}`
 				: tokens.handle

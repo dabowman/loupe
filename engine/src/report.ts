@@ -16,7 +16,7 @@ import { findingKey } from './analyze.ts';
 import { byBytes } from './discover.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, yellow } from './color.ts';
 import { RULES, renderTitle } from './rules.ts';
-import { messageLine } from './text.ts';
+import { noteLine } from './text.ts';
 import type {
 	AnalyzeResult,
 	BaselinedResult,
@@ -177,11 +177,11 @@ function suppressionLine(directives: readonly Directive[]): string {
 /**
  * A finding's message with its registry note, bounded to the report's one line.
  *
- * The note rides as the `tail` the bound is built to spare, and is shortened
- * from the front like any other tail: a note is read for its last clause. This
- * is the only format with a line budget; JSON and SARIF ship the whole of it.
+ * The note is shortened from the front by whole clauses, because a note is read
+ * for its last clause, and gives way to the message, never the other way round.
+ * This is the only format with a line budget; JSON and SARIF ship the whole of it.
  */
-const withNote = (f: Finding): string => (f.note ? messageLine(f.message, ` (${f.note})`) : f.message);
+const withNote = (f: Finding): string => (f.note ? noteLine(f.message, f.note) : f.message);
 
 /**
  * Which axis the report groups on. The other one becomes the sub-heading, so

@@ -448,7 +448,8 @@ profile declares those builds under `tokens.fallbacks`, checks of the same
 kinds, and finding one changes what the finding says, never whether it
 reports: the note becomes `fallbacks render but won't follow the theme; add
 'wp-theme' to this CSS's enqueue dependencies`, short enough that both
-clauses survive the report line's tail.
+clauses fit the report line's tail, and with the remedy last, so it is the
+clause kept when a long message leaves room for only one.
 
 The PHP read is the smallest thing that answers the question: comments blanked
 (a commented-out `'wp-theme'` is not a dependency), the call's argument list
