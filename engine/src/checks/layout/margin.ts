@@ -13,16 +13,19 @@
  *   some `calc()` part is negative by inspection     → layout/negative-margin
  *   some part is `auto`                              → clean, claimed
  *   every part is `0` or a CSS-wide keyword          → clean, claimed
+ *   the rule keys on a bare element (`.card p`)      → clean, claimed: prose
  *   otherwise                                        → layout/margin-on-child
+ *
+ * Design notes: docs/design/checks.md#layoutmargin-on-child-layoutnegative-margin
  */
 
 import type { DeclarationCheck } from '../../analyze.ts';
 import { classifyMargin, isMarginProp } from '../../styles.ts';
 
-export const margin: DeclarationCheck = ({ prop, value }) => {
+export const margin: DeclarationCheck = ({ prop, value }, { bareElement }) => {
 	if (!isMarginProp(prop)) return undefined;
 	const kind = classifyMargin(value);
 	const decl = `${prop}: ${value}`;
 	if (kind === 'negative') return { rule: 'layout/negative-margin', message: decl, code: prop };
-	return kind ? { rule: 'layout/margin-on-child', message: decl, code: prop } : null;
+	return kind && !bareElement ? { rule: 'layout/margin-on-child', message: decl, code: prop } : null;
 };

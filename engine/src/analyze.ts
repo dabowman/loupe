@@ -79,8 +79,9 @@ import {
 	isHardcodedTokenValue,
 	isLayoutDecl,
 	isMarginProp,
-	keyCompound,
+	keyClassesIn,
 	keySelector,
+	keysBareElement,
 	mediaQuery,
 	ownDecls,
 	ownLevel,
@@ -153,7 +154,7 @@ const realPath = (path: string): string | null => {
  * is missed — a missed override, never a false one.
  */
 const partClass = (sel: string): string | undefined =>
-	keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, '')).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+	ownLevel(keySelector(sel)).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
 
 /** The element a compound selector names, lowercased: `button.primary:hover` → `button`. */
 const tagOf = (compound: string): string | null => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
@@ -296,6 +297,7 @@ function classifyDeclaration(
 		boundSystem = [],
 		boundText = [],
 		isGrid = false,
+		bareElement = false,
 		surfaceOf = () => undefined,
 		surfaced = () => true,
 		enabled,
@@ -308,7 +310,7 @@ function classifyDeclaration(
 		TYPE_PROPS.has(prop) ||
 		isHardcodedTokenValue(prop, value) ||
 		APPEARANCE_PROPS.has(prop);
-	const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled };
+	const ctx = { boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled };
 	// Deliberately unbounded: `message` is part of what the dedupe tells two
 	// findings apart by. The line is bounded once, at the end of `analyze`.
 	for (const check of DECLARATIONS) {
@@ -688,7 +690,7 @@ export async function analyze(
 		if (!scopes) return [];
 		const out = new Set<string>();
 		for (const sel of selectors) {
-			const found = compoundElements(keyCompound(sel), carriersByClass);
+			const found = compoundElements(keySelector(sel), carriersByClass);
 			if (!found) return [];
 			for (const e of found) out.add(e);
 		}
@@ -701,7 +703,7 @@ export async function analyze(
 	 */
 	const nestedElements = (selector: string): string[] => {
 		const selectors = list.comma(selector);
-		return selectors.some((sel) => keyCompound(sel).includes('&')) ? [] : elementsOf(selectors);
+		return selectors.some((sel) => keySelector(sel).includes('&')) ? [] : elementsOf(selectors);
 	};
 
 	for (const { abs, rel } of files.references) {
@@ -810,16 +812,20 @@ export async function analyze(
 			const allClasses = [...new Set(selectors.flatMap(classesIn))];
 			// Kept per selector as well as pooled: deleting the rule for one dead
 			// class is only safe if every selector in the list names that class.
-			const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+			const keyClassesPer = selectors.map(keyClassesIn);
 			const keyClasses = [...new Set(keyClassesPer.flat())];
 			if (!allClasses.length) continue;
 
 			// Bindings correlate against the KEY selector only: `.card .title`
-			// styles `.title`, so `.card`'s component must not answer for it.
+			// styles `.title`, so `.card`'s component must not answer for it, and
+			// `li:not(.btn)` styles no `.btn`.
 			const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
 			const boundSystem = bound.filter((b) => b.isSystem);
 			const boundText = bound.filter((b) => b.isText);
 			const isGrid = cssRule.isGrid;
+			// Every selector: one classed selector in the list, and the margin lands
+			// on a component's part as well.
+			const bareElement = selectors.every(keysBareElement);
 			const scopeLines = nearby(ruleLine);
 			// Carried so a browser-side reader can resolve this rule to the elements
 			// it styles: the comma-joined selector list is a valid `querySelectorAll`
@@ -843,7 +849,7 @@ export async function analyze(
 				const line = decl.line;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive },
+					{ boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled: ruleIsLive },
 				);
 				if (onRawKeys.length)
 					classDecls.push({ prop, value: decl.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });

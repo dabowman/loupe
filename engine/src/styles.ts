@@ -459,28 +459,23 @@ export function mediaQuery(rule: Rule): string {
 }
 
 /**
- * Rightmost compound of a selector — the element the rule actually styles.
- * Component bindings must correlate against this, or a descendant rule
- * attributes its declarations to the ancestor's component.
- */
-export const keySelector = (sel: string): string =>
-	sel
-		.split(/\s*[>+~]\s*|\s+/)
-		.filter(Boolean)
-		.pop() ?? sel;
-
-/**
  * Each character of a selector outside brackets, parentheses and quotes, with
- * its index. The one scanner behind the two helpers below: nesting is what is
+ * its index. The one scanner behind the helpers below: nesting is what is
  * being tracked, and that is the one thing a regex cannot do.
+ *
+ * An escape is visited as its two characters together, so it reads as part of
+ * the name it sits in and never as structure: `.md\:flex` keeps its `\:`, and
+ * `\(` opens nothing.
  */
 function eachTopLevel(sel: string, visit: (ch: string, i: number) => void): void {
 	let depth = 0;
 	let quote = '';
 	for (let i = 0; i < sel.length; i++) {
 		const ch = sel[i] ?? '';
-		if (ch === '\\') i++;
-		else if (quote) {
+		if (ch === '\\') {
+			if (!depth && !quote) visit(sel.slice(i, i + 2), i);
+			i++;
+		} else if (quote) {
 			if (ch === quote) quote = '';
 		} else if (ch === '"' || ch === "'") quote = ch;
 		else if (ch === '(' || ch === '[') depth++;
@@ -490,14 +485,18 @@ function eachTopLevel(sel: string, visit: (ch: string, i: number) => void): void
 }
 
 /**
- * The last compound of a selector — the element it styles. Cut only at a
- * combinator outside brackets, parentheses and quotes: `.x[aria-label="Close
- * dialog"]` is one compound, and so is `.x:has(> .y)`.
+ * Rightmost compound of a selector — the element the rule actually styles.
+ * Component bindings must correlate against this, or a descendant rule
+ * attributes its declarations to the ancestor's component. Every check that
+ * keys reads this one key.
  *
- * The bracket-aware reading, for resolving what a rule lands on. {@link
- * keySelector} is the cheaper split the class correlation keys on.
+ * Cut only at a combinator outside brackets, parentheses and quotes:
+ * `.x[aria-label="Close dialog"]` is one compound, and so are `.x:has(> .y)`
+ * and `.x:nth-child(2n+1)`.
+ *
+ * Design notes: docs/design/analysis.md#reading-a-stylesheet
  */
-export function keyCompound(sel: string): string {
+export function keySelector(sel: string): string {
 	const s = sel.trim();
 	let start = 0;
 	eachTopLevel(s, (ch, i) => {
@@ -521,6 +520,24 @@ export function ownLevel(compound: string): string {
 
 export const classesIn = (sel: string): string[] =>
 	[...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
+
+/**
+ * The classes a selector styles: those its key compound puts on the element
+ * itself. `.list > li:not(.btn)` styles none, `.x:nth-child(2n+1)` styles `x`.
+ */
+export const keyClassesIn = (sel: string): string[] => classesIn(ownLevel(keySelector(sel)));
+
+/**
+ * Does a selector style an element by its tag alone? Its key compound names a
+ * tag and puts no class on it: `.card p`, `h2` and `li:not(.x)` do, and
+ * `.row > li.item`, `.stack > *` and `[data-slot]` do not.
+ *
+ * Design notes: docs/design/checks.md#a-margin-on-a-bare-element-is-prose
+ */
+export const keysBareElement = (sel: string): boolean => {
+	const own = ownLevel(keySelector(sel));
+	return /^[a-z]/i.test(own) && !classesIn(own).length;
+};
 
 /** Does this rule establish a CSS Grid? */
 export const ruleIsGrid = (rule: Container): boolean =>
