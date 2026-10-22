@@ -353,8 +353,8 @@ Forty-three false gaps, none of which the model ever had a chance to avoid.
 
 So the shortlist now exists only because a request has a limit — and it is a
 hard cap on the *number* of choices, not on their size: the API answers
-`Too many choices. Must have at most 255 choices.` `CANDIDATES` is 200, leaving
-room for the `none` option and for a batch carrying more than one question. A
+`Too many choices. Must have at most 255 choices.` `CANDIDATES` is 254, leaving
+the last slot for the `none` option. A
 set smaller than that is sent whole. The wider shortlist splits the probability mass, so more rows land under
 the floor — on that pair, 34 `unsure` against 4. That is the honest trade: an
 unsettled row is a row for a person, where a false `none` is a wrong claim about

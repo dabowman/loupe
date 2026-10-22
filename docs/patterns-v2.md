@@ -115,8 +115,10 @@ System One model can, for one force so far: `represents`, scored by
 naming the elements that are instances of its pattern, the vocabulary gives the
 force a `judge` block (question and per-value criteria, the wording the eval
 scores), and `check --judge` runs the abstract table in code on what it reads. A
-redirect is `patterns/judged-redirect`: advisory, after the baseline, never in
-the hook. A row that needs a force nobody has read stops the walk, so a partial
+redirect is `patterns/judged-redirect`: advisory by default, after the baseline.
+The hook passes `--judge` too, so with a key it can fire at write time, asked
+there only when the rule is set to `error`, since the hook prints only what
+blocks. A row that needs a force nobody has read stops the walk, so a partial
 reading never answers past a question the table did not reach.
 
 The next force is data plus an eval, not code: a `judge` block on the force, a
