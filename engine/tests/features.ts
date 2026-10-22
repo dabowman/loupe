@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
-import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
+import { SUBSTANTIAL, loadPatterns, matches, nodeCount, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents, surfacesRecorded } from '../src/components.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { APPEARANCE_PROPS, propsOverlap } from '../src/styles.ts';
@@ -642,6 +642,23 @@ await check('a signature below the floor is documentation, not a check', async (
 		{ patterns: registry },
 	);
 	assert(!at(r, 'patterns/duplicate-composite').length, 'action-cluster.bar has no shape to check');
+});
+
+// The matcher skips a shape below the floor, so an entry that says it is checked
+// by its signature and carries a smaller one is checked by nothing. A part
+// without a detector of its own is checked the way its parent says.
+await check('a shipped entry checked by signature carries a shape at or above the floor', () => {
+	type Raw = { pattern?: string; detector?: unknown; signature?: unknown; rendered_signature?: unknown };
+	const short: string[] = [];
+	const visit = (e: Raw & { parts?: Record<string, Raw> }, key: string, inherited: unknown): void => {
+		const detector = e.detector ?? inherited;
+		if ((Array.isArray(detector) ? detector : [detector]).includes('signature'))
+			for (const shape of [e.signature, e.rendered_signature].map(toNode))
+				if (shape && nodeCount(shape) < SUBSTANTIAL.minNodes) short.push(`${key} (${nodeCount(shape)} nodes)`);
+		for (const [name, part] of Object.entries(e.parts ?? {})) visit(part, `${key}#${name}`, detector);
+	};
+	for (const e of JSON.parse(readFileSync(REGISTRY, 'utf8')).realizations) visit(e, e.pattern, undefined);
+	assert(!short.length, `checked by a signature the matcher never runs: ${short.join(', ')}`);
 });
 
 await check('an unregistered shape needs three files before it is house style', async () => {
