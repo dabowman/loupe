@@ -49,11 +49,13 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { type FSWatcher, readFileSync, statSync, watch, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
-import { CSS_FILE, applyTokenFixes, tokenFixes } from './autofix.ts';
+import { CSS_FILE, applyTokenFixes, commentFor, directiveRefusal, tokenFixes, writeAbove } from './autofix.ts';
 import { writeBaseline } from './baseline.ts';
+import { coalesce } from './coalesce.ts';
 import { analyzeEntryBudget, discover, toPosix } from './discover.ts';
-import { body, embed } from './report-view.ts';
+import { body, embed, htmlDocument } from './report-view.ts';
 import { reportPayload } from './report.ts';
+import { directive } from './suppressions.ts';
 import { messageOf, oneLine } from './text.ts';
 import type { AnalyzeResult, BaselinedResult, Config, Finding, ReportPayload } from './types.ts';
 
@@ -61,9 +63,6 @@ import type { AnalyzeResult, BaselinedResult, Config, Finding, ReportPayload } f
 export const TOKEN_HEADER = 'x-loupe-token';
 /** The payload revision a write was aimed at. See the header note on staleness. */
 export const REV_HEADER = 'x-loupe-rev';
-
-/** The comment a suppression directive has to be written in, per file type. Mirrors the language server's. */
-const commentFor = (file: string, text: string): string => (CSS_FILE.test(file) ? `/* ${text} */` : `// ${text}`);
 
 /**
  * How many directories the watcher will hold open.
@@ -301,24 +300,16 @@ function page(opts: { token: string; root: string; editor: string }): string {
   <button class="btn" id="accept" disabled>accept as baseline</button>
 </div>
 <div class="said" id="said"></div>`;
-	return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loupe</title>
-<!-- Declared empty so the browser does not ask for /favicon.ico. A page whose
-     whole job is to report what is wrong should not open with a 404 of its own. -->
-<link rel="icon" href="data:,">
-</head>
-<body>
-<script>window.__loupe = ${host};</script>
+	return htmlDocument({
+		title: 'Loupe',
+		// Declared empty so the browser does not ask for /favicon.ico. A page whose
+		// whole job is to report what is wrong should not open with a 404 of its own.
+		head: '\n<link rel="icon" href="data:,">',
+		body: `<script>window.__loupe = ${host};</script>
 ${toolbar}
 ${body({ clean: false, parseErrors: 0, live: true })}
-<script>${CLIENT.replace('__TOKEN__', opts.token)}</script>
-</body>
-</html>
-`;
+<script>${CLIENT.replace('__TOKEN__', opts.token)}</script>`,
+	});
 }
 
 export async function ui(opts: UiOptions): Promise<UiHandle> {
@@ -387,7 +378,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 	 */
 	const wrote = (): void => {
 		rev++;
-		schedule(0);
+		runs.schedule(0);
 	};
 	/**
 	 * When the latest analysis began reading the tree. A watch event can arrive
@@ -428,40 +419,21 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 		push();
 	};
 
-	let running = false;
-	let queued = false;
-	let timer: NodeJS.Timeout | null = null;
-	const drain = async (): Promise<void> => {
-		if (running) return;
-		running = true;
+	/** Watch events and writes folded into runs: a burst is one analysis, and one mid-run is not dropped. */
+	const runs = coalesce(async () => {
 		try {
-			while (queued) {
-				queued = false;
-				try {
-					await runOnce();
-				} catch (err) {
-					// A failed analysis must not read as a clean page, nor as a current
-					// one: the last good payload stays, and the page says it is stale
-					// and why. The terminal hears it too.
-					log(`loupe: analysis failed — ${messageOf(err)}\n`);
-					if (state) {
-						state = { ...state, error: messageOf(err) };
-						push();
-					}
-				}
+			await runOnce();
+		} catch (err) {
+			// A failed analysis must not read as a clean page, nor as a current
+			// one: the last good payload stays, and the page says it is stale
+			// and why. The terminal hears it too.
+			log(`loupe: analysis failed — ${messageOf(err)}\n`);
+			if (state) {
+				state = { ...state, error: messageOf(err) };
+				push();
 			}
-		} finally {
-			running = false;
 		}
-	};
-	const schedule = (delay = DEBOUNCE_MS): void => {
-		queued = true;
-		if (timer) clearTimeout(timer);
-		timer = setTimeout(() => {
-			timer = null;
-			void drain();
-		}, delay);
-	};
+	}, DEBOUNCE_MS);
 
 	// ── the watch ─────────────────────────────────────────────────────────────
 
@@ -505,7 +477,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 				// in between would name lines the editor has already shifted.
 				const w = watch(dir, { persistent: false }, (_event, name) => {
 					if (!name || !alreadyRead(join(dir, String(name)))) rev++;
-					schedule();
+					runs.schedule();
 				});
 				w.on('error', () => {
 					w.close();
@@ -706,7 +678,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 
 		'POST /run': async (_req, res) => {
 			send(res, 200, { rev });
-			schedule(0);
+			runs.schedule(0);
 		},
 
 		'POST /fix': async (req, res) => {
@@ -762,32 +734,21 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 			const full = join(root, finding.file);
 			try {
 				const lines = readFileSync(full, 'utf8').split('\n');
-				const target = lines[finding.line - 1];
-				if (target === undefined) return send(res, 409, { error: 'that line is no longer in the file' });
-				// The two refusals `applyKeeps` makes, made here for the same reasons —
-				// this endpoint writes the same directive into the same place, so it has
-				// to decline the same writes or the two surfaces disagree about what a
-				// mute means.
-				//
-				// A directive above a rule's opening line covers the rule's whole scope,
-				// so muting one row would mute every row in that rule.
-				if (/(?:^|[^#])\{/.test(target))
-					return send(res, 409, {
-						error: "on the rule's opening line, where a directive would mute the whole rule — suppress it by hand",
-					});
-				// Only the nearest line above is read, so splicing in front of a
-				// directive already there pushes it off what it names, and the finding
-				// somebody already accepted comes back.
-				if ((shown?.directives ?? []).some((d) => d.file === finding.file && d.line === finding.line - 1))
-					return send(res, 409, {
-						error: 'the line above already carries a directive — add the rule to it by hand',
-					});
-				// Spaces and tabs only, and the line's own ending, so a CRLF file stays
-				// one. Both as `applyKeeps` does it.
-				const indent = /^[ \t]*/.exec(target)?.[0] ?? '';
-				const eol = target.endsWith('\r') ? '\r' : '';
-				const directive = commentFor(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${flat}`);
-				lines.splice(finding.line - 1, 0, `${indent}${directive}${eol}`);
+				if (lines[finding.line - 1] === undefined)
+					return send(res, 409, { error: 'that line is no longer in the file' });
+				// The refusals `applyKeeps` makes, made by the same function: this
+				// endpoint writes the same directive into the same place, so it has to
+				// decline the same writes or the two surfaces disagree about what a mute
+				// means.
+				const why = directiveRefusal(lines, finding.line, (line) =>
+					(shown?.directives ?? []).some((d) => d.file === finding.file && d.line === line),
+				);
+				if (why) return send(res, 409, { error: why });
+				writeAbove(
+					lines,
+					finding.line,
+					commentFor(finding.file, directive(config.suppression.keyword, finding.rule, flat)),
+				);
 				writeFileSync(full, lines.join('\n'));
 				wrote();
 				send(res, 200, { file: finding.file, line: finding.line, rule: finding.rule });
@@ -857,7 +818,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 	const close = (): Promise<void> =>
 		new Promise((done) => {
 			clearInterval(beat);
-			if (timer) clearTimeout(timer);
+			runs.cancel();
 			for (const w of watchers.values()) w.close();
 			watchers.clear();
 			for (const res of clients) res.end();
