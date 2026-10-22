@@ -1138,7 +1138,7 @@ async function main(): Promise<number> {
 				warned = true;
 				notice(`loupe: baseline at ${bPath} is unreadable — ignoring it.\n`);
 			}
-			return applyBaseline(fresh, baseline);
+			return applyBaseline(fresh, baseline, { enabled: config.enabled });
 		};
 	};
 
@@ -1514,7 +1514,7 @@ async function main(): Promise<number> {
 			const legacy = legacyBaseline(root);
 			if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}\n`);
 		}
-		result = applyBaseline(result, baseline, { scoped: scope !== null, rules });
+		result = applyBaseline(result, baseline, { scoped: scope !== null, rules, enabled: config.enabled });
 	}
 	// Before the judgements: a finding the filter drops is not worth a paid question.
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);

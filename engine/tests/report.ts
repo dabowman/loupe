@@ -1063,4 +1063,24 @@ await check('--severity error filters the baselined findings too', () => {
 	}
 });
 
+// An entry of a rule the config has off matches nothing, because the rule
+// reports nothing: that is not work done, and `fixed` counted it as such.
+await check('a rule switched off does not count its baseline entries as fixed', () => {
+	const dir = scratch('loupe-off-fixed-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
+		writeAll(dir, {
+			'loupe.config.json': JSON.stringify({ extends: 'generic', rules: { 'layout/margin-on-child': 'off' } }),
+		});
+		const fixed = (...argv: string[]): unknown =>
+			(JSON.parse(cli(dir, 'check', '--all', '--format', 'json', ...argv).stdout) as { summary: { fixed?: number } })
+				.summary.fixed;
+		assert(fixed() === 0, `fixed ${fixed()} with the rule off`);
+		assert(fixed('--rule', 'layout/margin-on-child') === 0, 'fixed counted under --rule for the rule that is off');
+	} finally {
+		cleanup(dir);
+	}
+});
+
 finish();
