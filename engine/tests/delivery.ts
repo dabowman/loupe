@@ -550,6 +550,8 @@ await check('what cannot be read is not a finding', () => {
 		['a list holding a variable', { 'includes/admin.php': enqueue("array( 'a', $more )") }],
 		['no enqueue at all', { 'src/index.js': 'export {};\n' }],
 		['an argument list that never closes', { 'includes/admin.php': "<?php\nwp_enqueue_style( 'a', 'b', array( 'c'" }],
+		['a literal list added to a call', { 'includes/admin.php': enqueue("array( 'wp-components' ) + acme_style_deps()") }],
+		['a short list added to a method', { 'includes/admin.php': enqueue("[ 'wp-components' ] + $this->deps()") }],
 	];
 	for (const [label, files] of cases) {
 		const found = undeliveredIn({ 'src/a.css': TOKENS_CSS, ...files });
@@ -577,6 +579,10 @@ await check('the PHP reading is literal and bounded', () => {
 	assert(!dependencyList('$deps').complete, 'a variable is not');
 	assert(!dependencyList("array_merge( $a, array( 'x' ) )").complete, 'a call is not');
 	assert(dependencyList(undefined).complete, 'no argument is an empty list');
+	assert(!dependencyList("array( 'a' ) + acme_deps()").complete, 'a list with more added to it is not');
+	assert(!dependencyList("[ 'a' ] + $this->deps()").complete, 'nor is a short one');
+	assert(!dependencyList("array( 'a' ) + array( 'b' )").complete, 'nor two lists added, which this does not add up');
+	assert(dependencyList("array( 'a', array_merge( $x ) )").handles.join() === 'a', 'a nested call is inside the list');
 	assert(argumentsAt(`f( ${'x'.repeat(6000)}`, 1) === null, 'an unclosed list is unreadable');
 	const stripped = stripComments("a(); // b()\n# c()\n#[Attr]\n/* d()\n */ e('//f');");
 	assert(!/b\(|c\(|d\(/.test(stripped), `comments are blanked: ${stripped}`);

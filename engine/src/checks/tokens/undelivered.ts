@@ -133,6 +133,26 @@ export function argumentsAt(text: string, open: number): string[] | null {
 	return null;
 }
 
+/**
+ * The offset of the bracket closing the one at `open`, or -1 when it does not
+ * close within {@link ARGS_MAX} characters. Quotes are honoured.
+ */
+function closingAt(text: string, open: number): number {
+	let depth = 0;
+	let quote: string | null = null;
+	const stop = Math.min(text.length, open + ARGS_MAX);
+	for (let i = open; i < stop; i++) {
+		const c = text[i];
+		if (quote) {
+			if (c === '\\') i++;
+			else if (c === quote) quote = null;
+		} else if (c === "'" || c === '"') quote = c;
+		else if (c === '(' || c === '[' || c === '{') depth++;
+		else if ((c === ')' || c === ']' || c === '}') && --depth === 0) return i;
+	}
+	return -1;
+}
+
 /** A quoted string with nothing interpolated into it, unquoted; else null. */
 const literal = (arg: string): string | null => {
 	const m = /^'((?:[^'\\]|\\.)*)'$|^"((?:[^"\\$]|\\.)*)"$/.exec(arg.trim());
@@ -148,8 +168,12 @@ export function dependencyList(arg: string | undefined): { handles: string[]; co
 	if (arg === undefined || arg === '') return { handles: [], complete: true };
 	const text = arg.trim();
 	const named = [...text.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\$]|\\.)*)"/g)].map((m) => m[1] ?? m[2] ?? '');
-	const list = /^array\s*\(([\s\S]*)\)$/i.exec(text)?.[1] ?? /^\[([\s\S]*)\]$/.exec(text)?.[1];
-	if (list === undefined) return { handles: named, complete: false };
+	const open = /^array\s*\(/i.exec(text)?.[0].length ?? (text.startsWith('[') ? 1 : 0);
+	// The list has to be the whole argument: `array( 'a' ) + deps()` ends in a
+	// paren too, and names more than its literal half.
+	const close = open ? closingAt(text, open - 1) : -1;
+	if (close !== text.length - 1) return { handles: named, complete: false };
+	const list = text.slice(open, close);
 	const items = argumentsAt(`(${list})`, 0) ?? [];
 	const complete = items.every((item) => item === '' || literal(item) !== null);
 	return { handles: named, complete };
