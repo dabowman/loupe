@@ -1162,7 +1162,7 @@ action is offered and nothing says why.
 ```bash
 ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe
 cd editors/vscode && npm install && npx @vscode/vsce package
-code --install-extension loupe-vscode-0.7.0.vsix   # or: cursor --install-extension
+code --install-extension loupe-vscode-*.vsix   # * is the version in editors/vscode/package.json; or: cursor --install-extension
 ```
 
 The extension is a launcher and nothing else — it spawns the server, names the
