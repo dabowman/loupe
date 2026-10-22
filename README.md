@@ -1176,7 +1176,8 @@ Neovim and Helix need no extension at all, just `loupe lsp` as the command.
 Use `bin/loupe` rather than `engine/bin/loupe.mjs`, here as everywhere: the shim
 is what passes the shipped profiles, and without them the component and
 composite rules are silently off — the editor would show a thinner report than
-CI does, and nothing would say so.
+CI does, and nothing would say so. The shim is a POSIX `sh` script, so on
+Windows neither PATH nor the extension's `loupe.path` can start it outside WSL.
 
 Two things are deliberate and both are visible the first time they bite.
 

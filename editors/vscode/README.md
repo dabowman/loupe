@@ -20,7 +20,8 @@ ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
 Use `bin/loupe`, not `engine/bin/loupe.mjs` — the shim is what passes the
 shipped design-system profiles, and without them the component and composite
 rules are silently off. If you would rather not touch your PATH, set
-`loupe.path` to that file instead.
+`loupe.path` to that file instead. On Windows neither route works outside WSL:
+`bin/loupe` is a POSIX `sh` script, which Windows cannot start.
 
 Then the extension:
 
