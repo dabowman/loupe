@@ -24185,7 +24185,12 @@ var numParam = (spec, key, fallback) => typeof spec[key] === "number" ? spec[key
 var listParam = (spec, key) => Array.isArray(spec[key]) ? spec[key].filter((x) => typeof x === "string") : [];
 function loadPatterns(raw) {
   const rec = raw;
-  const list2 = Array.isArray(raw) ? raw : rec?.realizations ?? rec?.patterns ?? [];
+  const found = Array.isArray(raw) ? raw : rec?.realizations ?? rec?.patterns;
+  if (!Array.isArray(found))
+    throw new Error(
+      'not a pattern registry: expected an array of entries, or an object with a "realizations" or "patterns" array'
+    );
+  const list2 = found;
   const out = [];
   const load = (p, id, inheritedCanonical) => {
     const canonical = "canonical" in (p ?? {}) ? bindName(p.canonical) : inheritedCanonical;
@@ -24551,7 +24556,10 @@ function readSurface(raw) {
   };
 }
 function loadComponents(raw) {
-  const list2 = Array.isArray(raw) ? raw : raw?.components ?? [];
+  const found = Array.isArray(raw) ? raw : raw?.components;
+  if (!Array.isArray(found))
+    throw new Error('not a component registry: expected an array of entries, or an object with a "components" array');
+  const list2 = found;
   const read = list2.filter(isEntry).map((c) => {
     const { surface, surfaced: _claimed, ...rest } = c;
     const s = surface === void 0 ? void 0 : readSurface(surface);
@@ -26345,8 +26353,15 @@ function compilePatterns(patterns) {
 function normalize(raw, { root: root2, ruleFrom = {} }) {
   const cfg = merge(DEFAULTS, raw ?? {});
   const ds = cfg.designSystem;
-  const patterns = readRegistry(cfg.patterns, root2, ds.packages, loadPatterns, []);
-  const componentRegistry = readRegistry(cfg.componentRegistry, root2, ds.packages, loadComponents, /* @__PURE__ */ new Map());
+  const patterns = readRegistry("patterns", cfg.patterns, root2, ds.packages, loadPatterns, []);
+  const componentRegistry = readRegistry(
+    "componentRegistry",
+    cfg.componentRegistry,
+    root2,
+    ds.packages,
+    loadComponents,
+    /* @__PURE__ */ new Map()
+  );
   const rules2 = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity }]));
   const ruleOrigins = {};
   for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
@@ -26472,14 +26487,16 @@ function ruleSetting(rawId, value) {
     throw new Error(`the reason for ${rawId} must be a non-empty string, got: ${JSON.stringify(reason)}`);
   return { severity, reason: reason.trim() };
 }
-function readRegistry(spec, root2, packages, load, empty) {
+function readRegistry(key, spec, root2, packages, load, empty) {
   if (Array.isArray(spec)) return load(spec);
-  if (typeof spec !== "string") return empty;
+  if (typeof spec !== "string" || !spec) return empty;
+  const path = under(root2, spec);
   try {
-    const raw = JSON.parse(readFileSync2(under(root2, spec), "utf8"));
+    const raw = JSON.parse(readFileSync2(path, "utf8"));
     return registryApplies(raw, packages) ? load(raw) : empty;
-  } catch {
-    return empty;
+  } catch (err) {
+    if (err?.code === "ENOENT") return empty;
+    throw new Error(`${key}: could not read ${path} \u2014 ${messageOf(err)}`);
   }
 }
 function enabledRules(config) {
