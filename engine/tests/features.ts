@@ -1519,6 +1519,43 @@ await check('--judge asks a variant only of the analog itself, not of the tail a
 	}
 });
 
+// The bundling note costs adopting the remedy. Once the judge withdraws the
+// remedy, "no analog, not Text content (bundling required: …)" names a cost
+// of nothing.
+await check('a withdrawn remedy drops the reach note that priced it', async () => {
+	const root = scratch('dsh-judge-reach-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<span>Hi</span>\n<p>Hi</p>' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
+		]);
+		const reach = 'bundling required: @wordpress/ui is bundled into your build, not provided by WordPress';
+		const at = (line: number, el: string): Finding => ({
+			rule: 'system/raw-element',
+			severity: 'warn',
+			rank: 0,
+			file: 'src/A.jsx',
+			line,
+			code: `<${el}>`,
+			message: `<${el}> → <Text> (@wordpress/ui)`,
+			note: `${reach}; an unrelated note`,
+		});
+		const findings = [at(1, 'span'), at(2, 'p')];
+		const stub = (async (_url: string, init: { body: string }) => {
+			const body = JSON.parse(init.body);
+			const span = body.state.elements[0].source.startsWith('<span');
+			const e0 = span ? { choice: 'not_text', confidence: 0.93 } : { choice: 'body-sm', confidence: 0.8 };
+			return new Response(JSON.stringify({ answers: { e0 } }));
+		}) as unknown as typeof fetch;
+		assert((await judgeVariants(root, findings, registry, 'key', stub)) === 2, 'not both were judged');
+		assert(findings[0]?.message === '<span> → no analog, not Text content (judged 0.93)', findings[0]?.message ?? '');
+		assert(findings[0]?.note === 'an unrelated note', `the withdrawn remedy kept its price: ${findings[0]?.note}`);
+		assert(findings[1]?.note === `${reach}; an unrelated note`, `a kept remedy lost its note: ${findings[1]?.note}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `analyze` bounded the line before the variant was spliced into it, so a long
 // suggestion came back past the cap with the judgement at the end of it.
 await check('a judged variant is still one bounded line, with the judgement kept last', async () => {

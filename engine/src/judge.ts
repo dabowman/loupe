@@ -24,6 +24,7 @@
 
 import { readFileSync } from 'node:fs';
 import { renameCandidates } from './checks/tokens/unknown-token.ts';
+import { withoutReach } from './delivery.ts';
 import { EMBEDDED_LANGUAGE } from './embedded.ts';
 import type { ForceJudge } from './judge/force.ts';
 import { forceQuery } from './judge/force.ts';
@@ -215,6 +216,8 @@ export async function judgeVariants(
 		// before the answer was spliced into it.
 		f.message = messageLine(`${element} → ${suggestion}`, ` ${tail}`);
 		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+		// The reach note priced adopting the analog, which a `not_` answer withdrew.
+		if (not) f.note = withoutReach(f.note, target.package);
 		annotated++;
 	});
 	return annotated;

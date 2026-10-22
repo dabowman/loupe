@@ -199,6 +199,19 @@ export function reachNote(
 }
 
 /**
+ * `note` without the `reachNote`s that priced adopting `pkg`, for a remedy
+ * withdrawn after `annotateReach` ran. Any other note stays.
+ */
+export function withoutReach(note: string | undefined, pkg: string): string | undefined {
+	if (!note) return note;
+	const root = packageRoot(pkg);
+	const kept = note
+		.split('; ')
+		.filter((n) => !n.startsWith(`bundling required: ${root} `) && !n.startsWith(`new dependency: ${root} `));
+	return kept.length ? kept.join('; ') : undefined;
+}
+
+/**
  * Append the reachability note to every finding whose remedy needs it, in
  * place. `note`, not `message`: the baseline keys on `code`, falling back to
  * `message`, and a note is shipped whole by every format and spared by the one
