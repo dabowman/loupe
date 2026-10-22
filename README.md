@@ -503,13 +503,20 @@ on. The wrong choice is usually one control, under that floor, which is what
 an entry's `detector` rules are for: the registry names the component and the
 limits, the engine ships the rule.
 
-Entries are keyed by user need, not component name — `confirm`,
-`choose.segmented`, `navigate-hierarchy#descend` — against an abstract pattern
-language in the top-level `patterns/index.json` that every profile realizes in
-its own way. The reach-for table in each profile's `patterns.md` is generated
-from the two files (`npm run patterns-doc` in `engine/`), so the prose an agent
-reads and the registry the engine checks cannot drift apart. The reasoning is
-in `docs/patterns-v2.md`.
+The `wpds` registry keys its entries by user need, not component name —
+`confirm`, `choose.segmented`, `navigate-hierarchy#descend` — against an
+abstract pattern language in the top-level `patterns/index.json`, which it
+names in `extends`. The reach-for table in `profiles/wpds/patterns.md` is
+generated from the two files (`npm run patterns-doc` in `engine/`), so the
+prose an agent reads and the registry the engine checks cannot drift apart.
+The reasoning is in `docs/patterns-v2.md`.
+
+`wpds` is the only profile that realizes the abstract language so far. The
+`archer` and `vip` registries are v1: a flat list of entries keyed by `id`
+(`dialog-anatomy`, `confirmation-dialog`), with no `extends`. The engine still
+reads them, but their `patterns.md` is written by hand, and
+`patterns-doc --check` covers only the generated tables, so nothing checks
+those two against their registries.
 
 The registry reaches the engine through the `wpds` profile, which the hooks and
 commands pass automatically and which applies only to projects importing
