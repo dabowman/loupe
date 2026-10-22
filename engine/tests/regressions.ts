@@ -1571,7 +1571,9 @@ await check('PostToolUse reads the index cache for the file as it was before the
 		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
 		const cold = edit('cache', '// a note\n');
 		assert(cold.status === 0, `the clean edit blocked: ${cold.status}\n${cold.stderr}`);
-		assert(scans(cold.stderr) === '4', `the cold run did not parse the tree once: ${cold.stderr}`);
+		// The tree once; then, for the advisory `<p>` the file already had, the file
+		// as it was, from the cache the first analysis has just written.
+		assert(scans(cold.stderr) === '4,1', `the cold run did not parse the tree once: ${cold.stderr}`);
 
 		const warm = edit('cache', 'export const B = () => <p style={{ marginBottom: 4 }}>y</p>;\n');
 		assert(warm.status === 2, `an edit that added a finding did not block: ${warm.status}\n${warm.stdout}`);
