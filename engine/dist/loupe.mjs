@@ -27872,16 +27872,19 @@ function cssFilesUnder(path, budget = { left: 200 }, exts = [".css"]) {
   return out;
 }
 function readTokenSources(root2, sources, prefixes) {
-  const set = emptyTokenSet();
+  const set = { ...emptyTokenSet(), read: [] };
   if (!prefixes.length) return set;
   for (const rel of sources ?? []) {
-    for (const file of cssFilesUnder(join7(root2, rel))) {
+    const files = cssFilesUnder(join7(root2, rel));
+    const before = set.known.size;
+    for (const file of files) {
       try {
         harvestTokenDefs(postcss_default.parse(readFileSync4(file, "utf8"), { from: file }), prefixes, set);
         set.sources++;
       } catch {
       }
     }
+    set.read.push({ path: rel, files: files.length, definitions: set.known.size - before });
   }
   return set;
 }
@@ -34040,6 +34043,22 @@ function cacheLine(root2) {
   ];
   return `${dir}  (${parts.join(", ")})`;
 }
+function tokensLine(config) {
+  const ds = config.designSystem;
+  if (!ds.tokenPrefixes?.length) return `${dim("tokens:     ")}(none \u2014 token rules inactive)`;
+  const prefixes = ds.tokenPrefixes.map((p) => `${p}*`).join(", ");
+  if (!ds.tokenSources.length) return yellow(`tokens:     ${prefixes} (no token sources configured)`);
+  const { read } = readTokenSources(config.root, ds.tokenSources, ds.tokenPrefixes);
+  const counts = read.filter((r) => r.definitions).map((r, i) => `${r.definitions}${i ? "" : r.definitions === 1 ? " definition" : " definitions"} from ${r.path}`);
+  if (counts.length) return `${dim("tokens:     ")}${prefixes} (${counts.join(", ")})`;
+  const missing = read.filter((r) => !r.files).map((r) => r.path);
+  const empty = read.filter((r) => r.files).map((r) => r.path);
+  const why = [
+    ...missing.length ? [`${missing.join(", ")} not found`] : [],
+    ...empty.length ? [`${empty.join(", ")} ${empty.length === 1 ? "defines" : "define"} none`] : []
+  ];
+  return yellow(`tokens:     ${prefixes} (0 definitions read; ${why.join("; ")})`);
+}
 var answerCache = (root2, noCache, file = JUDGE_CACHE) => cacheDisabled(noCache) ? null : new AnswerCache(join17(projectStateDir(root2), file));
 function listenFailure(err, command, port) {
   const code = err?.code;
@@ -34710,7 +34729,7 @@ async function main() {
       `${dim("packages:   ")}${orNone(ds.packages)}`,
       `${dim("layout:     ")}${components2(ds.layoutComponents)}`,
       `${dim("text:       ")}${components2(ds.textComponents)}`,
-      `${dim("tokens:     ")}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(", ") : "(none \u2014 token rules inactive)"}`,
+      tokensLine(config),
       `${dim("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
       `${dim("suppress:   ")}${directive(config.suppression.keyword, "<ruleId>", "<reason>")}`,
       `${dim("baseline:   ")}${base.path}${base.found && base.baseline === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
