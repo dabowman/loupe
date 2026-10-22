@@ -505,6 +505,11 @@ always runs live; it is cheap, and it is the half no single file can answer.
   switching presets does not thrash one; files unused for a week are deleted.
 - A cached file with no suppression directive is never opened. One with a
   directive is read for it, because a ledger of mutes is per run.
+- A file `analyze`'s `contents` stands in for (the hook's touched file as it
+  was before the edit) is never looked up or stored, and its entry is kept
+  through the save untouched. The entry describes the bytes on disk, which the
+  analysis of the edit has just recorded; dropping it as unseen would have the
+  next run parse the file again.
 - Whether a Sass or Less syntax plugin is installed is asked even of a cached
   sheet: that is about the machine now, not about the bytes.
 - **`tests/index-cache.ts` is the contract.** Every fixture, cold and warm, with
@@ -1002,9 +1007,12 @@ over:
 
 **Only when it would block.** The "before" is analyzed only when the "after"
 has a blocking finding, so an edit that leaves the file clean pays nothing for
-the question. One that would block pays a second analysis: on a synthetic
-2,460-file project, a blocking hook run went from 0.94s to 1.41s, and a clean
-one stayed at 1.0s.
+the question. One that would block pays a second analysis, which reads the
+index cache as the first does ([Caches](#caches)): only the touched file is
+parsed again, from what it held. On a synthetic 2,400-file project with the
+cache warm, a blocking hook run took about 1.2s while that analysis parsed the
+whole tree, against 0.5s for a clean one; reading the cache, it takes about
+0.65s.
 
 **Keyed like the baseline**: rule + file + normalized code, not line. An edit
 above a finding moves it down the file, and a key with the line in it would

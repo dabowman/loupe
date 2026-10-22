@@ -600,10 +600,14 @@ export async function analyze(
 	/**
 	 * What the cache knows about a file. Never asked about a file `contents`
 	 * stands in for: the cache describes the bytes on disk, and those are not
-	 * the ones being analyzed. With no lookup, nothing is stored either.
+	 * the ones being analyzed. With no lookup, nothing is stored either, and the
+	 * entry the disk's bytes earned is kept as it was.
 	 */
-	const lookup = (abs: string, rel: string): Lookup | null =>
-		contents?.has(rel) ? null : (cache?.lookup(abs, rel) ?? null);
+	const lookup = (abs: string, rel: string): Lookup | null => {
+		if (!contents?.has(rel)) return cache?.lookup(abs, rel) ?? null;
+		cache?.keep(rel);
+		return null;
+	};
 	/** Whether a file holds anything the suppression parser read as a directive. */
 	const hasDirectives = (supp: Suppressions): boolean => supp.directives.length > 0 || supp.malformed.length > 0;
 	/**

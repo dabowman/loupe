@@ -187,6 +187,14 @@ export class IndexCache {
 	}
 
 	/**
+	 * Keep a file's entry through `save` without asking about it: one whose bytes
+	 * this run takes from somewhere other than the disk the entry describes.
+	 */
+	keep(rel: string): void {
+		this.#seen.add(rel);
+	}
+
+	/**
 	 * Record what a file contributed, from the bytes just analyzed. Stamped with
 	 * the lookup's time, not the time of storing: a scan can finish seconds after
 	 * the read, and the racy-mtime guard is measured from the read.

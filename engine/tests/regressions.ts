@@ -1367,6 +1367,51 @@ await check('PostToolUse counts a finding sharing a key with a standing one as i
 	}
 });
 
+// The file as it was before the edit was analyzed with the index cache off, so
+// every PostToolUse that would block re-parsed the whole tree to answer for one
+// file. It reads the cache as the analysis of the edit does: only the touched
+// file is parsed from what it held, and the entry its bytes on disk earned is
+// left for the next run, not dropped.
+await check('PostToolUse reads the index cache for the file as it was before the edit', () => {
+	const tree: Record<string, string> = { 'loupe.config.json': JSON.stringify({ extends: 'wpds' }) };
+	for (let i = 0; i < 4; i++) tree[`src/A${i}.jsx`] = `export const A${i} = () => <p className="a${i}">x</p>;\n`;
+	const root = tmpRepo(tree);
+	const jsx = join(root, 'src', 'A0.jsx');
+	// The suites run uncached; this one is about the cache.
+	const cached = { CLAUDE_PLUGIN_OPTION_BLOCKING: 'true', LOUPE_NO_CACHE: '', LOUPE_DEBUG_SCAN: '1' };
+	const hook = (payload: object) => runCli(['hook', '--root', root], cached, JSON.stringify(payload));
+	/** How many files each scan parsed, in the order the run made them. */
+	const scans = (stderr: string): string => [...stderr.matchAll(/scanned (\d+) file\(s\)/g)].map((m) => m[1]).join();
+	const edit = (session: string, add: string) => {
+		const before = readFileSync(jsx, 'utf8');
+		writeFileSync(jsx, `${before}${add}`);
+		return hook({
+			session_id: session,
+			hook_event_name: 'PostToolUse',
+			tool_name: 'Edit',
+			tool_input: { file_path: 'src/A0.jsx' },
+			tool_response: { filePath: jsx, originalFile: before },
+		});
+	};
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		const cold = edit('cache', '// a note\n');
+		assert(cold.status === 0, `the clean edit blocked: ${cold.status}\n${cold.stderr}`);
+		assert(scans(cold.stderr) === '4', `the cold run did not parse the tree once: ${cold.stderr}`);
+
+		const warm = edit('cache', 'export const B = () => <p style={{ marginBottom: 4 }}>y</p>;\n');
+		assert(warm.status === 2, `an edit that added a finding did not block: ${warm.status}\n${warm.stdout}`);
+		assert(/margin-on-child/.test(warm.stderr), `the new finding is missing:\n${warm.stderr}`);
+		// The touched file as it is, then as it was; nothing else.
+		assert(scans(warm.stderr) === '1,1', `the tree was parsed again for the file before the edit:\n${warm.stderr}`);
+
+		const stop = hook({ session_id: 'cache', hook_event_name: 'Stop', stop_hook_active: false });
+		assert(scans(stop.stderr) === '', `the touched file's cached entry did not survive the edit:\n${stop.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // PostToolUse passes a standing finding over for Stop, but Stop stands down
 // where it cannot resolve the changed files — outside a git worktree — so a
 // finding passed over there, one the agent added an edit earlier included, was
