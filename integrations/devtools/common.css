@@ -1,0 +1,76 @@
+/*
+ * Chrome for both surfaces.
+ *
+ * DevTools is itself themed, and an extension panel that ignores that reads as a
+ * web page bolted into a tool. So: system font stack at DevTools' own size, and
+ * a palette that follows `prefers-color-scheme`, which DevTools sets to match
+ * its own theme.
+ */
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#ffffff, #1f1f1f);
+  --bg-2: light-dark(#f3f3f3, #282828);
+  --ink: light-dark(#1f1f1f, #e8eaed);
+  --ink-2: light-dark(#5f6368, #9aa0a6);
+  --ink-3: light-dark(#80868b, #75797c);
+  --line: light-dark(#e0e0e0, #3c4043);
+  --sev-error: light-dark(#c5221f, #f28b82);
+  --sev-warn: light-dark(#b06000, #fdd663);
+  --hit: light-dark(#137333, #81c995);
+  --sel: light-dark(#e8f0fe, #2d3134);
+  --accent: light-dark(#1a73e8, #8ab4f8);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.bar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; background: var(--bg-2); border-bottom: 1px solid var(--line);
+}
+.bar .grow { flex: 1; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex: none; }
+.dot.on { background: var(--hit); }
+.dot.off { background: var(--sev-error); }
+.dot.busy { background: var(--sev-warn); }
+button {
+  font: inherit; padding: 3px 9px; border-radius: 4px; cursor: pointer;
+  background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+}
+button:hover:not(:disabled) { background: var(--sel); }
+button:disabled { opacity: .5; cursor: default; }
+input {
+  font: inherit; padding: 3px 7px; border-radius: 4px;
+  background: var(--bg); color: var(--ink); border: 1px solid var(--line);
+}
+input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.port { width: 6ch; }
+.status { color: var(--ink-2); }
+.rows { padding: 2px 0; }
+.row { padding: 6px 10px; border-left: 2px solid transparent; cursor: pointer; }
+.row:hover { background: var(--bg-2); }
+.row.on { background: var(--sel); border-left-color: var(--hit); }
+/* Ordering is the matcher's; opacity is how the list says which bucket a row is
+   in without a heading per group. */
+.row.offwidth { opacity: .8; }
+.row.dead { opacity: .62; }
+.row.nodom { opacity: .5; cursor: default; }
+.top { display: flex; align-items: baseline; gap: 6px; }
+.sev { flex: none; font-weight: 600; }
+.sev.error { color: var(--sev-error); }
+.sev.warn { color: var(--sev-warn); }
+.rule { color: var(--accent); font-size: 11px; }
+.msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; word-break: break-word; margin: 1px 0; }
+.meta { color: var(--ink-3); font-size: 11px; display: flex; gap: 8px; flex-wrap: wrap; }
+.hits { color: var(--hit); }
+.hits.zero { color: var(--ink-3); }
+.cond { color: light-dark(#8430ce, #c58af9); }
+.cond.on { color: var(--ink-3); }
+.empty { padding: 18px 12px; color: var(--ink-3); text-align: center; }
+.empty b { color: var(--ink-2); }
+.note { padding: 7px 10px; color: var(--ink-3); border-top: 1px solid var(--line); font-size: 11px; }
+code { background: var(--bg-2); padding: 1px 4px; border-radius: 3px; font-size: 11px; }

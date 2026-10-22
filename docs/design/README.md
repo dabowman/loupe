@@ -19,12 +19,16 @@ points at it.
 | [cli.md](cli.md) | exit codes, the hook protocol, project detection and its budget, config resolution, profiles, state locations, building and distribution |
 | [judge.md](judge.md) | the `--judge` layer: each question, every floor, and the eval numbers behind them |
 | [lsp.md](lsp.md) | the language server: on-save analysis, repo-wide diagnostics, the quick fix shared with `loupe fix`, JSON-RPC framing |
-| [report.md](report.md) | the agent format, message bounding, JSON/SARIF/HTML, baseline, the suppression grammar, `fix`, `loupe serve` |
+| [report.md](report.md) | the agent format, message bounding, JSON/SARIF/HTML, baseline, the suppression grammar, `fix`, `loupe serve`, `loupe ui` |
 
-Two other documents sit outside this set:
+Three other documents sit outside this set:
 
 - [patterns-v2.md](../patterns-v2.md) — the abstract pattern language: what it is
   for and what was deliberately left out.
+- [ui-options.md](../ui-options.md) — the option space for a UI past the static
+  report, what each option unlocks and costs, and a staged recommendation.
+  Stages 1 and 2 shipped — `loupe ui` and the DevTools extension; the rest is
+  still a decision document, and the Status block at its head says which is which.
 - [MIGRATION.md](../../engine/MIGRATION.md) — moving off the bash quality hook
   this replaced.
 

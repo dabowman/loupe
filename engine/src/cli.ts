@@ -58,6 +58,7 @@ import {
 import { formatHtml } from './report-html.ts';
 import { lsp } from './lsp.ts';
 import { serve } from './serve.ts';
+import { ui } from './ui.ts';
 import { messageOf, oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import { NO_PROFILE, applyRegistries, profileRoots, readProfileRoots, selectProfiles } from './profiles.ts';
@@ -163,6 +164,24 @@ const answerCache = (root: string, noCache: boolean | undefined): AnswerCache | 
 	cacheDisabled(noCache) ? null : new AnswerCache(join(projectStateDir(root), 'judge-cache.json'));
 
 /**
+ * Why a server could not start, in a line a person can act on.
+ *
+ * The default is the stack, which is right for a bug and wrong for the two
+ * failures a reader actually hits: the port is taken, or it is one they are not
+ * allowed to bind. Both are ordinary, and both read as a crash without this.
+ */
+function listenFailure(err: unknown, command: string, port: number): string {
+	const code = (err as NodeJS.ErrnoException | null)?.code;
+	const why =
+		code === 'EADDRINUSE'
+			? `port ${port} is already in use — run \`loupe ${command} --port <n>\` on another, or --port 0 to be given a free one`
+			: code === 'EACCES'
+				? `not allowed to bind port ${port} — ports below 1024 need privileges`
+				: `${command} could not start — ${messageOf(err)}`;
+	return `loupe: ${why}\n`;
+}
+
+/**
  * How far a detection result is to be trusted, coloured to match. `detect`
  * prints two of these and `init` writes the config they describe, so what is
  * worth seeing at a glance is the weaker of the two.
@@ -242,6 +261,7 @@ const VALUE_FLAGS = [
 	'profiles',
 	'profile',
 	'port',
+	'editor',
 ] as const;
 
 type ValueFlag = (typeof VALUE_FLAGS)[number];
@@ -324,6 +344,9 @@ Commands:
   status                Show the effective config: rules, severities, what blocks
   serve                 Serve the findings to the running app, so a stylesheet
                         finding can be resolved to the elements it styles
+  ui                    The findings, live on the working tree: re-analyzed on
+                        save, every location a link into your editor, and fix,
+                        baseline and suppress from the row. Loopback only
   lsp                   Language server on stdin/stdout: diagnostics on save,
                         the rule's guidance on hover, and its fix as a quick
                         fix. Editors launch this; you do not run it by hand
@@ -368,7 +391,11 @@ Options:
                         and suppresses the ones it kept; add --dry-run to
                         review them first. (TYPESAFE_API_KEY from the
                         environment or ~/.config/loupe/.env)
-  --port <n>            Port for 'serve' (default: 7331)
+  --port <n>            Port for 'serve' (7331) or 'ui' (7332)
+  --editor <t>          What a location in 'ui' links to. {path} is the file's
+                        absolute path and {line} its line
+                        (default: vscode://file{path}:{line}; for Cursor or Zed,
+                        swap the scheme: cursor://file{path}:{line})
   --force               Overwrite an existing config, or write a guessed design
                         system (init)
   --version             Same as the version command
@@ -1278,10 +1305,15 @@ async function main(): Promise<number> {
 	// loaded at startup, with the baseline applied. Both return before the shared
 	// baseline block below, so they apply it here or show a backlog the project
 	// has already accepted.
-	const baselinedRun = (notice: (line: string) => void): (() => Promise<AnalyzeResult | BaselinedResult>) => {
+	//
+	// Split in two because `ui` needs both halves separately: it displays the
+	// baselined result and baselines the unbaselined one, and a runner that had
+	// already collapsed them would make `accept as baseline` record a backlog
+	// with the accepted part missing — which is every previously accepted finding
+	// turned live again.
+	const presenter = (notice: (line: string) => void): ((fresh: AnalyzeResult) => AnalyzeResult | BaselinedResult) => {
 		let warned = false;
-		return async () => {
-			const fresh = await analyze(config, { scope: null, cache: useCache });
+		return (fresh) => {
 			if (args.flags['no-baseline']) return fresh;
 			const { path: bPath, found } = findExistingBaseline(root, namedBaseline, config.baselinePath);
 			const baseline = found ? readBaseline(bPath) : null;
@@ -1293,6 +1325,10 @@ async function main(): Promise<number> {
 			}
 			return applyBaseline(fresh, baseline, { enabled: config.enabled });
 		};
+	};
+	const baselinedRun = (notice: (line: string) => void): (() => Promise<AnalyzeResult | BaselinedResult>) => {
+		const present = presenter(notice);
+		return async () => present(await analyze(config, { scope: null, cache: useCache }));
 	};
 
 	// Before every reporting path below: only framed protocol messages may reach
@@ -1318,10 +1354,70 @@ async function main(): Promise<number> {
 			return EXIT.CANNOT_RUN;
 		}
 		const run = baselinedRun(note);
-		const { url } = await serve({ port, config, run });
+		let url: string;
+		try {
+			({ url } = await serve({ port, config, run }));
+		} catch (err) {
+			fail(listenFailure(err, 'serve', port));
+			return EXIT.CANNOT_RUN;
+		}
 		process.stdout.write(
 			`${green(`loupe serve — ${url}`)}\n` +
 				`${dim('  Open that URL for the bookmarklet, then click it on the page you are developing.')}\n` +
+				`${dim('  Ctrl-C to stop.')}\n`,
+		);
+		// Nothing resolves this: the server holds the process open until killed.
+		await new Promise(() => {});
+		return EXIT.OK;
+	}
+
+	// `serve`'s sibling, and deliberately a separate command rather than a flag on
+	// it: that one is read-only and answers any origin, this one rewrites source
+	// files and answers only the page it served. Folding them together would put a
+	// writer behind `access-control-allow-origin: *`.
+	if (command === 'ui') {
+		const port = Number(args.flags.port ?? 7332);
+		if (!Number.isInteger(port) || port < 0 || port > 65535) {
+			fail(`loupe: --port wants a port number, got ${args.flags.port}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		// Refused rather than ignored. This command re-analyzes the whole tree on
+		// every save and shows everything it finds, so a narrowing flag has nowhere
+		// to apply — and a page that silently showed 300 findings under
+		// `--severity error` would be reporting something other than what it was
+		// asked for. Filter in the page instead; the toolbar does both.
+		const unhonored = (['severity', 'files', 'changed', 'judge'] as const).filter((f) => args.flags[f]);
+		if (unhonored.length) {
+			fail(
+				`loupe: ui does not take ${unhonored.map((f) => `--${f}`).join(' ')} — it shows the whole tree; ` +
+					'filter in the page, or use `check` for a narrowed run\n',
+			);
+			return EXIT.CANNOT_RUN;
+		}
+		const present = presenter(note);
+		let handle: Awaited<ReturnType<typeof ui>>;
+		try {
+			handle = await ui({
+				port,
+				config,
+				root,
+				analyze: () => analyze(config, { scope: null, cache: useCache }),
+				present,
+				baselineTarget: baselinePath(root, namedBaseline ?? config.baselinePath),
+				baselineFound: () => findExistingBaseline(root, namedBaseline, config.baselinePath).found,
+				// `||`, not `??`: an empty `--editor=` is not a template. Taken as
+				// nullish-only it reaches the page as '', and every location renders
+				// `href=""` — a link that reloads the report instead of opening a file.
+				editor: args.flags.editor || 'vscode://file{path}:{line}',
+				log: (line) => process.stderr.write(line),
+			});
+		} catch (err) {
+			fail(listenFailure(err, 'ui', port));
+			return EXIT.CANNOT_RUN;
+		}
+		process.stdout.write(
+			`${green(`loupe ui — ${handle.url}`)}\n` +
+				`${dim('  Findings, live on the working tree: re-analyzed on save, with fix, baseline and suppress.')}\n` +
 				`${dim('  Ctrl-C to stop.')}\n`,
 		);
 		// Nothing resolves this: the server holds the process open until killed.

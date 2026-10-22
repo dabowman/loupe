@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Loupe</title>
+<!-- Declared empty so nothing asks for /favicon.ico. -->
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="common.css">
+<div class="bar">
+  <span class="dot" id="dot"></span>
+  <span class="status" id="status">connecting…</span>
+  <span class="grow"></span>
+  <input type="search" id="q" placeholder="filter…" aria-label="Filter findings">
+  <label class="status" for="port">port</label>
+  <input class="port" id="port" inputmode="numeric" aria-label="Server port">
+  <button id="refresh">refresh</button>
+</div>
+<div class="rows" id="rows"></div>
+<div class="note" id="note"></div>
+<script src="vendor/match.js"></script>
+<script src="common.js"></script>
+<script src="panel.js"></script>

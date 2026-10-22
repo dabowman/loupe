@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Loupe</title>
+<!-- Declared empty so nothing asks for /favicon.ico. -->
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="common.css">
+<style>
+  /* The pane is narrow and short. Nothing in it competes for the space. */
+  body { font-size: 11.5px; }
+  .bar { padding: 5px 8px; }
+  .row { padding: 5px 8px; cursor: default; }
+  .sel { padding: 5px 8px; color: var(--ink-3); border-bottom: 1px solid var(--line); font-family: ui-monospace, Menlo, monospace; }
+</style>
+<div class="bar">
+  <span class="dot" id="dot"></span>
+  <span class="status" id="status">…</span>
+  <span class="grow"></span>
+  <button id="refresh">refresh</button>
+</div>
+<div class="sel" id="sel"></div>
+<div class="rows" id="rows"></div>
+<script src="vendor/match.js"></script>
+<script src="common.js"></script>
+<script src="sidebar.js"></script>
