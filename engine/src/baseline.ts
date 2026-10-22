@@ -32,7 +32,10 @@ export function readBaseline(path: string): Baseline | null {
 		// Defaulting it to `[]` says "nothing was accepted", which reads as a healthy
 		// empty baseline and puts the whole backlog live.
 		if (!Array.isArray(parsed.entries)) return null;
-		return { createdAt: parsed.createdAt ?? '', entries: parsed.entries, set: new Set(parsed.entries) };
+		// An entry that is not a string is no key a finding could match, and every
+		// reader past here takes one apart as text.
+		const entries = (parsed.entries as unknown[]).filter((e): e is string => typeof e === 'string');
+		return { createdAt: parsed.createdAt ?? '', entries, set: new Set(entries) };
 	} catch {
 		return null;
 	}

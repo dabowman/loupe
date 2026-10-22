@@ -1133,4 +1133,27 @@ await check('--rule patterns/judged-redirect without --judge says it reports onl
 	}
 });
 
+// `readBaseline` took any `entries` array, so a `null` in it reached `ruleOf`
+// and threw: `baseline --dry-run` and `check --rule` exited 2 on a file a plain
+// `check` read without complaint.
+await check('a baseline entry that is not a string is dropped, not thrown on', () => {
+	const dir = scratch('loupe-baseline-null-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
+		const path = join(dir, '.loupe-baseline.json');
+		const file = JSON.parse(readFileSync(path, 'utf8')) as { entries: unknown[] };
+		writeAll(dir, { '.loupe-baseline.json': JSON.stringify({ ...file, entries: [...file.entries, null, 3] }) });
+		for (const argv of [
+			['baseline', '--dry-run'],
+			['check', '--all', '--rule', 'layout/margin-on-child'],
+		]) {
+			const r = cli(dir, ...argv);
+			assert(r.status !== 2, `${argv.join(' ')} exited 2:\n${r.stderr}`);
+		}
+	} finally {
+		cleanup(dir);
+	}
+});
+
 finish();
