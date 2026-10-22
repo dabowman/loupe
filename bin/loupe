@@ -5,10 +5,14 @@
 # runs commands in, so this shim is reachable by name from any project without
 # an alias, an npm link, or anything added to the project itself. For plain
 # terminals, symlink this file onto PATH yourself — from a checkout, or from
-# wherever the marketplace install put the plugin:
+# the marketplace clone a plugin install leaves behind:
 #
 #     ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe
-#     ln -s ~/.claude/plugins/<marketplace>/loupe/bin/loupe ~/.local/bin/loupe
+#     ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
+#
+# Not the copy Claude Code itself runs: that one lives under
+# ~/.claude/plugins/cache/loupe/loupe/<commit>/, and the commit changes on every
+# update, so a link into it dangles after the next one.
 #
 # Both routes reach it through a symlink, but different ones: Claude Code
 # symlinks the plugin *directory*, ~/.local/bin symlinks this *file*. Both have
