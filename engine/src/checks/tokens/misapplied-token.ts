@@ -74,9 +74,11 @@ export function misappliedTokens(
 		if (!plainRefs(ref.value).includes(ref.name)) continue;
 		const at = place(scopes, ref.name);
 		if (!at) continue;
+		// One finding per token on a line, but only once one is reported: two
+		// references on a line can land on different elements, and a clean first
+		// one must not hide a misapplied second.
 		const key = `${ref.file}\u0000${ref.line}\u0000${prop}\u0000${ref.name}`;
 		if (seen.has(key)) continue;
-		seen.add(key);
 		let why: string | null = null;
 		if (at.property !== null && !propMatches(at.sets, prop) && !propMatches(at.also, prop))
 			why = `${at.property.startsWith('--') ? 'its family' : `a ${at.property} token`} sets ${at.sets.join(', ')}`;
@@ -85,6 +87,7 @@ export function misappliedTokens(
 			if (fit.fit === 'off') why = fit.why;
 		}
 		if (why === null) continue;
+		seen.add(key);
 		out.push({
 			rule: 'tokens/misapplied-token',
 			file: ref.file,

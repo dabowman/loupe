@@ -696,6 +696,25 @@ await check('elements that disagree, or a kind no markup can show, are never rep
 	assert(on.fit === 'on', `a Modal is a container: ${on.fit}`);
 });
 
+// Two references to one token on one line are two verdicts. Deduped before
+// the verdict, the clean first one hid a misapplied second one, which split
+// over two lines was reported.
+await check('a clean reference does not hide a misapplied one on the same line', async () => {
+	const T = 'var(--wpds-color-background-surface-neutral-strong)';
+	const { misapplied } = await run({
+		'src/A.jsx': `export const A = () => <><div style={{ background: '${T}' }} /><button style={{ background: '${T}' }} /></>;
+export const B = () => <><div className="rp-d" /><button className="rp-b" /></>;
+`,
+		'src/a.css': `.rp-d { background: ${T}; } .rp-b { background: ${T}; }\n`,
+	});
+	const where = misapplied.map((f) => `${f.file}:${f.line}`).sort();
+	assert(where.join() === 'src/A.jsx:1,src/a.css:1', `expected the button on each line: ${where.join(', ')}`);
+	assert(
+		misapplied.every((f) => f.message.endsWith('this styles <button>')),
+		misapplied.map((f) => f.message).join('\n'),
+	);
+});
+
 // A kind's list says what an element is, never what it is not: a `<div>`, a
 // `<span>` inside a button, or a component the profile has not read could be
 // any kind, and reading it as none reported a card's radius, an icon's
