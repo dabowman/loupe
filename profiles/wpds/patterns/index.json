@@ -118,8 +118,7 @@
     },
     {
       "pattern": "choose.rendered",
-      "import": "@wordpress/global-styles-ui",
-      "canonical": "Variation",
+      "canonical": null,
       "detector": "signature",
       "signature": [
         "Grid",
@@ -134,7 +133,7 @@
         "A RadioControl list of theme or preset names",
         "Static thumbnails that are not the thing they preview"
       ],
-      "note": "Each tile renders the real variation through a scoped style provider, marks the active one with aria-current, and puts the name in a Tooltip rather than under the tile. `Grid` is planned for deprecation — write the grid in CSS; the pattern is the live preview as the option, not that component."
+      "note": "No canonical: @wordpress/global-styles-ui builds this from a Variation tile it does not export. Its StyleVariations, ColorVariations and TypographyVariations are this pattern bound to the active theme's style variations (value and onChange are a GlobalStylesConfig) — reach for them for that choice only; for any other set, extract the project's own the first time it is built and fill `canonical` in. Core's tile renders the real variation through a scoped style provider, marks the active one with aria-current, and puts the name in a Tooltip rather than under the tile. `Grid` is planned for deprecation — write the grid in CSS; the pattern is the live preview as the option, not that component."
     },
     {
       "pattern": "enter-value.length",
