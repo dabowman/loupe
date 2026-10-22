@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
 import { loadConfig } from '../src/config.ts';
+import { IndexCache } from '../src/index-cache.ts';
 import { readProfiles } from '../src/profiles.ts';
 import type { AnalyzeResult } from '../src/types.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write } from './harness.ts';
@@ -139,19 +140,31 @@ for (const name of readdirSync(FIXTURES).sort()) {
 	});
 }
 
-await check('an unparseable stylesheet stays reported as unparsed when its failure is cached', async () => {
+// A failure can be the parser's rather than the file's, and an upgraded
+// postcss-scss or babel is not in the fingerprint: a failure is never kept, so
+// the next run asks the parser again.
+await check('an unparseable file stays reported, and its failure is never cached', async () => {
 	const root = scratch('loupe-index-broken-');
 	try {
 		write(root, 'loupe.config.json', JSON.stringify({ extends: 'wpds', sources: { styles: ['**/*.css'] } }));
 		write(root, 'styles/broken.css', '.a { color: red;\n.b {');
+		write(root, 'styles/fine.css', '.a { color: red; }');
+		write(root, 'src/Broken.jsx', 'export const A = () => <div>;');
 		await same(root, 'cold');
 		age(root);
 		await same(root, 'warm');
 		const result = JSON.parse(await run(root, { cache: true })) as AnalyzeResult;
 		assert(
 			result.findings.some((f) => f.rule === 'stylesheet/unparsed'),
-			'the cached failure was not reported as stylesheet/unparsed',
+			'the failure was not reported as stylesheet/unparsed',
 		);
+		const index = files(state, /^index-.*\.json$/).filter((f) => statSync(f).mtimeMs > Date.now() - 5000);
+		const stored = index.flatMap((f) =>
+			Object.keys((JSON.parse(readFileSync(f, 'utf8')) as { entries: object }).entries),
+		);
+		assert(stored.includes('styles/fine.css'), `the parsed sheet was not cached: ${stored.join(', ')}`);
+		assert(!stored.includes('styles/broken.css'), 'a stylesheet that failed to parse was cached');
+		assert(!stored.includes('src/Broken.jsx'), 'markup that failed to parse was cached');
 	} finally {
 		cleanup(root);
 	}
@@ -283,6 +296,28 @@ await check('with a profile active, and under `contents`, cached output is uncac
 		assert((await analyzed({ cache: true, contents: before })) === asWas, 'warm, under contents');
 		// And it was not stored as the file's: the disk's answer is unchanged.
 		assert((await analyzed({ cache: true })) === want, 'after a run under contents');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The racy-mtime guard trusts an entry on `stat` only when its mtime is two
+// seconds older than the read. Stamped when stored, after a scan that can take
+// seconds, a same-size rewrite in the read's mtime tick was trusted for good.
+await check('an entry records when its file was read, not when it was stored', async () => {
+	const root = scratch('loupe-index-stamp-');
+	try {
+		write(root, 'a.css', '.a { color: red; }');
+		const cache = new IndexCache(root, { stamp: 1 });
+		const look = cache.lookup(join(root, 'a.css'), 'a.css');
+		await new Promise((r) => setTimeout(r, 50));
+		const stored = Date.now();
+		cache.store(look, 'a.css', '.a { color: red; }', { d: false });
+		cache.save();
+		const entry = (JSON.parse(readFileSync(cache.path, 'utf8')) as { entries: Record<string, { t: number }> }).entries[
+			'a.css'
+		];
+		assert(entry !== undefined && entry.t === look.at && entry.t < stored, `stamped ${entry?.t}, read at ${look.at}`);
 	} finally {
 		cleanup(root);
 	}

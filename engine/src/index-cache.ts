@@ -49,7 +49,7 @@ export type SheetExtract =
 			/** Every custom property the sheet defines, in source order: `[name, value]`. */
 			defs: [string, string][];
 	  }
-	/** `error` is the message, `reason` the parse error's identity: what it is keyed on. */
+	/** `error` is the message, `reason` the parse error's identity: what it is keyed on. Never stored. */
 	| { error: string; reason?: string | undefined };
 
 /** A scan with its sets written out as arrays, the form JSON can hold. */
@@ -131,6 +131,11 @@ let CODE: string | null = null;
 
 /** One file, as the analysis reads it: its stat, and its bytes once anyone asks. */
 export interface Lookup {
+	/**
+	 * When the lookup began, which is no later than any read of the file this
+	 * run makes: what an entry stored from it records as its read time.
+	 */
+	at: number;
 	stat: Stats | null;
 	entry: Entry | null;
 	/** The bytes, when they had to be read to answer the lookup. */
@@ -158,31 +163,37 @@ export class IndexCache {
 	 */
 	lookup(abs: string, rel: string): Lookup {
 		this.#seen.add(rel);
+		const at = Date.now();
 		let stat: Stats | null = null;
 		try {
 			stat = statSync(abs);
 		} catch {
-			return { stat: null, entry: null, text: null };
+			return { at, stat: null, entry: null, text: null };
 		}
 		const entry = this.#entries.get(rel);
-		if (!entry || entry.s !== stat.size) return { stat, entry: null, text: null };
-		if (entry.m === stat.mtimeMs && entry.m < entry.t - RACY_MS) return { stat, entry, text: null };
+		if (!entry || entry.s !== stat.size) return { at, stat, entry: null, text: null };
+		if (entry.m === stat.mtimeMs && entry.m < entry.t - RACY_MS) return { at, stat, entry, text: null };
 		let text: string;
 		try {
 			text = readFileSync(abs, 'utf8');
 		} catch {
-			return { stat, entry: null, text: null };
+			return { at, stat, entry: null, text: null };
 		}
-		if (sha256(text) !== entry.h) return { stat, entry: null, text };
+		if (sha256(text) !== entry.h) return { at, stat, entry: null, text };
 		entry.m = stat.mtimeMs;
-		entry.t = Date.now();
+		entry.t = at;
 		this.#dirty = true;
-		return { stat, entry, text };
+		return { at, stat, entry, text };
 	}
 
-	/** Record what a file contributed, from the bytes just analyzed. */
-	store(rel: string, stat: Stats, text: string, data: Pick<Entry, 'd' | 'scan' | 'refs' | 'sheet'>): void {
-		this.#entries.set(rel, { m: stat.mtimeMs, s: stat.size, h: sha256(text), t: Date.now(), ...data });
+	/**
+	 * Record what a file contributed, from the bytes just analyzed. Stamped with
+	 * the lookup's time, not the time of storing: a scan can finish seconds after
+	 * the read, and the racy-mtime guard is measured from the read.
+	 */
+	store(look: Lookup, rel: string, text: string, data: Pick<Entry, 'd' | 'scan' | 'refs' | 'sheet'>): void {
+		if (!look.stat) return;
+		this.#entries.set(rel, { m: look.stat.mtimeMs, s: look.stat.size, h: sha256(text), t: look.at, ...data });
 		this.#dirty = true;
 	}
 

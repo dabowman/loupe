@@ -654,8 +654,10 @@ export async function analyze(
 		const scanned = scan as ScanResult;
 		diagnostics.filesScanned++;
 		const supp = suppressionsFor(rel, text ?? '');
-		if (cache && look?.stat && !look.entry?.scan)
-			cache.store(rel, look.stat, text ?? '', { d: hasDirectives(supp), scan: storeScan(scanned) });
+		// A parse failure is never kept: it can be the parser's, and an upgraded
+		// parser is not in the fingerprint. A file that fails is rare and re-read.
+		if (look && !look.entry?.scan && !scanned.parseError)
+			cache?.store(look, rel, text ?? '', { d: hasDirectives(supp), scan: storeScan(scanned) });
 		if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
 		for (const t of scanned.referenced) referenced.add(t);
 		for (const t of scanned.stems) stems.add(t);
@@ -723,7 +725,7 @@ export async function analyze(
 		const found = harvestTokens(text);
 		for (const t of found) referenced.add(t);
 		diagnostics.filesScanned++;
-		if (cache && look?.stat) cache.store(rel, look.stat, text, { d: false, refs: [...found] });
+		if (look) cache?.store(look, rel, text, { d: false, refs: [...found] });
 	}
 
 	// ── walk CSS ──────────────────────────────────────────────────────────────
@@ -799,7 +801,9 @@ export async function analyze(
 				failed = { error: parseMessageOf(err, abs), reason: parseReasonOf(err) };
 			}
 			sheet = failed ?? extractSheet(root as Root, src, tokenPrefixes);
-			if (cache && look?.stat) cache.store(rel, look.stat, src, { d: hasDirectives(supp), sheet });
+			// Kept only when it parsed, for the reason above: a project's postcss-scss
+			// is not in the fingerprint either.
+			if (look && !failed) cache?.store(look, rel, src, { d: hasDirectives(supp), sheet });
 		}
 		if ('error' in sheet) {
 			unparsed(sheet.error, sheet.reason);
