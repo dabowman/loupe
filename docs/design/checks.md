@@ -204,7 +204,7 @@ it names. Forwarding hid the drift rather than preventing it: `h1`–`h6` →
 `__experimentalHeading`, a private API. Keeping the registry current against
 trunk is the other half.
 
-The variant is left to `--judge`; see [judge.md](judge.md#which-variant).
+The variant is left to `--judge`; see [judge.md](judge.md#which-variant-judgevariantts).
 
 ### What the conversion would promote is said before it
 
