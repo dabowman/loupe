@@ -24782,7 +24782,8 @@ var wordpress_block_theme_default = {
       "patterns/**/*.php",
       "**/theme.json",
       "**/block.json",
-      "**/*.html"
+      "**/*.html",
+      "**/*.twig"
     ]
   }
 };
@@ -24865,6 +24866,7 @@ var wordpress_components_default = {
     references: [
       "**/*.php",
       "**/*.html",
+      "**/*.twig",
       "**/block.json",
       "**/theme.json",
       "**/patterns/**/*.php",
@@ -27331,14 +27333,29 @@ function harvestTokens(text2, into = /* @__PURE__ */ new Set()) {
 var MAX_STEM = 128;
 function harvestStems(text2, into = /* @__PURE__ */ new Set()) {
   for (let i = text2.indexOf("${"); i !== -1; i = text2.indexOf("${", i + 2)) {
-    let s = i;
-    const floor = Math.max(0, i - MAX_STEM);
-    while (s > floor && isWordChar(text2.charCodeAt(s - 1))) s--;
-    const stem = text2.slice(s, i);
-    if (stem.includes("-") && /^[A-Za-z_]/.test(stem)) into.add(stem);
+    const stem = text2.slice(runStart(text2, i), i);
+    if (isStem(stem)) into.add(stem);
   }
   return into;
 }
+var PHP_STEM_END = /['"]\s*\.|\{?\$[A-Za-z_]|%(?:\d+\$)?[sd]/g;
+function harvestPhpStems(text2, into = /* @__PURE__ */ new Set()) {
+  for (const { index: end } of text2.matchAll(PHP_STEM_END)) {
+    const s = runStart(text2, end);
+    const before = text2[s - 1];
+    if (before === "$" || before === "%") continue;
+    const stem = text2.slice(s, end);
+    if (isStem(stem)) into.add(stem);
+  }
+  return into;
+}
+function runStart(text2, end) {
+  let s = end;
+  const floor = Math.max(0, end - MAX_STEM);
+  while (s > floor && isWordChar(text2.charCodeAt(s - 1))) s--;
+  return s;
+}
+var isStem = (run) => run.includes("-") && /^[A-Za-z_]/.test(run);
 function isWordChar(c) {
   return c >= 97 && c <= 122 || c >= 65 && c <= 90 || c >= 48 && c <= 57 || c === 95 || c === 45;
 }
@@ -29328,6 +29345,7 @@ async function analyze(config, {
     if (oversized(abs, rel, look)) continue;
     if (look?.entry?.refs) {
       for (const t of look.entry.refs) referenced.add(t);
+      for (const t of look.entry.stems ?? []) stems.add(t);
       if (look.entry.block) blockNames.add(look.entry.block);
       diagnostics.filesScanned++;
       continue;
@@ -29335,11 +29353,14 @@ async function analyze(config, {
     const text2 = look?.text ?? readOrNull(abs, rel);
     if (text2 === null) continue;
     const found = harvestTokens(text2);
+    const built = harvestPhpStems(text2, harvestStems(text2));
     for (const t of found) referenced.add(t);
+    for (const t of built) stems.add(t);
     const block = isBlockManifest(rel) ? blockName(text2) : null;
     if (block) blockNames.add(block);
     diagnostics.filesScanned++;
-    if (look) cache2?.store(look, rel, text2, { d: false, refs: [...found], ...block ? { block } : {} });
+    if (look)
+      cache2?.store(look, rel, text2, { d: false, refs: [...found], stems: [...built], ...block ? { block } : {} });
   }
   const ownBlocks = [...blockNames].flatMap((name) => blockClasses(name) ?? []);
   const isOwnBlock = (cls) => ownBlocks.some((b) => cls.startsWith(b.prefix));
