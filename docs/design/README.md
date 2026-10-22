@@ -30,8 +30,8 @@ Three other documents sit outside this set:
   report, what each option unlocks and costs, and a staged recommendation.
   Stages 1 and 2 shipped — `loupe ui` and the DevTools extension; the rest is
   still a decision document, and the Status block at its head says which is which.
-- [MIGRATION.md](../../engine/MIGRATION.md) — moving off the bash quality hook
-  this replaced.
+- [MIGRATION.md](../../engine/MIGRATION.md) — upgrading a config and baseline
+  written for an older loupe.
 
 ## The recurring arguments
 
