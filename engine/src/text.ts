@@ -15,6 +15,11 @@
  * Design notes: docs/design/report.md#bounding
  */
 
+import { createHash } from 'node:crypto';
+
+/** A hex SHA-256 of `text`: the one digest every key, fingerprint and stamp here is made from. */
+export const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
+
 /** The message of an unknown throw. Anything can be thrown; only Errors carry a message. */
 export const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 

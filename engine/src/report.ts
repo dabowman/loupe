@@ -11,12 +11,12 @@
  * Design notes: docs/design/report.md
  */
 
-import { createHash } from 'node:crypto';
 import { findingKey } from './analyze.ts';
 import { byBytes } from './discover.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, yellow } from './color.ts';
 import { RULES, renderTitle } from './rules.ts';
-import { noteLine } from './text.ts';
+import { directive } from './suppressions.ts';
+import { noteLine, sha256 } from './text.ts';
 import type {
 	AnalyzeResult,
 	BaselinedResult,
@@ -29,15 +29,23 @@ import type {
 	Severity,
 } from './types.ts';
 
-const SEV_MARK: Partial<Record<Severity, string>> = { error: '\u2717', warn: '\u2022' };
+/**
+ * How a severity is drawn, wherever a report is drawn: the terminal, the HTML
+ * page, the pane. One table, so a reader learns the glyph once. `off` never
+ * reaches a finding.
+ */
+export const SEV_MARK: Partial<Record<Severity, string>> = { error: '\u2717', warn: '\u2022' };
 
 /**
- * The same severity in words, on every rule-group heading. The glyph is
- * unambiguous once you know it and invisible until then, and a reader who does
- * not decode it reaches for `loupe status` — a second run of the tool to learn
- * something this line already knew.
+ * The same severity in words, beside the glyph on every rule-group heading. The
+ * glyph is unambiguous once you know it and invisible until then, and a reader
+ * who does not decode it reaches for `loupe status` — a second run of the tool
+ * to learn something this line already knew.
  */
-const SEV_WORD: Partial<Record<Severity, string>> = { error: 'blocking', warn: 'advisory' };
+export const SEV_WORD: Partial<Record<Severity, string>> = { error: 'blocking', warn: 'advisory' };
+
+/** How many directories a rollup names before it folds the rest into one row. The page and the pane agree. */
+export const DIR_CAP = 12;
 
 /**
  * Component mentions inside a finding's message.
@@ -445,7 +453,7 @@ export function formatAgent(
 		);
 		lines.push(
 			dim(
-				`To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`,
+				`To suppress a specific finding, add \`${directive(kw, '<ruleId>', '<reason>')}\` on the offending line or the line above.`,
 			),
 		);
 		// A directive for the right rule sitting just too far from its finding is the
@@ -516,10 +524,7 @@ function fingerprints(findings: readonly Finding[]): string[] {
 		const key = findingKey(f);
 		const nth = seen.get(key) ?? 0;
 		seen.set(key, nth + 1);
-		return createHash('sha256')
-			.update(nth === 0 ? key : `${key}|#${nth}`)
-			.digest('hex')
-			.slice(0, 16);
+		return sha256(nth === 0 ? key : `${key}|#${nth}`).slice(0, 16);
 	});
 }
 

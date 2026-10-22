@@ -12,6 +12,7 @@
  * Design notes: docs/design/analysis.md#composite-signatures
  */
 
+import { listOf } from './json.ts';
 import type { Pattern, PatternNode, RuleSpec } from './types.ts';
 
 /**
@@ -155,8 +156,7 @@ const bindName = (c: unknown): string | null => (typeof c === 'string' && c ? (c
  * shipped. Only an object carries the parameters a shipped rule runs with.
  */
 const ruleSpecs = (detector: unknown): RuleSpec[] => {
-	const list = Array.isArray(detector) ? detector : [detector];
-	return list.filter(
+	return listOf(detector).filter(
 		(d): d is RuleSpec => typeof d === 'object' && d !== null && typeof (d as RuleSpec).rule === 'string',
 	);
 };
