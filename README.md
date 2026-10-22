@@ -1093,6 +1093,10 @@ pattern registries that `system/locked-component`, `system/superseded-component`
 and the composite rules read — so pass them with `--profiles`: without them
 those rules are off, and the report is silently clean of them.
 
+Every tagged release carries these binaries, and the first is v0.8.0, so before
+that tag is pushed — or on a fork that has not pushed one of its own — the URLs
+below return 404.
+
 ```yaml
 - run: |
     curl -fsSL -O https://github.com/dabowman/loupe/releases/latest/download/loupe-linux-x64
@@ -1118,7 +1122,7 @@ check what you downloaded — every release carries `SHA256SUMS`:
 
 ```yaml
 - run: |
-    base=https://github.com/dabowman/loupe/releases/download/v0.7.0
+    base=https://github.com/dabowman/loupe/releases/download/v0.8.0
     curl -fsSL -O "$base/loupe-linux-x64" -O "$base/SHA256SUMS"
     sha256sum --ignore-missing -c SHA256SUMS
     chmod +x loupe-linux-x64
