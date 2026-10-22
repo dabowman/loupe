@@ -9,7 +9,7 @@
  * Design notes: docs/design/cli.md#the-rule-catalog
  */
 
-import type { DesignSystem, RuleDef, RuleId, Severity } from './types.ts';
+import type { Capability, DesignSystem, RuleDef, RuleId, Severity } from './types.ts';
 
 export const RULES = {
 	'suppression/malformed': {
@@ -60,6 +60,7 @@ export const RULES = {
 		severity: 'warn',
 		rank: 3,
 		needs: ['patternRegistry'],
+		judgeOnly: true,
 		title:
 			'judged, advisory \u2014 a model read what this control stands for, and the pattern it was built as redirects that reading elsewhere; confirm before changing it',
 	},
@@ -151,6 +152,16 @@ export const RULES = {
 
 /** Every rule id, once, in declaration order — `Object.keys` loses the union. */
 export const RULE_IDS = Object.keys(RULES) as RuleId[];
+
+/** A rule's catalog entry as a `RuleDef`: `RULES[id]` keeps each entry's literal shape, which a lookup by id does not want. */
+const ruleDef = (id: RuleId): RuleDef => RULES[id];
+
+/** The rules that need `capability`: what a registry attached after the fact turns on, say. */
+export const rulesNeeding = (capability: Capability): RuleId[] =>
+	RULE_IDS.filter((id) => ruleDef(id).needs.includes(capability));
+
+/** The rules only `--judge` writes. */
+export const JUDGE_ONLY_RULES: ReadonlySet<RuleId> = new Set(RULE_IDS.filter((id) => ruleDef(id).judgeOnly));
 
 /** Legacy R0–R8 ids, honored in config and in suppression comments. */
 export const ALIASES = {
