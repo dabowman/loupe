@@ -41,6 +41,11 @@ export interface RuleDef {
 	rank: number;
 	needs: readonly Capability[];
 	title: string;
+	/**
+	 * Written only by `--judge`: a run without it reports nothing for the rule,
+	 * which `status` and a `--rule` naming it both have to say.
+	 */
+	judgeOnly?: true;
 }
 
 // ── findings ────────────────────────────────────────────────────────────────
@@ -351,6 +356,13 @@ export interface ClassifyContext {
 	boundText?: readonly Binding[];
 	isGrid?: boolean;
 	/**
+	 * Every selector of the stylesheet rule keys on a bare element — a tag with
+	 * no class of its own (`keysBareElement`). Only the stylesheet channel sets
+	 * it, so an inline style and a CSS-in-JS template, nested groups included,
+	 * never read as bare.
+	 */
+	bareElement?: boolean;
+	/**
 	 * The styling surface the registry records for a bound component, if any.
 	 * `undefined` is "nobody recorded one", which is not "it owns nothing".
 	 */
@@ -381,11 +393,26 @@ export interface TokenSet {
 	byValue: Map<string, string[]>;
 	sources: number;
 	/**
+	 * What each configured `tokenSources` path yielded, in the order configured.
+	 * Present on a set `readTokenSources` returned, and only there.
+	 */
+	read?: TokenSourceRead[] | undefined;
+	/**
 	 * What the active profiles declare each token is for. Absent: the generic
 	 * property→token table decides everything, as it did before profiles could
 	 * say.
 	 */
 	scopes?: TokenScopes | undefined;
+}
+
+/** One `designSystem.tokenSources` path, and what reading it yielded. */
+export interface TokenSourceRead {
+	/** As configured, relative to the project root or absolute. */
+	path: string;
+	/** The stylesheets found under it. 0: not installed, or no stylesheet there. */
+	files: number;
+	/** The token names first defined here. The set keeps a token's first definition. */
+	definitions: number;
 }
 
 // ── markup ──────────────────────────────────────────────────────────────────

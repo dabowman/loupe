@@ -3,10 +3,11 @@
  *
  * A hook run reports on one file but indexes every one, and three quarters of
  * that was re-parsing files nothing had touched. What a file contributes —
- * its markup scan, the class names a reference file mentions, a stylesheet's
- * rules reduced to the data the checks read — depends on the file's bytes and
- * the config, and on nothing else in the repo. The cross-file part, correlating
- * bindings with rules, is cheap and always runs live.
+ * its markup scan, the class names a reference file mentions and the block a
+ * `block.json` names, a stylesheet's rules reduced to the data the checks
+ * read — depends on the file's bytes and the config, and on nothing else in
+ * the repo. The cross-file part, correlating bindings with rules, is cheap and
+ * always runs live.
  *
  * Validity, per file:
  *
@@ -26,9 +27,11 @@
 
 import type { Stats } from 'node:fs';
 import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { readDir } from './discover.ts';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readJson, sha256, writeJsonAtomic } from './cache.ts';
+import { readJson, writeJsonAtomic } from './json.ts';
+import { sha256 } from './text.ts';
 import { EMBEDDED_VERSION } from './embedded.ts';
 import { projectStateDir } from './paths.ts';
 import type { DeadRule, ScanResult } from './types.ts';
@@ -72,6 +75,8 @@ interface Entry {
 	d: boolean;
 	scan?: StoredScan;
 	refs?: string[];
+	/** The block a `block.json` reference names. */
+	block?: string;
 	sheet?: SheetExtract;
 }
 
@@ -79,6 +84,9 @@ interface IndexFile {
 	version: 1;
 	entries: Record<string, Entry>;
 }
+
+/** How an index file is named in the state directory: `index-<fingerprint>.json`. */
+export const INDEX_FILE = /^index-[0-9a-f]+\.json$/;
 
 const RACY_MS = 2_000;
 // Index files for configs no run has used in this long are deleted on save.
@@ -112,7 +120,7 @@ function codeStamp(): string {
 		const dir = dirname(here);
 		const parts: string[] = [EMBEDDED_VERSION];
 		const walk = (d: string): void => {
-			for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+			for (const e of readDir(d)) {
 				const p = join(d, e.name);
 				if (e.isDirectory()) walk(p);
 				else if (e.name.endsWith('.ts')) parts.push(stamp(p, statSync(p)));
@@ -191,7 +199,7 @@ export class IndexCache {
 	 * the lookup's time, not the time of storing: a scan can finish seconds after
 	 * the read, and the racy-mtime guard is measured from the read.
 	 */
-	store(look: Lookup, rel: string, text: string, data: Pick<Entry, 'd' | 'scan' | 'refs' | 'sheet'>): void {
+	store(look: Lookup, rel: string, text: string, data: Pick<Entry, 'd' | 'scan' | 'refs' | 'block' | 'sheet'>): void {
 		if (!look.stat) return;
 		this.#entries.set(rel, { m: look.stat.mtimeMs, s: look.stat.size, h: sha256(text), t: look.at, ...data });
 		this.#dirty = true;
@@ -215,7 +223,7 @@ export class IndexCache {
 			const dir = dirname(this.path);
 			const now = Date.now();
 			for (const name of readdirSync(dir))
-				if (/^index-[0-9a-f]+\.json$/.test(name) && join(dir, name) !== this.path) {
+				if (INDEX_FILE.test(name) && join(dir, name) !== this.path) {
 					const p = join(dir, name);
 					if (now - statSync(p).mtimeMs > STALE_MS) rmSync(p, { force: true });
 				}

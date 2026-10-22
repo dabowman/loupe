@@ -15,9 +15,10 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
 import { isMainThread } from 'node:worker_threads';
-import { analyze, declarationKeys, dedupe } from './analyze.ts';
-import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
+import { analyze, declarationKeys, dedupe, isBlocking } from './analyze.ts';
+import { statusFlaggedBy, supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
+import { blockPrefixes, blocksIn, describeBlocks } from './blocks.ts';
 import {
 	MODEL,
 	judgeClient,
@@ -29,11 +30,13 @@ import {
 	redirectIdentity,
 	tokenDescriptions,
 } from './judge.ts';
+import type { JudgeClient } from './judge.ts';
 import { readTokenDoc, isTier } from './dtcg.ts';
 import type { Tier, TokenDoc } from './dtcg.ts';
 import { CANDIDATES, askCounterparts, formatMap, formatPlan, mapPayload, planMap } from './mapping.ts';
 import type { Mapping } from './mapping.ts';
-import { AnswerCache, readJson } from './cache.ts';
+import { AnswerCache } from './cache.ts';
+import { readJson } from './json.ts';
 import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset, presetKey } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
@@ -50,7 +53,7 @@ import {
 	isWorktree,
 	toPosix,
 } from './discover.ts';
-import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
+import { JUDGE_ONLY_RULES, RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
 import {
 	GROUP_BYS,
 	formatAgent,
@@ -60,15 +63,27 @@ import {
 	reportPayload,
 	shownFindings,
 } from './report.ts';
+import type { GroupBy } from './report.ts';
 import { formatHtml } from './report-html.ts';
 import { formatPane } from './report-pane.ts';
+import { INDEX_FILE } from './index-cache.ts';
 import { lsp } from './lsp.ts';
 import { serve } from './serve.ts';
 import { ui } from './ui.ts';
 import { messageOf, oneLine } from './text.ts';
+import { readTokenSources } from './tokens.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
-import { NO_PROFILE, applyRegistries, profileRoots, readProfileRoots, selectProfiles } from './profiles.ts';
-import { deliverySummary, mergeDeliveries, REMEDY_RULES } from './delivery.ts';
+import {
+	NO_PROFILE,
+	activeDelivery,
+	activeProfiles,
+	applyRegistries,
+	profileRoots,
+	readProfileRoots,
+	selectProfiles,
+} from './profiles.ts';
+import { deliverySummary, REMEDY_RULES } from './delivery.ts';
+import { directive } from './suppressions.ts';
 import type { Profile, RegistrySource } from './profiles.ts';
 import {
 	attemptsPath,
@@ -102,6 +117,7 @@ import {
 import type { HookPayload } from './hook.ts';
 import type {
 	AnalyzeResult,
+	Baseline,
 	BaselinedResult,
 	Config,
 	ConfigSuppression,
@@ -109,6 +125,7 @@ import type {
 	Directive,
 	Finding,
 	RuleId,
+	TokenSet,
 } from './types.ts';
 import type { DetectedConfig } from './detect.ts';
 
@@ -145,18 +162,20 @@ const note = (msg: string): void => {
 	process.stderr.write(yellow(msg));
 };
 
+/** Where the answers `--judge` paid for are kept, in the project's state directory. `map` keeps its own. */
+const JUDGE_CACHE = 'judge-cache.json';
+
 /** `status`'s cache line: the directory, the index size, the answers held. */
 function cacheLine(root: string): string {
 	const dir = projectStateDir(root);
 	let bytes = 0;
 	try {
-		for (const name of readdirSync(dir))
-			if (/^index-[0-9a-f]+\.json$/.test(name)) bytes += statSync(join(dir, name)).size;
+		for (const name of readdirSync(dir)) if (INDEX_FILE.test(name)) bytes += statSync(join(dir, name)).size;
 	} catch {
 		/* nothing cached yet */
 	}
 	const answers = Object.keys(
-		((readJson(join(dir, 'judge-cache.json')) as { entries?: object } | null)?.entries ?? {}) as object,
+		((readJson(join(dir, JUDGE_CACHE)) as { entries?: object } | null)?.entries ?? {}) as object,
 	).length;
 	const parts = [
 		bytes ? `index ${(bytes / 1e6).toFixed(1)} MB` : 'no index yet',
@@ -166,11 +185,36 @@ function cacheLine(root: string): string {
 }
 
 /**
+ * `status`'s tokens line: the prefixes, and what the configured sources yielded,
+ * from the same read the analysis seeds its token set with. Yellow when that is
+ * nothing, because `tokens/unknown-token` is then off.
+ */
+function tokensLine(config: Config): string {
+	const ds = config.designSystem;
+	if (!ds.tokenPrefixes?.length) return `${dim('tokens:     ')}(none \u2014 token rules inactive)`;
+	const prefixes = ds.tokenPrefixes.map((p) => `${p}*`).join(', ');
+	if (!ds.tokenSources.length) return yellow(`tokens:     ${prefixes} (no token sources configured)`);
+	const { read } = readTokenSources(config.root, ds.tokenSources, ds.tokenPrefixes);
+	// "171 definitions from A, 19 from B": the noun once, on the first count.
+	const counts = read
+		.filter((r) => r.definitions)
+		.map((r, i) => `${r.definitions}${i ? '' : r.definitions === 1 ? ' definition' : ' definitions'} from ${r.path}`);
+	if (counts.length) return `${dim('tokens:     ')}${prefixes} (${counts.join(', ')})`;
+	const missing = read.filter((r) => !r.files).map((r) => r.path);
+	const empty = read.filter((r) => r.files).map((r) => r.path);
+	const why = [
+		...(missing.length ? [`${missing.join(', ')} not found`] : []),
+		...(empty.length ? [`${empty.join(', ')} ${empty.length === 1 ? 'defines' : 'define'} none`] : []),
+	];
+	return yellow(`tokens:     ${prefixes} (0 definitions read; ${why.join('; ')})`);
+}
+
+/**
  * Answers already paid for, unless the run asked for every one to be fresh.
  * `map` keeps its own file: its answers are many and large, and the judge cache
  * is the one the hook reads on every edit.
  */
-const answerCache = (root: string, noCache: boolean | undefined, file = 'judge-cache.json'): AnswerCache | null =>
+const answerCache = (root: string, noCache: boolean | undefined, file = JUDGE_CACHE): AnswerCache | null =>
 	cacheDisabled(noCache) ? null : new AnswerCache(join(projectStateDir(root), file));
 
 /**
@@ -190,6 +234,28 @@ function listenFailure(err: unknown, command: string, port: number): string {
 				: `${command} could not start — ${messageOf(err)}`;
 	return `loupe: ${why}\n`;
 }
+
+/**
+ * `--port`, or the command's own default. `0` is a legal port — it asks the OS
+ * to choose — so the floor is 0. Null for anything that is not a port, which
+ * the caller refuses with {@link badPort}.
+ */
+const portFlag = (given: string | undefined, fallback: number): number | null => {
+	const port = Number(given ?? fallback);
+	return Number.isInteger(port) && port >= 0 && port <= 65535 ? port : null;
+};
+const badPort = (given: string | undefined): string => `loupe: --port wants a port number, got ${given}\n`;
+
+/**
+ * `--group-by` as a grouping, undefined where it was not given, or the refusal.
+ * Refused rather than defaulted: a misspelled `--group-by fil` falling back to
+ * the default prints a perfectly good report in the order the caller did not
+ * ask for.
+ */
+const groupByFlag = (given: string | undefined): GroupBy | undefined | { error: string } =>
+	given === undefined || isGroupBy(given)
+		? given
+		: { error: `unknown grouping "${given}" \u2014 expected ${GROUP_BYS.join(', ')}` };
 
 /**
  * How far a detection result is to be trusted, coloured to match. `detect`
@@ -574,10 +640,7 @@ function resolveScope(
 	if (args.flags.files)
 		return expandDirs(
 			config,
-			args.flags.files
-				.split(',')
-				.map((f) => f.trim())
-				.filter(Boolean)
+			listFlag(args.flags.files)
 				// Findings are keyed repo-relative, so an absolute path matches nothing and the
 				// run reports clean.
 				.map((f) => toPosix(isAbsolute(f) ? relative(config.root, resolve(f)) : f))
@@ -720,7 +783,7 @@ async function runMap(args: Args): Promise<number> {
 	// itself settles every row without one.
 	const apiKey = plan.jobs.length ? judgeKey() : '';
 	if (plan.jobs.length && !apiKey) {
-		fail(`loupe: map needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE} \u2014 or use --dry-run\n`);
+		fail(`loupe: map needs TYPESAFE_API_KEY, from ${KEY_SOURCES} \u2014 or use --dry-run\n`);
 		return EXIT.CANNOT_RUN;
 	}
 
@@ -857,7 +920,7 @@ function introducedBy(after: readonly Finding[], before: readonly Identity[]): F
 function ruleScope(list: string | undefined): Set<RuleId> | null | { error: string } {
 	if (list === undefined) return null;
 	const out = new Set<RuleId>();
-	for (const given of list.split(',').map((r) => r.trim())) {
+	for (const given of listFlag(list)) {
 		const id = canonicalRuleId(given);
 		if (!isRuleId(id)) return { error: `unknown rule "${given}" \u2014 \`loupe status\` lists them` };
 		out.add(id);
@@ -869,7 +932,7 @@ function ruleScope(list: string | undefined): Set<RuleId> | null | { error: stri
 function filterRules<T extends AnalyzeResult>(result: T, rules: ReadonlySet<RuleId> | null): T {
 	if (!rules) return result;
 	const findings = result.findings.filter((f) => rules.has(f.rule));
-	return { ...result, findings, blocking: findings.some((f) => f.severity === 'error') };
+	return { ...result, findings, blocking: isBlocking(findings) };
 }
 
 function filterSeverity<T extends AnalyzeResult | BaselinedResult>(result: T, min: string): T {
@@ -928,11 +991,12 @@ async function main(): Promise<number> {
 
 	// Off unless the project opted in, or silenced.
 	//
-	// Silence, not advisory mode: an advisory finding still lands in the agent's
-	// context, and an agent that sees a finding starts fixing it. Hook-only —
-	// `loupe check` typed by hand is someone asking. A project that never opted in
-	// hears nothing; one that opted in and was switched off is told so, like every
-	// other stand-down, or a stale switch disables the gate with no trace.
+	// Silence, not advisory mode: on PostToolUse an advisory finding still lands
+	// in the agent's context, and an agent that sees a finding starts fixing it.
+	// Hook-only — `loupe check` typed by hand is someone asking. A project that
+	// never opted in hears nothing; one that opted in and was switched off is told
+	// so, like every other stand-down, or a stale switch disables the gate with no
+	// trace.
 	if (isHook) {
 		const off = hookOff(projectDir, resolved);
 		if (off) return hookSilenced(projectDir, resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
@@ -1069,9 +1133,10 @@ async function main(): Promise<number> {
 	//
 	// The directories the config lists are read first, ahead of the convention and
 	// of `--profiles`, so on a shared id the project's own profile is the one kept.
+	const roots = profileRoots({ root, configured: config.profileDirs, flag: flagProfiles });
 	if (config.profileDirs.length) {
 		unreadable = [];
-		profiles = readProfileRoots(profileRoots({ root, configured: config.profileDirs, flag: flagProfiles }), unreadable);
+		profiles = readProfileRoots(roots, unreadable);
 		forced = byId(args.flags.profile);
 	}
 	// What selection is pinned to: `--profile`, typed at the moment of use, over
@@ -1083,11 +1148,7 @@ async function main(): Promise<number> {
 	// no pin at all.
 	if (pin && pin !== NO_PROFILE && !pinned && !isHook)
 		note(
-			`loupe: no profile "${pin}"${args.flags.profile ? '' : ' (the config\'s "profile")'} in ${profileRoots({
-				root,
-				configured: config.profileDirs,
-				flag: flagProfiles,
-			})
+			`loupe: no profile "${pin}"${args.flags.profile ? '' : ' (the config\'s "profile")'} in ${roots
 				.map((r) => r.dir)
 				.join(', ')}${flagProfiles ? '' : ' (--profiles was not given)'}${
 				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
@@ -1164,6 +1225,46 @@ async function main(): Promise<number> {
 	// path records the backlog in a file the others never open.
 	const namedBaseline = args.flags.baseline || null;
 
+	/**
+	 * The baseline this run reads: where it is, whether it is there, and what it
+	 * holds. `found` with no `baseline` is a file that is present and will not
+	 * parse — a merge conflict in a committed baseline is the ordinary way —
+	 * which every reader has to tell from no file at all: treating it as none
+	 * puts the whole backlog back with the gate blocking on all of it.
+	 */
+	const loadBaseline = (): ReturnType<typeof findExistingBaseline> & { baseline: Baseline | null } => {
+		const where = findExistingBaseline(root, namedBaseline, config.baselinePath);
+		return { ...where, baseline: where.found ? readBaseline(where.path) : null };
+	};
+	const unreadableBaseline = (path: string): string => `loupe: baseline at ${path} is unreadable \u2014 ignoring it.\n`;
+
+	/**
+	 * The judgements a run puts about tokens — which token a hardcoded value
+	 * should be, and which real token an unknown name meant — for the findings
+	 * it will show. Each fails on its own, with a note: the judgements beside it
+	 * stand when one cannot run. `judgeValues` is asked without a token set too,
+	 * so its refusal is said rather than skipped.
+	 */
+	const tokenJudgements = (
+		targets: readonly Finding[],
+		tokens: TokenSet | undefined,
+		client: JudgeClient,
+	): (Promise<unknown> | null)[] => {
+		const about = tokenDescriptions(activeProfiles(config));
+		return [
+			targets.some((f) => f.suggest?.length)
+				? judgeValues(root, targets, tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
+			tokens && targets.some((f) => f.unknown)
+				? judgeRenames(root, targets, tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
+		];
+	};
+
 	if (command === 'explain') {
 		const id = canonicalRuleId(args._[1] ?? '');
 		if (!isRuleId(id)) {
@@ -1179,8 +1280,7 @@ async function main(): Promise<number> {
 		// The two registry-backed rules have nothing of their own to explain: what they
 		// fire on is a list somebody else authored. Name the size, a few entries to
 		// recognise it by, and the file — not the list, which runs to hundreds.
-		const flagged =
-			id === 'system/locked-component' ? 'locked' : id === 'system/superseded-component' ? 'legacy' : null;
+		const flagged = statusFlaggedBy(id);
 		if (flagged) {
 			const entries = [...config.componentRegistry.values()];
 			// The same filter the rule applies. Counting every `legacy` entry would
@@ -1190,7 +1290,7 @@ async function main(): Promise<number> {
 				(e) => e.status === flagged && usableReplacement(config.componentRegistry, e.supersededBy),
 			);
 			const names = fires.slice(0, 5).map((e) => e.name);
-			const src = (config.profiles?.active ?? []).filter((p) => p.components);
+			const src = activeProfiles(config).filter((p) => p.components);
 			process.stdout.write(
 				`  ${dim(
 					`${fires.length} of ${entries.length} entries in the active component registry fire it` +
@@ -1204,7 +1304,7 @@ async function main(): Promise<number> {
 		}
 		// What adopting a remedy costs is the profile's to say, and this is where a
 		// reader asks what a remedy rule's note means.
-		const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+		const delivery = activeDelivery(config);
 		const bundled = [...(delivery?.packages ?? [])].filter(([, e]) => e.provided === 'bundled').map(([pkg]) => pkg);
 		if (REMEDY_RULES.has(id) && delivery && bundled.length)
 			process.stdout.write(
@@ -1254,7 +1354,7 @@ async function main(): Promise<number> {
 					: config.source.kind === 'inferred'
 						? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ''}`
 						: config.source.kind;
-		const base = findExistingBaseline(root, namedBaseline, config.baselinePath);
+		const base = loadBaseline();
 		const legacy = base.found ? null : legacyBaseline(root);
 		// The hook keys its counter on the Claude Code project — its `--root`, else
 		// CLAUDE_PROJECT_DIR — not on the config a package's status roots at.
@@ -1265,7 +1365,16 @@ async function main(): Promise<number> {
 		// Empty fields are printed as such: "no layout primitive" is a fact about the
 		// system, and inferring it from a missing line recommends one that isn't there.
 		const ds = config.designSystem;
-		const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+		const delivery = activeDelivery(config);
+		// The blocks whose wrapper classes the analysis takes as the project's own,
+		// off the walk and the reference globs it uses. A tree too large to index
+		// is one the analysis refuses, so it recognises none.
+		const walked = discover({
+			root: config.root,
+			sources: config.sources,
+			limit: analyzeEntryBudget(config.maxEntries),
+		});
+		const blocks = walked.truncated ? [] : blockPrefixes(blocksIn(walked.references));
 		const orNone = (arr: readonly string[] | undefined): string => (arr?.length ? arr.join(', ') : '(none)');
 		// `layout:`/`text:` get read as "what should I write", but they are
 		// recognition lists and carry the superseded spellings too. Mark those, so
@@ -1283,11 +1392,12 @@ async function main(): Promise<number> {
 			`${dim('packages:   ')}${orNone(ds.packages)}`,
 			`${dim('layout:     ')}${components(ds.layoutComponents)}`,
 			`${dim('text:       ')}${components(ds.textComponents)}`,
-			`${dim('tokens:     ')}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(', ') : '(none \u2014 token rules inactive)'}`,
+			tokensLine(config),
 			`${dim('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
-			`${dim('suppress:   ')}${config.suppression.keyword} <ruleId> -- <reason>`,
+			...(blocks.length ? [`${dim('blocks:     ')}${describeBlocks(blocks)}`] : []),
+			`${dim('suppress:   ')}${directive(config.suppression.keyword, '<ruleId>', '<reason>')}`,
 			`${dim('baseline:   ')}${base.path}${
-				base.found && readBaseline(base.path) === null
+				base.found && base.baseline === null
 					? '  (unreadable \u2014 every finding in it is live again)'
 					: base.fallback === 'default-name'
 						? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)`
@@ -1361,9 +1471,9 @@ async function main(): Promise<number> {
 			// error-severity rule under a gate that cannot block is advisory in practice,
 			// and the colour follows the words for the same reason. `gateBlocks` rather
 			// than `blockingAllowed`: a silenced hook blocks nothing.
-			// This one only exists under `--judge`, which the hook now passes — so its
-			// severity counts like any other, and the suffix says what it costs.
-			const judgeOnly = id === 'patterns/judged-redirect';
+			// A judge-only rule exists only under `--judge`, which the hook now passes —
+			// so its severity counts like any other, and the suffix says what it costs.
+			const judgeOnly = JUDGE_ONLY_RULES.has(id);
 			const verdict = config.enabled[id]
 				? sev === 'error' && gateBlocks
 					? red(judgeOnly ? 'BLOCKS (--judge only)' : 'BLOCKS')
@@ -1437,6 +1547,7 @@ async function main(): Promise<number> {
 			dim(`            ${Math.round(info.coverage * 100)}% of project CSS classes covered`),
 			// Why the confidence above is lower than the coverage alone would make it.
 			...info.namespaceNotes.map((n) => dim(`            ${n}`)),
+			...(info.blocks.length ? [`${dim('blocks:     ')}${describeBlocks(info.blocks)}`] : []),
 			// Listed, never written: `init` leaves `external` for somebody to confirm.
 			...(info.possibleExternal.length
 				? [
@@ -1518,13 +1629,12 @@ async function main(): Promise<number> {
 		let warned = false;
 		return (fresh) => {
 			if (args.flags['no-baseline']) return fresh;
-			const { path: bPath, found } = findExistingBaseline(root, namedBaseline, config.baselinePath);
-			const baseline = found ? readBaseline(bPath) : null;
+			const { path: bPath, found, baseline } = loadBaseline();
 			// Once, not per request: a long-lived process would repeat it until the
 			// line meant nothing.
 			if (found && !baseline && !warned) {
 				warned = true;
-				notice(`loupe: baseline at ${bPath} is unreadable — ignoring it.\n`);
+				notice(unreadableBaseline(bPath));
 			}
 			return applyBaseline(fresh, baseline, { enabled: config.enabled });
 		};
@@ -1549,11 +1659,9 @@ async function main(): Promise<number> {
 	}
 
 	if (command === 'serve') {
-		// `0` is a legal port — it asks the OS to choose — so the floor is 0, and
-		// the `??` default is what makes a bare `loupe serve` predictable.
-		const port = Number(args.flags.port ?? 7331);
-		if (!Number.isInteger(port) || port < 0 || port > 65535) {
-			fail(`loupe: --port wants a port number, got ${args.flags.port}\n`);
+		const port = portFlag(args.flags.port, 7331);
+		if (port === null) {
+			fail(badPort(args.flags.port));
 			return EXIT.CANNOT_RUN;
 		}
 		const run = baselinedRun(note);
@@ -1579,9 +1687,9 @@ async function main(): Promise<number> {
 	// files and answers only the page it served. Folding them together would put a
 	// writer behind `access-control-allow-origin: *`.
 	if (command === 'ui') {
-		const port = Number(args.flags.port ?? 7332);
-		if (!Number.isInteger(port) || port < 0 || port > 65535) {
-			fail(`loupe: --port wants a port number, got ${args.flags.port}\n`);
+		const port = portFlag(args.flags.port, 7332);
+		if (port === null) {
+			fail(badPort(args.flags.port));
 			return EXIT.CANNOT_RUN;
 		}
 		// Refused rather than ignored. This command re-analyzes the whole tree on
@@ -1657,8 +1765,8 @@ async function main(): Promise<number> {
 		// changes if I record now". Compared against the baseline in force \u2014 the one
 		// `check` reads \u2014 since that is what the write would replace.
 		if (args.flags['dry-run']) {
-			const base = findExistingBaseline(root, namedBaseline, config.baselinePath);
-			const prior = base.found ? readBaseline(base.path) : null;
+			const base = loadBaseline();
+			const prior = base.baseline;
 			const { entries, rules } = diffBaseline(result, prior);
 			const width = Math.max(0, ...rules.map((r) => r.rule.length));
 			const lines = [`Would record ${counted(result.findings.length, entries)} \u2192 ${target}`, ''];
@@ -1710,9 +1818,9 @@ async function main(): Promise<number> {
 	// (One that carries the grammar's shape and breaks it still reports as
 	// `suppression/malformed`, whichever keyword it was written in.)
 	if (command === 'suppressions') {
-		const by = args.flags['group-by'];
-		if (by !== undefined && !isGroupBy(by)) {
-			fail(`loupe: unknown grouping "${by}" \u2014 expected ${GROUP_BYS.join(', ')}\n`);
+		const by = groupByFlag(args.flags['group-by']);
+		if (typeof by === 'object') {
+			fail(`loupe: ${by.error}\n`);
 			return EXIT.CANNOT_RUN;
 		}
 		const all = (await analyze(config, { scope: null, cache: useCache })).directives;
@@ -1805,7 +1913,7 @@ async function main(): Promise<number> {
 	for (const id of rules ?? [])
 		if (!config.enabled[id]) note(`loupe: ${id} is off in this config \u2014 it reports nothing.\n`);
 		// Nor is a rule only the judge reports, named on a run that does not judge.
-		else if (id === 'patterns/judged-redirect' && command === 'check' && !args.flags.judge)
+		else if (JUDGE_ONLY_RULES.has(id) && command === 'check' && !args.flags.judge)
 			note(`loupe: ${id} reports only under --judge \u2014 this run reports nothing for it.\n`);
 
 	// The one network call in the engine, so the key is checked before the walk.
@@ -1837,29 +1945,11 @@ async function main(): Promise<number> {
 		}
 		// Each judgement fails on its own, as in `check`: a failed request leaves
 		// those findings unjudged, and every fix that needed no model is still
-		// written below.
-		const about = tokenDescriptions(config.profiles?.active ?? []);
-		// Every channel: a judged replacement is written in all three. Only a
-		// judged `keep` outside a stylesheet has nowhere to go, and that one is
-		// reported as a skip rather than paid for silently.
-		const judgeable = toFix.findings.filter((f) => f.suggest?.length);
+		// written below. Every channel: a judged replacement is written in all
+		// three. Only a judged `keep` outside a stylesheet has nowhere to go, and
+		// that one is reported as a skip rather than paid for silently.
 		const client = apiKey ? judgeClient(apiKey, { cache: answerCache(root, args.flags['no-cache']) }) : null;
-		// Side by side: values and renames settle different findings.
-		await Promise.all([
-			// With no design-system tokens, `judgeValues` is the one to refuse, and
-			// the refusal is noted like any other failure.
-			client && judgeable.length
-				? judgeValues(root, judgeable, toFix.tokens, client, about).catch((err: unknown) => {
-						note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
-					})
-				: null,
-			// A judged rename is written like a spelled one, every line naming it.
-			client && toFix.tokens
-				? judgeRenames(root, toFix.findings, toFix.tokens, client, about).catch((err: unknown) => {
-						note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
-					})
-				: null,
-		]);
+		if (client) await Promise.all(tokenJudgements(toFix.findings, toFix.tokens, client));
 		client?.cache?.save();
 		const spent = client && judgeSummary(client);
 		if (spent) process.stderr.write(dim(`loupe: ${spent}\n`));
@@ -1919,14 +2009,13 @@ async function main(): Promise<number> {
 		fail(`loupe: unknown format "${format}" \u2014 expected ${FORMATS.join(', ')}\n`);
 		return EXIT.CANNOT_RUN;
 	}
-	// Rejected here for the same reason as `--format`: a misspelled `--group-by fil`
-	// falling back to the default prints a perfectly good report in the order the
-	// caller did not ask for.
-	const group = args.flags['group-by'] ?? 'rule';
-	if (!isGroupBy(group)) {
-		fail(`loupe: unknown grouping "${group}" \u2014 expected ${GROUP_BYS.join(', ')}\n`);
+	// Rejected here for the same reason as `--format`.
+	const grouping = groupByFlag(args.flags['group-by']);
+	if (typeof grouping === 'object') {
+		fail(`loupe: ${grouping.error}\n`);
 		return EXIT.CANNOT_RUN;
 	}
+	const group = grouping ?? 'rule';
 	// ── check / hook ──────────────────────────────────────────────────────────
 	// A PostToolUse payload names the file just written; scope to it so drift is
 	// reported at write time. Stop payloads carry no file and fall through to
@@ -1965,18 +2054,11 @@ async function main(): Promise<number> {
 	}
 
 	if (!args.flags['no-baseline']) {
-		// `found` is what lets the warning below tell an absent baseline from a
-		// broken one: `readBaseline` answers null for both.
-		const { path: bPath, found } = findExistingBaseline(root, namedBaseline, config.baselinePath);
-		const baseline = found ? readBaseline(bPath) : null;
-		// A file that is present and unparseable is not the same as no file, and
-		// treating it as one puts the whole backlog back with the gate blocking on all
-		// of it. Conflict markers in a committed baseline are the ordinary way here.
-		//
+		const { path: bPath, found, baseline } = loadBaseline();
 		// The hook says it too: it is the surface where the agent is handed back a
 		// backlog it accepted, with no reason given. `emitBlocking` already writes to
 		// stderr, and Claude Code feeds that back on exit 2.
-		if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.\n`);
+		if (found && !baseline) note(unreadableBaseline(bPath));
 		// A 0.1.x baseline is no longer read, and dropping it was silent: the backlog
 		// it held came back as live findings with nothing to say why. On stderr, so
 		// JSON and SARIF on stdout stay what a parser expects; not from the hook.
@@ -2002,35 +2084,62 @@ async function main(): Promise<number> {
 	 * is conformant, absolutely — the JSX converted and the CSS left behind is an
 	 * omission by then, not an intermediate state.
 	 *
-	 * The "before" is only analyzed when the "after" would block, so a clean
-	 * edit pays nothing for the question.
+	 * `handed` is what a PostToolUse that blocks nothing hands the agent: every
+	 * blocking finding, all of them standing by then and each one Stop will hold
+	 * it to, and of the rest only those the edit introduced. A created file, or a
+	 * payload with no pre-edit content, compares against nothing and hands over
+	 * everything.
+	 *
+	 * The "before" is analyzed once, and only when the "after" has a finding, so
+	 * a clean edit pays nothing for the question.
 	 *
 	 * Passing a standing finding over is a deferral only where Stop will see it.
 	 * Where Stop cannot resolve the files the turn changed — no git worktree, or
-	 * a repository git refuses to read — it stands down, and a finding passed
-	 * over here is never enforced at all: that is the absolute check, as before.
+	 * a repository git refuses to read — it stands down, and a blocking finding
+	 * passed over here is never enforced at all: that is the absolute check, as
+	 * before.
 	 */
-	let verdict: Promise<{ errors: Finding[]; blocking: Finding[] }> | null = null;
-	const hookVerdict = (): Promise<{ errors: Finding[]; blocking: Finding[] }> =>
+	type Verdict = { errors: Finding[]; blocking: Finding[]; handed: Finding[] };
+	let verdict: Promise<Verdict> | null = null;
+	const hookVerdict = (): Promise<Verdict> =>
 		(verdict ??= (async () => {
 			const errors = result.findings.filter((f) => f.severity === 'error');
-			if (!touched || !errors.length) return { errors, blocking: errors };
-			const stopScope = resolveScope(config, args, { defaultChanged: true });
-			if (stopScope !== null && !Array.isArray(stopScope)) return { errors, blocking: errors };
+			const absolute = { errors, blocking: errors, handed: result.findings };
+			if (!touched || !result.findings.length) return absolute;
+			if (errors.length) {
+				const stopScope = resolveScope(config, args, { defaultChanged: true });
+				if (stopScope !== null && !Array.isArray(stopScope)) return absolute;
+			}
 			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
 				judge: Boolean(apiKey),
 				suppress: !args.flags['no-suppressions'],
 			});
-			return { errors, blocking: introducedBy(errors, before) };
+			// One pass over every finding: the keys carry the rule, so the errors
+			// among them are the ones `introducedBy(errors, before)` would answer.
+			const introduced = new Set(introducedBy(result.findings, before));
+			return {
+				errors,
+				blocking: errors.filter((f) => introduced.has(f)),
+				handed: result.findings.filter((f) => f.severity === 'error' || introduced.has(f)),
+			};
 		})());
 	/**
+	 * Whether the event has a way into the agent's context that does not block:
+	 * PostToolUse's `additionalContext`. Stop's only one is `decision: "block"`.
+	 *
+	 * Design notes: docs/design/cli.md#advisory-findings-reach-the-agent-on-posttooluse-only
+	 */
+	const hookAdvises = hookEvent(payload) === 'PostToolUse';
+	/**
 	 * The findings the hook will print, decided the way the branch below decides
-	 * it: none when nothing blocks or the gate has stood down (a summary line
-	 * either way), else the blocking ones under the findings cap.
+	 * it. When nothing blocks: on PostToolUse the ones it hands the agent as
+	 * context, under the findings cap, and on Stop none (a tally). When
+	 * something does: the blocking ones under the cap, or none once the gate has
+	 * stood down (a summary line).
 	 */
 	const hookShows = async (): Promise<Finding[]> => {
-		const { blocking } = await hookVerdict();
-		if (!blocking.length) return [];
+		const { blocking, handed } = await hookVerdict();
+		if (!blocking.length) return hookAdvises ? shownFindings(handed, config.hook.maxFindings) : [];
 		if (!payload.session_id && payload.stop_hook_active) return [];
 		// Peeked under the key the branch below bumps, session id or not.
 		if (peekAttempts(root, budgetKey) + 1 > config.hook.maxAttempts) return [];
@@ -2054,9 +2163,10 @@ async function main(): Promise<number> {
 			cache: answerCache(root, args.flags['no-cache']),
 		});
 		const redirectSeverity = config.severityOf('patterns/judged-redirect');
-		// The same filters, for the findings the redirects add. In the hook a
-		// redirect that cannot block is never printed: only blocking findings are
-		// handed back.
+		// The same filters, for the findings the redirects add. In the hook only a
+		// redirect that can block is asked for: the pass asks about every control in
+		// scope before there is a finding to choose among, so it cannot be held to
+		// what the hook prints.
 		const askRedirects =
 			Boolean(result.controls?.length) &&
 			(args.flags.severity !== 'error' || redirectSeverity === 'error') &&
@@ -2076,38 +2186,29 @@ async function main(): Promise<number> {
 			result.findings = dedupe(result.findings);
 		};
 		// What the rest is asked about. A typed run prints everything; the hook
-		// prints a tally when nothing blocks, and only the blocking findings it has
-		// room for when something does — so that is all it pays to have judged.
+		// prints only the findings it has room for — the blocking ones when
+		// something blocks, the ones a PostToolUse hands the agent when nothing
+		// does — and a tally otherwise, so that is all it pays to have judged.
 		// A redirect configured to block decides which of those it is, so the hook
 		// waits for it first; everywhere else every pass runs at once.
 		if (isHook) addRedirects(await redirects);
 		const targets = isHook ? await hookShows() : result.findings;
-		const about = tokenDescriptions(config.profiles?.active ?? []);
-		const settled = await Promise.all([
-			isHook ? Promise.resolve([]) : redirects,
-			judgeVariants(root, targets, config.componentRegistry, client).catch((err: unknown) => {
-				note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
-			}),
-			// Its own note: the judgements above stand when this one cannot run. Asked
-			// without a token set too, so its refusal is said rather than skipped.
-			targets.some((f) => f.suggest?.length)
-				? judgeValues(root, targets, result.tokens, client, about).catch((err: unknown) => {
-						note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
-					})
-				: null,
-			result.tokens && targets.some((f) => f.unknown)
-				? judgeRenames(root, targets, result.tokens, client, about).catch((err: unknown) => {
-						note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
-					})
-				: null,
+		const [found] = await Promise.all([
+			isHook ? Promise.resolve([] as Finding[]) : redirects,
+			Promise.all([
+				judgeVariants(root, targets, config.componentRegistry, client).catch((err: unknown) => {
+					note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
+				}),
+				...tokenJudgements(targets, result.tokens, client),
+			]),
 		]);
-		addRedirects(settled[0]);
+		addRedirects(found);
 		client.cache?.save();
 		judged = judgeSummary(client);
 		if (deadline?.aborted) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)\n`);
 		// Computed before the redirects above existed: one configured to `error`
 		// has to be able to fail the run it is reported in.
-		result.blocking = result.findings.some((f) => f.severity === 'error');
+		result.blocking = isBlocking(result.findings);
 	}
 
 	// What judging cost, beside the summary the user sees: a gate that is
@@ -2115,7 +2216,7 @@ async function main(): Promise<number> {
 	const spentSuffix = judged ? dim(` (${judged})`) : '';
 	if (isHook) {
 		const sessionId = payload.session_id ?? '';
-		const { errors, blocking } = await hookVerdict();
+		const { errors, blocking, handed } = await hookVerdict();
 		// What stood before the edit and still does: never more than stood before it.
 		const standing = errors.length - blocking.length;
 		// Said, not dropped: the agent should know what it is walking past, and that
@@ -2125,14 +2226,25 @@ async function main(): Promise<number> {
 			: '';
 		if (!blocking.length) {
 			clearAttempts(root, budgetKey);
-			if (!standing) return emitClean(`${formatSummary(result)}${spentSuffix}${ceilingSuffix}`);
-			// The agent hears it too, with the findings: it is the agent Stop holds to them.
-			const message = `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`;
-			const report = formatAgent({ ...result, findings: errors }, config, {
+			// The advisory ones the edit walked past: counted, never listed, or every
+			// edit to a legacy file hands the agent its backlog to start fixing.
+			const passed = result.findings.length - handed.length;
+			const passedNote = passed
+				? ` ${passed} advisory finding(s) already in ${touched} before this edit, left out of the agent's report.`
+				: '';
+			const message = standing
+				? `loupe: this edit added no blocking findings.${standingNote}${passedNote}${spentSuffix}${ceilingSuffix}`
+				: `${formatSummary(result)}${passedNote}${spentSuffix}${ceilingSuffix}`;
+			if (!hookAdvises || !handed.length) return emitClean(message);
+			// The agent hears what was handed over in the blocking report's format and
+			// under its cap. The report opens with its own tally, so the message leads
+			// it only where it says more.
+			const report = formatAgent({ ...result, findings: handed }, config, {
 				maxFindings: config.hook.maxFindings,
 				terse: true,
 			});
-			return emitAdvisory(message, `${message}\n\n${report}`, payload);
+			const context = standing || passed || ceilingSuffix ? `${message}\n\n${report}` : report;
+			return emitAdvisory(message, context, payload);
 		}
 		const attempts = bumpAttempts(root, budgetKey);
 		const max = config.hook.maxAttempts;

@@ -48,10 +48,10 @@ would work as a stylelint plugin, and are included because you want one report.
 | `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere |
 | `patterns/unregistered-composite` | The same composite in 3+ files, registered in none |
 | `tokens/hardcoded-value` | A literal colour/length where a design token exists |
-| `layout/margin-on-child` | Margin, which belongs on the parent's `gap` |
+| `layout/margin-on-child` | Margin, which belongs on the parent's `gap` — not on a bare element (`.card p`), which is prose |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own |
 | `typography/untokenized` | Raw type styling with no token and no text component |
-| `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals |
+| `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals — which a block's own `.wp-block-{namespace}-*` wrapper, named by its `block.json`, is not |
 | `system/raw-element` | A raw element that has a design-system analog |
 | `system/inline-style` | A style prop doing what a component prop or token already does |
 | `layout/negative-margin` | A negative margin pulling against the layout the system provides |
@@ -225,6 +225,14 @@ error-severity findings, so CI behaviour does not depend on this.
 }
 ```
 
+`wp-block-` is external in the WordPress presets, which is right for core's
+`.wp-block-group`. Your own blocks need no config: the `name` in each
+`block.json` (`acme/card`) makes `.wp-block-acme-card`, and every class under
+`wp-block-acme-`, yours — never a library internal, so the findings inside the
+rule report as they would on any class — and the wrapper itself never dead,
+since only WordPress's rendered output carries it. `detect` and `status` list
+them under `blocks:`; nothing is written into `namespaces.project`.
+
 A rule takes a bare severity, or `{ "severity", "reason" }` to say why; any
 other key is a config error. The `["warn", { … }]` form was removed in 0.8.0,
 and a config still using it does not load — under the hook that means the gate
@@ -343,6 +351,12 @@ also inferred with no config at all:
   }
 }
 ```
+
+`loupe status` prints what the `tokenSources` yielded on its `tokens:` line:
+`--acme-* (190 definitions from node_modules/@acme/tokens/dist/tokens.css)`, or
+`0 definitions read` and each path not found. A path that stops resolving turns
+`tokens/unknown-token` off, so check that line first when a report names no
+tokens.
 
 File markers work too, for a system that leaves no dependency — `"files": {
 "all": ["theme.json"], "any": ["templates/", "parts/"] }`, probed at the root and
@@ -1023,7 +1037,13 @@ was passed over.
 
 On blocking findings it exits 2 and hands a budgeted report back to the agent:
 guidance printed once per rule, a sample of each rule rather than a flood of
-the first one. On a clean run it exits 0 with a one-line tally.
+the first one. With findings and nothing blocking it exits 0 with a one-line
+tally for the person, and on `PostToolUse` hands the agent the same budgeted
+report as `hookSpecificOutput.additionalContext` — of the findings the edit
+introduced, with a count of the advisory ones it walked past (everything, when
+there is no pre-edit content to compare against). `Stop` has no way into the
+agent's context that does not block the turn, so there the tally is all there
+is. On a clean run it exits 0 with the tally alone.
 
 Installed as a Claude Code plugin, the hook reads its settings from
 `CLAUDE_PLUGIN_OPTION_*` — whether it may block, which preset to force, the
@@ -1056,10 +1076,11 @@ put `"env": { "LOUPE_OFF": "1" }` in the project's `.claude/settings.local.json`
 (one project, read on every run, so it takes effect mid-session), or start a
 session as `LOUPE_OFF=1 claude`. All three feed the same option. The hook then
 checks nothing and says only `loupe: skipped — silenced by …` to the user,
-rather than downgrading to advisory, because an advisory finding still reaches
-the agent and an agent that sees a finding starts fixing it. `loupe status`
-reports the switch on its `options:` line with where it was set. `loupe` run by
-hand ignores it.
+rather than downgrading to advisory, because on `PostToolUse` an advisory
+finding the edit introduced still reaches the agent and an agent that sees a
+finding starts fixing it (on `Stop` an advisory finding is only a tally the user
+sees). `loupe status` reports the switch on its `options:` line with where it
+was set. `loupe` run by hand ignores it.
 
 Both read the same on/off spelling as every plugin option: `1`, `true`, `yes`,
 `on`, case-insensitively. `LOUPE_OFF=0` is not one of them and leaves the hook
@@ -1295,7 +1316,7 @@ A library call writes nothing anywhere unless it passes `cache: true`.
 
 | key | |
 | --- | --- |
-| `designSystem.tokenSources` | Paths (file or directory) holding the token definitions. Read even under `node_modules`, which the project walk prunes — that is where a design system's tokens live. Missing paths are skipped. |
+| `designSystem.tokenSources` | Paths (file or directory) holding the token definitions, each relative to the project root or absolute. Read even under `node_modules`, which the project walk prunes — that is where a design system's tokens live. Missing paths are skipped, and `loupe status` names them on its `tokens:` line. |
 | `designSystem.styleSources` | Paths (file or directory) holding the design system's own stylesheets (`.css`, `.scss`, `.less`). Every class they define is a library internal: a project rule whose key selector is one of them reports `system/override (library internal)`, the way a `namespaces.external` prefix does. This is how an unprefixed system (`.field-label`, `.toast-viewport`) is recognised, since no JSX binds the classes a component renders itself. The sheets are not checked as project code, a `namespaces.project` prefix still wins, and custom properties set on a project class (a slot rebind) are not an override. Missing paths are skipped. |
 | `designSystem.cssInJsPackages` | Packages whose tagged templates are CSS. Defaults cover styled-components and emotion. |
 | `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element` when the carrier is a `components.text` or `components.layout` name; nothing nested inside it is, and a genuine render callback on any other component is not. Defaults to `render`, `as`, `component`; `[]` exempts nothing. A list replaces the default rather than extending it. |

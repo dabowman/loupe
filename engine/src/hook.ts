@@ -2,7 +2,9 @@
  * Claude Code Stop-hook mode.
  *
  * Exit protocol:
- *   0 + {systemMessage}  clean, or advisory-only, or gave up after N attempts
+ *   0 + {systemMessage}  clean, or advisory-only, or gave up after N attempts;
+ *                        on PostToolUse, the findings the edit introduced also
+ *                        reach the agent as hookSpecificOutput.additionalContext
  *   2 + stderr           blocking findings; stderr is handed back to the agent
  *
  * Bounded retry rather than an absolute bail on `stop_hook_active`: skipping
@@ -13,12 +15,13 @@
  * Design notes: docs/design/cli.md#exit-codes-are-a-contract
  */
 
-import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { existsSync, realpathSync } from 'node:fs';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { text } from 'node:stream/consumers';
-import { toPosix } from './discover.ts';
-import { attemptsPath, ensureDir, isOn } from './paths.ts';
+import { dirsUp, toPosix } from './discover.ts';
+import { readJson, writeJsonAtomic } from './json.ts';
+import { attemptsPath, isOn, under } from './paths.ts';
 
 const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
@@ -61,28 +64,19 @@ export interface PluginOptions {
 export const readStdin = async (): Promise<string> => (process.stdin.isTTY ? '' : text(process.stdin));
 
 function readState(root: string): AttemptState {
-	try {
-		const raw = JSON.parse(readFileSync(attemptsPath(root), 'utf8')) as Partial<AttemptState>;
-		const now = Date.now();
-		const sessions: Record<string, Attempt> = {};
-		for (const [id, entry] of Object.entries(raw.sessions ?? {}))
-			if (now - (entry?.at ?? 0) < MAX_AGE_MS) sessions[id] = entry;
-		return { sessions };
-	} catch {
-		return { sessions: {} };
-	}
+	// A missing or unreadable file is an empty budget, not a failure.
+	const raw = readJson(attemptsPath(root)) as Partial<AttemptState> | null;
+	const now = Date.now();
+	const sessions: Record<string, Attempt> = {};
+	for (const [id, entry] of Object.entries(raw?.sessions ?? {}))
+		if (now - (entry?.at ?? 0) < MAX_AGE_MS) sessions[id] = entry;
+	return { sessions };
 }
 
-function writeState(root: string, state: AttemptState): void {
-	try {
-		const p = attemptsPath(root);
-		ensureDir(dirname(p));
-		writeFileSync(p, JSON.stringify(state));
-	} catch {
-		// No writable state dir just means no retry budget tracking; never let
-		// bookkeeping failure take down the gate.
-	}
-}
+/** No writable state dir just means no retry budget tracking; bookkeeping never takes the gate down. */
+const writeState = (root: string, state: AttemptState): void => {
+	writeJsonAtomic(attemptsPath(root), state);
+};
 
 export function bumpAttempts(root: string, sessionId: string | undefined): number {
 	if (!sessionId) return 1;
@@ -120,7 +114,10 @@ export function parsePayload(raw: string): HookPayload {
  * The file a PostToolUse payload just touched, as a repo-relative path.
  *
  * Scoping to it is what turns this from a review-time gate into a write-time
- * one: the drift is reported while the agent still has the decision in hand.
+ * one: the drift reaches the agent while it still has the decision in hand — a
+ * blocking finding as the block, an advisory one as context. Stop has no
+ * channel for the second, so on Stop advisory findings are a tally the person
+ * sees.
  *
  * Returns null for a payload with no file (a Stop event, or a non-file tool),
  * which the caller maps to the changed-files scope, and for a file outside the
@@ -133,7 +130,7 @@ export function parsePayload(raw: string): HookPayload {
 export function payloadFile(payload: HookPayload | null | undefined, root: string): string | null {
 	const raw = payload?.tool_input?.file_path;
 	if (typeof raw !== 'string' || !raw) return null;
-	const abs = isAbsolute(raw) ? raw : join(root, raw);
+	const abs = under(root, raw);
 	const inside = (from: string, to: string): string | null => {
 		const rel = relative(from, to);
 		return rel && !rel.startsWith('..') && !isAbsolute(rel) ? rel : null;
@@ -178,12 +175,14 @@ export function preEditContent(payload: HookPayload | null | undefined): string 
 	return typeof original === 'string' ? original : null;
 }
 
+/** `CLAUDE_PROJECT_DIR`, where Claude Code set it to a directory that is there. */
+const envProjectDir = (): string | undefined => {
+	const dir = process.env.CLAUDE_PROJECT_DIR;
+	return dir && existsSync(dir) ? dir : undefined;
+};
+
 /** Where the project lives, in order of trustworthiness. */
-export function hookRoot(): string {
-	const fromEnv = process.env.CLAUDE_PROJECT_DIR;
-	if (fromEnv && existsSync(fromEnv)) return fromEnv;
-	return process.cwd();
-}
+export const hookRoot = (): string => envProjectDir() ?? process.cwd();
 
 export { isOn };
 
@@ -200,14 +199,15 @@ export { isOn };
  */
 export function claudeProjectDir(explicit?: string | null): string {
 	if (!explicit) {
-		const fromEnv = process.env.CLAUDE_PROJECT_DIR;
-		if (fromEnv && existsSync(fromEnv)) return fromEnv;
+		const fromEnv = envProjectDir();
+		if (fromEnv) return fromEnv;
 	}
 	const start = resolve(explicit ?? process.cwd());
 	const home = resolve(homedir());
-	for (let dir = start; dir !== home; dir = dirname(dir)) {
+	for (const dir of dirsUp(start)) {
+		if (dir === home) break;
 		if (existsSync(join(dir, '.claude'))) return dir;
-		if (existsSync(join(dir, '.git')) || dirname(dir) === dir) break;
+		if (existsSync(join(dir, '.git'))) break;
 	}
 	return start;
 }
@@ -227,12 +227,9 @@ function settingsEnv(projectDir: string, name: string): { value: string; from: s
 		[join(homedir(), '.claude', 'settings.json'), '~/.claude/settings.json'],
 	];
 	for (const [file, label] of files) {
-		try {
-			const v = (JSON.parse(readFileSync(file, 'utf8')) as { env?: Record<string, unknown> }).env?.[name];
-			if (v !== undefined) return { value: String(v), from: `${name} in ${label}` };
-		} catch {
-			/* no settings file */
-		}
+		// No settings file, or one that will not parse, has nothing to say.
+		const v = (readJson(file) as { env?: Record<string, unknown> } | null)?.env?.[name];
+		if (v !== undefined) return { value: String(v), from: `${name} in ${label}` };
 	}
 	return undefined;
 }
@@ -336,16 +333,12 @@ export function resolvedOptions(projectDir: string): ResolvedOptions {
 	const seen: string[] = [];
 	let matched = false;
 	for (const file of ['settings.json', 'settings.local.json']) {
-		let configs: Record<string, { options?: Record<string, unknown> }> | undefined;
-		try {
-			configs = (
-				JSON.parse(readFileSync(join(homedir(), '.claude', file), 'utf8')) as {
-					pluginConfigs?: Record<string, { options?: Record<string, unknown> }>;
-				}
-			).pluginConfigs;
-		} catch {
-			continue; // no settings file, or not ours to read
-		}
+		// No settings file, or not ours to read: nothing to overlay.
+		const configs = (
+			readJson(join(homedir(), '.claude', file)) as {
+				pluginConfigs?: Record<string, { options?: Record<string, unknown> }>;
+			} | null
+		)?.pluginConfigs;
 		if (!configs || typeof configs !== 'object') continue;
 		const key = Object.keys(configs).find(isOurs);
 		if (key === undefined) {
@@ -417,33 +410,34 @@ function coerce(opts: Record<string, unknown>): PluginOptions {
 	};
 }
 
-export function emitClean(message: string): number {
-	process.stdout.write(JSON.stringify({ systemMessage: message, suppressOutput: true }));
+/**
+ * What a non-blocking hook says: a `systemMessage` for the user, nothing in
+ * the transcript, and whatever else the event admits. Exit 0.
+ */
+const say = (message: string, extra: Record<string, unknown> = {}): number => {
+	process.stdout.write(JSON.stringify({ systemMessage: message, suppressOutput: true, ...extra }));
 	return 0;
-}
+};
+
+export const emitClean = (message: string): number => say(message);
 
 /**
- * A stand-down the agent has to hear about as well as the user: exit 0, never
- * blocking, with `message` for the user and `context` for the agent.
+ * What the agent has to hear as well as the user, without blocking — findings
+ * that do not block, or a stand-down: exit 0, with `message` for the user and
+ * `context` for the agent.
  *
  * PostToolUse has a non-blocking way into the agent's context,
  * `hookSpecificOutput.additionalContext`. Stop has none — its only channel to
- * the agent is `decision: "block"`, which is exactly what a gate that cannot
- * configure itself must not do — so there it is the user's message alone.
+ * the agent is `decision: "block"`, which stays reserved for blocking — so
+ * there it is the user's message alone.
  */
-export function emitAdvisory(message: string, context: string, payload: HookPayload): number {
-	const event = hookEvent(payload);
-	process.stdout.write(
-		JSON.stringify({
-			systemMessage: message,
-			suppressOutput: true,
-			...(event === 'PostToolUse'
-				? { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: context } }
-				: {}),
-		}),
+export const emitAdvisory = (message: string, context: string, payload: HookPayload): number =>
+	say(
+		message,
+		hookEvent(payload) === 'PostToolUse'
+			? { hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: context } }
+			: {},
 	);
-	return 0;
-}
 
 export function emitBlocking(report: string): number {
 	process.stderr.write(`${report}\n`);
