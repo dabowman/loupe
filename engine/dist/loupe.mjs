@@ -35328,19 +35328,27 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   let verdict2 = null;
   const hookVerdict = () => verdict2 ??= (async () => {
     const errors = result.findings.filter((f) => f.severity === "error");
-    if (!touched || !errors.length) return { errors, blocking: errors };
-    const stopScope = resolveScope(config, args, { defaultChanged: true });
-    if (stopScope !== null && !Array.isArray(stopScope)) return { errors, blocking: errors };
+    const absolute = { errors, blocking: errors, handed: result.findings };
+    if (!touched || !result.findings.length) return absolute;
+    if (errors.length) {
+      const stopScope = resolveScope(config, args, { defaultChanged: true });
+      if (stopScope !== null && !Array.isArray(stopScope)) return absolute;
+    }
     const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
       judge: Boolean(apiKey),
       suppress: !args.flags["no-suppressions"]
     });
-    return { errors, blocking: introducedBy(errors, before) };
+    const introduced = new Set(introducedBy(result.findings, before));
+    return {
+      errors,
+      blocking: errors.filter((f) => introduced.has(f)),
+      handed: result.findings.filter((f) => f.severity === "error" || introduced.has(f))
+    };
   })();
   const hookAdvises = hookEvent(payload) === "PostToolUse";
   const hookShows = async () => {
-    const { blocking } = await hookVerdict();
-    if (!blocking.length) return hookAdvises ? shownFindings(result.findings, config.hook.maxFindings) : [];
+    const { blocking, handed } = await hookVerdict();
+    if (!blocking.length) return hookAdvises ? shownFindings(handed, config.hook.maxFindings) : [];
     if (!payload.session_id && payload.stop_hook_active) return [];
     if (peekAttempts(root2, budgetKey) + 1 > config.hook.maxAttempts) return [];
     return shownFindings(blocking, config.hook.maxFindings);
@@ -35394,17 +35402,23 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   const spentSuffix = judged ? dim(` (${judged})`) : "";
   if (isHook) {
     const sessionId = payload.session_id ?? "";
-    const { errors, blocking } = await hookVerdict();
+    const { errors, blocking, handed } = await hookVerdict();
     const standing = errors.length - blocking.length;
     const standingNote = standing ? ` ${standing} blocking finding(s) already in ${touched} before this edit, left for the Stop check.` : "";
     if (!blocking.length) {
       clearAttempts(root2, budgetKey);
-      const message = standing ? `loupe: this edit added no blocking findings.${standingNote}${spentSuffix}${ceilingSuffix}` : `${formatSummary(result)}${spentSuffix}${ceilingSuffix}`;
-      if (!hookAdvises || !result.findings.length) return emitClean(message);
-      const report2 = formatAgent(result, config, { maxFindings: config.hook.maxFindings, terse: true });
-      return emitAdvisory(message, standing || ceilingSuffix ? `${message}
+      const passed = result.findings.length - handed.length;
+      const passedNote = passed ? ` ${passed} advisory finding(s) already in ${touched} before this edit, left out of the agent's report.` : "";
+      const message = standing ? `loupe: this edit added no blocking findings.${standingNote}${passedNote}${spentSuffix}${ceilingSuffix}` : `${formatSummary(result)}${passedNote}${spentSuffix}${ceilingSuffix}`;
+      if (!hookAdvises || !handed.length) return emitClean(message);
+      const report2 = formatAgent({ ...result, findings: handed }, config, {
+        maxFindings: config.hook.maxFindings,
+        terse: true
+      });
+      const context = standing || passed || ceilingSuffix ? `${message}
 
-${report2}` : report2, payload);
+${report2}` : report2;
+      return emitAdvisory(message, context, payload);
     }
     const attempts = bumpAttempts(root2, budgetKey);
     const max = config.hook.maxAttempts;
