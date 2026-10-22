@@ -168,6 +168,20 @@
           "weak"
         ],
         "about": "For groups: whether the grouping needs a visible box or just rhythm."
+      },
+      "structure": {
+        "values": [
+          "fields",
+          "graph"
+        ],
+        "about": "What a region edits: one thing's own fields, or several things and the connections between them."
+      },
+      "placement": {
+        "values": [
+          "derived",
+          "authored"
+        ],
+        "about": "Whether where something sits is computed from the data every time, or put there by the author and kept."
       }
     },
     "containers": {
@@ -550,6 +564,62 @@
         },
         "form-screen": {
           "summary": "The form is the screen."
+        }
+      }
+    },
+    {
+      "id": "edit-graph",
+      "intent": "enter",
+      "scale": "region",
+      "problem": "The user builds several things and the connections between them, and it is the connections that have to be read and changed.",
+      "forces": [
+        "structure",
+        "placement"
+      ],
+      "parts": [
+        {
+          "role": "nodes",
+          "note": "One card per thing, carrying what the reader needs at a glance. Its fields are edited elsewhere (edit-record.inspector), so the card holds no controls of its own."
+        },
+        {
+          "role": "edges",
+          "note": "The connections. The region routes them — where a line leaves and arrives is a decision about every other line, not one the author makes."
+        },
+        {
+          "role": "bands",
+          "note": "Optional: stretches of the canvas whose boundaries give a position meaning, so moving a card across one changes what that thing is."
+        },
+        {
+          "role": "canvas-actions",
+          "note": "The verbs that need no second thing to name them: add one here, delete this, lay it out again. A verb that needs one — where a connection goes — belongs in the inspector, against the read-out of the same setting."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "structure": "fields"
+          },
+          "redirect": "edit-record",
+          "because": "One thing's own fields are a form, however the region draws them."
+        },
+        {
+          "when": {
+            "placement": "authored"
+          },
+          "variant": "canvas"
+        },
+        {
+          "default": "auto-layout"
+        }
+      ],
+      "variants": {
+        "canvas": {
+          "summary": "The author arranges the things and draws the connections: positions are theirs and are kept, and the layout only re-runs when asked for.",
+          "consequences": "Every gesture has to say what it will do while it is still held, because a drop that silently does nothing is the failure this variant invites. A layout that re-runs on any edit undoes the arrangement the author just made."
+        },
+        "auto-layout": {
+          "summary": "The structure is edited and the layout is computed from it every time, so there is nothing to arrange and nothing to reset.",
+          "consequences": "Right while the shape is small or forced by the data; wrong the moment the author has a reason to put two things side by side, because nothing can keep it."
         }
       }
     },

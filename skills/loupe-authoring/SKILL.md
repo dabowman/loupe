@@ -1,7 +1,7 @@
 ---
 name: loupe-authoring
 description: >-
-  Load BEFORE writing or editing any UI built on a design system — a component library plus design tokens, whatever it is called: WordPress Design System (`@wordpress/components`, `@wordpress/ui`, `--wpds-*`), Archer (`@dabowman/archer`), or the system a project declares in its own `loupe.config.json`. Carries the authoring rules that keep generated code from drifting, and they are the same rules in every system: the component before the element, the prop before the stylesheet, `gap` on a layout primitive before a margin anywhere, a token chosen by role before a value that merely matches. Starts by asking `loupe status` which design system is actually in play, then reads that system's own authoring notes from its profile — so the specifics (which components exist, what the tokens are named, which escape-hatch keyword) come from the project rather than from memory. Also covers when writing CSS is legitimate and how to suppress a finding properly. Triggers on building screens, settings panels, modals, sidebars, toolbars, data tables, empty states, or any JSX importing components from a design-system package. Pair with `loupe-patterns` before assembling a composite and `loupe-remediation` when fixing findings.
+  Load BEFORE writing or editing any UI built on a design system — a component library plus design tokens, whatever it is called: WordPress Design System (`@wordpress/components`, `@wordpress/ui`, `--wpds-*`), Archer (`@dabowman/archer`), the VIP Design System (`@automattic/vip-design-system`), or the system a project declares in its own `loupe.config.json`. Carries the authoring rules that keep generated code from drifting, and they are the same rules in every system: the component before the element, the prop before the stylesheet, `gap` on a layout primitive before a margin anywhere, a token chosen by role before a value that merely matches. Starts by asking `loupe status` which design system is actually in play, then reads that system's own authoring notes from its profile — so the specifics (which components exist, what the tokens are named, which escape-hatch keyword) come from the project rather than from memory. Also covers when writing CSS is legitimate and how to suppress a finding properly. Triggers on building screens, settings panels, modals, sidebars, toolbars, data tables, empty states, or any JSX importing components from a design-system package. Pair with `loupe-patterns` before assembling a composite and `loupe-remediation` when fixing findings.
 compatibility: "Any React-family design system Loupe can be configured for. Conformance checking needs the plugin's engine (node >=18)."
 ---
 
@@ -20,7 +20,7 @@ locally true. Decide correctly the first time.
 ## First: find out which design system this is
 
 The rules below are the same everywhere. The nouns are not — one system's
-layout primitive is `Stack`, another's is `HStack`, a third has none at all;
+layout primitive is `Stack`, another's is `Box`, a third has none at all;
 tokens are `--wpds-color-*` here and `--color-text-*` there. Guessing those is
 the single largest source of code that looks conformant and imports nothing
 real.
@@ -35,8 +35,8 @@ Read the top block before writing anything:
 | --- | --- |
 | `system:` | The design system's name |
 | `packages:` | What its components are imported from |
-| `layout:` | The layout primitive(s). `(none)` is a real answer — a headless library has none |
-| `text:` | The text component(s), or `(none)` — then type is a token, not a component |
+| `layout:` | The layout primitive(s), canonical first. A name marked `(legacy)` is recognized but superseded — never write one. `(none)` is a real answer — a headless library has none |
+| `text:` | The text component(s), same convention, or `(none)` — then type is a token, not a component |
 | `tokens:` | The token namespace(s). Everything you write comes from these |
 | `suppress:` | The exact escape-hatch keyword for this project |
 | `profile:` | The active design-system profile, and the directory it lives in |

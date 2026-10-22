@@ -13,6 +13,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Every CLI a test spawns inherits this, so suites that are not about the
+// caches neither read a warm one nor leave index files behind in the user's
+// temp directory. The cache suites turn it back on for the runs they measure.
+process.env.LOUPE_NO_CACHE ??= '1';
+
 let failed = 0;
 
 /** Run one named assertion. A throw is a failure, not a crash. */
@@ -59,6 +64,7 @@ export const failures = (): number => failed;
 
 /** Print the tally and set the exit code. Every test file ends with this. */
 export function finish(summary?: string): never {
+	cleanup(PLUGIN_DATA);
 	console.log(summary ?? `\n${failed ? `${failed} failed` : 'all passed'}`);
 	process.exit(failed ? 1 : 0);
 }
@@ -113,3 +119,14 @@ export function writeAll(root: string, files: Record<string, string>): void {
 
 /** Remove a scratch repo, whatever state it is in. */
 export const cleanup = (root: string): void => rmSync(root, { recursive: true, force: true });
+
+/**
+ * The plugin data directory for every CLI a suite starts — hand it over as
+ * `CLAUDE_PLUGIN_DATA`.
+ *
+ * Without one the hook keeps its retry counter in a temp directory of the
+ * user's, keyed by the project's path, and a scratch repo's path is new every
+ * run: each run left its counters behind for good, under a directory no
+ * `cleanup` of the repo reaches. One per suite, removed by `finish`.
+ */
+export const PLUGIN_DATA = scratch('loupe-plugin-data-');

@@ -13,6 +13,7 @@
 
 import type { Rule as PostcssRule } from 'postcss';
 import type { RULES } from './rules.ts';
+import type { TokenScopes } from './scopes.ts';
 
 // ── rules ───────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,22 @@ export interface RuleDef {
 
 // ── findings ────────────────────────────────────────────────────────────────
 
+/**
+ * Where a value is written, in a channel whose source text is not CSS.
+ *
+ * `style={{ paddingBottom: 13 }}` is reported as `padding-bottom: 13px`, and
+ * neither half of that is in the file: the key is camelCase and React is what
+ * gives the number its unit. So the JSX channel hands `fix` the bytes instead
+ * of a declaration to match. `col` is 0-based within the declaration's own
+ * reported line, and `text` is the literal exactly as written there — checked
+ * before the splice, so a file that has moved under the report refuses rather
+ * than rewriting whatever now sits in that column.
+ */
+export interface ValueSpan {
+	col: number;
+	text: string;
+}
+
 /** A property/value pair whose literal could be a token. Feeds the token pass. */
 export interface Hint {
 	prop: string;
@@ -55,6 +72,8 @@ export interface Hint {
 	 * matched against the wrong line edits the wrong declaration.
 	 */
 	line?: number | undefined;
+	/** Set by the channels whose source is not CSS, where a match cannot find it. */
+	span?: ValueSpan | undefined;
 }
 
 /**
@@ -87,6 +106,42 @@ export interface Suggestion extends Hint {
 	 * answers rendered for a reader.
 	 */
 	judged?: Judged | undefined;
+	/**
+	 * Why the one token in `tokens` is not applied unattended: the profile scopes
+	 * it to a kind of element this declaration is not shown to style, or is shown
+	 * not to. An off-role candidate is a question, the way two on-role ones are,
+	 * so `fix` leaves it and the report says what to check.
+	 */
+	review?: string | undefined;
+}
+
+/**
+ * A misspelled token name and the one known token it is a near miss for.
+ *
+ * A name, not a declaration: `tokens/unknown-token` reports once per file and
+ * name however many times the file writes it, so the fix it licenses is every
+ * one of `lines` — fixing the line it was reported at would leave the rest, and
+ * the next run would report the same name again.
+ */
+export interface TokenRename {
+	from: string;
+	to: string;
+	/** Every line of this file that references the name, first-seen order. */
+	lines: number[];
+}
+
+/**
+ * The whole extent of a rule that declares nothing but a dead class, in lines.
+ *
+ * Carried only where the rule can be removed on its own — and read only by the
+ * language server, because deleting is not substituting and `loupe fix` does
+ * not do it. See docs/design/report.md#deleting-is-the-editors-alone.
+ */
+export interface DeadRule {
+	/** First line to remove: a comment attached above the rule, where there is one. */
+	startLine: number;
+	/** The line the rule's closing brace is on. */
+	endLine: number;
 }
 
 /**
@@ -153,6 +208,12 @@ export interface Finding {
 	rank: number;
 	hints?: Hint[] | undefined;
 	suffix?: string | undefined;
+	/**
+	 * Working state, like `hints`: what the markup and the selector say this
+	 * finding's declarations land on — `button`, `Modal` — for the token pass to
+	 * hold a suggestion against its declared scope. Dropped there.
+	 */
+	elements?: string[] | undefined;
 	suggest?: Suggestion[] | undefined;
 	/**
 	 * The declaration `tokens/hardcoded-value` flagged, as written — what a
@@ -161,6 +222,23 @@ export interface Finding {
 	 * `judgeValues` writes an answer for.
 	 */
 	decl?: Hint | undefined;
+	/**
+	 * The rewrite `tokens/unknown-token` licenses, where exactly one known token
+	 * is a near miss for the name, or where `--judge` picked one. Absent
+	 * otherwise — then the finding stands for a reader.
+	 */
+	rename?: TokenRename | undefined;
+	/**
+	 * Where a `tokens/unknown-token` name with no settled rename is written: the
+	 * property of its first reference, and every line of the file naming it.
+	 * What `--judge` needs to ask which token was meant, and to rename it.
+	 */
+	unknown?: { prop: string; lines: number[] } | undefined;
+	/**
+	 * The rule a `css/dead-class` finding names, where deleting it is safe.
+	 * Absent where it is not — then no deletion is offered at all.
+	 */
+	dead?: DeadRule | undefined;
 }
 
 /**
@@ -184,6 +262,7 @@ export interface PendingFinding extends ClassifiedFinding {
 	scopeLines?: number[] | undefined;
 	selector?: string | undefined;
 	media?: string | undefined;
+	elements?: string[] | undefined;
 }
 
 export interface ParseError {
@@ -211,6 +290,12 @@ export interface Directive {
 	reason: string;
 	/** The read alias it was written with, when that is not the active keyword. */
 	alias?: string;
+	/**
+	 * The rule ids it names that muted nothing on this run: dead weight, or a
+	 * typo. Set only by a run that applied suppressions to the directive's file,
+	 * and absent when every id it names is live.
+	 */
+	stale?: string[];
 }
 
 /** A suppression comment that names no rule, or gives no reason. */
@@ -223,6 +308,8 @@ export interface MalformedDirective {
 
 export interface Suppressions {
 	byLine: Map<number, Set<string>>;
+	/** The directives covering each line of `byLine`, for crediting a mute to the one that did it. */
+	owners: Map<number, Directive[]>;
 	directives: Directive[];
 	malformed: MalformedDirective[];
 }
@@ -238,7 +325,11 @@ export interface AnalyzeResult {
 	 * `check --judge` asks about it.
 	 */
 	controls?: Control[];
-	/** The token set the run read, which `--judge` chooses from. */
+	/**
+	 * The token set the run read, which `--judge` chooses from. Absent when the
+	 * design system's own sources yielded nothing (`diagnostics.tokensKnown` is
+	 * 0), whatever the project defines under the same prefix.
+	 */
 	tokens?: TokenSet;
 }
 
@@ -249,6 +340,8 @@ export interface Decl {
 	prop: string;
 	value: string;
 	line?: number | null;
+	/** The JSX channel's pointer back at the bytes this declaration was translated from. */
+	span?: ValueSpan | undefined;
 }
 
 export type MarginKind = 'spacing' | 'negative' | null;
@@ -257,6 +350,18 @@ export interface ClassifyContext {
 	boundSystem?: readonly Binding[];
 	boundText?: readonly Binding[];
 	isGrid?: boolean;
+	/**
+	 * The styling surface the registry records for a bound component, if any.
+	 * `undefined` is "nobody recorded one", which is not "it owns nothing".
+	 */
+	surfaceOf?: (binding: Binding) => StylingSurface | undefined;
+	/**
+	 * Whether the registry a bound component comes from records styling
+	 * surfaces at all. Where it does not, a missing surface says nothing about
+	 * this component in particular, and `system/override` reads it the way it
+	 * did before surfaces existed — see `surfacesRecorded`.
+	 */
+	surfaced?: (binding: Binding) => boolean;
 	/**
 	 * Whether a rule is live in this run. Two branches of the classifier
 	 * *supersede* the ordinary verdict rather than adding to it, so a
@@ -275,6 +380,12 @@ export interface TokenSet {
 	/** normalized value -> token names carrying it */
 	byValue: Map<string, string[]>;
 	sources: number;
+	/**
+	 * What the active profiles declare each token is for. Absent: the generic
+	 * property→token table decides everything, as it did before profiles could
+	 * say.
+	 */
+	scopes?: TokenScopes | undefined;
 }
 
 // ── markup ──────────────────────────────────────────────────────────────────
@@ -285,6 +396,12 @@ export interface Binding {
 	tag: string | null;
 	isSystem: boolean;
 	isText?: boolean;
+	/**
+	 * The canonical name and the package it was imported from, which together
+	 * key the component registry. Absent where the channel cannot say.
+	 */
+	component?: string;
+	package?: string;
 	file?: string;
 	line?: number;
 }
@@ -295,6 +412,8 @@ export interface RawElement {
 	file: string;
 	line: number;
 	suggest: string;
+	/** The element `suggest` should render as, from the mapping's `render`. */
+	render?: string | undefined;
 	styledOnly: boolean;
 	inlineStyled: boolean;
 	inlineLayout: boolean;
@@ -302,10 +421,25 @@ export interface RawElement {
 
 export interface InlineStyleElement {
 	tag: string;
+	/** The canonical name of a design-system component, however the file imported it. */
+	component: string | null;
+	/**
+	 * What a profile's token-scope kinds call this element: the tag, or the
+	 * design-system component it is — `Button` under any alias, a namespace
+	 * import's member, a compound part as itself (`Card.Header`). Null for a
+	 * project component, whose own markup decides what it renders.
+	 */
+	element: string | null;
 	isSystem: boolean;
 	isText: boolean;
 	decls: Decl[];
 	dynamic: number;
+	/**
+	 * The CSS property of each dynamic entry whose key is static
+	 * (`color: isError ? a : b`). An entry with no knowable key — a spread,
+	 * `style={obj}` — has none, which is how the two are told apart.
+	 */
+	dynamicProps: string[];
 	file: string;
 	line: number;
 }
@@ -340,9 +474,57 @@ export interface ComponentEntry {
 	package: string;
 	status: 'recommended' | 'legacy' | 'locked' | 'experimental';
 	supersededBy?: string;
+	/**
+	 * Set only where moving the import to the package `supersededBy` names
+	 * changes the specifier and nothing else: same exported name, every prop the
+	 * old component takes accepted with the same meaning, no prop the old one did
+	 * not require, same default element and same rendering — established by
+	 * reading both implementations, never inferred from the names matching.
+	 *
+	 * There is no `false`. Absent means "nobody established it", which is also
+	 * what a verified no leaves behind, because a fix must not fire on a guess
+	 * that happens to be recorded. No WPDS entry carries it.
+	 *
+	 * Design notes: docs/design/checks.md#a-same-name-move-is-not-a-drop-in-move
+	 */
+	dropIn?: true;
 	note?: string;
 	/** Variant name → what it is for. Read only by `check --judge`. */
 	variants?: Record<string, string>;
+	/**
+	 * What the component styles itself, on the element its `className` lands
+	 * on, and what controls each. Read by `system/override` and
+	 * `typography/in-css`. Absent means nobody has recorded it, and those rules
+	 * fail safe — see `StylingSurface`.
+	 */
+	surface?: StylingSurface;
+	/**
+	 * Set by the loader, never authored: the registry this entry was read from
+	 * records a surface on at least one entry. It is what tells "this entry was
+	 * not read for a surface" (a gap, advisory) from "this registry records no
+	 * surfaces" (the pre-surface reading, blocking).
+	 */
+	surfaced?: true;
+}
+
+/**
+ * A component's styling surface: the CSS properties it owns on the element its
+ * `className` reaches, each mapped to the prop (or props) that controls it, or
+ * to `null` where the component sets it and exposes no prop for it.
+ *
+ * A property not listed is one the component has no opinion about, so a class
+ * setting it is the sanctioned styling channel rather than an override.
+ * `properties: {}` is a verified answer — it owns nothing there — which is not
+ * the same as the field being absent. A shorthand and its longhands overlap:
+ * owning `border` owns `border-color`, and `font` reaches `font-size`.
+ *
+ * Design notes: docs/design/checks.md#systemoverride
+ */
+export interface StylingSurface {
+	properties: Record<string, string | string[] | null>;
+	/** Package, version and date the surface was read from — never inferred. */
+	verifiedAgainst?: string;
+	note?: string;
 }
 
 // ── css-in-js ───────────────────────────────────────────────────────────────
@@ -361,6 +543,9 @@ export interface CssInJsTemplate {
 	target: string | null;
 	isSystem: boolean;
 	isText: boolean;
+	/** Registry key parts for a design-system target, as on a `Binding`. */
+	component?: string;
+	package?: string;
 	groups: TemplateGroup[];
 	error: string | null;
 }
@@ -378,6 +563,11 @@ export interface PatternNode {
 	name: string;
 	pkg: string | null;
 	children: PatternNode[];
+	/**
+	 * A registry node written `>Name`: it must be a direct child of the node
+	 * above it, not anywhere beneath. Only pattern nodes carry it.
+	 */
+	direct?: boolean;
 	line?: number;
 }
 
@@ -452,10 +642,24 @@ export interface Control {
 	patternId: string;
 }
 
+/**
+ * An element carrying classes, for a token scope to know what a rule lands on:
+ * every class it carries, and what it is — the design-system component or the
+ * mapped raw tag the rest of the index records. Null where the index records
+ * nothing for it (a project component, a tag the element map does not name),
+ * so a class it shares with a recorded element cannot be taken to style only
+ * that one.
+ */
+export interface ClassCarrier {
+	element: string | null;
+	classes: string[];
+}
+
 export interface ScanResult {
 	controls: Control[];
 	bindings: Binding[];
 	rawEls: RawElement[];
+	carriers: ClassCarrier[];
 	inlineStyles: InlineStyleElement[];
 	cssInJs: CssInJsTemplate[];
 	composites: Composite[];
@@ -493,6 +697,7 @@ export interface SuppressionConfig {
 export interface HookConfig {
 	maxAttempts: number;
 	maxFindings: number;
+	/** The deadline for the hook's whole judge phase, every stage and request in it. */
 	timeoutMs: number;
 }
 
@@ -501,12 +706,25 @@ export interface ElementMapping {
 	component: string;
 	/** Only suggest the analog when the element is actually being styled. */
 	styledOnly: boolean;
+	/** An attribute whose static value picks the analog: `input` by `type`. */
+	attribute?: string;
+	/** That attribute's value → its analog; `null` means the element has none. */
+	values?: Record<string, string | null>;
+	/**
+	 * The element the analog renders as, through its `render` prop: a heading
+	 * keeps its semantics as `<Text render={ <h4 /> }>`. Applies to `component`
+	 * only, never to an analog `values` picked.
+	 */
+	render?: string;
 }
 
 /** The same mapping as authored, where `styledOnly` may simply be absent. */
 export interface AuthoredElementMapping {
 	component: string;
 	styledOnly?: boolean;
+	attribute?: string;
+	values?: Record<string, string | null>;
+	render?: string;
 }
 
 /**
@@ -531,18 +749,41 @@ export interface MergedConfig {
 		styleSources: string[];
 		cssInJsPackages: string[];
 		normalizeExports: string;
+		/**
+		 * Recognition lists: every spelling of a layout or text component the
+		 * rules must match, superseded ones included, so a check reads code that
+		 * still writes the old name. **Canonical first** — guidance names the
+		 * first entry, so a legacy name there is a recommendation to write it.
+		 */
 		components: { layout: string[]; text: string[] };
 		elementMap: Record<string, string | AuthoredElementMapping>;
 		substitutionProps: string[];
+		/**
+		 * The inline-style declarations a component's own API sanctions, by
+		 * component and CSS property: WPDS `Text` has no color prop, so its docs
+		 * set color through `style`. Only a `style` made entirely of these is not
+		 * `system/inline-style`; its declarations still go through the ordinary
+		 * checks, so a raw colour there is still a hardcoded value.
+		 */
+		allowedInlineStyles: Record<string, string[]>;
 	};
 	namespaces: { project: string[]; external: string[]; neverDead: string[] };
 	sources: SourceGlobs;
 	suppression: SuppressionConfig;
-	rules: Record<string, Severity>;
+	rules: Record<string, AuthoredRuleSetting>;
 	patterns: string | unknown[] | null;
 	componentRegistry: string | unknown[] | null;
 	baseline: string;
 	hook: HookConfig;
+	/** How many entries analysis walks before it refuses. Absent for the default. */
+	maxEntries?: number;
+	/**
+	 * The project's own profile directories. Anchored to the file that wrote them
+	 * as `extends` is resolved, so by the time it is merged every entry is absolute.
+	 */
+	profiles?: string | string[];
+	/** Pin profile selection to one id, or to `none`. */
+	profile?: string;
 	extends?: string | string[];
 }
 
@@ -557,11 +798,14 @@ export interface AuthoredConfig {
 	namespaces?: Partial<MergedConfig['namespaces']>;
 	sources?: Partial<SourceGlobs>;
 	suppression?: Partial<SuppressionConfig>;
-	rules?: Record<string, Severity>;
+	rules?: Record<string, AuthoredRuleSetting>;
 	patterns?: string | unknown[] | null;
 	componentRegistry?: string | unknown[] | null;
 	baseline?: string;
 	hook?: Partial<HookConfig>;
+	maxEntries?: number;
+	profiles?: string | string[];
+	profile?: string;
 }
 
 /** The design system, resolved: names expanded, predicates precompiled. */
@@ -579,10 +823,39 @@ export interface DesignSystem {
 	elementMap: Map<string, ElementMapping>;
 	/** Props whose value names the element a component should render. */
 	substitutionProps: Set<string>;
+	/** Canonical component → the CSS properties its `style` may carry. */
+	allowedInlineStyles: Map<string, Set<string>>;
 }
 
 export interface RuleSetting {
 	severity: Severity;
+	/**
+	 * Why the config set it, when it says. Turning a rule off in config is a
+	 * suppression of the whole rule, everywhere, so it can carry a reason the way
+	 * a directive does, and `loupe suppressions` lists it beside them.
+	 */
+	reason?: string;
+}
+
+/**
+ * A rule setting as written: a bare severity, or the object form that can also
+ * say why. The `[severity, options]` array form is gone, and fails with a
+ * message naming the fix.
+ */
+export type AuthoredRuleSetting = Severity | { severity: Severity; reason?: string };
+
+/**
+ * A rule turned off in config, listed by `loupe suppressions` beside the inline
+ * directives. Shaped like a {@link Directive} where the two overlap, so a
+ * consumer reading `file`, `rules` and `reason` reads either; there is no line.
+ */
+export interface ConfigSuppression {
+	scope: 'config';
+	/** The config file that turned it off, relative to the root, or `preset <name>`. */
+	file: string;
+	rules: [RuleId];
+	/** Null when the setting gives none. */
+	reason: string | null;
 }
 
 /** One design system, as a directory: what it is, and what describes it. */
@@ -595,7 +868,99 @@ export interface Profile {
 	components: string | null;
 	/** `{ token: description }`, the design system's own words for what each token is for. */
 	tokenDescriptions: string | null;
+	/**
+	 * What each token is for, as the system's naming grammar says it — read and
+	 * validated from `profile.json`. Null where the profile declares none, or
+	 * declares it wrong: the engine then falls back to its generic table.
+	 */
+	tokenScopes: TokenScopes | null;
+	/** What was wrong with the profile's own declarations, for the CLI to say. Empty when nothing was. */
+	problems: string[];
+	/** How the system's packages and tokens reach a page — read, validated, or null. */
+	delivery: Delivery | null;
 	dir: string;
+	/**
+	 * Where it was read from. A project's own profile outranks a shipped one on
+	 * the same id or the same package, so selection has to know which is which.
+	 */
+	origin: ProfileOrigin;
+}
+
+/** `shipped` is anything handed over with `--profiles`; `project` is the project's own. */
+export type ProfileOrigin = 'project' | 'shipped';
+
+// ── delivery ────────────────────────────────────────────────────────────────
+
+/**
+ * How one package reaches the page.
+ *
+ * `external`: the host provides it at runtime (WordPress's `wp-components`
+ * script), so importing it costs the build nothing. `bundled`: the build tool
+ * compiles it into the project's own bundle, so the first import is a new
+ * runtime dependency and a bigger bundle.
+ */
+export interface PackageDelivery {
+	provided: 'external' | 'bundled';
+	/** The host's handle for an external package, where it has one. */
+	handle?: string | undefined;
+	note?: string | undefined;
+}
+
+/**
+ * One way a project can show the token stylesheet reaches its pages. The
+ * profile states them; `tokens/undelivered` runs them. None parses a language:
+ * each is a bounded, literal read of the files its `files` globs name.
+ *
+ *   enqueue-dependency   a call (`wp_enqueue_style(…)`) whose dependency
+ *                        argument is a literal list naming one of `handles`,
+ *                        or an `enqueues` call whose own handle is one of them.
+ *                        The only kind that can say "not delivered": calls
+ *                        found, every one read, none naming a handle.
+ *   import               an `@import`, `import` or `require` of one of
+ *                        `specifiers` — the sheet bundled into the project's own.
+ *   pattern              any match of `pattern` — a build plugin that writes
+ *                        fallbacks into every `var()`, say.
+ */
+export type DeliveryCheck =
+	| {
+			kind: 'enqueue-dependency';
+			files: string[];
+			calls: string[];
+			handles: string[];
+			/** Calls whose first argument naming a handle is itself the delivery. */
+			enqueues: string[];
+			/** 0-based position of the dependency list in the call. */
+			argument: number;
+			note?: string | undefined;
+	  }
+	| { kind: 'import'; files: string[]; specifiers: string[]; note?: string | undefined }
+	| { kind: 'pattern'; files: string[]; pattern: RegExp; note?: string | undefined };
+
+/** Where a design system's tokens come from, and what shows they arrived. */
+export interface TokenDelivery {
+	/** The stylesheet that defines them, as a reader would name it. */
+	stylesheet: string;
+	/** The host's handle for it, where there is one. */
+	handle?: string | undefined;
+	/** The token namespace this delivery covers. Empty: the design system's own. */
+	prefixes: string[];
+	note?: string | undefined;
+	/** Any one of these, holding, is delivery. */
+	evidence: DeliveryCheck[];
+	/**
+	 * Any one of these, holding, means the build writes fallback values into
+	 * each `var()`: the declarations render, but at the default theme's values,
+	 * not the site's. Not delivery — said on the finding instead.
+	 */
+	fallbacks: DeliveryCheck[];
+}
+
+/** A profile's delivery block, validated. */
+export interface Delivery {
+	/** What provides the externals: "WordPress". */
+	host: string;
+	packages: Map<string, PackageDelivery>;
+	tokens: TokenDelivery | null;
 }
 
 /** A registry that was read but did not apply to this project. */
@@ -648,7 +1013,17 @@ export interface Config {
 	suppression: SuppressionConfig;
 	baselinePath: string;
 	hook: HookConfig;
+	/**
+	 * The analysis walk's ceiling as the config sets it, validated. Absent when
+	 * the config leaves it to the default; `LOUPE_MAX_ENTRIES` outranks it.
+	 */
+	maxEntries?: number;
 	rules: Record<RuleId, RuleSetting>;
+	/**
+	 * Where each rule setting the config wrote came from: a path relative to the
+	 * root, or `preset <name>`. A rule left at its default is absent.
+	 */
+	ruleFrom: Partial<Record<RuleId, string>>;
 	enabled: Record<RuleId, boolean>;
 	severityOf: (id: RuleId) => Severity;
 	isProject: (cls: string) => boolean;
@@ -658,6 +1033,10 @@ export interface Config {
 	source: ConfigSource;
 	/** True when nobody wrote this config down — the CLI holds it to a lower bar. */
 	inferred: boolean;
+	/** The project's own profile directories (`profiles`), absolute. Read ahead of `--profiles`. */
+	profileDirs: string[];
+	/** `profile`: the id selection is pinned to, `none`, or null for selection by package. */
+	profilePin: string | null;
 	/** Attached by the CLI once profile registries have been merged in. */
 	profiles?: ProfileState;
 }
@@ -685,7 +1064,12 @@ export type Discovered = Record<SourceKind, DiscoveredFile[]> & { truncated: boo
 export interface BaselineFile {
 	version: number;
 	createdAt: string;
-	/** Entries, not findings — kept under this name because 0.1.x files use it. */
+	/**
+	 * Entries, not findings — kept under this name because 0.1.x files use it.
+	 * Nothing here reads it; it is written for engines that predate `findings`.
+	 * Remove it in 0.9.0, the minor after 0.8.0: the 0.1.x locations that were
+	 * its only other reason to stay were dropped in 0.8.0 (#42).
+	 */
 	count: number;
 	/**
 	 * Findings recorded, which is >= `count` whenever several shared a key.
@@ -702,9 +1086,17 @@ export interface Baseline extends Pick<BaselineFile, 'createdAt' | 'entries'> {
 
 /** An analysis with the accepted backlog subtracted. */
 export interface BaselinedResult extends AnalyzeResult {
+	/** Findings the baseline hid — `baselinedFindings.length`. */
 	baselined: number;
-	/** Only meaningful on a whole-repo run — scoped runs suppress it. */
-	fixed: number;
+	/** The findings the baseline hid, for the formats that list them as suppressed. */
+	baselinedFindings: Finding[];
+	/**
+	 * Baseline *entries* nothing matched — work done since it was recorded. In
+	 * entries, not findings, because entries are all a baseline stores. Null on a
+	 * scoped run, where an absent entry is mostly just out of scope, and when no
+	 * baseline was read.
+	 */
+	fixed: number | null;
 }
 
 // ── report payload ──────────────────────────────────────────────────────────
@@ -725,10 +1117,14 @@ export interface RuleDescriptor {
  * is now a contract with two consumers instead of one, and the second reads it
  * back at runtime. `version` is additive-only: fields may be added, so a
  * consumer must ignore what it does not know, and nothing already emitted
- * changes meaning without a bump.
+ * changes meaning or disappears without a bump.
+ *
+ * 2 — `config.rules[id]` is `{ severity }`: `options` went with the
+ * `[severity, {opts}]` rule form. A setting that says why it is set also
+ * carries `reason`, which is additive.
  */
 export interface ReportPayload {
-	version: 1;
+	version: 2;
 	tool: 'loupe';
 	blocking: boolean;
 	summary: {
@@ -758,6 +1154,15 @@ export interface ReportPayload {
 		 * not evidence that a baseline exists.
 		 */
 		baselined?: number;
+		/**
+		 * Baseline *entries* nothing matched any more — the backlog burned down
+		 * since it was recorded. Entries, not findings: several findings can
+		 * collapse into one entry, and an entry with no finding left has nothing
+		 * to count but itself. The same `-N fixed` `baseline --dry-run` prints.
+		 * Absent on a scoped run, where a missing entry is mostly out of scope,
+		 * and when no baseline file was read.
+		 */
+		fixed?: number;
 	};
 	rules: RuleDescriptor[];
 	findings: (Omit<Finding, 'rank'> & { fix: string })[];
@@ -775,16 +1180,25 @@ export interface ReportPayload {
  * nothing else, and asking for a whole finding would mean a caller with a
  * candidate in hand had to invent a severity and a rank to be allowed to ask.
  */
-export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest' | 'decl' | 'judged'>;
+export type FixCandidate = Pick<Finding, 'rule' | 'file' | 'line' | 'suggest' | 'decl' | 'judged' | 'rename'>;
 
-/** One substitution: this property, this value, rewritten `to` this. */
+/**
+ * One substitution: this property, this value, rewritten `to` this.
+ *
+ * A rename carries no `prop`, because it is not a `prop: value` substitution —
+ * `value` is the misspelled token name and `to` the name it becomes, replaced
+ * inside every `var()` on the line that names it.
+ */
 export interface TokenFix {
 	file: string;
 	line: number;
-	prop: string;
+	/** Absent on a token rename, which has no declaration around it. */
+	prop?: string | undefined;
 	value: string;
-	/** `var(--token)`, or one per part for a shorthand the judge settled. */
+	/** `var(--token)`, one per part for a shorthand the judge settled, or a token name for a rename. */
 	to: string;
+	/** Where to splice, for a declaration whose source text is not the CSS reported. */
+	span?: ValueSpan | undefined;
 }
 
 export interface SkippedFix extends TokenFix {

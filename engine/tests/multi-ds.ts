@@ -16,17 +16,20 @@
  * the wrong repo — which is the failure mode no build ever catches.
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
 import { loadConfig } from '../src/config.ts';
+import { loadComponents } from '../src/components.ts';
+import { supersededEverywhere } from '../src/checks/system/currency.ts';
 import { matches, toNode } from '../src/patterns.ts';
 import { registryApplies } from '../src/registry.ts';
 import { renderTitle } from '../src/rules.ts';
-import { readProfiles, selectProfiles, applyRegistries } from '../src/profiles.ts';
+import { readProfiles, selectProfiles, applyRegistries, profileRoots, readProfileRoots } from '../src/profiles.ts';
 import { detectPreset } from '../src/detect.ts';
-import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
+import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, DesignSystem, PatternNode } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -509,6 +512,51 @@ await check('a headless system composes without a layout or text layer', async (
 	}
 });
 
+// Every shipped preset reaches `generic`, so two of them side by side share an
+// ancestor. One `seen` set threaded through sibling entries called that a cycle,
+// and the config would not load — under the hook, the gate checked nothing
+// while telling the agent to fix a cycle that was not there.
+await check('extends can list two configs that share an ancestor', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: ['wpds', 'base-ui', './team.json'] }),
+		'team.json': JSON.stringify({ extends: 'generic', namespaces: { project: ['acme-'] } }),
+	});
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		assert(config.designSystem.name === 'Base UI', `the later entry wins: ${config.designSystem.name}`);
+		assert(config.isProject('acme-x'), 'the team config, which also extends generic, is merged');
+		assert(config.ruleFrom['system/override'] === 'preset base-ui', `ruleFrom: ${config.ruleFrom['system/override']}`);
+		// `generic` is merged once, where it is first met. Merged again under
+		// base-ui, its `references` would land over the WordPress ones wpds carries.
+		const wp = JSON.parse(readFileSync(join(PRESET_DIR, 'wordpress-components.json'), 'utf8')) as {
+			sources: { references: string[] };
+		};
+		assert(
+			JSON.stringify(config.sources.references) === JSON.stringify(wp.sources.references),
+			`a later branch's copy of generic undid wordpress-components: ${JSON.stringify(config.sources.references)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a real extends cycle is still refused, through sibling entries too', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: ['generic', './a.json'] }),
+		'a.json': JSON.stringify({ extends: ['./b.json'] }),
+		'b.json': JSON.stringify({ extends: ['generic', './a.json'] }),
+	});
+	try {
+		const err = await loadConfig({ root, configPath: join(root, 'loupe.config.json') }).then(
+			() => undefined,
+			(e: unknown) => (e instanceof Error ? e.message : String(e)),
+		);
+		assert(err?.startsWith('circular extends at ') && err.endsWith('a.json'), `expected a cycle at a.json, got ${err}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // ── a second shipped design system ──────────────────────────────────────────
 // The claim the profiles directory makes is that adding a design system is
 // adding a directory. Archer is the second one shipped, and it is the first
@@ -542,9 +590,24 @@ await check('the archer profile reaches a project that imports it, and only that
 // covered: it inherits Base UI's parts but not its licence to restyle them.
 // Turning the override rules off — which is what the headless preset does — was
 // the easy wrong answer, and it silently stops reporting real overrides.
+//
+// With a registry that records surfaces, the per-declaration form needs one to
+// say the component owns what the class sets; this fixture states one for the
+// component it restyles. The shipped Archer registry records none, which is the
+// case the checks after the VIP one cover.
 await check('a styled system on a headless library keeps its override rules', async () => {
 	const root = repo({
-		'loupe.config.json': JSON.stringify({ extends: 'archer' }),
+		'loupe.config.json': JSON.stringify({
+			extends: 'archer',
+			componentRegistry: [
+				{
+					name: 'Button',
+					package: '@dabowman/archer',
+					status: 'recommended',
+					surface: { properties: { background: 'variant' } },
+				},
+			],
+		}),
 		'src/A.jsx': `import { Button } from '@dabowman/archer';\nexport const A = () => <Button className="save">Save</Button>;\n`,
 		'styles/a.css': '.save { background: #c24300; }\n',
 	});
@@ -561,6 +624,150 @@ await check('a styled system on a headless library keeps its override rules', as
 	} finally {
 		cleanup(root);
 	}
+});
+
+await check("the vip profile reaches a VIP project, and NewDialog's style prop is its sizing API", async () => {
+	const root = repo({
+		'package.json': JSON.stringify({ dependencies: { '@automattic/vip-design-system': '^2.23.0' } }),
+		'src/A.jsx': `import { Box, NewDialog } from '@automattic/vip-design-system';
+export const A = () => (
+  <>
+    <NewDialog.Root title="t" description="d" style={{ maxWidth: 600, overflowY: 'visible' }} />
+    <Box style={{ background: '#c24300' }} />
+  </>
+);
+`,
+	});
+	try {
+		assert(detectPreset(root).preset === 'vip', `expected vip, got ${detectPreset(root).preset}`);
+		const on = selectProfiles(readProfiles(PROFILES), {
+			designSystem: { packages: ['@automattic/vip-design-system'] },
+		});
+		assert(on.length === 1 && on[0]?.id === 'vip', 'vip should select on its own package');
+		const config = await loadConfig({ root, preset: 'vip' });
+		const inline = (await analyze(config, { scope: null })).findings.filter((f) => f.rule === 'system/inline-style');
+		assert(
+			inline.length === 1 && inline[0]?.line === 5,
+			`only the Box's inline style should report: ${inline.map((f) => f.line)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// #13 narrowed the per-declaration form to what a registry `surface` says the
+// component owns, failing safe to advisory where none is recorded. That is
+// right for a registry read for surfaces, whose gaps are gaps; for one that
+// records none at all — VIP and Archer today, a run with no profile, a
+// project's own registry — it switched the rule off. There, a class restyling a
+// component blocks as it always did, with the remedy it always had.
+
+/** Analyze through profiles' shipped registries, the way `--profiles` merges them. */
+async function withProfiles(
+	files: Record<string, string>,
+	config: Record<string, unknown>,
+	ids: readonly string[],
+): Promise<AnalyzeResult> {
+	const root = repo({ 'loupe.config.json': JSON.stringify(config), ...files });
+	try {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const profiles = readProfiles(PROFILES).filter((p) => ids.includes(p.id));
+		assert(profiles.length === ids.length, `missing a profile: ${ids}`);
+		applyRegistries(
+			config,
+			profiles.map((p) => ({ label: `profile ${p.id}`, patterns: null, components: p.components, forced: true })),
+		);
+		return await analyze(config, { scope: null });
+	} finally {
+		cleanup(root);
+	}
+}
+
+const UNREAD = (tag: string, prop: string): string => `<${tag}> ← ${prop} — restyle via its props/tokens, not CSS`;
+
+for (const [id, pkg] of [
+	['archer', '@dabowman/archer'],
+	['vip', '@automattic/vip-design-system'],
+] as const)
+	await check(`the ${id} registry records no surfaces, so an override there reads as it did before them`, async () => {
+		const shipped = loadComponents(JSON.parse(readFileSync(join(PROFILES, id, 'components', 'index.json'), 'utf8')));
+		assert(
+			[...shipped.values()].every((e) => !e.surface && !e.surfaced),
+			`the ${id} registry now records surfaces; this check no longer covers the fallback`,
+		);
+		const r = await withProfiles(
+			{
+				'src/A.jsx': `import { Button } from '${pkg}';\nexport const A = () => <Button className="save">Save</Button>;\n`,
+				'styles/a.css': '.save { background: #c24300; border-radius: 4px; }\n',
+			},
+			{ extends: id },
+			[id],
+		);
+		const overrides = r.findings.filter((f) => f.rule === 'system/override');
+		const want = [UNREAD('Button', 'background'), UNREAD('Button', 'border-radius')];
+		assert(
+			overrides.map((f) => f.message).join('|') === want.join('|'),
+			`every appearance property should report, with the props/tokens remedy: ${overrides.map((f) => f.message)}`,
+		);
+		// The identity it had before surfaces existed, so a baseline still matches.
+		assert(
+			overrides.every((f) => f.code === f.message.split(' — ')[0]),
+			`code: ${overrides.map((f) => f.code)}`,
+		);
+		const preset = JSON.parse(readFileSync(join(PRESET_DIR, `${id}.json`), 'utf8')) as {
+			rules: Record<string, string>;
+		};
+		assert(
+			overrides.every((f) => f.severity === preset.rules['system/override']),
+			`at the preset's severity: ${overrides.map((f) => f.severity)}`,
+		);
+	});
+
+await check('with no registry at all, an override reads as it did before surfaces', async () => {
+	const root = repo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'src/A.jsx':
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;\n',
+		'styles/a.css': '.acme-t { color: #f00; }\n',
+	});
+	try {
+		const r = await analyze(await loadConfig({ root, configPath: join(root, 'loupe.config.json') }), { scope: null });
+		const f = one(
+			r.findings.filter((x) => x.rule === 'system/override'),
+			'a colour on a bound Text should block',
+		);
+		assert(f.message === UNREAD('Text', 'color') && f.severity === 'error', `${f.severity} ${f.message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Two profiles active, one read for surfaces and one not: each component is read
+// by the registry it came from, not by whether the run has surfaces somewhere.
+await check('with WPDS and VIP both active, each component is read by its own registry', async () => {
+	const r = await withProfiles(
+		{
+			'src/A.jsx': [
+				"import { Notice } from '@wordpress/components';",
+				"import { Text } from '@wordpress/ui';",
+				"import { Button } from '@automattic/vip-design-system';",
+				'export const A = () => <><Notice className="acme-n">x</Notice><Text className="acme-t">t</Text><Button className="acme-b">b</Button></>;',
+			].join('\n'),
+			'styles/a.css': '.acme-n { color: #333; }\n.acme-t { color: #333; }\n.acme-b { color: #333; }\n',
+		},
+		{
+			extends: 'wpds',
+			designSystem: { packages: ['@wordpress/components', '@wordpress/ui', '@automattic/vip-design-system'] },
+		},
+		['wpds', 'vip'],
+	);
+	const overrides = r.findings.filter((f) => f.rule === 'system/override').map((f) => f.message);
+	// Notice has no surface in a registry that records them: a gap, advisory.
+	// Text's surface does not list colour: `className` doing its job. VIP's
+	// Button comes from a registry that records none: blocking, as before.
+	assert(overrides.join('|') === UNREAD('Button', 'color'), `only the VIP component should report: ${overrides}`);
+	const plain = r.findings.filter((f) => f.rule === 'tokens/hardcoded-value').map((f) => f.line);
+	assert(plain.join() === '1,2', `the WPDS colours fall through to the plain verdict: ${plain}`);
 });
 
 // A title interpolates one token namespace. With seventeen prefixes there is no
@@ -580,12 +787,66 @@ await check('a rule title names a token namespace only when there is one', () =>
 		knownComponents: new Set(),
 		elementMap: new Map(),
 		substitutionProps: new Set(),
+		allowedInlineStyles: new Map(),
 	});
 	const several = renderTitle('tokens/hardcoded-value', ds(['--color-', '--space-']), 'k');
 	assert(!several.includes('--color-*'), `several prefixes must not be reported as the namespace: ${several}`);
 	assert(several.includes('design-system'), `the fallback should be generic: ${several}`);
 	const single = renderTitle('tokens/hardcoded-value', ds(['--wpds-']), 'k');
 	assert(single.includes('--wpds-*'), `a single prefix is the namespace and should be named: ${single}`);
+});
+
+// `components.layout`/`.text` are recognition lists: they carry every spelling
+// a rule has to match, superseded ones included. Guidance that named the first
+// *two* therefore named whatever sat in second place — `layout/in-css` read
+// "use <Stack>/<HStack>" under WPDS, sending every flex fix to a legacy
+// component that `system/superseded-component` then reports. Both halves are
+// checked: the code names one entry, and the shipped lists put the canonical
+// spelling there.
+await check('guidance names the canonical component, never a superseded spelling', () => {
+	const ds = (layout: string[], text: string[]): DesignSystem => ({
+		name: 'X',
+		packages: [],
+		tokenPrefixes: [],
+		tokenSources: [],
+		styleSources: [],
+		cssInJsPackages: [],
+		normalizeExports: null,
+		layoutComponents: layout,
+		textComponents: text,
+		knownComponents: new Set(),
+		elementMap: new Map(),
+		substitutionProps: new Set(),
+		allowedInlineStyles: new Map(),
+	});
+	const flex = renderTitle('layout/in-css', ds(['Stack', 'HStack', 'VStack'], []), 'k');
+	assert(flex.includes('<Stack>'), `the canonical primitive should be named: ${flex}`);
+	assert(!/HStack|VStack/.test(flex), `a superseded spelling must not be recommended: ${flex}`);
+	const type = renderTitle('typography/untokenized', ds([], ['Text', 'Heading']), 'k');
+	assert(type.includes('<Text>') && !type.includes('<Heading>'), `text guidance names the canonical: ${type}`);
+	// `(none)` is a real answer, and inventing a primitive is worse than saying so.
+	const bare = renderTitle('layout/in-css', ds([], []), 'k');
+	assert(bare.includes('a layout primitive'), `no primitive keeps the generic phrase: ${bare}`);
+
+	// The data half: whatever each shipped preset puts first is a name that
+	// system's own registry still recommends. Reordering a list silently turns
+	// every one of these titles into a recommendation to write the old name.
+	for (const id of ['wpds', 'archer', 'vip']) {
+		const preset = JSON.parse(readFileSync(join(PRESET_DIR, `${id}.json`), 'utf8')) as {
+			designSystem?: { components?: Record<string, string[]> };
+		};
+		const registry = loadComponents(
+			JSON.parse(readFileSync(join(HERE, '..', '..', 'profiles', id, 'components', 'index.json'), 'utf8')),
+		);
+		for (const axis of ['layout', 'text']) {
+			const canonical = preset.designSystem?.components?.[axis]?.[0];
+			if (!canonical) continue;
+			assert(
+				!supersededEverywhere(registry, canonical),
+				`${id} preset's ${axis} list is not canonical-first — guidance would recommend ${canonical}`,
+			);
+		}
+	}
 });
 
 // Anatomy entries are how a library's *required* structure stops reporting as
@@ -694,6 +955,238 @@ await check('a rule in the removed [severity, options] form fails with the fix',
 		assert(err instanceof Error && /no longer supported.*"warn"/.test(err.message), `got ${String(err)}`);
 	} finally {
 		cleanup(root);
+	}
+});
+
+// ── project profiles (#75) ──────────────────────────────────────────────────
+//
+// `@automattic/vip-design-system` v3 is a rebuild of the system the shipped
+// `vip` profile describes, under the same package name. Selection is by
+// package, so the project got the v2 profile — and the authoring skill then
+// loaded v2's `authoring.md` — with no way to supply its own except a
+// `--profiles` that no hook, command or skill passes, and that replaced the
+// shipped set when it was passed by hand.
+
+const VIP = '@automattic/vip-design-system';
+
+/** The reporter's repro: a VIP v3 project carrying its own profile under `at`. */
+function vipV3(config: Record<string, unknown>, at = 'loupe/profiles'): string {
+	return repo({
+		'package.json': JSON.stringify({ name: 'repro', dependencies: { [VIP]: '^3.0.0' } }),
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			designSystem: { name: 'VIP v3', packages: [VIP] },
+			...config,
+		}),
+		[`${at}/vip-v3/profile.json`]: JSON.stringify({ id: 'vip-v3', name: 'VIP Design System v3', packages: [VIP] }),
+		[`${at}/vip-v3/authoring.md`]: '# v3 authoring\n',
+	});
+}
+
+/**
+ * `loupe status`'s `profile:` line, run from the project the way the hooks run
+ * it: the shipped `--profiles` and nothing about the project's own.
+ */
+function profileLine(root: string, ...extra: string[]): { line: string; stderr: string } {
+	const home = scratch('loupe-pp-home-');
+	try {
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, NO_COLOR: '1' };
+		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_')) delete env[k];
+		const r = spawnSync(process.execPath, [CLI, 'status', '--profiles', PROFILES, ...extra], {
+			cwd: root,
+			encoding: 'utf8',
+			env,
+		});
+		if (r.error) throw r.error;
+		const line = (r.stdout ?? '').split('\n').find((l) => l.startsWith('profile:')) ?? '';
+		return { line, stderr: r.stderr ?? '' };
+	} finally {
+		cleanup(home);
+	}
+}
+
+await check('a project profile from the config wins over the shipped one on its package', () => {
+	const root = vipV3({ profiles: './loupe/profiles' });
+	try {
+		const { line } = profileLine(root);
+		assert(
+			line.includes(`vip-v3 (VIP Design System v3) — ${join(root, 'loupe', 'profiles', 'vip-v3')}`),
+			`status should name the project's profile and its directory, got: ${line}`,
+		);
+		assert(!/\bvip \(/.test(line), `the shipped vip profile must not be selected beside it: ${line}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('.loupe/profiles is read with no config key and no flag', () => {
+	const root = vipV3({}, '.loupe/profiles');
+	try {
+		const { line } = profileLine(root);
+		assert(line.includes(`vip-v3 (VIP Design System v3) — ${join(root, '.loupe', 'profiles', 'vip-v3')}`), line);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('project profiles are merged with the shipped set, not swapped for it', () => {
+	const root = vipV3({});
+	try {
+		const all = readProfileRoots(profileRoots({ root, configured: [join(root, 'loupe', 'profiles')], flag: PROFILES }));
+		const ids = all.map((p) => p.id);
+		for (const id of ['vip-v3', 'vip', 'wpds', 'archer'])
+			assert(ids.includes(id), `expected ${id} among the merged profiles, got ${ids.join(', ')}`);
+		assert(all.find((p) => p.id === 'vip-v3')?.origin === 'project', 'the project profile is marked as such');
+		assert(all.find((p) => p.id === 'wpds')?.origin === 'shipped', 'a shipped profile is marked as such');
+		// The shipped set still selects for the projects it describes…
+		const wp = selectProfiles(all, { designSystem: { packages: ['@wordpress/components'] } });
+		assert(wp.map((p) => p.id).join() === 'wpds', `wpds should still select, got ${wp.map((p) => p.id)}`);
+		// …and the shadowed one can still be named outright.
+		assert(selectProfiles(all, { designSystem: { packages: [VIP] } }, 'vip')[0]?.id === 'vip', 'vip by id');
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a project profile shadows a shipped one only over packages the project imports', () => {
+	const all = [
+		{ id: 'acme', packages: ['@acme/ui', '@wordpress/components'], origin: 'project' },
+		{ id: 'wpds', packages: ['@wordpress/components', '@wordpress/ui'], origin: 'shipped' },
+	] as unknown as Parameters<typeof selectProfiles>[0];
+	const ids = (pkgs: string[]): string =>
+		selectProfiles(all, { designSystem: { packages: pkgs } })
+			.map((p) => p.id)
+			.join();
+	const apart = ids(['@acme/ui', '@wordpress/ui']);
+	assert(apart === 'acme,wpds', `no package imported by both, both select: ${apart}`);
+	const shared = ids(['@acme/ui', '@wordpress/components']);
+	assert(shared === 'acme', `a package imported by both shadows the shipped one: ${shared}`);
+});
+
+await check('a profile with the reserved id "none" is not read', () => {
+	const root = repo({
+		'none/profile.json': JSON.stringify({ packages: ['@acme/ui'] }),
+		'acme/profile.json': JSON.stringify({ id: 'none', packages: ['@acme/ui'] }),
+	});
+	try {
+		const ids = readProfiles(root).map((p) => p.id);
+		assert(ids.length === 0, `got ${ids.join(', ')}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a project profile wins on a shared id', () => {
+	const root = repo({
+		'package.json': JSON.stringify({ name: 'repro', dependencies: { [VIP]: '^3.0.0' } }),
+		'loupe.config.json': JSON.stringify({ extends: 'generic', designSystem: { packages: [VIP] } }),
+		'.loupe/profiles/vip/profile.json': JSON.stringify({ id: 'vip', name: 'VIP, rebuilt', packages: [VIP] }),
+	});
+	try {
+		const { line } = profileLine(root);
+		assert(line.includes(`vip (VIP, rebuilt) — ${join(root, '.loupe', 'profiles', 'vip')}`), line);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a config profiles path is relative to the config file that wrote it', async () => {
+	const root = repo({
+		'shared/loupe.base.json': JSON.stringify({ extends: 'generic', profiles: './profiles' }),
+		'shared/profiles/acme/profile.json': JSON.stringify({ id: 'acme', packages: ['@acme/ui'] }),
+		'app/loupe.config.json': JSON.stringify({ extends: '../shared/loupe.base.json' }),
+	});
+	try {
+		const config = await loadConfig({ root: join(root, 'app') });
+		assert(
+			config.profileDirs.join() === join(root, 'shared', 'profiles'),
+			`expected the shared config's own directory, got ${config.profileDirs}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('"profile" pins selection, and --profile outranks it', () => {
+	const off = vipV3({ profile: 'none' });
+	try {
+		const { line } = profileLine(off);
+		assert(/^profile:\s+none selected — pinned to "none"/.test(line), `got: ${line}`);
+	} finally {
+		cleanup(off);
+	}
+	const pinned = vipV3({ profiles: './loupe/profiles', profile: 'wpds' });
+	try {
+		const { line } = profileLine(pinned);
+		assert(/^profile:\s+wpds \(/.test(line) && !line.includes('vip'), `the pin should select wpds alone: ${line}`);
+	} finally {
+		cleanup(pinned);
+	}
+	const typed = vipV3({ profiles: './loupe/profiles', profile: 'none' });
+	try {
+		const { line } = profileLine(typed, '--profile', 'vip-v3');
+		assert(/^profile:\s+vip-v3 \(/.test(line), `--profile should win over the config, got: ${line}`);
+	} finally {
+		cleanup(typed);
+	}
+});
+
+// The workaround the issue had to use — `"packages": []` — took every rule
+// that needs packages down with the wrong profile.
+await check('"profile": "none" keeps the rules that need packages on', async () => {
+	const root = vipV3({ profile: 'none' });
+	try {
+		const config = await loadConfig({ root });
+		assert(config.profilePin === 'none', `got ${config.profilePin}`);
+		assert(config.designSystem.packages.join() === VIP, 'the packages survive the pin');
+		assert(config.enabled['patterns/unregistered-composite'], 'unregistered-composite stays on');
+		const all = readProfileRoots(profileRoots({ root, flag: PROFILES }));
+		assert(selectProfiles(all, config, config.profilePin).length === 0, 'none selects nothing');
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a pin naming no profile says so', () => {
+	const root = vipV3({ profile: 'nope' });
+	try {
+		const { stderr } = profileLine(root);
+		assert(/no profile "nope" \(the config's "profile"\)/.test(stderr), `got: ${stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a project profile that fails to load says so, rather than leaving the shipped one silently', () => {
+	const root = vipV3({ profiles: './loupe/profiles' });
+	try {
+		writeFileSync(join(root, 'loupe', 'profiles', 'vip-v3', 'profile.json'), '{ "id": "vip-v3", ');
+		const { line, stderr } = profileLine(root);
+		assert(
+			stderr.includes(
+				`project profile skipped, could not load ${join(root, 'loupe', 'profiles', 'vip-v3', 'profile.json')}`,
+			),
+			`got: ${stderr}`,
+		);
+		// What it warns about: the shipped profile it was written to replace is back.
+		assert(/\bvip \(/.test(line), `the shipped vip profile selects in its place: ${line}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a malformed profiles or profile key is a config error, not "none"', async () => {
+	for (const bad of [{ profiles: 3 }, { profiles: [''] }, { profile: '' }, { profile: ['vip'] }]) {
+		const root = repo({ 'loupe.config.json': JSON.stringify(bad) });
+		try {
+			const err = await loadConfig({ root }).then(
+				() => null,
+				(e: unknown) => e,
+			);
+			assert(err instanceof Error && /^profiles? must be/.test(err.message), `${JSON.stringify(bad)}: ${String(err)}`);
+		} finally {
+			cleanup(root);
+		}
 	}
 });
 

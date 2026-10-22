@@ -105,6 +105,12 @@ Matching is **containment, not equality**:
   one case with nothing to report.
 - Each registered child claims a distinct node, so `["Stack", "Text", "Text"]`
   needs two `Text`s rather than matching one twice.
+- Prefix a child with `>` to pin it to its parent's **direct** children:
+  `["Stack", [">Stack", ">Text", ">Button"], ...]`. Do this whenever a shape is
+  built from layout primitives, `Text` and `Button` alone — matched at any depth,
+  such a shape fires on every screen whose outer `Stack` holds a label and a
+  button somewhere. Better still, include a component that is distinctive to the
+  pattern (a field for an inspector), so the shape says what it is.
 
 **A signature under four nodes is documentation, not a check.** The engine skips
 it. `Stack(Button,Button)` is a true description of an action bar and a useless

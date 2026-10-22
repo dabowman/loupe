@@ -8,26 +8,47 @@
  * reader, so it is the whole of this suite.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import postcss from 'postcss';
 import { analyze } from '../src/analyze.ts';
-import { applyKeeps, applyTokenFixes, settledBy } from '../src/autofix.ts';
-import { loadConfig } from '../src/config.ts';
-import { judgeValues } from '../src/judge.ts';
+import { applyKeeps, applyTokenFixes, settledBy, tokenFixes } from '../src/autofix.ts';
+import { loadComponents } from '../src/components.ts';
+import { loadConfig, setComponentRegistry } from '../src/config.ts';
+import { judgeRenames, judgeValues } from '../src/judge.ts';
 import { KEEP, emptyTokenSet, harvestTokenDefs, planValue } from '../src/tokens.ts';
 import { messageParts } from '../src/text.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write, writeAll } from './harness.ts';
-import type { Finding, FixCandidate, SkippedFix, TokenFix } from '../src/types.ts';
+import type { ComponentEntry, Finding, FixCandidate, ParseError, SkippedFix, TokenFix } from '../src/types.ts';
 
 const CONFIG = JSON.stringify({ extends: 'wpds', namespaces: { project: ['wf-'] } });
+
+/**
+ * Where the `wpds` preset's `tokenSources` reads the design system's tokens. A
+ * fixture's tokens go here, not into the project's own stylesheets: what a
+ * project defines under the same prefix is not the design system's.
+ */
+const DS_TOKENS = 'node_modules/@wordpress/theme/prebuilt/css/design-tokens.css';
+
+/** The shipped WPDS component registry, at the path the profile loader reads. */
+const COMPONENT_REGISTRY = join(
+	dirname(fileURLToPath(import.meta.url)),
+	'..',
+	'..',
+	'profiles',
+	'wpds',
+	'components',
+	'index.json',
+);
 
 const TOKENS = `:root {
 	--wpds-border-radius-md: 4px;
 	--wpds-color-foreground-content-neutral: #1e1e1e;
 	--wpds-color-foreground-content-strong: #1e1e1e;
 	--wpds-dimension-space-md: 8px;
+	--wpds-dimension-space-lg: 13px;
 	--wpds-typography-font-size-sm: 12px;
 	--wpds-typography-line-height-xs: 16px;
 }`;
@@ -37,17 +58,34 @@ interface Fixture {
 	skipped: SkippedFix[];
 	read: (rel: string) => string;
 	findings: Finding[];
+	/**
+	 * What the engine's own parsers make of the files `fix` just wrote. A
+	 * substitution in a JS channel is bytes spliced into a program, and a report
+	 * that goes clean because the file no longer parses is the worst outcome
+	 * this path has.
+	 */
+	parseErrors: ParseError[];
+	/**
+	 * What a second run finds. A fix that settles what it reported and leaves the
+	 * rest of the file broken reports clean for one line and re-reports the same
+	 * name on the next run, which is indistinguishable from a fix that worked
+	 * until somebody runs it twice.
+	 */
+	remaining: Finding[];
 }
 
 /** Analyze a throwaway repo, apply fixes, hand back what the files now say. */
-async function fixture(files: Record<string, string>): Promise<Fixture> {
+async function fixture(files: Record<string, string>, components?: Map<string, ComponentEntry>): Promise<Fixture> {
 	const root = scratch('dsh-fix-');
 	try {
-		const all = { 'loupe.config.json': CONFIG, 'styles/tokens.css': TOKENS, ...files };
+		const all = { 'loupe.config.json': CONFIG, [DS_TOKENS]: TOKENS, ...files };
 		writeAll(root, all);
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		// The registry rides on the profile, which only a `--profiles` run merges.
+		if (components) setComponentRegistry(config, components);
 		const result = await analyze(config, { scope: null });
 		const outcome = applyTokenFixes(root, result.findings);
+		const reread = await analyze(config, { scope: null });
 		// Read before the cleanup below: a closure over `root` would resolve
 		// against a directory this function has already removed.
 		const after = new Map(Object.keys(all).map((rel) => [rel, readFileSync(join(root, rel), 'utf8')]));
@@ -59,6 +97,8 @@ async function fixture(files: Record<string, string>): Promise<Fixture> {
 				return text;
 			},
 			findings: result.findings,
+			parseErrors: reread.diagnostics.parseErrors,
+			remaining: reread.findings,
 		};
 	} finally {
 		cleanup(root);
@@ -85,6 +125,20 @@ await check('an ambiguous value is left alone', async () => {
 	assert(read('styles/b.css').includes('#1e1e1e'), 'value should be untouched');
 });
 
+// vip-workflows: the padding scale stops at 32px and `gap-3xl` is 40px, so an
+// exact match taken among the tokens carrying the value wrote `padding:
+// var(--wpds-dimension-gap-3xl)` on every `padding: 40px`.
+await check("a value only a sibling family carries is not the property's token", async () => {
+	const { applied, read } = await fixture({
+		[DS_TOKENS]: ':root {\n\t--wpds-dimension-padding-sm: 8px;\n\t--wpds-dimension-gap-3xl: 40px;\n}',
+		'styles/g.css': '.wf-g {\n\tpadding: 40px;\n\tpadding-top: 8px;\n}',
+	});
+	const out = read('styles/g.css');
+	assert(out.includes('padding: 40px;'), `padding took a gap token:\n${out}`);
+	assert(out.includes('padding-top: var(--wpds-dimension-padding-sm);'), `padding lost its own token:\n${out}`);
+	assert(applied.length === 1, `expected 1 fix, got ${JSON.stringify(applied)}`);
+});
+
 await check('a property is not matched inside a longer property name', async () => {
 	const { applied, read } = await fixture({
 		'styles/c.css': '.wf-c {\n\t-webkit-border-radius: 4px;\n\tborder-radius: 4px;\n}',
@@ -105,11 +159,119 @@ await check('two fixes on one line both land', async () => {
 	);
 });
 
-await check('the JS channels are never rewritten as CSS', async () => {
-	const { applied } = await fixture({
-		'src/E.jsx': 'export const E = () => <div className="wf-e" style={{ borderRadius: \'4px\' }} />;',
+// `style={{ paddingBottom: 13 }}` is reported as `padding-bottom: 13px`, and
+// neither half of that is written in the file: the key is camelCase and React
+// is what gives the number its unit. So the fix is spliced at the span the scan
+// recorded — and the attribute next to it is what a CSS-shaped match would have
+// rewritten instead.
+await check('a JSX inline style is substituted at the bytes it was written at', async () => {
+	const { applied, read, parseErrors } = await fixture({
+		'src/E.jsx': [
+			'export const E = () => (',
+			'\t<div style={{ padding: 13, paddingBottom: \'13px\' }} title="padding: 13px">',
+			'\t\t<span style={{ borderRadius: `4px` }} />',
+			'\t</div>',
+			');',
+		].join('\n'),
 	});
-	assert(!applied.length, `inline style was rewritten: ${JSON.stringify(applied)}`);
+	assert(applied.length === 3, `expected 3 fixes, got ${JSON.stringify(applied)}`);
+	const out = read('src/E.jsx');
+	// A bare number is a length React suffixed, and a token is a string.
+	assert(out.includes("padding: 'var(--wpds-dimension-space-lg)',"), `bare number not substituted:\n${out}`);
+	// Two on one line: the first splice must not move the second.
+	assert(out.includes("paddingBottom: 'var(--wpds-dimension-space-lg)' }}"), `quoted value lost:\n${out}`);
+	// The quote the value was already written in is the quote it keeps.
+	assert(out.includes('borderRadius: `var(--wpds-border-radius-md)`'), `template quote not kept:\n${out}`);
+	assert(out.includes('title="padding: 13px"'), `a lookalike elsewhere on the line was rewritten:\n${out}`);
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+// A template's text is literal CSS, so it is matched as CSS. A declaration whose
+// value comes from an interpolation never reaches `fix` at all — the parse drops
+// it, because a value nothing can see is not a value anything can replace.
+await check('a CSS-in-JS declaration is substituted and an interpolated one is left alone', async () => {
+	const { applied, read, parseErrors } = await fixture({
+		'src/F.jsx': [
+			"import styled from 'styled-components';",
+			'const pad = 8;',
+			'export const Card = styled.div`',
+			'\tpadding: ${pad}px;',
+			'\tborder-radius: 4px;',
+			'`;',
+			'export const Pill = styled.span`padding: 8px`;',
+		].join('\n'),
+	});
+	assert(applied.map((f) => f.line).join() === '5,7', `fixes: ${JSON.stringify(applied)}`);
+	const out = read('src/F.jsx');
+	assert(out.includes('\tborder-radius: var(--wpds-border-radius-md);'), `not substituted:\n${out}`);
+	// A template on one line: its backtick bounds the declaration the way a brace does.
+	assert(out.includes('styled.span`padding: var(--wpds-dimension-space-md)`'), `one-line template:\n${out}`);
+	assert(out.includes('padding: ${pad}px;'), `an interpolated value was touched:\n${out}`);
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+await check('an ambiguous inline value is left alone', async () => {
+	const { applied, read } = await fixture({
+		'src/G.jsx': "export const G = () => <div style={{ color: '#1e1e1e' }} />;",
+	});
+	assert(!applied.length, `an ambiguous value was rewritten: ${JSON.stringify(applied)}`);
+	assert(read('src/G.jsx').includes("'#1e1e1e'"), 'value should be untouched');
+});
+
+// `css/dead-class` is the one finding with a quick fix that never runs here.
+// Every other fix on this page is a substitution: the old value is still in the
+// diff and the next run checks what replaced it. A deletion leaves nothing to
+// compare against, and the check over-collects references on purpose, so a
+// false "dead" is the failure it is priced to avoid — a price that only holds
+// for a reader who sees the rule. See docs/design/report.md#deleting-is-the-editors-alone.
+await check('`loupe fix` deletes nothing for a dead class', async () => {
+	const before = '/* gone with it, in the editor */\n.wf-dead {\n\tcolor: red;\n}\n';
+	const { applied, read, findings, remaining } = await fixture({ 'styles/dead.css': before });
+	const dead = findings.filter((f) => f.rule === 'css/dead-class');
+	assert(dead.length === 1, `the fixture reported ${dead.length} dead classes, expected 1`);
+	// The extent the editor deletes by is on the finding — this is the case the
+	// editor *does* offer, so the file below is untouched by choice, not by luck.
+	assert(dead[0]?.dead, 'the finding carried no extent, so this asserts nothing');
+	assert(!tokenFixes(dead).length, 'a dead class resolved into the shared fix list');
+	assert(!applied.length, `fix rewrote something: ${JSON.stringify(applied)}`);
+	assert(read('styles/dead.css') === before, `the stylesheet was edited:\n${read('styles/dead.css')}`);
+	assert(
+		remaining.some((f) => f.rule === 'css/dead-class'),
+		'the finding did not survive the fix pass',
+	);
+});
+
+// The quick fix and a second `fix` run both read a file that may have moved
+// since the scan. A column is not self-checking the way a match is, so what
+// stands at it is checked against what was reported there.
+await check('a span that has moved skips rather than rewriting the wrong bytes', () => {
+	const root = scratch('dsh-fix-');
+	try {
+		const scanned = 'export const H = () => <div style={{ padding: 13 }} />;';
+		// The same line, re-indented since: every column past the indent moved.
+		write(root, 'src/H.jsx', `\t${scanned}`);
+		const findings: FixCandidate[] = [
+			{
+				rule: 'tokens/hardcoded-value',
+				file: 'src/H.jsx',
+				line: 1,
+				suggest: [
+					{
+						prop: 'padding',
+						value: '13px',
+						tokens: ['--wpds-dimension-space-lg'],
+						span: { col: scanned.indexOf('13'), text: '13' },
+					},
+				],
+			},
+		];
+		const { applied, skipped } = applyTokenFixes(root, findings);
+		assert(!applied.length && skipped.length === 1, `expected one skip: ${JSON.stringify({ applied, skipped })}`);
+		assert(skipped[0]?.why.includes('no longer where'), `wrong reason: ${skipped[0]?.why}`);
+		assert(readFileSync(join(root, 'src/H.jsx'), 'utf8') === `\t${scanned}`, 'file must be untouched');
+	} finally {
+		cleanup(root);
+	}
 });
 
 await check('a stale line number skips rather than guesses', async () => {
@@ -162,7 +324,7 @@ await check('a skipped multi-line declaration is reported on one line', async ()
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
-			'styles/tokens.css': ':root { --wpds-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08); }',
+			[DS_TOKENS]: ':root { --wpds-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08); }',
 			'styles/s.css': '.wf-s {\n\tbox-shadow: 0 1px 2px rgba(0, 0, 0, 0.12),\n\t\t0 4px 12px rgba(0, 0, 0, 0.08);\n}',
 			'src/S.jsx': 'export const S = () => <div className="wf-s" />;',
 		});
@@ -209,6 +371,202 @@ await check('a collapsed finding is cleared only once every declaration is settl
 	assert(applied.length === 2, `expected 2 fixes, got ${applied.length}`);
 	assert(settledBy(findings, applied) === 1, 'both declarations settled, so the finding is cleared');
 	assert(!/\b(12px|16px)\b/.test(read('styles/u.css')), `a literal survived:\n${read('styles/u.css')}`);
+});
+
+// ── tokens/unknown-token ────────────────────────────────────────────────────
+// A name nothing defines is usually a misspelling, and the known set is right
+// there. Every case below is one where the rename would be invisible if it were
+// wrong: the file parses, the report goes clean, and the element is now painted
+// from a token that means something else.
+
+/** `xs` and `xl` differ in one character, so `xm` is a near miss for both. */
+const NEAR = `:root {
+	--wpds-color-foreground: #1e1e1e;
+	--wpds-dimension-space-xs: 4px;
+	--wpds-dimension-space-xl: 24px;
+	--wpds-dimension-space-md: 8px;
+}`;
+
+const uses = (rel: string): string => `export const X = () => <div className="${rel}" />;`;
+
+await check('a misspelled token is renamed everywhere the file names it', async () => {
+	const { applied, read, findings, remaining, parseErrors } = await fixture({
+		[DS_TOKENS]: NEAR,
+		'styles/v.css': [
+			'.wf-v {',
+			'\tcolor: var(--wpds-colr-foreground);',
+			'\tborder-color: var(--wpds-colr-foreground);',
+			'\tbackground: linear-gradient(var(--wpds-colr-foreground), var(--wpds-colr-foreground));',
+			'}',
+		].join('\n'),
+		'src/V.jsx': uses('wf-v'),
+	});
+	// One finding, because the rule reports once per file and name — and four
+	// references on three lines, because that is what has to change for it to
+	// stop being true.
+	const unknown = findings.filter((f) => f.rule === 'tokens/unknown-token');
+	assert(unknown.length === 1, `expected one finding, got ${unknown.length}`);
+	assert(applied.length === 3, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('styles/v.css');
+	assert(!out.includes('--wpds-colr-'), `an occurrence survived:\n${out}`);
+	assert(out.split('--wpds-color-foreground').length === 5, `not every occurrence was renamed:\n${out}`);
+	assert(settledBy(findings, applied) === 1, 'every line renamed, so the finding is cleared');
+	assert(!remaining.some((f) => f.rule === 'tokens/unknown-token'), 'the next run must not report it again');
+	assert(!parseErrors.length, `the stylesheet no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+await check('a name two known tokens are equally near is left alone', async () => {
+	const { applied, read, findings } = await fixture({
+		[DS_TOKENS]: NEAR,
+		'styles/x.css': '.wf-x { padding: var(--wpds-dimension-space-xm); }',
+		'src/X.jsx': uses('wf-x'),
+	});
+	assert(!applied.length, `a coin toss was applied: ${JSON.stringify(applied)}`);
+	assert(read('styles/x.css').includes('--wpds-dimension-space-xm'), 'the name must be untouched');
+	assert(settledBy(findings, applied) === 0, 'an unrenamed finding is not cleared');
+});
+
+await check('a name near nothing is left alone', async () => {
+	const { applied, read } = await fixture({
+		[DS_TOKENS]: NEAR,
+		'styles/y.css': '.wf-y { color: var(--wpds-color-brand); }',
+		'src/Y.jsx': uses('wf-y'),
+	});
+	assert(!applied.length, `an invented name was renamed: ${JSON.stringify(applied)}`);
+	assert(read('styles/y.css').includes('--wpds-color-brand'), 'the name must be untouched');
+});
+
+// The whole defence of a one-keystroke threshold: a scale step is one keystroke
+// from its neighbour and means a different amount. `20px` where `30px` was
+// asked for is the failure this path exists to prevent — right pixels, wrong
+// meaning, clean report.
+await check('a step on a scale is not a spelling, however near it sits', async () => {
+	const { applied, read } = await fixture({
+		[DS_TOKENS]: ':root {\n\t--wpds-dimension-space-20: 20px;\n}',
+		'styles/z.css': '.wf-z { padding: var(--wpds-dimension-space-30); }',
+		'src/Z.jsx': uses('wf-z'),
+	});
+	assert(!applied.length, `a scale step was renamed: ${JSON.stringify(applied)}`);
+	assert(read('styles/z.css').includes('--wpds-dimension-space-30'), 'the name must be untouched');
+});
+
+// `--wpds-dimension-space-m` is a deletion away from `-md`, and `-md` is written
+// on the same line. A rename bounded only on the left would make it `-mdd`.
+await check('a rename stops at the name it was given, and never at a definition', async () => {
+	const { applied, read, parseErrors } = await fixture({
+		[DS_TOKENS]: NEAR,
+		'styles/aa.css': [
+			'.wf-aa {',
+			'\t--wf-local: var(--wpds-dimension-space-m);',
+			'\tpadding: var(--wpds-dimension-space-m) var(--wpds-dimension-space-md);',
+			'}',
+		].join('\n'),
+		'src/AA.jsx': uses('wf-aa'),
+	});
+	assert(applied.length === 2, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('styles/aa.css');
+	assert(!out.includes('-mdd'), `the rename ran past its name:\n${out}`);
+	assert(out.includes('--wf-local: var(--wpds-dimension-space-md);'), `not renamed in a custom property:\n${out}`);
+	assert(
+		out.includes('padding: var(--wpds-dimension-space-md) var(--wpds-dimension-space-md);'),
+		`both references on one line should be renamed:\n${out}`,
+	);
+	assert(!parseErrors.length, `the stylesheet no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+// The other channel `var()` references are collected from. A template's text is
+// literal CSS, so the same match finds it there.
+await check('a misspelled token in a CSS-in-JS template is renamed too', async () => {
+	const { applied, read, findings, remaining, parseErrors } = await fixture({
+		[DS_TOKENS]: NEAR,
+		'src/AB.jsx': [
+			"import styled from 'styled-components';",
+			'export const Card = styled.div`',
+			'\tcolor: var(--wpds-colr-foreground);',
+			'\tborder-color: var(--wpds-colr-foreground);',
+			'`;',
+		].join('\n'),
+	});
+	assert(applied.length === 2, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('src/AB.jsx');
+	assert(!out.includes('--wpds-colr-'), `an occurrence survived:\n${out}`);
+	assert(settledBy(findings, applied) === 1, 'every line renamed, so the finding is cleared');
+	assert(!remaining.some((f) => f.rule === 'tokens/unknown-token'), 'the next run must not report it again');
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
+// What a spelling cannot settle, put to a stub: what is asked, and that a judged
+// rename is written exactly as a spelled one, on every line naming it.
+await check('fix --judge renames what the judgement settled, and nothing under the floor', async () => {
+	const root = scratch('dsh-judge-rename-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			[DS_TOKENS]: NEAR,
+			'styles/x.css': [
+				'.wf-x {',
+				'\tpadding: var(--wpds-dimension-space-xm);',
+				'\tgap: var(--wpds-dimension-space-xm);',
+				'\tcolor: var(--wpds-color-text);',
+				'}',
+				'.wf-y { padding: var(--wpds-space-huge); }',
+			].join('\n'),
+			'src/X.jsx': `${uses('wf-x')}\n${uses('wf-y')}`,
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const result = await analyze(config, { scope: null });
+		assert(result.tokens, 'analyze did not hand back its token set');
+		const asked = new Map<string, Record<string, string>>();
+		const answer: Record<string, { choice: string; confidence: number }> = {
+			'--wpds-dimension-space-xm': { choice: '--wpds-dimension-space-xl', confidence: 0.95 },
+			'--wpds-color-text': { choice: 'none', confidence: 0.93 },
+			'--wpds-space-huge': { choice: '--wpds-dimension-space-xl', confidence: 0.7 },
+		};
+		const stub = (async (_url: string, init: { body: string }) => {
+			const questions = JSON.parse(init.body).questions as Record<
+				string,
+				{ instructions: string; criteria: Record<string, string> }
+			>;
+			const answers = Object.fromEntries(
+				Object.entries(questions).map(([k, q]) => {
+					const name = /var\((--[\w-]+)\)/.exec(q.instructions)?.[1] ?? '';
+					asked.set(name, q.criteria);
+					return [k, answer[name]];
+				}),
+			);
+			return new Response(JSON.stringify({ answers }));
+		}) as unknown as typeof fetch;
+		const settled = await judgeRenames(root, result.findings, result.tokens, 'key', new Map(), stub);
+
+		assert(asked.size === 3, `asked about ${[...asked.keys()].join(', ')}`);
+		const xm = Object.keys(asked.get('--wpds-dimension-space-xm') ?? {});
+		assert(
+			xm.join() === '--wpds-dimension-space-xs,--wpds-dimension-space-xl,--wpds-dimension-space-md,none',
+			`xm was offered ${xm.join(', ')}`,
+		);
+		assert(settled === 2, `settled ${settled}, expected 2 (the rename and the none)`);
+		const of = (name: string): Finding => {
+			const f = result.findings.find((x) => x.rule === 'tokens/unknown-token' && x.code === name);
+			assert(f, `no finding for ${name}`);
+			return f;
+		};
+		assert(
+			of('--wpds-dimension-space-xm').message === '--wpds-dimension-space-xm → --wpds-dimension-space-xl (judged 0.95)',
+			of('--wpds-dimension-space-xm').message,
+		);
+		assert(of('--wpds-color-text').message === '--wpds-color-text → no token means this (judged 0.93)', 'none');
+		assert(!of('--wpds-color-text').rename, 'a none was renamed');
+		assert(!of('--wpds-space-huge').rename && !of('--wpds-space-huge').judged, 'a sub-floor pick was recorded');
+
+		const { applied } = applyTokenFixes(root, result.findings);
+		assert(applied.map((f) => f.line).join() === '2,3', `applied: ${JSON.stringify(applied)}`);
+		assert(settledBy(result.findings, applied) === 1, 'the renamed finding is cleared, and only it');
+		const out = readFileSync(join(root, 'styles/x.css'), 'utf8');
+		assert(out.split('var(--wpds-dimension-space-xl)').length === 3, out);
+		assert(out.includes('var(--wpds-color-text)') && out.includes('var(--wpds-space-huge)'), out);
+	} finally {
+		cleanup(root);
+	}
 });
 
 // ── fix --judge ─────────────────────────────────────────────────────────────
@@ -318,128 +676,267 @@ await check('--judge refuses an empty token set rather than calling every value 
 	assert(!called && findings[0]?.judged === undefined && findings[0]?.message === 'padding: 10px', 'judged anyway');
 });
 
+// The same failure behind one token of the project's own: the walk adds what a
+// project stylesheet defines under the prefix to the set it judges against, so
+// the set was not empty and every value with no token was suppressed as tokenless.
+await check("--judge refuses a token set only the project's own definitions filled", async () => {
+	const root = scratch('dsh-judge-project-tokens-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': JSON.stringify({
+				extends: 'wpds',
+				namespaces: { project: ['wf-'] },
+				designSystem: { tokenSources: ['vendor/empty'] },
+			}),
+			'vendor/empty/.keep': '',
+			'styles/a.css': ':root {\n\t--wpds-brand-color: #123456;\n}\n.wf-a {\n\tpadding: 13px;\n}',
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const result = await analyze(config, { scope: null });
+		assert(result.diagnostics.tokensKnown === 0, `the design system read ${result.diagnostics.tokensKnown} tokens`);
+		assert(result.tokens === undefined, `handed back ${result.tokens?.known.size} of the project's own tokens`);
+		const stub = (async () => {
+			throw new Error('asked a model with no design-system tokens');
+		}) as unknown as typeof fetch;
+		let threw = '';
+		try {
+			await judgeValues(root, result.findings, result.tokens, 'key', new Map(), stub);
+		} catch (err) {
+			threw = err instanceof Error ? err.message : String(err);
+		}
+		assert(/no design tokens were read/.test(threw), `did not refuse: ${threw || 'no throw'}`);
+		const padding = result.findings.find((f) => f.decl?.prop === 'padding');
+		assert(padding && !padding.suggest?.some((s) => s.judged), 'padding was judged tokenless');
+	} finally {
+		cleanup(root);
+	}
+});
+
 // Offline: the stub answers by what each question offers, so the check is on
 // what gets asked, what gets written, and what `fix --judge` does with it.
-await check('fix --judge rewrites what it settled, suppresses what it kept, and leaves the rest', async () => {
-	const root = scratch('dsh-judge-fix-');
+await check(
+	'fix --judge rewrites what it settled, suppresses what has no token at all, and leaves the rest',
+	async () => {
+		const root = scratch('dsh-judge-fix-');
+		try {
+			writeAll(root, {
+				'loupe.config.json': CONFIG,
+				[DS_TOKENS]: JUDGE_TOKENS,
+				'styles/card.css': [
+					'.wf-card {',
+					'\tpadding: 10px 12px;',
+					'\tbackground: #f0c;',
+					'\tbox-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);',
+					'\tborder-radius: 3px;',
+					'}',
+					'.wf-row { background: #f0c; border-radius: 3px; }',
+				].join('\n'),
+				'src/A.jsx': "export const A = () => <div style={{ background: '#f0c' }} />;",
+			});
+			const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+			const result = await analyze(config, { scope: null });
+			assert(result.tokens, 'analyze did not hand back its token set');
+			const asked: { instructions: string; criteria: Record<string, string> }[] = [];
+			const stub = (async (_url: string, init: { body: string }) => {
+				const questions = JSON.parse(init.body).questions as Record<
+					string,
+					{ instructions: string; criteria: Record<string, string> }
+				>;
+				const answers = Object.fromEntries(
+					Object.entries(questions).map(([k, q]) => {
+						asked.push(q);
+						const offers = Object.keys(q.criteria);
+						// Under the floor, and applied anyway: in-scale spacing only snaps.
+						const pick = offers.includes('--wpds-dimension-padding-sm')
+							? { choice: '--wpds-dimension-padding-sm', confidence: 0.3 }
+							: offers.includes('--wpds-border-radius-md')
+								? { choice: '--wpds-border-radius-md', confidence: 0.3 }
+								: { choice: 'keep', confidence: 0.7 };
+						return [k, pick];
+					}),
+				);
+				return new Response(JSON.stringify({ answers }));
+			}) as unknown as typeof fetch;
+			const about = new Map([['--wpds-color-background-surface-neutral', 'Surfaces with normal emphasis.']]);
+			const written = await judgeValues(root, result.findings, result.tokens, 'key', about, stub);
+
+			// 10px, the card's pink, both radii, the row's pink and the inline pink:
+			// 12px was exact and box-shadow has no family, so neither is a question.
+			assert(asked.length === 6, `asked ${asked.length} questions, expected 6`);
+			// 10px of padding sits inside the scale, so it can only snap.
+			const offersKeep = (q: { criteria: Record<string, string> }): boolean => 'keep' in q.criteria;
+			const tenAsk = asked.find((q) => '--wpds-dimension-padding-sm' in q.criteria);
+			assert(tenAsk && !offersKeep(tenAsk), 'in-scale padding was offered keep');
+			assert(
+				asked.filter((q) => q !== tenAsk).every(offersKeep),
+				'a question off the spacing scale offered no way to keep the value',
+			);
+			const pinkAsk = asked.find((q) => '--wpds-color-background-surface-neutral' in q.criteria);
+			assert(
+				pinkAsk?.criteria['--wpds-color-background-surface-neutral']?.includes('Surfaces with normal emphasis.'),
+				'the description was not sent',
+			);
+			assert(written === 5, `wrote ${written}, expected 5 (padding, three pinks, box-shadow)`);
+
+			const at = (file: string, line: number, prop: string) => {
+				const f = result.findings.find((x) => x.file === file && x.line === line && x.decl?.prop === prop);
+				assert(f, `no finding for ${prop} at ${file}:${line}`);
+				return f;
+			};
+			const padding = at('styles/card.css', 2, 'padding');
+			assert(
+				padding.message ===
+					'padding: 10px 12px → --wpds-dimension-padding-sm --wpds-dimension-padding-md (judged 0.30)',
+				padding.message,
+			);
+			// The message names the tokens; the answer stays the CSS `fix` writes.
+			assert(
+				padding.judged?.answer === 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md)',
+				`judged answer is not the replacement value: ${padding.judged?.answer}`,
+			);
+			assert(
+				padding.judged?.spans.every((s) => padding.message.includes(s)),
+				'a span is not in the message',
+			);
+			assert(
+				at('styles/card.css', 3, 'background').message === 'background: #f0c → deliberate, no token fits (judged 0.70)',
+				'pink not kept',
+			);
+			assert(
+				at('styles/card.css', 4, 'box-shadow').message.endsWith('→ no box-shadow token in the design system'),
+				'box-shadow',
+			);
+			assert(at('styles/card.css', 5, 'border-radius').judged === undefined, 'a sub-floor pick was recorded');
+			// The channel marker stays last.
+			const inline = at('src/A.jsx', 1, 'background');
+			assert(inline.message === 'background: #f0c → deliberate, no token fits (judged 0.70) (inline)', inline.message);
+
+			const fixes = applyTokenFixes(root, result.findings);
+			assert(fixes.applied.length === 1 && fixes.applied[0]?.line === 2, `fixes: ${JSON.stringify(fixes.applied)}`);
+			const kept = applyKeeps(root, result.findings, config.suppression.keyword);
+			// Only box-shadow, which has no token at all. The pinks were judged
+			// deliberate, and what they are is a reason only a reader can write.
+			assert(kept.applied.map((k) => k.line).join() === '4', `kept: ${JSON.stringify(kept.applied)}`);
+			const why = Object.fromEntries(kept.skipped.map((k) => [`${k.file}:${k.line}`, k.why]));
+			for (const at of ['styles/card.css:3', 'styles/card.css:7', 'src/A.jsx:1'])
+				assert(why[at]?.startsWith('judged deliberate'), `${at}: ${JSON.stringify(why)}`);
+
+			const css = readFileSync(join(root, 'styles/card.css'), 'utf8');
+			assert(css.includes('\tpadding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);'), css);
+			assert(
+				css.includes(
+					`\t/* ${config.suppression.keyword} tokens/hardcoded-value -- no box-shadow token in the design system */\n\tbox-shadow:`,
+				),
+				css,
+			);
+			assert(!css.includes('deliberate, no token fits'), `a judgement was written as a reason:\n${css}`);
+			// The directives parse and mute exactly what they were written for.
+			const after = await analyze(config, { scope: ['styles/card.css'] });
+			const left = after.findings.map((f) => `${f.rule}:${f.line}`);
+			assert(!left.includes('suppression/malformed'), `a directive was malformed: ${left.join(', ')}`);
+			const hard = after.findings
+				.filter((f) => f.rule === 'tokens/hardcoded-value')
+				.map((f) => f.decl?.prop)
+				.sort();
+			assert(hard.join() === 'background,background,border-radius,border-radius', `left: ${hard.join()}`);
+		} finally {
+			cleanup(root);
+		}
+	},
+);
+
+// A run with one value to judge and everything else exact wrote nothing at all
+// when the one request failed. `fetch` is replaced before the CLI loads, so the
+// outage is the command's own call, not a stub handed to it.
+await check('fix --judge still writes what needed no model when the judge cannot be reached', () => {
+	const root = scratch('dsh-judge-down-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
-			'styles/tokens.css': JUDGE_TOKENS,
-			'styles/card.css': [
-				'.wf-card {',
-				'\tpadding: 10px 12px;',
-				'\tbackground: #f0c;',
-				'\tbox-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);',
-				'\tborder-radius: 3px;',
-				'}',
-				'.wf-row { background: #f0c; border-radius: 3px; }',
-			].join('\n'),
-			'src/A.jsx': "export const A = () => <div style={{ background: '#f0c' }} />;",
+			[DS_TOKENS]: JUDGE_TOKENS,
+			// 4px is exactly one radius; 6px sits between two padding steps and is a question.
+			'styles/a.css': '.wf-a {\n\tborder-radius: 4px;\n\tpadding: 6px;\n}',
+		});
+		const outage = `data:text/javascript,${encodeURIComponent(
+			"globalThis.fetch = async () => { throw new TypeError('fetch failed (simulated outage)'); };",
+		)}`;
+		const r = spawnSync(process.execPath, ['--import', outage, CLI, 'fix', '--judge', '--root', root], {
+			encoding: 'utf8',
+			env: { ...process.env, TYPESAFE_API_KEY: 'key' },
+		});
+		assert(r.status === 0, `exited ${r.status}: ${r.stderr}`);
+		assert(r.stderr.includes('simulated outage'), `the failure was not noted: ${r.stderr}`);
+		const css = readFileSync(join(root, 'styles/a.css'), 'utf8');
+		assert(css.includes('border-radius: var(--wpds-border-radius-md);'), `the exact token was not written:\n${css}`);
+		assert(css.includes('padding: 6px;'), `an unjudged value was rewritten:\n${css}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `analyze` bounds every line before it returns, and `--judge` recomposes a
+// message after that. A css-in-js selector rides in the tail, so a long one
+// came back whole and past the cap once the judgement was written in.
+await check('a judged css-in-js finding with a long selector is still one bounded line', async () => {
+	const root = scratch('dsh-judge-bound-');
+	try {
+		const selector = `.Styled-${'x'.repeat(200)}-tail`;
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			// No padding token at all, so the answer is written without a model.
+			[DS_TOKENS]: ':root { --wpds-border-radius-md: 4px; }',
+			'src/A.jsx': `import styled from 'styled-components';\nexport const A = styled.div\`\n\t${selector} {\n\t\tpadding: 999px;\n\t}\n\`;\n`,
 		});
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		const result = await analyze(config, { scope: null });
 		assert(result.tokens, 'analyze did not hand back its token set');
-		const asked: { instructions: string; criteria: Record<string, string> }[] = [];
+		const stub = (async () => {
+			throw new Error('asked a model about a property with no tokens');
+		}) as unknown as typeof fetch;
+		assert((await judgeValues(root, result.findings, result.tokens, 'key', new Map(), stub)) === 1, 'not judged');
+		const f = result.findings.find((x) => x.decl?.prop === 'padding');
+		assert(f, 'no padding finding');
+		assert([...f.message].length <= 200, `${[...f.message].length} characters: ${f.message}`);
+		assert(f.message.startsWith('padding: 999px → no padding token in the design system'), f.message);
+		// Shortened from the front, so what tells two selectors apart survives.
+		assert(f.message.endsWith('-tail` (css-in-js)'), f.message);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The same for a judged rename: the unknown name is source text, and the line
+// was rewritten after `analyze` bounded it.
+await check('a judged rename of a long unknown name is still one bounded line', async () => {
+	const root = scratch('dsh-judge-rename-bound-');
+	try {
+		const long = `--wpds-dimension-space-${'x'.repeat(220)}`;
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			[DS_TOKENS]: NEAR,
+			'styles/x.css': `.wf-x { padding: var(${long}); }\n`,
+			'src/X.jsx': uses('wf-x'),
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const result = await analyze(config, { scope: null });
+		assert(result.tokens, 'analyze did not hand back its token set');
 		const stub = (async (_url: string, init: { body: string }) => {
-			const questions = JSON.parse(init.body).questions as Record<
-				string,
-				{ instructions: string; criteria: Record<string, string> }
-			>;
+			const questions = JSON.parse(init.body).questions as Record<string, unknown>;
 			const answers = Object.fromEntries(
-				Object.entries(questions).map(([k, q]) => {
-					asked.push(q);
-					const offers = Object.keys(q.criteria);
-					// Under the floor, and applied anyway: in-scale spacing only snaps.
-					const pick = offers.includes('--wpds-dimension-padding-sm')
-						? { choice: '--wpds-dimension-padding-sm', confidence: 0.3 }
-						: offers.includes('--wpds-border-radius-md')
-							? { choice: '--wpds-border-radius-md', confidence: 0.3 }
-							: { choice: 'keep', confidence: 0.7 };
-					return [k, pick];
-				}),
+				Object.keys(questions).map((k) => [k, { choice: '--wpds-dimension-space-xl', confidence: 0.95 }]),
 			);
 			return new Response(JSON.stringify({ answers }));
 		}) as unknown as typeof fetch;
-		const about = new Map([['--wpds-color-background-surface-neutral', 'Surfaces with normal emphasis.']]);
-		const written = await judgeValues(root, result.findings, result.tokens, 'key', about, stub);
-
-		// 10px, the card's pink, both radii, the row's pink and the inline pink:
-		// 12px was exact and box-shadow has no family, so neither is a question.
-		assert(asked.length === 6, `asked ${asked.length} questions, expected 6`);
-		// 10px of padding sits inside the scale, so it can only snap.
-		const offersKeep = (q: { criteria: Record<string, string> }): boolean => 'keep' in q.criteria;
-		const tenAsk = asked.find((q) => '--wpds-dimension-padding-sm' in q.criteria);
-		assert(tenAsk && !offersKeep(tenAsk), 'in-scale padding was offered keep');
+		assert((await judgeRenames(root, result.findings, result.tokens, 'key', new Map(), stub)) === 1, 'not settled');
+		const f = result.findings.find((x) => x.rule === 'tokens/unknown-token' && x.code === long);
+		assert(f, 'no finding for the long name');
+		assert([...f.message].length <= 200, `${[...f.message].length} characters: ${f.message}`);
+		// The name gives way; the answer and its confidence are what a reader acts on.
 		assert(
-			asked.filter((q) => q !== tenAsk).every(offersKeep),
-			'a question off the spacing scale offered no way to keep the value',
+			f.message.endsWith('… → --wpds-dimension-space-xl (judged 0.95)'),
+			`the judgement did not survive the bound: ${f.message}`,
 		);
-		const pinkAsk = asked.find((q) => '--wpds-color-background-surface-neutral' in q.criteria);
-		assert(
-			pinkAsk?.criteria['--wpds-color-background-surface-neutral']?.includes('Surfaces with normal emphasis.'),
-			'the description was not sent',
-		);
-		assert(written === 5, `wrote ${written}, expected 5 (padding, three pinks, box-shadow)`);
-
-		const at = (file: string, line: number, prop: string) => {
-			const f = result.findings.find((x) => x.file === file && x.line === line && x.decl?.prop === prop);
-			assert(f, `no finding for ${prop} at ${file}:${line}`);
-			return f;
-		};
-		const padding = at('styles/card.css', 2, 'padding');
-		assert(
-			padding.message === 'padding: 10px 12px → --wpds-dimension-padding-sm --wpds-dimension-padding-md (judged 0.30)',
-			padding.message,
-		);
-		// The message names the tokens; the answer stays the CSS `fix` writes.
-		assert(
-			padding.judged?.answer === 'var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md)',
-			`judged answer is not the replacement value: ${padding.judged?.answer}`,
-		);
-		assert(
-			padding.judged?.spans.every((s) => padding.message.includes(s)),
-			'a span is not in the message',
-		);
-		assert(
-			at('styles/card.css', 3, 'background').message === 'background: #f0c → deliberate, no token fits (judged 0.70)',
-			'pink not kept',
-		);
-		assert(
-			at('styles/card.css', 4, 'box-shadow').message.endsWith('→ no box-shadow token in the design system'),
-			'box-shadow',
-		);
-		assert(at('styles/card.css', 5, 'border-radius').judged === undefined, 'a sub-floor pick was recorded');
-		// The channel marker stays last.
-		const inline = at('src/A.jsx', 1, 'background');
-		assert(inline.message === 'background: #f0c → deliberate, no token fits (judged 0.70) (inline)', inline.message);
-
-		const fixes = applyTokenFixes(root, result.findings);
-		assert(fixes.applied.length === 1 && fixes.applied[0]?.line === 2, `fixes: ${JSON.stringify(fixes.applied)}`);
-		const kept = applyKeeps(root, result.findings, config.suppression.keyword);
-		assert(kept.applied.map((k) => k.line).join() === '3,4', `kept: ${JSON.stringify(kept.applied)}`);
-		const why = Object.fromEntries(kept.skipped.map((k) => [`${k.file}:${k.line}`, k.why]));
-		// A directive mutes a whole line, and the row's radius was never settled.
-		assert(why['styles/card.css:7']?.includes('shares its line'), JSON.stringify(why));
-		assert(why['src/A.jsx:1'] === 'not a stylesheet', JSON.stringify(why));
-
-		const css = readFileSync(join(root, 'styles/card.css'), 'utf8');
-		assert(css.includes('\tpadding: var(--wpds-dimension-padding-sm) var(--wpds-dimension-padding-md);'), css);
-		assert(
-			css.includes(
-				`\t/* ${config.suppression.keyword} tokens/hardcoded-value -- deliberate, no token fits (judged 0.70) */\n\tbackground: #f0c;`,
-			),
-			css,
-		);
-		// The directives parse and mute exactly what they were written for.
-		const after = await analyze(config, { scope: ['styles/card.css'] });
-		const left = after.findings.map((f) => `${f.rule}:${f.line}`);
-		assert(!left.includes('suppression/malformed'), `a directive was malformed: ${left.join(', ')}`);
-		const hard = after.findings
-			.filter((f) => f.rule === 'tokens/hardcoded-value')
-			.map((f) => f.decl?.prop)
-			.sort();
-		assert(hard.join() === 'background,border-radius,border-radius', `left: ${hard.join()}`);
+		assert(f.rename?.to === '--wpds-dimension-space-xl', 'the rename itself was lost to the bound');
 	} finally {
 		cleanup(root);
 	}
@@ -453,7 +950,7 @@ await check('a collapsed typography finding is judged and fixed declaration by d
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
-			'styles/tokens.css': `${JUDGE_TOKENS}\n:root {\n\t--wpds-typography-font-size-sm: 12px;\n\t--wpds-typography-font-size-md: 13px;\n\t--wpds-typography-font-weight-default: 400;\n\t--wpds-typography-font-weight-emphasis: 600;\n}`,
+			[DS_TOKENS]: `${JUDGE_TOKENS}\n:root {\n\t--wpds-typography-font-size-sm: 12px;\n\t--wpds-typography-font-size-md: 13px;\n\t--wpds-typography-font-weight-default: 400;\n\t--wpds-typography-font-weight-emphasis: 600;\n}`,
 			'styles/type.css': [
 				'.wf-t {',
 				'\tfont-size: 12px;',
@@ -621,7 +1118,7 @@ await check(
 						prop: 'background',
 						value: '#f0c',
 						tokens: [],
-						judged: { answer: 'keep', confidence: 0.9, spans: ['deliberate, no token fits'] },
+						judged: { answer: 'keep', confidence: 1, spans: ['no background token in the design system'] },
 					},
 				],
 			});
@@ -645,7 +1142,7 @@ await check(
 			const crlf = readFileSync(join(root, 'styles/crlf.css'), 'utf8');
 			assert(
 				crlf ===
-					'.wf-b {\r\n\t/* ds-allow tokens/hardcoded-value -- deliberate, no token fits */\r\n\tbackground: #f0c;\r\n}\r\n',
+					'.wf-b {\r\n\t/* ds-allow tokens/hardcoded-value -- no background token in the design system */\r\n\tbackground: #f0c;\r\n}\r\n',
 				JSON.stringify(crlf),
 			);
 		} finally {
@@ -653,5 +1150,90 @@ await check(
 		}
 	},
 );
+
+// The skill tells an agent to suppress a deliberate value with what it is, not
+// with the judgement, and `fix --judge` used to write the judgement. A
+// directive mutes its whole line, so a tokenless value beside one left for
+// review is left too.
+await check('a value judged deliberate is left for review, and so is anything on its line', () => {
+	const root = scratch('dsh-keeps-deliberate-');
+	try {
+		writeAll(root, {
+			'styles/a.css': '.wf-a {\n\tbackground: #f0c;\n\tbox-shadow: 0 1px 2px #000; color: #0cf;\n}\n',
+		});
+		const keep = (line: number, prop: string, value: string, spans: string[]): FixCandidate => ({
+			rule: 'tokens/hardcoded-value',
+			file: 'styles/a.css',
+			line,
+			suggest: [{ prop, value, tokens: [], judged: { answer: KEEP, confidence: 0.8, spans } }],
+		});
+		const { applied, skipped } = applyKeeps(
+			root,
+			[
+				keep(2, 'background', '#f0c', ['deliberate, no token fits', '(judged 0.80)']),
+				keep(3, 'box-shadow', '0 1px 2px #000', ['no box-shadow token in the design system']),
+				keep(3, 'color', '#0cf', ['deliberate, no token fits', '(judged 0.80)']),
+			],
+			'ds-allow',
+		);
+		assert(!applied.length, `suppressed: ${JSON.stringify(applied)}`);
+		const why = skipped.map((k) => `${k.line}:${k.prop}:${k.why.split(' ')[0]}`).join();
+		assert(why === '2:background:judged,3:box-shadow:shares,3:color:judged', why);
+		assert(
+			readFileSync(join(root, 'styles/a.css'), 'utf8') ===
+				'.wf-a {\n\tbackground: #f0c;\n\tbox-shadow: 0 1px 2px #000; color: #0cf;\n}\n',
+			'a directive was written',
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Moving an import is not a substitution, and the licence for one — `dropIn` on
+// a registry entry — is carried by nothing the shipped registry holds. `HStack`
+// needs a new prop to move at all, so it is the case a specifier swap would get
+// silently wrong. The registry is the real one, so this fails the day an entry
+// claims `dropIn` and a fix path starts reading it.
+// See docs/design/report.md#moving-an-import-is-not-a-substitution.
+await check('a superseded component import is reported and never rewritten', async () => {
+	const registry = loadComponents(JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')));
+	assert(![...registry.values()].some((e) => e.dropIn), 'no shipped entry may claim dropIn without a fix path');
+	const src = "import { HStack } from '@wordpress/components';\n\nexport const AC = () => <HStack />;\n";
+	const { applied, findings, read, parseErrors, remaining } = await fixture({ 'src/AC.jsx': src }, registry);
+	const superseded = (f: Finding): boolean => f.rule === 'system/superseded-component';
+	assert(findings.some(superseded), 'expected the import to be reported');
+	assert(applied.length === 0, `expected no fixes, got ${JSON.stringify(applied)}`);
+	assert(read('src/AC.jsx') === src, 'the import must be left byte-identical');
+	assert(parseErrors.length === 0, `expected a clean re-parse, got ${parseErrors[0]?.message}`);
+	assert(remaining.some(superseded), 'the finding must still stand afterwards');
+});
+
+// A bare `/loupe-fix` keeps the baseline in its check, so its first step must
+// not rewrite what the baseline accepted: it runs `fix --changed`, which has to
+// leave every file the working tree has not touched alone.
+await check('fix --changed rewrites only the files the working tree changed', () => {
+	const root = scratch('dsh-fix-changed-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			[DS_TOKENS]: ':root { --wpds-border-radius-md: 4px; }',
+			'styles/old.css': '.wf-a { border-radius: 4px; }',
+			'styles/new.css': '.wf-b { color: red; }',
+			'src/A.jsx': 'export const A = () => <><div className="wf-a" /><div className="wf-b" /></>;',
+		});
+		const git = (...argv: string[]): void => {
+			execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...argv], { cwd: root, stdio: 'ignore' });
+		};
+		git('init');
+		git('add', '-A');
+		git('commit', '-m', 'base');
+		write(root, 'styles/new.css', '.wf-b { border-radius: 4px; }');
+		const out = execFileSync('node', [CLI, 'fix', '--changed', '--dry-run', '--root', root], { encoding: 'utf8' });
+		assert(/styles\/new\.css:1/.test(out), `the changed file was not fixed:\n${out}`);
+		assert(!/styles\/old\.css/.test(out), `an unchanged file was rewritten:\n${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
 
 finish();

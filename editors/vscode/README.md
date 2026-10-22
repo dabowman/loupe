@@ -14,7 +14,7 @@ install:
 
 ```bash
 ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe        # from a checkout
-ln -s ~/.claude/plugins/<marketplace>/loupe/bin/loupe ~/.local/bin/loupe
+ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
 ```
 
 Use `bin/loupe`, not `engine/bin/loupe.mjs` — the shim is what passes the
@@ -54,6 +54,7 @@ Server** — no rebuild.
 | **Hover** | The rule's guidance — the part the terminal report prints once per group, which is also the part a linter does not give you. |
 | **Quick fix** | Where the engine settled the answer on its own, the substitution `loupe fix` would write, byte for byte. It is the same function. |
 | **Quick fix** | Suppress this finding — with the reason left blank, on purpose. See below. |
+| **Quick fix** | For `css/dead-class`, delete the rule — offered here and never by `loupe fix`. See below. |
 
 ## Two things worth knowing
 
@@ -68,6 +69,16 @@ a directive with no reason does not silence anything, it reports as
 louder one that goes away only once you write down why. A quick fix that filled
 the reason in for you would be the one way to get a signed-off silence nobody
 signed off on.
+
+**Deleting a dead rule is offered in the editor and nowhere else.** `loupe fix`
+substitutes values; it will not delete a rule, because a deletion leaves nothing
+to compare against afterwards and the reference index behind `css/dead-class`
+over-collects on purpose — a false "referenced" costs one missed finding, a
+false "dead" deletes live CSS. That trade is priced for someone looking at the
+rule, which is what the editor is and a batch pass is not. Where the rule cannot
+be removed cleanly — a selector list that also styles a live class, the only
+rule inside an `@media`, a class several rules declare — no action is offered
+and nothing says why, which is the safe direction for it to fail in.
 
 ## Settings
 

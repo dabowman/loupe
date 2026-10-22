@@ -121,6 +121,7 @@ export function makeSuppressionParser({
 	 */
 	return function scan(text: string, relPath: string): Suppressions {
 		const byLine = new Map<number, Set<string>>();
+		const owners = new Map<number, Directive[]>();
 		const directives: Directive[] = [];
 		const malformed: MalformedDirective[] = [];
 		const lines = text.split('\n');
@@ -136,19 +137,9 @@ export function makeSuppressionParser({
 			if (m?.[2] !== undefined && m[3] !== undefined) {
 				const ids = m[2].split(',').map((s) => canonicalRuleId(s.trim()));
 				const used = m[1] ?? keyword;
-				byLine.set(line, new Set(ids));
-				// A block comment covers every line it spans, not just the one the keyword
-				// sits on. `isSuppressed` looks only at the finding's line and the one
-				// above, so a directive whose comment closes two lines higher anchors to
-				// nothing — and a formatter wraps a reason worth writing.
-				for (const l of spannedLines(lines, i, raw, stripped)) {
-					const set = byLine.get(l) ?? new Set<string>();
-					for (const id of ids) set.add(id);
-					byLine.set(l, set);
-				}
 				// Flattened for the same reason the malformed branch below is: a tab in
 				// the reason resets the columns `loupe suppressions` prints in.
-				directives.push({
+				const directive: Directive = {
 					file: relPath,
 					line,
 					rules: ids,
@@ -156,7 +147,18 @@ export function makeSuppressionParser({
 					// Carried only when it is not the keyword the config asks for, so
 					// `loupe suppressions` can name the rename.
 					...(used === keyword ? {} : { alias: used }),
-				});
+				};
+				directives.push(directive);
+				// A block comment covers every line it spans, not just the one the keyword
+				// sits on. `isSuppressed` looks only at the finding's line and the one
+				// above, so a directive whose comment closes two lines higher anchors to
+				// nothing — and a formatter wraps a reason worth writing.
+				for (const l of [line, ...spannedLines(lines, i, raw, stripped)]) {
+					const set = byLine.get(l) ?? new Set<string>();
+					for (const id of ids) set.add(id);
+					byLine.set(l, set);
+					owners.set(l, [...(owners.get(l) ?? []), directive]);
+				}
 			} else if (written.test(stripped) || shaped.test(stripped)) {
 				malformed.push({
 					rule: 'suppression/malformed',
@@ -170,7 +172,7 @@ export function makeSuppressionParser({
 				});
 			}
 		}
-		return { byLine, directives, malformed };
+		return { byLine, owners, directives, malformed };
 	};
 }
 
@@ -187,9 +189,47 @@ export function isSuppressed(
 	ruleId: string,
 	scopeLines: readonly number[] = [],
 ): boolean {
+	return mutingLine(byLine, line, ruleId, scopeLines) !== null;
+}
+
+/** The line whose directive mutes a finding, by the same lookup as `isSuppressed`; null if none does. */
+export function mutingLine(
+	byLine: Map<number, Set<string>>,
+	line: number,
+	ruleId: string,
+	scopeLines: readonly number[] = [],
+): number | null {
 	for (const L of [line, line - 1, ...scopeLines]) {
 		const s = byLine.get(L);
-		if (s?.has(ruleId)) return true;
+		if (s?.has(ruleId)) return L;
 	}
-	return false;
+	return null;
+}
+
+/**
+ * Which rule ids of each directive muted something, for `Directive.stale`.
+ *
+ * Every finding a directive's line would have muted is credited to it — a
+ * finding the rule is off for is never produced, so a directive for a disabled
+ * rule reads as stale, which is what it is under that config.
+ */
+export class MuteLedger {
+	private readonly used = new Map<Directive, Set<string>>();
+
+	/** Mute `ruleId` at `line` if a directive covers it, crediting that directive. */
+	mute(supp: Suppressions, line: number, ruleId: string, scopeLines: readonly number[] = []): boolean {
+		const L = mutingLine(supp.byLine, line, ruleId, scopeLines);
+		if (L === null) return false;
+		for (const d of supp.owners.get(L) ?? [])
+			if (d.rules.includes(ruleId)) this.used.set(d, (this.used.get(d) ?? new Set()).add(ruleId));
+		return true;
+	}
+
+	/** Set `stale` on each directive naming a rule that muted nothing; `skip` names rules this run could not exercise. */
+	settle(directives: readonly Directive[], skip: ReadonlySet<string> = new Set()): void {
+		for (const d of directives) {
+			const stale = d.rules.filter((r) => !skip.has(r) && !this.used.get(d)?.has(r));
+			if (stale.length) d.stale = stale;
+		}
+	}
 }

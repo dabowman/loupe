@@ -8,16 +8,19 @@
  * *fewer* findings, which no failing build ever reveals.
  */
 
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, symlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze, findingKey } from '../src/analyze.ts';
 import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
-import { loadComponents } from '../src/components.ts';
-import { LANGUAGE, ask, judgeRedirects, judgeVariants } from '../src/judge.ts';
+import { loadComponents, surfacesRecorded } from '../src/components.ts';
+import { readProfiles } from '../src/profiles.ts';
+import { APPEARANCE_PROPS, propsOverlap } from '../src/styles.ts';
+import { LANGUAGE, ask, judgeRedirects, judgeVariants, redirectIdentity } from '../src/judge.ts';
 import { forceQuery } from '../src/judge/force.ts';
-import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
+import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, ComponentEntry, Finding, Pattern, PatternNode, RuleId } from '../src/types.ts';
 
 /** `toNode` is nullable by contract; a signature written in a test is not. */
@@ -40,7 +43,8 @@ async function run(
 		patterns,
 		components,
 		judge,
-	}: { patterns?: Pattern[]; components?: Map<string, ComponentEntry>; judge?: boolean } = {},
+		suppress,
+	}: { patterns?: Pattern[]; components?: Map<string, ComponentEntry>; judge?: boolean; suppress?: boolean } = {},
 ): Promise<AnalyzeResult> {
 	const root = scratch('dsh-feat-');
 	try {
@@ -48,7 +52,7 @@ async function run(
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
 		if (patterns) setPatterns(config, patterns);
 		if (components) setComponentRegistry(config, components);
-		return await analyze(config, { scope: null, judge: judge ?? false });
+		return await analyze(config, { scope: null, judge: judge ?? false, suppress: suppress ?? true });
 	} finally {
 		cleanup(root);
 	}
@@ -114,6 +118,22 @@ await check('unknown-token stays silent when no token set was found', async () =
 	assert(!at(r, 'tokens/unknown-token').length, 'declared a token unknown with nothing to check against');
 });
 
+// The walk adds the project's own definitions to the token set. One of them is
+// not the design system's set, and checking against it calls every real token
+// unknown, beside the notice that unknown ones cannot be reported.
+await check("unknown-token stays silent when the only tokens found are the project's own", async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/brand.css': ':root { --wpds-brand-color: #c00; }',
+		'styles/a.css':
+			'.acme-card { color: var(--wpds-color-foreground-content-neutral); background: var(--wpds-color-background-surface-neutral); }',
+		'src/A.jsx': 'export const A = () => <div className="acme-card" />;',
+	});
+	assert(r.diagnostics.tokensKnown === 0, `the design system's sources yielded nothing: ${r.diagnostics.tokensKnown}`);
+	const unknown = at(r, 'tokens/unknown-token');
+	assert(!unknown.length, `checked against the project's own token: ${unknown.map((f) => f.code)}`);
+});
+
 await check('unknown-token fires once a token set exists', async () => {
 	const r = await run({
 		'loupe.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
@@ -167,7 +187,18 @@ await check('styled.div declarations are classified and located exactly', async 
 });
 
 await check('styled(Component) inherits that component’s verdict', async () => {
-	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED });
+	// An override needs a surface saying the component owns the property; a
+	// text component's type declarations need only its being one.
+	const button: ComponentEntry = {
+		name: 'Button',
+		package: '@wordpress/components',
+		status: 'recommended',
+		surface: { properties: { background: 'variant' } },
+	};
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/Card.tsx': STYLED },
+		{ components: new Map([['@wordpress/components::Button', button]]) },
+	);
 	const override = at(r, 'system/override');
 	const typo = at(r, 'typography/in-css');
 	assert(
@@ -518,13 +549,44 @@ await check('a registered child must claim a distinct node', () => {
 const composite = (n: string): string =>
 	[
 		"import { Stack, Text, Button } from '@wordpress/ui';",
+		"import { TextControl } from '@wordpress/components';",
 		`export const Panel${n} = () => (`,
 		'\t<Stack>',
 		'\t\t<Stack><Text>Details</Text><Button>Close</Button></Stack>',
-		'\t\t<div className="acme-body"><Stack><Text>body</Text></Stack></div>',
+		'\t\t<div className="acme-body"><Stack><TextControl label="Title" /></Stack></div>',
 		'\t</Stack>',
 		');',
 	].join('\n');
+
+// Written in layout primitives, Text and Button alone and matched at any depth,
+// these two fired on whole screens: the outer Stack held a label and a button
+// somewhere, and two Texts in one place and a Button in another.
+await check('a panel with no field is not an inspector', () => {
+	const inspector = registry.find((p) => p.id === 'edit-record.inspector');
+	assert(inspector?.node, 'the shipped registry should carry edit-record.inspector');
+	const card = node(['Stack', ['Stack', 'Text', 'Button'], ['Stack', 'Text']]);
+	assert(!matches(inspector.node, card), 'a header row over body text is a card, not an inspector');
+	const panel = node(['Stack', ['Stack', 'Text', 'Button'], ['Stack', ['Stack', 'TextControl']]]);
+	assert(matches(inspector.node, panel), 'a header row over a field is');
+});
+
+await check('a pinned child must be a direct child, not a descendant', () => {
+	const inspector = registry.find((p) => p.id === 'edit-record.inspector');
+	assert(inspector?.node, 'the shipped registry should carry edit-record.inspector');
+	// A screen whose header row sits three levels down, beside an unrelated form.
+	const screen = node(['Stack', ['Stack', ['Stack', ['Stack', 'Text', 'Button']]], ['Stack', 'TextControl']]);
+	assert(!matches(inspector.node, screen), 'the header row has to be a child of the panel itself');
+	const header = registry.find((p) => p.id === 'screen.page#header');
+	assert(header?.node, 'the shipped registry should carry screen.page#header');
+	const page = node(['HStack', ['VStack', 'Text', 'Text'], ['HStack', 'Button']]);
+	assert(matches(header.node, page), 'a title stack beside an actions stack is a page header');
+	const scattered = node([
+		'VStack',
+		['VStack', ['Card', ['VStack', 'Text', 'Text']]],
+		['VStack', ['HStack', 'Button']],
+	]);
+	assert(!matches(header.node, scattered), 'two Texts deep in one branch and a Button in another is not');
+});
 
 await check('a registered pattern rebuilt in two files is reported in both', async () => {
 	const r = await run(
@@ -825,7 +887,47 @@ await check('a file importing ConfirmDialog beside a hand-built pair is not told
 	assert(!at(r, 'patterns/superseded-composite').length, 'the canonical import means the choice was deliberate');
 });
 
+// @wordpress/ui's SelectControl, recommended there since 0.23.0, takes the same
+// `{ value, label }` shape under `items`: four of them are the same refusal.
+await check('the @wordpress/ui SelectControl with four static items is refused the same way', async () => {
+	const src = [
+		"import { SelectControl } from '@wordpress/ui';",
+		`export const A = () => (<SelectControl label="Align" items={ ${four} } />);`,
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { patterns: registry });
+	const hit = one(at(r, 'patterns/superseded-composite'), 'one select, one finding');
+	assert(hit.message.includes('choose.segmented') && hit.message.includes('4 short static items'), hit.message);
+});
+
 // ── component currency ────────────────────────────────────────────────────
+
+// Upstream moved the select in one release: @wordpress/ui 0.23.0 marks its
+// SelectControl and Select `recommended`, and @wordpress/components 41.0.0 marks
+// its SelectControl and BaseControl `not-recommended`, naming the replacements.
+await check('the select moved to @wordpress/ui, and BaseControl to Field', async () => {
+	const entry = (key: string) => componentRegistry.get(key);
+	assert(entry('@wordpress/ui::SelectControl')?.status === 'recommended', 'ui SelectControl is the current select');
+	assert(entry('@wordpress/ui::Select')?.status === 'recommended', 'and its Select primitive');
+	assert(
+		JSON.stringify(entry('@wordpress/ui::SelectControl')?.surface?.properties) === '{}',
+		'its root is Field.Root, which owns nothing',
+	);
+	const old = entry('@wordpress/components::SelectControl');
+	assert(old?.status === 'legacy' && old.supersededBy === 'SelectControl (@wordpress/ui)', `${JSON.stringify(old)}`);
+	const base = entry('@wordpress/components::BaseControl');
+	assert(base?.status === 'legacy' && base.supersededBy === 'Field (@wordpress/ui)', `${JSON.stringify(base)}`);
+	const raw = JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')) as { scope: { absent: string } };
+	assert(!raw.scope.absent.includes('SelectControl'), 'recorded, so no longer listed as known and unrecorded');
+
+	const src = [
+		"import { SelectControl } from '@wordpress/components';",
+		"import { SelectControl as UiSelect } from '@wordpress/ui';",
+		'export const A = () => (<><SelectControl label="a" /><UiSelect label="b" /></>);',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const f = one(at(r, 'system/superseded-component'), 'only the @wordpress/components import is stale');
+	assert(f.message.includes('SelectControl (@wordpress/ui)'), `names the replacement: ${f.message}`);
+});
 
 await check('a locked component is reported, its recommended sibling is not', async () => {
 	const src = [
@@ -894,6 +996,20 @@ await check('a locked-component finding can be suppressed like any other', async
 	].join('\n');
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	assert(!at(r, 'system/locked-component').length, 'a well-formed suppression mutes the finding');
+});
+
+await check('--no-suppressions reports what a directive mutes, and still lists the directive', async () => {
+	const src = [
+		'/* wpds-allow system/locked-component -- reviewed, migrating later */',
+		"import { Badge } from '@wordpress/components';",
+		'export const A = () => <Badge>old</Badge>;',
+	].join('\n');
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
+		{ components: componentRegistry, suppress: false },
+	);
+	one(at(r, 'system/locked-component'), 'the suppressed finding is back');
+	assert(r.directives.length === 1, `the directive is still listed: ${r.directives.length}`);
 });
 
 // ── where a directive has to sit ──────────────────────────────────────────────
@@ -1006,6 +1122,136 @@ await check('a raw element is never sent to a component the registry supersedes'
 	assert(!/<Heading>/.test(f.message), `sent to a legacy component: ${f.message}`);
 	assert(f.message.includes('@wordpress/ui'), `did not forward to the current analog: ${f.message}`);
 });
+
+// `Text` alone loses what the `<h3>` was for. The mapping names the element the
+// analog renders as, so the suggestion is the whole conversion.
+await check('a heading is sent to Text rendered as that heading', async () => {
+	const src = 'export const A = () => (\n\t<>\n\t\t<h3>title</h3>\n\t\t<H6 />\n\t\t<h6>small</h6>\n\t</>\n);';
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const got = at(r, 'system/raw-element').map((f) => `${f.line} ${f.message}`);
+	const want = [
+		'3 <h3> → <Text render={ <h3 /> }> (@wordpress/ui)',
+		'5 <h6> → <Text render={ <h6 /> }> (@wordpress/ui)',
+	];
+	assert(JSON.stringify(got) === JSON.stringify(want), `got:\n${got.join('\n')}`);
+	// Without a registry the preset alone still says it, minus the package.
+	const bare = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': '<h2>x</h2>' });
+	const b = one(at(bare, 'system/raw-element'), 'expected the heading finding without a registry');
+	assert(b.message === '<h2> → <Text render={ <h2 /> }>', b.message);
+});
+
+// `render` is printed into the suggestion as JSX; anything but a tag name would
+// hand the agent a remedy that does not parse.
+await check('an element-map render that is not an element name is refused', async () => {
+	const root = scratch('dsh-render-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': JSON.stringify({
+				extends: 'wpds',
+				designSystem: { elementMap: { h4: { component: 'Text', render: '<h4 />' } } },
+			}),
+		});
+		const err = await loadConfig({ root, configPath: join(root, 'loupe.config.json') }).then(
+			() => null,
+			(e: Error) => e,
+		);
+		assert(err?.message.includes('elementMap.h4.render') ?? false, `accepted: ${err?.message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// A hand-built <table> styled with tokens passes every token check; it just
+// isn't DataViews. Interactive elements are flagged whether or not CSS touches them.
+await check('a raw interactive element names its analog and the package to import it from', async () => {
+	const src = [
+		'export const A = ( { t } ) => (',
+		'\t<>',
+		'\t\t<button>Go</button>',
+		'\t\t<input />',
+		'\t\t<input type="checkbox" />',
+		'\t\t<input type={ "FILE" } />',
+		'\t\t<input type="submit" />',
+		'\t\t<input type={ t } />',
+		'\t\t<input type="hidden" name="nonce" />',
+		'\t\t<select />',
+		'\t\t<textarea />',
+		'\t\t<table />',
+		'\t\t<dialog />',
+		'\t\t<progress />',
+		'\t\t<details />',
+		'\t\t{ /* <table> in a comment */ }',
+		"\t\t{ '<button>' }",
+		'\t</>',
+		');',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const got = at(r, 'system/raw-element').map((f) => `${f.line} ${f.message}`);
+	const want = [
+		'3 <button> → <Button> (@wordpress/components)',
+		'4 <input> → <InputControl> (@wordpress/ui)',
+		'5 <input> → <CheckboxControl> (@wordpress/components)',
+		'6 <input> → <FormFileUpload> (@wordpress/components)',
+		'7 <input> → <Button> (@wordpress/components)',
+		'8 <input> → <InputControl> (@wordpress/ui)',
+		'10 <select> → <SelectControl> (@wordpress/ui)',
+		'11 <textarea> → <TextareaControl> (@wordpress/ui)',
+		'12 <table> → <DataViews> (@wordpress/dataviews)',
+		'13 <dialog> → <Modal> (@wordpress/components)',
+		'14 <progress> → <ProgressBar> (@wordpress/components)',
+		'15 <details> → <Collapsible> (@wordpress/ui)',
+	];
+	assert(JSON.stringify(got) === JSON.stringify(want), `got:\n${got.join('\n')}`);
+});
+
+// The bare `grid` shorthand lays an element out in every channel, not only in a
+// stylesheet (#65). The two channels that once skipped it must not drift back.
+await check('an inline `grid` shorthand lays the element out, as it does in a stylesheet', async () => {
+	const src = [
+		'export const A = () => <div style={{ grid: "auto-flow / 1fr 1fr" }}>x</div>;',
+		'export const B = () => <div style={{ grid: "auto-flow / 1fr 1fr", gap: "8px" }}>x</div>;',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src });
+	assert(
+		at(r, 'system/raw-element').some((f) => f.line === 1),
+		'a grid-only <div> is laid out, so it maps to a layout primitive',
+	);
+	assert(!at(r, 'layout/in-css').length, 'the gap of a grid is not flex layout to move to a primitive');
+});
+
+// The element map's advice is only as good as the names in it: a suggestion
+// the registry has never heard of is one nobody can import, and one it marks
+// `legacy` is advice another rule then reports. `h1`–`h6` → `Heading` stayed in
+// the map after the registry superseded `Heading`. Every shipped
+// profile, against its own preset, so the next drift fails here rather than in
+// someone's backlog.
+for (const profile of readProfiles(join(HERE, '..', '..', 'profiles'))) {
+	if (!profile.preset || !profile.components) continue;
+	const { preset, components } = profile;
+	await check(`every ${preset} element-map analog is one the ${profile.id} registry recommends`, async () => {
+		const root = scratch('dsh-map-');
+		try {
+			writeAll(root, { 'loupe.config.json': JSON.stringify({ extends: preset }) });
+			const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+			const registry = loadComponents(JSON.parse(readFileSync(components, 'utf8')));
+			const map = [...config.designSystem.elementMap];
+			assert(map.length > 0, `${preset} maps no elements — nothing was checked`);
+			const stale = map.flatMap(([tag, m]) =>
+				[[tag, m.component] as const, ...Object.entries(m.values ?? {}).map(([v, c]) => [`${tag}[${v}]`, c] as const)]
+					// A dotted subcomponent's currency is its root's, as for an import.
+					.filter(([, c]) => c !== null && c !== undefined)
+					.filter(([, c]) => {
+						const name = String(c).split('.')[0];
+						return ![...registry.values()].some((e) => e.name === name && e.status === 'recommended');
+					})
+					.map(([t, c]) => `${t} → ${c}`),
+			);
+			assert(!stale.length, `not recommended by the registry: ${stale.join(', ')}`);
+		} finally {
+			cleanup(root);
+		}
+	});
+}
 
 // ── library internals by stylesheet ───────────────────────────────────────────
 // An unprefixed system (`.field-label`, `.toast-viewport`) has no prefix for
@@ -1222,6 +1468,141 @@ await check(
 	},
 );
 
+// A heading's suggestion already carries `render`; the variant goes into the
+// same tag rather than trailing it as prose.
+await check('--judge writes the variant into a suggestion that carries render', async () => {
+	const root = scratch('dsh-judge-render-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<h4>Site details</h4>' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'heading-md': 'A heading.' } },
+		]);
+		const f: Finding = {
+			rule: 'system/raw-element',
+			severity: 'warn',
+			rank: 0,
+			file: 'src/A.jsx',
+			line: 1,
+			code: '<h4>',
+			message: '<h4> → <Text render={ <h4 /> }> (@wordpress/ui)',
+		};
+		const stub = (async () =>
+			new Response(
+				JSON.stringify({ answers: { e0: { choice: 'heading-md', confidence: 0.7 } } }),
+			)) as unknown as typeof fetch;
+		assert((await judgeVariants(root, [f], registry, 'key', stub)) === 1, 'nothing was written');
+		assert(
+			f.message === '<h4> → <Text variant="heading-md" render={ <h4 /> }> (@wordpress/ui) (judged 0.70)',
+			f.message,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The analog is the conversion's leading `<Name`; the rest of the line is the
+// promotion tail, whose class names can spell a component too. Matched anywhere
+// after the arrow, `.Text-label` on a button cost a Text-variant question, and
+// its answer rewrote the Button remedy to "no analog, not Text content".
+await check('--judge asks a variant only of the analog itself, not of the tail after it', async () => {
+	const root = scratch('dsh-judge-target-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<button className="Text-label">Go</button>' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
+			{ name: 'Button', package: '@wordpress/ui', status: 'recommended' },
+		]);
+		const message = '<button> → <Button> (@wordpress/ui) — converted, would block: background (.Text-label)';
+		const f: Finding = {
+			rule: 'system/raw-element',
+			severity: 'warn',
+			rank: 0,
+			file: 'src/A.jsx',
+			line: 1,
+			code: '<button>',
+			message,
+		};
+		let asked = 0;
+		const stub = (async () => {
+			asked++;
+			return new Response(JSON.stringify({ answers: { e0: { choice: 'not_text', confidence: 0.93 } } }));
+		}) as unknown as typeof fetch;
+		assert((await judgeVariants(root, [f], registry, 'key', stub)) === 0, 'a Button remedy was judged as Text');
+		assert(asked === 0, `asked ${asked} paid question(s) about a class name`);
+		assert(f.message === message, f.message);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The bundling note costs adopting the remedy. Once the judge withdraws the
+// remedy, "no analog, not Text content (bundling required: …)" names a cost
+// of nothing.
+await check('a withdrawn remedy drops the reach note that priced it', async () => {
+	const root = scratch('dsh-judge-reach-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<span>Hi</span>\n<p>Hi</p>' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
+		]);
+		const reach = 'bundling required: @wordpress/ui is bundled into your build, not provided by WordPress';
+		const at = (line: number, el: string): Finding => ({
+			rule: 'system/raw-element',
+			severity: 'warn',
+			rank: 0,
+			file: 'src/A.jsx',
+			line,
+			code: `<${el}>`,
+			message: `<${el}> → <Text> (@wordpress/ui)`,
+			note: `${reach}; an unrelated note`,
+		});
+		const findings = [at(1, 'span'), at(2, 'p')];
+		const stub = (async (_url: string, init: { body: string }) => {
+			const body = JSON.parse(init.body);
+			const span = body.state.elements[0].source.startsWith('<span');
+			const e0 = span ? { choice: 'not_text', confidence: 0.93 } : { choice: 'body-sm', confidence: 0.8 };
+			return new Response(JSON.stringify({ answers: { e0 } }));
+		}) as unknown as typeof fetch;
+		assert((await judgeVariants(root, findings, registry, 'key', stub)) === 2, 'not both were judged');
+		assert(findings[0]?.message === '<span> → no analog, not Text content (judged 0.93)', findings[0]?.message ?? '');
+		assert(findings[0]?.note === 'an unrelated note', `the withdrawn remedy kept its price: ${findings[0]?.note}`);
+		assert(findings[1]?.note === `${reach}; an unrelated note`, `a kept remedy lost its note: ${findings[1]?.note}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// `analyze` bounded the line before the variant was spliced into it, so a long
+// suggestion came back past the cap with the judgement at the end of it.
+await check('a judged variant is still one bounded line, with the judgement kept last', async () => {
+	const root = scratch('dsh-judge-variant-bound-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<p className="description">Help</p>' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
+		]);
+		const f: Finding = {
+			rule: 'system/raw-element',
+			severity: 'warn',
+			rank: 0,
+			file: 'src/A.jsx',
+			line: 1,
+			code: '<p>',
+			message: `<p> → <Text> (@wordpress/ui), ${'and then a long note about the analog '.repeat(8)}`,
+		};
+		const stub = (async () =>
+			new Response(
+				JSON.stringify({ answers: { e0: { choice: 'body-sm', confidence: 0.8 } } }),
+			)) as unknown as typeof fetch;
+		assert((await judgeVariants(root, [f], registry, 'key', stub)) === 1, 'nothing was written');
+		assert([...f.message].length <= 200, `${[...f.message].length} characters: ${f.message}`);
+		assert(f.message.startsWith('<p> → <Text variant="body-sm"> (@wordpress/ui)'), f.message);
+		assert(f.message.endsWith('… (judged 0.80)'), `the judgement did not survive the bound: ${f.message}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // ── --judge: forces and redirects ───────────────────────────────────────────
 
 const represents = LANGUAGE.vocabulary.forces.represents?.judge;
@@ -1278,6 +1659,34 @@ await check('the force query sends one control per request, and keeps answers in
 	assert(answers[7]?.confidence === 0.07, `answer 7 was ${answers[7]?.confidence}`);
 	// The trailing batch re-indexes from e0; it must still land at 40, not 0.
 	assert(answers[40]?.confidence === 0, `answer 40 was ${answers[40]?.confidence}`);
+});
+
+// An abort is a deadline: the request's own 20s, or the hook's whole judge
+// phase. Retried like a dropped socket, a request that timed out would run four
+// more times, and a hook past its deadline would go on asking.
+await check('a timed-out or aborted request is not retried', async () => {
+	for (const name of ['TimeoutError', 'AbortError']) {
+		let calls = 0;
+		const stub = (async () => {
+			calls++;
+			throw new DOMException('the operation was aborted', name);
+		}) as unknown as typeof fetch;
+		let thrown: unknown = null;
+		try {
+			await ask(
+				forceQuery(represents),
+				[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+				'key',
+				stub,
+				1,
+				0,
+			);
+		} catch (err) {
+			thrown = err;
+		}
+		assert(calls === 1, `${name}: ${calls} calls, expected one`);
+		assert(thrown instanceof Error && thrown.name === name, `${name}: threw ${String(thrown)}`);
+	}
 });
 
 await check('a dropped connection is retried, not thrown away', async () => {
@@ -1366,6 +1775,37 @@ await check('a 429 waits as long as retry-after says, then asks again', async ()
 	assert(Date.now() - started < 400, `waited ${Date.now() - started}ms for a 10ms retry-after`);
 });
 
+// Honoured verbatim, one `retry-after: 3600` held the run for an hour. The
+// waits are recorded rather than slept, so this costs nothing.
+await check('a retry-after of an hour is capped at a few seconds', async () => {
+	let calls = 0;
+	const stub = (async () =>
+		++calls === 1
+			? new Response('slow down', { status: 429, headers: { 'retry-after': '3600' } })
+			: new Response(
+					JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }),
+				)) as unknown as typeof fetch;
+	const waits: number[] = [];
+	const real = globalThis.setTimeout;
+	globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+		waits.push(ms ?? 0);
+		return real(fn, 0);
+	}) as typeof setTimeout;
+	try {
+		await ask(
+			forceQuery(represents),
+			[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+			'key',
+			stub,
+		);
+	} finally {
+		globalThis.setTimeout = real;
+	}
+	assert(calls === 2, `${calls} calls`);
+	const wait = one(waits, 'one wait between the two attempts');
+	assert(wait === 5_000, `waited ${wait}ms for a retry-after of 3600s, not the 5s cap`);
+});
+
 await check('resolve runs on known forces, and stops at a row it cannot decide', async () => {
 	const table = [
 		{ when: { represents: 'command' }, redirect: 'menu' },
@@ -1438,11 +1878,530 @@ await check(
 		assert(f.message === '<Button> (represents: destination) \u2192 `navigate-hierarchy` (judged 0.97)', f.message);
 		assert(f.judged?.answer === 'destination' && f.judged.confidence === 0.97, JSON.stringify(f.judged));
 		assert(Boolean(f.note), "the redirect's `because` was dropped");
+		// The hook's pre-edit comparison keys a control as the redirect it would
+		// be, without asking: the two keys have to be the same string.
+		const control = first(
+			controls.filter((c) => c.line === 4),
+			'the control on line 4',
+		);
+		assert(
+			findingKey(f) === findingKey({ ...redirectIdentity(control), message: '' }),
+			`the pre-edit key ${findingKey({ ...redirectIdentity(control), message: '' })} is not the finding's ${findingKey(f)}`,
+		);
 
 		// Off unless asked: a plain check and the hook never collect a control.
 		const plain = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': file }, { patterns: registry });
 		assert(plain.controls === undefined, 'collected controls without --judge');
 	},
 );
+
+// Redirects are written after `analyze` returns, so its dedupe never saw them:
+// two Buttons on one line judged alike came out as two identical findings.
+// Through the CLI, with `fetch` replaced before it loads, because the push it
+// has to dedupe is the command's own.
+await check('two controls on one line judged alike are one redirect', () => {
+	const root = scratch('dsh-judge-dedupe-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG(),
+			'src/A.jsx': [
+				"import { Button } from '@wordpress/components';",
+				'export function Screen() {',
+				"	return (<><Button onClick={ () => go( '/a' ) }>A</Button><Button onClick={ () => go( '/a' ) }>A</Button></>);",
+				'}',
+			].join('\n'),
+		});
+		const destination = `data:text/javascript,${encodeURIComponent(
+			"globalThis.fetch = async () => new Response(JSON.stringify({ answers: { e0: { choice: 'destination', confidence: 0.99 } } }));",
+		)}`;
+		// The pattern registry rides on the profile, which only `--profiles` merges.
+		const argv = ['check', '--root', root, '--all', '--judge', '--profiles', dirname(PROFILE), '--format', 'json'];
+		const r = spawnSync(process.execPath, ['--import', destination, CLI, ...argv], {
+			encoding: 'utf8',
+			env: { ...process.env, TYPESAFE_API_KEY: 'key' },
+		});
+		assert(r.status === 0, `exited ${r.status}: ${r.stderr}`);
+		const found = (JSON.parse(r.stdout) as { findings: Finding[] }).findings.filter(
+			(f) => f.rule === 'patterns/judged-redirect',
+		);
+		one(found, 'one redirect for two controls on line 3');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// ── the feedback from a wpds audit ─────────────────────────────────────────────
+
+// WPDS `Text` has no color prop, and its own docs set color through `style`. A
+// suppression on every one of those was a quarter of one project's directives.
+await check('color on Text is the sanctioned inline style, and its value is still checked', async () => {
+	const src = (style: string): string =>
+		[
+			"import { Text, Stack } from '@wordpress/ui';",
+			`export const A = ({ tone, rest }) => <Text variant="body-md" style={ ${style} }>x</Text>;`,
+		].join('\n');
+	const clean = await run({
+		'loupe.config.json': CONFIG(),
+		'src/A.jsx': src("{ color: 'var(--wpds-color-foreground-content-warning)' }"),
+	});
+	assert(!at(clean, 'system/inline-style').length, 'a token color on Text is sanctioned');
+	assert(!at(clean, 'tokens/hardcoded-value').length, 'and a token is a token');
+	const dynamic = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src('{ color: tone }') });
+	assert(!at(dynamic, 'system/inline-style').length, 'an expression for color is still color');
+	const raw = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src("{ color: '#d63638' }") });
+	assert(!at(raw, 'system/inline-style').length, 'the sanction is about the property');
+	one(at(raw, 'tokens/hardcoded-value'), 'a raw colour there is still a hardcoded value');
+	const mixed = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src("{ color: 'var(--x)', marginTop: 4 }") });
+	const f = one(at(mixed, 'system/inline-style'), 'anything beside color is the old finding');
+	assert(f.message.includes('margin-top') && !f.message.includes('color'), `named the sanctioned one: ${f.message}`);
+	const spread = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src("{ color: 'var(--x)', ...rest }") });
+	one(at(spread, 'system/inline-style'), 'a spread could carry anything');
+	const stack = await run({
+		'loupe.config.json': CONFIG(),
+		'src/A.jsx': [
+			"import { Stack } from '@wordpress/ui';",
+			"export const A = () => <Stack style={ { color: 'var(--x)' } }>x</Stack>;",
+		].join('\n'),
+	});
+	one(at(stack, 'system/inline-style'), 'the sanction is Text-only');
+});
+
+// Both of these were found by a reviewer by hand, after the check ran clean.
+await check('a raw colour inside a border shorthand is a hardcoded value', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': [
+			'.acme-a { border: 1px solid #dcdcde; }',
+			'.acme-b { border-top: var(--wpds-border-width-xs) solid rgba(214,54,56,.3); }',
+			'.acme-c { outline: 2px solid hsl(0 0% 50%); }',
+			'.acme-ok { border: 1px solid var(--wpds-color-stroke-surface-neutral); }',
+			'.acme-fallback { border-bottom: 1px solid var(--wpds-color-stroke-surface-neutral, #ccc); }',
+			'.acme-url { background-image: url(icons.svg#face); }',
+		].join('\n'),
+		'src/A.jsx': [
+			'export const A = () => (<>',
+			'\t<div className="acme-a acme-b acme-c acme-ok acme-fallback acme-url" />',
+			"\t<div style={ { borderBottom: '1px solid #dcdcde' } } />",
+			'</>);',
+		].join('\n'),
+	});
+	const lines = at(r, 'tokens/hardcoded-value').map((f) => `${f.file}:${f.line}`);
+	for (const want of ['styles/a.css:1', 'styles/a.css:2', 'styles/a.css:3', 'src/A.jsx:3'])
+		assert(lines.includes(want), `missed ${want}: ${lines.join(', ')}`);
+	assert(lines.length === 4, `flagged a token, a fallback or a url: ${lines.join(', ')}`);
+});
+
+await check('a directive that mutes nothing is reported stale', async () => {
+	const src = [
+		'/* wpds-allow system/locked-component -- reviewed, migrating later */',
+		"import { Badge } from '@wordpress/components';",
+		'export const A = () => <Badge>old</Badge>;',
+		'// wpds-allow system/raw-element -- nothing here any more',
+		'export const B = () => null;',
+		'// wpds-allow system/raw-element, system/locked-compnent -- one live, one typo',
+		'export const C = () => <p>x</p>;',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
+	const [live, dead, half] = r.directives;
+	assert(live && !live.stale, `a directive that muted a finding is live: ${JSON.stringify(live)}`);
+	assert(dead?.stale?.join() === 'system/raw-element', `the dead one: ${JSON.stringify(dead)}`);
+	assert(half?.stale?.join() === 'system/locked-compnent', `only the typo is stale: ${JSON.stringify(half)}`);
+	const off = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src },
+		{ components: componentRegistry, suppress: false },
+	);
+	assert(
+		off.directives.every((d) => !d.stale),
+		'with suppressions off nothing was offered to them, so nothing is stale',
+	);
+});
+
+// ── styling surfaces ────────────────────────────────────────────────────────
+// `system/override` used to fire on any appearance property on any class bound
+// to a component, so converting a raw element as `system/raw-element` asks
+// turned the same unchanged CSS from advisory to blocking — with a remedy, "use
+// its props", naming props that do not exist. It now blocks only where the
+// registry records that the component owns the property.
+
+const blocking = (r: AnalyzeResult): Finding[] => r.findings.filter((f) => f.severity === 'error');
+
+await check('converting a raw element to Text does not promote its CSS to blocking', async () => {
+	const css = '.acme-title { color: #826200; text-transform: uppercase; letter-spacing: 0.05em; }';
+	const before = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': css,
+			'src/A.tsx': 'export const A = () => <h4 className="acme-title">Hi</h4>;',
+		},
+		{ components: componentRegistry },
+	);
+	const after = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': css,
+			'src/A.tsx': [
+				"import { Text } from '@wordpress/ui';",
+				'export const A = () => <Text variant="heading-md" render={ <h4 /> } className="acme-title">Hi</Text>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const css_ = (r: AnalyzeResult) =>
+		r.findings
+			.filter((f) => f.file.endsWith('.scss'))
+			.map((f) => `${f.severity} ${f.rule} ${f.message}`)
+			.sort();
+	assert(!blocking(after).length, `the conversion added blocking findings: ${JSON.stringify(blocking(after))}`);
+	assert(
+		JSON.stringify(css_(after)) === JSON.stringify(css_(before)),
+		`the same CSS classified differently on the component:\n${css_(before).join('\n')}\n---\n${css_(after).join('\n')}`,
+	);
+	assert(!at(after, 'system/raw-element').length, 'the converted element still reports as raw');
+});
+
+await check('a property the component owns still blocks, and the message names the prop', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-t { font-size: 14px; }\n.acme-b { background: #f00; border-color: #00f; }',
+			'src/A.tsx': [
+				"import { Text } from '@wordpress/ui';",
+				"import { Button } from '@wordpress/components';",
+				'export const A = () => <><Text className="acme-t">x</Text><Button className="acme-b">y</Button></>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const type = one(at(r, 'typography/in-css'), 'font-size on Text is the variant’s');
+	assert(type.message === 'font-size on <Text> — set via its variant prop', `message: ${type.message}`);
+	assert(type.severity === 'error', 'an owned property is blocking');
+	const overrides = at(r, 'system/override').map((f) => f.message);
+	assert(
+		overrides.includes('<Button> ← background — set via its variant prop'),
+		`background on Button: ${overrides.join('; ')}`,
+	);
+	// `border-color` is a longhand of the `border` the surface lists.
+	assert(
+		overrides.includes('<Button> ← border-color — set via its variant prop'),
+		`a longhand of an owned shorthand is owned: ${overrides.join('; ')}`,
+	);
+	// The explanation is not part of the finding's identity: a baseline taken
+	// before the message said why must still recognise it.
+	assert(
+		at(r, 'system/override').every((f) => f.code === f.message.split(' — ')[0]),
+		'the code stays the component and the property',
+	);
+});
+
+// A class can be bound to several text components. `letter-spacing` is not
+// `@wordpress/ui` Text's, but `Truncate` records no surface, so its claim on the
+// type stands; reading only the first binding made the verdict follow file order.
+await check('typography/in-css reads every text component a class is bound to, whatever the file order', async () => {
+	const verdicts: string[] = [];
+	for (const [text, truncate] of [
+		['src/A.tsx', 'src/B.tsx'],
+		['src/C.tsx', 'src/B.tsx'],
+	] as const) {
+		const r = await run(
+			{
+				'loupe.config.json': CONFIG(),
+				'styles/a.scss': '.acme-l { letter-spacing: 1px; }',
+				[text]: 'import { Text } from \'@wordpress/ui\';\nexport const T = () => <Text className="acme-l">x</Text>;',
+				[truncate]:
+					'import { Truncate } from \'@wordpress/components\';\nexport const U = () => <Truncate className="acme-l">x</Truncate>;',
+			},
+			{ components: componentRegistry },
+		);
+		const css = r.findings.filter((f) => f.file.endsWith('.scss'));
+		verdicts.push(css.map((f) => `${f.severity} ${f.rule} ${f.message}`).join('; '));
+	}
+	assert(verdicts[0] === verdicts[1], `the verdict followed file order:\n${verdicts.join('\n')}`);
+	assert(verdicts[0] === 'error typography/in-css letter-spacing on <Truncate>', `verdict: ${verdicts[0]}`);
+});
+
+// The code is the finding's baseline identity, and before every binding was read
+// it was the first one's. The message names the binding that owns the property;
+// the code stays on the first, as system/override's does, so a baselined entry
+// still matches.
+await check('typography/in-css keeps its code on the first text component', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-l { font-size: 13px; }',
+			'src/B.tsx':
+				'import { Truncate } from \'@wordpress/components\';\nexport const U = () => <Truncate className="acme-l">x</Truncate>;',
+			'src/C.tsx': 'import { Text } from \'@wordpress/ui\';\nexport const T = () => <Text className="acme-l">x</Text>;',
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(
+		r.findings.filter((x) => x.rule === 'typography/in-css'),
+		'one typography/in-css finding',
+	);
+	assert(f.message.startsWith('font-size on <Text> — set via'), `the owner is named: ${f.message}`);
+	assert(f.code === 'font-size on <Truncate>', `the code stays on the first binding: ${f.code}`);
+});
+
+// `import * as UI` binds the package, so `<UI.Button>` is the package's Button.
+// Keyed as a part of `UI`, it found no surface while the package counted as
+// surfaced, and the override fell to an advisory hardcoded value.
+await check('a namespace import’s member is the component, and keeps its surface', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-t { font-size: 14px; }\n.acme-b { background: #f00; }',
+			'src/A.tsx': [
+				"import * as UI from '@wordpress/ui';",
+				"import * as WP from '@wordpress/components';",
+				'export const A = () => <><UI.Text className="acme-t">x</UI.Text><WP.Button className="acme-b">y</WP.Button></>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const type = one(at(r, 'typography/in-css'), 'font-size on UI.Text is the variant’s');
+	assert(type.severity === 'error' && type.message.endsWith('set via its variant prop'), `type: ${type.message}`);
+	const override = one(at(r, 'system/override'), 'background on WP.Button is the variant’s');
+	assert(override.severity === 'error' && override.message.endsWith('set via its variant prop'), override.message);
+	assert(!at(r, 'tokens/hardcoded-value').length, 'neither falls through to a plain hardcoded value');
+});
+
+await check('a class on several components keeps the first one in its code, whichever owns the property', async () => {
+	// Before surfaces, `system/override` named the first component the class is
+	// bound to, and that is what a baseline recorded then holds. The message may
+	// now name another binding — the one whose surface owns the property — but
+	// the identity must not move with it, or upgrading resurfaces accepted work.
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.css': '.acme-x { color: #f00; }',
+			'src/A.tsx': [
+				"import { Notice } from '@wordpress/components';",
+				'export const A = () => <Notice className="acme-x">x</Notice>;',
+			].join('\n'),
+			'src/B.tsx': [
+				"import { Button } from '@wordpress/components';",
+				'export const B = () => <Button className="acme-x">y</Button>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/override'), 'one override on the shared class');
+	assert(f.message.startsWith('<Button> ← color — set via'), `the message names the owner: ${f.message}`);
+	// The key a baseline recorded before surfaces: the first binding, by code.
+	const recorded = findingKey({ rule: 'system/override', file: f.file, code: '<Notice> ← color', message: '' });
+	assert(findingKey(f) === recorded, `the pre-surface key ${recorded} is not the finding's ${findingKey(f)}`);
+});
+
+await check('a component that sets a property with no prop for it says so, and still blocks', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-field { font-size: 14px; border: 1px solid #ccc; border-radius: 2px; }',
+			'src/A.tsx': [
+				"import { TextControl } from '@wordpress/components';",
+				'export const A = () => <TextControl className="acme-field" label="x" value="" onChange={ () => {} } />;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/override'), 'only the font-size is the wrapper’s own');
+	assert(
+		f.message === '<TextControl> ← font-size — it sets this itself and has no prop for it',
+		`message: ${f.message}`,
+	);
+	assert(f.severity === 'error', 'owned with no prop is still an override');
+	// The class lands on the wrapper around label, input and help, which sets no
+	// border: that is the box `className` hands you, styled as any other.
+	const plain = at(r, 'tokens/hardcoded-value').map((f) => f.message);
+	assert(
+		plain.includes('border: 1px solid #ccc') && plain.includes('border-radius: 2px'),
+		`the unowned declarations fall through to the plain verdict: ${plain.join('; ')}`,
+	);
+});
+
+await check('a component with no recorded surface is advisory, and promises no prop', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-n { color: #333; text-transform: uppercase; }',
+			'src/A.tsx': [
+				"import { Notice } from '@wordpress/components';",
+				'export const A = () => <Notice className="acme-n">x</Notice>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	assert(!componentRegistry.get('@wordpress/components::Notice')?.surface, 'the fixture needs a surface-less entry');
+	assert(!at(r, 'system/override').length, `no surface, no override: ${JSON.stringify(at(r, 'system/override'))}`);
+	assert(!blocking(r).length, `nothing blocks: ${JSON.stringify(blocking(r))}`);
+	one(at(r, 'tokens/hardcoded-value'), 'the raw colour still owes its token');
+});
+
+await check('a compound part is its own element: Card.Root owns its surface, Card.Content does not', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-card { background-color: #eee; }\n.acme-body { background-color: #eee; }',
+			'src/A.tsx': [
+				"import { Card } from '@wordpress/ui';",
+				'export const A = () => <Card.Root className="acme-card"><Card.Content className="acme-body">x</Card.Content></Card.Root>;',
+			].join('\n'),
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/override'), 'Card.Root sets its own background');
+	assert(f.line === 1, `the override is the root's: line ${f.line}`);
+	assert(
+		at(r, 'tokens/hardcoded-value').some((h) => h.line === 2),
+		'the content part has no surface, so its colour is a plain hardcoded value',
+	);
+});
+
+// What converting would change is said before the conversion, on the
+// `system/raw-element` finding that asks for it: #13's 41 blockers arrived
+// after the fact. The message grows a tail; `code` does not, so a baseline
+// keyed on `<h4>` survives it.
+
+const TITLE_CSS = '.acme-title { color: #826200; text-transform: uppercase; letter-spacing: 0.05em; font-size: 14px; }';
+const H4 = 'export const A = () => <h4 className="acme-title">Hi</h4>;';
+
+await check('a raw element names the declarations its conversion would promote', async () => {
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'styles/a.scss': TITLE_CSS, 'src/A.tsx': H4 },
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/raw-element'), 'the <h4> should report');
+	// Text's surface owns font-size through `variant`, and nothing else here.
+	assert(
+		f.message === '<h4> → <Text render={ <h4 /> }> (@wordpress/ui) — converted, would block: font-size (.acme-title)',
+		`message: ${f.message}`,
+	);
+	assert(f.code === '<h4>', `the identity does not move: ${f.code}`);
+});
+
+await check('a raw element whose conversion changes nothing says nothing more', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-title { color: #826200; letter-spacing: 0.05em; }',
+			'src/A.tsx': H4,
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(at(r, 'system/raw-element'), 'the <h4> should report');
+	assert(f.message === '<h4> → <Text render={ <h4 /> }> (@wordpress/ui)', `message: ${f.message}`);
+});
+
+await check('where no registry records surfaces, every appearance property is named', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.scss': `${TITLE_CSS}\n.acme-big { border: 1px solid #ccc; }`,
+		'src/A.tsx': 'export const A = () => <h4 className="acme-title acme-big acme-x">Hi</h4>;',
+	});
+	const f = one(at(r, 'system/raw-element'), 'the <h4> should report');
+	assert(
+		f.message ===
+			'<h4> → <Text render={ <h4 /> }> — converted, would block: color, text-transform, letter-spacing, font-size (+1 more) (.acme-title, .acme-big)',
+		`message: ${f.message}`,
+	);
+	// The keys of a run that says it and one that cannot.
+	const quiet = await run({
+		'loupe.config.json': CONFIG({ rules: { 'system/override': 'off', 'typography/in-css': 'off' } }),
+		'styles/a.scss': `${TITLE_CSS}\n.acme-big { border: 1px solid #ccc; }`,
+		'src/A.tsx': 'export const A = () => <h4 className="acme-title acme-big acme-x">Hi</h4>;',
+	});
+	const bare = one(at(quiet, 'system/raw-element'), 'the <h4> should still report');
+	assert(bare.message === '<h4> → <Text render={ <h4 /> }>', `with nothing to promote: ${bare.message}`);
+	assert(findingKey(bare) === findingKey(f), `the baseline key moved: ${findingKey(bare)} / ${findingKey(f)}`);
+});
+
+await check('a malformed surface is dropped rather than half-read', () => {
+	const loaded = loadComponents([
+		{ name: 'A', package: 'p', status: 'recommended', surface: { properties: { color: 3 } } },
+		{ name: 'B', package: 'p', status: 'recommended', surface: { properties: [] } },
+		{ name: 'C', package: 'p', status: 'recommended', surface: { properties: { 'Font-Size': ['variant'] } } },
+		{ name: 'D', package: 'p', status: 'recommended', surface: { properties: {} } },
+	]);
+	assert(!loaded.get('p::A')?.surface, 'a non-prop value invalidates the surface');
+	assert(!loaded.get('p::B')?.surface, 'properties must be an object');
+	assert(loaded.get('p::C')?.surface?.properties['font-size']?.[0] === 'variant', 'property names are lower-cased');
+	assert(loaded.get('p::D')?.surface !== undefined, 'an empty surface is a verified answer, and is kept');
+	assert(loaded.get('p::A')?.surfaced, 'every entry of a registry recording a surface is read by surface');
+});
+
+// Where the registry records no surface anywhere, a missing one is not a gap in
+// one entry, and the rule keeps the reading it had before surfaces existed.
+await check('whether a registry records surfaces is the loader’s to say, per component', () => {
+	const none = loadComponents([
+		{ name: 'A', package: 'p', status: 'recommended', surfaced: true },
+		{ name: 'B', package: 'p', status: 'recommended', surface: { properties: { color: 3 } } },
+	]);
+	assert(
+		[...none.values()].every((e) => !e.surfaced),
+		'neither a claimed flag nor a malformed surface makes a registry surfaced',
+	);
+	const merged = new Map([
+		...none,
+		...loadComponents([{ name: 'C', package: 'q', status: 'recommended', surface: { properties: {} } }]),
+	]);
+	const recorded = surfacesRecorded(merged);
+	assert(!recorded('p', 'A'), 'an entry from a registry recording none');
+	assert(!recorded('p', 'Z'), 'an unlisted component, from a package only that registry lists');
+	assert(recorded('q', 'C.Item'), 'a part, by its namespace’s entry');
+	assert(recorded('r', 'X'), 'a package nobody lists: whether anything in the run records surfaces');
+	assert(recorded(undefined, 'X'), 'no package to key on: the same');
+	assert(!surfacesRecorded(none)(undefined, 'X'), 'and nothing in the run does');
+});
+
+await check('a shorthand and its longhands overlap; neighbouring families do not', () => {
+	const yes: [string, string][] = [
+		['border', 'border-top-color'],
+		['border-color', 'border'],
+		['font', 'font-size'],
+		['background', 'background-color'],
+		['border-radius', 'border-top-left-radius'],
+	];
+	const no: [string, string][] = [
+		['border', 'border-radius'],
+		['font-size', 'font-weight'],
+		['color', 'background-color'],
+	];
+	for (const [a, b] of yes) assert(propsOverlap(a, b) && propsOverlap(b, a), `${a} / ${b} should overlap`);
+	for (const [a, b] of no) assert(!propsOverlap(a, b), `${a} / ${b} should not overlap`);
+});
+
+// What the shipped surfaces claim is checked against what the rules can see: a
+// property neither rule reads is data nobody acts on, and a surface with no
+// provenance is a guess.
+await check('every shipped surface is sourced, and lists only properties the rules read', () => {
+	const raw = JSON.parse(readFileSync(COMPONENT_REGISTRY, 'utf8')) as {
+		scope?: { covers?: unknown; absent?: unknown };
+		components: { name: string; package: string; surface?: unknown }[];
+	};
+	assert(Array.isArray(raw.scope?.covers) && typeof raw.scope?.absent === 'string', 'the file declares its scope');
+	const surfaced = raw.components.filter((c) => c.surface !== undefined);
+	assert(surfaced.length > 0, 'no entry carries a surface');
+	for (const c of surfaced) {
+		const s = componentRegistry.get(`${c.package}::${c.name}`)?.surface;
+		assert(s, `${c.package}::${c.name}: the surface did not load`);
+		assert(/\d{4}-\d{2}-\d{2}/.test(s.verifiedAgainst ?? ''), `${c.name}: no dated verifiedAgainst`);
+		const unread = Object.keys(s.properties).filter((p) => !APPEARANCE_PROPS.has(p));
+		assert(!unread.length, `${c.package}::${c.name} lists properties no rule reads: ${unread.join(', ')}`);
+	}
+	// Issue #21's family: each control's surface is a recorded answer, even
+	// where the answer is that it owns nothing a class can reach.
+	for (const name of [
+		'TextControl',
+		'SelectControl',
+		'ToggleControl',
+		'CheckboxControl',
+		'RadioControl',
+		'TextareaControl',
+		'ComboboxControl',
+		'RangeControl',
+		'SearchControl',
+	])
+		assert(componentRegistry.get(`@wordpress/components::${name}`)?.surface, `${name} has no surface`);
+});
 
 finish();

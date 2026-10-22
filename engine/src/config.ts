@@ -9,7 +9,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, isSeverity } from './rules.ts';
 import { loadPatterns } from './patterns.ts';
@@ -53,6 +53,7 @@ export const DEFAULTS: MergedConfig = {
 		// and Base UI, `as` and `component` elsewhere. The element in one of these is
 		// an argument naming a tag, not markup being rendered. `[]` turns it off.
 		substitutionProps: ['render', 'as', 'component'],
+		allowedInlineStyles: {},
 	},
 	namespaces: { project: [], external: [], neverDead: [] },
 	sources: {
@@ -69,7 +70,9 @@ export const DEFAULTS: MergedConfig = {
 	// (the layout/text categorization) — same word, unrelated concern.
 	componentRegistry: null,
 	baseline: DEFAULT_BASELINE,
-	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 120000 },
+	// timeoutMs is the hook's whole judge phase, well inside the 60s Claude Code
+	// gives PostToolUse: the analysis on either side of it needs the rest.
+	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 30000 },
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
@@ -87,6 +90,19 @@ export function merge<T>(base: T, over: unknown): T {
 	const out: Record<string, unknown> = { ...base };
 	for (const [k, v] of Object.entries(over)) out[k] = isObj(v) && isObj(base[k]) ? merge(base[k], v) : v;
 	return out as T;
+}
+
+/**
+ * {@link merge}, except that a rule's setting is replaced whole.
+ *
+ * Merging one field-by-field would carry a preset's `reason` for turning a rule
+ * off onto a project that turned it back on — an explanation of a setting that
+ * is no longer there.
+ */
+function mergeConfig(base: AuthoredConfig, over: AuthoredConfig): AuthoredConfig {
+	const out = merge(base, over);
+	if (isObj(base.rules) && isObj(over.rules)) out.rules = { ...base.rules, ...over.rules };
+	return out;
 }
 
 /** Walk up from `start` looking for a config file or a `loupe` package.json key. */
@@ -137,12 +153,52 @@ async function resolveExtends(spec: string, fromDir: string): Promise<{ path: st
 	throw new Error(`cannot resolve extends: ${spec}`);
 }
 
-async function loadChain(path: string, seen = new Set<string>()): Promise<AuthoredConfig> {
+/**
+ * A config with its `extends` resolved, and which file in the chain wrote each
+ * rule setting — what lets `loupe suppressions` say a preset turned a rule off
+ * rather than pin it on the project's own config.
+ */
+interface Chain {
+	raw: AuthoredConfig;
+	/** Rule id as written → the absolute path or `preset <name>` that set it. */
+	ruleFrom: Record<string, string>;
+}
+
+/**
+ * Where a walk of `extends` has got to.
+ *
+ * `ancestors` is the path from the config being loaded down to this one, and a
+ * config met again on it is a cycle. It is not every config visited: a diamond
+ * — `extends: ["wpds", "base-ui"]`, both of which reach `generic` — meets the
+ * shared ancestor twice on separate branches, and that is no cycle.
+ *
+ * `applied` is every config merged in so far, across branches. A shared
+ * ancestor is merged once, where it is first met, and skipped after: merged
+ * again, the second branch's copy would land on top of the first branch and put
+ * back every setting the first branch's own configs had replaced — `generic`'s
+ * `sources.references` over `wordpress-components`'. Merged once, every config
+ * still lands after its ancestors and before its descendants, as in one chain.
+ */
+interface Walk {
+	ancestors: ReadonlySet<string>;
+	applied: Set<string>;
+}
+
+const freshWalk = (): Walk => ({ ancestors: new Set(), applied: new Set() });
+
+async function loadChain(path: string, walk = freshWalk()): Promise<Chain> {
 	const real = resolve(path);
-	if (seen.has(real)) throw new Error(`circular extends at ${real}`);
-	seen.add(real);
+	if (walk.ancestors.has(real)) throw new Error(`circular extends at ${real}`);
+	if (walk.applied.has(real)) return { raw: {}, ruleFrom: {} };
+	walk.applied.add(real);
 	const raw = (await readConfigFile(real)) ?? {};
-	return expandExtends(raw, dirname(real), seen);
+	const label = real.startsWith(PRESET_DIR)
+		? `preset ${real.slice(PRESET_DIR.length + 1).replace(/\.json$/, '')}`
+		: real;
+	return expandExtends(raw, dirname(real), label, {
+		ancestors: new Set([...walk.ancestors, real]),
+		applied: walk.applied,
+	});
 }
 
 /**
@@ -154,17 +210,38 @@ async function loadChain(path: string, seen = new Set<string>()): Promise<Author
 async function expandExtends(
 	raw: AuthoredConfig | undefined,
 	fromDir: string,
-	seen = new Set<string>(),
-): Promise<AuthoredConfig> {
-	if (!raw?.extends) return raw ?? {};
+	label: string,
+	walk = freshWalk(),
+): Promise<Chain> {
+	raw = anchorProfiles(raw, fromDir);
+	const own = Object.fromEntries(Object.keys(isObj(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
+	if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
 	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
 	let base: AuthoredConfig = {};
+	let ruleFrom: Record<string, string> = {};
 	for (const spec of specs) {
 		const { path: p } = await resolveExtends(spec, fromDir);
-		base = merge(base, await loadChain(p, seen));
+		const parent = await loadChain(p, walk);
+		base = mergeConfig(base, parent.raw);
+		ruleFrom = { ...ruleFrom, ...parent.ruleFrom };
 	}
 	const { extends: _drop, ...rest } = raw;
-	return merge(base, rest);
+	return { raw: mergeConfig(base, rest), ruleFrom: { ...ruleFrom, ...own } };
+}
+
+/**
+ * `profiles` resolved against the directory of the file that wrote it.
+ *
+ * Here rather than in `normalize`, which knows only the root: once `extends` is
+ * merged nothing says which file a path came from, and a shared config's
+ * `./profiles` means the directory beside *it*, not beside whatever extends it.
+ * Anything that is not a string is left alone for `normalize` to refuse.
+ */
+function anchorProfiles(raw: AuthoredConfig | undefined, fromDir: string): AuthoredConfig | undefined {
+	if (!raw || raw.profiles === undefined) return raw;
+	const at = (p: unknown): unknown => (typeof p === 'string' && p !== '' ? resolve(fromDir, p) : p);
+	const spec: unknown = raw.profiles;
+	return { ...raw, profiles: (Array.isArray(spec) ? spec.map(at) : at(spec)) as string | string[] };
 }
 
 /** Shipped presets, `generic` last — it is the fallback, not a choice. */
@@ -218,7 +295,10 @@ export function compilePatterns(patterns: readonly string[] | undefined): RegExp
  * Normalize a merged config: canonicalize rule ids, coerce severities, expand
  * the element map, and precompute the predicates the analyzer uses.
  */
-export function normalize(raw: AuthoredConfig | undefined, { root }: { root: string }): Config {
+export function normalize(
+	raw: AuthoredConfig | undefined,
+	{ root, ruleFrom = {} }: { root: string; ruleFrom?: Record<string, string> },
+): Config {
 	const cfg = merge(DEFAULTS, raw ?? {});
 	const ds = cfg.designSystem;
 	const patterns = readRegistry(cfg.patterns, root, ds.packages, loadPatterns, []);
@@ -230,23 +310,31 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		RuleId,
 		RuleSetting
 	>;
+	const ruleOrigins: Partial<Record<RuleId, string>> = {};
 	for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
 		const id = canonicalRuleId(rawId);
 		if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
-		const sev: unknown = value;
-		if (!isSeverity(sev))
-			throw new Error(
-				Array.isArray(sev)
-					? `rule options are no longer supported — write "${rawId}": ${JSON.stringify(sev[0])}`
-					: `bad severity for ${rawId}: ${String(sev)}`,
-			);
-		rules[id] = { severity: sev };
+		rules[id] = ruleSetting(rawId, value);
+		// A path is shown relative to the root; a preset by name. A config normalized
+		// straight from an object has no file to name.
+		const from = ruleFrom[rawId];
+		ruleOrigins[id] = from === undefined ? 'config' : isAbsolute(from) ? relative(root, from) || from : from;
 	}
 
-	// Element map: "p": "Text" or "div": { component, styledOnly }.
+	// Element map: "p": "Text", "div": { component, styledOnly },
+	// "input": { component, attribute: "type", values: { checkbox: "CheckboxControl" } },
+	// or "h4": { component: "Text", render: "h4" }.
 	const elementMap = new Map<string, ElementMapping>();
 	for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
 		const entry = typeof v === 'string' ? { component: v, styledOnly: false } : v;
+		if ((entry.values === undefined) !== (entry.attribute === undefined))
+			throw new Error(`elementMap.${tag}: attribute and values go together`);
+		// It is printed as `render={ <h4 /> }`, so anything but a bare tag name
+		// would put a suggestion in the finding that does not parse.
+		if (entry.render !== undefined && !(typeof entry.render === 'string' && /^[a-z][a-z0-9-]*$/i.test(entry.render)))
+			throw new Error(
+				`elementMap.${tag}.render must be an element name like "h4", got: ${JSON.stringify(entry.render)}`,
+			);
 		elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
 	}
 
@@ -267,6 +355,38 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 	const styleSources: unknown = ds.styleSources ?? [];
 	if (!Array.isArray(styleSources) || styleSources.some((p) => typeof p !== 'string' || p === ''))
 		throw new Error(`designSystem.styleSources must be an array of paths, got: ${JSON.stringify(styleSources)}`);
+
+	const allowedInlineStyles: unknown = ds.allowedInlineStyles ?? {};
+	if (
+		!isObj(allowedInlineStyles) ||
+		Object.values(allowedInlineStyles).some((v) => !Array.isArray(v) || v.some((p) => typeof p !== 'string'))
+	)
+		throw new Error(
+			`designSystem.allowedInlineStyles must map component names to arrays of CSS properties, got: ${JSON.stringify(allowedInlineStyles)}`,
+		);
+
+	// A ceiling the walk refuses at. A string or a fraction read as "no ceiling
+	// set" would leave a project that meant to raise it refusing at the default,
+	// and one that meant to lower it walking a home directory.
+	const maxEntries: unknown = cfg.maxEntries;
+	if (maxEntries !== undefined && maxEntries !== null && !(Number.isInteger(maxEntries) && (maxEntries as number) > 0))
+		throw new Error(`maxEntries must be a positive whole number of entries, got: ${JSON.stringify(maxEntries)}`);
+
+	// A project's own profile directories. A bare string is one directory, not a
+	// list of characters; anything else is a mistake, and read as "none" it would
+	// quietly hand the project the shipped profile it wrote its own to replace.
+	const profileSpec: unknown = cfg.profiles ?? [];
+	const profileList: unknown[] =
+		typeof profileSpec === 'string' ? [profileSpec] : Array.isArray(profileSpec) ? profileSpec : [profileSpec];
+	if (profileList.some((p) => typeof p !== 'string' || p === ''))
+		throw new Error(`profiles must be a directory or an array of directories, got: ${JSON.stringify(profileSpec)}`);
+	// Normally absolute already (see `anchorProfiles`); an object normalized
+	// straight from code has no file, so its paths are the root's.
+	const profileDirs = (profileList as string[]).map((p) => resolve(root, p));
+
+	const pin: unknown = cfg.profile;
+	if (pin !== undefined && pin !== null && !(typeof pin === 'string' && pin !== ''))
+		throw new Error(`profile must be a profile id or "none", got: ${JSON.stringify(pin)}`);
 
 	const layoutComponents = ds.components?.layout ?? [];
 	const textComponents = ds.components?.text ?? [];
@@ -308,6 +428,8 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 		// paths won. Normalizing a bare object is the inline case by definition.
 		source: { kind: 'inline' },
 		inferred: false,
+		profileDirs,
+		profilePin: typeof pin === 'string' ? pin : null,
 		designSystem: {
 			name: ds.name || '',
 			packages: ds.packages ?? [],
@@ -321,20 +443,53 @@ export function normalize(raw: AuthoredConfig | undefined, { root }: { root: str
 			knownComponents: new Set([...layoutComponents, ...textComponents]),
 			elementMap,
 			substitutionProps: new Set(substitutionProps as string[]),
+			allowedInlineStyles: new Map(
+				Object.entries(allowedInlineStyles as Record<string, string[]>).map(([c, props]) => [
+					c,
+					new Set(props.map((p) => p.toLowerCase())),
+				]),
+			),
 		},
 		patterns,
 		componentRegistry,
 		sources: cfg.sources,
 		suppression,
-		baselinePath: cfg.baseline,
+		// An empty `baseline` names nothing, as an empty `--baseline=` does.
+		baselinePath: cfg.baseline || DEFAULT_BASELINE,
 		hook: cfg.hook,
+		...(typeof maxEntries === 'number' ? { maxEntries } : {}),
 		rules,
+		ruleFrom: ruleOrigins,
 		severityOf: (id: RuleId) => rules[id].severity,
 		isProject: (cls: string) => projectPrefixes.some((p) => cls.startsWith(p)),
 		isExternal: (cls: string) => externalPrefixes.some((p) => cls.startsWith(p)),
 		isNeverDead: (cls: string) => neverDead.some((re) => re.test(cls)),
 	};
 	return { ...config, enabled: enabledRules(config) };
+}
+
+/**
+ * One rule's setting: `"<severity>"`, or `{ severity, reason }` to say why.
+ *
+ * Anything else throws rather than guessing — a misspelled `reasn` read as no
+ * reason at all is exactly the silent loss the object form exists to prevent.
+ */
+function ruleSetting(rawId: string, value: unknown): RuleSetting {
+	if (isSeverity(value)) return { severity: value };
+	if (Array.isArray(value))
+		throw new Error(`rule options are no longer supported — write "${rawId}": ${JSON.stringify(value[0])}`);
+	if (!isObj(value)) throw new Error(`bad severity for ${rawId}: ${String(value)}`);
+	const extra = Object.keys(value).filter((k) => k !== 'severity' && k !== 'reason');
+	if (extra.length)
+		throw new Error(
+			`unknown key${extra.length > 1 ? 's' : ''} in the setting for ${rawId}: ${extra.join(', ')} — a rule setting takes only severity and reason`,
+		);
+	const { severity, reason } = value;
+	if (!isSeverity(severity)) throw new Error(`bad severity for ${rawId}: ${String(severity)}`);
+	if (reason === undefined) return { severity };
+	if (typeof reason !== 'string' || !reason.trim())
+		throw new Error(`the reason for ${rawId} must be a non-empty string, got: ${JSON.stringify(reason)}`);
+	return { severity, reason: reason.trim() };
 }
 
 /**
@@ -441,29 +596,29 @@ export async function loadConfig({
 	inline?: AuthoredConfig | null;
 	inferred?: boolean;
 }): Promise<Config> {
-	let raw: AuthoredConfig;
+	let chain: Chain;
 	let source: ConfigSource;
 	if (configPath) {
-		raw = await loadChain(resolve(configPath));
+		chain = await loadChain(resolve(configPath));
 		source = { kind: 'file', path: resolve(configPath) };
 	} else if (preset) {
 		if (!hasPreset(preset)) throw new Error(`unknown preset: ${preset}`);
-		raw = await loadChain(join(PRESET_DIR, `${presetKey(preset)}.json`));
+		chain = await loadChain(join(PRESET_DIR, `${presetKey(preset)}.json`));
 		source = { kind: 'preset', name: preset };
 	} else {
 		const found = findConfig(root);
 		if (found) {
-			raw = await loadChain(found);
+			chain = await loadChain(found);
 			source = { kind: 'file', path: found };
 		} else if (inline) {
-			raw = await expandExtends(inline, root);
+			chain = await expandExtends(inline, root, inferred ? 'inferred config' : 'inline config');
 			source = { kind: inferred ? 'inferred' : 'inline' };
 		} else {
-			raw = await loadChain(join(PRESET_DIR, 'generic.json'));
+			chain = await loadChain(join(PRESET_DIR, 'generic.json'));
 			source = { kind: 'preset', name: 'generic' };
 		}
 	}
-	const normalized = normalize(raw, { root });
+	const normalized = normalize(chain.raw, { root, ruleFrom: chain.ruleFrom });
 	normalized.source = source;
 	normalized.inferred = source.kind === 'inferred';
 	return normalized;

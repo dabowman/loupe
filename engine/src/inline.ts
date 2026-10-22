@@ -12,6 +12,7 @@
  */
 
 import type { Node, ObjectProperty } from '@babel/types';
+import type { ValueSpan } from './types.ts';
 
 /**
  * Properties where a bare number is a ratio or a count, not a length. React
@@ -101,6 +102,36 @@ export function toCssValue(prop: string, node: Node | null | undefined): string 
 function numeric(prop: string, n: number): string {
 	if (n === 0) return '0';
 	return UNITLESS.has(prop) ? String(n) : `${n}px`;
+}
+
+/**
+ * Where a style value is written, for `fix` to splice.
+ *
+ * The two conversions above run one way only: `13` is reported as `13px` and a
+ * quoted value is reported without its quotes, so nothing in the declaration a
+ * reader sees can be matched against the source. The literal's own column and
+ * text can be. A value that is not a single literal sitting on the
+ * declaration's own line has no span, and a fix for it is refused rather than
+ * matched as CSS.
+ */
+export function valueSpan(node: Node | null | undefined, line: number | null): ValueSpan | undefined {
+	const loc = node?.loc;
+	if (!node || !loc || loc.start.line !== line || loc.end.line !== line) return undefined;
+	const text = rawOf(node);
+	return text === null ? undefined : { col: loc.start.column, text };
+}
+
+/** The literal as written. `extra.raw` carries it for all but these two shapes. */
+function rawOf(node: Node): string | null {
+	if (node.type === 'TemplateLiteral') return node.expressions.length ? null : `\`${node.quasis[0]?.value.raw ?? ''}\``;
+	if (node.type === 'UnaryExpression') {
+		const inner = node.argument ? rawOf(node.argument) : null;
+		// A space between the sign and the number leaves this not matching the
+		// source, which the splice checks and refuses.
+		return inner === null ? null : `${node.operator}${inner}`;
+	}
+	const raw = node.extra?.raw;
+	return typeof raw === 'string' ? raw : null;
 }
 
 /** The property name a style-object key carries, or null if it isn't static. */

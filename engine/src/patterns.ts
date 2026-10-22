@@ -18,10 +18,15 @@ import type { Pattern, PatternNode, RuleSpec } from './types.ts';
  * `"Stack"` → any `Stack`; `"@wordpress/components::Stack"` → that package's.
  * Qualifying is opt-in per node, for the project that imports two systems at
  * once; a registry scoped by its own `packages` field needs none of it.
+ *
+ * A leading `>` pins the node to its parent's direct children — see `matches`.
  */
-const split = (spec: string): { name: string; pkg: string | null } => {
+const split = (raw: string): { name: string; pkg: string | null; direct?: true } => {
+	const direct = raw.startsWith('>');
+	const spec = direct ? raw.slice(1).trimStart() : raw;
 	const i = spec.indexOf('::');
-	return i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
+	const named = i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
+	return direct ? { ...named, direct } : named;
 };
 
 /** `[name, ...children]` → `{ name, pkg, children }`. A bare string is a leaf. */
@@ -68,9 +73,15 @@ const nameMatches = (spec: string, actual: string): boolean =>
  * sibling in a fixed order — `form-modal` records its footer as a sibling of the
  * body and real code nests it inside.
  *
+ * A child written `>Name` is the exception: it must be one of the root's own
+ * children in the system tree (raw elements between still don't count). A shape
+ * made only of layout primitives, `Text` and `Button` needs it — matched at any
+ * depth, a whole screen's outer `Stack` contains a "header" somewhere.
+ *
  * Each registered child must claim a distinct node, so `["VStack","Text","Text"]`
  * needs two Texts rather than matching one twice. Assignment is greedy, largest
- * child first.
+ * child first, and pinned children before loose ones, so a loose child never
+ * takes the only node a pinned one could have had.
  */
 export function matches(pattern: PatternNode, tree: PatternNode): boolean {
 	if (!nameMatches(pattern.name, tree.name)) return false;
@@ -80,12 +91,15 @@ export function matches(pattern: PatternNode, tree: PatternNode): boolean {
 	if (pattern.pkg && tree.pkg && pattern.pkg !== tree.pkg) return false;
 	if (!pattern.children.length) return true;
 	const pool = descendants(tree);
-	const used = new Set();
-	const wanted = [...pattern.children].sort((a, b) => nodeCount(b) - nodeCount(a));
+	const own = new Set(tree.children);
+	const used = new Set<PatternNode>();
+	const wanted = [...pattern.children].sort(
+		(a, b) => Number(Boolean(b.direct)) - Number(Boolean(a.direct)) || nodeCount(b) - nodeCount(a),
+	);
 	for (const want of wanted) {
-		const idx = pool.findIndex((n, i) => !used.has(i) && matches(want, n));
-		if (idx === -1) return false;
-		used.add(idx);
+		const hit = pool.find((n) => !used.has(n) && (!want.direct || own.has(n)) && matches(want, n));
+		if (!hit) return false;
+		used.add(hit);
 	}
 	return true;
 }

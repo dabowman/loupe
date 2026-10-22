@@ -24,7 +24,7 @@
  */
 
 import { ask } from './judge.ts';
-import type { Choice } from './judge.ts';
+import type { Auth, Choice } from './judge.ts';
 import { DEFAULT_CONTEXT, NONE, counterpartQuery } from './judge/counterpart.ts';
 import type { Context, CounterpartItem } from './judge/counterpart.ts';
 import { bold, dim, green, yellow } from './color.ts';
@@ -498,11 +498,11 @@ export function planMap(from: TokenDoc, to: TokenDoc, opts: PlanOptions = {}): M
  */
 export async function askCounterparts(
 	plan: MapPlan,
-	apiKey: string,
+	auth: Auth,
 	fetchImpl: Fetch = fetch,
 	ctx: Context = DEFAULT_CONTEXT,
 ): Promise<{ mappings: Mapping[]; answers: (Choice | undefined)[] }> {
-	const answers = plan.jobs.length ? await ask(counterpartQuery(ctx), plan.jobs, apiKey, fetchImpl) : [];
+	const answers = plan.jobs.length ? await ask(counterpartQuery(ctx), plan.jobs, auth, fetchImpl) : [];
 	const judged = plan.jobs.map((job, i): Mapping => rowFor(job, answers[i]));
 	// Back into the order the tokens were authored in: a map read by a person is
 	// read beside the file it came from, and which rows needed a model is not an
