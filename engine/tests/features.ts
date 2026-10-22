@@ -13,7 +13,7 @@ import { mkdirSync, readFileSync, symlinkSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze, findingKey } from '../src/analyze.ts';
-import { loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
+import { listPresets, loadConfig, setComponentRegistry, setPatterns } from '../src/config.ts';
 import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents, surfacesRecorded } from '../src/components.ts';
 import { readProfiles } from '../src/profiles.ts';
@@ -2035,6 +2035,24 @@ await check('a directive that mutes nothing is reported stale', async () => {
 		off.directives.every((d) => !d.stale),
 		'with suppressions off nothing was offered to them, so nothing is stale',
 	);
+});
+
+// An import is canonicalised by `normalizeExports` before the layout and text
+// lists are consulted, so a listed name the pattern would rewrite can never
+// match: `__unstableMotion` sat in the wpds layout list as `Motion` (#108).
+await check('every shipped preset lists its layout and text components by canonical name', async () => {
+	const root = scratch('dsh-feat-');
+	try {
+		for (const name of listPresets()) {
+			const { designSystem: ds } = await loadConfig({ root, preset: name });
+			for (const c of [...ds.layoutComponents, ...ds.textComponents]) {
+				const canonical = ds.normalizeExports ? c.replace(ds.normalizeExports, '') : c;
+				assert(canonical === c, `${name}: ${c} is read as ${canonical}, so the entry never matches`);
+			}
+		}
+	} finally {
+		cleanup(root);
+	}
 });
 
 // ── styling surfaces ────────────────────────────────────────────────────────
