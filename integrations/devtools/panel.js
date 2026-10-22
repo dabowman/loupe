@@ -35,8 +35,8 @@ const setStatus = (cls, text) => {
 async function resolve() {
 	if (!payload) return;
 	await installMatcher();
-	await evalInPage(`window.__loupeMatch.load(${JSON.stringify(payload.findings.map((f) => ({ selector: f.selector, media: f.media, severity: f.severity })))})`);
-	snapshot = (await evalInPage('window.__loupeMatch.snapshot()')) || [];
+	await evalInPage(`window.__loupeMatch.load(${JSON.stringify(payload.findings.map((f) => ({ selector: f.selector, media: f.media, severity: f.severity })))}, 'panel')`);
+	snapshot = (await evalInPage("window.__loupeMatch.snapshot('panel')")) || [];
 	render();
 }
 
@@ -123,7 +123,7 @@ function render() {
 		const row = rs[k];
 		const i = row.i;
 		node.onmouseenter = () => {
-			if (pinned === null) void evalInPage(`window.__loupeMatch.highlight(${i})`).catch(() => {});
+			if (pinned === null) void evalInPage(`window.__loupeMatch.highlight(${i}, 'panel')`).catch(() => {});
 		};
 		node.onmouseleave = () => {
 			if (pinned === null) void evalInPage('window.__loupeMatch.clear()').catch(() => {});
@@ -134,7 +134,7 @@ function render() {
 			const expr =
 				pinned === null
 					? 'window.__loupeMatch.clear()'
-					: `(function(){window.__loupeMatch.highlight(${i});window.__loupeMatch.scrollTo(${i});})()`;
+					: `(function(){window.__loupeMatch.highlight(${i}, 'panel');window.__loupeMatch.scrollTo(${i}, 'panel');})()`;
 			void evalInPage(expr).catch(() => {});
 			render();
 		};

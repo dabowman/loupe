@@ -45,12 +45,12 @@ async function show() {
 	try {
 		await installMatcher();
 		await evalInPage(
-			`window.__loupeMatch.load(${JSON.stringify(payload.findings.map((f) => ({ selector: f.selector, media: f.media, severity: f.severity })))})`,
+			`window.__loupeMatch.load(${JSON.stringify(payload.findings.map((f) => ({ selector: f.selector, media: f.media, severity: f.severity })))}, 'sidebar')`,
 		);
 		// Two facts in one round trip: what is selected, and what is wrong with it.
 		const answer = await evalInPage(
 			'(function(){ if (!$0) return null; return { tag: $0.tagName.toLowerCase(),' +
-				' cls: ($0.getAttribute("class") || ""), hits: window.__loupeMatch.forElement($0) }; })()',
+				' cls: ($0.getAttribute("class") || ""), hits: window.__loupeMatch.forElement($0, \'sidebar\') }; })()',
 		);
 		render(answer);
 	} catch (err) {

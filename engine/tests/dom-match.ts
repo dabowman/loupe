@@ -158,6 +158,32 @@ await check('the API a reader depends on is all present', () => {
 		assert(new RegExp(`\\b${fn}:`).test(MATCH_JS), `window.__loupeMatch.${fn} is gone`);
 });
 
+// The panel, the Elements sidebar and the overlay each load a payload of their
+// own, fetched at their own moment, into the one matcher a page has, and each
+// addresses its list by index. Shared, the last to load answered for all three.
+await check('each reader keeps its own findings', () => {
+	const el = (cls: string) => ({ cls, nodeType: 1, closest: () => null, matches: (sel: string) => sel === `.${cls}` });
+	const page = [el('a'), el('b'), el('b')];
+	const document = { querySelectorAll: (sel: string) => page.filter((e) => e.matches(sel)) };
+	const window: Record<string, unknown> = { matchMedia: () => ({ media: 'all', matches: true }) };
+	const M = new Function('window', 'document', `${MATCH_JS}; return window.__loupeMatch;`)(window, document) as {
+		load: (findings: object[], who?: string) => number;
+		snapshot: (who?: string) => { i: number; n: number }[];
+		forElement: (el: object, who?: string) => { i: number }[];
+	};
+	M.load([{ selector: '.a' }], 'panel');
+	M.load([{ selector: '.b' }, { selector: '.a' }], 'sidebar');
+	const panel = M.snapshot('panel');
+	assert(panel.length === 1 && panel[0]?.n === 1, `the panel's list was replaced: ${JSON.stringify(panel)}`);
+	const sidebar = M.snapshot('sidebar');
+	assert(sidebar.map((r) => r.n).join() === '2,1', `the sidebar's list: ${JSON.stringify(sidebar)}`);
+	assert(M.forElement(page[0] as object, 'panel')[0]?.i === 0, 'index 0 of the panel is its own .a');
+	assert(M.forElement(page[0] as object, 'sidebar')[0]?.i === 1, 'index 1 of the sidebar is its .a');
+	// A reader that names none keeps the single list there always was.
+	M.load([{ selector: '.b' }]);
+	assert(M.snapshot()[0]?.n === 2 && M.snapshot('panel')[0]?.n === 1, 'the unnamed list is a reader of its own');
+});
+
 await check("loupe's own furniture is never a finding's target", () => {
 	// The overlay's panel is a div with classes, in the page. Without this, every
 	// broad selector reports one extra hit and outlines loupe outlining itself.

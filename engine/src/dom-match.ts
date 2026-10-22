@@ -32,7 +32,7 @@
  * copy that already matches, so this is the only thing that evicts a stale
  * matcher from a page an older loupe already touched.
  */
-export const MATCH_VERSION = 2;
+export const MATCH_VERSION = 3;
 
 export const MATCH_JS = `
 (function () {
@@ -160,29 +160,36 @@ export const MATCH_JS = `
    */
   function bucket(n, on) { return n > 0 ? (on ? 0 : 1) : n === 0 ? 2 : 3; }
 
-  var loaded = [];
+  // One list per reader. The panel, the Elements sidebar and the overlay each
+  // hand over findings fetched at their own moment and address them by index,
+  // so one shared list let the last to load answer for the others: a highlight
+  // on the wrong elements, or a row for an index the overlay never had. A call
+  // that names no reader uses the one list there was before.
+  var lists = {};
+  function listOf(who) { return lists[who || 'page'] || []; }
 
   var api = {
     version: ${MATCH_VERSION},
 
     /** Hand over the findings. Only \`selector\`, \`media\` and \`severity\` are read. */
-    load: function (findings) {
-      loaded = (findings || []).map(function (f) {
+    load: function (findings, who) {
+      var list = (findings || []).map(function (f) {
         return { selector: f.selector || null, media: f.media || null, severity: f.severity || 'warn' };
       });
-      return loaded.length;
+      lists[who || 'page'] = list;
+      return list.length;
     },
 
     domSelector: domSelector,
-    active: function (i) { return active(loaded[i]); },
+    active: function (i, who) { return active(listOf(who)[i]); },
 
     /**
      * One row per loaded finding: how many elements it reaches and whether its
      * condition holds. One eval for the whole list — a call per finding would
      * cost a round trip each across the DevTools boundary.
      */
-    snapshot: function () {
-      return loaded.map(function (f, i) {
+    snapshot: function (who) {
+      return listOf(who).map(function (f, i) {
         var els = elementsFor(f);
         var n = els ? els.length : -1;
         var on = active(f);
@@ -197,8 +204,9 @@ export const MATCH_JS = `
      * "what is wrong with *this*". \`matches\` rather than re-querying, because
      * the question is about one node.
      */
-    forElement: function (el) {
+    forElement: function (el, who) {
       if (!el || el.nodeType !== 1) return [];
+      var loaded = listOf(who);
       var out = [];
       for (var i = 0; i < loaded.length; i++) {
         var f = loaded[i];
@@ -213,10 +221,10 @@ export const MATCH_JS = `
     },
 
     /** Outline what finding \`i\` reaches. Returns how many boxes were drawn. */
-    highlight: function (i) {
+    highlight: function (i, who) {
       ensure();
       layer.innerHTML = '';
-      var els = elementsFor(loaded[i]);
+      var els = elementsFor(listOf(who)[i]);
       if (!els || !els.length) return 0;
       var drawn = 0;
       els.forEach(function (el, k) {
@@ -267,15 +275,15 @@ export const MATCH_JS = `
       layer = null;
     },
 
-    scrollTo: function (i) {
-      var els = elementsFor(loaded[i]);
+    scrollTo: function (i, who) {
+      var els = elementsFor(listOf(who)[i]);
       if (!els || !els.length) return false;
       els[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
       return true;
     },
 
     /** Marks are absolutely positioned against the viewport, so a scroll moves them. */
-    reposition: function (i) { return i === null || i === undefined ? api.clear() : api.highlight(i); },
+    reposition: function (i, who) { return i === null || i === undefined ? api.clear() : api.highlight(i, who); },
   };
 
   window.__loupeMatch = api;

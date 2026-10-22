@@ -134,7 +134,7 @@ const JS = `
   // nothing, then what was never a browser question.
   function rows() {
     var needle = q.toLowerCase();
-    return M.snapshot().map(function (r) {
+    return M.snapshot('overlay').map(function (r) {
       return { i: r.i, f: data.findings[r.i], n: r.n, on: r.on, bucket: r.bucket };
     }).filter(function (r) {
       if (!needle) return true;
@@ -212,13 +212,13 @@ const JS = `
     panel.querySelectorAll('.row').forEach(function (el, k) {
       var row = rs[k];
       var i = row.i;
-      el.onmouseenter = function () { if (pinned === null) M.highlight(i); };
+      el.onmouseenter = function () { if (pinned === null) M.highlight(i, 'overlay'); };
       el.onmouseleave = function () { if (pinned === null) M.clear(); };
       el.onclick = function () {
         if (!row || row.n <= 0) return;
         pinned = pinned === i ? null : i;
         if (pinned === null) M.clear();
-        else { M.highlight(i); M.scrollTo(i); }
+        else { M.highlight(i, 'overlay'); M.scrollTo(i, 'overlay'); }
         render();
       };
     });
@@ -233,7 +233,7 @@ const JS = `
   var frame = null;
   function reposition() {
     if (pinned === null || frame !== null) return;
-    frame = requestAnimationFrame(function () { frame = null; if (pinned !== null) M.highlight(pinned); });
+    frame = requestAnimationFrame(function () { frame = null; if (pinned !== null) M.highlight(pinned, 'overlay'); });
   }
   // A resize changes the answers themselves: crossing a breakpoint turns findings
   // on and off, so the boxes move *and* the list is restated. Debounced, because
@@ -255,7 +255,7 @@ const JS = `
           throw new Error(j && j.error || 'HTTP ' + r.status);
         });
       })
-      .then(function (j) { data = j; pinned = null; M.load(data.findings); render(); })
+      .then(function (j) { data = j; pinned = null; M.load(data.findings, 'overlay'); render(); })
       .catch(function (e) {
         panel.innerHTML = '<div class="head"><span class="title">loupe</span></div><div class="empty">' +
           esc(String(e && e.message || e)) + '<br>Is \\u0060loupe serve\\u0060 still running?</div>';
