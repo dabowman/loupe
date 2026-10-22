@@ -18,6 +18,13 @@
  * A profile with no `packages` is never selected automatically — there is
  * nothing to recognize it by — and has to be named with `--profile <id>`.
  *
+ * Profiles come from two places. `--profiles` hands over the shipped set; the
+ * project adds its own, from the directories its config lists under `profiles`
+ * and from `.loupe/profiles/`. A project's own profile outranks a shipped one
+ * claiming the same id or the same package: a design system rebuilt under its
+ * old package name ships the profile that describes it *now*, and the shipped
+ * one describes what it used to be.
+ *
  * Design notes: docs/design/cli.md#profiles
  */
 
@@ -31,9 +38,29 @@ import { setComponentRegistry, setPatterns } from './config.ts';
 import { declaredPackages, registryApplies } from './registry.ts';
 import { parseTokenScopes } from './scopes.ts';
 import { messageOf } from './text.ts';
-import type { ComponentEntry, Config, Pattern, Profile, RegistryNote, SkippedRegistry } from './types.ts';
+import type {
+	ComponentEntry,
+	Config,
+	Pattern,
+	Profile,
+	ProfileOrigin,
+	RegistryNote,
+	SkippedRegistry,
+} from './types.ts';
 
-export type { Profile, RegistryNote, SkippedRegistry };
+export type { Profile, ProfileOrigin, RegistryNote, SkippedRegistry };
+
+/** Where a project keeps its own profiles when its config does not say. */
+export const PROJECT_PROFILES = join('.loupe', 'profiles');
+
+/** The `profile` / `--profile` value that pins selection to no profile at all. */
+export const NO_PROFILE = 'none';
+
+/** One directory of profiles, and whose they are. */
+export interface ProfileRoot {
+	dir: string;
+	origin: ProfileOrigin;
+}
 
 /** A registry pair to merge in, labelled for the report. */
 export interface RegistrySource {
@@ -96,7 +123,7 @@ function readScopes(dir: string, raw: unknown): ReturnType<typeof parseTokenScop
  * Every `<root>/<id>/profile.json`. A malformed or unreadable profile is
  * skipped rather than thrown: one bad directory must not take the gate down.
  */
-export function readProfiles(root: string | null | undefined): Profile[] {
+export function readProfiles(root: string | null | undefined, origin: ProfileOrigin = 'shipped'): Profile[] {
 	if (!root || !existsSync(root)) return [];
 	const out: Profile[] = [];
 	// Sorted, and one profile per id. Sorting is what makes "the first one wins" a
@@ -135,6 +162,7 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 				// does not validate is no block rather than a profile that cannot load.
 				delivery: delivery ? readDelivery(under(dir, delivery)) : null,
 				dir,
+				origin,
 			});
 			// Claimed only once the entry is on the list: reserving it above let a
 			// directory that threw on the way to `push` lock the id out.
@@ -148,11 +176,53 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 }
 
 /**
+ * Where profiles are read from, most authoritative first: the directories the
+ * config lists, then `.loupe/profiles/` under the root, then `--profiles`.
+ *
+ * The convention is read whether or not the config names other directories —
+ * it is where a profile is found with no config at all — and a directory named
+ * twice is read once, under the first, most authoritative, origin.
+ */
+export function profileRoots({
+	root,
+	configured = [],
+	flag = null,
+}: {
+	root: string;
+	configured?: readonly string[];
+	flag?: string | null;
+}): ProfileRoot[] {
+	const roots: ProfileRoot[] = [
+		...configured.map((dir) => ({ dir: resolve(dir), origin: 'project' as const })),
+		{ dir: resolve(root, PROJECT_PROFILES), origin: 'project' },
+		...(flag ? [{ dir: resolve(flag), origin: 'shipped' as const }] : []),
+	];
+	const seen = new Set<string>();
+	return roots.filter((r) => !seen.has(r.dir) && Boolean(seen.add(r.dir)));
+}
+
+/**
+ * Every profile under `roots`, one per id, the first root to carry an id
+ * winning it — which, in {@link profileRoots}' order, is the project's.
+ */
+export function readProfileRoots(roots: readonly ProfileRoot[]): Profile[] {
+	const out = new Map<string, Profile>();
+	for (const { dir, origin } of roots) for (const p of readProfiles(dir, origin)) if (!out.has(p.id)) out.set(p.id, p);
+	return [...out.values()].sort((a, b) => byBytes(a.id, b.id));
+}
+
+/**
  * The profiles that apply to `config`.
  *
  * Selection is by package: the project imports `@wordpress/components`, so the
  * profile that claims it is the one whose composites can legitimately match.
- * `force` names a profile explicitly and skips the question.
+ * `force` names a profile explicitly and skips the question; `none` names no
+ * profile, without the project having to stop declaring its packages — which
+ * would switch off every rule that needs them.
+ *
+ * A shipped profile claiming a package that a selected project profile also
+ * claims is left out: two descriptions of one package, and the project wrote
+ * its own because the shipped one is wrong for it.
  */
 export function selectProfiles(
 	profiles: readonly Profile[],
@@ -161,10 +231,13 @@ export function selectProfiles(
 	config: { designSystem?: { packages?: readonly string[] } },
 	force: string | null = null,
 ): Profile[] {
+	if (force === NO_PROFILE) return [];
 	if (force) return profiles.filter((p) => p.id === force);
 	const pkgs = config.designSystem?.packages ?? [];
 	if (!pkgs.length) return [];
-	return profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
+	const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
+	const claimed = new Set(matched.filter((p) => p.origin === 'project').flatMap((p) => p.packages));
+	return matched.filter((p) => p.origin === 'project' || !p.packages.some((pkg) => claimed.has(pkg)));
 }
 
 /**

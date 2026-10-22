@@ -777,6 +777,13 @@ export interface MergedConfig {
 	hook: HookConfig;
 	/** How many entries analysis walks before it refuses. Absent for the default. */
 	maxEntries?: number;
+	/**
+	 * The project's own profile directories. Anchored to the file that wrote them
+	 * as `extends` is resolved, so by the time it is merged every entry is absolute.
+	 */
+	profiles?: string | string[];
+	/** Pin profile selection to one id, or to `none`. */
+	profile?: string;
 	extends?: string | string[];
 }
 
@@ -797,6 +804,8 @@ export interface AuthoredConfig {
 	baseline?: string;
 	hook?: Partial<HookConfig>;
 	maxEntries?: number;
+	profiles?: string | string[];
+	profile?: string;
 }
 
 /** The design system, resolved: names expanded, predicates precompiled. */
@@ -870,7 +879,15 @@ export interface Profile {
 	/** How the system's packages and tokens reach a page — read, validated, or null. */
 	delivery: Delivery | null;
 	dir: string;
+	/**
+	 * Where it was read from. A project's own profile outranks a shipped one on
+	 * the same id or the same package, so selection has to know which is which.
+	 */
+	origin: ProfileOrigin;
 }
+
+/** `shipped` is anything handed over with `--profiles`; `project` is the project's own. */
+export type ProfileOrigin = 'project' | 'shipped';
 
 // ── delivery ────────────────────────────────────────────────────────────────
 
@@ -1016,6 +1033,10 @@ export interface Config {
 	source: ConfigSource;
 	/** True when nobody wrote this config down — the CLI holds it to a lower bar. */
 	inferred: boolean;
+	/** The project's own profile directories (`profiles`), absolute. Read ahead of `--profiles`. */
+	profileDirs: string[];
+	/** `profile`: the id selection is pinned to, `none`, or null for selection by package. */
+	profilePin: string | null;
 	/** Attached by the CLI once profile registries have been merged in. */
 	profiles?: ProfileState;
 }

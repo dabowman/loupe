@@ -534,7 +534,8 @@ design system is never mistaken for one of these.
 Everything above that is specific to WPDS — the two registries, the preset that
 configures them, the packages that identify it — lives in `profiles/wpds/`. The
 engine takes `--profiles`, which the hooks, commands and `bin/loupe` all pass,
-and applies a profile only to a project importing its packages.
+and applies a profile only to a project importing its packages. A project's own
+profiles are read as well — see [Your own profile](#your-own-profile).
 
 ```jsonc
 // profiles/wpds/profile.json
@@ -596,6 +597,34 @@ scales so an agent holds the `sx` half by hand.
 Adding a fourth is adding a directory here plus a preset in `engine/presets/` —
 see **Adding a design system** in the
 [engine README](engine/README.md#adding-a-design-system).
+
+#### Your own profile
+
+A design system that ships its own profile, in its own repo, does not need a
+fork of this one. Put the profile directory in `.loupe/profiles/`, or list
+wherever it lives under `profiles` in `loupe.config.json` (relative to the
+config file):
+
+```jsonc
+{
+  "extends": "generic",
+  "profiles": "./loupe/profiles",
+  "designSystem": { "name": "VIP v3", "packages": ["@automattic/vip-design-system"] }
+}
+```
+
+Both are read on every run — the hooks, the commands and a typed `loupe` alike
+— alongside the shipped profiles, not instead of them. A project profile wins
+over a shipped one with the same `id`, and over one claiming the same package,
+which is what a design system rebuilt under its old package name needs: the
+shipped `vip` profile describes VIP's Theme UI system, not the v3 rebuild. The
+shadowed profile is still there to name with `--profile`.
+
+`"profile"` pins the choice outright: an id, or `"none"` for no profile, while
+`designSystem.packages` — and every rule that needs it — stays as it is.
+
+`loupe status` prints the chosen profile's directory, and the skills read its
+`authoring.md`, `patterns.md` and `remediation.md` from there.
 
 ### Config
 

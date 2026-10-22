@@ -555,6 +555,41 @@ claiming it was dropped too.
 Sorting, here as in `discover`, is what makes "the first one wins" a fact rather
 than a filesystem accident.
 
+**A project can bring its own profile, and it outranks the shipped one.** Every
+entry point passes the shipped directory as `--profiles`, and nothing else; a
+project-local profile was reachable only by typing `--profiles` by hand, which
+also *replaced* the shipped set. So the engine reads the project's profiles
+itself, wherever it runs: the directories the config lists under `profiles`,
+then `.loupe/profiles/` under the root, then `--profiles`. No hook, command or
+skill had to change. The order is the precedence — the first directory to
+carry an id keeps it — and a directory named twice is read once, under the
+more authoritative origin.
+
+An id is not enough, because selection is by package and a design system can
+be rebuilt under its old name: VIP v3 is `@automattic/vip-design-system` and
+nothing like the Theme UI system the shipped `vip` profile describes. A project
+profile is the project saying what its package means *now*, so a shipped profile
+claiming a package a selected project profile claims is not selected. It is
+shadowed, not removed: `--profile vip` still reaches it.
+
+The config's `profiles` paths are resolved against the file that wrote them, as
+`extends` is resolved, and before the merge — once `extends` is merged nothing
+says which file a path came from, and a shared base config's `./profiles` means
+the directory beside it. The directories a config lists are known only once it
+is loaded, after the point where a profile's preset is settled; that is fine,
+because a profile's preset matters only to a project with no config at all.
+
+**`profile` pins selection without emptying the packages.** Before it, the only
+way out of a wrong profile was `"packages": []`, which also switches off every
+rule that needs them. `"profile": "none"` selects nothing and leaves the
+packages alone; `"profile": "<id>"` is `--profile <id>` written down, registries
+merged past the scope check like the flag's. The flag, typed at the moment of
+use, outranks it, and a pin naming nothing says so, for the same reason a
+mistyped `--profile` does. `none` is a reserved id.
+
+Selection is still by name, not version. A profile that could say it describes
+`<3` of a package would let the shipped `vip` claim only v2 — left for later.
+
 **The project always wins a registry merge**: a repo that has written down its
 own `page-header` means that one, not the shipped generic. What was applied and
 what was skipped both come back, so the CLI can say why a registry it was handed
