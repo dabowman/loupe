@@ -916,7 +916,9 @@ with or without a key.
 The cost is a network round trip per flagged element, inside Claude Code's hook
 timeout — 60s on `PostToolUse`, 120s on `Stop`. Each request gives up after 20
 seconds and the run keeps the deterministic findings it already had. To stay
-offline, drop `--judge` from `hooks/hooks.json`, or just leave the key unset.
+offline, leave the key unset. Dropping `--judge` from `hooks/hooks.json` holds
+only in a checkout: a marketplace install runs the copy under
+`~/.claude/plugins/cache/loupe/loupe/<commit>/`, which every update replaces.
 
 The hook only pays for what it prints. A run that does not block prints a
 one-line tally, so it asks nothing; a blocking run asks only about the findings
