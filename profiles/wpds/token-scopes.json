@@ -2,8 +2,8 @@
   "$source": "The naming grammar, segment meanings and target table are WPDS's own, from gutenberg packages/theme/docs/tokens.md (trunk, read 2026-10-02): --wpds-color-<property>-<target>-<tone>[-<emphasis>][-<state>], --wpds-dimension-<property>-<size>, --wpds-border-<property>-<size-or-target>, --wpds-typography-<property>-<role-or-size>, --wpds-motion-<property>-<scale-or-intent>, --wpds-cursor-<target>. The radius roles are the descriptions of the --wpds-border-radius-* tokens in that file and in @wordpress/theme 2.2.0 (xs 1px, sm 2px, md 4px, lg 8px, xl 12px under the default subtle corner radius).",
   "$kinds": "What markup can show an element to be. A tag is lowercase, a component capitalised; a component is listed only where its className lands on the element the kind names (Dropdown's lands on the toggle's wrapper, so it is not an overlay). An empty kind is one no markup can show — nested-in-control, the app shell — so a token scoped to it is never applied unattended and never reported.",
   "kinds": {
-    "interactive": ["a", "button", "input", "select", "textarea", "summary", "Button", "IconButton", "LinkButton", "Link", "ExternalLink", "MenuItem"],
-    "control": ["button", "input", "select", "textarea", "summary", "Button", "IconButton", "LinkButton", "MenuItem"],
+    "interactive": ["a", "button", "input", "select", "textarea", "summary", "Button", "IconButton", "ButtonLink", "Link", "ExternalLink", "MenuItem"],
+    "control": ["button", "input", "select", "textarea", "summary", "Button", "IconButton", "ButtonLink", "MenuItem"],
     "overlay": ["Popover"],
     "container": ["dialog", "Modal", "ConfirmDialog", "Card", "CollapsibleCard", "Notice", "Panel"],
     "nested-in-control": [],
