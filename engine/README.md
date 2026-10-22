@@ -1090,11 +1090,11 @@ Every run indexes the whole repo, but only files that changed since the last run
 are parsed: each file's scan is cached per project, in the plugin's data
 directory or a temp directory of your own, never in the repo. A hook run on a
 Gutenberg-sized tree takes about 0.8s instead of 3.8s. A `PostToolUse` that
-finds something blocking also analyzes the file as it was before the edit, and
-that second analysis reads the same cache, parsing only that one file. Judged
-answers are cached the same way, keyed by the exact question asked, so a
-repeated write re-asks only what changed. A cold run with a lot to parse spreads
-it across worker threads.
+finds anything, blocking or advisory, also analyzes the file as it was before
+the edit, and that second analysis reads the same cache, parsing only that one
+file. Judged answers are cached the same way, keyed by the exact question asked,
+so a repeated write re-asks only what changed. A cold run with a lot to parse
+spreads it across worker threads.
 
 | | |
 | --- | --- |
