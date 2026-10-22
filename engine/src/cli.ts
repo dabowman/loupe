@@ -953,6 +953,15 @@ async function main(): Promise<number> {
 			// repo. The marker is computed, not assumed — a root above the temp
 			// directory would contain it.
 			`${dim('state:      ')}${state}${relative(root, state).startsWith('..') ? '  (retry counter only, outside your repo)' : ''}`,
+			// The Claude Code hook has CLAUDE_PLUGIN_DATA and a terminal does not, so
+			// the line above is not the hook's file unless this run has it too.
+			...(process.env.CLAUDE_PLUGIN_DATA
+				? []
+				: [
+						dim(
+							`            without CLAUDE_PLUGIN_DATA; the Claude Code hook's is ${toPosix(attemptsPath(root, '$CLAUDE_PLUGIN_DATA'))}`,
+						),
+					]),
 			`${dim('options:    ')}${describeOptions(resolved)}`,
 			`${dim('plugin:     ')}${isPluginContext() ? 'running as a plugin' : 'not running as a plugin'}`,
 			// The hook passes `--judge` and then turns it off silently when there is no

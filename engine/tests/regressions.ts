@@ -1142,13 +1142,13 @@ await check('the hook keeps its retry counter out of the repo, and status says w
 	try {
 		const r = runCli(
 			['hook', '--root', root],
-			env({ CLAUDE_PLUGIN_DATA: undefined, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }),
+			{ CLAUDE_PLUGIN_DATA: '', CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
 			'{"session_id":"tmp","tool_input":{"file_path":"styles/a.css"}}',
 		);
 		assert(r.status === 2, `the fixture should block (and so count an attempt), got ${r.status}:\n${r.stderr}`);
 		assert(!existsSync(join(root, '.loupe')), 'the hook wrote a .loupe/ directory into the project');
 
-		const status = runCli(['status', '--root', root], env({ CLAUDE_PLUGIN_DATA: undefined })).stdout;
+		const status = runCli(['status', '--root', root], { CLAUDE_PLUGIN_DATA: '' }).stdout;
 		const line = /state:\s+(\S+)(.*)/.exec(status);
 		assert(line, `status does not report the retry counter:\n${status}`);
 		const [, named = '', marker = ''] = line;
@@ -1156,6 +1156,24 @@ await check('the hook keeps its retry counter out of the repo, and status says w
 		assert(existsSync(where), `status names ${where}, which the hook did not write`);
 		assert(relative(root, where).startsWith('..'), `the retry counter is inside the repo: ${where}`);
 		assert(/outside your repo/.test(marker), `status did not mark the location:\n${status}`);
+		// Typed in a terminal, status has no CLAUDE_PLUGIN_DATA while the Claude
+		// Code hook does, so the path above is not the hook's file. It says so, and
+		// where the hook's is.
+		const key = basename(dirname(where));
+		assert(
+			status.includes(`$CLAUDE_PLUGIN_DATA/${key}/attempts.json`),
+			`status does not say where the Claude Code hook keeps its counter:\n${status}`,
+		);
+		const data = scratch('dsh-plugin-data-');
+		try {
+			const inPlugin = runCli(['status', '--root', root], env({ CLAUDE_PLUGIN_DATA: data })).stdout;
+			assert(
+				inPlugin.includes(join(data, key, 'attempts.json')) && !inPlugin.includes('$CLAUDE_PLUGIN_DATA'),
+				`with plugin data, status should name that file alone:\n${inPlugin}`,
+			);
+		} finally {
+			cleanup(data);
+		}
 	} finally {
 		cleanup(root);
 		if (where.endsWith('attempts.json')) cleanup(dirname(where));
