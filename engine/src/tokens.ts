@@ -191,21 +191,61 @@ export function tokensFor(set: TokenSet, prop: string, value: string): string[] 
 	// The role is decided over the whole set, not over the tokens that happen to
 	// carry the value: a padding scale that stops at 32px makes `padding: 40px`
 	// a question, not `gap-3xl` because only a gap step is 40px.
-	const family = new Set(onRole([...set.known], prop, set.scopes));
+	const family = roleOf(set, prop);
 	return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
 }
 
 /** Every on-role token for `prop` that has a literal value, as `[name, value]`, whatever the value. */
 function familyFor(set: TokenSet, prop: string): [string, string][] {
-	const all = [...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v]));
-	const keep = new Set(
-		onRole(
-			all.map(([n]) => n),
-			prop,
-			set.scopes,
-		),
-	);
-	return all.filter(([n]) => keep.has(n));
+	const cache = familiesOf(set);
+	let family = cache.literal.get(prop);
+	if (!family) {
+		const all = [...set.byValue].flatMap(([v, names]) => names.map((n): [string, string] => [n, v]));
+		const keep = new Set(
+			onRole(
+				all.map(([n]) => n),
+				prop,
+				set.scopes,
+			),
+		);
+		family = all.filter(([n]) => keep.has(n));
+		cache.literal.set(prop, family);
+	}
+	return family;
+}
+
+/** `onRole` over the whole set, as a set. */
+function roleOf(set: TokenSet, prop: string): ReadonlySet<string> {
+	const cache = familiesOf(set);
+	let family = cache.all.get(prop);
+	if (!family) {
+		family = new Set(onRole([...set.known], prop, set.scopes));
+		cache.all.set(prop, family);
+	}
+	return family;
+}
+
+// Which tokens answer for a property depends only on the set's names and its
+// scopes, yet `tokensFor` and `planValue` asked it again for every finding —
+// with a profile loaded, the whole grammar over every token, each time. Cached
+// per set and property. A set only grows (the walk adds project tokens as it
+// finds them, names and values together), so its size is the version, and
+// assigning new scopes starts over.
+interface Families {
+	size: number;
+	scopes: TokenScopes | undefined;
+	all: Map<string, ReadonlySet<string>>;
+	literal: Map<string, [string, string][]>;
+}
+const families = new WeakMap<TokenSet, Families>();
+
+function familiesOf(set: TokenSet): Families {
+	let cache = families.get(set);
+	if (!cache || cache.size !== set.known.size || cache.scopes !== set.scopes) {
+		cache = { size: set.known.size, scopes: set.scopes, all: new Map(), literal: new Map() };
+		families.set(set, cache);
+	}
+	return cache;
 }
 
 // ── what a literal could be replaced with ───────────────────────────────────
@@ -361,7 +401,7 @@ export function planValue(
 	const family = familyFor(set, prop);
 	// A token defined as another token has no literal to offer, but it is still a
 	// token for this property: "none" would be a false statement about the system.
-	if (!family.length) return onRole([...set.known], prop, set.scopes).length ? null : 'none';
+	if (!family.length) return roleOf(set, prop).size ? null : 'none';
 	// A family the engine can measure takes a value apart; one it cannot —
 	// shadows, easings — is matched whole.
 	const measurable = family.some(([, fv]) => measure(fv));

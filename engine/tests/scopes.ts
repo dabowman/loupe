@@ -21,7 +21,7 @@ import { loadConfig } from '../src/config.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { fitOf, parseTokenScopes, place } from '../src/scopes.ts';
 import type { TokenScopes } from '../src/scopes.ts';
-import { GENERIC_ROLES, emptyTokenSet, harvestTokenDefs, onRole } from '../src/tokens.ts';
+import { GENERIC_ROLES, emptyTokenSet, harvestTokenDefs, onRole, planValue, tokensFor } from '../src/tokens.ts';
 import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { Finding, Profile, TokenSet } from '../src/types.ts';
 
@@ -708,6 +708,35 @@ await check('profile kinds of one name pool when two profiles are active', async
 		[wpds, other],
 	);
 	assert(one(misapplied, 'still one finding').message.includes('<dialog>'), 'the merged scopes still check');
+});
+
+await check('the cached family follows a set that grows, and new scopes', () => {
+	// The family is cached per set and property, and the walk adds project tokens to
+	// the same set after the first question has been asked of it. Whatever was
+	// cached, every answer must be the one a fresh set gives.
+	const a = ':root { --wpds-dimension-padding-md: 12px; --wpds-border-radius-sm: 2px; }';
+	const b = ':root { --wpds-dimension-gap-md: 12px; --wpds-border-radius-md: 4px; --acme-gap: 12px; }';
+	const fresh = (css: string, scopes?: TokenScopes) => {
+		const set = harvestTokenDefs(postcss.parse(css), ['--wpds-', '--acme-'], emptyTokenSet());
+		set.scopes = scopes;
+		return set;
+	};
+	const ask = (set: TokenSet) =>
+		JSON.stringify(
+			[
+				['gap', '12px'],
+				['padding-top', '12px'],
+				['border-radius', '4px'],
+			].map(([p, v]) => [tokensFor(set, p as string, v as string), planValue(set, p as string, v as string)]),
+		);
+	const grown = fresh(a);
+	ask(grown);
+	harvestTokenDefs(postcss.parse(b), ['--wpds-', '--acme-'], grown);
+	assert(ask(grown) === ask(fresh(a + b)), `grown: ${ask(grown)}\nfresh: ${ask(fresh(a + b))}`);
+	grown.scopes = WPDS ?? undefined;
+	const scoped = fresh(a + b, WPDS ?? undefined);
+	assert(ask(grown) === ask(scoped), `scoped: ${ask(grown)}\nfresh: ${ask(scoped)}`);
+	assert(ask(scoped) !== ask(fresh(a + b)), 'the scopes change at least one answer, or this proves nothing');
 });
 
 finish();
