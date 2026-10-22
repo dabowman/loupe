@@ -1,0 +1,6 @@
+.acme-list > li:not(.acme-btn) { color: #333; }
+.acme-list > .acme-row:not(.acme-btn + .acme-ghost) { color: #333; }
+.acme-item:nth-child(2n+1) { color: #444; }
+.acme-list .acme-orphan:nth-child(2n+1) { color: #666; }
+.acme-list .acme-gone[aria-label="Close dialog"] { color: #555; }
+.acme-stale:is(.acme-list .acme-item) { color: #444; }
