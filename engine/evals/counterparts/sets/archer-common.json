@@ -1,0 +1,739 @@
+{
+  "color": {
+    "$type": "color",
+    "$description": "Common semantic color tokens",
+    "primary": {
+      "$value": "{color.brand.500}",
+      "$description": "Primary action color",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:2:108",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    },
+    "primary-hover": {
+      "$value": "{color.brand.600}",
+      "$description": "Primary action hover color",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:2:109",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    },
+    "primary-active": {
+      "$value": "{color.brand.700}",
+      "$description": "Primary action active/pressed color",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:2:110",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    },
+    "success": {
+      "$value": "{color.green.600}",
+      "$description": "Success state color",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:2:111",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    },
+    "error": {
+      "$value": "{color.red.600}",
+      "$description": "Error state color",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:2:112",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    },
+    "warning": {
+      "$value": "{color.yellow.600}",
+      "$description": "Warning state color",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:2:113",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    },
+    "info": {
+      "$value": "{color.blue.600}",
+      "$description": "Informational state color",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:2:114",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    },
+    "backdrop": {
+      "$value": {
+        "colorSpace": "srgb",
+        "components": [
+          0,
+          0,
+          0
+        ],
+        "alpha": 0.4
+      },
+      "$description": "Modal scrim behind dialogs, alert dialogs, and drawers",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:23:2",
+        "com.figma.scopes": [
+          "FRAME_FILL",
+          "SHAPE_FILL"
+        ]
+      }
+    },
+    "text": {
+      "primary": {
+        "$value": "{color.neutral.1000}",
+        "$description": "neutral color, shade 1000",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:115",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "secondary": {
+        "$value": "{color.neutral.800}",
+        "$description": "neutral color, shade 800",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:116",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "tertiary": {
+        "$value": "{color.neutral.700}",
+        "$description": "neutral color, shade 700",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:117",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "inverse": {
+        "$value": "{color.neutral.100}",
+        "$description": "neutral color, shade 100",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:118",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "on-primary": {
+        "$value": "{color.white}",
+        "$description": "Text and icons on color.primary-surface. Pure white in both themes.",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:353:10",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "error": {
+        "$value": "{color.red.900}",
+        "$description": "Error text color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:119",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "warning": {
+        "$value": "{color.yellow.900}",
+        "$description": "Warning text color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:120",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "success": {
+        "$value": "{color.green.900}",
+        "$description": "Success text color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:121",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "info": {
+        "$value": "{color.blue.900}",
+        "$description": "Info text color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:122",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "link": {
+        "$value": "{color.brand.600}",
+        "$description": "Brand-colored text (links, current/open nav items, toolbar links, toast actions). The 4.5:1 step of the brand ramp — color.primary itself is only 3.5:1 and is reserved for fills and non-text indicators.",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:123",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      },
+      "link-hover": {
+        "$value": "{color.brand.700}",
+        "$description": "Hover state of brand-colored text.",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:124",
+          "com.figma.scopes": [
+            "TEXT_FILL"
+          ]
+        }
+      }
+    },
+    "background": {
+      "primary": {
+        "$value": "{color.neutral.100}",
+        "$description": "Primary background",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:125",
+          "com.figma.scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ]
+        }
+      },
+      "secondary": {
+        "$value": "{color.neutral.200}",
+        "$description": "Secondary background",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:126",
+          "com.figma.scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ]
+        }
+      },
+      "tertiary": {
+        "$value": "{color.neutral.300}",
+        "$description": "Tertiary background",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:127",
+          "com.figma.scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ]
+        }
+      },
+      "quaternary": {
+        "$value": "{color.neutral.400}",
+        "$description": "Quaternary background — pressed/active surface step after tertiary",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:128",
+          "com.figma.scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ]
+        }
+      },
+      "inverse": {
+        "$value": "{color.neutral.900}",
+        "$description": "Inverse background",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:129",
+          "com.figma.scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ]
+        }
+      },
+      "error": {
+        "$value": "{color.red.200}",
+        "$description": "Error background",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:130",
+          "com.figma.scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ]
+        }
+      },
+      "warning": {
+        "$value": "{color.yellow.200}",
+        "$description": "Warning background",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:131",
+          "com.figma.scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ]
+        }
+      },
+      "success": {
+        "$value": "{color.green.200}",
+        "$description": "Success background",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:132",
+          "com.figma.scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ]
+        }
+      },
+      "info": {
+        "$value": "{color.blue.200}",
+        "$description": "Info background",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:133",
+          "com.figma.scopes": [
+            "FRAME_FILL",
+            "SHAPE_FILL"
+          ]
+        }
+      }
+    },
+    "border": {
+      "primary": {
+        "$value": "{color.neutral.300}",
+        "$description": "Default border color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:134",
+          "com.figma.scopes": [
+            "STROKE_COLOR"
+          ]
+        }
+      },
+      "secondary": {
+        "$value": "{color.neutral.400}",
+        "$description": "Secondary border color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:135",
+          "com.figma.scopes": [
+            "STROKE_COLOR"
+          ]
+        }
+      },
+      "error": {
+        "$value": "{color.red.400}",
+        "$description": "Error border color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:136",
+          "com.figma.scopes": [
+            "STROKE_COLOR"
+          ]
+        }
+      },
+      "warning": {
+        "$value": "{color.yellow.400}",
+        "$description": "Warning border color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:137",
+          "com.figma.scopes": [
+            "STROKE_COLOR"
+          ]
+        }
+      },
+      "success": {
+        "$value": "{color.green.400}",
+        "$description": "Success border color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:138",
+          "com.figma.scopes": [
+            "STROKE_COLOR"
+          ]
+        }
+      },
+      "info": {
+        "$value": "{color.blue.400}",
+        "$description": "Info border color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:139",
+          "com.figma.scopes": [
+            "STROKE_COLOR"
+          ]
+        }
+      },
+      "control": {
+        "$value": "{color.neutral.500}",
+        "$description": "Boundary of interactive controls whose background matches the page (text fields, checkbox, radio, switch off-track, scrollbar thumb). 3.5:1 against background.primary per WCAG 1.4.11; decorative borders keep border.primary.",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:140",
+          "com.figma.scopes": [
+            "STROKE_COLOR"
+          ]
+        }
+      },
+      "control-hover": {
+        "$value": "{color.neutral.600}",
+        "$description": "Hover state of control boundaries.",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:141",
+          "com.figma.scopes": [
+            "STROKE_COLOR"
+          ]
+        }
+      },
+      "focus": {
+        "$value": "{color.brand.600}",
+        "$description": "Focus indicator color. 4.5:1 against background.primary and 3.6:1 against background.tertiary, so the ring stays visible on hovered/active surfaces.",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:142",
+          "com.figma.scopes": [
+            "STROKE_COLOR"
+          ]
+        }
+      }
+    },
+    "shadow": {
+      "$description": "Shadow color palette — override per theme for tinted shadows",
+      "subtle": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0,
+            0
+          ],
+          "alpha": 0.05
+        },
+        "$description": "Lightest shadow color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:143",
+          "com.figma.scopes": [
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "default": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0,
+            0
+          ],
+          "alpha": 0.1
+        },
+        "$description": "Default shadow color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:144",
+          "com.figma.scopes": [
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "strong": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0,
+            0
+          ],
+          "alpha": 0.25
+        },
+        "$description": "Heavy shadow color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:145",
+          "com.figma.scopes": [
+            "EFFECT_COLOR"
+          ]
+        }
+      }
+    },
+    "ansi": {
+      "0": {
+        "$value": "{color.neutral.100}",
+        "$description": "Black — inverted: dark color for bg fills on light. Breaks ANSI naming but preserves semantics.",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:146",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "1": {
+        "$value": "{color.red.600}",
+        "$description": "Red",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:147",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "2": {
+        "$value": "{color.green.600}",
+        "$description": "Green",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:148",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "3": {
+        "$value": "{color.yellow.600}",
+        "$description": "Yellow",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:149",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "4": {
+        "$value": "{color.blue.600}",
+        "$description": "Blue",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:150",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "5": {
+        "$value": "{color.magenta.600}",
+        "$description": "Magenta",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:151",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "6": {
+        "$value": "{color.cyan.600}",
+        "$description": "Cyan",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:152",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "7": {
+        "$value": "{color.neutral.700}",
+        "$description": "White",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:153",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "8": {
+        "$value": "{color.neutral.300}",
+        "$description": "Bright black",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:154",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "9": {
+        "$value": "{color.red.800}",
+        "$description": "Bright red",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:155",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "10": {
+        "$value": "{color.green.800}",
+        "$description": "Bright green",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:156",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "11": {
+        "$value": "{color.yellow.800}",
+        "$description": "Bright yellow",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:157",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "12": {
+        "$value": "{color.blue.800}",
+        "$description": "Bright blue",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:158",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "13": {
+        "$value": "{color.magenta.800}",
+        "$description": "Bright magenta",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:159",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "14": {
+        "$value": "{color.cyan.800}",
+        "$description": "Bright cyan",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:160",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "15": {
+        "$value": "{color.neutral.900}",
+        "$description": "Bright white",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:161",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "background": {
+        "$value": "{color.background.primary}",
+        "$description": "Terminal background",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:162",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "foreground": {
+        "$value": "{color.text.primary}",
+        "$description": "Terminal foreground",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:163",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "cursor": {
+        "$value": "{color.primary}",
+        "$description": "Cursor color",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:164",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      },
+      "selection": {
+        "$value": "{color.background.secondary}",
+        "$description": "Selection highlight",
+        "$extensions": {
+          "com.figma.variableId": "VariableID:2:165",
+          "com.figma.scopes": [
+            "ALL_FILLS",
+            "STROKE_COLOR",
+            "EFFECT_COLOR"
+          ]
+        }
+      }
+    },
+    "primary-surface": {
+      "$value": "{color.brand-surface.100}",
+      "$description": "Brand fill that carries text. Picked for white text on it (APCA Lc 77, which also clears WCAG 4.5:1 for the axe gate), so it is the same hex in both themes; color.primary is measured against the page and flips with the theme. Pair with color.text.on-primary. Buttons, pressed toggles, toast actions.",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:353:7",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    },
+    "primary-surface-hover": {
+      "$value": "{color.brand-surface.200}",
+      "$description": "Hover state of color.primary-surface. Darker: white text only gains contrast that way (APCA Lc 82).",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:353:8",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    },
+    "primary-surface-active": {
+      "$value": "{color.brand-surface.300}",
+      "$description": "Active/pressed state of color.primary-surface (APCA Lc 87).",
+      "$extensions": {
+        "com.figma.variableId": "VariableID:353:9",
+        "com.figma.scopes": [
+          "ALL_FILLS",
+          "STROKE_COLOR"
+        ]
+      }
+    }
+  }
+}

@@ -33,7 +33,8 @@
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
     "eval:renames": "node evals/renames/run.ts",
-    "test": "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/judge-cache.ts && node tests/index-cache.ts && node tests/scan-pool.ts && node tests/multi-ds.ts && node tests/scopes.ts && node tests/delivery.ts && node tests/report.ts && node tests/dom-match.ts && node tests/serve.ts && node tests/ui.ts && node tests/lsp.ts"
+    "test": "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/judge-cache.ts && node tests/index-cache.ts && node tests/scan-pool.ts && node tests/multi-ds.ts && node tests/scopes.ts && node tests/delivery.ts && node tests/map.ts && node tests/report.ts && node tests/dom-match.ts && node tests/serve.ts && node tests/ui.ts && node tests/lsp.ts",
+    "eval:counterparts": "node evals/counterparts/run.ts"
   },
   "dependencies": {
     "@babel/parser": "^7.24.0",

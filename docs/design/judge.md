@@ -260,11 +260,13 @@ decoration.
   the project itself defines under the prefix to the same set, so `analyze`
   hands back no set at all when `diagnostics.tokensKnown` is 0.
 - **One failure fails the whole ask.** The pool stops its other workers rather
-  than pay for answers that are about to be thrown away; the caller reports the
-  failure and keeps what it had.
+  than pay for answers that are about to be thrown away — a worker mid-retry
+  stops at its next attempt; the caller reports the failure and keeps what it had.
 - **Overload is transient.** A run is a hundred requests, so one 529 should not
   lose the other ninety-nine — retried with the server's own wait where it names
-  one, doubling otherwise. The server's wait is capped at 5s, a little past the
+  one, doubling otherwise. A dropped connection is retried on the same budget,
+  whether it drops before the response or while its body is read; an abort is
+  a deadline, and is not. The server's wait is capped at 5s, a little past the
   longest the doubling would pick (4s): a `retry-after: 3600` is not a wait a
   run, or a hook inside Claude Code's timeout, can afford.
 

@@ -439,6 +439,38 @@ advisory and never baselined. A control that already carries `href` is not
 asked. See `engine/README.md` for how it decides and how
 it scored.
 
+### Mapping one token set onto another
+
+Experimental, and off to one side of everything above: the rest of loupe asks
+whether code conforms to *its* design system, and this asks a question with two
+systems in it. Given two DTCG token sets it answers, for every token in the
+first, which token in the second is the same decision — which is what makes two
+systems comparable at all.
+
+```bash
+loupe map ./wpds/tokens ./primer/tokens --out map.json
+loupe map ./a ./b --dry-run            # the shortlists, asking nothing
+```
+
+Both sides are assumed to be standard DTCG and three-tiered; nothing else about
+them has to agree, and nothing is configured per system. `$type` is a hard gate;
+every token of a compatible type is then offered, and only where there are more
+of them than a question can carry is the list ranked down — colour distance in
+OKLab, names as word sets with the organising words dropped. The model picks
+among them or says the second system has no counterpart. Where several tokens
+land on one counterpart the report says so rather than reading like a bijection
+— which is often the finding: nine WPDS tokens map onto Primer's single
+`bgColor.disabled`. `--dry-run` shows the shortlists for free, which is the first
+thing to run on a new pair.
+
+Some of it is measured. `engine/evals/counterparts` builds labelled pairs by
+renaming a real set, and says what the question needs (the `$description`
+carries the meaning; a name alone declines 41% of the time when a counterpart
+exists) and where the confidence floor goes (0.70, the one point where precision
+steps — 97% above it, about 75% anywhere below). The ranking weights are still
+arguments rather than numbers. `docs/design/map.md` says which is which, and
+`engine/README.md` documents the flags.
+
 ### Composites
 
 The expensive drift is compositional: six page headers, four modal footers, each

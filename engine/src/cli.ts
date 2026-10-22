@@ -19,6 +19,7 @@ import { analyze, declarationKeys, dedupe } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import {
+	MODEL,
 	judgeClient,
 	judgeRedirects,
 	judgeRenames,
@@ -28,6 +29,10 @@ import {
 	redirectIdentity,
 	tokenDescriptions,
 } from './judge.ts';
+import { readTokenDoc, isTier } from './dtcg.ts';
+import type { Tier, TokenDoc } from './dtcg.ts';
+import { CANDIDATES, askCounterparts, formatMap, formatPlan, mapPayload, planMap } from './mapping.ts';
+import type { Mapping } from './mapping.ts';
 import { AnswerCache, readJson } from './cache.ts';
 import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset, presetKey } from './embedded.ts';
@@ -159,9 +164,13 @@ function cacheLine(root: string): string {
 	return `${dir}  (${parts.join(', ')})`;
 }
 
-/** Answers already paid for, unless the run asked for every one to be fresh. */
-const answerCache = (root: string, noCache: boolean | undefined): AnswerCache | null =>
-	cacheDisabled(noCache) ? null : new AnswerCache(join(projectStateDir(root), 'judge-cache.json'));
+/**
+ * Answers already paid for, unless the run asked for every one to be fresh.
+ * `map` keeps its own file: its answers are many and large, and the judge cache
+ * is the one the hook reads on every edit.
+ */
+const answerCache = (root: string, noCache: boolean | undefined, file = 'judge-cache.json'): AnswerCache | null =>
+	cacheDisabled(noCache) ? null : new AnswerCache(join(projectStateDir(root), file));
 
 /**
  * Why a server could not start, in a line a person can act on.
@@ -261,6 +270,10 @@ const VALUE_FLAGS = [
 	'profiles',
 	'profile',
 	'port',
+	'out',
+	'limit',
+	'tier',
+	'type',
 	'editor',
 ] as const;
 
@@ -335,6 +348,8 @@ Commands:
   suppressions          List every active suppression directive, and every
                         rule turned off in config, with its reason
   explain <rule>        Print a rule's guidance
+  map <a> <b>           Experimental. Map one DTCG token set onto another: for
+                        each token in a, which token in b is its counterpart
   presets               List bundled presets
   version               Print the version, whether it runs from source or the bundle, and where
   detect                Show the config that would be inferred for this project
@@ -381,7 +396,8 @@ Options:
                         off, or an id that is not a rule — and exit 1 if any
   --dry-run             Report what 'fix' would change without writing; for
                         'baseline', what it would record by rule, new and
-                        fixed against the existing baseline
+                        fixed against the existing baseline; with 'map', print
+                        the shortlists without asking anything
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
                         pattern it was built as (patterns/judged-redirect), and
@@ -396,6 +412,11 @@ Options:
                         absolute path and {line} its line
                         (default: vscode://file{path}:{line}; for Cursor or Zed,
                         swap the scheme: cursor://file{path}:{line})
+  --out <path>          Write the map here as JSON (map)
+  --tier <t,...>        Only map tokens in these tiers: base, semantic,
+                        component (map)
+  --type <t,...>        Only map tokens of these DTCG $types (map)
+  --limit <n>           Only map the first n tokens in scope (map)
   --force               Overwrite an existing config, or write a guessed design
                         system (init)
   --version             Same as the version command
@@ -568,6 +589,183 @@ function resolveScope(
 	return null;
 }
 
+/** A comma-separated flag value as a trimmed list. */
+const listFlag = (value: string | undefined): string[] =>
+	(value ?? '')
+		.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean);
+
+/**
+ * What to call each set, in the report and in the question put to the model.
+ *
+ * The model is told it is mapping "wpds" onto "archer", and those names are
+ * doing work: they are most of what says the two sets are different systems
+ * rather than two halves of one. Two paths that read as the same name — a
+ * `tokens.json` in each of two checkouts — would describe the run as a system
+ * mapped onto itself, so the directory above breaks the tie.
+ */
+function mapLabels(a: string, b: string): [string, string] {
+	const base = (p: string): string => basename(resolve(p)).replace(/\.json$/i, '');
+	if (base(a) !== base(b)) return [base(a), base(b)];
+	const withDir = (p: string): string => `${basename(dirname(resolve(p)))}/${base(p)}`;
+	return withDir(a) === withDir(b) ? [`${base(a)} (a)`, `${base(b)} (b)`] : [withDir(a), withDir(b)];
+}
+
+/**
+ * `map` — one DTCG token set onto another.
+ *
+ * The one command that reads design systems rather than a codebase: both sets
+ * are named on the command line, so there is no project, no config and no walk,
+ * and it returns before any of that is resolved.
+ *
+ * It is also the one command whose whole answer is a judgement — there is no
+ * deterministic verdict underneath it to fall back on — so unlike `--judge` a
+ * missing key is a refusal rather than a degraded run. `--dry-run` is the free
+ * half: the shortlists, which is what decides whether the right answer is even
+ * on offer.
+ *
+ * Design notes: docs/design/map.md
+ */
+async function runMap(args: Args): Promise<number> {
+	const [, fromPath, toPath, ...extra] = args._;
+	if (!fromPath || !toPath) {
+		fail('loupe: map needs two token sets \u2014 `loupe map <from> <to>`, each a DTCG file or a directory of them\n');
+		return EXIT.CANNOT_RUN;
+	}
+	// An unquoted glob expands to several paths, and taking the first two maps the wrong pair.
+	if (extra.length) {
+		fail(`loupe: map takes two token sets, got ${extra.length + 2} \u2014 name a directory rather than a glob\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// `map` has no report to paint as SARIF or HTML; a run that accepted the flag
+	// and printed the readable report would look like it had honoured it.
+	const format = args.flags.format ?? 'agent';
+	if (format !== 'agent' && format !== 'json') {
+		fail(`loupe: map writes agent or json, not "${format}"\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// The dry run prints the shortlists as text and writes nothing.
+	if (args.flags['dry-run'] && (format === 'json' || args.flags.out)) {
+		fail('loupe: map --dry-run prints the shortlists as text; --format json and --out apply to a real run\n');
+		return EXIT.CANNOT_RUN;
+	}
+
+	const tiers = listFlag(args.flags.tier);
+	const badTiers = tiers.filter((t) => !isTier(t));
+	if (badTiers.length) {
+		fail(`loupe: unknown tier(s) ${badTiers.join(', ')} \u2014 expected base, semantic, component\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// A cap that does not parse must not mean "no cap": every token is a paid request.
+	const limit = args.flags.limit === undefined ? 0 : Number(args.flags.limit);
+	if (args.flags.limit !== undefined && !(Number.isInteger(limit) && limit > 0)) {
+		fail(`loupe: --limit takes a positive whole number, not "${args.flags.limit}"\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// Checked before anything is asked, so a mistyped path cannot cost the run.
+	const out = args.flags.out ? resolve(args.flags.out) : null;
+	if (out && !existsSync(dirname(out))) {
+		fail(`loupe: cannot write the map to ${out} \u2014 ${dirname(out)} does not exist\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	let from: TokenDoc;
+	let to: TokenDoc;
+	try {
+		const [fromLabel, toLabel] = mapLabels(fromPath, toPath);
+		from = readTokenDoc(fromPath, fromLabel);
+		to = readTokenDoc(toPath, toLabel);
+	} catch (err) {
+		fail(`loupe: ${messageOf(err)}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	// Checked against the set rather than against the spec's list: a set is free
+	// to carry types the spec never named, and a typo here would otherwise map
+	// nothing at all and report it as a clean run over zero tokens.
+	const types = listFlag(args.flags.type);
+	const present = new Set(from.tokens.map((t) => t.type).filter(Boolean));
+	const badTypes = types.filter((t) => !present.has(t));
+	if (badTypes.length) {
+		fail(
+			`loupe: ${from.label} has no ${badTypes.join(', ')} token(s) \u2014 it has ${[...present].sort().join(', ')}\n`,
+		);
+		return EXIT.CANNOT_RUN;
+	}
+
+	const plan = planMap(from, to, { tiers: tiers as Tier[], types, limit });
+	process.stderr.write(
+		dim(
+			`loupe: ${from.label} ${from.tokens.length} token(s) from ${from.files.length} file(s), ` +
+				`${to.label} ${to.tokens.length} from ${to.files.length}\n`,
+		),
+	);
+	// A valid tier the set does not use, or a tier and type that never meet, is
+	// the same clean run over zero tokens the type check refuses.
+	if (!plan.jobs.length && !plan.settled.length) {
+		const scope = `--tier ${tiers.join(',')}${types.length ? ` --type ${types.join(',')}` : ''}`;
+		fail(`loupe: no token in ${from.label} is in scope for ${scope}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	if (args.flags['dry-run']) {
+		process.stdout.write(formatPlan(plan, CANDIDATES));
+		return EXIT.OK;
+	}
+
+	// Only a run that has something to ask needs the key: a set mapped onto
+	// itself settles every row without one.
+	const apiKey = plan.jobs.length ? judgeKey() : '';
+	if (plan.jobs.length && !apiKey) {
+		fail(`loupe: map needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE} \u2014 or use --dry-run\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	if (plan.jobs.length) process.stderr.write(dim(`loupe: asking ${MODEL} about ${plan.jobs.length} token(s)\u2026\n`));
+	let mappings: Mapping[];
+	// The run's one client: its request limit, its retries, and the answers
+	// already paid for. A map is hundreds of questions, and a run that failed
+	// halfway, or one re-run with the same sets, asks again only what it has
+	// no answer for. Kept beside the directory it was run from, since a map
+	// has no project, in a file of its own; an answer is keyed by its exact
+	// request, so where it is kept never makes it the wrong one.
+	const client = judgeClient(apiKey ?? '', {
+		cache: answerCache(resolve(process.cwd()), args.flags['no-cache'], 'map-cache.json'),
+	});
+	try {
+		({ mappings } = await askCounterparts(plan, client));
+	} catch (err) {
+		// Nothing partial is written: half a map read as a whole one would report
+		// every unasked token as having no counterpart. What was answered is kept.
+		client.cache?.save();
+		fail(`loupe: ${messageOf(err)}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	client.cache?.save();
+	const spent = judgeSummary(client);
+	if (spent) process.stderr.write(dim(`loupe: ${spent}\n`));
+
+	const json = `${JSON.stringify(mapPayload(plan, mappings, MODEL), null, 2)}\n`;
+	// Printed before the file is written, so a write that fails still leaves the
+	// paid answers on screen.
+	process.stdout.write(format === 'json' ? json : formatMap(plan, mappings));
+	if (out) {
+		try {
+			writeFileSync(out, json);
+		} catch (err) {
+			fail(`loupe: could not write the map to ${out}: ${messageOf(err)}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		// To stderr under --format json, where stdout is the map itself and a line of
+		// prose in it is corruption.
+		const said = green(`loupe: map written to ${out}\n`);
+		if (format === 'json') process.stderr.write(said);
+		else process.stdout.write(`\n${said}`);
+	}
+	return EXIT.OK;
+}
+
 /** What a finding is matched by across an edit: its baseline key, and its message. */
 type Identity = Pick<Finding, 'rule' | 'file' | 'code' | 'message'>;
 
@@ -706,6 +904,9 @@ async function main(): Promise<number> {
 		process.stdout.write(`${listPresets().join('\n')}\n`);
 		return EXIT.OK;
 	}
+	// Before the root is resolved: both token sets are named on the command line,
+	// so there is no project here for `map` to need one of.
+	if (command === 'map') return runMap(args);
 
 	const isHook = command === 'hook';
 

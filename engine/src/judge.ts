@@ -36,7 +36,7 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import { boundMessage, messageLine } from './text.ts';
+import { boundMessage, messageLine, messageOf } from './text.ts';
 import { DELIBERATE, KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
@@ -180,7 +180,8 @@ export function judgeSummary(client: JudgeClient): string | null {
  * question has to be scored batched.
  *
  * `size` is how many items share one request; see docs/design/judge.md for why
- * it is 1. Throws on a failed request; the caller reports it and keeps what it
+ * it is 1. `backoff` is the first retry's wait in ms, doubling after; a test
+ * passes 0. Throws on a failed request; the caller reports it and keeps what it
  * had.
  *
  * A request is keyed by its own bytes — model, endpoint, elements and questions
@@ -194,23 +195,51 @@ export async function ask<T>(
 	auth: Auth,
 	fetchImpl: Fetch = fetch,
 	size = 1,
+	backoff = 500,
 ): Promise<(Choice | undefined)[]> {
 	const client = clientOf(auth, fetchImpl);
 	const endpoint = ENDPOINT_OVERRIDE ?? ENDPOINT;
 	const batches: T[][] = [];
 	for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
+	// Set when one batch fails: the others stop retrying rather than pay for
+	// answers that are about to be thrown away.
+	let stopped = false;
 
 	const post = async (body: string, n: number): Promise<(Choice | undefined)[]> => {
 		for (let attempt = 0; ; attempt++) {
-			const res = await client.fetchImpl(endpoint, {
-				method: 'POST',
-				headers: { authorization: `Bearer ${client.apiKey}`, 'content-type': 'application/json' },
-				body,
-				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-			});
-			if (res.ok) {
-				const parsed = (await res.json()) as { answers: Record<string, Choice> };
-				return Array.from({ length: n }, (_, i) => parsed.answers[`e${i}`]);
+			if (stopped) throw new Error('stopped: another request failed');
+			let res: Response;
+			let parsed: { answers: Record<string, Choice> } | undefined;
+			try {
+				res = await client.fetchImpl(endpoint, {
+					method: 'POST',
+					headers: { authorization: `Bearer ${client.apiKey}`, 'content-type': 'application/json' },
+					body,
+					signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+				});
+				// Read inside the try: a socket that drops after the headers fails
+				// here, and is as transient as one that drops before them.
+				if (res.ok) parsed = (await res.json()) as { answers: Record<string, Choice> };
+			} catch (err) {
+				// An abort is a deadline — the request's own, or the hook's — and a
+				// deadline retried is no deadline. A body that arrived whole and is not
+				// JSON — a proxy's page, a misconfigured endpoint — answers the same
+				// way every time. Everything else thrown is the connection, as
+				// transient as a 503, so the retry budget covers both.
+				const name = err instanceof Error ? err.name : '';
+				if (name === 'AbortError' || name === 'TimeoutError') throw err;
+				if (err instanceof SyntaxError)
+					throw new Error(`TypeSafe answered with a body that is not JSON: ${messageOf(err)}`);
+				if (attempt >= RETRIES) {
+					const cause = err instanceof Error && err.cause ? `: ${messageOf(err.cause)}` : '';
+					throw new Error(`TypeSafe unreachable: ${messageOf(err)}${cause}`);
+				}
+				await new Promise((r) => setTimeout(r, backoff * 2 ** attempt));
+				continue;
+			}
+			if (parsed) {
+				const { answers } = parsed;
+				return Array.from({ length: n }, (_, i) => answers[`e${i}`]);
 			}
 			const transient = res.status === 429 || res.status >= 500;
 			if (!transient || attempt >= RETRIES)
@@ -218,7 +247,7 @@ export async function ask<T>(
 			// The server's own wait when it names one, in seconds and capped; a
 			// date or nothing falls back to doubling.
 			const after = Number(res.headers.get('retry-after'));
-			const wait = after > 0 ? Math.min(after * 1000, RETRY_WAIT_MAX_MS) : 500 * 2 ** attempt;
+			const wait = after > 0 ? Math.min(after * 1000, RETRY_WAIT_MAX_MS) : backoff * 2 ** attempt;
 			await new Promise((r) => setTimeout(r, wait));
 		}
 	};
@@ -271,6 +300,7 @@ export async function ask<T>(
 					// One failure fails the whole ask: stop the other workers rather
 					// than pay for answers that are about to be thrown away.
 					next = batches.length;
+					stopped = true;
 					throw err;
 				}
 			}

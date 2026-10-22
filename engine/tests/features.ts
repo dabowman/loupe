@@ -1661,6 +1661,121 @@ await check('the force query sends one control per request, and keeps answers in
 	assert(answers[40]?.confidence === 0, `answer 40 was ${answers[40]?.confidence}`);
 });
 
+// An abort is a deadline: the request's own 20s, or the hook's whole judge
+// phase. Retried like a dropped socket, a request that timed out would run four
+// more times, and a hook past its deadline would go on asking.
+await check('a timed-out or aborted request is not retried', async () => {
+	for (const name of ['TimeoutError', 'AbortError']) {
+		let calls = 0;
+		const stub = (async () => {
+			calls++;
+			throw new DOMException('the operation was aborted', name);
+		}) as unknown as typeof fetch;
+		let thrown: unknown = null;
+		try {
+			await ask(
+				forceQuery(represents),
+				[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+				'key',
+				stub,
+				1,
+				0,
+			);
+		} catch (err) {
+			thrown = err;
+		}
+		assert(calls === 1, `${name}: ${calls} calls, expected one`);
+		assert(thrown instanceof Error && thrown.name === name, `${name}: threw ${String(thrown)}`);
+	}
+	// Nor a whole body that is not JSON: a proxy's page answers the same each time.
+	let pages = 0;
+	const proxy = (async () => {
+		pages++;
+		return new Response('<html>sign in to continue</html>', { status: 200 });
+	}) as unknown as typeof fetch;
+	let said = '';
+	try {
+		await ask(
+			forceQuery(represents),
+			[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+			'key',
+			proxy,
+			1,
+			0,
+		);
+	} catch (err) {
+		said = String(err);
+	}
+	assert(pages === 1, `a page that is not JSON was asked for ${pages} times`);
+	assert(/not JSON/.test(said), `said: ${said}`);
+});
+
+await check('a dropped connection is retried, not thrown away', async () => {
+	// A reset arrives as a throw rather than a status, so it has to be caught where
+	// the status retries are.
+	let calls = 0;
+	const stub = (async () => {
+		if (++calls <= 2) throw new TypeError('fetch failed');
+		return new Response(JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }));
+	}) as unknown as typeof fetch;
+	// Backoff 0: the retries are what is under test, not the waits between them.
+	const [a] = await ask(
+		forceQuery(represents),
+		[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+		'key',
+		stub,
+		1,
+		0,
+	);
+	assert(calls === 3 && a?.choice === 'command', `${calls} calls, answer ${JSON.stringify(a)}`);
+
+	// A socket that drops after the headers fails in the body read, and is retried too.
+	let reads = 0;
+	const midBody = (async () => {
+		if (++reads === 1) {
+			const body = new ReadableStream({
+				start(c) {
+					c.enqueue(new TextEncoder().encode('{"answ'));
+					c.error(new TypeError('terminated'));
+				},
+			});
+			return new Response(body);
+		}
+		return new Response(JSON.stringify({ answers: { e0: { choice: 'command', confidence: 1 } } }));
+	}) as unknown as typeof fetch;
+	const [b] = await ask(
+		forceQuery(represents),
+		[{ file: 'src/C.jsx', component: 'Button', enclosing: 'C', source: '<Button />' }],
+		'key',
+		midBody,
+		1,
+		0,
+	);
+	assert(reads === 2 && b?.choice === 'command', `${reads} calls, answer ${JSON.stringify(b)}`);
+
+	// And a host that is simply gone still fails the run, once the budget is out.
+	let tries = 0;
+	const dead = (async () => {
+		tries++;
+		throw new TypeError('fetch failed');
+	}) as unknown as typeof fetch;
+	let threw = '';
+	try {
+		await ask(
+			forceQuery(represents),
+			[{ file: 'a.jsx', component: 'B', enclosing: 'C', source: '<B />' }],
+			'k',
+			dead,
+			1,
+			0,
+		);
+	} catch (err) {
+		threw = err instanceof Error ? err.message : String(err);
+	}
+	assert(threw.includes('unreachable'), `an unreachable host reported: ${threw || 'nothing'}`);
+	assert(tries === 5, `retried ${tries} times, expected the budget of 5`);
+});
+
 await check('a 429 waits as long as retry-after says, then asks again', async () => {
 	let calls = 0;
 	const stub = (async () =>
