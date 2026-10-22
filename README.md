@@ -509,7 +509,8 @@ abstract pattern language in the top-level `patterns/index.json`, which it
 names in `extends`. The reach-for table in `profiles/wpds/patterns.md` is
 generated from the two files (`npm run patterns-doc` in `engine/`), so the
 prose an agent reads and the registry the engine checks cannot drift apart.
-The reasoning is in `docs/patterns-v2.md`.
+The format, field by field, and what was left out of it, is in
+`docs/patterns-v2.md`.
 
 `wpds` is the only profile that realizes the abstract language so far. The
 `archer` and `vip` registries are v1: a flat list of entries keyed by `id`

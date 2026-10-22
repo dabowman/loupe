@@ -1,9 +1,11 @@
 # Options for a real UI
 
-Loupe has five output surfaces today and three of them are already a UI of some
-kind. The question is not "does loupe need a UI" — it is which of the things a
-*real* UI does that none of the three currently does, and what shell those
-capabilities want to live in.
+Loupe has eight output surfaces today, and six of them are a UI of some kind.
+Three of the six — `loupe ui`, the DevTools extension and the Claude Code pane —
+came after this document was first written, when there were five and the UIs
+among them were the HTML report, the LSP and `loupe serve`. The question was not
+"does loupe need a UI" — it was which of the things a *real* UI does that none
+of those three did, and what shell those capabilities want to live in.
 
 This document names the gap, then the options, then a recommendation.
 
@@ -50,8 +52,18 @@ This document names the gap, then the options, then a recommendation.
 > `report-view.ts` in Stage 1, and the same reason — two copies would be two
 > answers and the disagreement would be invisible.
 >
-> Design notes: [design/report.md](design/report.md#loupe-ui) and
-> [#resolving-a-finding-to-elements](design/report.md#resolving-a-finding-to-elements).
+> Outside the stages, the pane shipped: the report drawn beside the transcript
+> in Claude Code (`hooks/register.tsx`), re-run after each edit the model makes
+> to a UI file and drawn from `--format pane`. It gives the person watching an
+> agent liveness without a server, and it reads rather than writes — pressing a
+> rule drafts `/loupe-fix <rule>` into the prompt and never sends it, so
+> write-back stays with `loupe ui`. Its numbers are `reportPayload()` reshaped,
+> the same discipline again: a third reader of one payload, not a third
+> computation.
+>
+> Design notes: [design/report.md](design/report.md#loupe-ui),
+> [#resolving-a-finding-to-elements](design/report.md#resolving-a-finding-to-elements)
+> and [#the-pane](design/report.md#the-pane).
 
 ## What exists now
 
@@ -62,8 +74,12 @@ This document names the gap, then the options, then a recommendation.
 | `check --format html` | a self-contained page: KPIs, rule bars, directory rollup, composite clusters, findings table | a person triaging |
 | `loupe lsp` | diagnostics on save, guidance on hover, the fix as a quick fix | a person (or agent) editing |
 | `loupe serve` | a shadow-DOM panel injected by bookmarklet; resolves stylesheet findings to the live elements they style | a person in the running app |
+| `loupe ui` | the HTML report's views served live over loopback, with fix, mute and accept-as-baseline from the page (Stage 1) | a person triaging |
+| DevTools extension | the `serve` panel as a DevTools panel, plus an Elements sidebar for the selected node (Stage 2) | a person in the running app |
+| the pane (`--format pane`) | the report drawn beside the Claude Code transcript, re-run after each edit the model makes | a person watching an agent work |
 
-Two of these are genuinely good and under-appreciated.
+The first five are what this document started from. Two of them are genuinely
+good and under-appreciated.
 
 **The LSP is the strongest surface loupe has.** It is editor-agnostic by
 construction — `engine/src/lsp.ts` is the whole implementation, the VS Code
@@ -340,14 +356,15 @@ binary build already exists and a dev tool should stay light. Start with the tra
 surface, and it answers "does ambient drift awareness matter" before committing
 to H.
 
-**What would change this.** Three things, in the order they would move me:
+**What would change this.** Revisit the order if any of three things turns out
+true, the most consequential first:
 
 - If the intended reader is not the person who ran `npm install` — a designer
   auditing a system they do not build, a lead reviewing a team's drift — then
-  Stage 1's "runs on a machine that already has loupe" assumption collapses, and
-  the shell moves up, because installation *is* the product for that reader.
-- If viewport-dependent findings turn out to be where the real value is, H stops
-  being stage 4 and becomes the thesis.
+  Stage 1's "runs on a machine that already has loupe" assumption collapses.
+  Move the shell up, because installation *is* the product for that reader.
+- If viewport-dependent findings turn out to be where the real value is, make H
+  the thesis rather than stage 4.
 - If incremental analysis proves harder than the ponytail in `lsp.ts` suggests,
-  every option gets worse at once and the live-on-save premise needs rethinking
-  before any shell is built.
+  every option gets worse at once. Rethink the live-on-save premise before
+  building any shell.

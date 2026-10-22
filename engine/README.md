@@ -669,9 +669,11 @@ reader; `fix --judge` acts on the per-declaration ones.
 A value the property has a family for but that the engine cannot relate to it
 is not asked about and is left exactly as reported — `line-height: 1.4` against
 line heights written in px is the case that comes up, and on
-`vip-digital-asset-manager` it is 11 of the 27 open type declarations. Working
-out what a ratio means needs the `font-size` beside it, which is code's job,
-not a question.
+`vip-digital-asset-manager` (a private WordPress plugin; the literals `--judge`
+asks about there are committed under `evals/values`, so the eval below
+reproduces without it) it is 11 of the 27 open type declarations. Working out
+what a ratio means needs the `font-size` beside it, which is code's job, not a
+question.
 
 `planValue` splits a flagged value into parts (on whitespace outside
 parentheses), skips zeros and keywords, and settles each literal part a single
@@ -813,8 +815,10 @@ npm run eval:renames
 
 `evals/renames` carries 158 made-up names. Real code has almost none to label
 (Gutenberg's three are test fixtures), so each is a real `var(--wpds-*)` from
-`site-foundry` or Gutenberg with its name swapped for an agent-style guess, a
-typo between two steps, or a name for something WPDS has no token for. At the
+`site-foundry` (a private WPDS app; the items are committed under
+`evals/renames`, so the eval reproduces without it) or Gutenberg with its name
+swapped for an agent-style guess, a typo between two steps, or a name for
+something WPDS has no token for. At the
 floor it renames 49% of them at 99% right across three runs. Its one wrong pick
 is `--wpds-color-background-control-primary-weak-active` read as brand rather
 than neutral, which "primary" arguably is. It never renames a between-steps
