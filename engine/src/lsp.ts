@@ -28,9 +28,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { substituteOnLine, tokenFixes } from './autofix.ts';
+import { commentFor, substituteOnLine, tokenFixes } from './autofix.ts';
+import { coalesce } from './coalesce.ts';
 import { renderTitle } from './rules.ts';
 import { toPosix } from './discover.ts';
+import { directive } from './suppressions.ts';
 import { escapeRe, messageOf } from './text.ts';
 import type { AnalyzeResult, BaselinedResult, Config, DeadRule, Finding, Severity } from './types.ts';
 
@@ -173,10 +175,6 @@ function deleteRule(lines: readonly string[], dead: DeadRule, cls: string): Text
 	};
 }
 
-/** The comment a suppression directive has to be written in, per file type. */
-const commentFor = (file: string, body: string): string =>
-	/\.(css|scss|sass|less|pcss|postcss)$/i.test(file) ? `/* ${body} */` : `// ${body}`;
-
 export interface LspHandle {
 	/** Resolves when the peer has asked to exit. */
 	closed: Promise<void>;
@@ -301,33 +299,8 @@ export function lsp(opts: {
 		published = now;
 	}
 
-	/**
-	 * Coalesce saves into runs: the timer folds a burst into one analysis, and
-	 * `queued` keeps a save that arrived mid-run from being dropped.
-	 */
-	let timer: NodeJS.Timeout | null = null;
-	let running = false;
-	let queued = false;
-	const drain = async (): Promise<void> => {
-		if (running) return;
-		running = true;
-		try {
-			while (queued) {
-				queued = false;
-				await publish();
-			}
-		} finally {
-			running = false;
-		}
-	};
-	const schedule = (delay = 120): void => {
-		queued = true;
-		if (timer) clearTimeout(timer);
-		timer = setTimeout(() => {
-			timer = null;
-			void drain();
-		}, delay);
-	};
+	/** Saves folded into runs: a burst is one analysis, and a save mid-run is not dropped. */
+	const runs = coalesce(publish, 120);
 
 	/** The findings on a line, for the two requests that ask about a position. */
 	const at = (uri: string, line: number): Finding[] => {
@@ -426,7 +399,7 @@ export function lsp(opts: {
 							[uri]: [
 								{
 									range: { start: { line, character: 0 }, end: { line, character: 0 } },
-									newText: `${indent}${commentFor(rel, `${config.suppression.keyword} ${finding.rule} -- `)}\n`,
+									newText: `${indent}${commentFor(rel, directive(config.suppression.keyword, finding.rule, ''))}\n`,
 								} satisfies TextEdit,
 							],
 						},
@@ -460,7 +433,7 @@ export function lsp(opts: {
 				});
 				return;
 			case 'initialized':
-				schedule(0);
+				runs.schedule(0);
 				return;
 			case 'shutdown':
 				reply(id ?? 0, null);
@@ -484,7 +457,7 @@ export function lsp(opts: {
 				open.delete(uri);
 				return;
 			case 'textDocument/didSave':
-				schedule();
+				runs.schedule();
 				return;
 			case 'textDocument/codeAction': {
 				reply(
