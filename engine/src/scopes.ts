@@ -179,8 +179,10 @@ export function parseTokenScopes(raw: unknown): { scopes: TokenScopes | null; er
 		const holes = [...pattern.matchAll(PLACEHOLDER)].map((m) => m[1] ?? '');
 		const bad = holes.filter((h) => !/^[a-z][a-z-]*$/.test(h));
 		if (bad.length) err(`${at}.pattern`, `a placeholder is a lowercase name: ${bad.map((b) => `{${b}}`).join(', ')}`);
-		for (const name of ['property', 'target'])
-			if (holes.filter((h) => h === name).length > 1) err(`${at}.pattern`, `{${name}} appears more than once`);
+		// Each of these is a named group, and a name repeated makes `new RegExp`
+		// throw, so the grammar is refused here rather than compiled below.
+		const repeated = ['property', 'target'].filter((name) => holes.filter((h) => h === name).length > 1);
+		for (const name of repeated) err(`${at}.pattern`, `{${name}} appears more than once`);
 		if (/[^a-z0-9-]/.test(pattern.replace(/\.\.\.$/, '').replace(PLACEHOLDER, '')))
 			err(`${at}.pattern`, 'only lowercase letters, digits, `-`, placeholders and a trailing `...`');
 
@@ -223,6 +225,7 @@ export function parseTokenScopes(raw: unknown): { scopes: TokenScopes | null; er
 				}
 		}
 
+		if (repeated.length) continue;
 		// `{property}` matches only the declared segments, longest first: WPDS's
 		// `surface-width` and `font-size` are one segment of two words. Every other
 		// placeholder is one word.

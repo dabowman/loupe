@@ -110,6 +110,35 @@ await check('a profile with broken scopes still loads, and says what was wrong',
 	}
 });
 
+// `new RegExp` throws on a repeated named group. Inline, nothing caught it before
+// `readProfiles` dropped the whole profile; the same block as a file was kept.
+await check('a repeated placeholder is refused with a problem, inline or by path, and the profile still loads', () => {
+	const grammars = [{ pattern: '--a-{property}-{property}', property: { text: ['color'] } }];
+	const parsed = parseTokenScopes({ grammars });
+	assert(parsed.scopes === null, 'a repeated placeholder refuses the block');
+	assert(
+		parsed.errors.some((e) => e.includes('{property} appears more than once')),
+		`errors: ${parsed.errors.join('; ')}`,
+	);
+	const dir = scratch('loupe-scopes-repeat-');
+	try {
+		writeAll(dir, {
+			'inline/profile.json': JSON.stringify({ id: 'inline', packages: ['@i/ui'], tokenScopes: { grammars } }),
+			'path/profile.json': JSON.stringify({ id: 'path', packages: ['@p/ui'], tokenScopes: './scopes.json' }),
+			'path/scopes.json': JSON.stringify({ grammars }),
+		});
+		const read = readProfiles(dir);
+		assert(read.map((p) => p.id).join() === 'inline,path', `both profiles load: ${read.map((p) => p.id)}`);
+		for (const p of read)
+			assert(
+				p.tokenScopes === null && p.problems.some((e) => e.includes('appears more than once')),
+				`${p.id}: ${p.problems.join('; ')}`,
+			);
+	} finally {
+		cleanup(dir);
+	}
+});
+
 await check('the CLI says a selected profile’s scopes were refused', () => {
 	const dir = scratch('loupe-scopes-cli-');
 	try {

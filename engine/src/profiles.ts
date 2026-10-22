@@ -80,13 +80,14 @@ interface RawProfile {
  * named like any other, not a reason to drop the profile's registries.
  */
 function readScopes(dir: string, raw: unknown): ReturnType<typeof parseTokenScopes> {
-	if (typeof raw !== 'string') return parseTokenScopes(raw);
+	// Inline too: a throw from parsing would otherwise reach `readProfiles`'s
+	// catch and drop the whole profile, where the same block by path is kept.
 	try {
-		return parseTokenScopes(readJson(under(dir, raw)));
+		return parseTokenScopes(typeof raw === 'string' ? readJson(under(dir, raw)) : raw);
 	} catch (err) {
 		return {
 			scopes: null,
-			errors: [`tokenScopes: could not read ${raw} — ${messageOf(err)}`],
+			errors: [`tokenScopes: could not read ${typeof raw === 'string' ? raw : 'the inline block'} — ${messageOf(err)}`],
 		};
 	}
 }
