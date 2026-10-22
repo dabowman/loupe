@@ -45,7 +45,9 @@ here=$(resolve "$0") || exit 2
 # different design system selects no profile and gets no registry.
 #
 # An explicit --profiles/--patterns still wins: the flag is only added when the
-# caller named none of them.
+# caller named none of them. A project's own profiles need neither — the engine
+# reads them from the config's `profiles` and from .loupe/profiles/ itself, on
+# top of whatever --profiles names.
 #
 # `--profile <id>` is deliberately NOT in that list. It selects *among* the
 # profiles this line supplies rather than supplying any of its own, so treating

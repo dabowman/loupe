@@ -16,6 +16,7 @@
  * the wrong repo — which is the failure mode no build ever catches.
  */
 
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,9 +27,9 @@ import { supersededEverywhere } from '../src/checks/system/currency.ts';
 import { matches, toNode } from '../src/patterns.ts';
 import { registryApplies } from '../src/registry.ts';
 import { renderTitle } from '../src/rules.ts';
-import { readProfiles, selectProfiles, applyRegistries } from '../src/profiles.ts';
+import { readProfiles, selectProfiles, applyRegistries, profileRoots, readProfileRoots } from '../src/profiles.ts';
 import { detectPreset } from '../src/detect.ts';
-import { assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
+import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
 import type { AnalyzeResult, DesignSystem, PatternNode } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -954,6 +955,238 @@ await check('a rule in the removed [severity, options] form fails with the fix',
 		assert(err instanceof Error && /no longer supported.*"warn"/.test(err.message), `got ${String(err)}`);
 	} finally {
 		cleanup(root);
+	}
+});
+
+// ── project profiles (#75) ──────────────────────────────────────────────────
+//
+// `@automattic/vip-design-system` v3 is a rebuild of the system the shipped
+// `vip` profile describes, under the same package name. Selection is by
+// package, so the project got the v2 profile — and the authoring skill then
+// loaded v2's `authoring.md` — with no way to supply its own except a
+// `--profiles` that no hook, command or skill passes, and that replaced the
+// shipped set when it was passed by hand.
+
+const VIP = '@automattic/vip-design-system';
+
+/** The reporter's repro: a VIP v3 project carrying its own profile under `at`. */
+function vipV3(config: Record<string, unknown>, at = 'loupe/profiles'): string {
+	return repo({
+		'package.json': JSON.stringify({ name: 'repro', dependencies: { [VIP]: '^3.0.0' } }),
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			designSystem: { name: 'VIP v3', packages: [VIP] },
+			...config,
+		}),
+		[`${at}/vip-v3/profile.json`]: JSON.stringify({ id: 'vip-v3', name: 'VIP Design System v3', packages: [VIP] }),
+		[`${at}/vip-v3/authoring.md`]: '# v3 authoring\n',
+	});
+}
+
+/**
+ * `loupe status`'s `profile:` line, run from the project the way the hooks run
+ * it: the shipped `--profiles` and nothing about the project's own.
+ */
+function profileLine(root: string, ...extra: string[]): { line: string; stderr: string } {
+	const home = scratch('loupe-pp-home-');
+	try {
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, NO_COLOR: '1' };
+		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_')) delete env[k];
+		const r = spawnSync(process.execPath, [CLI, 'status', '--profiles', PROFILES, ...extra], {
+			cwd: root,
+			encoding: 'utf8',
+			env,
+		});
+		if (r.error) throw r.error;
+		const line = (r.stdout ?? '').split('\n').find((l) => l.startsWith('profile:')) ?? '';
+		return { line, stderr: r.stderr ?? '' };
+	} finally {
+		cleanup(home);
+	}
+}
+
+await check('a project profile from the config wins over the shipped one on its package', () => {
+	const root = vipV3({ profiles: './loupe/profiles' });
+	try {
+		const { line } = profileLine(root);
+		assert(
+			line.includes(`vip-v3 (VIP Design System v3) — ${join(root, 'loupe', 'profiles', 'vip-v3')}`),
+			`status should name the project's profile and its directory, got: ${line}`,
+		);
+		assert(!/\bvip \(/.test(line), `the shipped vip profile must not be selected beside it: ${line}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('.loupe/profiles is read with no config key and no flag', () => {
+	const root = vipV3({}, '.loupe/profiles');
+	try {
+		const { line } = profileLine(root);
+		assert(line.includes(`vip-v3 (VIP Design System v3) — ${join(root, '.loupe', 'profiles', 'vip-v3')}`), line);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('project profiles are merged with the shipped set, not swapped for it', () => {
+	const root = vipV3({});
+	try {
+		const all = readProfileRoots(profileRoots({ root, configured: [join(root, 'loupe', 'profiles')], flag: PROFILES }));
+		const ids = all.map((p) => p.id);
+		for (const id of ['vip-v3', 'vip', 'wpds', 'archer'])
+			assert(ids.includes(id), `expected ${id} among the merged profiles, got ${ids.join(', ')}`);
+		assert(all.find((p) => p.id === 'vip-v3')?.origin === 'project', 'the project profile is marked as such');
+		assert(all.find((p) => p.id === 'wpds')?.origin === 'shipped', 'a shipped profile is marked as such');
+		// The shipped set still selects for the projects it describes…
+		const wp = selectProfiles(all, { designSystem: { packages: ['@wordpress/components'] } });
+		assert(wp.map((p) => p.id).join() === 'wpds', `wpds should still select, got ${wp.map((p) => p.id)}`);
+		// …and the shadowed one can still be named outright.
+		assert(selectProfiles(all, { designSystem: { packages: [VIP] } }, 'vip')[0]?.id === 'vip', 'vip by id');
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a project profile shadows a shipped one only over packages the project imports', () => {
+	const all = [
+		{ id: 'acme', packages: ['@acme/ui', '@wordpress/components'], origin: 'project' },
+		{ id: 'wpds', packages: ['@wordpress/components', '@wordpress/ui'], origin: 'shipped' },
+	] as unknown as Parameters<typeof selectProfiles>[0];
+	const ids = (pkgs: string[]): string =>
+		selectProfiles(all, { designSystem: { packages: pkgs } })
+			.map((p) => p.id)
+			.join();
+	const apart = ids(['@acme/ui', '@wordpress/ui']);
+	assert(apart === 'acme,wpds', `no package imported by both, both select: ${apart}`);
+	const shared = ids(['@acme/ui', '@wordpress/components']);
+	assert(shared === 'acme', `a package imported by both shadows the shipped one: ${shared}`);
+});
+
+await check('a profile with the reserved id "none" is not read', () => {
+	const root = repo({
+		'none/profile.json': JSON.stringify({ packages: ['@acme/ui'] }),
+		'acme/profile.json': JSON.stringify({ id: 'none', packages: ['@acme/ui'] }),
+	});
+	try {
+		const ids = readProfiles(root).map((p) => p.id);
+		assert(ids.length === 0, `got ${ids.join(', ')}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a project profile wins on a shared id', () => {
+	const root = repo({
+		'package.json': JSON.stringify({ name: 'repro', dependencies: { [VIP]: '^3.0.0' } }),
+		'loupe.config.json': JSON.stringify({ extends: 'generic', designSystem: { packages: [VIP] } }),
+		'.loupe/profiles/vip/profile.json': JSON.stringify({ id: 'vip', name: 'VIP, rebuilt', packages: [VIP] }),
+	});
+	try {
+		const { line } = profileLine(root);
+		assert(line.includes(`vip (VIP, rebuilt) — ${join(root, '.loupe', 'profiles', 'vip')}`), line);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a config profiles path is relative to the config file that wrote it', async () => {
+	const root = repo({
+		'shared/loupe.base.json': JSON.stringify({ extends: 'generic', profiles: './profiles' }),
+		'shared/profiles/acme/profile.json': JSON.stringify({ id: 'acme', packages: ['@acme/ui'] }),
+		'app/loupe.config.json': JSON.stringify({ extends: '../shared/loupe.base.json' }),
+	});
+	try {
+		const config = await loadConfig({ root: join(root, 'app') });
+		assert(
+			config.profileDirs.join() === join(root, 'shared', 'profiles'),
+			`expected the shared config's own directory, got ${config.profileDirs}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('"profile" pins selection, and --profile outranks it', () => {
+	const off = vipV3({ profile: 'none' });
+	try {
+		const { line } = profileLine(off);
+		assert(/^profile:\s+none selected — pinned to "none"/.test(line), `got: ${line}`);
+	} finally {
+		cleanup(off);
+	}
+	const pinned = vipV3({ profiles: './loupe/profiles', profile: 'wpds' });
+	try {
+		const { line } = profileLine(pinned);
+		assert(/^profile:\s+wpds \(/.test(line) && !line.includes('vip'), `the pin should select wpds alone: ${line}`);
+	} finally {
+		cleanup(pinned);
+	}
+	const typed = vipV3({ profiles: './loupe/profiles', profile: 'none' });
+	try {
+		const { line } = profileLine(typed, '--profile', 'vip-v3');
+		assert(/^profile:\s+vip-v3 \(/.test(line), `--profile should win over the config, got: ${line}`);
+	} finally {
+		cleanup(typed);
+	}
+});
+
+// The workaround the issue had to use — `"packages": []` — took every rule
+// that needs packages down with the wrong profile.
+await check('"profile": "none" keeps the rules that need packages on', async () => {
+	const root = vipV3({ profile: 'none' });
+	try {
+		const config = await loadConfig({ root });
+		assert(config.profilePin === 'none', `got ${config.profilePin}`);
+		assert(config.designSystem.packages.join() === VIP, 'the packages survive the pin');
+		assert(config.enabled['patterns/unregistered-composite'], 'unregistered-composite stays on');
+		const all = readProfileRoots(profileRoots({ root, flag: PROFILES }));
+		assert(selectProfiles(all, config, config.profilePin).length === 0, 'none selects nothing');
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a pin naming no profile says so', () => {
+	const root = vipV3({ profile: 'nope' });
+	try {
+		const { stderr } = profileLine(root);
+		assert(/no profile "nope" \(the config's "profile"\)/.test(stderr), `got: ${stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a project profile that fails to load says so, rather than leaving the shipped one silently', () => {
+	const root = vipV3({ profiles: './loupe/profiles' });
+	try {
+		writeFileSync(join(root, 'loupe', 'profiles', 'vip-v3', 'profile.json'), '{ "id": "vip-v3", ');
+		const { line, stderr } = profileLine(root);
+		assert(
+			stderr.includes(
+				`project profile skipped, could not load ${join(root, 'loupe', 'profiles', 'vip-v3', 'profile.json')}`,
+			),
+			`got: ${stderr}`,
+		);
+		// What it warns about: the shipped profile it was written to replace is back.
+		assert(/\bvip \(/.test(line), `the shipped vip profile selects in its place: ${line}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a malformed profiles or profile key is a config error, not "none"', async () => {
+	for (const bad of [{ profiles: 3 }, { profiles: [''] }, { profile: '' }, { profile: ['vip'] }]) {
+		const root = repo({ 'loupe.config.json': JSON.stringify(bad) });
+		try {
+			const err = await loadConfig({ root }).then(
+				() => null,
+				(e: unknown) => e,
+			);
+			assert(err instanceof Error && /^profiles? must be/.test(err.message), `${JSON.stringify(bad)}: ${String(err)}`);
+		} finally {
+			cleanup(root);
+		}
 	}
 });
 
