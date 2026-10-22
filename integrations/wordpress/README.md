@@ -5,7 +5,8 @@ injects into the current document only, so on wp-admin — which is a multi-page
 app, one full navigation per screen — it is a click per page.
 
 `loupe-overlay.php` is a development mu-plugin that loads the overlay itself, so
-it survives navigation.
+it survives navigation. It needs WordPress 6.3 or later, for the `defer` loading
+strategy it enqueues the overlay with.
 
 ## Install it
 
@@ -55,11 +56,17 @@ define( 'LOUPE_OVERLAY_URL', 'http://localhost:7331' );
 
 ## Use it
 
-Add `?loupe=1` to any URL once. The overlay stays until you visit `?loupe=0`.
+Signed in as an administrator, add `?loupe=1` to any URL once. The overlay stays
+until you visit `?loupe=0`.
 
 ```
 http://localhost:8888/wp-admin/?loupe=1
 ```
+
+Only a user with the `manage_options` capability — an administrator — can turn
+it on or see it. For anyone else `?loupe=1` does nothing and the overlay never
+loads, even in a browser that still holds the cookie, so it stays hidden while
+you are signed out.
 
 ## Why it is off until you ask
 
@@ -81,7 +88,10 @@ and a stored `storageState` only has it if you logged in with the overlay on.
 **Mixed content.** If WordPress is served over HTTPS — a Jurassic Tube or ngrok
 tunnel, say — the browser refuses to load `http://localhost:7331/overlay.js`
 from it. Use the local `http://` origin, or put `loupe serve` behind the same
-kind of tunnel and point the constant at that.
+kind of tunnel and point the constant at that. Visitors to the tunnelled site
+still get nothing — the mu-plugin only loads the overlay for administrators —
+but a tunnel to `loupe serve` answers anyone who has its URL, so keep it to
+yourself and close it when you are done.
 
 **Pages it cannot see.** The panel is a view of the rendered page: a finding in
 an unopened modal or an unrendered branch is listed and resolves to nothing, and
