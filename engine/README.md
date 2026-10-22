@@ -19,7 +19,7 @@ that shaped each decision, and the eval numbers behind the tuned ones — is in
 [`docs/design/`](../docs/design/README.md).
 
 ```bash
-node engine/bin/loupe.mjs check --all   # or ./bin/loupe check --all
+node bin/loupe.mjs check --all   # or ../bin/loupe check --all
 ```
 
 ## Why
