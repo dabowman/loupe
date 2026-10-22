@@ -142,12 +142,25 @@ Parse errors and a token set that came back empty still print — a run that
 quietly skipped half the CSS reads as a clean one at either verbosity.
 
 `bin/loupe` is on PATH inside any Claude Code session — Claude Code adds each
-enabled plugin's `bin/` to the environment it runs commands in. For plain
-terminals, symlink it somewhere on your `PATH`:
+enabled plugin's `bin/` to the environment it runs commands in, and only
+there. A plain terminal reports `command not found` until you symlink it
+somewhere on your `PATH`:
 
 ```bash
-ln -s "$HOME/.claude/plugins/<marketplace>/loupe/bin/loupe" ~/.local/bin/loupe
+ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
 ```
+
+Link the marketplace clone, not the copy Claude Code runs: that one sits under
+`~/.claude/plugins/cache/loupe/loupe/<commit>/`, and the commit changes on every
+update. The clone moves with `/plugin marketplace update`, so it can be a
+commit ahead of the installed plugin between updates. From a checkout of this
+repository, link its `bin/loupe` the same way. Loupe is not on npm yet, so a
+`lint:loupe` script in a project's `package.json` works only for people who
+have made this link.
+
+A terminal sees none of the plugin's settings (blocking, preset, API key) —
+Claude Code passes them to hooks only. `loupe status` says where it found its
+settings, and a hand-run `loupe check` exits 1 on errors either way.
 
 It runs against the project you are in — the directory holding the
 `loupe.config.json` that governs your cwd, so a command typed in
