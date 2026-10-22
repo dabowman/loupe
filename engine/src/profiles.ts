@@ -30,17 +30,21 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { byBytes, readDir } from './discover.ts';
-import { isAbsolute, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
-import { readDelivery } from './delivery.ts';
+import { mergeDeliveries, readDelivery } from './delivery.ts';
 import { setComponentRegistry, setPatterns } from './config.ts';
+import { asString, asStrings } from './json.ts';
+import { under } from './paths.ts';
 import { declaredPackages, registryApplies } from './registry.ts';
+import { rulesNeeding } from './rules.ts';
 import { parseTokenScopes } from './scopes.ts';
 import { messageOf } from './text.ts';
 import type {
 	ComponentEntry,
 	Config,
+	Delivery,
 	Pattern,
 	Profile,
 	ProfileOrigin,
@@ -77,16 +81,19 @@ export interface RegistrySource {
 	forced?: boolean;
 }
 
-const readJson = (p: string): unknown => JSON.parse(readFileSync(p, 'utf8'));
+/** A JSON file, or a throw — the callers here catch it and name the file. */
+const readJsonStrict = (p: string): unknown => JSON.parse(readFileSync(p, 'utf8'));
 
-/** Resolve a profile-relative path. */
-const under = (dir: string, rel: string): string => (isAbsolute(rel) ? rel : join(dir, rel));
+/**
+ * The profiles a run selected, which is what every reader of a profile's
+ * registries, scopes, descriptions or delivery block iterates. Empty until the
+ * CLI has attached them, and for a library caller that never does.
+ */
+export const activeProfiles = (config: Pick<Config, 'profiles'>): Profile[] => config.profiles?.active ?? [];
 
-const asStrings = (v: unknown): string[] =>
-	Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : [];
-
-/** A field that has to be a usable string, or nothing. Nothing else is coerced. */
-const asString = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+/** How the active profiles say their packages and tokens reach a page, merged. */
+export const activeDelivery = (config: Pick<Config, 'profiles'>): Delivery | null =>
+	mergeDeliveries(activeProfiles(config).map((p) => p.delivery));
 
 /** A `profile.json` as authored — every field optional, nothing vouched for. */
 interface RawProfile {
@@ -110,7 +117,7 @@ function readScopes(dir: string, raw: unknown): ReturnType<typeof parseTokenScop
 	// Inline too: a throw from parsing would otherwise reach `readProfiles`'s
 	// catch and drop the whole profile, where the same block by path is kept.
 	try {
-		return parseTokenScopes(typeof raw === 'string' ? readJson(under(dir, raw)) : raw);
+		return parseTokenScopes(typeof raw === 'string' ? readJsonStrict(under(dir, raw)) : raw);
 	} catch (err) {
 		return {
 			scopes: null,
@@ -141,7 +148,7 @@ export function readProfiles(
 		const manifest = join(dir, 'profile.json');
 		if (!existsSync(manifest)) continue;
 		try {
-			const raw = readJson(manifest) as RawProfile;
+			const raw = readJsonStrict(manifest) as RawProfile;
 			// Every field is whatever JSON happened to hold, and `id` is a Set key, a
 			// `--profile` match and a sort key — and that sort runs outside every `try`
 			// here, so a manifest carrying `"id": 3` would throw past all of it.
@@ -159,7 +166,7 @@ export function readProfiles(
 			out.push({
 				id,
 				name: asString(raw.name) ?? asString(raw.id) ?? e.name,
-				preset: asString(raw.preset),
+				preset: asString(raw.preset) ?? null,
 				packages: asStrings(raw.packages),
 				patterns: patterns ? under(dir, patterns) : null,
 				components: components ? under(dir, components) : null,
@@ -305,7 +312,7 @@ export function applyRegistries(
 			const path = src[kind];
 			if (!path) continue;
 			try {
-				const raw = readJson(resolve(path));
+				const raw = readJsonStrict(resolve(path));
 				const inScope = registryApplies(raw, config.designSystem.packages);
 				if (!src.forced && !inScope) {
 					skipped.push({ label: src.label, kind, packages: declaredPackages(raw) });
@@ -333,14 +340,11 @@ export function applyRegistries(
 	// invisible as one that was skipped.
 	//
 	// Each note is stated once, in the order a reader would check it. Every rule
-	// the registry feeds, not just the first.
-	const registryRules = [
-		'patterns/duplicate-composite',
-		'patterns/superseded-composite',
-		'patterns/judged-redirect',
-	] as const;
+	// the registry feeds — the catalog says which — not just the first.
+	const allOff = (kind: 'patternRegistry' | 'componentRegistry'): boolean =>
+		rulesNeeding(kind).every((rule) => config.severityOf(rule) === 'off');
 	const patternsNote = (added: number): string | null =>
-		registryRules.every((rule) => config.severityOf(rule) === 'off')
+		allOff('patternRegistry')
 			? null
 			: !added
 				? 'merged but enabled nothing — it added no patterns this config did not already have'
@@ -356,9 +360,7 @@ export function applyRegistries(
 						? 'merged but enabled nothing — this config declares no designSystem.components for its signatures to match'
 						: null;
 	const componentsNote = (added: number): string | null =>
-		added ||
-		(config.severityOf('system/locked-component') === 'off' &&
-			config.severityOf('system/superseded-component') === 'off')
+		added || allOff('componentRegistry')
 			? null
 			: 'merged but enabled nothing — it added no entries this config did not already have';
 

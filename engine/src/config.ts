@@ -15,7 +15,9 @@ import { RULES, RULE_IDS, canonicalRuleId, isRuleId, isSeverity } from './rules.
 import { loadPatterns } from './patterns.ts';
 import { registryApplies } from './registry.ts';
 import { loadComponents } from './components.ts';
-import { DEFAULT_BASELINE } from './paths.ts';
+import { isRecord as isObj, listOf, readJson } from './json.ts';
+import { DEFAULT_BASELINE, under } from './paths.ts';
+import { escapeRe } from './text.ts';
 import type {
 	AuthoredConfig,
 	Capability,
@@ -28,7 +30,7 @@ import type {
 	RuleId,
 	RuleSetting,
 } from './types.ts';
-import { EMBEDDED_PRESETS, PRESET_DIR, hasPreset, presetKey, presetNames, readPreset } from './embedded.ts';
+import { EMBEDDED_PRESETS, PRESET_DIR, hasPreset, presetNames, presetOf, presetPath, readPreset } from './embedded.ts';
 
 const CONFIG_NAMES = ['loupe.config.mjs', 'loupe.config.js', 'loupe.config.json', '.louperc.json'];
 
@@ -75,8 +77,6 @@ export const DEFAULTS: MergedConfig = {
 	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 30000 },
 };
 
-const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
-
 /**
  * Deep merge; arrays replace rather than concatenate so a preset can be
  * overridden.
@@ -113,15 +113,10 @@ export function findConfig(start: string): string | null {
 			const p = join(dir, name);
 			if (existsSync(p)) return p;
 		}
+		// An unreadable package.json is not this walk's problem: it reads as one with no `loupe` key.
 		const pkg = join(dir, 'package.json');
-		if (existsSync(pkg)) {
-			try {
-				const parsed: unknown = JSON.parse(readFileSync(pkg, 'utf8'));
-				if (isObj(parsed) && parsed.loupe) return pkg;
-			} catch {
-				/* unreadable package.json is not our problem here */
-			}
-		}
+		const parsed = readJson(pkg);
+		if (isObj(parsed) && parsed.loupe) return pkg;
 		const up = dirname(dir);
 		if (up === dir) return null;
 		dir = up;
@@ -131,8 +126,9 @@ export function findConfig(start: string): string | null {
 async function readConfigFile(path: string): Promise<AuthoredConfig | undefined> {
 	// A preset the binary carries rather than reads. Checked before the disk
 	// read so the error below stays about *your* config file, not this one.
-	if (path.startsWith(PRESET_DIR) && !existsSync(path)) {
-		const embedded = EMBEDDED_PRESETS[presetKey(path.slice(PRESET_DIR.length + 1).replace(/\.json$/, ''))];
+	const preset = presetOf(path);
+	if (preset !== null && !existsSync(path)) {
+		const embedded = EMBEDDED_PRESETS[preset];
 		if (embedded) return embedded as AuthoredConfig;
 	}
 	if (path.endsWith('.json')) {
@@ -147,8 +143,8 @@ async function readConfigFile(path: string): Promise<AuthoredConfig | undefined>
 
 /** Resolve `extends`, which may name a shipped preset or a path. */
 async function resolveExtends(spec: string, fromDir: string): Promise<{ path: string; dir: string }> {
-	if (hasPreset(spec)) return { path: join(PRESET_DIR, `${presetKey(spec)}.json`), dir: PRESET_DIR };
-	const asPath = isAbsolute(spec) ? spec : join(fromDir, spec);
+	if (hasPreset(spec)) return { path: presetPath(spec), dir: PRESET_DIR };
+	const asPath = under(fromDir, spec);
 	if (existsSync(asPath)) return { path: asPath, dir: dirname(asPath) };
 	throw new Error(`cannot resolve extends: ${spec}`);
 }
@@ -192,9 +188,8 @@ async function loadChain(path: string, walk = freshWalk()): Promise<Chain> {
 	if (walk.applied.has(real)) return { raw: {}, ruleFrom: {} };
 	walk.applied.add(real);
 	const raw = (await readConfigFile(real)) ?? {};
-	const label = real.startsWith(PRESET_DIR)
-		? `preset ${real.slice(PRESET_DIR.length + 1).replace(/\.json$/, '')}`
-		: real;
+	const preset = presetOf(real);
+	const label = preset === null ? real : `preset ${preset}`;
 	return expandExtends(raw, dirname(real), label, {
 		ancestors: new Set([...walk.ancestors, real]),
 		applied: walk.applied,
@@ -216,10 +211,9 @@ async function expandExtends(
 	raw = anchorProfiles(raw, fromDir);
 	const own = Object.fromEntries(Object.keys(isObj(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
 	if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
-	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
 	let base: AuthoredConfig = {};
 	let ruleFrom: Record<string, string> = {};
-	for (const spec of specs) {
+	for (const spec of listOf(raw.extends)) {
 		const { path: p } = await resolveExtends(spec, fromDir);
 		const parent = await loadChain(p, walk);
 		base = mergeConfig(base, parent.raw);
@@ -288,7 +282,7 @@ function shippedVocabulary(): { keywords: string[]; blanket: Set<string> } {
 
 /** Compile `has-*` style patterns into anchored regexes. */
 export function compilePatterns(patterns: readonly string[] | undefined): RegExp[] {
-	return (patterns ?? []).map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`));
+	return (patterns ?? []).map((p) => new RegExp(`^${escapeRe(p).replace(/\\\*/g, '.*')}$`));
 }
 
 /**
@@ -509,7 +503,7 @@ function readRegistry<T>(
 	if (Array.isArray(spec)) return load(spec);
 	if (typeof spec !== 'string') return empty;
 	try {
-		const raw: unknown = JSON.parse(readFileSync(isAbsolute(spec) ? spec : join(root, spec), 'utf8'));
+		const raw: unknown = JSON.parse(readFileSync(under(root, spec), 'utf8'));
 		return registryApplies(raw, packages) ? load(raw) : empty;
 	} catch {
 		return empty;
@@ -603,7 +597,7 @@ export async function loadConfig({
 		source = { kind: 'file', path: resolve(configPath) };
 	} else if (preset) {
 		if (!hasPreset(preset)) throw new Error(`unknown preset: ${preset}`);
-		chain = await loadChain(join(PRESET_DIR, `${presetKey(preset)}.json`));
+		chain = await loadChain(presetPath(preset));
 		source = { kind: 'preset', name: preset };
 	} else {
 		const found = findConfig(root);
@@ -614,7 +608,7 @@ export async function loadConfig({
 			chain = await expandExtends(inline, root, inferred ? 'inferred config' : 'inline config');
 			source = { kind: inferred ? 'inferred' : 'inline' };
 		} else {
-			chain = await loadChain(join(PRESET_DIR, 'generic.json'));
+			chain = await loadChain(presetPath('generic'));
 			source = { kind: 'preset', name: 'generic' };
 		}
 	}

@@ -8,42 +8,14 @@
  *
  * Both live in the project's state directory (`paths.ts`), never in the repo,
  * and both are optimisations only: a missing, corrupt or unwritable cache file
- * costs time and changes no answer. Writes are whole-file and atomic — written
- * beside, then renamed over — so two hook processes racing each other leave one
- * complete file, never a torn one.
+ * costs time and changes no answer. Writes go through `writeJsonAtomic`
+ * (`json.ts`), so two hook processes racing each other leave one complete
+ * file, never a torn one.
  *
  * Design notes: docs/design/cli.md#caches
  */
 
-import { createHash } from 'node:crypto';
-import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { ensureDir } from './paths.ts';
-
-export const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
-
-/** A JSON file, or null when it is missing or unreadable — a cold cache either way. */
-export function readJson(path: string): unknown {
-	try {
-		return JSON.parse(readFileSync(path, 'utf8'));
-	} catch {
-		return null;
-	}
-}
-
-/** Whole-file and atomic; false when the state directory is not writable. */
-export function writeJsonAtomic(path: string, data: unknown): boolean {
-	const tmp = `${path}.${process.pid}.tmp`;
-	try {
-		if (!ensureDir(dirname(path))) return false;
-		writeFileSync(tmp, JSON.stringify(data));
-		renameSync(tmp, path);
-		return true;
-	} catch {
-		rmSync(tmp, { force: true });
-		return false;
-	}
-}
+import { readJson, writeJsonAtomic } from './json.ts';
 
 /** One answer as Jev returned it; the shape `judge.ts` reads. */
 interface StoredChoice {

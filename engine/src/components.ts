@@ -14,6 +14,9 @@
 import { propsOverlap } from './styles.ts';
 import type { ComponentEntry, StylingSurface } from './types.ts';
 
+/** How the registry keys an entry: the package, then the name, so one name can mean two things. */
+export const registryKey = (pkg: string, name: string): string => `${pkg}::${name}`;
+
 /** The shape a registry entry has before anything has vouched for it. */
 type MaybeEntry = Partial<ComponentEntry> | null | undefined;
 
@@ -57,7 +60,7 @@ export function loadComponents(raw: unknown): Map<string, ComponentEntry> {
 	// and its gaps are gaps. A malformed surface is not a recorded one.
 	const surfaced = read.some((c) => c.surface !== undefined);
 	const map = new Map<string, ComponentEntry>();
-	for (const c of read) map.set(`${c.package}::${c.name}`, surfaced ? { ...c, surfaced: true } : c);
+	for (const c of read) map.set(registryKey(c.package, c.name), surfaced ? { ...c, surfaced: true } : c);
 	return map;
 }
 
@@ -73,10 +76,10 @@ export function surfaceFor(
 	name: string | undefined,
 ): StylingSurface | undefined {
 	if (!pkg || !name) return undefined;
-	const exact = registry.get(`${pkg}::${name}`);
+	const exact = registry.get(registryKey(pkg, name));
 	if (exact) return exact.surface;
 	const [root, ...parts] = name.split('.');
-	return parts.length === 1 && parts[0] === 'Root' ? registry.get(`${pkg}::${root}`)?.surface : undefined;
+	return parts.length === 1 && parts[0] === 'Root' && root ? registry.get(registryKey(pkg, root))?.surface : undefined;
 }
 
 /**
@@ -101,7 +104,9 @@ export function surfacesRecorded(
 	const anywhere = [...byPackage.values()].some(Boolean);
 	return (pkg, name) => {
 		if (!pkg) return anywhere;
-		const entry = (name && registry.get(`${pkg}::${name}`)) || (name && registry.get(`${pkg}::${name.split('.')[0]}`));
+		const entry =
+			(name && registry.get(registryKey(pkg, name))) ||
+			(name && registry.get(registryKey(pkg, name.split('.')[0] ?? name)));
 		if (entry) return entry.surfaced === true;
 		return byPackage.get(pkg) ?? anywhere;
 	};

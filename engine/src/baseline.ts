@@ -11,7 +11,8 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { findingKey } from './analyze.ts';
+import { findingKey, isBlocking } from './analyze.ts';
+import { byBytes } from './discover.ts';
 import { ensureDir } from './paths.ts';
 import type { AnalyzeResult, Baseline, BaselineFile, BaselinedResult } from './types.ts';
 
@@ -84,7 +85,7 @@ export function diffBaseline(
 		for (const e of entries) if (!prior.set.has(e)) row(ruleOf(e)).added++;
 		for (const e of prior.entries) if (!now.has(e)) row(ruleOf(e)).removed++;
 	}
-	const rules = [...rows.values()].sort((a, b) => b.findings - a.findings || (a.rule < b.rule ? -1 : 1));
+	const rules = [...rows.values()].sort((a, b) => b.findings - a.findings || byBytes(a.rule, b.rule));
 	return { entries: entries.length, rules };
 }
 
@@ -167,7 +168,7 @@ export function applyBaseline(
 	return {
 		...result,
 		findings: kept,
-		blocking: kept.some((f) => f.severity === 'error'),
+		blocking: isBlocking(kept),
 		baselined: accepted.length,
 		baselinedFindings: accepted,
 		fixed: scoped

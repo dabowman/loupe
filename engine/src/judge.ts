@@ -22,9 +22,8 @@
  * Design notes, and every measurement behind the floors: docs/design/judge.md
  */
 
-import { readFileSync } from 'node:fs';
 import type { AnswerCache } from './cache.ts';
-import { sha256 } from './cache.ts';
+import { isRecord, readJson } from './json.ts';
 import { renameCandidates } from './checks/tokens/unknown-token.ts';
 import { withoutReach } from './delivery.ts';
 import { EMBEDDED_LANGUAGE } from './embedded.ts';
@@ -36,10 +35,10 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import { boundMessage, messageLine, messageOf } from './text.ts';
+import { boundMessage, messageLine, messageOf, sha256 } from './text.ts';
 import { DELIBERATE, KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
-import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
+import type { ComponentEntry, Control, Finding, Judged, Profile, Severity, Suggestion, TokenSet } from './types.ts';
 
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 // A version, not `jev-latest`: every floor in here was measured against the
@@ -312,6 +311,9 @@ export async function ask<T>(
 /** How every judged message ends: the certainty behind what it now says. */
 const judgedTail = (confidence: number): string => `(judged ${confidence.toFixed(2)})`;
 
+/** An answer as data on a finding: the pick, its certainty, and the parts of the message it wrote. */
+const judgedAs = (a: Choice, spans: string[]): Judged => ({ answer: a.choice, confidence: a.confidence, spans });
+
 // ── system/raw-element: which variant? ──────────────────────────────────────
 
 /** The registry entry with variants that a raw-element finding points at, if any. */
@@ -370,7 +372,7 @@ export async function judgeVariants(
 		// Bounded again, with the judgement kept last: `analyze` bounded this line
 		// before the answer was spliced into it.
 		f.message = messageLine(`${element} → ${suggestion}`, ` ${tail}`);
-		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+		f.judged = judgedAs(a, [span, tail]);
 		// The reach note priced adopting the analog, which a `not_` answer withdrew.
 		if (not) f.note = withoutReach(f.note, target.package);
 		annotated++;
@@ -497,14 +499,11 @@ export async function judgeRedirects(
 export function tokenDescriptions(profiles: readonly Pick<Profile, 'tokenDescriptions'>[]): Map<string, string> {
 	const out = new Map<string, string>();
 	for (const p of profiles) {
-		if (!p.tokenDescriptions) continue;
-		try {
-			const raw = JSON.parse(readFileSync(p.tokenDescriptions, 'utf8')) as Record<string, unknown>;
-			for (const [name, text] of Object.entries(raw))
-				if (!name.startsWith('$') && typeof text === 'string') out.set(name, text);
-		} catch {
-			/* a profile without readable descriptions is asked with names alone */
-		}
+		// A profile without readable descriptions is asked with names alone.
+		const raw = p.tokenDescriptions ? readJson(p.tokenDescriptions) : null;
+		if (!isRecord(raw)) continue;
+		for (const [name, text] of Object.entries(raw))
+			if (!name.startsWith('$') && typeof text === 'string') out.set(name, text);
 	}
 	return out;
 }
@@ -720,7 +719,7 @@ export async function judgeRenames(
 		// The unknown name is source text, and nothing bounds this line after here.
 		// It is what gives way: the answer is the half a reader acts on.
 		f.message = messageLine(item.name, ` \u2192 ${span} ${tail}`);
-		f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+		f.judged = judgedAs(a, [span, tail]);
 		if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
 		settled++;
 	});
