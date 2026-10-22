@@ -56,6 +56,7 @@ than using it.
 | `agents/loupe-fixer` | Per-file remediation agent. `/loupe-fix` fans it out once the work spans enough files to be worth it. |
 | `commands/` | `/loupe-init`, `/loupe-audit`, `/loupe-fix`, `/loupe-baseline`, `/loupe-report` |
 | `hooks/hooks.json` | `PostToolUse` on what the edit just introduced, `Stop` across changed files |
+| `hooks/register.tsx` | The Loupe pane — the report drawn beside the transcript, re-run after each edit, with a status-line tally; `/loupe-pane` opens it by hand |
 | `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, its two registries and its three authoring docs |
 | `profiles/archer/` | The Archer profile — the same, for a styled system built on Base UI, with its own layout and text components |
 | `profiles/vip/` | The VIP Design System profile — the same, for `@automattic/vip-design-system` on Theme UI |
@@ -892,7 +893,40 @@ alone.
 sharing a drift audit with people who are not going to run the CLI. It only
 renders and publishes: the page comes from the engine, so two people running it
 never see two different reports. Anything you want to change about how it looks
-belongs in `engine/src/report-html.ts`.
+belongs in `engine/src/report-html.ts`. `/loupe-report --local` stops at the
+file, `.loupe/report.html` in the project, and hands back the path: in the
+Claude Code desktop app a click on it opens the page beside the conversation,
+and in a fullscreen terminal a Cmd/Ctrl-click opens it in the browser.
+
+### The pane
+
+The same report, live, beside the transcript. `hooks/register.tsx` is a Claude
+Code *mod* — a hooks module that draws — and in a project that opted the hooks
+in it opens a pane next to the conversation, runs the engine again after each
+edit the model makes to a UI file, and draws what `--format pane` answers: the
+tally, the rules in frequency order, where the drift sits, the densest files,
+and the composites rebuilt across files. A line in the status bar carries the
+count; a toast says once when the blocking count reaches zero; a notification
+fires when a turn ends with blocking findings still standing, which is the
+case you want to hear about without watching.
+
+What it draws depends on where Claude Code is drawing. The desktop app and the
+VS Code panel get the engine's SVG charts, with a tooltip per bar. The terminal
+gets the same rows as block-glyph bars sized to the pane, docked beside the
+transcript in a fullscreen terminal from 110 columns and inline above the
+prompt otherwise. Pressing a rule drafts `/loupe-fix <rule>` into the prompt —
+it never sends it. A `show` picker narrows the list to blocking or advisory,
+and `HTML report` writes `.loupe/report.html` and puts the path on the
+clipboard.
+
+`/loupe-pane` opens it in any project, opted in or not, and from then on edits
+refresh it. The plugin's `pane` option turns the automatic pane off while
+leaving the hooks alone. It draws nothing in cloud sessions, under `claude -p`
+or in the Agent SDK, where the hooks still run and the text report is the whole
+story — and the model never reads it: the pane is for the person, and the model
+keeps the budgeted agent format, which is the right split. The numbers come from
+the engine (`engine/src/report-pane.ts`), so the pane, the page and the JSON
+cannot disagree.
 
 ### In CI
 

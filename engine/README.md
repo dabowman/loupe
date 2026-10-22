@@ -965,6 +965,7 @@ no reader.
 ```bash
 loupe check --all --format json     # stable, versioned schema
 loupe check --all --format sarif    # GitHub code scanning
+loupe check --all --format pane     # the tallies and charts the Claude Code pane draws
 loupe check --changed --max-findings 20
 loupe check --rule layout/margin-on-child --format json   # one rule, every finding
 loupe suppressions                  # audit every active directive, and every rule off in config
@@ -992,6 +993,13 @@ result carrying `suppressions: [{ "kind": "external", "justification":
 "accepted in the loupe baseline" }]`, after the live ones, so code scanning
 shows it as suppressed rather than as fixed, and puts the same two counts in the
 run's `properties`.
+
+`--format pane` is the model behind the Loupe pane in Claude Code (the
+plugin's `hooks/register.tsx`): the tiles, the rules in frequency order, the
+directory rollup with its tail folded, the composite clusters, and the two bar
+charts as SVG strings a desktop surface draws as they are. It is derived from
+the `json` payload and nothing else, so the pane, the page and the JSON cannot
+describe different reports. Its `version` follows the same additive-only rule.
 
 `--rule <id>` scopes `check` and `fix` to the rules it names: repeat it, or give
 a comma list. The exit code answers for what is left, the baselined count is the

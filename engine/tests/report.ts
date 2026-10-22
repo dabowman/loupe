@@ -25,6 +25,7 @@ import { setColor } from '../src/color.ts';
 import { loadConfig } from '../src/config.ts';
 import { formatAgent, formatSarif, reportPayload } from '../src/report.ts';
 import { formatHtml } from '../src/report-html.ts';
+import { DIR_CAP, paneFromPayload, panePayload } from '../src/report-pane.ts';
 import { CLI, PLUGIN_DATA, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -1186,6 +1187,130 @@ await check('--files expands a directory to the source files under it', () => {
 			assert(files('--files', given).join() === all.join(), `--files ${given}: ${files('--files', given).join()}`);
 		// A file beside a directory, and the ignore globs still apply under it.
 		assert(files('--files', 'styles/b.css').join() === 'styles/b.css', 'a plain file is no longer taken as given');
+	} finally {
+		cleanup(dir);
+	}
+});
+
+// ── the pane model ──────────────────────────────────────────────────────────
+
+await check('the pane is derived from the json payload and agrees with it', () => {
+	const payload = reportPayload(result, config);
+	const pane = panePayload(result, config);
+	assert(
+		JSON.stringify(pane) === JSON.stringify(paneFromPayload(payload)),
+		'panePayload is not paneFromPayload(reportPayload)',
+	);
+	assert(JSON.stringify(pane.summary) === JSON.stringify(payload.summary), 'the pane carries a different summary');
+	const counted = pane.rules.reduce((n, r) => n + r.count, 0);
+	assert(counted === payload.findings.length, `the rule bars count ${counted} of ${payload.findings.length} findings`);
+	const inDirs = pane.dirs.reduce((n, d) => n + d.count, 0);
+	assert(
+		inDirs === payload.findings.length,
+		`the directory bars count ${inDirs} of ${payload.findings.length} findings`,
+	);
+	assert(pane.blocking === payload.blocking, 'blocking disagrees');
+});
+
+await check('pane rules are in frequency order, rank breaking ties — the page’s order', () => {
+	const payload = reportPayload(result, config);
+	const pane = paneFromPayload(payload);
+	const rank = new Map<string, number>(payload.rules.map((r) => [r.id, r.rank]));
+	for (let i = 1; i < pane.rules.length; i++) {
+		const a = pane.rules[i - 1];
+		const b = pane.rules[i];
+		assert(a && b, 'rows');
+		assert(
+			a.count > b.count || (a.count === b.count && (rank.get(a.id) ?? 0) >= (rank.get(b.id) ?? 0)),
+			`${a.id} (${a.count}) is before ${b.id} (${b.count}) against frequency order`,
+		);
+	}
+	for (const r of pane.rules) {
+		assert(r.title.length > 0, `${r.id} has no title`);
+		assert(r.files > 0, `${r.id} is in no file`);
+	}
+});
+
+await check('the pane folds the directory tail into one row rather than dropping it', () => {
+	const payload = reportPayload(result, config);
+	const first = payload.findings[0];
+	assert(first, 'fixture has a finding');
+	// Spread one finding over more directories than the cap names.
+	const spread = Array.from({ length: DIR_CAP + 3 }, (_, i) => ({ ...first, file: `dir-${i}/x.css` }));
+	const pane = paneFromPayload({ ...payload, findings: [...payload.findings, ...spread] });
+	const tail = pane.dirs[pane.dirs.length - 1];
+	assert(tail?.isTail, 'no folded tail row');
+	assert(pane.dirs.length === DIR_CAP + 1, `${pane.dirs.length} directory rows, want ${DIR_CAP + 1}`);
+	assert(/^\d+ more directories$/.test(tail.label), `tail label: ${tail.label}`);
+	const total = pane.dirs.reduce((n, d) => n + d.count, 0);
+	assert(total === payload.findings.length + spread.length, 'the fold lost findings');
+});
+
+await check('pane tiles mirror the page: a baseline tile only when it hid something', () => {
+	const payload = reportPayload(result, config);
+	const keys = (p: typeof payload) => paneFromPayload(p).tiles.map((t) => t.key);
+	assert(!keys(payload).includes('baselined'), 'a zero baseline tile is drawn');
+	assert(
+		keys({ ...payload, summary: { ...payload.summary, baselined: 2 } }).includes('baselined'),
+		'the baseline tile is missing',
+	);
+	const lead = paneFromPayload(payload).tiles[0];
+	assert(lead?.isLead && lead.value === payload.summary.total, 'the lead tile is not the total');
+	const blockingTile = paneFromPayload(payload).tiles.find((t) => t.key.includes('blocking'));
+	assert(
+		blockingTile?.isError === (payload.summary.error > 0 ? true : undefined),
+		'the blocking tile’s error paint disagrees with the count',
+	);
+});
+
+await check('pane charts are self-contained SVG with a glyph beside every severity color', () => {
+	const pane = panePayload(result, config);
+	for (const svg of [pane.svg.rules, pane.svg.dirs]) {
+		assert(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg"'), 'not an SVG document');
+		assert(svg.endsWith('</svg>'), 'SVG not closed');
+		assert(!/https?:\/\//.test(svg.replace('http://www.w3.org/2000/svg', '')), 'the chart fetches something');
+		assert(svg.includes('prefers-color-scheme: dark'), 'no dark palette');
+	}
+	for (const r of pane.rules) {
+		const glyph = r.severity === 'error' ? '✗' : '•';
+		assert(
+			pane.svg.rules.includes(`>${glyph} ${r.id}<`) || pane.svg.rules.includes(`>${glyph} …`),
+			`${r.id} is drawn without its glyph`,
+		);
+	}
+	// A finding's text reaches the chart's <title>; it must not reach its markup.
+	const hostile = reportPayload(result, config);
+	const doctored = {
+		...hostile,
+		rules: hostile.rules.map((r, i) => (i === 0 ? { ...r, title: '</svg><script>1</script>' } : r)),
+	};
+	const svg = paneFromPayload(doctored).svg.rules;
+	assert(!svg.includes('<script>'), 'a rule title escaped into the SVG');
+	assert((svg.match(/<\/svg>/g) ?? []).length === 1, 'a rule title closed the SVG early');
+});
+
+await check('a clean result still has a pane, with empty charts that say so', () => {
+	const clean: AnalyzeResult = { ...result, findings: [], blocking: false };
+	const pane = panePayload(clean, config);
+	assert(pane.rules.length === 0 && pane.dirs.length === 0, 'rows for no findings');
+	assert(pane.svg.rules.includes('No findings'), 'the empty chart is blank');
+	assert(pane.tiles[0]?.value === 0, 'the lead tile is not 0');
+});
+
+await check('--format pane writes one JSON document to stdout', () => {
+	const dir = scratch('loupe-pane-');
+	// RULED: one rule at error, so the tree blocks and the exit code is 1.
+	writeAll(dir, RULED);
+	try {
+		const r = spawnSync('node', [CLI, 'check', '--all', '--no-baseline', '--format', 'pane'], {
+			cwd: dir,
+			encoding: 'utf8',
+			env: { ...process.env, CLAUDE_PLUGIN_DATA: PLUGIN_DATA },
+		});
+		assert(r.status === 1, `exit ${r.status} on a drifty tree (want 1):\n${r.stderr}`);
+		const pane = JSON.parse(r.stdout) as { version: number; tool: string; rules: unknown[]; svg: { rules: string } };
+		assert(pane.version === 1 && pane.tool === 'loupe', 'not a pane payload');
+		assert(pane.rules.length > 0 && pane.svg.rules.startsWith('<svg'), 'an empty pane for a drifty tree');
 	} finally {
 		cleanup(dir);
 	}
