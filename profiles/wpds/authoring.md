@@ -23,8 +23,16 @@ a migration target). The engine mechanically flags `locked`/`legacy` imports
 never fires automatically, because whether it's safe here is contextual, not
 mechanical — see [Choosing a component](#choosing-a-component) below.
 
-**What are its props — the bundled `design-system` MCP**
-(`.mcp.json` → `@wordpress/design-system-mcp`). Use `get_component_details`
+**What are its props — the `design-system` MCP server**
+(`@wordpress/design-system-mcp`). The Loupe plugin no longer registers it
+automatically, so only a WordPress project pays its `npx` fetch at session
+start; a WPDS project opts in with:
+
+```sh
+claude mcp add design-system -- npx -y @wordpress/design-system-mcp@latest
+```
+
+Use `get_component_details`
 once you've picked the component. It has **no maturity signal at all** — it
 shows an `experimental` component with the same confidence as a `recommended`
 one, and it's measurably behind trunk for several newer `@wordpress/ui`

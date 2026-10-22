@@ -566,7 +566,8 @@ blocks, with "restyle via its props/tokens, not CSS"; the registry's `scope` fie
 families the file covers at all, so a missing entry reads as unreviewed rather
 than fine.
 
-The MCP has no maturity signal at all — it presents an `experimental`
+The `@wordpress/design-system-mcp` server (the WPDS profile's `authoring.md`
+says how to add it) has no maturity signal at all — it presents an `experimental`
 component with the same confidence as a `recommended` one, and it's
 measurably behind trunk for several `@wordpress/ui` additions besides. Use it
 for prop/usage detail on a component already chosen; use this registry to

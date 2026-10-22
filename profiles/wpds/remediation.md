@@ -4,9 +4,10 @@ The design-system half of `loupe-remediation`. Load that skill first — it
 carries the order to work in, the two failure modes, and the rules for
 suppressing well. This file is what each remedy means in WPDS terms.
 
-Before reaching for a prop or token name below, check it against the bundled
-`design-system` MCP (`get_component_details`, `get_design_tokens`) rather than
-recalling it — the remedies here name real current props, but WPDS moves twice
+Before reaching for a prop or token name below, check it against the opt-in
+`design-system` MCP (`get_component_details`, `get_design_tokens`; `authoring.md`
+beside this file says how to add it) rather than recalling it — the remedies
+here name real current props, but WPDS moves twice
 a year and a remedy that's right today can be stale by the next release. The
 MCP is for prop/usage detail on a component already chosen — it carries no
 maturity signal at all, so it is the wrong tool for "is this still the right
