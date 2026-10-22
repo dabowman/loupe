@@ -16,7 +16,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
 import { TreeTooLarge, isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
@@ -1242,6 +1242,77 @@ await check('PostToolUse blocks on what the edit introduced; Stop on everything'
 	} finally {
 		cleanup(root);
 	}
+});
+
+// The pi extension sent only the file path, never the file before the edit, so
+// every pi edit still got the absolute check and blocked on what was already
+// there. It snapshots the file at `tool_call` and hands it over as Claude Code
+// does, as `tool_response.originalFile`.
+await check('the pi extension blocks only on what an edit introduced', async () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
+		'styles/a.css': '.b { margin-bottom: 16px; }\n',
+	});
+	const css = join(root, 'styles', 'a.css');
+	type Handler = (event: object, ctx: object) => Promise<{ content?: { text: string }[] } | undefined>;
+	const handlers = new Map<string, Handler>();
+	const pi = { on: (name: string, fn: Handler) => handlers.set(name, fn), registerCommand: () => {} };
+	// The extension runs the engine as a child with this environment.
+	const saved = { ...process.env };
+	Object.assign(process.env, env({ CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' }));
+	try {
+		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
+		// Imported by URL, not by name: the extension's types come from pi, which
+		// this package does not install.
+		const extension = join(HERE, '..', '..', 'pi', 'extensions', 'loupe.ts');
+		const { default: register } = (await import(pathToFileURL(extension).href)) as {
+			default: (api: typeof pi) => void;
+		};
+		register(pi);
+		const ctx = { cwd: root, signal: undefined, sessionManager: { getSessionId: () => 'pi' } };
+		const call = { toolCallId: 'c1', toolName: 'edit', input: { path: 'styles/a.css' } };
+		await handlers.get('tool_call')?.({ ...call, type: 'tool_call' }, ctx);
+		writeFileSync(css, `/* spacing moves to the Stack next */\n${readFileSync(css, 'utf8')}`);
+		const result = await handlers.get('tool_result')?.(
+			{ ...call, type: 'tool_result', content: [], isError: false },
+			ctx,
+		);
+		const text = (result?.content ?? []).map((c) => c.text).join('');
+		assert(!/conformance findings on/.test(text), `blocked on a finding the edit did not introduce:\n${text}`);
+		assert(/already in styles\/a\.css/.test(text), `the standing finding was not named to the agent:\n${text}`);
+	} finally {
+		for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+		Object.assign(process.env, saved);
+		cleanup(root);
+	}
+});
+
+// The pi commands are a copy of the Claude Code ones and fell behind them:
+// `/loupe-fix <rule>` had no `--rule` or `--no-baseline`, so it worked a
+// filtered JSON by hand and saw none of the baselined backlog it was asked to
+// clear, and `/loupe-baseline` confirmed with a `check` that applies the
+// baseline it was about to replace.
+await check("the pi commands carry /loupe-fix's --rule and --no-baseline, and baseline --dry-run", async () => {
+	const commands = new Map<string, { handler: (args: string, ctx: object) => Promise<void> }>();
+	let sent = '';
+	const pi = {
+		on: () => {},
+		registerCommand: (name: string, c: { handler: (args: string, ctx: object) => Promise<void> }) =>
+			commands.set(name, c),
+		sendUserMessage: (text: string) => {
+			sent = text;
+		},
+	};
+	const extension = join(HERE, '..', '..', 'pi', 'extensions', 'loupe.ts');
+	const { default: register } = (await import(pathToFileURL(extension).href)) as {
+		default: (api: typeof pi) => void;
+	};
+	register(pi);
+	await commands.get('loupe-fix')?.handler('tokens/hardcoded-value', {});
+	assert(/--rule <id>/.test(sent) && /--no-baseline/.test(sent), `/loupe-fix <rule> lost the flags:\n${sent}`);
+	await commands.get('loupe-baseline')?.handler('', {});
+	assert(/ baseline --dry-run/.test(sent), `/loupe-baseline does not confirm with a dry run:\n${sent}`);
+	assert(!/ check --all --format json/.test(sent), `/loupe-baseline still sizes with check:\n${sent}`);
 });
 
 // The pre-edit findings were a Set of keys, so an edit that added a second
