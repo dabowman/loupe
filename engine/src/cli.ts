@@ -1354,6 +1354,9 @@ async function main(): Promise<number> {
 	// finding out and report clean.
 	const rules = ruleScope(args.flags.rule);
 	if (rules && !(rules instanceof Set)) {
+		// In the hook the id is in a hook command nobody in the turn can edit, and
+		// exit 2 would block every turn on it, past any retry budget.
+		if (isHook) return emitClean(`loupe: skipped — ${rules.error}`);
 		fail(`loupe: ${rules.error}\n`);
 		return EXIT.CANNOT_RUN;
 	}

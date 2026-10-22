@@ -3099,6 +3099,30 @@ await check('the hook bounds the whole judge phase by hook.timeoutMs', () => {
 	}
 });
 
+// A misspelled `--rule` is exit 2 when typed, and the hook carried that over:
+// every Stop blocked on a hook command the agent cannot edit, past the retry
+// budget, which counts only blocking findings.
+await check('a hook with an unknown --rule stands down instead of blocking every turn', () => {
+	const root = tmpRepo({
+		'package.json': JSON.stringify({ name: 'x' }),
+		'styles/a.css': '.a { color: #f00; }\n',
+	});
+	try {
+		for (let i = 0; i < 4; i++) {
+			const r = runCli(
+				['hook', '--root', root, '--rule', 'tokens/hardcode'],
+				{},
+				JSON.stringify({ session_id: 'x', hook_event_name: 'Stop', stop_hook_active: i > 0 }),
+			);
+			assert(r.status === 0, `run ${i + 1} exited ${r.status}: ${r.stderr}`);
+			const msg = (JSON.parse(r.stdout) as { systemMessage?: string }).systemMessage ?? '';
+			assert(msg.includes('skipped') && msg.includes('tokens/hardcode'), `run ${i + 1}: ${r.stdout}`);
+		}
+	} finally {
+		cleanup(root);
+	}
+});
+
 // The PATH shim found itself with `realpath`, which macOS 12 and earlier do not
 // ship: every invocation died on "command not found" before loupe ran. Both
 // routes onto PATH go through a symlink — Claude Code links the plugin
