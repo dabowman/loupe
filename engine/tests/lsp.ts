@@ -16,6 +16,7 @@ import { join } from 'node:path';
 import { analyze } from '../src/analyze.ts';
 import { applyTokenFixes } from '../src/autofix.ts';
 import { loadConfig } from '../src/config.ts';
+import { TreeTooLarge } from '../src/discover.ts';
 import { lsp } from '../src/lsp.ts';
 import { syntaxFor } from '../src/syntax.ts';
 import type { AnalyzeResult, Config } from '../src/types.ts';
@@ -524,6 +525,35 @@ await check('a multi-byte character is framed by bytes, not characters', async (
 	});
 	const after = await until((m) => m.id === 9, 'a reply after a multi-byte message');
 	assert(after.id === 9, 'the message after a multi-byte body was mis-framed');
+});
+
+// ── a refused analysis ──────────────────────────────────────────────────────
+
+// A tree past the walk's ceiling is refused rather than half-indexed, and the
+// server only logged the refusal: the Problems panel stayed empty, which reads
+// exactly like a clean workspace.
+await check('a refused analysis is shown to the user, not only logged', async () => {
+	const into = new PassThrough();
+	const out = new PassThrough();
+	let text = '';
+	out.on('data', (chunk: Buffer) => {
+		text += chunk.toString('utf8');
+	});
+	lsp({ config, run: () => Promise.reject(new TreeTooLarge(10)), input: into, output: out });
+	const frame = (msg: object): Buffer => {
+		const body = Buffer.from(JSON.stringify({ jsonrpc: '2.0', ...msg }), 'utf8');
+		return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, 'ascii'), body]);
+	};
+	into.write(frame({ id: 1, method: 'initialize', params: { rootUri: `file://${root}` } }));
+	into.write(frame({ method: 'initialized', params: {} }));
+	const deadline = Date.now() + 5_000;
+	while (!text.includes('window/showMessage') && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
+	const shown = /\{[^\r\n]*"method":"window\/showMessage"[^\r\n]*?\}\}/.exec(text)?.[0];
+	assert(shown, `nothing was shown:\n${text}`);
+	const params = (JSON.parse(shown) as { params: { type: number; message: string } }).params;
+	assert(params.type === 1 && /too large/.test(params.message), `not an error naming the refusal: ${shown}`);
+	into.write(frame({ id: 2, method: 'shutdown', params: {} }));
+	into.write(frame({ method: 'exit', params: {} }));
 });
 
 send({ id: 10, method: 'shutdown', params: {} });

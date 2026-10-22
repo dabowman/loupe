@@ -228,6 +228,30 @@ try {
 		assert(html.includes(`${url}/loupe-overlay.php`), 'the install command points elsewhere');
 		assert(html.includes(`"LOUPE_OVERLAY_URL": "${url}"`), 'the constant would be set to the wrong origin');
 	});
+	// A refused analysis answers 500 with `{ error }`, and the client called
+	// `.json()` and rendered it as a payload: the overlay said "Cannot read
+	// properties of undefined (reading 'map')" instead of why.
+	await check('the overlay shows a refused analysis as the refusal', async () => {
+		const js = await (await fetch(`${url}/overlay.js`)).text();
+		const body = /function load\(\) \{([\s\S]*?)\n {2}\}/.exec(js)?.[1];
+		assert(body, 'could not find load in the served client');
+		const refusal = 'tree too large to index: the walk stopped at 10 entries';
+		const panel = { innerHTML: '' };
+		let rendered = false;
+		const load = new Function('fetch', 'ORIGIN', 'panel', 'esc', 'render', `return function () {${body}\n}`)(
+			async () => ({ ok: false, status: 500, json: async () => ({ error: refusal }) }),
+			url,
+			panel,
+			(s: string) => s,
+			() => {
+				rendered = true;
+			},
+		) as () => void;
+		load();
+		for (let i = 0; i < 50 && !panel.innerHTML; i++) await new Promise((r) => setTimeout(r, 10));
+		assert(!rendered, 'the error body was rendered as findings');
+		assert(panel.innerHTML.includes(refusal), `the refusal was not shown: ${panel.innerHTML}`);
+	});
 } finally {
 	await close();
 	cleanup(root);

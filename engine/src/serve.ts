@@ -291,7 +291,11 @@ const JS = `
   }
   function load() {
     fetch(ORIGIN + '/findings.json', { cache: 'no-store' })
-      .then(function (r) { return r.json(); })
+      // A refused analysis is a 500 carrying { error }: shown as the reason, never
+      // rendered as a payload it is not.
+      .then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j && j.error || 'HTTP ' + r.status); return j; });
+      })
       .then(function (j) { data = j; pinned = null; render(); })
       .catch(function (e) {
         panel.innerHTML = '<div class="head"><span class="title">loupe</span></div><div class="empty">' +
