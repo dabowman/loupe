@@ -1484,6 +1484,41 @@ await check('--judge writes the variant into a suggestion that carries render', 
 	}
 });
 
+// The analog is the conversion's leading `<Name`; the rest of the line is the
+// promotion tail, whose class names can spell a component too. Matched anywhere
+// after the arrow, `.Text-label` on a button cost a Text-variant question, and
+// its answer rewrote the Button remedy to "no analog, not Text content".
+await check('--judge asks a variant only of the analog itself, not of the tail after it', async () => {
+	const root = scratch('dsh-judge-target-');
+	try {
+		writeAll(root, { 'src/A.jsx': '<button className="Text-label">Go</button>' });
+		const registry = loadComponents([
+			{ name: 'Text', package: '@wordpress/ui', status: 'recommended', variants: { 'body-sm': 'Help text.' } },
+			{ name: 'Button', package: '@wordpress/ui', status: 'recommended' },
+		]);
+		const message = '<button> → <Button> (@wordpress/ui) — converted, would block: background (.Text-label)';
+		const f: Finding = {
+			rule: 'system/raw-element',
+			severity: 'warn',
+			rank: 0,
+			file: 'src/A.jsx',
+			line: 1,
+			code: '<button>',
+			message,
+		};
+		let asked = 0;
+		const stub = (async () => {
+			asked++;
+			return new Response(JSON.stringify({ answers: { e0: { choice: 'not_text', confidence: 0.93 } } }));
+		}) as unknown as typeof fetch;
+		assert((await judgeVariants(root, [f], registry, 'key', stub)) === 0, 'a Button remedy was judged as Text');
+		assert(asked === 0, `asked ${asked} paid question(s) about a class name`);
+		assert(f.message === message, f.message);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `analyze` bounded the line before the variant was spliced into it, so a long
 // suggestion came back past the cap with the judgement at the end of it.
 await check('a judged variant is still one bounded line, with the judgement kept last', async () => {
