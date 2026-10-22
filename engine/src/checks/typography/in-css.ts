@@ -32,12 +32,17 @@ export const typographyInCss: DeclarationCheck = ({ prop }, { boundText, enabled
 	// Every binding is asked, as `owningBinding` does: the first one is only the
 	// first file the walk read, so it cannot decide alone. A surface that owns
 	// the property names its prop; failing that, a binding with no surface
-	// recorded keeps its claim on the type.
+	// recorded keeps its claim on the type. The code stays on the first binding,
+	// as system/override's does: it is the baseline identity, and it was the
+	// first binding's before the others were asked.
 	const owner = owningBinding(boundText, prop, surfaceOf);
 	const text = owner?.binding ?? boundText.find((b) => !surfaceOf(b));
 	if (!text) return undefined;
 	const head = `${prop} on <${text.tag}>`;
-	return owner?.via.length
-		? { rule: 'typography/in-css', message: `${head} — set via ${viaProps(owner.via)}`, code: head }
-		: { rule: 'typography/in-css', message: head };
+	const code = `${prop} on <${boundText[0].tag}>`;
+	return {
+		rule: 'typography/in-css',
+		message: owner?.via.length ? `${head} — set via ${viaProps(owner.via)}` : head,
+		code,
+	};
 };

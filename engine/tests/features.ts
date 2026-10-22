@@ -2025,6 +2025,29 @@ await check('typography/in-css reads every text component a class is bound to, w
 	assert(verdicts[0] === 'error typography/in-css letter-spacing on <Truncate>', `verdict: ${verdicts[0]}`);
 });
 
+// The code is the finding's baseline identity, and before every binding was read
+// it was the first one's. The message names the binding that owns the property;
+// the code stays on the first, as system/override's does, so a baselined entry
+// still matches.
+await check('typography/in-css keeps its code on the first text component', async () => {
+	const r = await run(
+		{
+			'loupe.config.json': CONFIG(),
+			'styles/a.scss': '.acme-l { font-size: 13px; }',
+			'src/B.tsx':
+				'import { Truncate } from \'@wordpress/components\';\nexport const U = () => <Truncate className="acme-l">x</Truncate>;',
+			'src/C.tsx': 'import { Text } from \'@wordpress/ui\';\nexport const T = () => <Text className="acme-l">x</Text>;',
+		},
+		{ components: componentRegistry },
+	);
+	const f = one(
+		r.findings.filter((x) => x.rule === 'typography/in-css'),
+		'one typography/in-css finding',
+	);
+	assert(f.message.startsWith('font-size on <Text> — set via'), `the owner is named: ${f.message}`);
+	assert(f.code === 'font-size on <Truncate>', `the code stays on the first binding: ${f.code}`);
+});
+
 // `import * as UI` binds the package, so `<UI.Button>` is the package's Button.
 // Keyed as a part of `UI`, it found no surface while the package counted as
 // surfaced, and the override fell to an advisory hardcoded value.
