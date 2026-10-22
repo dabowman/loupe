@@ -1,7 +1,7 @@
 {
   "packages": ["@automattic/vip-design-system"],
   "version": 1,
-  "verifiedAgainst": "Automattic/vip-design-system 2.23.9-dev.0: src/system/index.ts (the package's export list), each component's own .tsx, and each story's `tags` (`deprecated`, `new`), 2026-09-24. Usage cross-checked against vip-dashboard on 2.23.8.",
+  "verifiedAgainst": "@automattic/vip-design-system 2.23.9 (npm): src/system/index.ts (the package's export list), each component's own .tsx, and each story's `tags` (`deprecated`, `new`), read 2026-09-24.",
   "note": "Component currency, not props. `status`: `recommended` (use it), `legacy` (a story tagged `deprecated`, or a JSDoc `@deprecated` — `supersededBy` names the replacement). Every export is a named import off `@automattic/vip-design-system`; six of them are namespaces rather than components — `NewDialog`, `Form`, `Dropdown`, `Drawer`, `Accordion` and `Nav` — so the registry names the namespace and the note names its parts (`NewDialog.Root`, `Form.Select`, `Dropdown.Item`, …). Almost every component is a thin wrapper over its Theme UI namesake and takes Theme UI's `sx` and `variant`; read the component's own `.tsx` in the package's `src/system/` for the rest. Re-verify against `src/system/index.ts` and the stories' `tags` before bumping this file's version.",
   "components": [
     { "name": "Box", "package": "@automattic/vip-design-system", "status": "recommended", "note": "The generic block, and the one to reach for instead of a styled `<div>`. Theme UI's `Box`: polymorphic via `as`, styled through `sx` with theme keys. It is not a layout primitive on its own — it has no `gap`; siblings in a row or column want `Flex`, cells in columns want `Grid`." },
