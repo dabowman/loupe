@@ -222,9 +222,12 @@ function enqueueVerdict(
 	return first ? { state: 'missing', calls: seen, first } : { state: 'silent' };
 }
 
-/** `@import`, `@use`, `@forward`, `import … from`, side-effect `import`, `require`. */
+/**
+ * `@import`, `@use`, `@forward`, `import … from`, side-effect `import`,
+ * `require`, and an `@import url()` with nothing quoted inside it.
+ */
 const SPECIFIERS =
-	/@(?:import|use|forward)\s+(?:url\(\s*)?['"]([^'"]+)['"]|\bimport\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|\brequire\(\s*['"]([^'"]+)['"]/g;
+	/@(?:import|use|forward)\s+(?:url\(\s*)?['"]([^'"]+)['"]|\bimport\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|\brequire\(\s*['"]([^'"]+)['"]|@import\s+url\(\s*([^'"()\s]+)\s*\)/g;
 
 const withoutExt = (s: string): string => s.replace(/\.(?:s?css|sass|less)$/, '');
 
@@ -232,7 +235,7 @@ function importVerdict(check: Extract<DeliveryCheck, { kind: 'import' }>, files:
 	const wanted = check.specifiers.map(withoutExt);
 	for (const { text } of files)
 		for (const m of text.matchAll(SPECIFIERS)) {
-			const spec = withoutExt(String(m[1] ?? m[2] ?? m[3]).replace(/^~/, ''));
+			const spec = withoutExt(String(m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/^~/, ''));
 			if (wanted.some((w) => spec === w || spec.endsWith(`/${w}`))) return { state: 'delivered' };
 		}
 	return { state: 'silent' };

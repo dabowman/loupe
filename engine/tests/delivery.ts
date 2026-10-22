@@ -528,6 +528,14 @@ await check('other evidence the profile names is delivery too', () => {
 		'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
 	});
 	assert(!imported.length, 'bundling the sheet into the CSS delivers it');
+	// The form css-loader documents: `url()` with nothing quoted inside it.
+	for (const spec of ['url(@wordpress/theme/design-tokens.css)', 'url( ~@wordpress/theme/design-tokens.css )']) {
+		const found = undeliveredIn({
+			'src/a.css': `@import ${spec};\n${TOKENS_CSS}`,
+			'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+		});
+		assert(!found.length, `an unquoted @import ${spec} delivers it too`);
+	}
 	const block = undeliveredIn({
 		'src/a.css': TOKENS_CSS,
 		'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
