@@ -213,6 +213,7 @@ async function expandExtends(
 	label: string,
 	walk = freshWalk(),
 ): Promise<Chain> {
+	raw = anchorProfiles(raw, fromDir);
 	const own = Object.fromEntries(Object.keys(isObj(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
 	if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
 	const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
@@ -226,6 +227,21 @@ async function expandExtends(
 	}
 	const { extends: _drop, ...rest } = raw;
 	return { raw: mergeConfig(base, rest), ruleFrom: { ...ruleFrom, ...own } };
+}
+
+/**
+ * `profiles` resolved against the directory of the file that wrote it.
+ *
+ * Here rather than in `normalize`, which knows only the root: once `extends` is
+ * merged nothing says which file a path came from, and a shared config's
+ * `./profiles` means the directory beside *it*, not beside whatever extends it.
+ * Anything that is not a string is left alone for `normalize` to refuse.
+ */
+function anchorProfiles(raw: AuthoredConfig | undefined, fromDir: string): AuthoredConfig | undefined {
+	if (!raw || raw.profiles === undefined) return raw;
+	const at = (p: unknown): unknown => (typeof p === 'string' && p !== '' ? resolve(fromDir, p) : p);
+	const spec: unknown = raw.profiles;
+	return { ...raw, profiles: (Array.isArray(spec) ? spec.map(at) : at(spec)) as string | string[] };
 }
 
 /** Shipped presets, `generic` last — it is the fallback, not a choice. */
@@ -356,6 +372,22 @@ export function normalize(
 	if (maxEntries !== undefined && maxEntries !== null && !(Number.isInteger(maxEntries) && (maxEntries as number) > 0))
 		throw new Error(`maxEntries must be a positive whole number of entries, got: ${JSON.stringify(maxEntries)}`);
 
+	// A project's own profile directories. A bare string is one directory, not a
+	// list of characters; anything else is a mistake, and read as "none" it would
+	// quietly hand the project the shipped profile it wrote its own to replace.
+	const profileSpec: unknown = cfg.profiles ?? [];
+	const profileList: unknown[] =
+		typeof profileSpec === 'string' ? [profileSpec] : Array.isArray(profileSpec) ? profileSpec : [profileSpec];
+	if (profileList.some((p) => typeof p !== 'string' || p === ''))
+		throw new Error(`profiles must be a directory or an array of directories, got: ${JSON.stringify(profileSpec)}`);
+	// Normally absolute already (see `anchorProfiles`); an object normalized
+	// straight from code has no file, so its paths are the root's.
+	const profileDirs = (profileList as string[]).map((p) => resolve(root, p));
+
+	const pin: unknown = cfg.profile;
+	if (pin !== undefined && pin !== null && !(typeof pin === 'string' && pin !== ''))
+		throw new Error(`profile must be a profile id or "none", got: ${JSON.stringify(pin)}`);
+
 	const layoutComponents = ds.components?.layout ?? [];
 	const textComponents = ds.components?.text ?? [];
 
@@ -396,6 +428,8 @@ export function normalize(
 		// paths won. Normalizing a bare object is the inline case by definition.
 		source: { kind: 'inline' },
 		inferred: false,
+		profileDirs,
+		profilePin: typeof pin === 'string' ? pin : null,
 		designSystem: {
 			name: ds.name || '',
 			packages: ds.packages ?? [],

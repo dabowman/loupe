@@ -23,6 +23,8 @@
  */
 
 import { readFileSync } from 'node:fs';
+import type { AnswerCache } from './cache.ts';
+import { sha256 } from './cache.ts';
 import { renameCandidates } from './checks/tokens/unknown-token.ts';
 import { withoutReach } from './delivery.ts';
 import { EMBEDDED_LANGUAGE } from './embedded.ts';
@@ -34,7 +36,7 @@ import { around, notKey, variantQuery } from './judge/variant.ts';
 import { resolveRule } from './patterns.ts';
 import type { ResolveRule } from './patterns.ts';
 import { RULES } from './rules.ts';
-import { boundMessage, messageLine } from './text.ts';
+import { boundMessage, messageLine, messageOf } from './text.ts';
 import { DELIBERATE, KEEP, declarationMessage, planValue } from './tokens.ts';
 import type { Slot } from './tokens.ts';
 import type { ComponentEntry, Control, Finding, Profile, Severity, Suggestion, TokenSet } from './types.ts';
@@ -66,6 +68,13 @@ const REQUEST_TIMEOUT_MS = 20_000;
 
 type Fetch = typeof fetch;
 
+// Overridable for tests only, and only to this machine: an endpoint is where the
+// key is sent, and a project's own settings can put variables in the hook's
+// environment.
+const ENDPOINT_OVERRIDE = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(process.env.LOUPE_JUDGE_ENDPOINT ?? '')
+	? (process.env.LOUPE_JUDGE_ENDPOINT as string)
+	: null;
+
 export interface Choice {
 	choice: string;
 	/** How concentrated `probabilities` is, not the chance `choice` is right. */
@@ -82,6 +91,85 @@ export interface Query<T> {
 	question: (item: T, index: number) => object;
 }
 
+/** What a run spent, for the line that says so. */
+export interface JudgeStats {
+	/** Requests sent. */
+	asked: number;
+	/** Requests answered from the cache instead. */
+	cached: number;
+	/** Requests identical to one already in flight this run, which waited for it. */
+	shared: number;
+}
+
+/**
+ * Everything the asks in one run share: the key, the transport, one limit on
+ * requests in flight however many passes are asking at once, the answers
+ * already paid for, and the tally of what was spent.
+ *
+ * A bare key string where a client is expected builds a private one with no
+ * cache — which is what the evals and the unit tests want: every request real,
+ * none remembered.
+ */
+export interface JudgeClient {
+	apiKey: string;
+	fetchImpl: Fetch;
+	cache: AnswerCache | null;
+	/** Runs `fn` once a request slot is free. */
+	slot: <R>(fn: () => Promise<R>) => Promise<R>;
+	/** Requests in flight by key, so two passes asking the same thing pay once. */
+	inflight: Map<string, Promise<(Choice | undefined)[]>>;
+	stats: JudgeStats;
+}
+
+export type Auth = string | JudgeClient;
+
+/**
+ * A slot pool. A released slot is handed straight to the next waiter rather
+ * than freed, so nothing arriving in between can take it and run one over.
+ */
+function limiter(size: number): JudgeClient['slot'] {
+	let active = 0;
+	const waiting: (() => void)[] = [];
+	return async (fn) => {
+		if (active < size) active++;
+		else await new Promise<void>((resolve) => waiting.push(resolve));
+		try {
+			return await fn();
+		} finally {
+			const next = waiting.shift();
+			if (next) next();
+			else active--;
+		}
+	};
+}
+
+export function judgeClient(
+	apiKey: string,
+	{ fetchImpl = fetch, cache = null }: { fetchImpl?: Fetch; cache?: AnswerCache | null } = {},
+): JudgeClient {
+	return {
+		apiKey,
+		fetchImpl,
+		cache,
+		slot: limiter(CONCURRENCY),
+		inflight: new Map(),
+		stats: { asked: 0, cached: 0, shared: 0 },
+	};
+}
+
+const clientOf = (auth: Auth, fetchImpl: Fetch): JudgeClient =>
+	typeof auth === 'string' ? judgeClient(auth, { fetchImpl }) : auth;
+
+/** `judge: 4 asked, 37 from cache` — or null when nothing was judged at all. */
+export function judgeSummary(client: JudgeClient): string | null {
+	const { asked, cached, shared } = client.stats;
+	if (!asked && !cached && !shared) return null;
+	const parts = [`${asked} asked`];
+	if (cached) parts.push(`${cached} from cache`);
+	if (shared) parts.push(`${shared} shared`);
+	return `judge: ${parts.join(', ')}`;
+}
+
 /**
  * Batch, post, align.
  *
@@ -92,35 +180,66 @@ export interface Query<T> {
  * question has to be scored batched.
  *
  * `size` is how many items share one request; see docs/design/judge.md for why
- * it is 1. Throws on a failed request; the caller reports it and keeps what it
+ * it is 1. `backoff` is the first retry's wait in ms, doubling after; a test
+ * passes 0. Throws on a failed request; the caller reports it and keeps what it
  * had.
+ *
+ * A request is keyed by its own bytes — model, endpoint, elements and questions
+ * — so an answer is reused only for exactly the question it answered. Context
+ * lines are part of the element, so an edit near what was asked is a new
+ * question; an edit anywhere else is not.
  */
 export async function ask<T>(
 	query: Query<T>,
 	items: readonly T[],
-	apiKey: string,
+	auth: Auth,
 	fetchImpl: Fetch = fetch,
 	size = 1,
+	backoff = 500,
 ): Promise<(Choice | undefined)[]> {
+	const client = clientOf(auth, fetchImpl);
+	const endpoint = ENDPOINT_OVERRIDE ?? ENDPOINT;
 	const batches: T[][] = [];
 	for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
+	// Set when one batch fails: the others stop retrying rather than pay for
+	// answers that are about to be thrown away.
+	let stopped = false;
 
-	const sendBatch = async (batch: readonly T[]): Promise<(Choice | undefined)[]> => {
-		const body = JSON.stringify({
-			model: MODEL,
-			state: { elements: batch.map(query.element) },
-			questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)])),
-		});
+	const post = async (body: string, n: number): Promise<(Choice | undefined)[]> => {
 		for (let attempt = 0; ; attempt++) {
-			const res = await fetchImpl(ENDPOINT, {
-				method: 'POST',
-				headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-				body,
-				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-			});
-			if (res.ok) {
-				const parsed = (await res.json()) as { answers: Record<string, Choice> };
-				return batch.map((_, i) => parsed.answers[`e${i}`]);
+			if (stopped) throw new Error('stopped: another request failed');
+			let res: Response;
+			let parsed: { answers: Record<string, Choice> } | undefined;
+			try {
+				res = await client.fetchImpl(endpoint, {
+					method: 'POST',
+					headers: { authorization: `Bearer ${client.apiKey}`, 'content-type': 'application/json' },
+					body,
+					signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+				});
+				// Read inside the try: a socket that drops after the headers fails
+				// here, and is as transient as one that drops before them.
+				if (res.ok) parsed = (await res.json()) as { answers: Record<string, Choice> };
+			} catch (err) {
+				// An abort is a deadline — the request's own, or the hook's — and a
+				// deadline retried is no deadline. A body that arrived whole and is not
+				// JSON — a proxy's page, a misconfigured endpoint — answers the same
+				// way every time. Everything else thrown is the connection, as
+				// transient as a 503, so the retry budget covers both.
+				const name = err instanceof Error ? err.name : '';
+				if (name === 'AbortError' || name === 'TimeoutError') throw err;
+				if (err instanceof SyntaxError)
+					throw new Error(`TypeSafe answered with a body that is not JSON: ${messageOf(err)}`);
+				if (attempt >= RETRIES) {
+					const cause = err instanceof Error && err.cause ? `: ${messageOf(err.cause)}` : '';
+					throw new Error(`TypeSafe unreachable: ${messageOf(err)}${cause}`);
+				}
+				await new Promise((r) => setTimeout(r, backoff * 2 ** attempt));
+				continue;
+			}
+			if (parsed) {
+				const { answers } = parsed;
+				return Array.from({ length: n }, (_, i) => answers[`e${i}`]);
 			}
 			const transient = res.status === 429 || res.status >= 500;
 			if (!transient || attempt >= RETRIES)
@@ -128,13 +247,47 @@ export async function ask<T>(
 			// The server's own wait when it names one, in seconds and capped; a
 			// date or nothing falls back to doubling.
 			const after = Number(res.headers.get('retry-after'));
-			const wait = after > 0 ? Math.min(after * 1000, RETRY_WAIT_MAX_MS) : 500 * 2 ** attempt;
+			const wait = after > 0 ? Math.min(after * 1000, RETRY_WAIT_MAX_MS) : backoff * 2 ** attempt;
 			await new Promise((r) => setTimeout(r, wait));
 		}
 	};
 
+	const sendBatch = async (batch: readonly T[]): Promise<(Choice | undefined)[]> => {
+		const body = JSON.stringify({
+			model: MODEL,
+			state: { elements: batch.map(query.element) },
+			questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)])),
+		});
+		const key = sha256(`${endpoint}\n${body}`);
+		const hit = client.cache?.get(key);
+		if (hit && hit.length === batch.length) {
+			client.stats.cached++;
+			return hit;
+		}
+		const pending = client.inflight.get(key);
+		if (pending) {
+			client.stats.shared++;
+			return pending;
+		}
+		const request = client.slot(async () => {
+			client.stats.asked++;
+			const answers = await post(body, batch.length);
+			// Only a whole answer is worth keeping: a gap would be served as one forever.
+			if (answers.every((a) => a !== undefined)) client.cache?.set(key, answers as Choice[]);
+			return answers;
+		});
+		client.inflight.set(key, request);
+		try {
+			return await request;
+		} finally {
+			client.inflight.delete(key);
+		}
+	};
+
 	// Bounded pool. Results are written by index, so the answers come back in
-	// the order the items went in however the requests interleave.
+	// the order the items went in however the requests interleave. The client's
+	// slots bound what is on the wire across every ask sharing it; this bounds
+	// how far ahead one ask runs.
 	const done: (Choice | undefined)[][] = new Array(batches.length);
 	let next = 0;
 	await Promise.all(
@@ -147,6 +300,7 @@ export async function ask<T>(
 					// One failure fails the whole ask: stop the other workers rather
 					// than pay for answers that are about to be thrown away.
 					next = batches.length;
+					stopped = true;
 					throw err;
 				}
 			}
@@ -183,7 +337,7 @@ export async function judgeVariants(
 	root: string,
 	findings: readonly Finding[],
 	registry: ReadonlyMap<string, ComponentEntry>,
-	apiKey: string,
+	auth: Auth,
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
 	const withVariants = [...registry.values()].filter((e) => e.status === 'recommended' && e.variants);
@@ -192,7 +346,7 @@ export async function judgeVariants(
 		return target ? [{ f, target }] : [];
 	});
 
-	const answers = await ask(variantQuery(root), jobs, apiKey, fetchImpl);
+	const answers = await ask(variantQuery(root), jobs, auth, fetchImpl);
 
 	let annotated = 0;
 	jobs.forEach(({ f, target }, i) => {
@@ -268,7 +422,7 @@ export const redirectIdentity = (
  */
 export async function judgeRedirects(
 	controls: readonly Control[],
-	apiKey: string,
+	auth: Auth,
 	severity: Severity,
 	fetchImpl: Fetch = fetch,
 ): Promise<Finding[]> {
@@ -276,25 +430,34 @@ export async function judgeRedirects(
 	const abstractOf = (patternId: string): string => patternId.split('#', 1)[0]?.split('.', 1)[0] ?? patternId;
 	const tableOf = (c: Control): ResolveRule[] => byId.get(abstractOf(c.patternId))?.resolve ?? [];
 
+	// One client for every force, so they share its slots rather than each
+	// bringing a pool of its own.
+	const client = clientOf(auth, fetchImpl);
 	const known = controls.map((): Record<string, string> => ({}));
 	const sure = controls.map((): Record<string, number> => ({}));
-	for (const [name, force] of Object.entries(LANGUAGE.vocabulary.forces)) {
-		if (!force.judge) continue;
-		const asked = controls.flatMap((c, i) => (tableOf(c).some((r) => r.when && name in r.when) ? [i] : []));
-		if (!asked.length) continue;
-		const answers = await ask(
-			forceQuery(force.judge),
-			asked.map((i) => controls[i] as Control),
-			apiKey,
-			fetchImpl,
-		);
-		asked.forEach((ci, k) => {
-			const a = answers[k];
-			if (!a || a.confidence < REDIRECT_FLOOR) return;
-			(known[ci] as Record<string, string>)[name] = a.choice;
-			(sure[ci] as Record<string, number>)[name] = a.confidence;
-		});
-	}
+	// Every force at once: each writes only its own name, and the client's slots
+	// bound what is on the wire. Settled, not raced: a failed force fails the
+	// call, but only once the others have finished, so what they spent lands in
+	// the client's tally before anyone reads it.
+	const settled = await Promise.allSettled(
+		Object.entries(LANGUAGE.vocabulary.forces).map(async ([name, force]) => {
+			if (!force.judge) return;
+			const asked = controls.flatMap((c, i) => (tableOf(c).some((r) => r.when && name in r.when) ? [i] : []));
+			if (!asked.length) return;
+			const answers = await ask(
+				forceQuery(force.judge),
+				asked.map((i) => controls[i] as Control),
+				client,
+			);
+			asked.forEach((ci, k) => {
+				const a = answers[k];
+				if (!a || a.confidence < REDIRECT_FLOOR) return;
+				(known[ci] as Record<string, string>)[name] = a.choice;
+				(sure[ci] as Record<string, number>)[name] = a.confidence;
+			});
+		}),
+	);
+	for (const r of settled) if (r.status === 'rejected') throw r.reason;
 
 	// `<Button> (represents: destination) \u2192 \`navigate-hierarchy\` (judged 0.97)`:
 	// what it was read as, where that sends it, and the least certain reading
@@ -388,7 +551,7 @@ export async function judgeValues(
 	root: string,
 	findings: readonly Finding[],
 	set: TokenSet | undefined,
-	apiKey: string,
+	auth: Auth,
 	about: ReadonlyMap<string, string> = new Map(),
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
@@ -447,7 +610,7 @@ export async function judgeValues(
 				: [],
 		),
 	);
-	const answers = await ask(valueQuery(about), asked, apiKey, fetchImpl);
+	const answers = await ask(valueQuery(about), asked, auth, fetchImpl);
 	const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
 
 	for (const { f, decl, parts, slots } of open) {
@@ -530,7 +693,7 @@ export async function judgeRenames(
 	root: string,
 	findings: readonly Finding[],
 	set: TokenSet,
-	apiKey: string,
+	auth: Auth,
 	about: ReadonlyMap<string, string> = new Map(),
 	fetchImpl: Fetch = fetch,
 ): Promise<number> {
@@ -544,7 +707,7 @@ export async function judgeRenames(
 	const answers = await ask(
 		renameQuery,
 		jobs.map((j) => j.item),
-		apiKey,
+		auth,
 		fetchImpl,
 	);
 

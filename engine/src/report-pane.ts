@@ -12,7 +12,7 @@
  * It is derived from the `--format json` payload and nothing else — the same
  * rule the HTML report keeps, for the same reason: two readers of one run must
  * never see two different reports. The ordering rules mirror the page's client
- * (`report-html.ts`): rules in frequency order with rank breaking ties,
+ * (`report-view.ts`): rules in frequency order with rank breaking ties,
  * directories capped with the tail folded into one row rather than dropped.
  *
  * Design notes: docs/design/report.md#the-pane
@@ -78,7 +78,7 @@ export interface PanePayload {
 	};
 }
 
-/** How many directories the rollup names before it starts counting the rest. Matches `report-html.ts`. */
+/** How many directories the rollup names before it starts counting the rest. Matches `report-view.ts`. */
 export const DIR_CAP = 12;
 /** How many files the densest-files list names. */
 const FILE_CAP = 8;

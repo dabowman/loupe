@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { harvestStems } from '../src/markup.ts';
 import { TreeTooLarge, isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
-import { attemptsPath } from '../src/paths.ts';
+import { attemptsPath, projectStateDir } from '../src/paths.ts';
 import { RULES } from '../src/rules.ts';
 import { analyze } from '../src/analyze.ts';
 import { CLI, PLUGIN_DATA, assert, check, cleanup, execFailure, finish, one, scratch, writeAll } from './harness.ts';
@@ -3158,6 +3158,9 @@ await check('the hook bounds the whole judge phase by hook.timeoutMs', () => {
 			extends: 'wpds',
 			namespaces: { project: ['wf-'] },
 			hook: { timeoutMs: 1500 },
+			// Blocking: the hook pays only for judging what it prints, and an
+			// advisory run prints a tally.
+			rules: { 'tokens/hardcoded-value': 'error' },
 		}),
 		'node_modules/@wordpress/theme/prebuilt/css/design-tokens.css':
 			':root {\n\t--wpds-dimension-padding-sm: 8px;\n\t--wpds-dimension-padding-md: 12px;\n}',
@@ -3189,9 +3192,9 @@ await check('the hook bounds the whole judge phase by hook.timeoutMs', () => {
 		});
 		const took = Date.now() - t;
 		assert(existsSync(asked), `the judge was never asked, so the deadline went untested: ${r.stdout}${r.stderr}`);
-		assert(r.status === 0, `exited ${r.status}: ${r.stderr}`);
+		assert(r.status === 2, `exited ${r.status}, expected the block: ${r.stdout}${r.stderr}`);
 		assert(took < 10_000, `the judge phase ran ${took}ms against a 1.5s deadline`);
-		assert(JSON.parse(r.stdout).systemMessage, `unexpected output: ${r.stdout}`);
+		assert(/tokens\/hardcoded-value/.test(r.stderr), `the finding was not reported: ${r.stderr}`);
 	} finally {
 		cleanup(root);
 	}
@@ -3325,12 +3328,17 @@ await check("status names the hook's retry counter by the Claude Code project, n
 		const pkg = join(top, 'packages', 'ui');
 		const env: NodeJS.ProcessEnv = { ...process.env, HOME: scratch('dsh-home-'), CLAUDE_PLUGIN_DATA: '' };
 		delete env.CLAUDE_PROJECT_DIR;
+		// The suites run uncached; this one asks where the caches are.
+		delete env.LOUPE_NO_CACHE;
 		const status = (extra: NodeJS.ProcessEnv): string =>
 			spawnSync(process.execPath, [CLI, 'status'], { cwd: pkg, env: { ...env, ...extra }, encoding: 'utf8' }).stdout;
 		const want = attemptsPath(top, '$CLAUDE_PLUGIN_DATA');
 		const typed = status({});
 		assert(typed.includes(want), `expected ${want}, the project's key:\n${typed}`);
 		assert(!typed.includes(attemptsPath(pkg, '$CLAUDE_PLUGIN_DATA')), `named the package's key:\n${typed}`);
+		// The caches too: the hook's live under its plugin data, keyed on its project.
+		const caches = `the Claude Code hook's are in ${projectStateDir(top, '$CLAUDE_PLUGIN_DATA')}`;
+		assert(typed.includes(caches), `status does not say where the hook's caches are:\n${typed}`);
 		const inClaude = status({ CLAUDE_PROJECT_DIR: top });
 		assert(inClaude.includes(want), `with CLAUDE_PROJECT_DIR, expected ${want}:\n${inClaude}`);
 	} finally {

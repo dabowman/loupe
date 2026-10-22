@@ -417,6 +417,47 @@ whatever design system a project is on.
 project actually imports; `--profile <id>` forces one. A profile declaring no
 packages is never selected automatically — there is nothing to recognize it by.
 
+#### A project's own profiles
+
+A project can carry profiles of its own, beside the shipped ones rather than
+instead of them. They are read from every directory the config lists under
+`profiles` (a path or an array of paths, each relative to the config file that
+wrote it) and from `.loupe/profiles/` under the project root, with no flag —
+so the hooks, the commands and a typed `loupe` all see them while still passing
+only the shipped `--profiles`. Like every array in the config, a `profiles` list
+in a config that `extends` another replaces the base's list rather than adding
+to it: repeat the base's directory if you mean both.
+
+```jsonc
+{
+  "extends": "generic",
+  "profiles": "./loupe/profiles",      // or ["./a", "./b"]; .loupe/profiles/ is read either way
+  "profile": "vip-v3",                 // optional: pin selection to one id, or "none"
+  "designSystem": { "packages": ["@automattic/vip-design-system"] }
+}
+```
+
+The project's profile wins:
+
+- **on an id** — the config's directories are read first, in order, then
+  `.loupe/profiles/`, then `--profiles`, and the first to carry an id keeps it;
+- **on a package** — a shipped profile claiming a package that a selected
+  project profile also claims is not selected. That is the case of a design
+  system rebuilt under its old package name: the shipped profile describes what
+  it used to be. It stays available by id, so `--profile vip` still reaches it.
+
+`loupe status` prints the project profile's directory on its `profile:` line,
+which is where the plugin's skills read `authoring.md` from.
+
+`profile` pins selection without touching `designSystem.packages`: `"none"`
+selects no profile while every rule that needs the packages stays on, and an id
+applies that profile as `--profile <id>` would — registries merged past the
+scope check, notes on stderr where that matters. `--profile` on the command line
+outranks it. A pin naming no profile says so on stderr.
+
+Selection is still by package name, not version: a profile cannot yet say it
+describes only `<3` of a package.
+
 Forcing one applies the whole bundle: its registries merge without the scope
 check the flag has already answered, and its preset configures the run. That
 preset is the least explicit statement anything makes about a project —
@@ -835,6 +876,76 @@ to a request this question scores 81% and finds 69% of the destinations, because
 every control in a batch shares one state with the other 39; alone it scores 93%
 and finds 97%.
 
+## Mapping one token set onto another
+
+Experimental, and the one command that reads design systems rather than a
+codebase. Given two DTCG token sets, it answers, for every token in the first,
+which token in the second is the same decision:
+
+```bash
+loupe map ./wpds/tokens ./primer/tokens            # the readable report
+loupe map ./a ./b --out map.json                   # and the map as a file
+loupe map ./a ./b --dry-run                        # the shortlists, asking nothing
+loupe map ./a ./b --tier semantic --type color     # one slice of it
+```
+
+Each side is a `.json` file or a directory of them. Both are assumed to be
+standard DTCG and to follow the base/semantic/component structure; **nothing
+else about them has to agree** — not naming, not grouping, not depth, not which
+draft of the spec they were authored against. Nothing is configured per system,
+because the sets worth mapping are the ones nobody has written a profile for.
+
+A row settles one of five ways: `exact` (the same path in both sets, so no
+question was put), `judged` (a counterpart above the floor), `none` (the second
+system models this differently or not at all), `unsure` (asked, came back under
+the floor — a row for a person, not a claim that the counterpart is missing) and
+`absent` (the second set has no tokens of that type at all, which needed no
+model either).
+
+The work splits the way every `--judge` question does, but the engine's half is
+deliberately small: it gates on `$type` and then offers every token of a
+compatible type. Only where there are more of those than one question can carry
+does it rank them down — colour distance in OKLab, lengths on their scale, names
+as word sets with the tier and type words dropped, and a weight for tier
+agreement. The model picks among what it is given, reading each option's tier,
+value and `$description`, and may answer that there is no counterpart. Both spec drafts render to one value, so a set written
+`{ value: 16, unit: "px" }` and one written `"1rem"` measure as the same length,
+and a palette in `hsl` compares against one in `srgb`.
+
+A map is not a bijection, and a per-row report reads like one. Rows landing on a
+token another row already claimed are marked `shared ×n` and listed under their
+own heading, and the JSON carries them as `collisions`. That is often the useful
+half of the result: mapping WPDS onto Primer, nine WPDS tokens land on
+`bgColor.disabled`, because WPDS has a disabled background per tone and per
+emphasis where Primer has one.
+
+How many options a question offers is the setting that matters most, and it is
+measured rather than chosen: `evals/counterparts` shows accuracy tracking the
+*ceiling* — whether the true counterpart is on the shortlist at all — almost
+exactly, so a short list loses answers the model would otherwise have found.
+Eight candidates scored 37% on one substrate where offering the whole set scored
+98%. The cap is now 254, which is what fits in one request; a smaller set is
+sent whole. Run `npm run eval:counterparts` (needs a key) or
+`node evals/counterparts/run.ts --ceilings` for the free half.
+
+The floor is measured the same way. `evals/counterparts/floor.ts` sweeps it and
+finds confidence steps rather than slopes: answers at 0.70 and above are right
+97% of the time, and answers anywhere between 0.25 and 0.70 are right about 75%
+of the time, so a floor inside that range separates nothing. It sits at 0.70.
+A row under it keeps the answer behind it — `unsettled  leaning radius.4  0.32`,
+or `leaning no counterpart` — without that answer being written into the map,
+so the rows a higher floor excludes become a reader's queue rather than blanks.
+
+`--dry-run` prints the shortlists and asks nothing, which is the first thing to
+run on a new pair: a shortlist that does not contain the right answer cannot be
+rescued by the model. Everything else needs `TYPESAFE_API_KEY`, and unlike
+`--judge` a missing key is a refusal rather than a degraded run — there is no
+deterministic verdict underneath this to fall back on.
+
+Sources must be strict JSON; a set authored in JSON5 (Primer's are) needs
+converting first. Design notes, and every number in here that has not been
+measured: [docs/design/map.md](../docs/design/map.md).
+
 ## Baseline
 
 The first run on an existing codebase is the adoption blocker. Record the
@@ -960,6 +1071,26 @@ writes the payload into this process, and a `Write` of a large file carries the
 whole file body in it. Exiting without reading leaves that write on a pipe with
 no reader.
 
+### Caches
+
+Every run indexes the whole repo, but only files that changed since the last run
+are parsed: each file's scan is cached per project, in the plugin's data
+directory or a temp directory of your own, never in the repo. A hook run on a
+Gutenberg-sized tree takes about 0.8s instead of 3.8s. Judged answers are cached
+the same way, keyed by the exact question asked, so a repeated write re-asks
+only what changed. A cold run with a lot to parse spreads it across worker
+threads.
+
+| | |
+| --- | --- |
+| `--no-cache`, `LOUPE_NO_CACHE=1` | Parse every file and ask every judgement fresh. A cache never changes an answer, so this is for doubting one. |
+| `LOUPE_NO_WORKERS=1` | Scan in-process even on a cold run. |
+| `LOUPE_DEBUG_SCAN=1` | Say on stderr whether the scans ran in workers or in-process. |
+
+`loupe status` prints a `cache:` line with the directory and what it holds. Why
+it is built this way, and the one case it cannot see (a same-size rewrite with
+the old mtime put back): [docs/design/cli.md#caches](../docs/design/cli.md#caches).
+
 ## Output
 
 ```bash
@@ -1041,6 +1172,45 @@ are not at". A comma binds looser than `and`, so a combination that would need
 the query rewritten to stay correct is omitted rather than guessed at; an
 unconditional rule omits the field.
 
+## The live UI
+
+```bash
+loupe ui                            # then open http://127.0.0.1:7332
+loupe ui --port 8200
+loupe ui --editor 'cursor://file{path}:{line}'
+```
+
+The findings, live on the working tree. Same page as `--format html` — the same
+rollups, the same charts, the same grouping — with the four things a file cannot
+do:
+
+- **It re-runs.** A watcher over the directories the analysis actually read,
+  pushed to the page over SSE. Save a file, the page restates itself; it crosses
+  into clean and back out again without a reload.
+- **Every location is a link** into your editor, at the line. `--editor` takes a
+  template; `{path}` is the file's absolute path and `{line}` its line, so
+  `cursor://file{path}:{line}`, `zed://file{path}:{line}` and
+  `idea://open?file={path}&line={line}` all work.
+- **`fix` and `mute` are on the row.** `fix` appears only where the engine
+  settled on exactly one on-role token — the same predicate `loupe fix` uses, run
+  where the files are, so the button cannot offer a substitution the writer would
+  refuse. `mute` asks for a reason and writes the directive.
+- **`accept as baseline` is a button**, and it records the whole backlog rather
+  than whatever the page still had on screen.
+
+It writes to your files, so unlike `loupe serve` it is not open to the network:
+it binds loopback, sends no CORS header, and holds every write to a secret minted
+at startup and handed only to the page it served. A write also names the run it
+was aimed at, so a click against a payload the tree has moved past is refused
+rather than applied to whatever now sits at that index.
+
+The header says what it is doing — when it last ran, how long that took, how many
+files, and how many directories it is watching. Where a watch cannot be
+established it says so and leaves the re-run button, rather than showing a stale
+page under a live-looking indicator.
+
+For the terminal-shaped question — *which elements on screen* — see below.
+
 ## In the browser
 
 ```bash
@@ -1082,7 +1252,32 @@ as a verdict rather than a view:
   hidden.
 
 The terminal remains the complete report. This answers the one question it
-cannot: *which elements on screen*.
+cannot: *which elements on screen*. `loupe ui` answers a different one — what is
+wrong right now, and can I fix it from here — and the two are separate commands
+because that one writes to your files and this one answers any origin.
+
+### In DevTools
+
+`integrations/devtools/` is a Manifest V3 extension that reads this same server and
+puts it where the inspector already is. Load it unpacked; `integrations/devtools/README.md`
+has the steps.
+
+It adds two surfaces. The **Loupe panel** is this overlay without the
+bookmarklet — same list, same resolution, same ordering — and it gains the two
+things injection costs you: it survives a navigation, and it is not a fixed panel
+over the app intercepting the clicks of the thing you are testing. That is the
+same problem the WordPress mu-plugin above solves, answered generally rather than
+for one host: nothing is installed in the app, so nothing has to be gated off for
+browser tests.
+
+The **Loupe pane in the Elements panel** is the one that could not be a
+bookmarklet. Select a node, and it lists the findings that style *that node*.
+Every other output here starts from the findings and asks where they are; a
+person who has opened DevTools has already found the thing that looks wrong, and
+this is the only surface that answers the question they actually have.
+
+Both read `/findings.json` from this server. They cannot read `loupe ui` — that
+one writes to your files, so it answers only the page it served.
 
 ## Programmatic use
 
@@ -1091,8 +1286,10 @@ import { analyze } from 'loupe';
 import { loadConfig } from 'loupe/config';
 
 const config = await loadConfig({ root: process.cwd() });
-const { findings, blocking, directives } = analyze(config, { scope: null });
+const { findings, blocking, directives } = await analyze(config, { scope: null });
 ```
+
+A library call writes nothing anywhere unless it passes `cache: true`.
 
 ### Config keys added for these rules
 
@@ -1105,6 +1302,8 @@ const { findings, blocking, directives } = analyze(config, { scope: null });
 | `designSystem.allowedInlineStyles` | Inline-style properties a component's own API sanctions, as `{ "Text": ["color"] }` keyed by canonical component name. A `style` on that component made only of those properties is not `system/inline-style`; its values still go through the ordinary checks, so a raw colour there is still `tokens/hardcoded-value`. Any other property, a spread, or an opaque `style={obj}` reports the element as before, naming only the unsanctioned properties. The `wpds` preset sanctions `color` on `Text`, which has no color prop. |
 | `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. A `judge` detector (`components`, `unless`) names elements for `check --judge` to ask about, and reports `patterns/judged-redirect`. |
 | `maxEntries` | How many entries the analysis walk reads before it refuses (default 200,000). A positive whole number; anything else is a config error. `LOUPE_MAX_ENTRIES` outranks it for one run. |
+| `profiles` | The project's own profile directories: a path or an array of paths, each relative to the config file that wrote it. Read ahead of `.loupe/profiles/` and `--profiles`, and merged with them; see [A project's own profiles](#a-projects-own-profiles). Anything but non-empty strings is a config error. |
+| `profile` | Pins profile selection: a profile id, or `"none"` for no profile at all, without emptying `designSystem.packages`. `--profile` outranks it. |
 | `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package, and optionally each component's styling `surface` — `{ "properties": { "font-size": "variant", "border-radius": null } }` — which `system/override` and `typography/in-css` read; a registry recording none on any entry keeps `system/override`'s pre-surface reading, where every appearance property on a bound class blocks): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
 `scope` filters what is *reported*. The index is always built repo-wide —
@@ -1215,19 +1414,22 @@ off for everyone.
 ## Tests
 
 ```bash
-npm test        # typecheck, then all six suites
+npm test        # typecheck, then every suite
 ```
 
-Six suites, in the order `npm test` runs them: `tests/run.ts` (fixtures, one
+Eleven suites, in the order `npm test` runs them: `tests/run.ts` (fixtures, one
 directory per behaviour), `tests/detect.ts` (inference), `tests/regressions.ts`
 (failures that reported success), `tests/features.ts` (the three channels and the
 two cross-file rules), `tests/autofix.ts` (the fix path, where a wrong
-substitution is invisible), and `tests/multi-ds.ts` (registry scoping and profile
-selection — which design system answers for a file). `tests/scopes.ts` covers
-token scopes: the schema's validation, the generic table's parity with what it
-replaced, `fix` holding back an off-role token, and `tokens/misapplied-token`.
-`tests/harness.ts` is not a
-suite: it holds the `check`/`assert`/scratch-repo helpers the six share, typed
-once instead of copied six times.
+substitution is invisible), `tests/multi-ds.ts` (registry scoping and profile
+selection — which design system answers for a file), `tests/scopes.ts` (token
+scopes: the schema's validation, the generic table's parity with what it
+replaced, `fix` holding back an off-role token, and `tokens/misapplied-token`),
+`tests/report.ts` (the formatters and the HTML artifact), `tests/dom-match.ts`
+(the shared matcher's escaping, and whether the extension's vendored copy has
+drifted), `tests/serve.ts` (the read-only overlay server), `tests/ui.ts` (the
+writing server, mostly its refusals), and `tests/lsp.ts` (the language server).
+`tests/harness.ts` is not a suite: it holds the `check`/`assert`/scratch-repo
+helpers they share, typed once instead of copied into each.
 Once behaviour is config-driven, these are the only thing standing between a
 preset edit and a rule silently switching itself off.

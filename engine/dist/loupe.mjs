@@ -2027,7 +2027,7 @@ var require_util = __commonJS({
         }
         path = url.path;
       }
-      var isAbsolute7 = exports.isAbsolute(path);
+      var isAbsolute8 = exports.isAbsolute(path);
       var parts = [];
       var start = 0;
       var i = 0;
@@ -2062,7 +2062,7 @@ var require_util = __commonJS({
       }
       path = parts.join("/");
       if (path === "") {
-        path = isAbsolute7 ? "/" : ".";
+        path = isAbsolute8 ? "/" : ".";
       }
       if (url) {
         url.path = path;
@@ -2071,7 +2071,7 @@ var require_util = __commonJS({
       return path;
     });
     exports.normalize = normalize2;
-    function join16(aRoot, aPath) {
+    function join19(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -2103,11 +2103,11 @@ var require_util = __commonJS({
       }
       return joined;
     }
-    exports.join = join16;
+    exports.join = join19;
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
-    function relative6(aRoot, aPath) {
+    function relative7(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -2126,7 +2126,7 @@ var require_util = __commonJS({
       }
       return Array(level + 1).join("../") + aPath.substr(aRoot.length + 1);
     }
-    exports.relative = relative6;
+    exports.relative = relative7;
     var supportsNullProto = (function() {
       var obj = /* @__PURE__ */ Object.create(null);
       return !("__proto__" in obj);
@@ -2317,7 +2317,7 @@ var require_util = __commonJS({
             parsed.path = parsed.path.substring(0, index2 + 1);
           }
         }
-        sourceURL = join16(urlGenerate(parsed), sourceURL);
+        sourceURL = join19(urlGenerate(parsed), sourceURL);
       }
       return normalize2(sourceURL);
     }
@@ -3757,8 +3757,8 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync11, readFileSync: readFileSync16, realpathSync: realpathSync3 } = __require("fs");
-    var { dirname: dirname8, isAbsolute: isAbsolute7, join: join16, relative: relative6, sep: sep3 } = __require("path");
+    var { existsSync: existsSync11, readFileSync: readFileSync20, realpathSync: realpathSync3 } = __require("fs");
+    var { dirname: dirname11, isAbsolute: isAbsolute8, join: join19, relative: relative7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -3785,7 +3785,7 @@ var require_previous_map = __commonJS({
         if (!this.mapFile && opts.from) {
           this.mapFile = opts.from;
         }
-        if (this.mapFile) this.root = dirname8(this.mapFile);
+        if (this.mapFile) this.root = dirname11(this.mapFile);
         if (text2) this.text = text2;
       }
       consumer() {
@@ -3831,15 +3831,15 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative6(realPath2(dirname8(cssFile)), realPath2(path));
-          if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute7(rel)) {
+          let rel = relative7(realPath2(dirname11(cssFile)), realPath2(path));
+          if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute8(rel)) {
             return void 0;
           }
         }
-        this.root = dirname8(path);
+        this.root = dirname11(path);
         if (existsSync11(path)) {
           this.mapFile = path;
-          return readFileSync16(path, "utf-8").toString().trim();
+          return readFileSync20(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -3873,7 +3873,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join16(dirname8(file), map);
+          if (file) map = join19(dirname11(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -3903,15 +3903,15 @@ var require_input = __commonJS({
   "node_modules/postcss/lib/input.js"(exports, module) {
     "use strict";
     var { nanoid } = require_non_secure();
-    var { isAbsolute: isAbsolute7, resolve: resolve7 } = __require("path");
+    var { isAbsolute: isAbsolute8, resolve: resolve8 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
-    var { fileURLToPath: fileURLToPath5, pathToFileURL: pathToFileURL3 } = __require("url");
+    var { fileURLToPath: fileURLToPath6, pathToFileURL: pathToFileURL3 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
     var PreviousMap = require_previous_map();
     var terminalHighlight = require_terminal_highlight();
     var lineToIndexCache = Symbol("lineToIndexCache");
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(resolve7 && isAbsolute7);
+    var pathAvailable = Boolean(resolve8 && isAbsolute8);
     function getLineToIndex(input) {
       if (input[lineToIndexCache]) return input[lineToIndexCache];
       let lines = input.css.split("\n");
@@ -3942,10 +3942,10 @@ var require_input = __commonJS({
         this.document = this.css;
         if (opts.document) this.document = opts.document.toString();
         if (opts.from) {
-          if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute7(opts.from)) {
+          if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute8(opts.from)) {
             this.file = opts.from;
           } else {
-            this.file = resolve7(opts.from);
+            this.file = resolve8(opts.from);
           }
         }
         if (pathAvailable && sourceMapAvailable) {
@@ -4066,7 +4066,7 @@ var require_input = __commonJS({
         if (/^\w+:\/\//.test(file)) {
           return file;
         }
-        return resolve7(this.map.consumer().sourceRoot || this.map.root || ".", file);
+        return resolve8(this.map.consumer().sourceRoot || this.map.root || ".", file);
       }
       origin(line, column, endLine, endColumn) {
         if (!this.map) return false;
@@ -4082,7 +4082,7 @@ var require_input = __commonJS({
           if (toPosition.source) to = toPosition;
         }
         let fromUrl;
-        if (isAbsolute7(from.source)) {
+        if (isAbsolute8(from.source)) {
           fromUrl = pathToFileURL3(from.source);
         } else {
           fromUrl = new URL(
@@ -4098,8 +4098,8 @@ var require_input = __commonJS({
           url: fromUrl.toString()
         };
         if (fromUrl.protocol === "file:") {
-          if (fileURLToPath5) {
-            result.file = fileURLToPath5(fromUrl);
+          if (fileURLToPath6) {
+            result.file = fileURLToPath6(fromUrl);
           } else {
             throw new Error(`file: protocol is not available in this PostCSS build`);
           }
@@ -4376,12 +4376,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname8, relative: relative6, resolve: resolve7, sep: sep3 } = __require("path");
+    var { dirname: dirname11, relative: relative7, resolve: resolve8, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL3 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname8 && resolve7 && relative6 && sep3);
+    var pathAvailable = Boolean(dirname11 && resolve8 && relative7 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -4413,7 +4413,7 @@ var require_map_generator = __commonJS({
       applyPrevMaps() {
         for (let prev of this.previous()) {
           let from = this.toUrl(this.path(prev.file));
-          let root2 = prev.root || dirname8(prev.file);
+          let root2 = prev.root || dirname11(prev.file);
           let map;
           if (this.mapOpts.sourcesContent === false) {
             map = new SourceMapConsumer(prev.text);
@@ -4608,11 +4608,11 @@ var require_map_generator = __commonJS({
         if (/^\w+:\/\//.test(file)) return file;
         let cached = this.memoizedPaths.get(file);
         if (cached) return cached;
-        let from = this.opts.to ? dirname8(this.opts.to) : ".";
+        let from = this.opts.to ? dirname11(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname8(resolve7(from, this.mapOpts.annotation));
+          from = dirname11(resolve8(from, this.mapOpts.annotation));
         }
-        let path = relative6(from, file);
+        let path = relative7(from, file);
         this.memoizedPaths.set(file, path);
         return path;
       }
@@ -23155,10 +23155,10 @@ var require_interpolation = __commonJS({
           tokens.push(token);
           token = this.tokenizer.nextToken();
         }
-        const words = tokens.map((tokn) => tokn[1]);
+        const words2 = tokens.map((tokn) => tokn[1]);
         const [first] = tokens;
         const last = tokens.pop();
-        const newToken = ["word", words.join(""), first[2], last[2]];
+        const newToken = ["word", words2.join(""), first[2], last[2]];
         this.tokenizer.back(token);
         this.tokenizer.back(newToken);
         return true;
@@ -23494,14 +23494,15 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync10, statSync as statSync5, writeFileSync as writeFileSync4 } from "node:fs";
-import { basename, dirname as dirname7, isAbsolute as isAbsolute6, join as join15, relative as relative5, resolve as resolve6 } from "node:path";
+import { existsSync as existsSync10, readdirSync as readdirSync4, statSync as statSync8, writeFileSync as writeFileSync6 } from "node:fs";
+import { basename as basename2, dirname as dirname10, isAbsolute as isAbsolute7, join as join18, relative as relative6, resolve as resolve7 } from "node:path";
 import { homedir as homedir2 } from "node:os";
-import { fileURLToPath as fileURLToPath4 } from "node:url";
+import { fileURLToPath as fileURLToPath5 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
+import { isMainThread as isMainThread2 } from "node:worker_threads";
 
 // src/analyze.ts
-import { readFileSync as readFileSync4, realpathSync, statSync as statSync3 } from "node:fs";
+import { readFileSync as readFileSync7, realpathSync, statSync as statSync4 } from "node:fs";
 
 // node_modules/postcss/lib/postcss.mjs
 var import_postcss = __toESM(require_postcss(), 1);
@@ -23532,7 +23533,7 @@ var Root = import_postcss.default.Root;
 var Node = import_postcss.default.Node;
 
 // src/analyze.ts
-import { isAbsolute, join as join4, relative as relative2, sep as sep2 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join7, relative as relative2, sep as sep2 } from "node:path";
 
 // src/rules.ts
 var RULES = {
@@ -24943,7 +24944,12 @@ function scanMarkup(text2, relPath, ds, rules2 = []) {
   };
   let ast;
   try {
-    ast = (0, import_parser.parse)(text2, { sourceType: "unambiguous", errorRecovery: true, plugins: PLUGINS });
+    ast = (0, import_parser.parse)(text2, {
+      sourceType: "unambiguous",
+      errorRecovery: true,
+      attachComment: false,
+      plugins: PLUGINS
+    });
   } catch (err) {
     return { ...result, parseError: messageLineOf(err) };
   }
@@ -25603,19 +25609,25 @@ function normalizeValue(value) {
   return v;
 }
 var emptyTokenSet = () => ({ known: /* @__PURE__ */ new Set(), byValue: /* @__PURE__ */ new Map(), sources: 0 });
-function harvestTokenDefs(root2, prefixes, into) {
-  if (!prefixes.length) return into;
+function addTokenDef(into, name, value) {
+  if (into.known.has(name)) return;
+  into.known.add(name);
+  const v = normalizeValue(value);
+  if (!v || v.includes("var(")) return;
+  const names = into.byValue.get(v) ?? [];
+  if (!names.includes(name)) names.push(name);
+  into.byValue.set(v, names);
+}
+function tokenDefsIn(root2, prefixes) {
+  const out = [];
+  if (!prefixes.length) return out;
   root2.walkDecls((decl2) => {
-    const name = decl2.prop;
-    if (!name.startsWith("--") || !prefixes.some((p) => name.startsWith(p))) return;
-    if (into.known.has(name)) return;
-    into.known.add(name);
-    const v = normalizeValue(decl2.value);
-    if (!v || v.includes("var(")) return;
-    const names = into.byValue.get(v) ?? [];
-    if (!names.includes(name)) names.push(name);
-    into.byValue.set(v, names);
+    if (decl2.prop.startsWith("--") && prefixes.some((p) => decl2.prop.startsWith(p))) out.push([decl2.prop, decl2.value]);
   });
+  return out;
+}
+function harvestTokenDefs(root2, prefixes, into) {
+  for (const [name, value] of tokenDefsIn(root2, prefixes)) addTokenDef(into, name, value);
   return into;
 }
 function cssFilesUnder(path, budget = { left: 200 }, exts = [".css"]) {
@@ -25811,1508 +25823,134 @@ function tokenRefsIn(value, prefixes) {
   return out;
 }
 
-// src/checks/css/dead-class.ts
-function deadClasses(declared, {
-  referenced,
-  stems,
-  isProject,
-  isNeverDead
-}) {
-  const isReferenced = (cls) => referenced.has(cls) || isNeverDead(cls) || stems.some((s) => cls.startsWith(s));
-  const rules2 = /* @__PURE__ */ new Map();
-  for (const d of declared) {
-    const key = `${d.file}\0${d.cls}`;
-    rules2.set(key, (rules2.get(key) ?? 0) + 1);
-  }
-  const seen = /* @__PURE__ */ new Set();
-  return declared.flatMap(({ file, line, cls, scopeLines, cut }) => {
-    const key = `${file}\0${cls}`;
-    if (seen.has(key) || !isProject(cls) || isReferenced(cls)) return [];
-    seen.add(key);
-    return [
-      {
-        rule: "css/dead-class",
-        file,
-        line,
-        message: `.${cls}`,
-        code: `.${cls}`,
-        selector: `.${cls}`,
-        scopeLines,
-        dead: rules2.get(key) === 1 ? cut : void 0
-      }
-    ];
-  });
-}
+// src/index-cache.ts
+import { readdirSync as readdirSync3, readFileSync as readFileSync5, rmSync as rmSync2, statSync as statSync2 } from "node:fs";
+import { dirname as dirname4, join as join6 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 
-// src/checks/layout/in-css.ts
-var layoutInCss = ({ prop, value }, { boundSystem, isGrid }) => {
-  const decl2 = `${prop}: ${value}`;
-  if (GAP_PROPS.has(prop))
-    return !boundSystem.length && !isGrid ? { rule: "layout/in-css", message: decl2, code: prop } : null;
-  if (!isFlexDecl(prop, value)) return void 0;
-  const gridDisplay = prop === "display" && /\bgrid\b/.test(value);
-  return !boundSystem.length && !isGrid && !gridDisplay ? { rule: "layout/in-css", message: decl2, code: oneLine(decl2) } : null;
-};
+// src/cache.ts
+import { createHash as createHash2 } from "node:crypto";
+import { readFileSync as readFileSync3, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname as dirname2 } from "node:path";
 
-// src/checks/layout/margin.ts
-var margin = ({ prop, value }) => {
-  if (!isMarginProp(prop)) return void 0;
-  const kind = classifyMargin(value);
-  const decl2 = `${prop}: ${value}`;
-  if (kind === "negative") return { rule: "layout/negative-margin", message: decl2, code: prop };
-  return kind ? { rule: "layout/margin-on-child", message: decl2, code: prop } : null;
-};
-
-// src/checks/patterns/composites.ts
-function composites({
-  found,
-  hits,
-  registry,
-  importsByFile,
-  enabled: enabled2
-}) {
-  const dupEnabled = enabled2("patterns/duplicate-composite");
-  const newEnabled = enabled2("patterns/unregistered-composite");
-  const supEnabled = enabled2("patterns/superseded-composite");
-  if (!(dupEnabled || newEnabled || supEnabled) || !(found.length || hits.length)) return [];
-  const out = [];
-  const anatomyRoots = registry.flatMap(
-    (p) => p.node && p.canonical && p.canonical === p.node.name.split(".")[0] ? [p.canonical] : []
-  );
-  const bestMatch = (c) => registry.filter((p) => p.node !== null && p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree)).sort((a, b) => b.size - a.size)[0] ?? null;
-  const avoidMatch = (c) => {
-    let best = null;
-    for (const p of registry) {
-      let fit = 0;
-      for (const a of p.avoid) if (matches(a, c.tree)) fit = Math.max(fit, nodeCount(a));
-      if (fit && (!best || fit > best.fit)) best = { pattern: p, fit };
-    }
-    return best?.pattern ?? null;
-  };
-  const byPattern = /* @__PURE__ */ new Map();
-  const bySuperseded = /* @__PURE__ */ new Map();
-  const bySignature = /* @__PURE__ */ new Map();
-  for (const c of found) {
-    const hit = dupEnabled ? bestMatch(c) : null;
-    if (hit) {
-      if (hit.canonical && importsByFile.get(c.file)?.has(hit.canonical)) continue;
-      const perFile2 = byPattern.get(hit.id) ?? /* @__PURE__ */ new Map();
-      byPattern.set(hit.id, perFile2);
-      const prev2 = perFile2.get(c.file);
-      if (!prev2 || c.size > prev2.size) perFile2.set(c.file, { ...c, pattern: hit });
-      continue;
-    }
-    const avoided = supEnabled ? avoidMatch(c) : null;
-    if (avoided) {
-      if (avoided.canonical && importsByFile.get(c.file)?.has(avoided.canonical)) continue;
-      const perFile2 = bySuperseded.get(avoided.id) ?? /* @__PURE__ */ new Map();
-      bySuperseded.set(avoided.id, perFile2);
-      const prev2 = perFile2.get(c.file);
-      if (!prev2 || c.size < prev2.size) perFile2.set(c.file, { ...c, pattern: avoided });
-      continue;
-    }
-    if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
-    if (anatomyRoots.some((root2) => partsOf(root2, c.tree))) continue;
-    const perFile = bySignature.get(c.signature) ?? /* @__PURE__ */ new Map();
-    bySignature.set(c.signature, perFile);
-    const prev = perFile.get(c.file);
-    if (!prev || c.line < prev.line) perFile.set(c.file, c);
-  }
-  const emit = (rule2, c, signature, tail, group) => {
-    out.push({
-      rule: rule2,
-      file: c.file,
-      line: c.line,
-      message: `${signature}${tail}`,
-      suffix: tail,
-      code: c.signature,
-      group
-    });
-  };
-  for (const [id, files] of byPattern) {
-    if (files.size < 2) continue;
-    for (const c of files.values()) {
-      const remedy = c.pattern?.canonical ? `import \`${c.pattern.canonical}\`` : "extract one shared implementation";
-      emit(
-        "patterns/duplicate-composite",
-        c,
-        c.signature,
-        ` \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`,
-        id
-      );
-    }
-  }
-  if (supEnabled)
-    for (const h of hits) {
-      const entry = registry.find((p) => p.id === h.patternId);
-      if (!entry) continue;
-      if (entry.canonical && importsByFile.get(h.file)?.has(entry.canonical)) continue;
-      const remedy = entry.canonical ? `use \`${entry.canonical}\`` : `follow the \`${entry.id}\` pattern`;
-      emit(
-        "patterns/superseded-composite",
-        { file: h.file, line: h.line, signature: `rule:${h.rule}:${h.detail}` },
-        h.detail,
-        ` \u2014 \`${entry.id}\` covers this; ${remedy}`,
-        entry.id
-      );
-    }
-  for (const [id, files] of bySuperseded) {
-    for (const c of files.values()) {
-      const remedy = c.pattern?.canonical ? `use \`${c.pattern.canonical}\`` : `follow the \`${id}\` pattern`;
-      emit("patterns/superseded-composite", c, c.signature, ` \u2014 \`${id}\` covers this; ${remedy}`, id);
-    }
-  }
-  for (const [sig, files] of bySignature) {
-    if (files.size < 3) continue;
-    for (const c of files.values())
-      emit("patterns/unregistered-composite", c, sig, ` \u2014 assembled in ${files.size} files, registered in none`, sig);
-  }
-  return out;
+// src/paths.ts
+import { createHash } from "node:crypto";
+import { existsSync as existsSync3, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join as join4, resolve as resolve2 } from "node:path";
+var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
+var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
+function projectKey(root2) {
+  const full = resolve2(root2);
+  const hash = createHash("sha256").update(full).digest("hex").slice(0, 10);
+  const name = full.split(/[/\\]/).filter(Boolean).pop() ?? "project";
+  return `${name.replace(/[^\w.-]/g, "-")}-${hash}`;
 }
-
-// src/checks/system/currency.ts
-var namedReplacements = (supersededBy) => [...(supersededBy ?? "").matchAll(/([A-Z][\w.]*)\s*\(\s*(@[\w@/.-]+)/g)].map((m) => ({
-  name: String(m[1]),
-  package: String(m[2])
-}));
-var supersededEverywhere = (registry, name) => {
-  const entries = [...registry.values()].filter((e) => e.name === name);
-  return entries.length > 0 && !entries.some((e) => e.status === "recommended");
-};
-function usableReplacement(registry, supersededBy) {
-  const candidates = namedReplacements(supersededBy);
-  if (!candidates.length) return true;
-  return candidates.some((c) => {
-    const entry = registry.get(`${c.package}::${c.name}`) ?? registry.get(`${c.package}::${c.name.split(".")[0]}`);
-    return !entry || entry.status !== "locked" && entry.status !== "experimental";
-  });
-}
-function currency(imports, registry, enabled2) {
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const ci of imports) {
-    if (ci.file === void 0) continue;
-    const entry = registry.get(`${ci.package}::${ci.canonical}`);
-    if (!entry || entry.status !== "legacy" && entry.status !== "locked") continue;
-    const rule2 = entry.status === "locked" ? "system/locked-component" : "system/superseded-component";
-    if (!enabled2(rule2)) continue;
-    if (!usableReplacement(registry, entry.supersededBy)) continue;
-    const key = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const remedy = entry.supersededBy ? ` \u2192 ${entry.supersededBy}` : "";
-    const uses = ci.uses > 1 ? ` \xD7${ci.uses}` : "";
-    out.push({
-      rule: rule2,
-      file: ci.file,
-      line: ci.line,
-      message: `${ci.canonical} (${ci.package})${uses}${remedy}`,
-      // Carried, not concatenated: the finalize pass caps `message`.
-      note: entry.note,
-      code: `${rule2}:${ci.package}:${ci.canonical}`,
-      // The declaration line and the one above it are both suppression anchors.
-      scopeLines: [ci.declLine, ci.declLine - 1]
-    });
-  }
-  return out;
-}
-
-// src/checks/system/inline-style.ts
-function inlineStyle(el, allowed = /* @__PURE__ */ new Map()) {
-  if (!el.isSystem) return null;
-  const ok = el.component && allowed.get(el.component) || /* @__PURE__ */ new Set();
-  const opaque = el.dynamic - el.dynamicProps.length;
-  const decls = el.decls.map((d) => d.prop).filter((p) => !ok.has(p));
-  const dynamic = el.dynamicProps.filter((p) => !ok.has(p)).length + opaque;
-  if (!decls.length && !dynamic) return null;
-  const shown = decls.slice(0, 3).join(", ");
-  const extra = decls.length + dynamic - Math.min(decls.length, 3);
-  return {
-    rule: "system/inline-style",
-    message: `<${el.tag}> style={{ ${shown || "\u2026"}${extra > 0 ? `, +${extra}` : ""} }}`,
-    code: `<${el.tag}> inline-style`
-  };
-}
-
-// src/checks/system/override.ts
-function owningBinding(bound, prop, surfaceOf) {
-  for (const binding of bound) {
-    const surface = surfaceOf(binding);
-    const owned = surface && ownership(surface, prop);
-    if (owned) return { binding, via: owned.via };
-  }
-  return void 0;
-}
-var viaProps = (via) => via.length === 1 ? `its ${via[0]} prop` : `its ${via.slice(0, -1).join(", ")} and ${via.at(-1)} props`;
-var UNREAD_REMEDY = "restyle via its props/tokens, not CSS";
-var systemOverride = ({ prop }, { boundSystem, enabled: enabled2, surfaceOf, surfaced }) => {
-  if (!boundSystem[0] || !APPEARANCE_PROPS.has(prop) || !enabled2("system/override")) return void 0;
-  const owner = owningBinding(boundSystem, prop, surfaceOf);
-  const code = `<${boundSystem[0].tag}> \u2190 ${prop}`;
-  if (owner) {
-    const head2 = `<${owner.binding.tag}> \u2190 ${prop}`;
-    return {
-      rule: "system/override",
-      message: owner.via.length ? `${head2} \u2014 set via ${viaProps(owner.via)}` : `${head2} \u2014 it sets this itself and has no prop for it`,
-      code
-    };
-  }
-  const unread = boundSystem.find((b) => !surfaced(b));
-  if (!unread) return void 0;
-  return { rule: "system/override", message: `<${unread.tag}> \u2190 ${prop} \u2014 ${UNREAD_REMEDY}`, code };
-};
-function libraryOverride(keyClasses, isLibrary, isProject) {
-  const part = keyClasses.find((c) => isLibrary(c) && !isProject(c));
-  return part ? { rule: "system/override", message: `.${part} (library internal)` } : null;
-}
-
-// src/checks/system/raw-element.ts
-var PROPS_MAX = 4;
-var CLASSES_MAX = 2;
-var named = (items, max) => `${items.slice(0, max).join(", ")}${items.length > max ? ` (+${items.length - max} more)` : ""}`;
-var LEVEL = { none: 0, off: 0, warn: 1, error: 2 };
-var VERB = ["clear", "warn", "block"];
-function conversion(el, name, pkg, { decls, verdictAs, severityOf, textComponents }) {
-  const isText = textComponents.includes(name);
-  const as = { tag: name, isSystem: true, isText, component: name, ...pkg ? { package: pkg } : {} };
-  const level = (rule2) => LEVEL[rule2 ? severityOf(rule2) : "none"];
-  const changed = /* @__PURE__ */ new Map();
-  for (const cls of new Set(el.classes))
-    for (const d of decls.get(cls) ?? []) {
-      const after = level(verdictAs(d, as));
-      if (after === level(d.now)) continue;
-      const group = changed.get(after) ?? { props: [], classes: /* @__PURE__ */ new Set() };
-      if (!group.props.includes(d.prop)) group.props.push(d.prop);
-      group.classes.add(cls);
-      changed.set(after, group);
-    }
-  if (!changed.size) return void 0;
-  const parts = [...changed].sort(([a], [b]) => b - a).map(([at, { props, classes }]) => {
-    const on = named(
-      [...classes].map((c) => `.${c}`),
-      CLASSES_MAX
-    );
-    return `would ${VERB[at]}: ${named(props, PROPS_MAX)} (${on})`;
-  });
-  return `converted, ${parts.join("; ")}`;
-}
-function currentAnalog(registry, suggest, render) {
-  if (!supersededEverywhere(registry, suggest)) {
-    const open = render ? `<${suggest} render={ <${render} /> }>` : `<${suggest}>`;
-    const current = [...registry.values()].filter((e) => e.name === suggest && e.status === "recommended");
-    const pkg = current.length === 1 ? current[0]?.package : void 0;
-    return { text: pkg ? `${open} (${pkg})` : open, current: { name: suggest, package: pkg } };
-  }
-  const remedy = [...registry.values()].find((e) => e.name === suggest && e.supersededBy)?.supersededBy;
-  return { text: remedy || `<${suggest}>` };
-}
-function rawElements(els, {
-  layoutComponents,
-  styledClasses,
-  layoutClasses,
-  registry,
-  promotion
-}) {
-  return els.flatMap((el) => {
-    if (el.styledOnly) {
-      const suggestsLayout = String(el.suggest).split("/").some((n) => layoutComponents.includes(n.trim()));
-      const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
-      const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
-      if (suggestsLayout ? !laidOut : !styled) return [];
-    }
-    const analog = currentAnalog(registry, el.suggest, el.render);
-    const name = analog.current?.name;
-    const target = typeof name === "string" && name && !name.includes("/") ? analog.current : void 0;
-    const tail = target && promotion ? conversion(el, target.name, target.package, promotion) : void 0;
-    return [
-      {
-        rule: "system/raw-element",
-        file: el.file,
-        line: el.line,
-        message: `<${el.tag}> \u2192 ${analog.text}${tail ? ` \u2014 ${tail}` : ""}`,
-        code: `<${el.tag}>`
-      }
-    ];
-  });
-}
-
-// src/checks/tokens/hardcoded-value.ts
-var hardcodedValue = ({ prop, value }) => {
-  if (!isHardcodedTokenValue(prop, value)) return void 0;
-  const decl2 = `${prop}: ${value}`;
-  return { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hints: [{ prop, value }] };
-};
-
-// src/checks/tokens/undelivered.ts
-var import_picomatch2 = __toESM(require_picomatch2(), 1);
-import { readFileSync as readFileSync3, statSync as statSync2 } from "node:fs";
-var FALLBACKS = "fallbacks render but won't follow the theme";
-var WALK_LIMIT = 5e4;
-var FILE_LIMIT = 4e3;
-var MAX_BYTES = 15e5;
-var ARGS_MAX = 5e3;
-function stripComments(text2) {
-  const out = text2.split("");
-  let quote = null;
-  for (let i = 0; i < out.length; i++) {
-    const c = out[i];
-    if (quote) {
-      if (c === "\\") i++;
-      else if (c === quote) quote = null;
-      continue;
-    }
-    if (c === "'" || c === '"') {
-      quote = c;
-      continue;
-    }
-    const next = out[i + 1];
-    let stop;
-    if (c === "/" && next === "/" || c === "#" && next !== "[") stop = text2.indexOf("\n", i);
-    else if (c === "/" && next === "*") {
-      const close = text2.indexOf("*/", i + 2);
-      stop = close === -1 ? -1 : close + 2;
-    } else continue;
-    if (stop === -1) stop = out.length;
-    for (let k = i; k < stop; k++) if (out[k] !== "\n") out[k] = " ";
-    i = stop - 1;
-  }
-  return out.join("");
-}
-function argumentsAt(text2, open) {
-  const args = [];
-  let depth = 0;
-  let quote = null;
-  let start = open + 1;
-  const stop = Math.min(text2.length, open + ARGS_MAX);
-  for (let i = open + 1; i < stop; i++) {
-    const c = text2[i];
-    if (quote) {
-      if (c === "\\") i++;
-      else if (c === quote) quote = null;
-      continue;
-    }
-    if (c === "'" || c === '"') quote = c;
-    else if (c === "(" || c === "[" || c === "{") depth++;
-    else if (c === ")" && depth === 0) {
-      const last = text2.slice(start, i).trim();
-      if (last || args.length) args.push(last);
-      return args;
-    } else if (c === ")" || c === "]" || c === "}") depth--;
-    else if (c === "," && depth === 0) {
-      args.push(text2.slice(start, i).trim());
-      start = i + 1;
-    }
-  }
-  return null;
-}
-function closingAt(text2, open) {
-  let depth = 0;
-  let quote = null;
-  const stop = Math.min(text2.length, open + ARGS_MAX);
-  for (let i = open; i < stop; i++) {
-    const c = text2[i];
-    if (quote) {
-      if (c === "\\") i++;
-      else if (c === quote) quote = null;
-    } else if (c === "'" || c === '"') quote = c;
-    else if (c === "(" || c === "[" || c === "{") depth++;
-    else if ((c === ")" || c === "]" || c === "}") && --depth === 0) return i;
-  }
-  return -1;
-}
-var literal = (arg) => {
-  const m = /^'((?:[^'\\]|\\.)*)'$|^"((?:[^"\\$]|\\.)*)"$/.exec(arg.trim());
-  return m ? m[1] ?? m[2] ?? "" : null;
-};
-function dependencyList(arg) {
-  if (arg === void 0 || arg === "") return { handles: [], complete: true };
-  const text2 = arg.trim();
-  const named2 = [...text2.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\$]|\\.)*)"/g)].map((m) => m[1] ?? m[2] ?? "");
-  const open = /^array\s*\(/i.exec(text2)?.[0].length ?? (text2.startsWith("[") ? 1 : 0);
-  const close = open ? closingAt(text2, open - 1) : -1;
-  if (close !== text2.length - 1) return { handles: named2, complete: false };
-  const list2 = text2.slice(open, close);
-  const items = argumentsAt(`(${list2})`, 0) ?? [];
-  const complete = items.every((item) => item === "" || literal(item) !== null);
-  return { handles: named2, complete };
-}
-function dependencyArgument(args, index2) {
-  const named2 = args.find((a) => /^deps\s*:(?!:)/.test(a));
-  if (named2 !== void 0) return named2.replace(/^deps\s*:/, "").trim();
-  const arg = args[index2];
-  return arg !== void 0 && /^[A-Za-z_]\w*\s*:(?!:)/.test(arg) ? void 0 : arg;
-}
-var lineAt = (text2, offset) => text2.slice(0, offset).split("\n").length;
-function enqueueVerdict(check, files) {
-  const calls = new RegExp(`(?<![\\w$>:])(${check.calls.join("|")})\\s*\\(`, "g");
-  let seen = 0;
-  let first = null;
-  let unknown = false;
-  for (const { rel, text: text2 } of files) {
-    const code = stripComments(text2);
-    for (const m of code.matchAll(calls)) {
-      if (/\bfunction\s+$/.test(code.slice(Math.max(0, m.index - 20), m.index))) continue;
-      const args = argumentsAt(code, m.index + m[0].length - 1);
-      seen++;
-      first ??= { file: rel, line: lineAt(code, m.index) };
-      if (!args) {
-        unknown = true;
-        continue;
-      }
-      const own = literal(args[0] ?? "");
-      if (own !== null && check.enqueues.includes(String(m[1])) && check.handles.includes(own))
-        return { state: "delivered" };
-      const deps = dependencyList(dependencyArgument(args, check.argument));
-      if (deps.handles.some((h) => check.handles.includes(h))) return { state: "delivered" };
-      if (!deps.complete) unknown = true;
-    }
-  }
-  if (unknown) return { state: "unknown" };
-  return first ? { state: "missing", calls: seen, first } : { state: "silent" };
-}
-var SPECIFIERS = /@(?:import|use|forward)\s+(?:url\(\s*)?['"]([^'"]+)['"]|\bimport\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|\brequire\(\s*['"]([^'"]+)['"]|@import\s+url\(\s*([^'"()\s]+)\s*\)/g;
-var withoutExt = (s) => s.replace(/\.(?:s?css|sass|less)$/, "");
-function importVerdict(check, files) {
-  const wanted = check.specifiers.map(withoutExt);
-  for (const { text: text2 } of files)
-    for (const m of text2.matchAll(SPECIFIERS)) {
-      const spec = withoutExt(String(m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/^~/, ""));
-      if (wanted.some((w) => spec === w || spec.endsWith(`/${w}`))) return { state: "delivered" };
-    }
-  return { state: "silent" };
-}
-function readEvidenceFiles(root2, checks, ignore) {
-  const globs = [...new Set(checks.flatMap((c) => c.files))];
-  const found = discover({
-    root: root2,
-    sources: { styles: globs, markup: [], references: [], ignore: [...ignore] },
-    limit: WALK_LIMIT
-  });
-  if (found.truncated || found.styles.length > FILE_LIMIT) return null;
-  const out = [];
-  for (const { abs, rel } of found.styles) {
-    try {
-      if (statSync2(abs).size > MAX_BYTES) return null;
-      out.push({ rel, text: readFileSync3(abs, "utf8") });
-    } catch {
-      return null;
-    }
-  }
-  return out;
-}
-function undelivered({
-  root: root2,
-  ignore,
-  tokens,
-  refs,
-  prefixes,
-  projectDefined,
-  reports
-}) {
-  if (!tokens) return [];
-  const namespace = tokens.prefixes.length ? tokens.prefixes : prefixes;
-  if (!namespace.length) return [];
-  const used = refs.filter((r) => namespace.some((p) => r.name.startsWith(p)) && !projectDefined.has(r.name)).sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
-  const [anchor] = used;
-  if (!anchor || !reports(anchor.file)) return [];
-  const files = readEvidenceFiles(root2, [...tokens.evidence, ...tokens.fallbacks], ignore);
-  if (!files) return [];
-  const verdictOf = (check) => {
-    const mine = files.filter((f) => (0, import_picomatch2.default)(check.files)(f.rel));
-    if (check.kind === "enqueue-dependency") return enqueueVerdict(check, mine);
-    if (check.kind === "import") return importVerdict(check, mine);
-    return mine.some((f) => check.pattern.test(f.text)) ? { state: "delivered" } : { state: "silent" };
-  };
-  const verdicts = tokens.evidence.map(verdictOf);
-  if (verdicts.some((v) => v.state === "delivered" || v.state === "unknown")) return [];
-  const missing = verdicts.find((v) => v.state === "missing");
-  if (!missing) return [];
-  const target = tokens.handle ?? tokens.stylesheet;
-  const fallbacks = tokens.fallbacks.some((check) => verdictOf(check).state === "delivered");
-  const users = new Set(used.map((r) => r.file)).size;
-  const shown = namespace.map((p) => `${p}*`).join(", ");
-  return [
-    {
-      rule: "tokens/undelivered",
-      file: anchor.file,
-      line: anchor.line,
-      message: `${shown} used in ${users} file(s); none of ${missing.calls} style enqueue(s) depends on ${target} (first: ${missing.first.file}:${missing.first.line})`,
-      // One per project and delivery: the count and the first enqueue move with
-      // every edit, and a baseline must not.
-      code: `tokens/undelivered:${target}`,
-      // The remedy, short enough to survive as the line's tail. The profile's
-      // own prose on it is `loupe explain`'s to print, whole. With fallbacks
-      // the page does render, so the note says why that is not enough, and
-      // stays short enough for both clauses to survive the tail's bound.
-      note: fallbacks ? `${FALLBACKS}${tokens.handle ? `; add '${tokens.handle}' to this CSS's enqueue dependencies` : ""}` : tokens.handle ? `list '${tokens.handle}' in the dependencies of the enqueue loading this CSS` : void 0,
-      scopeLines: anchor.scopeLines
-    }
-  ];
-}
-
-// src/checks/tokens/unknown-token.ts
-function oneEdit(a, b) {
-  if (Math.abs(a.length - b.length) > 1) return false;
-  let head2 = 0;
-  while (head2 < a.length && head2 < b.length && a[head2] === b[head2]) head2++;
-  let tail = 0;
-  while (tail < a.length - head2 && tail < b.length - head2 && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
-  return a.length - head2 - tail <= 1 && b.length - head2 - tail <= 1;
-}
-var spelling = (name) => name.replace(/\d/g, "");
-function nearMiss(name, known) {
-  let found;
-  for (const k of known) {
-    if (!oneEdit(name, k) || spelling(k) === spelling(name)) continue;
-    if (found !== void 0) return void 0;
-    found = k;
-  }
-  return found;
-}
-function renameCandidates(name, prop, known, scopes) {
-  const names = [...known];
-  const tails = prop.startsWith("--") ? prop.slice(2).split("-") : [];
-  let family = onRole(names, prop, scopes);
-  for (let k = 0; !family.length && k < tails.length; k++) family = onRole(names, tails.slice(k).join("-"), scopes);
-  const segs = name.split("-");
-  for (let k = segs.length - 1; !family.length && k >= 4; k--) {
-    const head2 = `${segs.slice(0, k).join("-")}-`;
-    family = names.filter((n) => n.startsWith(head2));
-  }
-  return [.../* @__PURE__ */ new Set([...family, ...names.filter((n) => oneEdit(name, n))])];
-}
-function unknownTokens(refs, known) {
-  if (!known.size) return [];
-  const groups = /* @__PURE__ */ new Map();
-  for (const ref of refs) {
-    if (known.has(ref.name)) continue;
-    const group = groups.get(`${ref.file}\0${ref.name}`);
-    if (group) {
-      if (!group.lines.includes(ref.line)) group.lines.push(ref.line);
-      continue;
-    }
-    groups.set(`${ref.file}\0${ref.name}`, { ...ref, lines: [ref.line] });
-  }
-  return [...groups.values()].map(({ file, line, name, prop, scopeLines, lines }) => {
-    const to = nearMiss(name, known);
-    const rename = to === void 0 ? void 0 : { from: name, to, lines };
-    return {
-      rule: "tokens/unknown-token",
-      file,
-      line,
-      // The name alone: the rule's title already says a token is being named.
-      // With the replacement beside it where one is settled, so a reader sees
-      // what `fix` would write without having to run it.
-      message: to === void 0 ? name : `${name} \u2192 ${to}`,
-      code: name,
-      scopeLines,
-      rename,
-      unknown: rename ? void 0 : { prop, lines }
-    };
-  });
-}
-
-// src/checks/tokens/misapplied-token.ts
-function plainRefs(value) {
-  const out = [];
-  const stack = [];
-  for (let i = 0; i < value.length; i++) {
-    const ch = value[i];
-    if (ch === ")") stack.pop();
-    if (ch !== "(") continue;
-    const fn = /([-\w]*)$/.exec(value.slice(0, i))?.[1]?.toLowerCase() ?? "";
-    if (fn === "var" && !stack.includes(true)) {
-      const name = /^\(\s*(--[\w-]+)/.exec(value.slice(i))?.[1];
-      if (name) out.push(name);
-    }
-    stack.push(["calc", "min", "max", "clamp"].includes(fn) || fn.endsWith("-calc"));
-  }
-  return out;
-}
-function misappliedTokens(refs, scopes, known) {
-  if (!scopes) return [];
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const ref of refs) {
-    const prop = ref.prop.toLowerCase();
-    if (prop.startsWith("--") || prop.startsWith("$") || prop.startsWith("@")) continue;
-    const bare = prop.replace(/^-(?:webkit|moz|ms|o)-/, "");
-    const admits = (props) => propMatches(props, prop) || propMatches(props, bare);
-    if (known.size && !known.has(ref.name)) continue;
-    if (!plainRefs(ref.value).includes(ref.name)) continue;
-    const at = place(scopes, ref.name);
-    if (!at) continue;
-    const key = `${ref.file}\0${ref.line}\0${prop}\0${ref.name}`;
-    if (seen.has(key)) continue;
-    let why = null;
-    if (at.property !== null && !admits(at.sets) && !admits(at.also))
-      why = `${at.property.startsWith("--") ? "its family" : `a ${at.property} token`} sets ${at.sets.join(", ")}`;
-    else {
-      const fit = fitOf(scopes, ref.name, ref.elements);
-      if (fit.fit === "off") why = fit.why;
-    }
-    if (why === null) continue;
-    seen.add(key);
-    out.push({
-      rule: "tokens/misapplied-token",
-      file: ref.file,
-      line: ref.line,
-      message: `${prop}: ${ref.name} \u2014 ${why}`,
-      // The token and where it is written, not why: a declaration that edits
-      // its scope stays the same finding.
-      code: `${prop}: ${ref.name}`,
-      scopeLines: ref.scopeLines
-    });
-  }
-  return out;
-}
-
-// src/checks/typography/in-css.ts
-var typographyInCss = ({ prop }, { boundText, enabled: enabled2, surfaceOf }) => {
-  if (!TYPE_PROPS.has(prop) || !boundText[0] || !enabled2("typography/in-css")) return void 0;
-  const owner = owningBinding(boundText, prop, surfaceOf);
-  const text2 = owner?.binding ?? boundText.find((b) => !surfaceOf(b));
-  if (!text2) return void 0;
-  const head2 = `${prop} on <${text2.tag}>`;
-  const code = `${prop} on <${boundText[0].tag}>`;
-  return {
-    rule: "typography/in-css",
-    message: owner?.via.length ? `${head2} \u2014 set via ${viaProps(owner.via)}` : head2,
-    code
-  };
-};
-
-// src/checks/typography/untokenized.ts
-var untokenizedType = ({ prop, value }) => {
-  if (!TYPE_PROPS.has(prop)) return void 0;
-  if (usesToken(value) || isInertValue(value)) return null;
-  const decl2 = `${prop}: ${value}`;
-  return { rule: "typography/untokenized", message: decl2, code: oneLine(decl2), hints: [{ prop, value }] };
-};
-
-// src/analyze.ts
-var realPath = (path) => {
+function ensureDir(dir) {
   try {
-    return realpathSync.native(path);
+    mkdirSync(dir, { recursive: true });
+    return dir;
   } catch {
     return null;
   }
-};
-var partClass = (sel) => keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, "")).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
-var tagOf = (compound) => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
-function keyCompound(sel) {
-  let depth = 0;
-  let quote = "";
-  let start = 0;
-  const s = sel.trim();
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === "\\") i++;
-    else if (quote) {
-      if (ch === quote) quote = "";
-    } else if (ch === '"' || ch === "'") quote = ch;
-    else if (ch === "(" || ch === "[") depth++;
-    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
-    else if (!depth && (ch === " " || ch === "\n" || ch === "	" || ch === ">" || ch === "+" || ch === "~"))
-      start = i + 1;
-  }
-  return s.slice(start);
 }
-function ownLevel(compound) {
-  let depth = 0;
-  let quote = "";
-  let out = "";
-  for (let i = 0; i < compound.length; i++) {
-    const ch = compound[i] ?? "";
-    if (quote) {
-      if (ch === "\\") i++;
-      else if (ch === quote) quote = "";
-    } else if (ch === '"' || ch === "'") quote = ch;
-    else if (ch === "(" || ch === "[") depth++;
-    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
-    else if (!depth) out += ch;
-  }
-  return out;
+var projectStateDir = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join4(data || join4(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`), projectKey(root2));
+var attemptsPath = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join4(projectStateDir(root2, data), "attempts.json");
+var cacheDisabled = (flag) => Boolean(flag) || isOn(process.env.LOUPE_NO_CACHE);
+var DEFAULT_BASELINE = ".loupe-baseline.json";
+var baselinePath = (root2, p) => isAbsolute(p) ? p : join4(root2, p);
+function legacyBaseline(root2) {
+  const data = process.env.CLAUDE_PLUGIN_DATA;
+  const candidates = [
+    join4(root2, ".loupe", "baseline.json"),
+    ...data ? [join4(data, "projects", projectKey(root2), "baseline.json")] : []
+  ];
+  return candidates.find((path) => existsSync3(path)) ?? null;
 }
-function compoundElements(compound, carriersByClass) {
-  if (compound.includes("dsh-e") || compound.includes("\\")) return null;
-  const own = ownLevel(compound);
-  const tag = tagOf(own);
-  if (tag) return [tag];
-  const [head2, ...rest] = new Set(classesIn(own));
-  if (head2 === void 0) return null;
-  const on = (carriersByClass.get(head2) ?? []).filter((c) => rest.every((k) => c.classes.includes(k)));
-  const out = [];
-  for (const c of on) {
-    if (c.element === null) return null;
-    out.push(c.element);
+var legacyBaselineNotice = (path) => `${path} is a 0.1.x baseline, which this version no longer reads \u2014 re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
+function findExistingBaseline(root2, explicit, configured) {
+  if (explicit !== null) {
+    const path = baselinePath(root2, explicit);
+    return { path, found: existsSync3(path), fallback: "none" };
   }
-  return out.length ? out : null;
+  const target = baselinePath(root2, configured);
+  if (existsSync3(target)) return { path: target, found: true, fallback: "none" };
+  const byDefaultName = join4(root2, DEFAULT_BASELINE);
+  if (byDefaultName !== target && existsSync3(byDefaultName))
+    return { path: byDefaultName, found: true, fallback: "default-name" };
+  return { path: target, found: false, fallback: "none" };
 }
-async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
-  const classes = /* @__PURE__ */ new Set();
-  const dirs2 = [];
-  const unread = [];
-  for (const src of sources) {
-    const dir = realPath(isAbsolute(src) ? src : join4(root2, src));
-    if (!dir) continue;
-    dirs2.push(dir);
-    const budget = { left: 400 };
-    for (const file of cssFilesUnder(dir, budget, [".css", ".scss", ".less"])) {
-      const shown = toPosix(relative2(root2, file));
-      const syntax = await syntaxFor(file);
-      if (!syntax.parse) {
-        unread.push({ file: shown, message: `needs \`npm i -D ${syntax.missing}\` to be read` });
-        continue;
-      }
-      let sheet;
-      try {
-        sheet = syntax.parse(readFileSync4(file, "utf8"), { from: file });
-      } catch (err) {
-        unread.push({ file: shown, message: parseMessageOf(err, file) });
-        continue;
-      }
-      harvestTokenDefs(sheet, tokenPrefixes, tokenSet);
-      if (/\.module\.[^./\\]+$/i.test(file)) continue;
-      sheet.walkRules((rule2) => {
-        const decls = [...ownDecls(rule2)];
-        if (decls.length && decls.every((d) => d.prop.startsWith("--"))) return;
-        for (const sel of resolvedSelectors(rule2)) {
-          if (/^[.#][\w-]+\s*\(/.test(sel)) continue;
-          const part = partClass(sel);
-          if (part) classes.add(part);
-        }
-      });
-    }
-    if (!budget.left)
-      unread.push({ file: toPosix(relative2(root2, dir)), message: "read the first 400 stylesheets only" });
+
+// src/cache.ts
+var sha256 = (text2) => createHash2("sha256").update(text2).digest("hex");
+function readJson(path) {
+  try {
+    return JSON.parse(readFileSync3(path, "utf8"));
+  } catch {
+    return null;
   }
-  return { classes, dirs: dirs2, unread };
 }
-var DECLARATIONS = [
-  typographyInCss,
-  systemOverride,
-  margin,
-  untokenizedType,
-  layoutInCss,
-  hardcodedValue
-];
-function classifyDeclaration({ prop, value }, {
-  boundSystem = [],
-  boundText = [],
-  isGrid = false,
-  surfaceOf = () => void 0,
-  surfaced = () => true,
-  enabled: enabled2
-}) {
-  const styling = isMarginProp(prop) || isFlexDecl(prop, value) || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || isHardcodedTokenValue(prop, value) || APPEARANCE_PROPS.has(prop);
-  const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: enabled2 };
-  for (const check of DECLARATIONS) {
-    const verdict = check({ prop, value }, ctx);
-    if (verdict !== void 0) return { finding: verdict, styling };
-  }
-  return { finding: null, styling };
-}
-var COLLAPSE_PER_RULE = /* @__PURE__ */ new Set(["layout/in-css", "typography/untokenized"]);
-var propOf = (message) => (message.split(":")[0] ?? message).trim();
-var declarationKeys = (f) => {
-  if (!COLLAPSE_PER_RULE.has(f.rule)) return [findingKey(f)];
-  const collapsed = `${f.rule}:`;
-  const props = f.code?.startsWith(collapsed) ? f.code.slice(collapsed.length).split(",") : [propOf(f.message)];
-  return props.map((p) => findingKey({ ...f, code: `${collapsed}${p}` }));
-};
-function collapsePerRule(pending) {
-  const out = [];
-  const groups = /* @__PURE__ */ new Map();
-  for (const f of pending) {
-    if (!COLLAPSE_PER_RULE.has(f.rule)) {
-      out.push(f);
-      continue;
-    }
-    const group = groups.get(f.rule) ?? [];
-    group.push(f);
-    groups.set(f.rule, group);
-  }
-  for (const [rule2, group] of groups) {
-    const first = group[0];
-    if (!first) continue;
-    if (group.length === 1) {
-      out.push(first);
-      continue;
-    }
-    const props = [...new Set(group.map((f) => propOf(f.message)))];
-    out.push({
-      ...first,
-      // Bounded per contributor, so one long value cannot spend the whole
-      // line. Safe here where it is not at capture: a collapsed finding
-      // carries its own `code`, so identity does not fall back to this.
-      message: group.map((f) => snippet(f.message)).join("; "),
-      // Each hint keeps the line it was flagged on. The collapsed finding
-      // reports at the first one, and `fix` matches every other against the
-      // line it is actually written on rather than that one.
-      hints: group.flatMap((f) => (f.hints ?? []).map((h) => ({ ...h, line: f.line }))),
-      code: `${rule2}:${props.sort().join(",")}`
-    });
-  }
-  return out;
-}
-async function analyze(config, {
-  scope = null,
-  judge = false,
-  suppress = true,
-  contents
-} = {}) {
-  const ds = config.designSystem;
-  const ruleIsLive = (rule2) => config.enabled[rule2];
-  const surfaceOf = (b) => surfaceFor(config.componentRegistry, b.package, b.component);
-  const recorded = surfacesRecorded(config.componentRegistry);
-  const surfaced = (b) => recorded(b.package, b.component);
-  const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
-  const parseSuppressions = makeSuppressionParser(config.suppression);
-  const limit = analyzeEntryBudget(config.maxEntries);
-  const files = discover({ root: config.root, sources: config.sources, limit });
-  if (files.truncated) throw new TreeTooLarge(limit);
-  const MAX_BYTES2 = 15e5;
-  const tooBig = (abs, rel) => {
-    const given = contents?.get(rel);
-    if (given !== void 0) return Buffer.byteLength(given) > MAX_BYTES2;
-    try {
-      return statSync3(abs).size > MAX_BYTES2;
-    } catch {
-      return false;
-    }
-  };
-  const read = (abs, rel) => contents?.get(rel) ?? readFileSync4(abs, "utf8");
-  const tokenPrefixes = ds.tokenPrefixes ?? [];
-  const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
-  tokenSet.scopes = mergeScopes((config.profiles?.active ?? []).map((p) => p.tokenScopes));
-  const scopes = tokenSet.scopes;
-  const realRoot = realPath(config.root) ?? config.root;
-  const library = await readLibrary(realRoot, ds.styleSources, tokenPrefixes, tokenSet);
-  const isLibrarySheet = (rel) => {
-    const abs = join4(realRoot, rel);
-    return library.dirs.some((d) => abs === d || abs.startsWith(`${d}${sep2}`));
-  };
-  const tokenRefs = [];
-  const scopedRefs = [];
-  const projectTokens = emptyTokenSet();
-  const findings = [];
-  const directives = [];
-  const diagnostics = {
-    parseErrors: [...library.unread],
-    filesScanned: 0,
-    tokensKnown: tokenSet.known.size
-  };
-  const suppByFile = /* @__PURE__ */ new Map();
-  const ledger = new MuteLedger();
-  const inScope = scope ? new Set(scope) : null;
-  const reports = (rel) => !inScope || inScope.has(rel);
-  const suppressionsFor = (rel, text2) => {
-    const cached = suppByFile.get(rel);
-    if (cached) return cached;
-    const parsed = parseSuppressions(text2, rel);
-    if (!suppress) parsed.byLine.clear();
-    suppByFile.set(rel, parsed);
-    return parsed;
-  };
-  const report = ({ scopeLines, rule: rule2, file, line, message, ...f }) => {
-    if (!config.enabled[rule2] || !reports(file)) return;
-    const supp = suppByFile.get(file);
-    if (supp && ledger.mute(supp, line, rule2, scopeLines)) return;
-    findings.push({ rule: rule2, severity: config.severityOf(rule2), file, line, message, ...f, rank: RULES[rule2].rank });
-  };
-  const referenced = /* @__PURE__ */ new Set();
-  const stems = /* @__PURE__ */ new Set();
-  const bindings = /* @__PURE__ */ new Map();
-  const rawEls = [];
-  const carriersByClass = /* @__PURE__ */ new Map();
-  const inlineStyles = [];
-  const cssInJs = [];
-  const composites2 = [];
-  const patternRules = (config.patterns ?? []).flatMap(
-    (p) => p.rules.filter((spec) => judge || spec.rule !== "judge").map((spec) => ({ patternId: p.id, spec }))
-  );
-  const controls = [];
-  const ruleHits = [];
-  const importsByFile = /* @__PURE__ */ new Map();
-  const componentImports = [];
-  for (const { abs, rel } of files.markup) {
-    if (tooBig(abs, rel)) continue;
-    let text2;
-    try {
-      text2 = read(abs, rel);
-    } catch {
-      continue;
-    }
-    diagnostics.filesScanned++;
-    const scanned = scanMarkup(text2, rel, ds, patternRules);
-    if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
-    for (const t of scanned.referenced) referenced.add(t);
-    for (const t of scanned.stems) stems.add(t);
-    for (const b of scanned.bindings) {
-      if (b.cls === void 0) continue;
-      const group = bindings.get(b.cls) ?? [];
-      group.push(b);
-      bindings.set(b.cls, group);
-    }
-    rawEls.push(...scanned.rawEls);
-    if (scopes)
-      for (const c of scanned.carriers)
-        for (const cls of new Set(c.classes)) {
-          const list2 = carriersByClass.get(cls);
-          if (list2) list2.push(c);
-          else carriersByClass.set(cls, [c]);
-        }
-    inlineStyles.push(...scanned.inlineStyles);
-    cssInJs.push(...scanned.cssInJs);
-    composites2.push(...scanned.composites);
-    for (const h of scanned.ruleHits) ruleHits.push({ ...h, file: rel });
-    controls.push(...scanned.controls);
-    if (scanned.imports) importsByFile.set(rel, scanned.imports);
-    for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
-    suppressionsFor(rel, text2);
-  }
-  const elementsOf = (selectors) => {
-    if (!scopes) return [];
-    const out = /* @__PURE__ */ new Set();
-    for (const sel of selectors) {
-      const found = compoundElements(keyCompound(sel), carriersByClass);
-      if (!found) return [];
-      for (const e of found) out.add(e);
-    }
-    return [...out];
-  };
-  const nestedElements = (selector) => {
-    const selectors = list.comma(selector);
-    return selectors.some((sel) => keyCompound(sel).includes("&")) ? [] : elementsOf(selectors);
-  };
-  for (const { abs, rel } of files.references) {
-    if (tooBig(abs, rel)) continue;
-    try {
-      harvestTokens(read(abs, rel), referenced);
-      diagnostics.filesScanned++;
-    } catch {
-    }
-  }
-  const styledClasses = /* @__PURE__ */ new Set();
-  const layoutClasses = /* @__PURE__ */ new Set();
-  const declared = [];
-  const onRaw = new Set(ruleIsLive("system/raw-element") ? rawEls.flatMap((el) => el.classes) : []);
-  const rawClassDecls = /* @__PURE__ */ new Map();
-  for (const { abs, rel } of files.styles) {
-    if (isLibrarySheet(rel)) continue;
-    let text2;
-    try {
-      text2 = read(abs, rel);
-    } catch {
-      continue;
-    }
-    diagnostics.filesScanned++;
-    suppressionsFor(rel, text2);
-    const unparsed = (message, code) => {
-      diagnostics.parseErrors.push({ file: rel, message });
-      if (config.enabled["stylesheet/unparsed"] && reports(rel))
-        findings.push({
-          rule: "stylesheet/unparsed",
-          severity: config.severityOf("stylesheet/unparsed"),
-          file: rel,
-          line: 1,
-          message,
-          code: code ?? message,
-          rank: RULES["stylesheet/unparsed"].rank
-        });
-    };
-    if (tooBig(abs, rel)) {
-      unparsed(`stylesheet over ${Math.round(MAX_BYTES2 / 1e3)}kB \u2014 skipped as generated`);
-      continue;
-    }
-    const syntax = await syntaxFor(rel);
-    if (syntax.missing !== void 0) {
-      unparsed(`needs \`npm i -D ${syntax.missing}\` to be checked`);
-      continue;
-    }
-    let root2;
-    try {
-      root2 = syntax.parse(text2, { from: abs, map: false });
-    } catch (err) {
-      unparsed(parseMessageOf(err, abs), parseReasonOf(err));
-      continue;
-    }
-    const emit = (f) => report({ ...f, file: rel, code: f.code ?? f.message });
-    harvestTokenDefs(root2, tokenPrefixes, tokenSet);
-    if (delivery?.tokens) harvestTokenDefs(root2, tokenPrefixes, projectTokens);
-    const srcLines = text2.split("\n");
-    root2.walkRules((cssRule) => {
-      const ruleLine = cssRule.source?.start?.line ?? 1;
-      const selectors = resolvedSelectors(cssRule);
-      const allClasses = [...new Set(selectors.flatMap(classesIn))];
-      const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
-      const keyClasses = [...new Set(keyClassesPer.flat())];
-      if (!allClasses.length) return;
-      const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
-      const boundSystem = bound.filter((b) => b.isSystem);
-      const boundText = bound.filter((b) => b.isText);
-      const isGrid = ruleIsGrid(cssRule);
-      const scopeLines = [ruleLine, ruleLine - 1];
-      const selector = selectors.join(", ");
-      const media = mediaQuery(cssRule) || void 0;
-      const elements = elementsOf(selectors);
-      let touchesStyle = false;
-      let touchesLayout = false;
-      const pending = [];
-      const onRawKeys = keyClasses.filter((c) => onRaw.has(c));
-      const classDecls = [];
-      for (const decl2 of ownDecls(cssRule)) {
-        const prop = decl2.prop.toLowerCase();
-        const line = decl2.source?.start?.line ?? ruleLine;
-        const { finding, styling } = classifyDeclaration(
-          { prop, value: decl2.value },
-          { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive }
-        );
-        if (onRawKeys.length)
-          classDecls.push({ prop, value: decl2.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
-        if (styling) touchesStyle = true;
-        if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
-        for (const name of tokenRefsIn(decl2.value, tokenPrefixes)) {
-          const ref = { file: rel, line, name, prop, scopeLines };
-          tokenRefs.push(ref);
-          if (scopes) scopedRefs.push({ ...ref, value: decl2.value, elements });
-        }
-        if (finding) pending.push({ ...finding, line, scopeLines });
-      }
-      if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
-      if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
-      const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
-      if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
-      else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
-      if (!override)
-        for (const c of onRawKeys) {
-          const list2 = rawClassDecls.get(c) ?? [];
-          list2.push(...classDecls);
-          rawClassDecls.set(c, list2);
-        }
-      const cut = deletableRule(cssRule, srcLines);
-      for (const cls of keyClasses)
-        declared.push({
-          file: rel,
-          line: ruleLine,
-          cls,
-          scopeLines,
-          cut: cut && keyClassesPer.every((k) => k.includes(cls)) ? cut : void 0
-        });
-    });
-  }
-  for (const f of deadClasses(declared, {
-    referenced,
-    stems: [...stems],
-    isProject: config.isProject,
-    isNeverDead: config.isNeverDead
-  }))
-    report(f);
-  for (const el of inlineStyles) {
-    if (!reports(el.file)) continue;
-    const scopeLines = [el.line, el.line - 1];
-    const whole = ruleIsLive("system/inline-style") ? inlineStyle(el, ds.allowedInlineStyles) : null;
-    if (whole) {
-      report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
-      continue;
-    }
-    const isGrid = el.decls.some((d) => isGridDecl(d.prop, d.value));
-    const pending = [];
-    const elements = el.element ? [el.element] : [];
-    for (const d of el.decls) {
-      if (scopes)
-        for (const name of tokenRefsIn(d.value, tokenPrefixes))
-          scopedRefs.push({
-            file: el.file,
-            line: d.line ?? el.line,
-            name,
-            prop: d.prop,
-            scopeLines,
-            value: d.value,
-            elements
-          });
-      const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
-      if (finding)
-        pending.push({
-          ...finding,
-          // The classifier sees the translated declaration, which is not what
-          // the file says. Only the span points back at the bytes it came from.
-          hints: finding.hints?.map((h) => ({ ...h, span: d.span })),
-          line: d.line ?? el.line,
-          code: finding.code ?? finding.message,
-          suffix: " (inline)"
-        });
-    }
-    for (const f of collapsePerRule(pending))
-      report({
-        ...f,
-        file: el.file,
-        message: `${f.message}${f.suffix ?? ""}`,
-        code: f.code ?? f.message,
-        scopeLines,
-        elements
-      });
-  }
-  for (const tpl of cssInJs) {
-    const supp = suppByFile.get(tpl.file);
-    if (!reports(tpl.file)) {
-      if (supp && !tpl.error)
-        for (const group of tpl.groups)
-          for (const d of group.decls)
-            for (const name of tokenRefsIn(d.value, tokenPrefixes))
-              tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
-      continue;
-    }
-    if (tpl.error) {
-      diagnostics.parseErrors.push({ file: tpl.file, message: `css-in-js at line ${tpl.line}: ${tpl.error}` });
-      continue;
-    }
-    const key = {
-      ...tpl.component ? { component: tpl.component } : {},
-      ...tpl.package ? { package: tpl.package } : {}
-    };
-    const boundSystem = tpl.isSystem ? [{ tag: tpl.target, isSystem: true, ...key }] : [];
-    const boundText = tpl.isText ? [{ tag: tpl.target, isSystem: true, isText: true, ...key }] : [];
-    const self = tpl.isSystem ? tpl.component ?? tpl.target : tpl.target && /^[a-z]/.test(tpl.target) ? tpl.target : null;
-    for (const group of tpl.groups) {
-      const onTarget = group.onTarget;
-      const pending = [];
-      let elements = [];
-      if (onTarget) elements = scopes && self ? [self] : [];
-      else if (group.selector) elements = nestedElements(group.selector);
-      for (const d of group.decls) {
-        if (supp)
-          for (const name of tokenRefsIn(d.value, tokenPrefixes)) {
-            const ref = { file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] };
-            tokenRefs.push(ref);
-            if (scopes) scopedRefs.push({ ...ref, value: d.value, elements });
-          }
-        const { finding } = classifyDeclaration(d, {
-          boundSystem: onTarget ? boundSystem : [],
-          boundText: onTarget ? boundText : [],
-          isGrid: group.isGrid,
-          surfaceOf,
-          surfaced,
-          enabled: ruleIsLive
-        });
-        if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
-      }
-      const where = group.selector ? ` in \`${group.selector}\`` : "";
-      for (const f of collapsePerRule(pending))
-        report({
-          ...f,
-          file: tpl.file,
-          message: `${f.message}${where} (css-in-js)`,
-          code: `css-in-js:${f.code ?? f.message}`,
-          suffix: `${where} (css-in-js)`,
-          scopeLines: [tpl.line, tpl.line - 1],
-          elements
-        });
-    }
-  }
-  for (const f of rawElements(ruleIsLive("system/raw-element") ? rawEls.filter((el) => reports(el.file)) : [], {
-    layoutComponents: ds.layoutComponents,
-    styledClasses,
-    layoutClasses,
-    registry: config.componentRegistry,
-    promotion: {
-      decls: rawClassDecls,
-      // The same classifier, with the analog bound alongside whatever the
-      // rule's classes are already bound to.
-      verdictAs: (d, as) => classifyDeclaration(
-        { prop: d.prop, value: d.value },
-        {
-          boundSystem: [...d.boundSystem, as],
-          boundText: as.isText ? [...d.boundText, as] : d.boundText,
-          isGrid: d.isGrid,
-          surfaceOf,
-          surfaced,
-          enabled: ruleIsLive
-        }
-      ).finding?.rule ?? null,
-      severityOf: config.severityOf,
-      textComponents: ds.textComponents
-    }
-  }))
-    report(f);
-  for (const f of composites({
-    found: composites2,
-    hits: ruleHits,
-    registry: config.patterns ?? [],
-    importsByFile,
-    enabled: ruleIsLive
-  }))
-    report(f);
-  for (const f of currency(componentImports, config.componentRegistry, ruleIsLive)) report(f);
-  annotateReach(findings, {
-    delivery,
-    imports: componentImports,
-    dependencies: projectDependencies(config.root),
-    dsPackages: ds.packages
-  });
-  for (const [file, s] of suppByFile) {
-    directives.push(...s.directives);
-    if (!config.enabled["suppression/malformed"] || !reports(file)) continue;
-    for (const m of s.malformed)
-      findings.push({
-        ...m,
-        severity: config.severityOf("suppression/malformed"),
-        code: m.message,
-        rank: RULES["suppression/malformed"].rank
-      });
-  }
-  for (const f of findings) {
-    const elements = f.elements ?? [];
-    delete f.elements;
-    if (!f.hints?.length) {
-      delete f.hints;
-      continue;
-    }
-    const hold = scopes ? (token) => {
-      const fit = fitOf(scopes, token, elements);
-      return fit.fit === "off" || fit.fit === "unknown" ? fit.why : null;
-    } : null;
-    f.suggest = f.hints.map((h) => {
-      const tokens = tokensFor(tokenSet, h.prop, h.value);
-      const [only] = tokens;
-      let review = null;
-      if (hold && only !== void 0 && tokens.length === 1) review = hold(only);
-      else if (hold && !tokens.length) {
-        const plan = planValue(tokenSet, h.prop, h.value, hold);
-        if (plan && plan !== "none") review = plan.review ?? null;
-      }
-      return review ? { ...h, tokens, review } : { ...h, tokens };
-    });
-    f.message = declarationMessage(f.suggest, f.suffix ?? "");
-    if (f.rule === "tokens/hardcoded-value" && f.hints.length === 1) f.decl = f.hints[0];
-    delete f.hints;
-  }
-  if (diagnostics.tokensKnown) for (const f of unknownTokens(tokenRefs, tokenSet.known)) report(f);
-  for (const f of misappliedTokens(scopedRefs, scopes, tokenSet.known)) report(f);
-  if (ruleIsLive("tokens/undelivered"))
-    for (const f of undelivered({
-      root: config.root,
-      ignore: config.sources.ignore ?? [],
-      tokens: delivery?.tokens ?? null,
-      refs: tokenRefs,
-      prefixes: tokenPrefixes,
-      projectDefined: projectTokens.known,
-      reports
-    }))
-      report(f);
-  const unique = dedupe(findings);
-  for (const f of unique) f.message = boundMessage(f.message, f.suffix);
-  unique.sort((a, b) => b.rank - a.rank || byBytes(a.file, b.file) || a.line - b.line);
-  directives.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
-  const liveControls = judge && config.enabled["patterns/judged-redirect"] ? controls.filter((c) => {
-    const supp = suppByFile.get(c.file);
-    return reports(c.file) && !(supp && ledger.mute(supp, c.line, "patterns/judged-redirect"));
-  }) : null;
-  if (suppress)
-    ledger.settle(
-      directives.filter((d) => reports(d.file)),
-      new Set(judge ? [] : ["patterns/judged-redirect"])
-    );
-  return {
-    findings: unique,
-    directives,
-    diagnostics,
-    blocking: unique.some((f) => f.severity === "error"),
-    // Only when the design system's own sources yielded tokens. The walk adds
-    // whatever the project defines under the same prefix to this same set, and
-    // one `--wpds-brand-color` of the project's own would otherwise pass for a
-    // design system read, with every value judged tokenless against it.
-    ...diagnostics.tokensKnown ? { tokens: tokenSet } : {},
-    // Scoped and suppressed here, where the scope and the comments are: the
-    // finding a control becomes is written later, by the judge.
-    ...liveControls ? { controls: liveControls } : {}
-  };
-}
-function dedupe(findings) {
-  const seen = /* @__PURE__ */ new Set();
-  return findings.filter((f) => {
-    const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ""}|${f.message}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
+function writeJsonAtomic(path, data) {
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    if (!ensureDir(dirname2(path))) return false;
+    writeFileSync(tmp, JSON.stringify(data));
+    renameSync(tmp, path);
     return true;
-  });
+  } catch {
+    rmSync(tmp, { force: true });
+    return false;
+  }
 }
-var PROJECT_RULES = /* @__PURE__ */ new Set(["tokens/undelivered"]);
-var findingKey = (f) => `${f.rule}|${PROJECT_RULES.has(f.rule) ? "<project>" : f.file}|${oneLine(String(f.code ?? f.message))}`;
-
-// src/autofix.ts
-import { readFileSync as readFileSync5, writeFileSync } from "node:fs";
-import { join as join5 } from "node:path";
-var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
-function tokenFixes(findings) {
-  const out = [];
-  for (const f of findings) {
-    for (const s of f.suggest ?? []) {
-      const to = s.tokens.length === 1 && !s.review ? `var(${s.tokens[0]})` : s.judged?.answer;
-      if (to === void 0 || to === KEEP) continue;
-      out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to, span: s.span });
-    }
-    const rename = f.rename;
-    if (rename) for (const line of rename.lines) out.push({ file: f.file, line, value: rename.from, to: rename.to });
+var ANSWER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+var ANSWER_MAX_ENTRIES = 2e4;
+var AnswerCache = class _AnswerCache {
+  path;
+  #entries = null;
+  #added = /* @__PURE__ */ new Map();
+  constructor(path) {
+    this.path = path;
   }
-  return out;
-}
-function settledBy(findings, applied, kept = []) {
-  const at = (d) => `${d.file}\0${d.line}\0${d.prop ?? ""}`;
-  const done = new Set([...applied, ...kept].map(at));
-  return findings.filter((f) => {
-    const parts = f.rename ? f.rename.lines.map((line) => ({ file: f.file, line })) : (f.suggest ?? (f.decl ? [f.decl] : [])).map((s) => ({ file: f.file, line: s.line ?? f.line, prop: s.prop }));
-    return parts.length > 0 && parts.every((p) => done.has(at(p)));
-  }).length;
-}
-var QUOTES = "'\"`";
-function substituteOnLine(line, fix) {
-  const span = fix.span;
-  if (span) {
-    if (line.slice(span.col, span.col + span.text.length) !== span.text)
-      return { why: "the value is no longer where it was reported" };
-    if (/['"`\\]|\$\{/.test(fix.to)) return { why: "replacement is not writable as a JS string" };
-    const opener = span.text[0];
-    const quote = opener && QUOTES.includes(opener) ? opener : "'";
-    return `${line.slice(0, span.col)}${quote}${fix.to}${quote}${line.slice(span.col + span.text.length)}`;
+  #load() {
+    if (this.#entries) return this.#entries;
+    this.#entries = _AnswerCache.#read(this.path);
+    return this.#entries;
   }
-  if (fix.prop === void 0) {
-    const renamed = line.replace(new RegExp(`(var\\(\\s*)${escapeRe(fix.value)}(?![-\\w])`, "g"), `$1${fix.to}`);
-    if (renamed === line) return { why: "the token is not on its reported line" };
-    return renamed;
+  static #read(path) {
+    const raw = readJson(path);
+    const out = /* @__PURE__ */ new Map();
+    if (raw?.version !== 1 || !raw.entries || typeof raw.entries !== "object") return out;
+    const now = Date.now();
+    for (const [key, entry] of Object.entries(raw.entries))
+      if (Array.isArray(entry?.a) && typeof entry.t === "number" && now - entry.t < ANSWER_MAX_AGE_MS)
+        out.set(key, entry);
+    return out;
   }
-  const re = new RegExp(
-    `(^|[;{\\s\`])(${escapeRe(fix.prop)}\\s*:\\s*)${escapeRe(fix.value.trim())}(?=\\s*(?:!important)?\\s*(?:[;}\`]|$))`,
-    "gi"
-  );
-  const hits = line.match(re);
-  if (hits?.length !== 1)
-    return { why: hits ? `${hits.length} matches on line` : "declaration not on its reported line" };
-  return line.replace(re, `$1$2${fix.to}`);
-}
-function applyTokenFixes(root2, findings, { dry = false } = {}) {
-  const byFile = /* @__PURE__ */ new Map();
-  for (const fix of tokenFixes(findings)) {
-    const group = byFile.get(fix.file) ?? [];
-    group.push(fix);
-    byFile.set(fix.file, group);
+  get(key) {
+    return this.#load().get(key)?.a;
   }
-  const applied = [];
-  const skipped = [];
-  for (const [file, group] of byFile) {
-    const abs = join5(root2, file);
-    let text2;
-    try {
-      text2 = readFileSync5(abs, "utf8");
-    } catch (err) {
-      const why = messageLineOf(err);
-      for (const fix of group) skipped.push({ ...fix, why });
-      continue;
-    }
-    const lines = text2.split("\n");
-    let dirty = false;
-    for (const fix of [...group].sort((a, b) => b.line - a.line || (b.span?.col ?? 0) - (a.span?.col ?? 0))) {
-      const i = fix.line - 1;
-      const line = lines[i];
-      if (line === void 0) {
-        skipped.push({ ...fix, why: "line out of range" });
-        continue;
-      }
-      const rewritten = substituteOnLine(line, fix);
-      if (typeof rewritten !== "string") {
-        skipped.push({ ...fix, why: rewritten.why });
-        continue;
-      }
-      lines[i] = rewritten;
-      dirty = true;
-      applied.push(fix);
-    }
-    if (dirty && !dry) writeFileSync(abs, lines.join("\n"));
+  set(key, answers) {
+    const entry = { a: answers, t: Date.now() };
+    this.#load().set(key, entry);
+    this.#added.set(key, entry);
   }
-  applied.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
-  return { applied, skipped };
-}
-function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } = {}) {
-  const taken = new Set(directives.map((d) => `${d.file}\0${d.line}`));
-  const all = findings.flatMap((f) => (f.suggest ?? []).map((s) => ({ f, s, line: s.line ?? f.line })));
-  const onLine = /* @__PURE__ */ new Map();
-  for (const d of all) {
-    const k = `${d.f.file}\0${d.line}`;
-    onLine.set(k, [...onLine.get(k) ?? [], d]);
+  /** How many answers this run bought; nothing to write when it is zero. */
+  get added() {
+    return this.#added.size;
   }
-  const rulesOn = new Map(
-    [...onLine].map(([k, group]) => [k, [...new Set(group.map((d) => d.f.rule))].sort().join(",")])
-  );
-  const byFile = /* @__PURE__ */ new Map();
-  const skipped = [];
-  const deliberate = (s) => s.judged?.spans[0] === DELIBERATE;
-  for (const { f, s: decl2, line } of all) {
-    if (decl2.judged?.answer !== KEEP) continue;
-    const kept = {
-      file: f.file,
-      line,
-      prop: decl2.prop,
-      value: decl2.value,
-      reason: decl2.judged.spans.join(" ")
-    };
-    if (deliberate(decl2))
-      skipped.push({ ...kept, why: "judged deliberate \u2014 suppress it by hand, saying what the value is" });
-    else if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
-    else if (onLine.get(`${f.file}\0${line}`)?.some((o) => o.s.judged?.answer !== KEEP || deliberate(o.s)))
-      skipped.push({ ...kept, why: "shares its line with a value that is not suppressed" });
-    else byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
+  save() {
+    if (!this.#added.size) return;
+    const merged = _AnswerCache.#read(this.path);
+    for (const [k, v] of this.#added) merged.set(k, v);
+    const kept = [...merged].sort((x, y) => y[1].t - x[1].t).slice(0, ANSWER_MAX_ENTRIES);
+    const file = { version: 1, entries: Object.fromEntries(kept) };
+    if (writeJsonAtomic(this.path, file)) this.#added.clear();
   }
-  const applied = [];
-  for (const [file, group] of byFile) {
-    const abs = join5(root2, file);
-    let text2;
-    try {
-      text2 = readFileSync5(abs, "utf8");
-    } catch (err) {
-      const why = messageLineOf(err);
-      for (const k of group) skipped.push({ ...k, why });
-      continue;
-    }
-    const lines = text2.split("\n");
-    let last = 0;
-    for (const k of [...group].sort((a, b) => b.line - a.line)) {
-      if (k.line === last) {
-        applied.push(k);
-        continue;
-      }
-      const line = lines[k.line - 1];
-      if (line === void 0) {
-        skipped.push({ ...k, why: "line out of range" });
-        continue;
-      }
-      if (taken.has(`${file}\0${k.line - 1}`)) {
-        skipped.push({ ...k, why: "the line above already carries a directive \u2014 add the rule to it by hand" });
-        continue;
-      }
-      if (/(?:^|[^#])\{/.test(line)) {
-        skipped.push({ ...k, why: "on the rule's opening line, where a directive would mute the whole rule" });
-        continue;
-      }
-      const indent = /^[ \t]*/.exec(line)?.[0] ?? "";
-      const eol = line.endsWith("\r") ? "\r" : "";
-      const rules2 = rulesOn.get(`${file}\0${k.line}`) ?? "tokens/hardcoded-value";
-      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} ${rules2} -- ${k.reason} */${eol}`);
-      applied.push(k);
-      last = k.line;
-    }
-    if (last && !dry) writeFileSync(abs, lines.join("\n"));
-  }
-  applied.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
-  return { applied, skipped };
-}
-
-// src/judge.ts
-import { readFileSync as readFileSync8 } from "node:fs";
+};
 
 // src/embedded.ts
-import { existsSync as existsSync3, readFileSync as readFileSync6, readdirSync as readdirSync2 } from "node:fs";
-import { dirname as dirname2, join as join6 } from "node:path";
+import { existsSync as existsSync4, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "node:fs";
+import { dirname as dirname3, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // presets/archer.json
@@ -28847,7 +27485,8 @@ var package_default = {
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
     "eval:renames": "node evals/renames/run.ts",
-    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/multi-ds.ts && node tests/scopes.ts && node tests/delivery.ts && node tests/report.ts && node tests/serve.ts && node tests/lsp.ts"
+    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/judge-cache.ts && node tests/index-cache.ts && node tests/scan-pool.ts && node tests/multi-ds.ts && node tests/scopes.ts && node tests/delivery.ts && node tests/map.ts && node tests/report.ts && node tests/dom-match.ts && node tests/serve.ts && node tests/ui.ts && node tests/lsp.ts",
+    "eval:counterparts": "node evals/counterparts/run.ts"
   },
   dependencies: {
     "@babel/parser": "^7.24.0",
@@ -28882,7 +27521,7 @@ var EMBEDDED_PRESETS = Object.assign(/* @__PURE__ */ Object.create(null), {
 var EMBEDDED_VERSION = package_default.version;
 var EMBEDDED_LANGUAGE = patterns_default;
 var presetKey = (spec) => spec.replace(/^loupe\/presets\//, "");
-var PRESET_DIR = join6(dirname2(fileURLToPath(import.meta.url)), "..", "presets");
+var PRESET_DIR = join5(dirname3(fileURLToPath(import.meta.url)), "..", "presets");
 var presetNames = () => {
   try {
     return readdirSync2(PRESET_DIR).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, "")).sort();
@@ -28891,17 +27530,1804 @@ var presetNames = () => {
   }
 };
 var readPreset = (name) => {
-  const onDisk = join6(PRESET_DIR, `${name}.json`);
-  if (existsSync3(onDisk)) {
+  const onDisk = join5(PRESET_DIR, `${name}.json`);
+  if (existsSync4(onDisk)) {
     try {
-      return JSON.parse(readFileSync6(onDisk, "utf8"));
+      return JSON.parse(readFileSync4(onDisk, "utf8"));
     } catch {
       return void 0;
     }
   }
   return EMBEDDED_PRESETS[name];
 };
-var hasPreset = (spec) => existsSync3(join6(PRESET_DIR, `${presetKey(spec)}.json`)) || Boolean(EMBEDDED_PRESETS[presetKey(spec)]);
+var hasPreset = (spec) => existsSync4(join5(PRESET_DIR, `${presetKey(spec)}.json`)) || Boolean(EMBEDDED_PRESETS[presetKey(spec)]);
+
+// src/index-cache.ts
+var RACY_MS = 2e3;
+var STALE_MS = 7 * 24 * 60 * 60 * 1e3;
+function stableJson(value) {
+  return JSON.stringify(value, (_k, v) => {
+    if (v instanceof Set) return { $set: [...v].map(String).sort() };
+    if (v instanceof Map) return { $map: [...v] };
+    if (v instanceof RegExp) return { $re: String(v) };
+    return v;
+  });
+}
+function codeStamp() {
+  let here;
+  try {
+    here = fileURLToPath2(import.meta.url);
+  } catch {
+    return EMBEDDED_VERSION;
+  }
+  const stamp = (file, st) => `${file}:${st.size}:${st.mtimeMs}`;
+  try {
+    if (here.endsWith(".mjs")) return `${EMBEDDED_VERSION}|${stamp(here, statSync2(here))}`;
+    const dir = dirname4(here);
+    const parts = [EMBEDDED_VERSION];
+    const walk = (d) => {
+      for (const e of readdirSync3(d, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : 1)) {
+        const p = join6(d, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (e.name.endsWith(".ts")) parts.push(stamp(p, statSync2(p)));
+      }
+    };
+    walk(dir);
+    return parts.join("|");
+  } catch {
+    return EMBEDDED_VERSION;
+  }
+}
+var CODE = null;
+var IndexCache = class {
+  path;
+  #entries;
+  #seen = /* @__PURE__ */ new Set();
+  #dirty = false;
+  constructor(root2, inputs) {
+    CODE ??= codeStamp();
+    const fp = sha256(`${CODE}
+${stableJson(inputs)}`).slice(0, 16);
+    this.path = join6(projectStateDir(root2), `index-${fp}.json`);
+    const raw = readJson(this.path);
+    this.#entries = new Map(raw?.version === 1 && raw.entries ? Object.entries(raw.entries) : []);
+  }
+  /**
+   * What is known about a file. `entry` is non-null only when it still
+   * describes the file on disk; `text` is non-null whenever the bytes were read
+   * to decide that, so the caller never reads them twice.
+   */
+  lookup(abs, rel) {
+    this.#seen.add(rel);
+    const at = Date.now();
+    let stat = null;
+    try {
+      stat = statSync2(abs);
+    } catch {
+      return { at, stat: null, entry: null, text: null };
+    }
+    const entry = this.#entries.get(rel);
+    if (!entry || entry.s !== stat.size) return { at, stat, entry: null, text: null };
+    if (entry.m === stat.mtimeMs && entry.m < entry.t - RACY_MS) return { at, stat, entry, text: null };
+    let text2;
+    try {
+      text2 = readFileSync5(abs, "utf8");
+    } catch {
+      return { at, stat, entry: null, text: null };
+    }
+    if (sha256(text2) !== entry.h) return { at, stat, entry: null, text: text2 };
+    entry.m = stat.mtimeMs;
+    entry.t = at;
+    this.#dirty = true;
+    return { at, stat, entry, text: text2 };
+  }
+  /**
+   * Record what a file contributed, from the bytes just analyzed. Stamped with
+   * the lookup's time, not the time of storing: a scan can finish seconds after
+   * the read, and the racy-mtime guard is measured from the read.
+   */
+  store(look, rel, text2, data) {
+    if (!look.stat) return;
+    this.#entries.set(rel, { m: look.stat.mtimeMs, s: look.stat.size, h: sha256(text2), t: look.at, ...data });
+    this.#dirty = true;
+  }
+  /**
+   * Written only when something changed, and pruned to the files this run saw:
+   * a deleted file's entry would otherwise ride along forever.
+   */
+  save() {
+    for (const rel of this.#entries.keys())
+      if (!this.#seen.has(rel)) {
+        this.#entries.delete(rel);
+        this.#dirty = true;
+      }
+    if (!this.#dirty) return;
+    const file = { version: 1, entries: Object.fromEntries(this.#entries) };
+    if (writeJsonAtomic(this.path, file)) this.#dirty = false;
+    try {
+      const dir = dirname4(this.path);
+      const now = Date.now();
+      for (const name of readdirSync3(dir))
+        if (/^index-[0-9a-f]+\.json$/.test(name) && join6(dir, name) !== this.path) {
+          const p = join6(dir, name);
+          if (now - statSync2(p).mtimeMs > STALE_MS) rmSync2(p, { force: true });
+        }
+    } catch {
+    }
+  }
+};
+var storeScan = (scan) => {
+  const plain = JSON.parse(JSON.stringify({ ...scan, imports: [], referenced: [], stems: [] }));
+  plain.imports = [...scan.imports];
+  plain.referenced = [...scan.referenced];
+  plain.stems = [...scan.stems];
+  return plain;
+};
+var loadScan = (stored) => ({
+  ...stored,
+  imports: new Set(stored.imports),
+  referenced: new Set(stored.referenced),
+  stems: new Set(stored.stems)
+});
+
+// src/scan-pool.ts
+import os from "node:os";
+import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
+var TAG = "loupe-scan-worker";
+var MIN_FILES = 150;
+var MIN_BYTES = 6e5;
+var BATCH = 24;
+function workerCount(jobs) {
+  if (isOn(process.env.LOUPE_NO_WORKERS)) return 0;
+  if (process.versions.bun) return 0;
+  if (jobs.length < MIN_FILES) return 0;
+  let bytes = 0;
+  for (const j of jobs) bytes += j.text.length;
+  if (bytes < MIN_BYTES) return 0;
+  const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
+  if (cores < 2) return 0;
+  return Math.min(cores - 1, 8, Math.ceil(jobs.length / BATCH));
+}
+var scanAll = (jobs, ds, rules2) => jobs.map((j) => scanMarkup(j.text, j.rel, ds, rules2));
+async function scanMany(jobs, ds, rules2) {
+  const debug = (line) => {
+    if (isOn(process.env.LOUPE_DEBUG_SCAN)) process.stderr.write(`loupe: ${line}
+`);
+  };
+  const n = workerCount(jobs);
+  if (n) {
+    try {
+      const out2 = await inWorkers(jobs, ds, rules2, n);
+      debug(`scanned ${jobs.length} file(s) across ${n} worker(s)`);
+      return out2;
+    } catch (err) {
+      debug(`workers failed (${err instanceof Error ? err.message : String(err)}), scanning in-process`);
+    }
+  }
+  const out = scanAll(jobs, ds, rules2);
+  if (jobs.length) debug(`scanned ${jobs.length} file(s) in-process`);
+  return out;
+}
+function inWorkers(jobs, ds, rules2, n) {
+  const out = new Array(jobs.length);
+  let next = 0;
+  let left = jobs.length;
+  const workers = [];
+  return new Promise((resolve8, reject) => {
+    let settled = false;
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      for (const w of workers) void w.terminate();
+      if (err) reject(err);
+      else resolve8(out);
+    };
+    const feed = (w) => {
+      if (next >= jobs.length) return;
+      const batch = jobs.slice(next, next + BATCH).map((j, k) => ({ ...j, i: next + k }));
+      next += batch.length;
+      w.postMessage(batch);
+    };
+    for (let k = 0; k < n; k++) {
+      const w = new Worker(new URL(import.meta.url), { workerData: { [TAG]: true, ds, rules: rules2 } });
+      workers.push(w);
+      w.on("message", (done) => {
+        for (const { i, scan } of done) out[i] = scan;
+        left -= done.length;
+        if (left === 0) finish();
+        else feed(w);
+      });
+      w.on("error", finish);
+      w.on("exit", (code) => {
+        if (code !== 0) finish(new Error(`scan worker exited with ${code}`));
+      });
+      feed(w);
+    }
+  });
+}
+if (!isMainThread && workerData?.[TAG] && parentPort) {
+  const { ds, rules: rules2 } = workerData;
+  const port = parentPort;
+  port.on("message", (batch) => {
+    port.postMessage(batch.map((j) => ({ i: j.i, scan: scanMarkup(j.text, j.rel, ds, rules2) })));
+  });
+}
+
+// src/checks/css/dead-class.ts
+function deadClasses(declared, {
+  referenced,
+  stems,
+  isProject,
+  isNeverDead
+}) {
+  const isReferenced = (cls) => referenced.has(cls) || isNeverDead(cls) || stems.some((s) => cls.startsWith(s));
+  const rules2 = /* @__PURE__ */ new Map();
+  for (const d of declared) {
+    const key = `${d.file}\0${d.cls}`;
+    rules2.set(key, (rules2.get(key) ?? 0) + 1);
+  }
+  const seen = /* @__PURE__ */ new Set();
+  return declared.flatMap(({ file, line, cls, scopeLines, cut }) => {
+    const key = `${file}\0${cls}`;
+    if (seen.has(key) || !isProject(cls) || isReferenced(cls)) return [];
+    seen.add(key);
+    return [
+      {
+        rule: "css/dead-class",
+        file,
+        line,
+        message: `.${cls}`,
+        code: `.${cls}`,
+        selector: `.${cls}`,
+        scopeLines,
+        dead: rules2.get(key) === 1 ? cut : void 0
+      }
+    ];
+  });
+}
+
+// src/checks/layout/in-css.ts
+var layoutInCss = ({ prop, value }, { boundSystem, isGrid }) => {
+  const decl2 = `${prop}: ${value}`;
+  if (GAP_PROPS.has(prop))
+    return !boundSystem.length && !isGrid ? { rule: "layout/in-css", message: decl2, code: prop } : null;
+  if (!isFlexDecl(prop, value)) return void 0;
+  const gridDisplay = prop === "display" && /\bgrid\b/.test(value);
+  return !boundSystem.length && !isGrid && !gridDisplay ? { rule: "layout/in-css", message: decl2, code: oneLine(decl2) } : null;
+};
+
+// src/checks/layout/margin.ts
+var margin = ({ prop, value }) => {
+  if (!isMarginProp(prop)) return void 0;
+  const kind = classifyMargin(value);
+  const decl2 = `${prop}: ${value}`;
+  if (kind === "negative") return { rule: "layout/negative-margin", message: decl2, code: prop };
+  return kind ? { rule: "layout/margin-on-child", message: decl2, code: prop } : null;
+};
+
+// src/checks/patterns/composites.ts
+function composites({
+  found,
+  hits,
+  registry,
+  importsByFile,
+  enabled: enabled2
+}) {
+  const dupEnabled = enabled2("patterns/duplicate-composite");
+  const newEnabled = enabled2("patterns/unregistered-composite");
+  const supEnabled = enabled2("patterns/superseded-composite");
+  if (!(dupEnabled || newEnabled || supEnabled) || !(found.length || hits.length)) return [];
+  const out = [];
+  const anatomyRoots = registry.flatMap(
+    (p) => p.node && p.canonical && p.canonical === p.node.name.split(".")[0] ? [p.canonical] : []
+  );
+  const bestMatch = (c) => registry.filter((p) => p.node !== null && p.size >= SUBSTANTIAL.minNodes && matches(p.node, c.tree)).sort((a, b) => b.size - a.size)[0] ?? null;
+  const avoidMatch = (c) => {
+    let best = null;
+    for (const p of registry) {
+      let fit = 0;
+      for (const a of p.avoid) if (matches(a, c.tree)) fit = Math.max(fit, nodeCount(a));
+      if (fit && (!best || fit > best.fit)) best = { pattern: p, fit };
+    }
+    return best?.pattern ?? null;
+  };
+  const byPattern = /* @__PURE__ */ new Map();
+  const bySuperseded = /* @__PURE__ */ new Map();
+  const bySignature = /* @__PURE__ */ new Map();
+  for (const c of found) {
+    const hit = dupEnabled ? bestMatch(c) : null;
+    if (hit) {
+      if (hit.canonical && importsByFile.get(c.file)?.has(hit.canonical)) continue;
+      const perFile2 = byPattern.get(hit.id) ?? /* @__PURE__ */ new Map();
+      byPattern.set(hit.id, perFile2);
+      const prev2 = perFile2.get(c.file);
+      if (!prev2 || c.size > prev2.size) perFile2.set(c.file, { ...c, pattern: hit });
+      continue;
+    }
+    const avoided = supEnabled ? avoidMatch(c) : null;
+    if (avoided) {
+      if (avoided.canonical && importsByFile.get(c.file)?.has(avoided.canonical)) continue;
+      const perFile2 = bySuperseded.get(avoided.id) ?? /* @__PURE__ */ new Map();
+      bySuperseded.set(avoided.id, perFile2);
+      const prev2 = perFile2.get(c.file);
+      if (!prev2 || c.size < prev2.size) perFile2.set(c.file, { ...c, pattern: avoided });
+      continue;
+    }
+    if (!newEnabled || c.size < SUBSTANTIAL.minNodes || c.depth < SUBSTANTIAL.minDepth) continue;
+    if (anatomyRoots.some((root2) => partsOf(root2, c.tree))) continue;
+    const perFile = bySignature.get(c.signature) ?? /* @__PURE__ */ new Map();
+    bySignature.set(c.signature, perFile);
+    const prev = perFile.get(c.file);
+    if (!prev || c.line < prev.line) perFile.set(c.file, c);
+  }
+  const emit = (rule2, c, signature, tail, group) => {
+    out.push({
+      rule: rule2,
+      file: c.file,
+      line: c.line,
+      message: `${signature}${tail}`,
+      suffix: tail,
+      code: c.signature,
+      group
+    });
+  };
+  for (const [id, files] of byPattern) {
+    if (files.size < 2) continue;
+    for (const c of files.values()) {
+      const remedy = c.pattern?.canonical ? `import \`${c.pattern.canonical}\`` : "extract one shared implementation";
+      emit(
+        "patterns/duplicate-composite",
+        c,
+        c.signature,
+        ` \u2014 rebuilds \`${id}\`, also in ${files.size - 1} other file(s); ${remedy}`,
+        id
+      );
+    }
+  }
+  if (supEnabled)
+    for (const h of hits) {
+      const entry = registry.find((p) => p.id === h.patternId);
+      if (!entry) continue;
+      if (entry.canonical && importsByFile.get(h.file)?.has(entry.canonical)) continue;
+      const remedy = entry.canonical ? `use \`${entry.canonical}\`` : `follow the \`${entry.id}\` pattern`;
+      emit(
+        "patterns/superseded-composite",
+        { file: h.file, line: h.line, signature: `rule:${h.rule}:${h.detail}` },
+        h.detail,
+        ` \u2014 \`${entry.id}\` covers this; ${remedy}`,
+        entry.id
+      );
+    }
+  for (const [id, files] of bySuperseded) {
+    for (const c of files.values()) {
+      const remedy = c.pattern?.canonical ? `use \`${c.pattern.canonical}\`` : `follow the \`${id}\` pattern`;
+      emit("patterns/superseded-composite", c, c.signature, ` \u2014 \`${id}\` covers this; ${remedy}`, id);
+    }
+  }
+  for (const [sig, files] of bySignature) {
+    if (files.size < 3) continue;
+    for (const c of files.values())
+      emit("patterns/unregistered-composite", c, sig, ` \u2014 assembled in ${files.size} files, registered in none`, sig);
+  }
+  return out;
+}
+
+// src/checks/system/currency.ts
+var namedReplacements = (supersededBy) => [...(supersededBy ?? "").matchAll(/([A-Z][\w.]*)\s*\(\s*(@[\w@/.-]+)/g)].map((m) => ({
+  name: String(m[1]),
+  package: String(m[2])
+}));
+var supersededEverywhere = (registry, name) => {
+  const entries = [...registry.values()].filter((e) => e.name === name);
+  return entries.length > 0 && !entries.some((e) => e.status === "recommended");
+};
+function usableReplacement(registry, supersededBy) {
+  const candidates = namedReplacements(supersededBy);
+  if (!candidates.length) return true;
+  return candidates.some((c) => {
+    const entry = registry.get(`${c.package}::${c.name}`) ?? registry.get(`${c.package}::${c.name.split(".")[0]}`);
+    return !entry || entry.status !== "locked" && entry.status !== "experimental";
+  });
+}
+function currency(imports, registry, enabled2) {
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const ci of imports) {
+    if (ci.file === void 0) continue;
+    const entry = registry.get(`${ci.package}::${ci.canonical}`);
+    if (!entry || entry.status !== "legacy" && entry.status !== "locked") continue;
+    const rule2 = entry.status === "locked" ? "system/locked-component" : "system/superseded-component";
+    if (!enabled2(rule2)) continue;
+    if (!usableReplacement(registry, entry.supersededBy)) continue;
+    const key = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const remedy = entry.supersededBy ? ` \u2192 ${entry.supersededBy}` : "";
+    const uses = ci.uses > 1 ? ` \xD7${ci.uses}` : "";
+    out.push({
+      rule: rule2,
+      file: ci.file,
+      line: ci.line,
+      message: `${ci.canonical} (${ci.package})${uses}${remedy}`,
+      // Carried, not concatenated: the finalize pass caps `message`.
+      note: entry.note,
+      code: `${rule2}:${ci.package}:${ci.canonical}`,
+      // The declaration line and the one above it are both suppression anchors.
+      scopeLines: [ci.declLine, ci.declLine - 1]
+    });
+  }
+  return out;
+}
+
+// src/checks/system/inline-style.ts
+function inlineStyle(el, allowed = /* @__PURE__ */ new Map()) {
+  if (!el.isSystem) return null;
+  const ok = el.component && allowed.get(el.component) || /* @__PURE__ */ new Set();
+  const opaque = el.dynamic - el.dynamicProps.length;
+  const decls = el.decls.map((d) => d.prop).filter((p) => !ok.has(p));
+  const dynamic = el.dynamicProps.filter((p) => !ok.has(p)).length + opaque;
+  if (!decls.length && !dynamic) return null;
+  const shown = decls.slice(0, 3).join(", ");
+  const extra = decls.length + dynamic - Math.min(decls.length, 3);
+  return {
+    rule: "system/inline-style",
+    message: `<${el.tag}> style={{ ${shown || "\u2026"}${extra > 0 ? `, +${extra}` : ""} }}`,
+    code: `<${el.tag}> inline-style`
+  };
+}
+
+// src/checks/system/override.ts
+function owningBinding(bound, prop, surfaceOf) {
+  for (const binding of bound) {
+    const surface = surfaceOf(binding);
+    const owned = surface && ownership(surface, prop);
+    if (owned) return { binding, via: owned.via };
+  }
+  return void 0;
+}
+var viaProps = (via) => via.length === 1 ? `its ${via[0]} prop` : `its ${via.slice(0, -1).join(", ")} and ${via.at(-1)} props`;
+var UNREAD_REMEDY = "restyle via its props/tokens, not CSS";
+var systemOverride = ({ prop }, { boundSystem, enabled: enabled2, surfaceOf, surfaced }) => {
+  if (!boundSystem[0] || !APPEARANCE_PROPS.has(prop) || !enabled2("system/override")) return void 0;
+  const owner = owningBinding(boundSystem, prop, surfaceOf);
+  const code = `<${boundSystem[0].tag}> \u2190 ${prop}`;
+  if (owner) {
+    const head2 = `<${owner.binding.tag}> \u2190 ${prop}`;
+    return {
+      rule: "system/override",
+      message: owner.via.length ? `${head2} \u2014 set via ${viaProps(owner.via)}` : `${head2} \u2014 it sets this itself and has no prop for it`,
+      code
+    };
+  }
+  const unread = boundSystem.find((b) => !surfaced(b));
+  if (!unread) return void 0;
+  return { rule: "system/override", message: `<${unread.tag}> \u2190 ${prop} \u2014 ${UNREAD_REMEDY}`, code };
+};
+function libraryOverride(keyClasses, isLibrary, isProject) {
+  const part = keyClasses.find((c) => isLibrary(c) && !isProject(c));
+  return part ? { rule: "system/override", message: `.${part} (library internal)` } : null;
+}
+
+// src/checks/system/raw-element.ts
+var PROPS_MAX = 4;
+var CLASSES_MAX = 2;
+var named = (items, max) => `${items.slice(0, max).join(", ")}${items.length > max ? ` (+${items.length - max} more)` : ""}`;
+var LEVEL = { none: 0, off: 0, warn: 1, error: 2 };
+var VERB = ["clear", "warn", "block"];
+function conversion(el, name, pkg, { decls, verdictAs, severityOf, textComponents }) {
+  const isText = textComponents.includes(name);
+  const as = { tag: name, isSystem: true, isText, component: name, ...pkg ? { package: pkg } : {} };
+  const level = (rule2) => LEVEL[rule2 ? severityOf(rule2) : "none"];
+  const changed = /* @__PURE__ */ new Map();
+  for (const cls of new Set(el.classes))
+    for (const d of decls.get(cls) ?? []) {
+      const after = level(verdictAs(d, as));
+      if (after === level(d.now)) continue;
+      const group = changed.get(after) ?? { props: [], classes: /* @__PURE__ */ new Set() };
+      if (!group.props.includes(d.prop)) group.props.push(d.prop);
+      group.classes.add(cls);
+      changed.set(after, group);
+    }
+  if (!changed.size) return void 0;
+  const parts = [...changed].sort(([a], [b]) => b - a).map(([at, { props, classes }]) => {
+    const on = named(
+      [...classes].map((c) => `.${c}`),
+      CLASSES_MAX
+    );
+    return `would ${VERB[at]}: ${named(props, PROPS_MAX)} (${on})`;
+  });
+  return `converted, ${parts.join("; ")}`;
+}
+function currentAnalog(registry, suggest, render) {
+  if (!supersededEverywhere(registry, suggest)) {
+    const open = render ? `<${suggest} render={ <${render} /> }>` : `<${suggest}>`;
+    const current = [...registry.values()].filter((e) => e.name === suggest && e.status === "recommended");
+    const pkg = current.length === 1 ? current[0]?.package : void 0;
+    return { text: pkg ? `${open} (${pkg})` : open, current: { name: suggest, package: pkg } };
+  }
+  const remedy = [...registry.values()].find((e) => e.name === suggest && e.supersededBy)?.supersededBy;
+  return { text: remedy || `<${suggest}>` };
+}
+function rawElements(els, {
+  layoutComponents,
+  styledClasses,
+  layoutClasses,
+  registry,
+  promotion
+}) {
+  return els.flatMap((el) => {
+    if (el.styledOnly) {
+      const suggestsLayout = String(el.suggest).split("/").some((n) => layoutComponents.includes(n.trim()));
+      const laidOut = el.inlineLayout || el.classes.some((c) => layoutClasses.has(c));
+      const styled = el.inlineStyled || el.classes.some((c) => styledClasses.has(c));
+      if (suggestsLayout ? !laidOut : !styled) return [];
+    }
+    const analog = currentAnalog(registry, el.suggest, el.render);
+    const name = analog.current?.name;
+    const target = typeof name === "string" && name && !name.includes("/") ? analog.current : void 0;
+    const tail = target && promotion ? conversion(el, target.name, target.package, promotion) : void 0;
+    return [
+      {
+        rule: "system/raw-element",
+        file: el.file,
+        line: el.line,
+        message: `<${el.tag}> \u2192 ${analog.text}${tail ? ` \u2014 ${tail}` : ""}`,
+        code: `<${el.tag}>`
+      }
+    ];
+  });
+}
+
+// src/checks/tokens/hardcoded-value.ts
+var hardcodedValue = ({ prop, value }) => {
+  if (!isHardcodedTokenValue(prop, value)) return void 0;
+  const decl2 = `${prop}: ${value}`;
+  return { rule: "tokens/hardcoded-value", message: decl2, code: oneLine(decl2), hints: [{ prop, value }] };
+};
+
+// src/checks/tokens/undelivered.ts
+var import_picomatch2 = __toESM(require_picomatch2(), 1);
+import { readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
+var FALLBACKS = "fallbacks render but won't follow the theme";
+var WALK_LIMIT = 5e4;
+var FILE_LIMIT = 4e3;
+var MAX_BYTES = 15e5;
+var ARGS_MAX = 5e3;
+function stripComments(text2) {
+  const out = text2.split("");
+  let quote = null;
+  for (let i = 0; i < out.length; i++) {
+    const c = out[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
+    }
+    const next = out[i + 1];
+    let stop;
+    if (c === "/" && next === "/" || c === "#" && next !== "[") stop = text2.indexOf("\n", i);
+    else if (c === "/" && next === "*") {
+      const close = text2.indexOf("*/", i + 2);
+      stop = close === -1 ? -1 : close + 2;
+    } else continue;
+    if (stop === -1) stop = out.length;
+    for (let k = i; k < stop; k++) if (out[k] !== "\n") out[k] = " ";
+    i = stop - 1;
+  }
+  return out.join("");
+}
+function argumentsAt(text2, open) {
+  const args = [];
+  let depth = 0;
+  let quote = null;
+  let start = open + 1;
+  const stop = Math.min(text2.length, open + ARGS_MAX);
+  for (let i = open + 1; i < stop; i++) {
+    const c = text2[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"') quote = c;
+    else if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" && depth === 0) {
+      const last = text2.slice(start, i).trim();
+      if (last || args.length) args.push(last);
+      return args;
+    } else if (c === ")" || c === "]" || c === "}") depth--;
+    else if (c === "," && depth === 0) {
+      args.push(text2.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  return null;
+}
+function closingAt(text2, open) {
+  let depth = 0;
+  let quote = null;
+  const stop = Math.min(text2.length, open + ARGS_MAX);
+  for (let i = open; i < stop; i++) {
+    const c = text2[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+    } else if (c === "'" || c === '"') quote = c;
+    else if (c === "(" || c === "[" || c === "{") depth++;
+    else if ((c === ")" || c === "]" || c === "}") && --depth === 0) return i;
+  }
+  return -1;
+}
+var literal = (arg) => {
+  const m = /^'((?:[^'\\]|\\.)*)'$|^"((?:[^"\\$]|\\.)*)"$/.exec(arg.trim());
+  return m ? m[1] ?? m[2] ?? "" : null;
+};
+function dependencyList(arg) {
+  if (arg === void 0 || arg === "") return { handles: [], complete: true };
+  const text2 = arg.trim();
+  const named2 = [...text2.matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\$]|\\.)*)"/g)].map((m) => m[1] ?? m[2] ?? "");
+  const open = /^array\s*\(/i.exec(text2)?.[0].length ?? (text2.startsWith("[") ? 1 : 0);
+  const close = open ? closingAt(text2, open - 1) : -1;
+  if (close !== text2.length - 1) return { handles: named2, complete: false };
+  const list2 = text2.slice(open, close);
+  const items = argumentsAt(`(${list2})`, 0) ?? [];
+  const complete = items.every((item) => item === "" || literal(item) !== null);
+  return { handles: named2, complete };
+}
+function dependencyArgument(args, index2) {
+  const named2 = args.find((a) => /^deps\s*:(?!:)/.test(a));
+  if (named2 !== void 0) return named2.replace(/^deps\s*:/, "").trim();
+  const arg = args[index2];
+  return arg !== void 0 && /^[A-Za-z_]\w*\s*:(?!:)/.test(arg) ? void 0 : arg;
+}
+var lineAt = (text2, offset) => text2.slice(0, offset).split("\n").length;
+function enqueueVerdict(check, files) {
+  const calls = new RegExp(`(?<![\\w$>:])(${check.calls.join("|")})\\s*\\(`, "g");
+  let seen = 0;
+  let first = null;
+  let unknown = false;
+  for (const { rel, text: text2 } of files) {
+    const code = stripComments(text2);
+    for (const m of code.matchAll(calls)) {
+      if (/\bfunction\s+$/.test(code.slice(Math.max(0, m.index - 20), m.index))) continue;
+      const args = argumentsAt(code, m.index + m[0].length - 1);
+      seen++;
+      first ??= { file: rel, line: lineAt(code, m.index) };
+      if (!args) {
+        unknown = true;
+        continue;
+      }
+      const own = literal(args[0] ?? "");
+      if (own !== null && check.enqueues.includes(String(m[1])) && check.handles.includes(own))
+        return { state: "delivered" };
+      const deps = dependencyList(dependencyArgument(args, check.argument));
+      if (deps.handles.some((h) => check.handles.includes(h))) return { state: "delivered" };
+      if (!deps.complete) unknown = true;
+    }
+  }
+  if (unknown) return { state: "unknown" };
+  return first ? { state: "missing", calls: seen, first } : { state: "silent" };
+}
+var SPECIFIERS = /@(?:import|use|forward)\s+(?:url\(\s*)?['"]([^'"]+)['"]|\bimport\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|\brequire\(\s*['"]([^'"]+)['"]|@import\s+url\(\s*([^'"()\s]+)\s*\)/g;
+var withoutExt = (s) => s.replace(/\.(?:s?css|sass|less)$/, "");
+function importVerdict(check, files) {
+  const wanted = check.specifiers.map(withoutExt);
+  for (const { text: text2 } of files)
+    for (const m of text2.matchAll(SPECIFIERS)) {
+      const spec = withoutExt(String(m[1] ?? m[2] ?? m[3] ?? m[4]).replace(/^~/, ""));
+      if (wanted.some((w) => spec === w || spec.endsWith(`/${w}`))) return { state: "delivered" };
+    }
+  return { state: "silent" };
+}
+function readEvidenceFiles(root2, checks, ignore) {
+  const globs = [...new Set(checks.flatMap((c) => c.files))];
+  const found = discover({
+    root: root2,
+    sources: { styles: globs, markup: [], references: [], ignore: [...ignore] },
+    limit: WALK_LIMIT
+  });
+  if (found.truncated || found.styles.length > FILE_LIMIT) return null;
+  const out = [];
+  for (const { abs, rel } of found.styles) {
+    try {
+      if (statSync3(abs).size > MAX_BYTES) return null;
+      out.push({ rel, text: readFileSync6(abs, "utf8") });
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
+function undelivered({
+  root: root2,
+  ignore,
+  tokens,
+  refs,
+  prefixes,
+  projectDefined,
+  reports
+}) {
+  if (!tokens) return [];
+  const namespace = tokens.prefixes.length ? tokens.prefixes : prefixes;
+  if (!namespace.length) return [];
+  const used = refs.filter((r) => namespace.some((p) => r.name.startsWith(p)) && !projectDefined.has(r.name)).sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
+  const [anchor] = used;
+  if (!anchor || !reports(anchor.file)) return [];
+  const files = readEvidenceFiles(root2, [...tokens.evidence, ...tokens.fallbacks], ignore);
+  if (!files) return [];
+  const verdictOf = (check) => {
+    const mine = files.filter((f) => (0, import_picomatch2.default)(check.files)(f.rel));
+    if (check.kind === "enqueue-dependency") return enqueueVerdict(check, mine);
+    if (check.kind === "import") return importVerdict(check, mine);
+    return mine.some((f) => check.pattern.test(f.text)) ? { state: "delivered" } : { state: "silent" };
+  };
+  const verdicts = tokens.evidence.map(verdictOf);
+  if (verdicts.some((v) => v.state === "delivered" || v.state === "unknown")) return [];
+  const missing = verdicts.find((v) => v.state === "missing");
+  if (!missing) return [];
+  const target = tokens.handle ?? tokens.stylesheet;
+  const fallbacks = tokens.fallbacks.some((check) => verdictOf(check).state === "delivered");
+  const users = new Set(used.map((r) => r.file)).size;
+  const shown = namespace.map((p) => `${p}*`).join(", ");
+  return [
+    {
+      rule: "tokens/undelivered",
+      file: anchor.file,
+      line: anchor.line,
+      message: `${shown} used in ${users} file(s); none of ${missing.calls} style enqueue(s) depends on ${target} (first: ${missing.first.file}:${missing.first.line})`,
+      // One per project and delivery: the count and the first enqueue move with
+      // every edit, and a baseline must not.
+      code: `tokens/undelivered:${target}`,
+      // The remedy, short enough to survive as the line's tail. The profile's
+      // own prose on it is `loupe explain`'s to print, whole. With fallbacks
+      // the page does render, so the note says why that is not enough, and
+      // stays short enough for both clauses to survive the tail's bound.
+      note: fallbacks ? `${FALLBACKS}${tokens.handle ? `; add '${tokens.handle}' to this CSS's enqueue dependencies` : ""}` : tokens.handle ? `list '${tokens.handle}' in the dependencies of the enqueue loading this CSS` : void 0,
+      scopeLines: anchor.scopeLines
+    }
+  ];
+}
+
+// src/checks/tokens/unknown-token.ts
+function oneEdit(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let head2 = 0;
+  while (head2 < a.length && head2 < b.length && a[head2] === b[head2]) head2++;
+  let tail = 0;
+  while (tail < a.length - head2 && tail < b.length - head2 && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  return a.length - head2 - tail <= 1 && b.length - head2 - tail <= 1;
+}
+var spelling = (name) => name.replace(/\d/g, "");
+function nearMiss(name, known) {
+  let found;
+  for (const k of known) {
+    if (!oneEdit(name, k) || spelling(k) === spelling(name)) continue;
+    if (found !== void 0) return void 0;
+    found = k;
+  }
+  return found;
+}
+function renameCandidates(name, prop, known, scopes) {
+  const names = [...known];
+  const tails = prop.startsWith("--") ? prop.slice(2).split("-") : [];
+  let family = onRole(names, prop, scopes);
+  for (let k = 0; !family.length && k < tails.length; k++) family = onRole(names, tails.slice(k).join("-"), scopes);
+  const segs = name.split("-");
+  for (let k = segs.length - 1; !family.length && k >= 4; k--) {
+    const head2 = `${segs.slice(0, k).join("-")}-`;
+    family = names.filter((n) => n.startsWith(head2));
+  }
+  return [.../* @__PURE__ */ new Set([...family, ...names.filter((n) => oneEdit(name, n))])];
+}
+function unknownTokens(refs, known) {
+  if (!known.size) return [];
+  const groups = /* @__PURE__ */ new Map();
+  for (const ref of refs) {
+    if (known.has(ref.name)) continue;
+    const group = groups.get(`${ref.file}\0${ref.name}`);
+    if (group) {
+      if (!group.lines.includes(ref.line)) group.lines.push(ref.line);
+      continue;
+    }
+    groups.set(`${ref.file}\0${ref.name}`, { ...ref, lines: [ref.line] });
+  }
+  return [...groups.values()].map(({ file, line, name, prop, scopeLines, lines }) => {
+    const to = nearMiss(name, known);
+    const rename = to === void 0 ? void 0 : { from: name, to, lines };
+    return {
+      rule: "tokens/unknown-token",
+      file,
+      line,
+      // The name alone: the rule's title already says a token is being named.
+      // With the replacement beside it where one is settled, so a reader sees
+      // what `fix` would write without having to run it.
+      message: to === void 0 ? name : `${name} \u2192 ${to}`,
+      code: name,
+      scopeLines,
+      rename,
+      unknown: rename ? void 0 : { prop, lines }
+    };
+  });
+}
+
+// src/checks/tokens/misapplied-token.ts
+function plainRefs(value) {
+  const out = [];
+  const stack = [];
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    if (ch === ")") stack.pop();
+    if (ch !== "(") continue;
+    const fn = /([-\w]*)$/.exec(value.slice(0, i))?.[1]?.toLowerCase() ?? "";
+    if (fn === "var" && !stack.includes(true)) {
+      const name = /^\(\s*(--[\w-]+)/.exec(value.slice(i))?.[1];
+      if (name) out.push(name);
+    }
+    stack.push(["calc", "min", "max", "clamp"].includes(fn) || fn.endsWith("-calc"));
+  }
+  return out;
+}
+function misappliedTokens(refs, scopes, known) {
+  if (!scopes) return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const ref of refs) {
+    const prop = ref.prop.toLowerCase();
+    if (prop.startsWith("--") || prop.startsWith("$") || prop.startsWith("@")) continue;
+    const bare = prop.replace(/^-(?:webkit|moz|ms|o)-/, "");
+    const admits = (props) => propMatches(props, prop) || propMatches(props, bare);
+    if (known.size && !known.has(ref.name)) continue;
+    if (!plainRefs(ref.value).includes(ref.name)) continue;
+    const at = place(scopes, ref.name);
+    if (!at) continue;
+    const key = `${ref.file}\0${ref.line}\0${prop}\0${ref.name}`;
+    if (seen.has(key)) continue;
+    let why = null;
+    if (at.property !== null && !admits(at.sets) && !admits(at.also))
+      why = `${at.property.startsWith("--") ? "its family" : `a ${at.property} token`} sets ${at.sets.join(", ")}`;
+    else {
+      const fit = fitOf(scopes, ref.name, ref.elements);
+      if (fit.fit === "off") why = fit.why;
+    }
+    if (why === null) continue;
+    seen.add(key);
+    out.push({
+      rule: "tokens/misapplied-token",
+      file: ref.file,
+      line: ref.line,
+      message: `${prop}: ${ref.name} \u2014 ${why}`,
+      // The token and where it is written, not why: a declaration that edits
+      // its scope stays the same finding.
+      code: `${prop}: ${ref.name}`,
+      scopeLines: ref.scopeLines
+    });
+  }
+  return out;
+}
+
+// src/checks/typography/in-css.ts
+var typographyInCss = ({ prop }, { boundText, enabled: enabled2, surfaceOf }) => {
+  if (!TYPE_PROPS.has(prop) || !boundText[0] || !enabled2("typography/in-css")) return void 0;
+  const owner = owningBinding(boundText, prop, surfaceOf);
+  const text2 = owner?.binding ?? boundText.find((b) => !surfaceOf(b));
+  if (!text2) return void 0;
+  const head2 = `${prop} on <${text2.tag}>`;
+  const code = `${prop} on <${boundText[0].tag}>`;
+  return {
+    rule: "typography/in-css",
+    message: owner?.via.length ? `${head2} \u2014 set via ${viaProps(owner.via)}` : head2,
+    code
+  };
+};
+
+// src/checks/typography/untokenized.ts
+var untokenizedType = ({ prop, value }) => {
+  if (!TYPE_PROPS.has(prop)) return void 0;
+  if (usesToken(value) || isInertValue(value)) return null;
+  const decl2 = `${prop}: ${value}`;
+  return { rule: "typography/untokenized", message: decl2, code: oneLine(decl2), hints: [{ prop, value }] };
+};
+
+// src/analyze.ts
+var realPath = (path) => {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return null;
+  }
+};
+var partClass = (sel) => keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, "")).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+var tagOf = (compound) => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
+function keyCompound(sel) {
+  let depth = 0;
+  let quote = "";
+  let start = 0;
+  const s = sel.trim();
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === "\\") i++;
+    else if (quote) {
+      if (ch === quote) quote = "";
+    } else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+    else if (!depth && (ch === " " || ch === "\n" || ch === "	" || ch === ">" || ch === "+" || ch === "~"))
+      start = i + 1;
+  }
+  return s.slice(start);
+}
+function ownLevel(compound) {
+  let depth = 0;
+  let quote = "";
+  let out = "";
+  for (let i = 0; i < compound.length; i++) {
+    const ch = compound[i] ?? "";
+    if (quote) {
+      if (ch === "\\") i++;
+      else if (ch === quote) quote = "";
+    } else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+    else if (!depth) out += ch;
+  }
+  return out;
+}
+function compoundElements(compound, carriersByClass) {
+  if (compound.includes("dsh-e") || compound.includes("\\")) return null;
+  const own = ownLevel(compound);
+  const tag = tagOf(own);
+  if (tag) return [tag];
+  const [head2, ...rest] = new Set(classesIn(own));
+  if (head2 === void 0) return null;
+  const on = (carriersByClass.get(head2) ?? []).filter((c) => rest.every((k) => c.classes.includes(k)));
+  const out = [];
+  for (const c of on) {
+    if (c.element === null) return null;
+    out.push(c.element);
+  }
+  return out.length ? out : null;
+}
+async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
+  const classes = /* @__PURE__ */ new Set();
+  const dirs2 = [];
+  const unread = [];
+  for (const src of sources) {
+    const dir = realPath(isAbsolute2(src) ? src : join7(root2, src));
+    if (!dir) continue;
+    dirs2.push(dir);
+    const budget = { left: 400 };
+    for (const file of cssFilesUnder(dir, budget, [".css", ".scss", ".less"])) {
+      const shown = toPosix(relative2(root2, file));
+      const syntax = await syntaxFor(file);
+      if (!syntax.parse) {
+        unread.push({ file: shown, message: `needs \`npm i -D ${syntax.missing}\` to be read` });
+        continue;
+      }
+      let sheet;
+      try {
+        sheet = syntax.parse(readFileSync7(file, "utf8"), { from: file });
+      } catch (err) {
+        unread.push({ file: shown, message: parseMessageOf(err, file) });
+        continue;
+      }
+      harvestTokenDefs(sheet, tokenPrefixes, tokenSet);
+      if (/\.module\.[^./\\]+$/i.test(file)) continue;
+      sheet.walkRules((rule2) => {
+        const decls = [...ownDecls(rule2)];
+        if (decls.length && decls.every((d) => d.prop.startsWith("--"))) return;
+        for (const sel of resolvedSelectors(rule2)) {
+          if (/^[.#][\w-]+\s*\(/.test(sel)) continue;
+          const part = partClass(sel);
+          if (part) classes.add(part);
+        }
+      });
+    }
+    if (!budget.left)
+      unread.push({ file: toPosix(relative2(root2, dir)), message: "read the first 400 stylesheets only" });
+  }
+  return { classes, dirs: dirs2, unread };
+}
+var DECLARATIONS = [
+  typographyInCss,
+  systemOverride,
+  margin,
+  untokenizedType,
+  layoutInCss,
+  hardcodedValue
+];
+function classifyDeclaration({ prop, value }, {
+  boundSystem = [],
+  boundText = [],
+  isGrid = false,
+  surfaceOf = () => void 0,
+  surfaced = () => true,
+  enabled: enabled2
+}) {
+  const styling = isMarginProp(prop) || isFlexDecl(prop, value) || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || isHardcodedTokenValue(prop, value) || APPEARANCE_PROPS.has(prop);
+  const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: enabled2 };
+  for (const check of DECLARATIONS) {
+    const verdict2 = check({ prop, value }, ctx);
+    if (verdict2 !== void 0) return { finding: verdict2, styling };
+  }
+  return { finding: null, styling };
+}
+var COLLAPSE_PER_RULE = /* @__PURE__ */ new Set(["layout/in-css", "typography/untokenized"]);
+var propOf = (message) => (message.split(":")[0] ?? message).trim();
+var declarationKeys = (f) => {
+  if (!COLLAPSE_PER_RULE.has(f.rule)) return [findingKey(f)];
+  const collapsed = `${f.rule}:`;
+  const props = f.code?.startsWith(collapsed) ? f.code.slice(collapsed.length).split(",") : [propOf(f.message)];
+  return props.map((p) => findingKey({ ...f, code: `${collapsed}${p}` }));
+};
+function collapsePerRule(pending) {
+  const out = [];
+  const groups = /* @__PURE__ */ new Map();
+  for (const f of pending) {
+    if (!COLLAPSE_PER_RULE.has(f.rule)) {
+      out.push(f);
+      continue;
+    }
+    const group = groups.get(f.rule) ?? [];
+    group.push(f);
+    groups.set(f.rule, group);
+  }
+  for (const [rule2, group] of groups) {
+    const first = group[0];
+    if (!first) continue;
+    if (group.length === 1) {
+      out.push(first);
+      continue;
+    }
+    const props = [...new Set(group.map((f) => propOf(f.message)))];
+    out.push({
+      ...first,
+      // Bounded per contributor, so one long value cannot spend the whole
+      // line. Safe here where it is not at capture: a collapsed finding
+      // carries its own `code`, so identity does not fall back to this.
+      message: group.map((f) => snippet(f.message)).join("; "),
+      // Each hint keeps the line it was flagged on. The collapsed finding
+      // reports at the first one, and `fix` matches every other against the
+      // line it is actually written on rather than that one.
+      hints: group.flatMap((f) => (f.hints ?? []).map((h) => ({ ...h, line: f.line }))),
+      code: `${rule2}:${props.sort().join(",")}`
+    });
+  }
+  return out;
+}
+function extractSheet(root2, text2, tokenPrefixes) {
+  const srcLines = text2.split("\n");
+  const rules2 = [];
+  root2.walkRules((cssRule) => {
+    const selectors = resolvedSelectors(cssRule);
+    if (!selectors.some((s) => classesIn(s).length)) return;
+    const line = cssRule.source?.start?.line ?? 1;
+    const media = mediaQuery(cssRule) || void 0;
+    rules2.push({
+      line,
+      selectors,
+      isGrid: ruleIsGrid(cssRule),
+      ...media === void 0 ? {} : { media },
+      decls: [...ownDecls(cssRule)].map((d) => ({ prop: d.prop, value: d.value, line: d.source?.start?.line ?? line })),
+      cut: deletableRule(cssRule, srcLines)
+    });
+  });
+  return { rules: rules2, defs: tokenDefsIn(root2, tokenPrefixes) };
+}
+async function analyze(config, {
+  scope = null,
+  judge = false,
+  suppress = true,
+  cache: useCache = false,
+  contents
+} = {}) {
+  const ds = config.designSystem;
+  const ruleIsLive = (rule2) => config.enabled[rule2];
+  const surfaceOf = (b) => surfaceFor(config.componentRegistry, b.package, b.component);
+  const recorded = surfacesRecorded(config.componentRegistry);
+  const surfaced = (b) => recorded(b.package, b.component);
+  const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+  const parseSuppressions = makeSuppressionParser(config.suppression);
+  const limit = analyzeEntryBudget(config.maxEntries);
+  const files = discover({ root: config.root, sources: config.sources, limit });
+  if (files.truncated) throw new TreeTooLarge(limit);
+  const MAX_BYTES2 = 15e5;
+  const tooBig = (abs, rel) => {
+    const given = contents?.get(rel);
+    if (given !== void 0) return Buffer.byteLength(given) > MAX_BYTES2;
+    try {
+      return statSync4(abs).size > MAX_BYTES2;
+    } catch {
+      return false;
+    }
+  };
+  const read = (abs, rel) => contents?.get(rel) ?? readFileSync7(abs, "utf8");
+  const tokenPrefixes = ds.tokenPrefixes ?? [];
+  const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
+  tokenSet.scopes = mergeScopes((config.profiles?.active ?? []).map((p) => p.tokenScopes));
+  const scopes = tokenSet.scopes;
+  const realRoot = realPath(config.root) ?? config.root;
+  const library = await readLibrary(realRoot, ds.styleSources, tokenPrefixes, tokenSet);
+  const isLibrarySheet = (rel) => {
+    const abs = join7(realRoot, rel);
+    return library.dirs.some((d) => abs === d || abs.startsWith(`${d}${sep2}`));
+  };
+  const tokenRefs = [];
+  const scopedRefs = [];
+  const projectTokens = emptyTokenSet();
+  const findings = [];
+  const directives = [];
+  const diagnostics = {
+    parseErrors: [...library.unread],
+    filesScanned: 0,
+    tokensKnown: tokenSet.known.size
+  };
+  const suppByFile = /* @__PURE__ */ new Map();
+  const ledger = new MuteLedger();
+  const inScope = scope ? new Set(scope) : null;
+  const reports = (rel) => !inScope || inScope.has(rel);
+  const suppressionsFor = (rel, text2) => {
+    const cached = suppByFile.get(rel);
+    if (cached) return cached;
+    const parsed = parseSuppressions(text2, rel);
+    if (!suppress) parsed.byLine.clear();
+    suppByFile.set(rel, parsed);
+    return parsed;
+  };
+  const report = ({ scopeLines, rule: rule2, file, line, message, ...f }) => {
+    if (!config.enabled[rule2] || !reports(file)) return;
+    const supp = suppByFile.get(file);
+    if (supp && ledger.mute(supp, line, rule2, scopeLines)) return;
+    findings.push({ rule: rule2, severity: config.severityOf(rule2), file, line, message, ...f, rank: RULES[rule2].rank });
+  };
+  const referenced = /* @__PURE__ */ new Set();
+  const stems = /* @__PURE__ */ new Set();
+  const bindings = /* @__PURE__ */ new Map();
+  const rawEls = [];
+  const carriersByClass = /* @__PURE__ */ new Map();
+  const inlineStyles = [];
+  const cssInJs = [];
+  const composites2 = [];
+  const patternRules = (config.patterns ?? []).flatMap(
+    (p) => p.rules.filter((spec) => judge || spec.rule !== "judge").map((spec) => ({ patternId: p.id, spec }))
+  );
+  const cache2 = useCache ? new IndexCache(config.root, {
+    ds,
+    patternRules,
+    suppression: config.suppression,
+    tokenPrefixes,
+    maxBytes: MAX_BYTES2
+  }) : null;
+  const readOrNull = (abs, rel) => {
+    try {
+      return read(abs, rel);
+    } catch {
+      return null;
+    }
+  };
+  const lookup = (abs, rel) => contents?.has(rel) ? null : cache2?.lookup(abs, rel) ?? null;
+  const hasDirectives = (supp) => supp.directives.length > 0 || supp.malformed.length > 0;
+  const oversized = (abs, rel, look) => look ? (look.stat?.size ?? 0) > MAX_BYTES2 : tooBig(abs, rel);
+  const controls = [];
+  const ruleHits = [];
+  const importsByFile = /* @__PURE__ */ new Map();
+  const componentImports = [];
+  const markup = [];
+  const misses = [];
+  const missAt = [];
+  for (const { abs, rel } of files.markup) {
+    const look = lookup(abs, rel);
+    if (oversized(abs, rel, look)) continue;
+    const hit = look?.entry?.scan ? look.entry : null;
+    let text2 = look?.text ?? null;
+    if (!hit || hit.d) {
+      text2 ??= readOrNull(abs, rel);
+      if (text2 === null) continue;
+    }
+    const file = { rel, look, text: text2, scan: hit?.scan ? loadScan(hit.scan) : null };
+    if (!file.scan) {
+      missAt.push(markup.length);
+      misses.push({ rel, text: text2 ?? "" });
+    }
+    markup.push(file);
+  }
+  const scans = await scanMany(misses, ds, patternRules);
+  missAt.forEach((at, k) => {
+    const file = markup[at];
+    file.scan = scans[k];
+  });
+  for (const { rel, look, text: text2, scan } of markup) {
+    const scanned = scan;
+    diagnostics.filesScanned++;
+    const supp = suppressionsFor(rel, text2 ?? "");
+    if (look && !look.entry?.scan && !scanned.parseError)
+      cache2?.store(look, rel, text2 ?? "", { d: hasDirectives(supp), scan: storeScan(scanned) });
+    if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
+    for (const t of scanned.referenced) referenced.add(t);
+    for (const t of scanned.stems) stems.add(t);
+    for (const b of scanned.bindings) {
+      if (b.cls === void 0) continue;
+      const group = bindings.get(b.cls) ?? [];
+      group.push(b);
+      bindings.set(b.cls, group);
+    }
+    rawEls.push(...scanned.rawEls);
+    if (scopes)
+      for (const c of scanned.carriers)
+        for (const cls of new Set(c.classes)) {
+          const list2 = carriersByClass.get(cls);
+          if (list2) list2.push(c);
+          else carriersByClass.set(cls, [c]);
+        }
+    inlineStyles.push(...scanned.inlineStyles);
+    cssInJs.push(...scanned.cssInJs);
+    composites2.push(...scanned.composites);
+    for (const h of scanned.ruleHits) ruleHits.push({ ...h, file: rel });
+    controls.push(...scanned.controls);
+    if (scanned.imports) importsByFile.set(rel, scanned.imports);
+    for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
+  }
+  const elementsOf = (selectors) => {
+    if (!scopes) return [];
+    const out = /* @__PURE__ */ new Set();
+    for (const sel of selectors) {
+      const found = compoundElements(keyCompound(sel), carriersByClass);
+      if (!found) return [];
+      for (const e of found) out.add(e);
+    }
+    return [...out];
+  };
+  const nestedElements = (selector) => {
+    const selectors = list.comma(selector);
+    return selectors.some((sel) => keyCompound(sel).includes("&")) ? [] : elementsOf(selectors);
+  };
+  for (const { abs, rel } of files.references) {
+    const look = lookup(abs, rel);
+    if (oversized(abs, rel, look)) continue;
+    if (look?.entry?.refs) {
+      for (const t of look.entry.refs) referenced.add(t);
+      diagnostics.filesScanned++;
+      continue;
+    }
+    const text2 = look?.text ?? readOrNull(abs, rel);
+    if (text2 === null) continue;
+    const found = harvestTokens(text2);
+    for (const t of found) referenced.add(t);
+    diagnostics.filesScanned++;
+    if (look) cache2?.store(look, rel, text2, { d: false, refs: [...found] });
+  }
+  const styledClasses = /* @__PURE__ */ new Set();
+  const layoutClasses = /* @__PURE__ */ new Set();
+  const declared = [];
+  const onRaw = new Set(ruleIsLive("system/raw-element") ? rawEls.flatMap((el) => el.classes) : []);
+  const rawClassDecls = /* @__PURE__ */ new Map();
+  for (const { abs, rel } of files.styles) {
+    if (isLibrarySheet(rel)) continue;
+    const look = lookup(abs, rel);
+    const hit = look?.entry?.sheet ? look.entry : null;
+    let text2 = look?.text ?? null;
+    if (!hit || hit.d) {
+      text2 ??= readOrNull(abs, rel);
+      if (text2 === null) continue;
+    }
+    diagnostics.filesScanned++;
+    const supp = suppressionsFor(rel, text2 ?? "");
+    const unparsed = (message, code) => {
+      diagnostics.parseErrors.push({ file: rel, message });
+      if (config.enabled["stylesheet/unparsed"] && reports(rel))
+        findings.push({
+          rule: "stylesheet/unparsed",
+          severity: config.severityOf("stylesheet/unparsed"),
+          file: rel,
+          line: 1,
+          message,
+          code: code ?? message,
+          rank: RULES["stylesheet/unparsed"].rank
+        });
+    };
+    if (oversized(abs, rel, look)) {
+      unparsed(`stylesheet over ${Math.round(MAX_BYTES2 / 1e3)}kB \u2014 skipped as generated`);
+      continue;
+    }
+    const syntax = await syntaxFor(rel);
+    if (syntax.missing !== void 0) {
+      unparsed(`needs \`npm i -D ${syntax.missing}\` to be checked`);
+      continue;
+    }
+    let sheet;
+    if (hit?.sheet) sheet = hit.sheet;
+    else {
+      const src = text2 ?? "";
+      let root2;
+      let failed;
+      try {
+        root2 = syntax.parse(src, { from: abs, map: false });
+      } catch (err) {
+        failed = { error: parseMessageOf(err, abs), reason: parseReasonOf(err) };
+      }
+      sheet = failed ?? extractSheet(root2, src, tokenPrefixes);
+      if (look && !failed) cache2?.store(look, rel, src, { d: hasDirectives(supp), sheet });
+    }
+    if ("error" in sheet) {
+      unparsed(sheet.error, sheet.reason);
+      continue;
+    }
+    const emit = (f) => report({ ...f, file: rel, code: f.code ?? f.message });
+    for (const [name, value] of sheet.defs) {
+      addTokenDef(tokenSet, name, value);
+      if (delivery?.tokens) addTokenDef(projectTokens, name, value);
+    }
+    for (const cssRule of sheet.rules) {
+      const ruleLine = cssRule.line;
+      const selectors = cssRule.selectors;
+      const allClasses = [...new Set(selectors.flatMap(classesIn))];
+      const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+      const keyClasses = [...new Set(keyClassesPer.flat())];
+      if (!allClasses.length) continue;
+      const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
+      const boundSystem = bound.filter((b) => b.isSystem);
+      const boundText = bound.filter((b) => b.isText);
+      const isGrid = cssRule.isGrid;
+      const scopeLines = [ruleLine, ruleLine - 1];
+      const selector = selectors.join(", ");
+      const media = cssRule.media;
+      const elements = elementsOf(selectors);
+      let touchesStyle = false;
+      let touchesLayout = false;
+      const pending = [];
+      const onRawKeys = keyClasses.filter((c) => onRaw.has(c));
+      const classDecls = [];
+      for (const decl2 of cssRule.decls) {
+        const prop = decl2.prop.toLowerCase();
+        const line = decl2.line;
+        const { finding, styling } = classifyDeclaration(
+          { prop, value: decl2.value },
+          { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive }
+        );
+        if (onRawKeys.length)
+          classDecls.push({ prop, value: decl2.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
+        if (styling) touchesStyle = true;
+        if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
+        for (const name of tokenRefsIn(decl2.value, tokenPrefixes)) {
+          const ref = { file: rel, line, name, prop, scopeLines };
+          tokenRefs.push(ref);
+          if (scopes) scopedRefs.push({ ...ref, value: decl2.value, elements });
+        }
+        if (finding) pending.push({ ...finding, line, scopeLines });
+      }
+      if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
+      if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
+      const override = touchesStyle && ruleIsLive("system/override") ? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject) : null;
+      if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
+      else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
+      if (!override)
+        for (const c of onRawKeys) {
+          const list2 = rawClassDecls.get(c) ?? [];
+          list2.push(...classDecls);
+          rawClassDecls.set(c, list2);
+        }
+      const cut = cssRule.cut;
+      for (const cls of keyClasses)
+        declared.push({
+          file: rel,
+          line: ruleLine,
+          cls,
+          scopeLines,
+          cut: cut && keyClassesPer.every((k) => k.includes(cls)) ? cut : void 0
+        });
+    }
+  }
+  for (const f of deadClasses(declared, {
+    referenced,
+    stems: [...stems],
+    isProject: config.isProject,
+    isNeverDead: config.isNeverDead
+  }))
+    report(f);
+  for (const el of inlineStyles) {
+    if (!reports(el.file)) continue;
+    const scopeLines = [el.line, el.line - 1];
+    const whole = ruleIsLive("system/inline-style") ? inlineStyle(el, ds.allowedInlineStyles) : null;
+    if (whole) {
+      report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
+      continue;
+    }
+    const isGrid = el.decls.some((d) => isGridDecl(d.prop, d.value));
+    const pending = [];
+    const elements = el.element ? [el.element] : [];
+    for (const d of el.decls) {
+      if (scopes)
+        for (const name of tokenRefsIn(d.value, tokenPrefixes))
+          scopedRefs.push({
+            file: el.file,
+            line: d.line ?? el.line,
+            name,
+            prop: d.prop,
+            scopeLines,
+            value: d.value,
+            elements
+          });
+      const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
+      if (finding)
+        pending.push({
+          ...finding,
+          // The classifier sees the translated declaration, which is not what
+          // the file says. Only the span points back at the bytes it came from.
+          hints: finding.hints?.map((h) => ({ ...h, span: d.span })),
+          line: d.line ?? el.line,
+          code: finding.code ?? finding.message,
+          suffix: " (inline)"
+        });
+    }
+    for (const f of collapsePerRule(pending))
+      report({
+        ...f,
+        file: el.file,
+        message: `${f.message}${f.suffix ?? ""}`,
+        code: f.code ?? f.message,
+        scopeLines,
+        elements
+      });
+  }
+  for (const tpl of cssInJs) {
+    const supp = suppByFile.get(tpl.file);
+    if (!reports(tpl.file)) {
+      if (supp && !tpl.error)
+        for (const group of tpl.groups)
+          for (const d of group.decls)
+            for (const name of tokenRefsIn(d.value, tokenPrefixes))
+              tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
+      continue;
+    }
+    if (tpl.error) {
+      diagnostics.parseErrors.push({ file: tpl.file, message: `css-in-js at line ${tpl.line}: ${tpl.error}` });
+      continue;
+    }
+    const key = {
+      ...tpl.component ? { component: tpl.component } : {},
+      ...tpl.package ? { package: tpl.package } : {}
+    };
+    const boundSystem = tpl.isSystem ? [{ tag: tpl.target, isSystem: true, ...key }] : [];
+    const boundText = tpl.isText ? [{ tag: tpl.target, isSystem: true, isText: true, ...key }] : [];
+    const self = tpl.isSystem ? tpl.component ?? tpl.target : tpl.target && /^[a-z]/.test(tpl.target) ? tpl.target : null;
+    for (const group of tpl.groups) {
+      const onTarget = group.onTarget;
+      const pending = [];
+      let elements = [];
+      if (onTarget) elements = scopes && self ? [self] : [];
+      else if (group.selector) elements = nestedElements(group.selector);
+      for (const d of group.decls) {
+        if (supp)
+          for (const name of tokenRefsIn(d.value, tokenPrefixes)) {
+            const ref = { file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] };
+            tokenRefs.push(ref);
+            if (scopes) scopedRefs.push({ ...ref, value: d.value, elements });
+          }
+        const { finding } = classifyDeclaration(d, {
+          boundSystem: onTarget ? boundSystem : [],
+          boundText: onTarget ? boundText : [],
+          isGrid: group.isGrid,
+          surfaceOf,
+          surfaced,
+          enabled: ruleIsLive
+        });
+        if (finding) pending.push({ ...finding, line: d.line ?? tpl.line });
+      }
+      const where = group.selector ? ` in \`${group.selector}\`` : "";
+      for (const f of collapsePerRule(pending))
+        report({
+          ...f,
+          file: tpl.file,
+          message: `${f.message}${where} (css-in-js)`,
+          code: `css-in-js:${f.code ?? f.message}`,
+          suffix: `${where} (css-in-js)`,
+          scopeLines: [tpl.line, tpl.line - 1],
+          elements
+        });
+    }
+  }
+  for (const f of rawElements(ruleIsLive("system/raw-element") ? rawEls.filter((el) => reports(el.file)) : [], {
+    layoutComponents: ds.layoutComponents,
+    styledClasses,
+    layoutClasses,
+    registry: config.componentRegistry,
+    promotion: {
+      decls: rawClassDecls,
+      // The same classifier, with the analog bound alongside whatever the
+      // rule's classes are already bound to.
+      verdictAs: (d, as) => classifyDeclaration(
+        { prop: d.prop, value: d.value },
+        {
+          boundSystem: [...d.boundSystem, as],
+          boundText: as.isText ? [...d.boundText, as] : d.boundText,
+          isGrid: d.isGrid,
+          surfaceOf,
+          surfaced,
+          enabled: ruleIsLive
+        }
+      ).finding?.rule ?? null,
+      severityOf: config.severityOf,
+      textComponents: ds.textComponents
+    }
+  }))
+    report(f);
+  for (const f of composites({
+    found: composites2,
+    hits: ruleHits,
+    registry: config.patterns ?? [],
+    importsByFile,
+    enabled: ruleIsLive
+  }))
+    report(f);
+  for (const f of currency(componentImports, config.componentRegistry, ruleIsLive)) report(f);
+  annotateReach(findings, {
+    delivery,
+    imports: componentImports,
+    dependencies: projectDependencies(config.root),
+    dsPackages: ds.packages
+  });
+  for (const [file, s] of suppByFile) {
+    directives.push(...s.directives);
+    if (!config.enabled["suppression/malformed"] || !reports(file)) continue;
+    for (const m of s.malformed)
+      findings.push({
+        ...m,
+        severity: config.severityOf("suppression/malformed"),
+        code: m.message,
+        rank: RULES["suppression/malformed"].rank
+      });
+  }
+  for (const f of findings) {
+    const elements = f.elements ?? [];
+    delete f.elements;
+    if (!f.hints?.length) {
+      delete f.hints;
+      continue;
+    }
+    const hold = scopes ? (token) => {
+      const fit = fitOf(scopes, token, elements);
+      return fit.fit === "off" || fit.fit === "unknown" ? fit.why : null;
+    } : null;
+    f.suggest = f.hints.map((h) => {
+      const tokens = tokensFor(tokenSet, h.prop, h.value);
+      const [only] = tokens;
+      let review = null;
+      if (hold && only !== void 0 && tokens.length === 1) review = hold(only);
+      else if (hold && !tokens.length) {
+        const plan = planValue(tokenSet, h.prop, h.value, hold);
+        if (plan && plan !== "none") review = plan.review ?? null;
+      }
+      return review ? { ...h, tokens, review } : { ...h, tokens };
+    });
+    f.message = declarationMessage(f.suggest, f.suffix ?? "");
+    if (f.rule === "tokens/hardcoded-value" && f.hints.length === 1) f.decl = f.hints[0];
+    delete f.hints;
+  }
+  if (diagnostics.tokensKnown) for (const f of unknownTokens(tokenRefs, tokenSet.known)) report(f);
+  for (const f of misappliedTokens(scopedRefs, scopes, tokenSet.known)) report(f);
+  if (ruleIsLive("tokens/undelivered"))
+    for (const f of undelivered({
+      root: config.root,
+      ignore: config.sources.ignore ?? [],
+      tokens: delivery?.tokens ?? null,
+      refs: tokenRefs,
+      prefixes: tokenPrefixes,
+      projectDefined: projectTokens.known,
+      reports
+    }))
+      report(f);
+  const unique = dedupe(findings);
+  for (const f of unique) f.message = boundMessage(f.message, f.suffix);
+  unique.sort((a, b) => b.rank - a.rank || byBytes(a.file, b.file) || a.line - b.line);
+  directives.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
+  const liveControls = judge && config.enabled["patterns/judged-redirect"] ? controls.filter((c) => {
+    const supp = suppByFile.get(c.file);
+    return reports(c.file) && !(supp && ledger.mute(supp, c.line, "patterns/judged-redirect"));
+  }) : null;
+  if (suppress)
+    ledger.settle(
+      directives.filter((d) => reports(d.file)),
+      new Set(judge ? [] : ["patterns/judged-redirect"])
+    );
+  cache2?.save();
+  return {
+    findings: unique,
+    directives,
+    diagnostics,
+    blocking: unique.some((f) => f.severity === "error"),
+    // Only when the design system's own sources yielded tokens. The walk adds
+    // whatever the project defines under the same prefix to this same set, and
+    // one `--wpds-brand-color` of the project's own would otherwise pass for a
+    // design system read, with every value judged tokenless against it.
+    ...diagnostics.tokensKnown ? { tokens: tokenSet } : {},
+    // Scoped and suppressed here, where the scope and the comments are: the
+    // finding a control becomes is written later, by the judge.
+    ...liveControls ? { controls: liveControls } : {}
+  };
+}
+function dedupe(findings) {
+  const seen = /* @__PURE__ */ new Set();
+  return findings.filter((f) => {
+    const k = `${f.rule}|${f.file}|${f.line}|${f.code ?? ""}|${f.message}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+var PROJECT_RULES = /* @__PURE__ */ new Set(["tokens/undelivered"]);
+var findingKey = (f) => `${f.rule}|${PROJECT_RULES.has(f.rule) ? "<project>" : f.file}|${oneLine(String(f.code ?? f.message))}`;
+
+// src/autofix.ts
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync2 } from "node:fs";
+import { join as join8 } from "node:path";
+var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
+function tokenFixes(findings) {
+  const out = [];
+  for (const f of findings) {
+    for (const s of f.suggest ?? []) {
+      const to = s.tokens.length === 1 && !s.review ? `var(${s.tokens[0]})` : s.judged?.answer;
+      if (to === void 0 || to === KEEP) continue;
+      out.push({ file: f.file, line: s.line ?? f.line, prop: s.prop, value: s.value, to, span: s.span });
+    }
+    const rename = f.rename;
+    if (rename) for (const line of rename.lines) out.push({ file: f.file, line, value: rename.from, to: rename.to });
+  }
+  return out;
+}
+function settledBy(findings, applied, kept = []) {
+  const at = (d) => `${d.file}\0${d.line}\0${d.prop ?? ""}`;
+  const done = new Set([...applied, ...kept].map(at));
+  return findings.filter((f) => {
+    const parts = f.rename ? f.rename.lines.map((line) => ({ file: f.file, line })) : (f.suggest ?? (f.decl ? [f.decl] : [])).map((s) => ({ file: f.file, line: s.line ?? f.line, prop: s.prop }));
+    return parts.length > 0 && parts.every((p) => done.has(at(p)));
+  }).length;
+}
+var QUOTES = "'\"`";
+function substituteOnLine(line, fix) {
+  const span = fix.span;
+  if (span) {
+    if (line.slice(span.col, span.col + span.text.length) !== span.text)
+      return { why: "the value is no longer where it was reported" };
+    if (/['"`\\]|\$\{/.test(fix.to)) return { why: "replacement is not writable as a JS string" };
+    const opener = span.text[0];
+    const quote = opener && QUOTES.includes(opener) ? opener : "'";
+    return `${line.slice(0, span.col)}${quote}${fix.to}${quote}${line.slice(span.col + span.text.length)}`;
+  }
+  if (fix.prop === void 0) {
+    const renamed = line.replace(new RegExp(`(var\\(\\s*)${escapeRe(fix.value)}(?![-\\w])`, "g"), `$1${fix.to}`);
+    if (renamed === line) return { why: "the token is not on its reported line" };
+    return renamed;
+  }
+  const re = new RegExp(
+    `(^|[;{\\s\`])(${escapeRe(fix.prop)}\\s*:\\s*)${escapeRe(fix.value.trim())}(?=\\s*(?:!important)?\\s*(?:[;}\`]|$))`,
+    "gi"
+  );
+  const hits = line.match(re);
+  if (hits?.length !== 1)
+    return { why: hits ? `${hits.length} matches on line` : "declaration not on its reported line" };
+  return line.replace(re, `$1$2${fix.to}`);
+}
+function applyTokenFixes(root2, findings, { dry = false } = {}) {
+  const byFile = /* @__PURE__ */ new Map();
+  for (const fix of tokenFixes(findings)) {
+    const group = byFile.get(fix.file) ?? [];
+    group.push(fix);
+    byFile.set(fix.file, group);
+  }
+  const applied = [];
+  const skipped = [];
+  for (const [file, group] of byFile) {
+    const abs = join8(root2, file);
+    let text2;
+    try {
+      text2 = readFileSync8(abs, "utf8");
+    } catch (err) {
+      const why = messageLineOf(err);
+      for (const fix of group) skipped.push({ ...fix, why });
+      continue;
+    }
+    const lines = text2.split("\n");
+    let dirty = false;
+    for (const fix of [...group].sort((a, b) => b.line - a.line || (b.span?.col ?? 0) - (a.span?.col ?? 0))) {
+      const i = fix.line - 1;
+      const line = lines[i];
+      if (line === void 0) {
+        skipped.push({ ...fix, why: "line out of range" });
+        continue;
+      }
+      const rewritten = substituteOnLine(line, fix);
+      if (typeof rewritten !== "string") {
+        skipped.push({ ...fix, why: rewritten.why });
+        continue;
+      }
+      lines[i] = rewritten;
+      dirty = true;
+      applied.push(fix);
+    }
+    if (dirty && !dry) writeFileSync2(abs, lines.join("\n"));
+  }
+  applied.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
+  return { applied, skipped };
+}
+function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } = {}) {
+  const taken = new Set(directives.map((d) => `${d.file}\0${d.line}`));
+  const all = findings.flatMap((f) => (f.suggest ?? []).map((s) => ({ f, s, line: s.line ?? f.line })));
+  const onLine = /* @__PURE__ */ new Map();
+  for (const d of all) {
+    const k = `${d.f.file}\0${d.line}`;
+    onLine.set(k, [...onLine.get(k) ?? [], d]);
+  }
+  const rulesOn = new Map(
+    [...onLine].map(([k, group]) => [k, [...new Set(group.map((d) => d.f.rule))].sort().join(",")])
+  );
+  const byFile = /* @__PURE__ */ new Map();
+  const skipped = [];
+  const deliberate = (s) => s.judged?.spans[0] === DELIBERATE;
+  for (const { f, s: decl2, line } of all) {
+    if (decl2.judged?.answer !== KEEP) continue;
+    const kept = {
+      file: f.file,
+      line,
+      prop: decl2.prop,
+      value: decl2.value,
+      reason: decl2.judged.spans.join(" ")
+    };
+    if (deliberate(decl2))
+      skipped.push({ ...kept, why: "judged deliberate \u2014 suppress it by hand, saying what the value is" });
+    else if (!CSS_FILE.test(f.file)) skipped.push({ ...kept, why: "not a stylesheet" });
+    else if (onLine.get(`${f.file}\0${line}`)?.some((o) => o.s.judged?.answer !== KEEP || deliberate(o.s)))
+      skipped.push({ ...kept, why: "shares its line with a value that is not suppressed" });
+    else byFile.set(f.file, [...byFile.get(f.file) ?? [], kept]);
+  }
+  const applied = [];
+  for (const [file, group] of byFile) {
+    const abs = join8(root2, file);
+    let text2;
+    try {
+      text2 = readFileSync8(abs, "utf8");
+    } catch (err) {
+      const why = messageLineOf(err);
+      for (const k of group) skipped.push({ ...k, why });
+      continue;
+    }
+    const lines = text2.split("\n");
+    let last = 0;
+    for (const k of [...group].sort((a, b) => b.line - a.line)) {
+      if (k.line === last) {
+        applied.push(k);
+        continue;
+      }
+      const line = lines[k.line - 1];
+      if (line === void 0) {
+        skipped.push({ ...k, why: "line out of range" });
+        continue;
+      }
+      if (taken.has(`${file}\0${k.line - 1}`)) {
+        skipped.push({ ...k, why: "the line above already carries a directive \u2014 add the rule to it by hand" });
+        continue;
+      }
+      if (/(?:^|[^#])\{/.test(line)) {
+        skipped.push({ ...k, why: "on the rule's opening line, where a directive would mute the whole rule" });
+        continue;
+      }
+      const indent = /^[ \t]*/.exec(line)?.[0] ?? "";
+      const eol = line.endsWith("\r") ? "\r" : "";
+      const rules2 = rulesOn.get(`${file}\0${k.line}`) ?? "tokens/hardcoded-value";
+      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} ${rules2} -- ${k.reason} */${eol}`);
+      applied.push(k);
+      last = k.line;
+    }
+    if (last && !dry) writeFileSync2(abs, lines.join("\n"));
+  }
+  applied.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
+  return { applied, skipped };
+}
+
+// src/judge.ts
+import { readFileSync as readFileSync10 } from "node:fs";
 
 // src/judge/force.ts
 var forceQuery = (force) => ({
@@ -28946,10 +29372,10 @@ var valueQuery = (about) => ({
 });
 
 // src/judge/variant.ts
-import { readFileSync as readFileSync7 } from "node:fs";
-import { join as join7 } from "node:path";
+import { readFileSync as readFileSync9 } from "node:fs";
+import { join as join9 } from "node:path";
 function around(root2, file, line, before, after) {
-  const lines = readFileSync7(join7(root2, file), "utf8").split("\n");
+  const lines = readFileSync9(join9(root2, file), "utf8").split("\n");
   const i = line - 1;
   return {
     context_before: lines.slice(Math.max(0, i - before), i).join("\n"),
@@ -28983,32 +29409,113 @@ var CONCURRENCY = 6;
 var RETRIES = 4;
 var RETRY_WAIT_MAX_MS = 5e3;
 var REQUEST_TIMEOUT_MS = 2e4;
-async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
+var ENDPOINT_OVERRIDE = /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(process.env.LOUPE_JUDGE_ENDPOINT ?? "") ? process.env.LOUPE_JUDGE_ENDPOINT : null;
+function limiter(size) {
+  let active = 0;
+  const waiting = [];
+  return async (fn) => {
+    if (active < size) active++;
+    else await new Promise((resolve8) => waiting.push(resolve8));
+    try {
+      return await fn();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}
+function judgeClient(apiKey, { fetchImpl = fetch, cache: cache2 = null } = {}) {
+  return {
+    apiKey,
+    fetchImpl,
+    cache: cache2,
+    slot: limiter(CONCURRENCY),
+    inflight: /* @__PURE__ */ new Map(),
+    stats: { asked: 0, cached: 0, shared: 0 }
+  };
+}
+var clientOf = (auth, fetchImpl) => typeof auth === "string" ? judgeClient(auth, { fetchImpl }) : auth;
+function judgeSummary(client) {
+  const { asked, cached, shared } = client.stats;
+  if (!asked && !cached && !shared) return null;
+  const parts = [`${asked} asked`];
+  if (cached) parts.push(`${cached} from cache`);
+  if (shared) parts.push(`${shared} shared`);
+  return `judge: ${parts.join(", ")}`;
+}
+async function ask(query, items, auth, fetchImpl = fetch, size = 1, backoff = 500) {
+  const client = clientOf(auth, fetchImpl);
+  const endpoint = ENDPOINT_OVERRIDE ?? ENDPOINT;
   const batches = [];
   for (let at = 0; at < items.length; at += size) batches.push(items.slice(at, at + size));
+  let stopped = false;
+  const post = async (body2, n) => {
+    for (let attempt = 0; ; attempt++) {
+      if (stopped) throw new Error("stopped: another request failed");
+      let res;
+      let parsed;
+      try {
+        res = await client.fetchImpl(endpoint, {
+          method: "POST",
+          headers: { authorization: `Bearer ${client.apiKey}`, "content-type": "application/json" },
+          body: body2,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        });
+        if (res.ok) parsed = await res.json();
+      } catch (err) {
+        const name = err instanceof Error ? err.name : "";
+        if (name === "AbortError" || name === "TimeoutError") throw err;
+        if (err instanceof SyntaxError)
+          throw new Error(`TypeSafe answered with a body that is not JSON: ${messageOf(err)}`);
+        if (attempt >= RETRIES) {
+          const cause = err instanceof Error && err.cause ? `: ${messageOf(err.cause)}` : "";
+          throw new Error(`TypeSafe unreachable: ${messageOf(err)}${cause}`);
+        }
+        await new Promise((r) => setTimeout(r, backoff * 2 ** attempt));
+        continue;
+      }
+      if (parsed) {
+        const { answers } = parsed;
+        return Array.from({ length: n }, (_, i) => answers[`e${i}`]);
+      }
+      const transient = res.status === 429 || res.status >= 500;
+      if (!transient || attempt >= RETRIES)
+        throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      const after = Number(res.headers.get("retry-after"));
+      const wait = after > 0 ? Math.min(after * 1e3, RETRY_WAIT_MAX_MS) : backoff * 2 ** attempt;
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  };
   const sendBatch = async (batch) => {
     const body2 = JSON.stringify({
       model: MODEL,
       state: { elements: batch.map(query.element) },
       questions: Object.fromEntries(batch.map((item, i) => [`e${i}`, query.question(item, i)]))
     });
-    for (let attempt = 0; ; attempt++) {
-      const res = await fetchImpl(ENDPOINT, {
-        method: "POST",
-        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: body2,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-      });
-      if (res.ok) {
-        const parsed = await res.json();
-        return batch.map((_, i) => parsed.answers[`e${i}`]);
-      }
-      const transient = res.status === 429 || res.status >= 500;
-      if (!transient || attempt >= RETRIES)
-        throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      const after = Number(res.headers.get("retry-after"));
-      const wait = after > 0 ? Math.min(after * 1e3, RETRY_WAIT_MAX_MS) : 500 * 2 ** attempt;
-      await new Promise((r) => setTimeout(r, wait));
+    const key = sha256(`${endpoint}
+${body2}`);
+    const hit = client.cache?.get(key);
+    if (hit && hit.length === batch.length) {
+      client.stats.cached++;
+      return hit;
+    }
+    const pending = client.inflight.get(key);
+    if (pending) {
+      client.stats.shared++;
+      return pending;
+    }
+    const request = client.slot(async () => {
+      client.stats.asked++;
+      const answers = await post(body2, batch.length);
+      if (answers.every((a) => a !== void 0)) client.cache?.set(key, answers);
+      return answers;
+    });
+    client.inflight.set(key, request);
+    try {
+      return await request;
+    } finally {
+      client.inflight.delete(key);
     }
   };
   const done = new Array(batches.length);
@@ -29021,6 +29528,7 @@ async function ask(query, items, apiKey, fetchImpl = fetch, size = 1) {
           done[at] = await sendBatch(batches[at] ?? []);
         } catch (err) {
           next = batches.length;
+          stopped = true;
           throw err;
         }
       }
@@ -29034,13 +29542,13 @@ function targetOf(f, withVariants) {
   const name = /^\s*<?([A-Za-z_$][\w.$]*)/.exec(f.message.split("\u2192")[1] ?? "")?.[1];
   return name ? withVariants.find((e) => e.name === name) : void 0;
 }
-async function judgeVariants(root2, findings, registry, apiKey, fetchImpl = fetch) {
+async function judgeVariants(root2, findings, registry, auth, fetchImpl = fetch) {
   const withVariants = [...registry.values()].filter((e) => e.status === "recommended" && e.variants);
   const jobs = findings.flatMap((f) => {
     const target = targetOf(f, withVariants);
     return target ? [{ f, target }] : [];
   });
-  const answers = await ask(variantQuery(root2), jobs, apiKey, fetchImpl);
+  const answers = await ask(variantQuery(root2), jobs, auth, fetchImpl);
   let annotated = 0;
   jobs.forEach(({ f, target }, i) => {
     const a = answers[i];
@@ -29067,29 +29575,32 @@ var redirectIdentity = (c) => ({
   file: c.file,
   code: `<${c.component}>`
 });
-async function judgeRedirects(controls, apiKey, severity, fetchImpl = fetch) {
+async function judgeRedirects(controls, auth, severity, fetchImpl = fetch) {
   const byId = new Map(LANGUAGE.patterns.map((p) => [p.id, p]));
   const abstractOf = (patternId) => patternId.split("#", 1)[0]?.split(".", 1)[0] ?? patternId;
   const tableOf = (c) => byId.get(abstractOf(c.patternId))?.resolve ?? [];
+  const client = clientOf(auth, fetchImpl);
   const known = controls.map(() => ({}));
   const sure = controls.map(() => ({}));
-  for (const [name, force] of Object.entries(LANGUAGE.vocabulary.forces)) {
-    if (!force.judge) continue;
-    const asked = controls.flatMap((c, i) => tableOf(c).some((r) => r.when && name in r.when) ? [i] : []);
-    if (!asked.length) continue;
-    const answers = await ask(
-      forceQuery(force.judge),
-      asked.map((i) => controls[i]),
-      apiKey,
-      fetchImpl
-    );
-    asked.forEach((ci, k) => {
-      const a = answers[k];
-      if (!a || a.confidence < REDIRECT_FLOOR) return;
-      known[ci][name] = a.choice;
-      sure[ci][name] = a.confidence;
-    });
-  }
+  const settled = await Promise.allSettled(
+    Object.entries(LANGUAGE.vocabulary.forces).map(async ([name, force]) => {
+      if (!force.judge) return;
+      const asked = controls.flatMap((c, i) => tableOf(c).some((r) => r.when && name in r.when) ? [i] : []);
+      if (!asked.length) return;
+      const answers = await ask(
+        forceQuery(force.judge),
+        asked.map((i) => controls[i]),
+        client
+      );
+      asked.forEach((ci, k) => {
+        const a = answers[k];
+        if (!a || a.confidence < REDIRECT_FLOOR) return;
+        known[ci][name] = a.choice;
+        sure[ci][name] = a.confidence;
+      });
+    })
+  );
+  for (const r of settled) if (r.status === "rejected") throw r.reason;
   return controls.flatMap((c, i) => {
     const r = resolveRule(tableOf(c), known[i] ?? {});
     if (!r?.redirect) return [];
@@ -29116,7 +29627,7 @@ function tokenDescriptions(profiles) {
   for (const p of profiles) {
     if (!p.tokenDescriptions) continue;
     try {
-      const raw = JSON.parse(readFileSync8(p.tokenDescriptions, "utf8"));
+      const raw = JSON.parse(readFileSync10(p.tokenDescriptions, "utf8"));
       for (const [name, text2] of Object.entries(raw))
         if (!name.startsWith("$") && typeof text2 === "string") out.set(name, text2);
     } catch {
@@ -29135,7 +29646,7 @@ function restate(f) {
     spans: judged.flatMap((j) => j.spans)
   };
 }
-async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */ new Map(), fetchImpl = fetch) {
+async function judgeValues(root2, findings, set, auth, about = /* @__PURE__ */ new Map(), fetchImpl = fetch) {
   if (!set?.known.size)
     throw new Error(
       "no design tokens were read, so there is nothing to judge hardcoded values against \u2014 check designSystem.tokenSources against what the package actually ships"
@@ -29173,7 +29684,7 @@ async function judgeValues(root2, findings, set, apiKey, about = /* @__PURE__ */
       ] : []
     )
   );
-  const answers = await ask(valueQuery(about), asked, apiKey, fetchImpl);
+  const answers = await ask(valueQuery(about), asked, auth, fetchImpl);
   const answerOf = new Map(asked.map((item, k) => [item.slot, answers[k]]));
   for (const { f, decl: decl2, parts, slots } of open) {
     const got = slots.map((s) => "token" in s ? { choice: s.token, confidence: 1 } : answerOf.get(s));
@@ -29216,7 +29727,7 @@ function renameOptions(name, prop, set, about = /* @__PURE__ */ new Map()) {
     [values.get(n), about.get(n)].filter(Boolean).join(" \u2014 ") || n
   ]);
 }
-async function judgeRenames(root2, findings, set, apiKey, about = /* @__PURE__ */ new Map(), fetchImpl = fetch) {
+async function judgeRenames(root2, findings, set, auth, about = /* @__PURE__ */ new Map(), fetchImpl = fetch) {
   const jobs = findings.flatMap((f) => {
     if (f.rule !== "tokens/unknown-token" || f.rename || !f.unknown || !f.code) return [];
     const { prop, lines } = f.unknown;
@@ -29227,7 +29738,7 @@ async function judgeRenames(root2, findings, set, apiKey, about = /* @__PURE__ *
   const answers = await ask(
     renameQuery,
     jobs.map((j) => j.item),
-    apiKey,
+    auth,
     fetchImpl
   );
   let settled = 0;
@@ -29244,60 +29755,663 @@ async function judgeRenames(root2, findings, set, apiKey, about = /* @__PURE__ *
   return settled;
 }
 
-// src/baseline.ts
-import { existsSync as existsSync5, readFileSync as readFileSync9, writeFileSync as writeFileSync2 } from "node:fs";
-import { dirname as dirname3 } from "node:path";
-
-// src/paths.ts
-import { createHash } from "node:crypto";
-import { existsSync as existsSync4, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { isAbsolute as isAbsolute2, join as join8, resolve as resolve2 } from "node:path";
-var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
-function projectKey(root2) {
-  const full = resolve2(root2);
-  const hash = createHash("sha256").update(full).digest("hex").slice(0, 10);
-  const name = full.split(/[/\\]/).filter(Boolean).pop() ?? "project";
-  return `${name.replace(/[^\w.-]/g, "-")}-${hash}`;
-}
-function ensureDir(dir) {
+// src/dtcg.ts
+import { readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
+import { basename, isAbsolute as isAbsolute3, join as join10, relative as relative3, resolve as resolvePath } from "node:path";
+var TIERS = ["base", "semantic", "component"];
+var ALL_TIERS = [...TIERS, "unknown"];
+var isTier = (s) => ALL_TIERS.includes(s);
+var isNode = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+function tokenFilesUnder(path, budget = 200) {
+  let isDir;
   try {
-    mkdirSync(dir, { recursive: true });
-    return dir;
+    isDir = statSync5(path).isDirectory();
   } catch {
-    return null;
+    throw new Error(`no token set at ${path}`);
+  }
+  if (!isDir) return [path];
+  const out = [];
+  const walk = (dir) => {
+    for (const e of readDir(dir)) {
+      const full = join10(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name !== "node_modules") walk(full);
+      } else if (e.name.endsWith(".json") && !e.name.startsWith(".")) {
+        if (out.length >= budget)
+          throw new Error(`more than ${budget} .json files under ${path}; point at the token sources`);
+        out.push(full);
+      }
+    }
+  };
+  walk(path);
+  if (!out.length) throw new Error(`no .json token files under ${path}`);
+  return out;
+}
+var isToken = (n) => "$value" in n;
+function walkFile(raw, file, into, groupOf) {
+  if (!isNode(raw)) return;
+  const walk = (node, trail, inheritedType) => {
+    const declared = typeof node.$type === "string" ? node.$type : inheritedType;
+    for (const [key, child] of Object.entries(node)) {
+      if (key.startsWith("$") && key !== "$root" || !isNode(child)) continue;
+      const trailNext = [...trail, key];
+      if (!isToken(child)) {
+        walk(child, trailNext, declared);
+        continue;
+      }
+      const path = trailNext.join(".");
+      if (into.has(path)) continue;
+      const own = typeof child.$type === "string" ? child.$type : void 0;
+      const value = child.$value;
+      const isRef = aliasTarget(value) !== void 0;
+      if (own === void 0 && isRef && declared !== void 0) groupOf.set(path, declared);
+      into.set(path, {
+        path,
+        segments: trailNext,
+        leaf: key,
+        // Completed by `resolve`, which is the only place that can see the
+        // whole set and therefore the only place an alias's type is knowable.
+        type: own ?? (isRef ? "" : declared ?? ""),
+        typed: (own ?? declared) !== void 0,
+        value,
+        resolved: value,
+        literal: "",
+        ...typeof child.$description === "string" ? { description: child.$description } : {},
+        depth: 0,
+        file
+      });
+    }
+  };
+  walk(raw, [], void 0);
+}
+var ALIAS = /^\{([^{}]+)\}$/;
+var aliasTarget = (value) => typeof value === "string" ? ALIAS.exec(value.trim())?.[1] ?? void 0 : void 0;
+function resolve3(tokens, groupOf) {
+  const declaredOf = new Map([...tokens].map(([path, t]) => [path, t.type]));
+  for (const t of tokens.values()) {
+    const direct = aliasTarget(t.value);
+    if (direct !== void 0) t.alias = direct;
+    let at = t;
+    let type = t.type;
+    const seen = /* @__PURE__ */ new Set([t.path]);
+    let depth = 0;
+    for (; ; ) {
+      const next = aliasTarget(at.value);
+      if (next === void 0) break;
+      const to = tokens.get(next);
+      if (!to || seen.has(next)) break;
+      seen.add(next);
+      at = to;
+      depth++;
+      type ||= declaredOf.get(next) ?? "";
+    }
+    t.resolved = at.value;
+    t.depth = depth || (direct !== void 0 ? 1 : 0);
+    t.type = type || groupOf.get(t.path) || inferType(t.resolved);
+    t.literal = literalOf(t.resolved);
   }
 }
-var attemptsPath = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join8(data || join8(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`), projectKey(root2), "attempts.json");
-var DEFAULT_BASELINE = ".loupe-baseline.json";
-var baselinePath = (root2, p) => isAbsolute2(p) ? p : join8(root2, p);
-function legacyBaseline(root2) {
-  const data = process.env.CLAUDE_PLUGIN_DATA;
-  const candidates = [
-    join8(root2, ".loupe", "baseline.json"),
-    ...data ? [join8(data, "projects", projectKey(root2), "baseline.json")] : []
+function literalOf(value) {
+  if (value === null || value === void 0) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (!isNode(value)) return String(value);
+  if (typeof value.value === "number" && typeof value.unit === "string") return `${value.value}${value.unit}`;
+  if (Array.isArray(value.components) && typeof value.colorSpace === "string") {
+    const alpha = typeof value.alpha === "number" ? value.alpha : 1;
+    const hex = typeof value.hex === "string" ? value.hex.trim() : "";
+    if (/^#[0-9a-f]{6}$/i.test(hex)) return `${hex}${alpha < 1 ? byte(alpha) : ""}`;
+    const numbers = value.components.every((c) => typeof c === "number" || c === "none") ? value.components.map((c) => typeof c === "number" ? c : 0) : null;
+    const srgb = numbers && toSrgb(value.colorSpace, numbers);
+    if (srgb) return hexOf(srgb, alpha);
+    const parts = value.components.map((c) => typeof c === "number" ? round(c) : String(c));
+    return `color(${value.colorSpace} ${parts.join(" ")}${alpha !== 1 ? ` / ${round(alpha)}` : ""})`;
+  }
+  return JSON.stringify(value);
+}
+var round = (n) => String(Math.round(n * 1e3) / 1e3);
+function toSrgb(space, components2) {
+  const [a = 0, b = 0, c = 0] = components2;
+  switch (space) {
+    case "srgb":
+      return [a, b, c];
+    // Gamma-encode: the linear space holds the same colours on another curve.
+    case "srgb-linear": {
+      const enc = (v) => v <= 31308e-7 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055;
+      return [enc(a), enc(b), enc(c)];
+    }
+    // `[hue in degrees, saturation %, lightness %]`, per the spec.
+    case "hsl":
+      return hslToSrgb(a, b / 100, c / 100);
+    // `[hue, whiteness %, blackness %]`: the fully saturated hue, then mixed
+    // toward white and black.
+    case "hwb": {
+      const [w, bl] = [b / 100, c / 100];
+      if (w + bl >= 1) {
+        const grey = w / (w + bl);
+        return [grey, grey, grey];
+      }
+      const pure = hslToSrgb(a, 1, 0.5);
+      return [pure[0], pure[1], pure[2]].map((v) => v * (1 - w - bl) + w);
+    }
+    default:
+      return null;
+  }
+}
+function hslToSrgb(hue, s, l) {
+  const h = (hue % 360 + 360) % 360;
+  const chroma = (1 - Math.abs(2 * l - 1)) * s;
+  const x = chroma * (1 - Math.abs(h / 60 % 2 - 1));
+  const m = l - chroma / 2;
+  const [r, g, b] = h < 60 ? [chroma, x, 0] : h < 120 ? [x, chroma, 0] : h < 180 ? [0, chroma, x] : h < 240 ? [0, x, chroma] : h < 300 ? [x, 0, chroma] : [chroma, 0, x];
+  return [r + m, g + m, b + m];
+}
+var byte = (n) => Math.max(0, Math.min(255, Math.round(n * 255))).toString(16).padStart(2, "0");
+function hexOf(components2, alpha) {
+  const [r = 0, g = 0, b = 0] = components2;
+  return `#${byte(r)}${byte(g)}${byte(b)}${alpha < 1 ? byte(alpha) : ""}`;
+}
+function inferType(value) {
+  if (isNode(value)) {
+    if (Array.isArray(value.components)) return "color";
+    if (typeof value.value === "number" && typeof value.unit === "string")
+      return value.unit === "ms" || value.unit === "s" ? "duration" : "dimension";
+    if ("fontFamily" in value || "fontSize" in value) return "typography";
+    if ("color" in value && "offsetX" in value) return "shadow";
+    return "";
+  }
+  if (Array.isArray(value)) return value.length === 4 && value.every((n) => typeof n === "number") ? "cubicBezier" : "";
+  if (typeof value === "number") return "number";
+  if (typeof value !== "string") return "";
+  const v = value.trim().toLowerCase();
+  if (/^#[0-9a-f]{3,8}$/.test(v) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/.test(v)) return "color";
+  if (/^-?[\d.]+(px|rem|em|%|vh|vw|pt)$/.test(v)) return "dimension";
+  if (/^[\d.]+m?s$/.test(v)) return "duration";
+  if (/^cubic-bezier\(/.test(v)) return "cubicBezier";
+  if (/^(normal|bold|light|medium|semi-?bold|extra-?bold|black|thin)$/.test(v)) return "fontWeight";
+  return "";
+}
+var TIER_WORDS = {
+  base: /^(primitives?|base|core|globals?|foundations?|refs?|reference|palettes?|raw|scales?)$/,
+  semantic: /^(semantics?|alias(es)?|system|sys|themes?|roles?|intent|decisions?|common|shared|functional|applied)$/,
+  component: /^(components?|comps?|cmp|parts?|recipes?|patterns?)$/
+};
+var isTierWord = (word) => TIERS.some((t) => TIER_WORDS[t].test(word.toLowerCase()));
+function tierOf(segments, dirs2 = []) {
+  for (const d of dirs2) {
+    const tier = TIERS.find((t) => TIER_WORDS[t].test(d.toLowerCase()));
+    if (tier) return { tier, tierFrom: "foldered" };
+  }
+  for (const s of segments.slice(0, -1)) {
+    const tier = TIERS.find((t) => TIER_WORDS[t].test(s.toLowerCase()));
+    if (tier) return { tier, tierFrom: "named" };
+  }
+  return { tier: "unknown", tierFrom: "unstated" };
+}
+function dirsOf(root2, file) {
+  const within = relative3(resolvePath(root2), resolvePath(file));
+  const rel = within.startsWith("..") || isAbsolute3(within) ? file : within;
+  return rel.split(/[/\\]/).slice(0, -1).filter(Boolean);
+}
+var SIBLINGS = 12;
+function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
+  const files = tokenFilesUnder(path);
+  const flat = /* @__PURE__ */ new Map();
+  const groupOf = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    let raw;
+    try {
+      raw = JSON.parse(readFileSync11(file, "utf8").replace(/^\uFEFF/, ""));
+    } catch (err) {
+      throw new Error(`${file} is not readable JSON: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    walkFile(raw, file, flat, groupOf);
+  }
+  if (!flat.size) throw new Error(`${path} holds no DTCG tokens ($value was not found anywhere)`);
+  resolve3(flat, groupOf);
+  const byGroup = /* @__PURE__ */ new Map();
+  for (const t of flat.values()) {
+    const group = t.segments.slice(0, -1).join(".");
+    byGroup.set(group, [...byGroup.get(group) ?? [], t.leaf]);
+  }
+  const tokens = [...flat.values()].map((t) => {
+    const group = t.segments.slice(0, -1).join(".");
+    return {
+      ...t,
+      ...tierOf(t.segments, dirsOf(path, t.file)),
+      siblings: (byGroup.get(group) ?? []).filter((n) => n !== t.leaf).slice(0, SIBLINGS)
+    };
+  });
+  return { tokens, path, files, label };
+}
+
+// src/judge/counterpart.ts
+var NONE2 = "none";
+var noneKey = (candidates) => candidates.some((c) => c.path === NONE2) ? `$${NONE2}` : NONE2;
+var NONE_CRITERION2 = "None of these. The second system has no counterpart for this token \u2014 it models this part of the interface differently, or does not model it at all \u2014 and a port would have to add a token rather than reuse one.";
+var FULL_CONTEXT = {
+  element: { name: true, type: true, tier: true, value: true, alias: true, description: true, siblings: true },
+  option: { tier: true, value: true, description: true }
+};
+var valueCarries = (type) => type === "dimension" || type === "duration" || type === "number" || type === "fontWeight";
+var DEFAULT_CONTEXT = {
+  element: { ...FULL_CONTEXT.element, value: "comparable" },
+  option: { ...FULL_CONTEXT.option, value: "comparable" }
+};
+var showValue = (flag, type) => flag === "comparable" ? valueCarries(type) : flag;
+var describe = (t, opt) => {
+  const head2 = [
+    opt.tier && t.tier !== "unknown" ? t.tier : "",
+    showValue(opt.value, t.type) ? t.literal || "(no value)" : ""
+  ].filter(Boolean).join(" \xB7 ");
+  const desc = opt.description ? t.description : void 0;
+  if (!head2) return desc ?? "(name only)";
+  return desc ? `${head2} \u2014 ${desc}` : head2;
+};
+function optionShape(opt) {
+  const said = [
+    opt.tier ? "the tier it sits at" : "",
+    opt.value === true ? "its value" : "",
+    opt.description ? "what that system says it is for" : ""
+  ].filter(Boolean);
+  if (!said.length) return "its name alone";
+  if (said.length === 1) return said[0];
+  return `${said.slice(0, -1).join(", ")} and ${said.at(-1)}`;
+}
+var counterpartQuery = (ctx = DEFAULT_CONTEXT) => ({
+  element: ({ token, fromLabel }) => ({
+    set: fromLabel,
+    ...ctx.element.name ? { token: token.path } : {},
+    ...ctx.element.type ? { type: token.type || "unknown" } : {},
+    ...ctx.element.tier && token.tier !== "unknown" ? { tier: token.tier } : {},
+    ...showValue(ctx.element.value, token.type) && token.literal ? { value: token.literal } : {},
+    ...ctx.element.alias && token.alias ? { aliases: token.alias } : {},
+    ...ctx.element.description && token.description ? { description: token.description } : {},
+    ...ctx.element.siblings && token.siblings.length ? { group_siblings: token.siblings } : {}
+  }),
+  question: ({ candidates, fromLabel, toLabel }, i) => ({
+    type: "choice",
+    instructions: `\`elements[${i}]\` is one design token from the design system "${fromLabel}". Each option below is a token from a different design system, "${toLabel}", given as ${optionShape(ctx.option)}. Which option is the counterpart of \`elements[${i}]\` \u2014 the token an interface being ported from ${fromLabel} to ${toLabel} should use in its place, or does ${toLabel} have no counterpart for it? Match the intent of the token: the decision it records, and how specific that decision is. Two systems can agree on an intent and still round the value differently, and two unrelated tokens can share a value by coincidence.`,
+    criteria: {
+      ...Object.fromEntries(candidates.map((c) => [c.path, describe(c, ctx.option)])),
+      [noneKey(candidates)]: NONE_CRITERION2
+    }
+  })
+});
+
+// src/color.ts
+var { NO_COLOR, FORCE_COLOR, TERM } = process.env;
+var enabled = NO_COLOR ? false : FORCE_COLOR ? FORCE_COLOR !== "0" : Boolean(process.stdout.isTTY) && TERM !== "dumb";
+var setColor = (on) => {
+  enabled = on;
+};
+var paint = (code) => (text2) => enabled ? `\x1B[${code}m${text2}\x1B[0m` : text2;
+var bold = paint("1");
+var dim = paint("2");
+var red = paint("31");
+var green = paint("32");
+var yellow = paint("33");
+var magenta = paint("35");
+var cyan = paint("36");
+var SEV_PAINT = {
+  error: red,
+  warn: yellow,
+  off: dim
+};
+
+// src/mapping.ts
+var AS_PX = { px: 1, rem: 16, em: 16, pt: 4 / 3 };
+var AS_MS = { ms: 1, s: 1e3 };
+var NAMED = /* @__PURE__ */ new Map([
+  ["white", "#ffffff"],
+  ["black", "#000000"],
+  ["transparent", "#00000000"]
+]);
+function parseColor(text2) {
+  const lower = text2.trim().toLowerCase();
+  const v = NAMED.get(lower) ?? lower;
+  const hex = /^#([0-9a-f]{3,8})$/.exec(v)?.[1];
+  if (hex && (hex.length === 3 || hex.length === 4 || hex.length === 6 || hex.length === 8)) {
+    const wide = hex.length <= 4;
+    const at = (i) => {
+      const part = wide ? hex.slice(i, i + 1).repeat(2) : hex.slice(i * 2, i * 2 + 2);
+      return part ? Number.parseInt(part, 16) / 255 : 0;
+    };
+    const has = wide ? hex.length === 4 : hex.length === 8;
+    return { rgb: [at(0), at(1), at(2)], alpha: has ? at(3) : 1 };
+  }
+  const fn = /^(rgb|hsl|hwb)a?\(([^)]+)\)$/.exec(v);
+  if (!fn?.[1] || !fn[2]) return null;
+  const parts = fn[2].split(/[\s,/]+/).filter(Boolean);
+  const [x, y, z] = parts.map((p) => Number.parseFloat(p));
+  if (x === void 0 || y === void 0 || z === void 0 || [x, y, z].some(Number.isNaN)) return null;
+  const a = parts[3] === void 0 ? 1 : Number.parseFloat(parts[3]) / (parts[3].endsWith("%") ? 100 : 1);
+  const rgb = fn[1] === "rgb" ? [x, y, z].map((n, i) => n / (parts[i]?.endsWith("%") ? 100 : 255)) : toSrgb(fn[1], [x, y, z]);
+  return rgb && { rgb, alpha: Number.isNaN(a) ? 1 : a };
+}
+function oklab([r, g, b]) {
+  const lin = (c) => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  const [R, G, B] = [lin(r), lin(g), lin(b)];
+  const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
+  const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
+  const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
   ];
-  return candidates.find((path) => existsSync4(path)) ?? null;
 }
-var legacyBaselineNotice = (path) => `${path} is a 0.1.x baseline, which this version no longer reads \u2014 re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
-function findExistingBaseline(root2, explicit, configured) {
-  if (explicit !== null) {
-    const path = baselinePath(root2, explicit);
-    return { path, found: existsSync4(path), fallback: "none" };
+function measure2(literal2) {
+  const v = literal2.trim().toLowerCase();
+  if (!v) return null;
+  const color = parseColor(v);
+  if (color) return { kind: "color", lab: oklab(color.rgb), alpha: color.alpha };
+  const num2 = /^(-?\d*\.?\d+)([a-z%]*)$/.exec(v);
+  if (!num2) return null;
+  const n = Number.parseFloat(num2[1] ?? "");
+  if (Number.isNaN(n)) return null;
+  const unit = num2[2] ?? "";
+  if (unit in AS_PX) return { kind: "number", n: n * (AS_PX[unit] ?? 1), unit: "px" };
+  if (unit in AS_MS) return { kind: "number", n: n * (AS_MS[unit] ?? 1), unit: "ms" };
+  return { kind: "number", n, unit };
+}
+var COLOR_STEP = 0.06;
+var FEATURES = /* @__PURE__ */ new WeakMap();
+function featuresOf(t) {
+  let f = FEATURES.get(t);
+  if (!f) {
+    f = {
+      measured: measure2(t.literal),
+      words: words(t),
+      leaf: new Set(splitWords(t.leaf)),
+      leafName: t.leaf.toLowerCase()
+    };
+    FEATURES.set(t, f);
   }
-  const target = baselinePath(root2, configured);
-  if (existsSync4(target)) return { path: target, found: true, fallback: "none" };
-  const byDefaultName = join8(root2, DEFAULT_BASELINE);
-  if (byDefaultName !== target && existsSync4(byDefaultName))
-    return { path: byDefaultName, found: true, fallback: "default-name" };
-  return { path: target, found: false, fallback: "none" };
+  return f;
+}
+function valueScore(a, b) {
+  const [x, y] = [featuresOf(a).measured, featuresOf(b).measured];
+  if (!x || !y) return a.literal !== "" && a.literal === b.literal ? 1 : 0;
+  if (x.kind !== y.kind) return 0;
+  if (x.kind === "color" && y.kind === "color") {
+    const d = Math.hypot(x.lab[0] - y.lab[0], x.lab[1] - y.lab[1], x.lab[2] - y.lab[2]);
+    return 1 / (1 + (d + Math.abs(x.alpha - y.alpha) * 0.5) / COLOR_STEP);
+  }
+  if (x.kind === "number" && y.kind === "number") {
+    if (x.unit !== y.unit && x.unit && y.unit) return 0;
+    if (x.n === y.n) return 1;
+    if (x.n === 0 || y.n === 0 || x.n * y.n < 0) return 0;
+    const ratio = Math.min(Math.abs(x.n), Math.abs(y.n)) / Math.max(Math.abs(x.n), Math.abs(y.n));
+    return ratio * ratio;
+  }
+  return 0;
+}
+var NOISE = /^(tokens?|values?|css|json|web|default)$/;
+var splitWords = (text2) => text2.replace(/([a-z0-9])([A-Z])/g, "$1 $2").split(/[^A-Za-z0-9]+/).map((w) => w.toLowerCase()).filter(Boolean);
+function words(t) {
+  const typeWords = new Set(splitWords(t.type));
+  return new Set(
+    splitWords(t.path).filter((w) => !isTierWord(w) && !typeWords.has(w) && !NOISE.test(w) && !/^colou?rs?$/.test(w))
+  );
+}
+function dice(a, b) {
+  if (!a.size || !b.size) return 0;
+  let hit = 0;
+  for (const w of a) if (b.has(w)) hit++;
+  return 2 * hit / (a.size + b.size);
+}
+function nameScore(a, b) {
+  const [fa, fb] = [featuresOf(a), featuresOf(b)];
+  const whole = dice(fa.words, fb.words);
+  const leaf = fa.leafName === fb.leafName ? 1 : dice(fa.leaf, fb.leaf);
+  return 0.6 * whole + 0.4 * leaf;
+}
+var NUMERIC = /* @__PURE__ */ new Set(["dimension", "duration", "fontWeight", "number"]);
+var comparable = (a, b) => a === b || NUMERIC.has(a) && NUMERIC.has(b) && (a === "number" || b === "number");
+var WEIGHT = {
+  // A primitive *is* its value: two palettes are comparable by colour long
+  // before they are comparable by whatever each calls its greys.
+  base: { value: 0.75, name: 0.25 },
+  // A role is a name. Two systems that both have a default text colour will
+  // have rounded it differently, and the value is the weaker signal of the two.
+  semantic: { value: 0.35, name: 0.65 },
+  component: { value: 0.3, name: 0.7 },
+  // The set never said which tier this is, so there is no reason to prefer
+  // either signal over the other.
+  unknown: { value: 0.5, name: 0.5 }
+};
+var TIER_WEIGHT = 0.2;
+var CANDIDATES = 254;
+function rank(t, targets, gate = true) {
+  const w = WEIGHT[t.tier];
+  return targets.filter((c) => !gate || comparable(t.type, c.type)).map((c) => {
+    const value = valueScore(t, c);
+    const name = nameScore(t, c);
+    const sameTier = t.tier !== "unknown" && c.tier === t.tier;
+    return {
+      token: c,
+      value,
+      name,
+      sameTier,
+      score: TIER_WEIGHT * (sameTier ? 1 : 0) + (1 - TIER_WEIGHT) * (w.value * value + w.name * name)
+    };
+  }).sort((a, b) => b.score - a.score || byBytes(a.token.path, b.token.path));
+}
+var FLOOR2 = 0.7;
+function planMap(from, to, opts = {}) {
+  const size = opts.candidates ?? CANDIDATES;
+  const byPath = new Map(to.tokens.map((t) => [t.path, t]));
+  const inScope = (t) => (!opts.tiers?.length || opts.tiers.includes(t.tier)) && (!opts.types?.length || opts.types.includes(t.type));
+  const wanted = from.tokens.filter(inScope);
+  const capped = opts.limit && opts.limit > 0 ? wanted.slice(0, opts.limit) : wanted;
+  const jobs = [];
+  const shortlists = [];
+  const ranks = [];
+  const settled = [];
+  for (const t of capped) {
+    const row = {
+      from: t.path,
+      type: t.type,
+      tier: t.tier,
+      fromValue: t.literal
+    };
+    const twin = opts.settleExact === false ? void 0 : byPath.get(t.path);
+    if (twin && comparable(t.type, twin.type)) {
+      settled.push({ ...row, to: twin.path, toValue: twin.literal, confidence: 1, how: "exact", considered: [] });
+      continue;
+    }
+    const pool = to.tokens.filter((c) => opts.typeGate === false || comparable(t.type, c.type));
+    const ranked = pool.length <= size ? pool.map((token) => ({ token, score: 0, value: 0, name: 0, sameTier: false })) : rank(t, pool, false).slice(0, size);
+    if (!ranked.length) {
+      settled.push({ ...row, to: null, confidence: 1, how: "absent", considered: [] });
+      continue;
+    }
+    jobs.push({
+      token: t,
+      candidates: ranked.map((c) => c.token),
+      fromLabel: from.label,
+      toLabel: to.label
+    });
+    shortlists.push(ranked);
+    ranks.push(pool.length > size);
+  }
+  return { jobs, shortlists, ranked: ranks, settled, skipped: from.tokens.length - capped.length, from, to };
+}
+async function askCounterparts(plan, auth, fetchImpl = fetch, ctx = DEFAULT_CONTEXT) {
+  const answers = plan.jobs.length ? await ask(counterpartQuery(ctx), plan.jobs, auth, fetchImpl) : [];
+  const judged = plan.jobs.map((job, i) => rowFor(job, answers[i]));
+  const order = new Map(plan.from.tokens.map((t, i) => [t.path, i]));
+  const mappings = [...plan.settled, ...judged].sort(
+    (a, b) => (order.get(a.from) ?? 0) - (order.get(b.from) ?? 0) || byBytes(a.from, b.from)
+  );
+  return { mappings, answers };
+}
+function rowFor(job, answer) {
+  const { token, candidates } = job;
+  const none = noneKey(candidates);
+  const row = {
+    from: token.path,
+    type: token.type,
+    tier: token.tier,
+    fromValue: token.literal,
+    considered: candidates.map((c) => c.path)
+  };
+  if (!answer || !(answer.confidence >= FLOOR2)) {
+    const at = answer?.choice === none ? null : candidates.find((c) => c.path === answer?.choice);
+    return {
+      ...row,
+      to: null,
+      confidence: answer?.confidence ?? 0,
+      how: "unsure",
+      // `undefined` here is the third case, and the only one with nothing to
+      // say: no answer came back, or the one that did named an option that was
+      // never offered.
+      ...at !== void 0 ? { leaning: at ? { to: at.path, value: at.literal } : { to: null } } : {}
+    };
+  }
+  const rest = Object.entries(answer.probabilities ?? {}).filter(([k]) => k !== answer.choice && k !== none).sort((a, b) => b[1] - a[1])[0];
+  const runnerUp = rest ? { runnerUp: { to: rest[0], confidence: rest[1] } } : {};
+  if (answer.choice === none) return { ...row, to: null, confidence: answer.confidence, how: "none", ...runnerUp };
+  const picked = candidates.find((c) => c.path === answer.choice);
+  if (!picked) return { ...row, to: null, confidence: answer.confidence, how: "unsure" };
+  return {
+    ...row,
+    to: picked.path,
+    toValue: picked.literal,
+    confidence: answer.confidence,
+    how: "judged",
+    ...runnerUp
+  };
+}
+function collisionsIn(mappings) {
+  const claims = /* @__PURE__ */ new Map();
+  for (const m of mappings) if (m.to) claims.set(m.to, [...claims.get(m.to) ?? [], m.from]);
+  return [...claims].filter(([, from]) => from.length > 1).map(([to, from]) => ({ to, from })).sort((a, b) => b.from.length - a.from.length || byBytes(a.to, b.to));
+}
+var countBy = (mappings) => {
+  const counts = { exact: 0, judged: 0, none: 0, absent: 0, unsure: 0 };
+  for (const m of mappings) counts[m.how]++;
+  return counts;
+};
+var mapPayload = (plan, mappings, model) => ({
+  from: {
+    label: plan.from.label,
+    path: plan.from.path,
+    files: plan.from.files.length,
+    tokens: plan.from.tokens.length
+  },
+  to: { label: plan.to.label, path: plan.to.path, files: plan.to.files.length, tokens: plan.to.tokens.length },
+  model,
+  floor: FLOOR2,
+  skipped: plan.skipped,
+  counts: countBy(mappings),
+  collisions: collisionsIn(mappings),
+  mappings: [...mappings]
+});
+var OUTCOMES = [
+  ["exact", "named identically in both"],
+  ["judged", "judged"],
+  ["none", "no counterpart"],
+  ["unsure", "under the floor"],
+  ["absent", "nothing of their type to compare"]
+];
+function formatMap(plan, mappings) {
+  const width = (xs) => Math.min(48, Math.max(0, ...xs.map((x) => x.length)));
+  const pathW = width(mappings.map((m) => m.from));
+  const valueW = width(mappings.map((m) => m.fromValue));
+  const pad = (s, n) => s.length > n ? `${s.slice(0, n - 1)}\u2026` : s.padEnd(n);
+  const collisions = collisionsIn(mappings);
+  const shared = new Map(collisions.map((c) => [c.to, c.from.length]));
+  const out = [`${bold(`${plan.from.label} \u2192 ${plan.to.label}`)}
+`];
+  for (const tier of ALL_TIERS) {
+    const rows = mappings.filter((m) => m.tier === tier);
+    if (!rows.length) continue;
+    out.push(`${bold(tier)} ${dim(`(${rows.length})`)}
+`);
+    for (const m of rows) {
+      const head2 = `  ${pad(m.from, pathW)}  ${dim(pad(m.fromValue, valueW))}  \u2192  `;
+      const many = m.to ? shared.get(m.to) : void 0;
+      out.push(`${head2}${verdict(m)}${many ? dim(`  shared \xD7${many}`) : ""}
+`);
+    }
+    out.push("\n");
+  }
+  if (collisions.length) {
+    const claimed = collisions.reduce((n, c) => n + c.from.length, 0);
+    out.push(
+      `${bold("not one-to-one")} ${dim(
+        `(${collisions.length} token(s) in ${plan.to.label} claimed by ${claimed} in ${plan.from.label})`
+      )}
+`
+    );
+    for (const c of collisions) {
+      out.push(`  ${yellow(c.to)} ${dim(`\xD7${c.from.length}`)}
+`);
+      for (const f of c.from) out.push(`      ${dim(f)}
+`);
+    }
+    out.push("\n");
+  }
+  const counts = countBy(mappings);
+  const said = OUTCOMES.filter(([how]) => counts[how]).map(([how, text2]) => `${counts[how]} ${text2}`);
+  const scoped = plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : "";
+  out.push(`${mappings.length} token(s): ${said.join(", ")}.${scoped}
+`);
+  return out.join("");
+}
+function verdict(m) {
+  const sure = m.how === "exact" ? dim("identical") : dim(`${m.confidence.toFixed(2)}`);
+  if (m.to) return `${green(m.to)}  ${dim(m.toValue ?? "")}  ${sure}`;
+  if (m.how === "absent") return dim(`nothing of type ${m.type || "unknown"} to compare`);
+  if (m.how === "unsure") {
+    const lean = m.leaning ? ["leaning", m.leaning.to ?? "no counterpart", m.leaning.value].filter(Boolean).join(" ") : "no answer";
+    return `${yellow("unsettled")}  ${dim(`${lean}  ${m.confidence.toFixed(2)}`)}`;
+  }
+  return `${dim("no counterpart")}  ${sure}`;
+}
+function formatPlan(plan, show) {
+  const out = [`${bold(`${plan.from.label} \u2192 ${plan.to.label}`)} ${dim("(dry run)")}
+
+`];
+  for (const [i, job] of plan.jobs.entries()) {
+    const t = job.token;
+    out.push(`${t.path}  ${dim(`${t.literal}  ${t.tier}`)}
+`);
+    if (plan.ranked?.[i] === false) {
+      out.push(dim(`    all ${job.candidates.length} compatible token(s) offered, unranked
+
+`));
+      continue;
+    }
+    for (const c of (plan.shortlists[i] ?? []).slice(0, show))
+      out.push(
+        `    ${dim(c.score.toFixed(2))}  ${c.token.path}  ${dim(
+          `${c.token.literal}  ${c.token.tier}  value ${c.value.toFixed(2)} name ${c.name.toFixed(2)}`
+        )}
+`
+      );
+    out.push("\n");
+  }
+  const counts = countBy(plan.settled);
+  const said = OUTCOMES.filter(([how]) => counts[how]).map(([how, text2]) => `${counts[how]} ${text2}`);
+  const scoped = plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : "";
+  out.push(
+    `${plan.jobs.length + plan.settled.length} token(s): ${said.length ? `${said.join(", ")}, ` : ""}${plan.jobs.length} would be asked.${scoped}
+`
+  );
+  return out.join("");
 }
 
 // src/baseline.ts
+import { existsSync as existsSync5, readFileSync as readFileSync12, writeFileSync as writeFileSync3 } from "node:fs";
+import { dirname as dirname5 } from "node:path";
 function readBaseline(path) {
   if (!existsSync5(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync9(path, "utf8"));
+    const parsed = JSON.parse(readFileSync12(path, "utf8"));
     if (!Array.isArray(parsed.entries)) return null;
     const entries = parsed.entries.filter((e) => typeof e === "string");
     return { createdAt: parsed.createdAt ?? "", entries, set: new Set(entries) };
@@ -29328,7 +30442,7 @@ function diffBaseline(result, prior) {
   return { entries: entries.length, rules: rules2 };
 }
 function writeBaseline(full, result) {
-  ensureDir(dirname3(full));
+  ensureDir(dirname5(full));
   const entries = entriesOf(result);
   const prior = readBaseline(full);
   const unchanged = prior !== null && prior.entries.length === entries.length && prior.entries.every((e, i) => e === entries[i]);
@@ -29339,7 +30453,7 @@ function writeBaseline(full, result) {
     findings: result.findings.length,
     entries
   };
-  writeFileSync2(full, `${JSON.stringify(file, null, 2)}
+  writeFileSync3(full, `${JSON.stringify(file, null, 2)}
 `);
   return { path: full, findings: result.findings.length, entries: entries.length };
 }
@@ -29372,8 +30486,8 @@ function applyBaseline(result, baseline, {
 }
 
 // src/config.ts
-import { existsSync as existsSync6, readFileSync as readFileSync10 } from "node:fs";
-import { dirname as dirname4, isAbsolute as isAbsolute3, join as join9, relative as relative3, resolve as resolve3 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync13 } from "node:fs";
+import { dirname as dirname6, isAbsolute as isAbsolute4, join as join11, relative as relative4, resolve as resolve4 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // src/registry.ts
@@ -29444,21 +30558,21 @@ function mergeConfig(base, over) {
   return out;
 }
 function findConfig(start) {
-  let dir = resolve3(start);
+  let dir = resolve4(start);
   for (; ; ) {
     for (const name of CONFIG_NAMES) {
-      const p = join9(dir, name);
+      const p = join11(dir, name);
       if (existsSync6(p)) return p;
     }
-    const pkg = join9(dir, "package.json");
+    const pkg = join11(dir, "package.json");
     if (existsSync6(pkg)) {
       try {
-        const parsed = JSON.parse(readFileSync10(pkg, "utf8"));
+        const parsed = JSON.parse(readFileSync13(pkg, "utf8"));
         if (isObj(parsed) && parsed.loupe) return pkg;
       } catch {
       }
     }
-    const up = dirname4(dir);
+    const up = dirname6(dir);
     if (up === dir) return null;
     dir = up;
   }
@@ -29469,32 +30583,33 @@ async function readConfigFile(path) {
     if (embedded) return embedded;
   }
   if (path.endsWith(".json")) {
-    const parsed = JSON.parse(readFileSync10(path, "utf8"));
+    const parsed = JSON.parse(readFileSync13(path, "utf8"));
     return path.endsWith("package.json") ? parsed.loupe : parsed;
   }
   const mod = await import(pathToFileURL(path).href);
   return mod.default ?? mod;
 }
 async function resolveExtends(spec, fromDir) {
-  if (hasPreset(spec)) return { path: join9(PRESET_DIR, `${presetKey(spec)}.json`), dir: PRESET_DIR };
-  const asPath = isAbsolute3(spec) ? spec : join9(fromDir, spec);
-  if (existsSync6(asPath)) return { path: asPath, dir: dirname4(asPath) };
+  if (hasPreset(spec)) return { path: join11(PRESET_DIR, `${presetKey(spec)}.json`), dir: PRESET_DIR };
+  const asPath = isAbsolute4(spec) ? spec : join11(fromDir, spec);
+  if (existsSync6(asPath)) return { path: asPath, dir: dirname6(asPath) };
   throw new Error(`cannot resolve extends: ${spec}`);
 }
 var freshWalk = () => ({ ancestors: /* @__PURE__ */ new Set(), applied: /* @__PURE__ */ new Set() });
 async function loadChain(path, walk = freshWalk()) {
-  const real = resolve3(path);
+  const real = resolve4(path);
   if (walk.ancestors.has(real)) throw new Error(`circular extends at ${real}`);
   if (walk.applied.has(real)) return { raw: {}, ruleFrom: {} };
   walk.applied.add(real);
   const raw = await readConfigFile(real) ?? {};
   const label = real.startsWith(PRESET_DIR) ? `preset ${real.slice(PRESET_DIR.length + 1).replace(/\.json$/, "")}` : real;
-  return expandExtends(raw, dirname4(real), label, {
+  return expandExtends(raw, dirname6(real), label, {
     ancestors: /* @__PURE__ */ new Set([...walk.ancestors, real]),
     applied: walk.applied
   });
 }
 async function expandExtends(raw, fromDir, label, walk = freshWalk()) {
+  raw = anchorProfiles(raw, fromDir);
   const own = Object.fromEntries(Object.keys(isObj(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
   if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
   const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
@@ -29508,6 +30623,12 @@ async function expandExtends(raw, fromDir, label, walk = freshWalk()) {
   }
   const { extends: _drop, ...rest } = raw;
   return { raw: mergeConfig(base, rest), ruleFrom: { ...ruleFrom, ...own } };
+}
+function anchorProfiles(raw, fromDir) {
+  if (!raw || raw.profiles === void 0) return raw;
+  const at = (p) => typeof p === "string" && p !== "" ? resolve4(fromDir, p) : p;
+  const spec = raw.profiles;
+  return { ...raw, profiles: Array.isArray(spec) ? spec.map(at) : at(spec) };
 }
 function listPresets() {
   return presetNames().sort((a, b) => Number(a === "generic") - Number(b === "generic"));
@@ -29549,7 +30670,7 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
     if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
     rules2[id] = ruleSetting(rawId, value);
     const from = ruleFrom[rawId];
-    ruleOrigins[id] = from === void 0 ? "config" : isAbsolute3(from) ? relative3(root2, from) || from : from;
+    ruleOrigins[id] = from === void 0 ? "config" : isAbsolute4(from) ? relative4(root2, from) || from : from;
   }
   const elementMap = /* @__PURE__ */ new Map();
   for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
@@ -29578,6 +30699,14 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
   const maxEntries = cfg.maxEntries;
   if (maxEntries !== void 0 && maxEntries !== null && !(Number.isInteger(maxEntries) && maxEntries > 0))
     throw new Error(`maxEntries must be a positive whole number of entries, got: ${JSON.stringify(maxEntries)}`);
+  const profileSpec = cfg.profiles ?? [];
+  const profileList = typeof profileSpec === "string" ? [profileSpec] : Array.isArray(profileSpec) ? profileSpec : [profileSpec];
+  if (profileList.some((p) => typeof p !== "string" || p === ""))
+    throw new Error(`profiles must be a directory or an array of directories, got: ${JSON.stringify(profileSpec)}`);
+  const profileDirs = profileList.map((p) => resolve4(root2, p));
+  const pin = cfg.profile;
+  if (pin !== void 0 && pin !== null && !(typeof pin === "string" && pin !== ""))
+    throw new Error(`profile must be a profile id or "none", got: ${JSON.stringify(pin)}`);
   const layoutComponents = ds.components?.layout ?? [];
   const textComponents = ds.components?.text ?? [];
   const shipped = shippedVocabulary();
@@ -29603,6 +30732,8 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
     // paths won. Normalizing a bare object is the inline case by definition.
     source: { kind: "inline" },
     inferred: false,
+    profileDirs,
+    profilePin: typeof pin === "string" ? pin : null,
     designSystem: {
       name: ds.name || "",
       packages: ds.packages ?? [],
@@ -29661,7 +30792,7 @@ function readRegistry(spec, root2, packages, load, empty) {
   if (Array.isArray(spec)) return load(spec);
   if (typeof spec !== "string") return empty;
   try {
-    const raw = JSON.parse(readFileSync10(isAbsolute3(spec) ? spec : join9(root2, spec), "utf8"));
+    const raw = JSON.parse(readFileSync13(isAbsolute4(spec) ? spec : join11(root2, spec), "utf8"));
     return registryApplies(raw, packages) ? load(raw) : empty;
   } catch {
     return empty;
@@ -29709,11 +30840,11 @@ async function loadConfig({
   let chain;
   let source;
   if (configPath) {
-    chain = await loadChain(resolve3(configPath));
-    source = { kind: "file", path: resolve3(configPath) };
+    chain = await loadChain(resolve4(configPath));
+    source = { kind: "file", path: resolve4(configPath) };
   } else if (preset2) {
     if (!hasPreset(preset2)) throw new Error(`unknown preset: ${preset2}`);
-    chain = await loadChain(join9(PRESET_DIR, `${presetKey(preset2)}.json`));
+    chain = await loadChain(join11(PRESET_DIR, `${presetKey(preset2)}.json`));
     source = { kind: "preset", name: preset2 };
   } else {
     const found = findConfig(root2);
@@ -29724,7 +30855,7 @@ async function loadConfig({
       chain = await expandExtends(inline, root2, inferred ? "inferred config" : "inline config");
       source = { kind: inferred ? "inferred" : "inline" };
     } else {
-      chain = await loadChain(join9(PRESET_DIR, "generic.json"));
+      chain = await loadChain(join11(PRESET_DIR, "generic.json"));
       source = { kind: "preset", name: "generic" };
     }
   }
@@ -29734,28 +30865,8 @@ async function loadConfig({
   return normalized;
 }
 
-// src/color.ts
-var { NO_COLOR, FORCE_COLOR, TERM } = process.env;
-var enabled = NO_COLOR ? false : FORCE_COLOR ? FORCE_COLOR !== "0" : Boolean(process.stdout.isTTY) && TERM !== "dumb";
-var setColor = (on) => {
-  enabled = on;
-};
-var paint = (code) => (text2) => enabled ? `\x1B[${code}m${text2}\x1B[0m` : text2;
-var bold = paint("1");
-var dim = paint("2");
-var red = paint("31");
-var green = paint("32");
-var yellow = paint("33");
-var magenta = paint("35");
-var cyan = paint("36");
-var SEV_PAINT = {
-  error: red,
-  warn: yellow,
-  off: dim
-};
-
 // src/report.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 var SEV_MARK = { error: "\u2717", warn: "\u2022" };
 var SEV_WORD = { error: "blocking", warn: "advisory" };
 var COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|<[A-Z][A-Za-z0-9]*(?=\s)|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
@@ -29831,6 +30942,29 @@ var groupsOf = (findings, by) => by === "rule" ? bucket(findings, (f) => f.rule)
 var sameText = (f) => `${f.code ?? ""}\0${f.message}\0${f.note ?? ""}`;
 var sameLine = (f) => `${f.rule}\0${f.file}\0${sameText(f)}`;
 var collapse = (findings) => bucket(findings, sameLine).map(([, run]) => run.sort((a, b) => a.line - b.line)).sort((a, b) => b.length - a.length);
+function quotas(groups, maxFindings) {
+  const runs = new Map(groups.map(([key, all]) => [key, collapse(all)]));
+  const quota = new Map(groups.map(([key]) => [key, 0]));
+  let budget = maxFindings > 0 ? maxFindings : Infinity;
+  let progress = true;
+  while (budget > 0 && progress) {
+    progress = false;
+    for (const [key] of groups) {
+      if (budget <= 0) break;
+      const taken = quota.get(key) ?? 0;
+      if (taken >= (runs.get(key)?.length ?? 0)) continue;
+      quota.set(key, taken + 1);
+      budget--;
+      progress = true;
+    }
+  }
+  return { runs, quota };
+}
+function shownFindings(findings, maxFindings, group = "rule") {
+  const groups = groupsOf(findings, group);
+  const { runs, quota } = quotas(groups, maxFindings);
+  return groups.flatMap(([key]) => (runs.get(key) ?? []).slice(0, quota.get(key) ?? 0).flat());
+}
 function concentration(group, nested) {
   if (group.length < 2) return String(group.length);
   const files = new Set(group.map((f) => f.file)).size;
@@ -29873,21 +31007,7 @@ function formatAgent(result, config, {
   } else if (findings.length) {
     const sub = group === "rule" ? "file" : "rule";
     const groups = groupsOf(findings, group);
-    const runs = new Map(groups.map(([key, all]) => [key, collapse(all)]));
-    const quota = new Map(groups.map(([key]) => [key, 0]));
-    let budget = maxFindings > 0 ? maxFindings : Infinity;
-    let progress = true;
-    while (budget > 0 && progress) {
-      progress = false;
-      for (const [key] of groups) {
-        if (budget <= 0) break;
-        const taken = quota.get(key) ?? 0;
-        if (taken >= (runs.get(key)?.length ?? 0)) continue;
-        quota.set(key, taken + 1);
-        budget--;
-        progress = true;
-      }
-    }
+    const { runs, quota } = quotas(groups, maxFindings);
     let hidden = 0;
     for (const [key, all] of groups) {
       lines.push("");
@@ -29964,7 +31084,7 @@ function fingerprints(findings) {
     const key = findingKey(f);
     const nth = seen.get(key) ?? 0;
     seen.set(key, nth + 1);
-    return createHash2("sha256").update(nth === 0 ? key : `${key}|#${nth}`).digest("hex").slice(0, 16);
+    return createHash3("sha256").update(nth === 0 ? key : `${key}|#${nth}`).digest("hex").slice(0, 16);
   });
 }
 function reportPayload(result, config) {
@@ -29991,7 +31111,7 @@ function reportPayload(result, config) {
     rules: usedRules(result, config),
     // `rank` orders the report and `suffix` carries the channel marker; both are
     // working state, and this is the last place they can be dropped.
-    findings: result.findings.map(({ rank, suffix, ...f }) => ({ ...f, fix: title(f.rule) })),
+    findings: result.findings.map(({ rank: rank2, suffix, ...f }) => ({ ...f, fix: title(f.rule) })),
     suppressions: result.directives,
     parseErrors: result.diagnostics.parseErrors,
     config: { rules: config.rules, enabled: config.enabled }
@@ -30057,8 +31177,7 @@ function formatSarif(result, config) {
   );
 }
 
-// src/report-html.ts
-var embed = (json) => json.replace(/</g, "\\u003c");
+// src/report-view.ts
 var CSS = `
 :root {
   color-scheme: light;
@@ -30092,6 +31211,11 @@ var CSS = `
   :root[data-theme="dark"] { color-scheme: dark; }
 }
 * { box-sizing: border-box; }
+/* The live host hides panels with the hidden attribute, and the rule that
+   honours it lives in the UA origin \u2014 so any author display declaration below
+   beats it. .kpis and .filters both have one, which without this leaves a clean
+   page showing the previous run's stat tiles above its "No findings" card. */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--plane);
@@ -30179,19 +31303,90 @@ td.msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:
 #tip.on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { #tip { transition: none; } }
 `;
+var LIVE_CSS = `
+.top {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--hairline);
+  font-size: 12.5px; color: var(--ink-2);
+}
+.top .grow { flex: 1; }
+.conn { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-muted); flex: none; }
+.conn.on { background: #2f9e6f; }
+.conn.off { background: var(--sev-error); }
+.conn.busy { background: var(--sev-warn); }
+.btn {
+  font: inherit; font-size: 12px; padding: 5px 11px; border-radius: 7px; cursor: pointer;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--axis);
+}
+.btn:hover:not(:disabled) { background: var(--track); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn:focus-visible, .act-btn:focus-visible, .jump:focus-visible { outline: 2px solid var(--seq); outline-offset: 2px; }
+.act-btn {
+  font: inherit; font-size: 11.5px; padding: 2px 8px; margin-left: 4px; border-radius: 5px; cursor: pointer;
+  background: none; color: var(--ink-2); border: 1px solid var(--hairline);
+}
+.act-btn:hover:not(:disabled) { background: var(--track); color: var(--ink); }
+.act-btn:disabled { opacity: .45; cursor: default; }
+td.act { text-align: right; white-space: nowrap; width: 1%; }
+a.jump { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--axis); }
+a.jump:hover { color: var(--seq); border-bottom-color: var(--seq); }
+/* The flash a write leaves behind: what happened, where the row was. */
+.said { padding: 8px 20px; font-size: 12.5px; border-bottom: 1px solid var(--hairline); background: var(--surface); }
+.said.err { color: var(--sev-error); }
+.said:empty { display: none; }
+.wrap.live { padding-top: 20px; }
+`;
 var JS = `
 (function () {
-  var data = JSON.parse(document.getElementById('loupe-data').textContent);
+  // Two hosts, one view. The static report embeds its payload and renders once;
+  // \`loupe ui\` serves this same script with no embedded block and drives it
+  // through \`load\`. \`__loupe\` is how the live host announces itself \u2014 absent in
+  // the artifact, so LIVE is false there and nothing below changes its output.
+  var HOST = window.__loupe || {};
+  var LIVE = !!HOST.live;
+  var COLS = LIVE ? 3 : 2;
+  var data = { findings: [], rules: [], summary: {} };
+  var byRank = new Map();
+  var fixable = new Set();
   var state = { rule: null, severity: null, q: '' };
   var MARK = { error: '\\u2717', warn: '\\u2022' };
   var WORD = { error: 'blocking', warn: 'advisory' };
-  var byRank = new Map(data.rules.map(function (r) { return [r.id, r]; }));
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+  // Where a finding is, as the reader's editor addresses it. The host supplies
+  // both halves: the absolute root \u2014 already slash-led, so the result is a URI
+  // path on every platform \u2014 and the template, because which scheme opens is the
+  // reader's choice.
+  //
+  // Function replacements, not strings: a path containing \`$&\`, \`$\\\`\`, \`$'\` or
+  // \`$$\` is a substitution pattern to \`replace\`'s string form, so a SvelteKit
+  // \`$lib\` or a Remix \`$id\` segment would be silently rewritten before it ever
+  // reached the editor.
+  function href(f) {
+    var path = (HOST.root || '') + '/' + f.file;
+    return String(HOST.editor || '')
+      .replace('{path}', function () { return path; })
+      .replace('{line}', function () { return String(f.line); });
+  }
+
+  // The live row's third cell. Empty string in the artifact, where COLS is 2 and
+  // no host is listening for the clicks.
+  //
+  // Only a finding the server said it can rewrite offers \`fix\`: the predicate is
+  // \`tokenFixes\`, run where the files are, so this cell cannot offer a
+  // substitution the writer would refuse.
+  function acts(f) {
+    if (!LIVE) return '';
+    return '<td class="act">' +
+      (fixable.has(f.__i) ? '<button class="act-btn" data-act="fix" data-i="' + f.__i + '">fix</button>' : '') +
+      '<button class="act-btn" data-act="mute" data-i="' + f.__i + '">mute</button>' +
+      '</td>';
+  }
+
   function dirOf(file) {
     var i = String(file).lastIndexOf('/');
     return i === -1 ? '.' : file.slice(0, i);
@@ -30365,16 +31560,18 @@ var JS = `
       var sev = group[0].severity;
       var body = group.map(function (f) {
         var tokens = (f.suggest || []).map(function (s) { return s.tokens.join(' / '); }).filter(Boolean);
+        var loc = esc(f.file) + ':' + f.line;
         return '<tr>' +
-          '<td class="loc">' + esc(f.file) + ':' + f.line + '</td>' +
+          '<td class="loc">' + (LIVE ? '<a class="jump" href="' + esc(href(f)) + '">' + loc + '</a>' : loc) + '</td>' +
           '<td class="msg">' + esc(f.message) +
 						// Whole, not clipped: the page has room the one-line agent
 						// format does not.
             (f.note ? ' <span class="note">(' + esc(f.note) + ')</span>' : '') +
             (tokens.length ? '<div class="tokens">\\u2192 ' + esc(tokens.join(', ')) + '</div>' : '') + '</td>' +
+          acts(f) +
           '</tr>';
       }).join('');
-      return '<tbody><tr class="grp"><th colspan="2">' +
+      return '<tbody><tr class="grp"><th colspan="' + COLS + '">' +
         '<span class="sev ' + sev + '">' + MARK[sev] + ' ' + WORD[sev] + '</span> ' +
         '<span class="rule">' + esc(rule) + '</span> ' +
         '<span class="count">' + group.length + '</span>' +
@@ -30386,6 +31583,27 @@ var JS = `
 
   function render() {
     var rows = slice();
+    // Live only: the artifact decides clean once, at generation, and never ships
+    // the panels. A live page crosses that line in both directions.
+    if (LIVE) {
+      var none = data.findings.length === 0;
+      // Before the early return: nothing in an unparsed file was checked, so the
+      // clean page is the one that needs this said most.
+      var ban = document.getElementById('banner');
+      if (ban) {
+        var unread = (data.summary && data.summary.parseErrors) || 0;
+        ban.hidden = unread === 0;
+        document.getElementById('banner-n').textContent = String(unread);
+        document.getElementById('banner-why').textContent =
+          none ? ban.getAttribute('data-clean') : ban.getAttribute('data-dirty');
+      }
+      var clean = document.getElementById('clean');
+      if (clean) clean.hidden = !none;
+      Array.prototype.forEach.call(document.querySelectorAll('[data-when="findings"]'), function (el) {
+        el.hidden = none;
+      });
+      if (none) return;
+    }
     renderKpis(rows);
     renderRules(rows);
     renderPaths(rows);
@@ -30415,16 +31633,43 @@ var JS = `
     document.getElementById('q').value = '';
     render();
   });
-  render();
+
+  // Replace the payload and redraw. The artifact calls this once, from its own
+  // embedded block; the live host calls it on every re-analysis.
+  //
+  // \`__i\` is stamped here rather than passed around because every renderer below
+  // works on the filtered slice, and an action has to name the finding's position
+  // in the whole payload. It is written onto the client's own parsed copy and
+  // never sent back.
+  function load(next, meta) {
+    data = next;
+    data.findings.forEach(function (f, i) { f.__i = i; });
+    byRank = new Map(data.rules.map(function (r) { return [r.id, r]; }));
+    fixable = new Set((meta && meta.fixable) || []);
+    render();
+  }
+
+  var embedded = document.getElementById('loupe-data');
+  if (embedded) load(JSON.parse(embedded.textContent));
+  window.__loupeView = { load: load, render: render, state: state };
 })();
 `;
-function body(payload, clean, parseErrors) {
-  const banner = parseErrors ? `  <div class="banner"><b>${parseErrors} file(s) could not be parsed</b> and were skipped entirely \u2014 ${clean ? "a clean result covers only what could be read" : "every number below is a floor, not a total"}. See <code>stylesheet/unparsed</code>.</div>
+var embed = (json) => json.replace(/</g, "\\u003c");
+var WHY_CLEAN = "a clean result covers only what could be read";
+var WHY_DIRTY = "every number below is a floor, not a total";
+var bannerBody = (n, why) => `<b>${n} file(s) could not be parsed</b> and were skipped entirely \u2014 ${why}. See <code>stylesheet/unparsed</code>.`;
+function body(opts) {
+  const { payload, clean, parseErrors, live = false } = opts;
+  const banner = live ? `  <div class="banner" id="banner" hidden data-clean="${WHY_CLEAN}" data-dirty="${WHY_DIRTY}">${bannerBody(
+    '<span id="banner-n">0</span>',
+    '<span id="banner-why"></span>'
+  )}</div>
+` : parseErrors ? `  <div class="banner">${bannerBody(String(parseErrors), clean ? WHY_CLEAN : WHY_DIRTY)}</div>
 ` : "";
-  const main2 = clean ? `  <div class="card clean"><div class="v">clean</div><p class="sub">No findings.</p></div>
-</div>` : `  <div class="kpis" id="kpis"></div>
+  const cleanCard = `  <div class="card clean" id="clean"${live ? " hidden" : ""}><div class="v">clean</div><p class="sub">No findings.</p></div>`;
+  const panels = `  <div class="kpis" id="kpis" data-when="findings"></div>
 
-  <div class="filters">
+  <div class="filters" data-when="findings">
     <input type="search" id="q" placeholder="Filter by file, rule or value\u2026" aria-label="Filter findings">
     <button class="chip" data-sev="error" aria-pressed="false">\u2717 blocking</button>
     <button class="chip" data-sev="warn" aria-pressed="false">\u2022 advisory</button>
@@ -30432,7 +31677,7 @@ function body(payload, clean, parseErrors) {
     <span class="scope" id="scope"></span>
   </div>
 
-  <div class="card">
+  <div class="card" data-when="findings">
     <h2>By rule</h2>
     <p class="legend">
       <span><i class="dot" style="background:var(--sev-error)"></i> \u2717 blocking</span>
@@ -30441,35 +31686,43 @@ function body(payload, clean, parseErrors) {
     <div class="bars" id="rules"></div>
   </div>
 
-  <div class="card">
+  <div class="card" data-when="findings">
     <h2>Where it is</h2>
     <div class="bars" id="paths"></div>
   </div>
 
-  <div class="card" id="clusters-section" hidden>
+  <div class="card" id="clusters-section" data-when="findings" hidden>
     <h2>Composites rebuilt across files</h2>
     <div id="clusters"></div>
   </div>
 
-  <div class="card">
+  <div class="card" data-when="findings">
     <h2>Findings</h2>
     <div id="table"></div>
-  </div>
+  </div>`;
+  const main2 = live ? `${cleanCard}
+${panels}
+</div>
+<div id="tip" role="status" aria-live="polite"></div>
+<script>${JS}</script>` : clean ? `${cleanCard}
+</div>` : `${panels}
 </div>
 <div id="tip" role="status" aria-live="polite"></div>
 <script>${JS}</script>`;
+  const data = payload === void 0 ? "" : `
+<script type="application/json" id="loupe-data">${payload}</script>`;
   return `<!-- loupe:begin -->
-<style>${CSS}</style>
-<script type="application/json" id="loupe-data">${payload}</script>
-<div class="wrap">
+<style>${CSS}${live ? LIVE_CSS : ""}</style>${data}
+<div class="wrap${live ? " live" : ""}">
   <h1>Loupe</h1>
   <p class="sub">Design-system conformance report</p>
 ${banner}${main2}
 <!-- loupe:end -->`;
 }
+
+// src/report-html.ts
 function formatHtml(result, config) {
   const payload = embed(JSON.stringify(reportPayload(result, config)));
-  const clean = result.findings.length === 0;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -30478,7 +31731,7 @@ function formatHtml(result, config) {
 <title>Loupe report</title>
 </head>
 <body>
-${body(payload, clean, result.diagnostics.parseErrors.length)}
+${body({ payload, clean: result.findings.length === 0, parseErrors: result.diagnostics.parseErrors.length })}
 </body>
 </html>
 `;
@@ -30639,9 +31892,9 @@ function formatPane(result, config) {
 }
 
 // src/lsp.ts
-import { readFileSync as readFileSync11 } from "node:fs";
-import { join as join10 } from "node:path";
-import { fileURLToPath as fileURLToPath2, pathToFileURL as pathToFileURL2 } from "node:url";
+import { readFileSync as readFileSync14 } from "node:fs";
+import { join as join12 } from "node:path";
+import { fileURLToPath as fileURLToPath3, pathToFileURL as pathToFileURL2 } from "node:url";
 var SEVERITY = { error: 1, warn: 2, off: 2 };
 var field = (v, ...keys) => keys.reduce(
   (at, key) => at && typeof at === "object" ? at[key] : void 0,
@@ -30718,11 +31971,11 @@ function lsp(opts) {
   const open = /* @__PURE__ */ new Map();
   let findings = /* @__PURE__ */ new Map();
   let published = /* @__PURE__ */ new Set();
-  const uriOf = (rel) => pathToFileURL2(join10(root2, rel)).href;
+  const uriOf = (rel) => pathToFileURL2(join12(root2, rel)).href;
   const relOf = (uri) => {
     let abs;
     try {
-      abs = fileURLToPath2(uri);
+      abs = fileURLToPath3(uri);
     } catch {
       return null;
     }
@@ -30747,7 +32000,7 @@ function lsp(opts) {
       let text2 = buffer;
       if (text2 === void 0) {
         try {
-          text2 = readFileSync11(join10(root2, rel), "utf8");
+          text2 = readFileSync14(join12(root2, rel), "utf8");
         } catch {
           text2 = "";
         }
@@ -31001,11 +32254,271 @@ ${renderTitle(rule2, config.designSystem, config.suppression.keyword)}`).join("\
 
 // src/serve.ts
 import { createServer } from "node:http";
-import { readFileSync as readFileSync12 } from "node:fs";
-import { dirname as dirname5, join as join11 } from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
-var MU_PLUGIN = join11(
-  dirname5(fileURLToPath3(import.meta.url)),
+import { readFileSync as readFileSync15 } from "node:fs";
+import { dirname as dirname7, join as join13 } from "node:path";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
+
+// src/dom-match.ts
+var MATCH_VERSION = 3;
+var MATCH_JS = `
+(function () {
+  if (window.__loupeMatch && window.__loupeMatch.version === ${MATCH_VERSION}) return;
+
+  // Marks live in a shadow root of their own. The host page's stylesheet is the
+  // adversary here \u2014 in wp-admin it is considerable \u2014 and an outline drawn into
+  // the ordinary cascade is one \`* { box-sizing }\` away from being the wrong
+  // size and one \`div { display: none }\` away from being invisible.
+  var host = null, layer = null;
+  function ensure() {
+    if (host && host.isConnected) return;
+    host = document.createElement('div');
+    host.setAttribute('data-loupe-marks', '');
+    host.style.cssText = 'position:fixed;inset:0;z-index:2147483646;pointer-events:none';
+    var root = host.attachShadow({ mode: 'open' });
+    var style = document.createElement('style');
+    style.textContent =
+      ':host { all: initial }' +
+      '.marks { position: fixed; inset: 0; pointer-events: none }' +
+      '.mark { position: absolute; border: 2px solid #4ec9a5; background: rgba(78,201,165,.14); border-radius: 2px }' +
+      '.tag { position: absolute; top: -18px; left: -2px; background: #4ec9a5; color: #06231c;' +
+      ' font: 600 10px ui-monospace, Menlo, monospace; padding: 1px 5px; border-radius: 3px; white-space: nowrap }';
+    layer = document.createElement('div');
+    layer.className = 'marks';
+    root.appendChild(style);
+    root.appendChild(layer);
+    document.documentElement.appendChild(host);
+  }
+
+  // A selector as authored is not always one the DOM will accept, and one bad
+  // one must not take the caller down. Pseudo-elements have no node to match,
+  // and a state pseudo-class says *when* a rule applies, not what to.
+  //
+  // The trailing lookahead, not \\b: a word boundary sits happily between
+  // 'focus' and the '-' of ':focus-visible', so \\b would leave '-visible'
+  // welded to the class before it \u2014 a valid selector for an element that does
+  // not exist.
+  var STATE = /:(?:hover|focus-within|focus-visible|focus|active|visited|target|checked|disabled|enabled|indeterminate|placeholder-shown|autofill|default|read-only|read-write|link|any-link|user-invalid|user-valid|valid|invalid|required|optional)(?![\\w-])/g;
+  var PSEUDO_EL = /::[a-zA-Z-]+(\\([^)]*\\))?/g;
+
+  // Both passes below run at the top level only, because neither a comma nor a
+  // state pseudo-class means the same thing inside brackets:
+  //
+  //   .btn:not(:disabled)   stripping the argument leaves \`:not()\`, which the
+  //                         DOM refuses \u2014 so a rule that styles most of the
+  //                         page reports as reaching none of it
+  //   [title="a,b"]         splitting and rejoining rewrites the value
+  //
+  // A scanner rather than a regex: nesting is what is being tracked, and that is
+  // the one thing a regex cannot do.
+  function scan(s, at) {
+    var depth = 0, quote = null;
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charAt(i);
+      if (quote) {
+        if (c === '\\\\') i++;
+        else if (c === quote) quote = null;
+      } else if (c === '"' || c === "'") quote = c;
+      else if (c === '(' || c === '[') depth++;
+      else if (c === ')' || c === ']') depth--;
+      else if (depth <= 0) at(i, c);
+    }
+  }
+  function splitTop(s) {
+    var out = [], from = 0;
+    scan(s, function (i, c) { if (c === ',') { out.push(s.slice(from, i)); from = i + 1; } });
+    out.push(s.slice(from));
+    return out;
+  }
+  function stripState(s) {
+    // Collected first, applied back to front, so an earlier removal does not move
+    // the offsets of a later one.
+    var cuts = [];
+    scan(s, function (i, c) {
+      if (c !== ':') return;
+      STATE.lastIndex = i;
+      var m = STATE.exec(s);
+      if (m && m.index === i) cuts.push([i, i + m[0].length]);
+    });
+    for (var k = cuts.length - 1; k >= 0; k--) s = s.slice(0, cuts[k][0]) + s.slice(cuts[k][1]);
+    return s;
+  }
+  function domSelector(sel) {
+    // Pseudo-elements first and everywhere: the pattern consumes its own
+    // parentheses, so what is left nests the same way at every depth.
+    var flat = String(sel).replace(PSEUDO_EL, '');
+    var parts = splitTop(flat).map(function (s) { return stripState(s).trim(); }).filter(Boolean);
+    return parts.join(', ');
+  }
+
+  /** Loupe's own furniture is never a finding's target. */
+  function ours(el) {
+    return !!(el.closest && (el.closest('[data-loupe-marks]') || el.closest('[data-loupe-overlay]')));
+  }
+
+  function elementsFor(f) {
+    if (!f || !f.selector) return null;
+    var sel = domSelector(f.selector);
+    if (!sel) return [];
+    try {
+      return Array.prototype.slice.call(document.querySelectorAll(sel)).filter(function (el) {
+        return !ours(el);
+      });
+    } catch (e) { return []; }
+  }
+
+  // Whether the rule's own @media condition holds at this moment. An unparseable
+  // query normalizes to 'not all', which never matches, so an unreadable
+  // condition is treated as no condition rather than as one that never holds.
+  function active(f) {
+    if (!f || !f.media) return true;
+    try {
+      var mq = window.matchMedia(f.media);
+      if (mq.media === 'not all' && f.media.indexOf('not all') === -1) return true;
+      return mq.matches;
+    } catch (e) { return true; }
+  }
+
+  /**
+   * The page's opinion about ordering, shared so both readers list the same way:
+   * what this page can actually show you first, then what is real but not at
+   * this width, then what resolves to nothing, then what was never a browser
+   * question at all.
+   */
+  function bucket(n, on) { return n > 0 ? (on ? 0 : 1) : n === 0 ? 2 : 3; }
+
+  // One list per reader. The panel, the Elements sidebar and the overlay each
+  // hand over findings fetched at their own moment and address them by index,
+  // so one shared list let the last to load answer for the others: a highlight
+  // on the wrong elements, or a row for an index the overlay never had. A call
+  // that names no reader uses the one list there was before.
+  var lists = {};
+  function listOf(who) { return lists[who || 'page'] || []; }
+
+  var api = {
+    version: ${MATCH_VERSION},
+
+    /** Hand over the findings. Only \`selector\`, \`media\` and \`severity\` are read. */
+    load: function (findings, who) {
+      var list = (findings || []).map(function (f) {
+        return { selector: f.selector || null, media: f.media || null, severity: f.severity || 'warn' };
+      });
+      lists[who || 'page'] = list;
+      return list.length;
+    },
+
+    domSelector: domSelector,
+    active: function (i, who) { return active(listOf(who)[i]); },
+
+    /**
+     * One row per loaded finding: how many elements it reaches and whether its
+     * condition holds. One eval for the whole list \u2014 a call per finding would
+     * cost a round trip each across the DevTools boundary.
+     */
+    snapshot: function (who) {
+      return listOf(who).map(function (f, i) {
+        var els = elementsFor(f);
+        var n = els ? els.length : -1;
+        var on = active(f);
+        return { i: i, n: n, on: on, bucket: bucket(n, on) };
+      });
+    },
+
+    /**
+     * Which loaded findings style this element.
+     *
+     * The inversion the panel is for: not "where are these 200 findings" but
+     * "what is wrong with *this*". \`matches\` rather than re-querying, because
+     * the question is about one node.
+     */
+    forElement: function (el, who) {
+      if (!el || el.nodeType !== 1) return [];
+      var loaded = listOf(who);
+      var out = [];
+      for (var i = 0; i < loaded.length; i++) {
+        var f = loaded[i];
+        if (!f.selector) continue;
+        var sel = domSelector(f.selector);
+        if (!sel) continue;
+        try {
+          if (el.matches(sel)) out.push({ i: i, on: active(f) });
+        } catch (e) { /* a selector the DOM refuses matches nothing */ }
+      }
+      return out;
+    },
+
+    /** Outline what finding \`i\` reaches. Returns how many boxes were drawn. */
+    highlight: function (i, who) {
+      ensure();
+      layer.innerHTML = '';
+      var els = elementsFor(listOf(who)[i]);
+      if (!els || !els.length) return 0;
+      var drawn = 0;
+      els.forEach(function (el, k) {
+        var r = el.getBoundingClientRect();
+        if (!r.width && !r.height) return;
+        drawn++;
+        var box = document.createElement('div');
+        box.className = 'mark';
+        box.style.left = r.left + 'px';
+        box.style.top = r.top + 'px';
+        box.style.width = r.width + 'px';
+        box.style.height = r.height + 'px';
+        if (k === 0) {
+          var tag = document.createElement('span');
+          tag.className = 'tag';
+          tag.textContent = el.tagName.toLowerCase() +
+            (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '');
+          box.appendChild(tag);
+        }
+        layer.appendChild(box);
+      });
+      return drawn;
+    },
+
+    /** Outline one element, for the Elements sidebar's own hover. */
+    highlightElement: function (el) {
+      ensure();
+      layer.innerHTML = '';
+      if (!el || el.nodeType !== 1) return 0;
+      var r = el.getBoundingClientRect();
+      if (!r.width && !r.height) return 0;
+      var box = document.createElement('div');
+      box.className = 'mark';
+      box.style.left = r.left + 'px';
+      box.style.top = r.top + 'px';
+      box.style.width = r.width + 'px';
+      box.style.height = r.height + 'px';
+      layer.appendChild(box);
+      return 1;
+    },
+
+    clear: function () { if (layer) layer.innerHTML = ''; },
+
+    /** Take the marks layer out of the page entirely. For a caller shutting down. */
+    teardown: function () {
+      if (host) host.remove();
+      host = null;
+      layer = null;
+    },
+
+    scrollTo: function (i, who) {
+      var els = elementsFor(listOf(who)[i]);
+      if (!els || !els.length) return false;
+      els[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return true;
+    },
+
+    /** Marks are absolutely positioned against the viewport, so a scroll moves them. */
+    reposition: function (i, who) { return i === null || i === undefined ? api.clear() : api.highlight(i, who); },
+  };
+
+  window.__loupeMatch = api;
+})();
+`;
+
+// src/serve.ts
+var MU_PLUGIN = join13(
+  dirname7(fileURLToPath4(import.meta.url)),
   "..",
   "..",
   "integrations",
@@ -31046,12 +32559,6 @@ input { all: unset; width: 100%; padding: 5px 8px; background: #0f0f12; border: 
 .cond { color: #8d7bb8 } .cond.on { color: #6b6b76 }
 .empty { padding: 20px 12px; color: #6b6b76; text-align: center }
 .note { padding: 8px 12px; color: #6b6b76; border-top: 1px solid #2c2c33; font-size: 11px }
-.marks { position: fixed; inset: 0; pointer-events: none }
-.mark { position: absolute; border: 2px solid #4ec9a5; background: rgba(78,201,165,.14); border-radius: 2px }
-.tag {
-  position: absolute; top: -18px; left: -2px; background: #4ec9a5; color: #06231c;
-  font: 600 10px ui-monospace, Menlo, monospace; padding: 1px 5px; border-radius: 3px; white-space: nowrap;
-}
 `;
 var JS2 = `
 (function () {
@@ -31064,14 +32571,15 @@ var JS2 = `
   var style = document.createElement('style');
   style.textContent = __CSS__;
   root.appendChild(style);
-  var marks = document.createElement('div');
-  marks.className = 'marks';
   var panel = document.createElement('div');
   panel.className = 'panel';
-  root.appendChild(marks);
   root.appendChild(panel);
   document.body.appendChild(host);
 
+  var M = window.__loupeMatch;
+  // \`pinned\` is an index into the payload, not a position in the sorted list:
+  // the sort is recomputed on every resize, and a pin that meant "row 4" would
+  // follow the row rather than the finding across a breakpoint.
   var data = null, pinned = null, q = '';
 
   function esc(s) {
@@ -31080,80 +32588,19 @@ var JS2 = `
     });
   }
 
-  // A selector as authored is not always one the DOM will accept, and one bad one
-  // must not take the panel down. Pseudo-elements have no node to match, and a
-  // state pseudo-class says when a rule applies, not what to.
-  //
-  // The trailing lookahead, not \b: a word boundary sits happily between 'focus'
-  // and the '-' of ':focus-visible', so \b would leave '-visible' welded to the
-  // class before it \u2014 a valid selector for an element that does not exist.
-  var STATE = /:(?:hover|focus-within|focus-visible|focus|active|visited|target|checked|disabled|enabled|indeterminate|placeholder-shown|autofill|default|read-only|read-write|link|any-link|user-invalid|user-valid|valid|invalid|required|optional)(?![\\w-])/g;
-  function domSelector(sel) {
-    var parts = String(sel).split(',').map(function (s) {
-      return s.replace(/::[a-zA-Z-]+(\\([^)]*\\))?/g, '').replace(STATE, '').trim();
-    }).filter(Boolean);
-    return parts.join(', ');
-  }
-  function match(f) {
-    if (!f.selector) return null;
-    var sel = domSelector(f.selector);
-    if (!sel) return [];
-    try {
-      return Array.prototype.slice.call(document.querySelectorAll(sel)).filter(function (el) {
-        return !host.contains(el) && el !== host;
-      });
-    } catch (e) { return []; }
-  }
-
-  function draw(els) {
-    marks.innerHTML = '';
-    if (!els || !els.length) return;
-    els.forEach(function (el, i) {
-      var r = el.getBoundingClientRect();
-      if (!r.width && !r.height) return;
-      var box = document.createElement('div');
-      box.className = 'mark';
-      box.style.left = r.left + 'px';
-      box.style.top = r.top + 'px';
-      box.style.width = r.width + 'px';
-      box.style.height = r.height + 'px';
-      if (i === 0) {
-        var tag = document.createElement('span');
-        tag.className = 'tag';
-        tag.textContent = el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '');
-        box.appendChild(tag);
-      }
-      marks.appendChild(box);
-    });
-  }
-
-  // Whether the rule's own @media condition holds at this moment. An unparseable
-  // query normalizes to 'not all', which never matches, so an unreadable
-  // condition is treated as no condition.
-  function active(f) {
-    if (!f.media) return true;
-    try {
-      var mq = window.matchMedia(f.media);
-      if (mq.media === 'not all' && f.media.indexOf('not all') === -1) return true;
-      return mq.matches;
-    } catch (e) { return true; }
-  }
-
-  // Ordering is the panel's one opinion: what this page can actually show you
-  // comes first, then what is real but not visible at this width, then what
-  // resolves to nothing, then what was never a browser question.
+  // One query of the page per render, from the shared matcher; the bucket it
+  // returns is what orders the list \u2014 what this page can actually show you
+  // first, then what is real but not at this width, then what resolves to
+  // nothing, then what was never a browser question.
   function rows() {
     var needle = q.toLowerCase();
-    return data.findings.map(function (f) {
-      var els = match(f);
-      return { f: f, els: els, n: els ? els.length : -1, on: active(f) };
+    return M.snapshot('overlay').map(function (r) {
+      return { i: r.i, f: data.findings[r.i], n: r.n, on: r.on, bucket: r.bucket };
     }).filter(function (r) {
       if (!needle) return true;
       return (r.f.file + ' ' + r.f.message + ' ' + r.f.rule).toLowerCase().indexOf(needle) !== -1;
     }).sort(function (a, b) {
-      var ga = a.n > 0 ? (a.on ? 0 : 1) : a.n === 0 ? 2 : 3;
-      var gb = b.n > 0 ? (b.on ? 0 : 1) : b.n === 0 ? 2 : 3;
-      if (ga !== gb) return ga - gb;
+      if (a.bucket !== b.bucket) return a.bucket - b.bucket;
       if (a.f.severity !== b.f.severity) return a.f.severity === 'error' ? -1 : 1;
       return b.n - a.n;
     });
@@ -31192,7 +32639,7 @@ var JS2 = `
             ? '<span class="cond' + (r.on ? ' on' : '') + '">@media ' + esc(f.media) +
               (r.on ? '' : ' \\u2014 not at this width') + '</span>'
             : '';
-          return '<div class="row' + k + (pinned === i ? ' on' : '') + '" data-i="' + i + '">' +
+          return '<div class="row' + k + (pinned === r.i ? ' on' : '') + '" data-i="' + r.i + '">' +
             '<div><span class="sev ' + (f.severity === 'warn' ? 'warn' : '') + '">' +
               (f.severity === 'error' ? '\\u2717' : '\\u2022') + '</span> ' +
               '<span class="rule">' + esc(f.rule) + '</span></div>' +
@@ -31219,21 +32666,35 @@ var JS2 = `
       input.oninput = function () { q = input.value; pinned = null; render(); input.focus(); };
       if (q) { input.focus(); input.setSelectionRange(q.length, q.length); }
     }
-    panel.querySelectorAll('.row').forEach(function (el) {
-      var i = Number(el.getAttribute('data-i'));
-      el.onmouseenter = function () { if (pinned === null) draw(rs[i].els); };
-      el.onmouseleave = function () { if (pinned === null) draw(null); };
+    // The nodes were just rendered from \`rs\` in order, so the row is its
+    // position \u2014 not a scan of \`rs\` per node, which is quadratic on a render
+    // that already happens on every keystroke.
+    panel.querySelectorAll('.row').forEach(function (el, k) {
+      var row = rs[k];
+      var i = row.i;
+      el.onmouseenter = function () { if (pinned === null) M.highlight(i, 'overlay'); };
+      el.onmouseleave = function () { if (pinned === null) M.clear(); };
       el.onclick = function () {
-        if (!rs[i].els || !rs[i].els.length) return;
+        if (!row || row.n <= 0) return;
         pinned = pinned === i ? null : i;
-        draw(pinned === null ? null : rs[i].els);
-        if (pinned !== null) rs[i].els[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (pinned === null) M.clear();
+        else { M.highlight(i, 'overlay'); M.scrollTo(i, 'overlay'); }
         render();
       };
     });
   }
 
-  function reposition() { if (pinned !== null) { var rs = rows(); if (rs[pinned]) draw(rs[pinned].els); } }
+  // Marks are positioned against the viewport, so a scroll moves what they
+  // should be over. Re-drawing is the whole of it \u2014 the answer has not changed.
+  //
+  // Coalesced to one frame: this is bound in the capture phase, so every
+  // scrollable element on the page feeds it, and each call re-runs the finding's
+  // selector over the whole document and rebuilds a box per match.
+  var frame = null;
+  function reposition() {
+    if (pinned === null || frame !== null) return;
+    frame = requestAnimationFrame(function () { frame = null; if (pinned !== null) M.highlight(pinned, 'overlay'); });
+  }
   // A resize changes the answers themselves: crossing a breakpoint turns findings
   // on and off, so the boxes move *and* the list is restated. Debounced, because
   // a drag fires this continuously and each render re-runs every selector.
@@ -31254,7 +32715,7 @@ var JS2 = `
           throw new Error(j && j.error || 'HTTP ' + r.status);
         });
       })
-      .then(function (j) { data = j; pinned = null; render(); })
+      .then(function (j) { data = j; pinned = null; M.load(data.findings, 'overlay'); render(); })
       .catch(function (e) {
         panel.innerHTML = '<div class="head"><span class="title">loupe</span></div><div class="empty">' +
           esc(String(e && e.message || e)) + '<br>Is \\u0060loupe serve\\u0060 still running?</div>';
@@ -31264,6 +32725,11 @@ var JS2 = `
     window.removeEventListener('scroll', reposition, true);
     window.removeEventListener('resize', onResize);
     if (resizeTimer) clearTimeout(resizeTimer);
+    // Before the teardown: a frame still queued would call \`highlight\`, and that
+    // rebuilds the marks layer this is about to take out of the page.
+    if (frame !== null) { cancelAnimationFrame(frame); frame = null; }
+    pinned = null;
+    M.teardown();
     host.remove();
     delete window.__loupe;
   }
@@ -31310,9 +32776,9 @@ and a panel over every page eats their clicks.</p>
 </main>`;
 function serve(opts) {
   const { port, config, run } = opts;
-  const client = (origin) => JS2.replace("__ORIGIN__", origin).replace("__CSS__", JSON.stringify(CSS2));
+  const client = (origin) => MATCH_JS + JS2.replace("__ORIGIN__", origin).replace("__CSS__", JSON.stringify(CSS2));
   let url = `http://localhost:${port}`;
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve8, reject) => {
     const server = createServer((req, res) => {
       const origin = url;
       res.setHeader("access-control-allow-origin", "*");
@@ -31338,7 +32804,7 @@ function serve(opts) {
       if (path === "/loupe-overlay.php") {
         let php;
         try {
-          php = readFileSync12(MU_PLUGIN, "utf8");
+          php = readFileSync15(MU_PLUGIN, "utf8");
         } catch {
           res.statusCode = 404;
           res.end(
@@ -31363,7 +32829,7 @@ function serve(opts) {
     server.listen(port, () => {
       const addr = server.address();
       if (addr && typeof addr === "object") url = `http://localhost:${addr.port}`;
-      resolve7({
+      resolve8({
         url,
         close: () => new Promise((done) => {
           server.close(() => done());
@@ -31373,12 +32839,564 @@ function serve(opts) {
   });
 }
 
-// src/detect.ts
-import { existsSync as existsSync7, readFileSync as readFileSync13, statSync as statSync4 } from "node:fs";
-import { join as join12 } from "node:path";
-var readJson = (p) => {
+// src/ui.ts
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { readFileSync as readFileSync16, statSync as statSync6, watch, writeFileSync as writeFileSync4 } from "node:fs";
+import { createServer as createServer2 } from "node:http";
+import { dirname as dirname8, join as join14 } from "node:path";
+var TOKEN_HEADER = "x-loupe-token";
+var REV_HEADER = "x-loupe-rev";
+var commentFor2 = (file, text2) => CSS_FILE.test(file) ? `/* ${text2} */` : `// ${text2}`;
+var WATCH_CAP = 2048;
+var DEBOUNCE_MS = 140;
+var BODY_LIMIT = 64 * 1024;
+var PEEK = 12;
+function secretEquals(presented, real) {
+  const a = Buffer.from(presented);
+  const b = Buffer.from(real);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+var CLIENT = `
+(function () {
+  var TOKEN = '__TOKEN__';
+  var view = window.__loupeView;
+  var rev = -1;
+  var busy = false;
+
+  function el(id) { return document.getElementById(id); }
+  function say(msg, isErr) {
+    var s = el('said');
+    s.textContent = msg || '';
+    s.className = 'said' + (isErr ? ' err' : '');
+  }
+  function conn(cls, text) {
+    el('conn').className = 'conn ' + cls;
+    el('status').textContent = text;
+  }
+
+  function paint(s) {
+    rev = s.rev;
+    view.load(s.payload, { fixable: s.fixable });
+    var when = new Date(s.ranAt).toLocaleTimeString();
+    el('ran').textContent = when + ' \\u00b7 ' + s.ms + 'ms \\u00b7 ' + s.payload.summary.filesScanned + ' files';
+    // The panel says what it cannot see: a watch that could not be established
+    // is named, so a stale page never sits under a live-looking dot.
+    conn(s.watching === null ? 'busy' : 'on',
+      s.watching === null ? 'not watching \\u2014 re-run by hand' : 'watching ' + s.watching + ' directories');
+    // A failed run leaves the last good payload on screen, and says so in the
+    // place that otherwise reads as live.
+    if (s.error) conn('off', 'analysis failed \\u2014 ' + s.error + ' \\u2014 showing the last run that worked');
+    if (s.configChanged) say('the config file changed \\u2014 restart loupe ui to apply it', true);
+    el('accept').disabled = s.payload.summary.total === 0;
+    el('accept').textContent = s.baseline.found ? 're-baseline' : 'accept as baseline';
+  }
+
+  function load() {
+    return fetch('/state').then(function (r) { return r.json(); }).then(paint);
+  }
+
+  // Every mutating request carries the secret and the revision it was aimed at.
+  // A 409 means the tree moved under the page; reload and let the reader retry
+  // against what is actually there.
+  function post(path, payload) {
+    if (busy) return Promise.resolve(null);
+    busy = true;
+    say('');
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', '${TOKEN_HEADER}': TOKEN, '${REV_HEADER}': String(rev) },
+      body: JSON.stringify(payload || {})
+    }).then(function (r) {
+      return r.json().then(function (b) { return { ok: r.ok, status: r.status, body: b }; });
+    }).then(function (res) {
+      if (!res.ok) {
+        say(res.body && res.body.error ? res.body.error : 'request failed (' + res.status + ')', true);
+        if (res.status === 409) return load();
+        return null;
+      }
+      return res.body;
+    }).catch(function (e) {
+      say(String(e && e.message ? e.message : e), true);
+      return null;
+    }).then(function (out) {
+      busy = false;
+      return out;
+    });
+  }
+
+  el('rerun').addEventListener('click', function () {
+    conn('busy', 'analyzing\\u2026');
+    post('/run');
+  });
+
+  el('accept').addEventListener('click', function () {
+    post('/baseline').then(function (b) {
+      if (b) say('baselined ' + b.findings + ' finding(s) as ' + b.entries + ' entr' + (b.entries === 1 ? 'y' : 'ies') + ' \\u2014 ' + b.path);
+    });
+  });
+
+  // Delegation, because the table is replaced wholesale on every render.
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!b) return;
+    var i = Number(b.getAttribute('data-i'));
+    if (b.getAttribute('data-act') === 'fix') {
+      post('/fix', { findings: [i] }).then(function (r) {
+        if (!r) return;
+        if (r.applied) say('rewrote ' + r.applied + ' declaration(s)');
+        else say(r.skipped && r.skipped.length ? r.skipped[0].why : 'nothing to rewrite', true);
+      });
+      return;
+    }
+    if (b.getAttribute('data-act') === 'mute') {
+      // The reason is asked for rather than left blank. A directive without one
+      // reports as suppression/malformed by design, and this is the one surface
+      // that can put the question to a person instead of writing the silence.
+      var reason = window.prompt('Why is this one allowed? (a directive with no reason is itself an error)');
+      if (reason === null) return;
+      if (!reason.trim()) { say('a suppression needs a reason', true); return; }
+      post('/suppress', { finding: i, reason: reason.trim() }).then(function (r) {
+        if (r) say('suppressed at ' + r.file + ':' + r.line);
+      });
+    }
+  });
+
+  var es = new EventSource('/events');
+  es.onmessage = function (m) { paint(JSON.parse(m.data)); };
+  es.onerror = function () { conn('off', 'disconnected \\u2014 is the server still running?'); };
+
+  load().catch(function (e) { conn('off', String(e)); });
+})();
+`;
+function page(opts) {
+  const abs = toPosix(opts.root).replace(/^(?!\/)/, "/");
+  const host = embed(JSON.stringify({ live: true, root: abs, editor: opts.editor }));
+  const toolbar = `<div class="top">
+  <span class="conn" id="conn"></span>
+  <span id="status">connecting\u2026</span>
+  <span class="grow"></span>
+  <span class="ran" id="ran"></span>
+  <button class="btn" id="rerun">re-run</button>
+  <button class="btn" id="accept" disabled>accept as baseline</button>
+</div>
+<div class="said" id="said"></div>`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loupe</title>
+<!-- Declared empty so the browser does not ask for /favicon.ico. A page whose
+     whole job is to report what is wrong should not open with a 404 of its own. -->
+<link rel="icon" href="data:,">
+</head>
+<body>
+<script>window.__loupe = ${host};</script>
+${toolbar}
+${body({ clean: false, parseErrors: 0, live: true })}
+<script>${CLIENT.replace("__TOKEN__", opts.token)}</script>
+</body>
+</html>
+`;
+}
+async function ui(opts) {
+  const { port, config, root: root2, analyze: analyze2, present, baselineTarget, baselineFound, editor } = opts;
+  const log = opts.log ?? (() => {
+  });
+  const token = randomBytes(24).toString("hex");
+  let url = `http://127.0.0.1:${port}`;
+  let rev = 0;
+  let fresh = null;
+  let shown = null;
+  let state = null;
+  let watching = null;
+  const clients = /* @__PURE__ */ new Set();
+  const configFile = config.source.kind === "file" ? config.source.path : null;
+  const readConfig = () => {
+    try {
+      return configFile ? readFileSync16(configFile, "utf8") : null;
+    } catch {
+      return null;
+    }
+  };
+  const configAtStart = readConfig();
+  const snapshot = () => {
+    if (!fresh || !shown) throw new Error("no analysis yet");
+    const payload = reportPayload(shown, config);
+    return {
+      rev,
+      ranAt: (/* @__PURE__ */ new Date()).toISOString(),
+      ms: 0,
+      payload,
+      fixable: shown.findings.flatMap((f, i) => tokenFixes([f]).length > 0 ? [i] : []),
+      watching,
+      baseline: { path: baselineTarget, found: baselineFound() },
+      ...configFile && readConfig() !== configAtStart ? { configChanged: true } : {}
+    };
+  };
+  const push = () => {
+    if (!state) return;
+    const frame = `data: ${JSON.stringify(state)}
+
+`;
+    for (const res of clients) res.write(frame);
+  };
+  const wrote = () => {
+    rev++;
+    schedule(0);
+  };
+  let readFrom = 0;
+  const alreadyRead = (path) => {
+    for (const p of [path, dirname8(path)]) {
+      try {
+        return statSync6(p).mtimeMs < readFrom;
+      } catch {
+      }
+    }
+    return false;
+  };
+  const runOnce = async () => {
+    const started = Date.now();
+    readFrom = started;
+    const at = rev;
+    const result = await analyze2();
+    if (rev !== at) return;
+    fresh = result;
+    shown = present(fresh);
+    rev++;
+    rewatch();
+    state = { ...snapshot(), ms: Date.now() - started };
+    push();
+  };
+  let running = false;
+  let queued = false;
+  let timer = null;
+  const drain = async () => {
+    if (running) return;
+    running = true;
+    try {
+      while (queued) {
+        queued = false;
+        try {
+          await runOnce();
+        } catch (err) {
+          log(`loupe: analysis failed \u2014 ${messageOf(err)}
+`);
+          if (state) {
+            state = { ...state, error: messageOf(err) };
+            push();
+          }
+        }
+      }
+    } finally {
+      running = false;
+    }
+  };
+  const schedule = (delay = DEBOUNCE_MS) => {
+    queued = true;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      void drain();
+    }, delay);
+  };
+  const watchers = /* @__PURE__ */ new Map();
+  function rewatch() {
+    let dirs2;
+    try {
+      const found = discover({ root: root2, sources: config.sources, limit: analyzeEntryBudget(config.maxEntries) });
+      dirs2 = /* @__PURE__ */ new Set([root2]);
+      for (const f of [...found.styles, ...found.markup, ...found.references])
+        for (let d = dirname8(f.abs); d.length > root2.length && !dirs2.has(d); d = dirname8(d)) dirs2.add(d);
+    } catch (err) {
+      log(`loupe: cannot establish a watch \u2014 ${messageOf(err)}
+`);
+      watching = null;
+      return;
+    }
+    if (dirs2.size > WATCH_CAP) {
+      log(`loupe: ${dirs2.size} directories is past the watch ceiling of ${WATCH_CAP} \u2014 watching nothing.
+`);
+      for (const w of watchers.values()) w.close();
+      watchers.clear();
+      watching = null;
+      return;
+    }
+    for (const [dir, w] of watchers) {
+      if (dirs2.has(dir)) continue;
+      w.close();
+      watchers.delete(dir);
+    }
+    for (const dir of dirs2) {
+      if (watchers.has(dir)) continue;
+      try {
+        const w = watch(dir, { persistent: false }, (_event, name) => {
+          if (!name || !alreadyRead(join14(dir, String(name)))) rev++;
+          schedule();
+        });
+        w.on("error", () => {
+          w.close();
+          watchers.delete(dir);
+          watching = watchers.size || null;
+          if (state) state.watching = watching;
+          push();
+        });
+        watchers.set(dir, w);
+      } catch {
+      }
+    }
+    watching = watchers.size;
+  }
+  const send = (res, status, value) => {
+    const text2 = JSON.stringify(value);
+    res.writeHead(status, {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      "content-length": Buffer.byteLength(text2)
+    });
+    res.end(text2);
+  };
+  const readBody = (req) => new Promise((done, bad) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > BODY_LIMIT) {
+        bad(new Error("body too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw.trim()) return done({});
+      try {
+        done(JSON.parse(raw));
+      } catch {
+        bad(new Error("body is not JSON"));
+      }
+    });
+    req.on("error", bad);
+  });
+  const guard = (req) => {
+    const origin = req.headers.origin;
+    if (typeof origin === "string" && !isOurs2(origin)) return { status: 403, error: "cross-origin request refused" };
+    const presented = req.headers[TOKEN_HEADER];
+    if (typeof presented !== "string" || !secretEquals(presented, token))
+      return { status: 403, error: "this page was not served by this process" };
+    return null;
+  };
+  const LOOPBACK = /* @__PURE__ */ new Set(["127.0.0.1", "localhost", "[::1]"]);
+  const isOurs2 = (origin) => {
+    try {
+      const them = new URL(origin);
+      const us = new URL(url);
+      return them.protocol === "http:" && them.port === us.port && LOOPBACK.has(them.hostname);
+    } catch {
+      return false;
+    }
+  };
+  const revCheck = (req) => {
+    const named2 = Number(req.headers[REV_HEADER]);
+    if (!Number.isInteger(named2) || named2 !== rev)
+      return { status: 409, error: "the tree moved since this page was drawn \u2014 reloading" };
+    return null;
+  };
+  const findingAt = (value) => {
+    if (!shown || !Number.isInteger(value)) return null;
+    const i = value;
+    return i >= 0 && i < shown.findings.length ? shown.findings[i] ?? null : null;
+  };
+  const routes = {
+    "GET /": (_req, res) => {
+      const html = page({ token, root: root2, editor });
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+      res.end(html);
+    },
+    "GET /state": (_req, res) => {
+      if (!state) return send(res, 503, { error: "still analyzing" });
+      send(res, 200, state);
+    },
+    // Byte-for-byte what `--format json` writes, exactly as `loupe serve`
+    // answers it, so anything already pointed at that endpoint works here.
+    // The payload `state` is already holding for this revision, not a second
+    // build of it: `reportPayload` walks the findings four times and clones
+    // every one, and the answer for a given `rev` cannot differ.
+    "GET /findings.json": (_req, res) => {
+      if (!state) return send(res, 503, { error: "still analyzing" });
+      send(res, 200, state.payload);
+    },
+    "GET /events": (_req, res) => {
+      res.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-store",
+        connection: "keep-alive"
+      });
+      res.write(": open\n\n");
+      clients.add(res);
+      if (state) res.write(`data: ${JSON.stringify(state)}
+
+`);
+      res.on("close", () => clients.delete(res));
+    },
+    /**
+     * A window of source around a finding.
+     *
+     * The allowlist is the current run's own findings rather than a path check
+     * against the root: a comparison of resolved prefixes has to get symlinks,
+     * case-insensitive volumes and `..` all right to be safe, and a set of
+     * paths the analyzer just reported has none of those questions in it.
+     */
+    "GET /source": (_req, res, q) => {
+      const want = q.get("file");
+      if (!shown || !want) return send(res, 400, { error: "name a file" });
+      const known = new Set(shown.findings.map((f) => f.file));
+      if (!known.has(want)) return send(res, 404, { error: "not a file in this run" });
+      const asked = Number(q.get("line") ?? 1);
+      const at = Number.isInteger(asked) && asked > 0 ? asked : 1;
+      try {
+        const lines = readFileSync16(join14(root2, want), "utf8").split("\n");
+        const from = Math.max(1, at - PEEK);
+        const to = Math.min(lines.length, at + PEEK);
+        send(res, 200, { file: want, from, to, lines: lines.slice(from - 1, to) });
+      } catch (err) {
+        send(res, 404, { error: messageOf(err) });
+      }
+    },
+    "POST /run": async (_req, res) => {
+      send(res, 200, { rev });
+      schedule(0);
+    },
+    "POST /fix": async (req, res) => {
+      const payload = await readBody(req);
+      const stale = revCheck(req);
+      if (stale) return send(res, stale.status, { error: stale.error });
+      const asked = Array.isArray(payload?.findings) ? payload.findings : [];
+      const picked = asked.map(findingAt).filter((f) => f !== null);
+      if (!picked.length) return send(res, 400, { error: "no finding named" });
+      const { applied, skipped } = applyTokenFixes(root2, picked);
+      send(res, 200, {
+        applied: applied.length,
+        skipped: skipped.map((s) => ({ file: s.file, line: s.line, why: s.why }))
+      });
+      if (applied.length) wrote();
+    },
+    "POST /baseline": async (req, res) => {
+      const stale = revCheck(req);
+      if (stale) return send(res, stale.status, { error: stale.error });
+      if (!fresh) return send(res, 503, { error: "still analyzing" });
+      try {
+        send(res, 200, writeBaseline(baselineTarget, fresh));
+      } catch (err) {
+        return send(res, 500, { error: messageOf(err) });
+      }
+      wrote();
+    },
+    /**
+     * Write a suppression directive above the finding.
+     *
+     * The reason is required here, where the language server's quick fix leaves
+     * it blank. That is not a disagreement: a quick fix has nowhere to ask, so
+     * it writes a directive that reports as `suppression/malformed` until a
+     * person fills it in. A page can ask, so it does, and refuses the write
+     * rather than committing a silence nobody signed.
+     */
+    "POST /suppress": async (req, res) => {
+      const payload = await readBody(req);
+      const stale = revCheck(req);
+      if (stale) return send(res, stale.status, { error: stale.error });
+      const finding = findingAt(payload?.finding);
+      const reason = typeof payload?.reason === "string" ? payload.reason.trim() : "";
+      if (!finding) return send(res, 400, { error: "no finding named" });
+      if (!reason) return send(res, 400, { error: "a suppression needs a reason" });
+      if (!CSS_FILE.test(finding.file))
+        return send(res, 409, { error: "only a stylesheet finding is muted from here \u2014 suppress markup by hand" });
+      const flat = oneLine(reason);
+      const full = join14(root2, finding.file);
+      try {
+        const lines = readFileSync16(full, "utf8").split("\n");
+        const target = lines[finding.line - 1];
+        if (target === void 0) return send(res, 409, { error: "that line is no longer in the file" });
+        if (/(?:^|[^#])\{/.test(target))
+          return send(res, 409, {
+            error: "on the rule's opening line, where a directive would mute the whole rule \u2014 suppress it by hand"
+          });
+        if ((shown?.directives ?? []).some((d) => d.file === finding.file && d.line === finding.line - 1))
+          return send(res, 409, {
+            error: "the line above already carries a directive \u2014 add the rule to it by hand"
+          });
+        const indent = /^[ \t]*/.exec(target)?.[0] ?? "";
+        const eol = target.endsWith("\r") ? "\r" : "";
+        const directive = commentFor2(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${flat}`);
+        lines.splice(finding.line - 1, 0, `${indent}${directive}${eol}`);
+        writeFileSync4(full, lines.join("\n"));
+        wrote();
+        send(res, 200, { file: finding.file, line: finding.line, rule: finding.rule });
+      } catch (err) {
+        return send(res, 500, { error: messageOf(err) });
+      }
+    }
+  };
+  const server = createServer2((req, res) => {
+    let parsed;
+    try {
+      parsed = new URL(req.url ?? "/", url);
+    } catch {
+      return send(res, 400, { error: "not a request this server can address" });
+    }
+    if (!isOurs2(`http://${req.headers.host ?? ""}`))
+      return send(res, 403, { error: "this server answers loopback only" });
+    const key = `${req.method ?? "GET"} ${parsed.pathname}`;
+    const route = routes[key];
+    if (!route) {
+      const exists = Object.keys(routes).some((k) => k.endsWith(` ${parsed.pathname}`));
+      return send(res, exists ? 405 : 404, { error: exists ? "method not allowed" : "not found" });
+    }
+    if (req.method === "POST") {
+      const refusal = guard(req);
+      if (refusal) return send(res, refusal.status, { error: refusal.error });
+    }
+    Promise.resolve(route(req, res, parsed.searchParams)).catch((err) => {
+      if (!res.headersSent) send(res, 500, { error: messageOf(err) });
+    });
+  });
+  const beat = setInterval(() => {
+    for (const res of clients) res.write(": beat\n\n");
+  }, 25e3);
+  beat.unref();
+  await new Promise((done, bad) => {
+    server.on("error", bad);
+    server.listen(port, "127.0.0.1", () => {
+      const addr = server.address();
+      if (addr && typeof addr === "object") url = `http://127.0.0.1:${addr.port}`;
+      done();
+    });
+  });
+  const close = () => new Promise((done) => {
+    clearInterval(beat);
+    if (timer) clearTimeout(timer);
+    for (const w of watchers.values()) w.close();
+    watchers.clear();
+    for (const res of clients) res.end();
+    clients.clear();
+    server.close(() => done());
+  });
   try {
-    return JSON.parse(readFileSync13(p, "utf8"));
+    await runOnce();
+  } catch (err) {
+    await close();
+    throw new Error(`the first analysis failed \u2014 ${messageOf(err)}`);
+  }
+  return { url, close };
+}
+
+// src/detect.ts
+import { existsSync as existsSync7, readFileSync as readFileSync17, statSync as statSync7 } from "node:fs";
+import { join as join15 } from "node:path";
+var readJson2 = (p) => {
+  try {
+    return JSON.parse(readFileSync17(p, "utf8"));
   } catch {
     return null;
   }
@@ -31390,12 +33408,12 @@ function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
   const walk = (dir, rel, depth) => {
     if (depth > maxDepth || out.length >= budget) return;
-    const pkg = join12(dir, "package.json");
+    const pkg = join15(dir, "package.json");
     if (existsSync7(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
     for (const e of readDir(dir)) {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walk(join12(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
+      walk(join15(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
     }
   };
   walk(root2, "", 0);
@@ -31403,11 +33421,11 @@ function manifests(root2, maxDepth = 3, budget = 60) {
 }
 function markerAt(dir, marker) {
   const name = marker.replace(/\/$/, "");
-  const full = join12(dir, name);
+  const full = join15(dir, name);
   if (!existsSync7(full)) return false;
   if (!marker.endsWith("/")) return true;
   try {
-    return statSync4(full).isDirectory();
+    return statSync7(full).isDirectory();
   } catch {
     return false;
   }
@@ -31416,7 +33434,7 @@ function probeDirs(root2) {
   const out = [{ dir: root2, rel: "" }];
   for (const e of readDir(root2)) {
     if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-    out.push({ dir: join12(root2, e.name), rel: e.name });
+    out.push({ dir: join15(root2, e.name), rel: e.name });
   }
   return out;
 }
@@ -31424,7 +33442,7 @@ var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? det
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson(join12(root2, rel, "package.json")) ?? {};
+      const pkg = readJson2(join15(root2, rel, "package.json")) ?? {};
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
       const first = hit[0];
@@ -31437,13 +33455,13 @@ function matchPreset(name, detect, root2, found) {
   if (detect.files) {
     const all = detect.files.all ?? [];
     const any = detect.files.any ?? [];
-    const describe = (list2) => list2.join(" or ");
+    const describe2 = (list2) => list2.join(" or ");
     let partial = null;
     for (const { dir, rel } of probeDirs(root2)) {
       if (all.length && !all.every((m) => markerAt(dir, m))) continue;
       const where = rel ? ` in ${rel}/` : "";
       if (!any.length || any.some((m) => markerAt(dir, m))) {
-        const what = [...all, ...any.length ? [describe(any)] : []].join(" + ");
+        const what = [...all, ...any.length ? [describe2(any)] : []].join(" + ");
         return {
           preset: name,
           reasons: [`${what}${where}`],
@@ -31455,7 +33473,7 @@ function matchPreset(name, detect, root2, found) {
       if (weak && !partial)
         partial = {
           preset: name,
-          reasons: [`${describe(all)} present, no ${describe(any)}${where}`],
+          reasons: [`${describe2(all)} present, no ${describe2(any)}${where}`],
           confidence: weak,
           packageDir: rel
         };
@@ -31503,7 +33521,7 @@ function libraryPrefixes(dirs2, candidates) {
     if (depth > 4 || budget <= 0 || !want.size) return;
     for (const e of readDir(dir)) {
       if (budget <= 0 || !want.size) return;
-      const full = join12(dir, e.name);
+      const full = join15(dir, e.name);
       if (e.isDirectory()) {
         if (e.name === ".bin" || e.name === "node_modules") continue;
         walk(full, depth + 1);
@@ -31511,7 +33529,7 @@ function libraryPrefixes(dirs2, candidates) {
         budget--;
         let text2;
         try {
-          text2 = readFileSync13(full, "utf8");
+          text2 = readFileSync17(full, "utf8");
         } catch {
           continue;
         }
@@ -31546,17 +33564,17 @@ function presetEvidence(root2, imports) {
       `source imports: ${imported.slice(0, 5).map(([pkg, n]) => `${named2(pkg)} \xD7${n}`).join(", ")}${imported.length > 5 ? `, +${imported.length - 5} more` : ""}`
     );
   for (const { rel } of manifests(root2)) {
-    const pkg = readJson(join12(root2, rel, "package.json")) ?? {};
+    const pkg = readJson2(join15(root2, rel, "package.json")) ?? {};
     const typed = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).map((dep) => /^@types\/([\w.-]+)__([\w.-]+)$/.exec(dep)).filter((m) => m !== null && known(`@${m[1]}/${m[2]}`)).map((m) => `${m[0]} \u2192 ${named2(`@${m[1]}/${m[2]}`)}`);
     if (typed.length) out.push(`${rel ? `${rel}/package.json` : "package.json"}: ${typed.join(", ")}`);
   }
   for (const { dir, rel } of probeDirs(root2)) {
-    const build = join12(dir, "build");
+    const build = join15(dir, "build");
     const assets = readDir(build).filter((e) => e.isFile() && e.name.endsWith(".asset.php")).slice(0, 3);
     for (const e of assets) {
       let text2;
       try {
-        text2 = readFileSync13(join12(build, e.name), "utf8");
+        text2 = readFileSync17(join15(build, e.name), "utf8");
       } catch {
         continue;
       }
@@ -31565,8 +33583,8 @@ function presetEvidence(root2, imports) {
       if (deps.length) out.push(`${rel ? `${rel}/` : ""}build/${e.name} dependencies: ${deps.join(", ")}`);
     }
   }
-  if (existsSync7(join12(root2, ".wp-env.json"))) out.push(".wp-env.json (a WordPress development environment)");
-  const composer = readJson(join12(root2, "composer.json"));
+  if (existsSync7(join15(root2, ".wp-env.json"))) out.push(".wp-env.json (a WordPress development environment)");
+  const composer = readJson2(join15(root2, "composer.json"));
   if (composer) {
     const requires = Object.keys(composer.require ?? {}).filter((r) => r !== "php");
     const what = [
@@ -31605,11 +33623,11 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   for (const { abs } of read) {
     let text2;
     try {
-      if (statSync4(abs).size > STYLE_MAX_BYTES) {
+      if (statSync7(abs).size > STYLE_MAX_BYTES) {
         oversized++;
         continue;
       }
-      text2 = readFileSync13(abs, "utf8");
+      text2 = readFileSync17(abs, "utf8");
     } catch {
       continue;
     }
@@ -31632,7 +33650,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync13(abs, "utf8"));
+      markupText.push(readFileSync17(abs, "utf8"));
     } catch {
     }
   }
@@ -31641,7 +33659,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   for (const m of haystack.matchAll(IMPORT_RE)) if (m[1]) imports.set(m[1], (imports.get(m[1]) ?? 0) + 1);
   const candidates = [...cssCounts.entries()].filter(([prefix, count]) => count >= 3 && haystack.includes(prefix)).sort((a, b) => b[1] - a[1]);
   const vendored = libraryPrefixes(
-    [join12(root2, "node_modules"), ...packageDir ? [join12(root2, packageDir, "node_modules")] : []],
+    [join15(root2, "node_modules"), ...packageDir ? [join15(root2, packageDir, "node_modules")] : []],
     candidates.map(([p]) => p)
   );
   const accepted = [];
@@ -31711,15 +33729,17 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/profiles.ts
-import { existsSync as existsSync8, readFileSync as readFileSync14 } from "node:fs";
-import { isAbsolute as isAbsolute4, join as join13, resolve as resolve4 } from "node:path";
-var readJson2 = (p) => JSON.parse(readFileSync14(p, "utf8"));
-var under = (dir, rel) => isAbsolute4(rel) ? rel : join13(dir, rel);
+import { existsSync as existsSync8, readFileSync as readFileSync18 } from "node:fs";
+import { isAbsolute as isAbsolute5, join as join16, resolve as resolve5 } from "node:path";
+var PROJECT_PROFILES = join16(".loupe", "profiles");
+var NO_PROFILE = "none";
+var readJson3 = (p) => JSON.parse(readFileSync18(p, "utf8"));
+var under = (dir, rel) => isAbsolute5(rel) ? rel : join16(dir, rel);
 var asStrings2 = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString2 = (v) => typeof v === "string" && v !== "" ? v : null;
 function readScopes(dir, raw) {
   try {
-    return parseTokenScopes(typeof raw === "string" ? readJson2(under(dir, raw)) : raw);
+    return parseTokenScopes(typeof raw === "string" ? readJson3(under(dir, raw)) : raw);
   } catch (err) {
     return {
       scopes: null,
@@ -31727,19 +33747,19 @@ function readScopes(dir, raw) {
     };
   }
 }
-function readProfiles(root2) {
+function readProfiles(root2, origin = "shipped", unreadable) {
   if (!root2 || !existsSync8(root2)) return [];
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   for (const e of readDir(root2)) {
     if (!e.isDirectory()) continue;
-    const dir = join13(root2, e.name);
-    const manifest = join13(dir, "profile.json");
+    const dir = join16(root2, e.name);
+    const manifest = join16(dir, "profile.json");
     if (!existsSync8(manifest)) continue;
     try {
-      const raw = readJson2(manifest);
+      const raw = readJson3(manifest);
       const id = asString2(raw.id) ?? e.name;
-      if (seen.has(id)) continue;
+      if (id === NO_PROFILE || seen.has(id)) continue;
       const patterns = asString2(raw.patterns);
       const components2 = asString2(raw.components);
       const tokenDescriptions2 = asString2(raw.tokenDescriptions);
@@ -31758,19 +33778,46 @@ function readProfiles(root2) {
         // Read now, not by path later: two consumers want it, and a block that
         // does not validate is no block rather than a profile that cannot load.
         delivery: delivery ? readDelivery(under(dir, delivery)) : null,
-        dir
+        dir,
+        origin
       });
       seen.add(id);
-    } catch {
+    } catch (err) {
+      unreadable?.push(`${manifest} \u2014 ${messageOf(err)}`);
     }
   }
   return out.sort((a, b) => byBytes(a.id, b.id));
 }
+function profileRoots({
+  root: root2,
+  configured = [],
+  flag = null
+}) {
+  const roots = [
+    ...configured.map((dir) => ({ dir: resolve5(dir), origin: "project" })),
+    { dir: resolve5(root2, PROJECT_PROFILES), origin: "project" },
+    ...flag ? [{ dir: resolve5(flag), origin: "shipped" }] : []
+  ];
+  const seen = /* @__PURE__ */ new Set();
+  return roots.filter((r) => !seen.has(r.dir) && Boolean(seen.add(r.dir)));
+}
+function readProfileRoots(roots, unreadable) {
+  const out = /* @__PURE__ */ new Map();
+  for (const { dir, origin } of roots)
+    for (const p of readProfiles(dir, origin, origin === "project" ? unreadable : void 0))
+      if (!out.has(p.id)) out.set(p.id, p);
+  return [...out.values()].sort((a, b) => byBytes(a.id, b.id));
+}
 function selectProfiles(profiles, config, force = null) {
+  if (force === NO_PROFILE) return [];
   if (force) return profiles.filter((p) => p.id === force);
   const pkgs = config.designSystem?.packages ?? [];
   if (!pkgs.length) return [];
-  return profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
+  const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
+  const claimed = new Set(
+    matched.filter((p) => p.origin === "project").flatMap((p) => p.packages.filter((pkg) => pkgs.includes(pkg)))
+  );
+  return matched.filter((p) => p.origin === "project" || !p.packages.some((pkg) => claimed.has(pkg)));
 }
 function applyRegistries(config, sources) {
   const applied = [];
@@ -31799,7 +33846,7 @@ function applyRegistries(config, sources) {
       const path = src[kind];
       if (!path) continue;
       try {
-        const raw = readJson2(resolve4(path));
+        const raw = readJson3(resolve5(path));
         const inScope = registryApplies(raw, config.designSystem.packages);
         if (!src.forced && !inScope) {
           skipped.push({ label: src.label, kind, packages: declaredPackages(raw) });
@@ -31850,15 +33897,15 @@ function applyRegistries(config, sources) {
 }
 
 // src/hook.ts
-import { existsSync as existsSync9, readFileSync as readFileSync15, realpathSync as realpathSync2, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute5, join as join14, relative as relative4, resolve as resolve5 } from "node:path";
+import { existsSync as existsSync9, readFileSync as readFileSync19, realpathSync as realpathSync2, writeFileSync as writeFileSync5 } from "node:fs";
+import { dirname as dirname9, isAbsolute as isAbsolute6, join as join17, relative as relative5, resolve as resolve6 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var readStdin = async () => process.stdin.isTTY ? "" : text(process.stdin);
 function readState(root2) {
   try {
-    const raw = JSON.parse(readFileSync15(attemptsPath(root2), "utf8"));
+    const raw = JSON.parse(readFileSync19(attemptsPath(root2), "utf8"));
     const now = Date.now();
     const sessions = {};
     for (const [id, entry] of Object.entries(raw.sessions ?? {}))
@@ -31871,8 +33918,8 @@ function readState(root2) {
 function writeState(root2, state) {
   try {
     const p = attemptsPath(root2);
-    ensureDir(dirname6(p));
-    writeFileSync3(p, JSON.stringify(state));
+    ensureDir(dirname9(p));
+    writeFileSync5(p, JSON.stringify(state));
   } catch {
   }
 }
@@ -31883,6 +33930,10 @@ function bumpAttempts(root2, sessionId) {
   state.sessions[sessionId] = { count: next, at: Date.now() };
   writeState(root2, state);
   return next;
+}
+function peekAttempts(root2, sessionId) {
+  if (!sessionId) return 0;
+  return readState(root2).sessions[sessionId]?.count ?? 0;
 }
 function clearAttempts(root2, sessionId) {
   if (!sessionId) return;
@@ -31902,10 +33953,10 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute5(raw) ? raw : join14(root2, raw);
+  const abs = isAbsolute6(raw) ? raw : join17(root2, raw);
   const inside = (from, to) => {
-    const rel2 = relative4(from, to);
-    return rel2 && !rel2.startsWith("..") && !isAbsolute5(rel2) ? rel2 : null;
+    const rel2 = relative5(from, to);
+    return rel2 && !rel2.startsWith("..") && !isAbsolute6(rel2) ? rel2 : null;
   };
   let rel = inside(root2, abs);
   if (rel === null) {
@@ -31928,17 +33979,16 @@ function hookRoot() {
   if (fromEnv && existsSync9(fromEnv)) return fromEnv;
   return process.cwd();
 }
-var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
 function claudeProjectDir(explicit) {
   if (!explicit) {
     const fromEnv = process.env.CLAUDE_PROJECT_DIR;
     if (fromEnv && existsSync9(fromEnv)) return fromEnv;
   }
-  const start = resolve5(explicit ?? process.cwd());
-  const home = resolve5(homedir());
-  for (let dir = start; dir !== home; dir = dirname6(dir)) {
-    if (existsSync9(join14(dir, ".claude"))) return dir;
-    if (existsSync9(join14(dir, ".git")) || dirname6(dir) === dir) break;
+  const start = resolve6(explicit ?? process.cwd());
+  const home = resolve6(homedir());
+  for (let dir = start; dir !== home; dir = dirname9(dir)) {
+    if (existsSync9(join17(dir, ".claude"))) return dir;
+    if (existsSync9(join17(dir, ".git")) || dirname9(dir) === dir) break;
   }
   return start;
 }
@@ -31946,13 +33996,13 @@ function settingsEnv(projectDir, name) {
   const fromEnv = process.env[name];
   if (fromEnv !== void 0) return { value: fromEnv, from: `${name} in the environment` };
   const files = [
-    [join14(projectDir, ".claude", "settings.local.json"), ".claude/settings.local.json"],
-    [join14(projectDir, ".claude", "settings.json"), ".claude/settings.json"],
-    [join14(homedir(), ".claude", "settings.json"), "~/.claude/settings.json"]
+    [join17(projectDir, ".claude", "settings.local.json"), ".claude/settings.local.json"],
+    [join17(projectDir, ".claude", "settings.json"), ".claude/settings.json"],
+    [join17(homedir(), ".claude", "settings.json"), "~/.claude/settings.json"]
   ];
   for (const [file, label] of files) {
     try {
-      const v = JSON.parse(readFileSync15(file, "utf8")).env?.[name];
+      const v = JSON.parse(readFileSync19(file, "utf8")).env?.[name];
       if (v !== void 0) return { value: String(v), from: `${name} in ${label}` };
     } catch {
     }
@@ -31999,7 +34049,7 @@ function resolvedOptions(projectDir) {
   for (const file of ["settings.json", "settings.local.json"]) {
     let configs;
     try {
-      configs = JSON.parse(readFileSync15(join14(homedir(), ".claude", file), "utf8")).pluginConfigs;
+      configs = JSON.parse(readFileSync19(join17(homedir(), ".claude", file), "utf8")).pluginConfigs;
     } catch {
       continue;
     }
@@ -32098,17 +34148,41 @@ var fail = (msg) => {
 var note = (msg) => {
   process.stderr.write(yellow(msg));
 };
+function cacheLine(root2) {
+  const dir = projectStateDir(root2);
+  let bytes = 0;
+  try {
+    for (const name of readdirSync4(dir))
+      if (/^index-[0-9a-f]+\.json$/.test(name)) bytes += statSync8(join18(dir, name)).size;
+  } catch {
+  }
+  const answers = Object.keys(
+    readJson(join18(dir, "judge-cache.json"))?.entries ?? {}
+  ).length;
+  const parts = [
+    bytes ? `index ${(bytes / 1e6).toFixed(1)} MB` : "no index yet",
+    `${answers} judgement${answers === 1 ? "" : "s"}`
+  ];
+  return `${dir}  (${parts.join(", ")})`;
+}
+var answerCache = (root2, noCache, file = "judge-cache.json") => cacheDisabled(noCache) ? null : new AnswerCache(join18(projectStateDir(root2), file));
+function listenFailure(err, command, port) {
+  const code = err?.code;
+  const why = code === "EADDRINUSE" ? `port ${port} is already in use \u2014 run \`loupe ${command} --port <n>\` on another, or --port 0 to be given a free one` : code === "EACCES" ? `not allowed to bind port ${port} \u2014 ports below 1024 need privileges` : `${command} could not start \u2014 ${messageOf(err)}`;
+  return `loupe: ${why}
+`;
+}
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
 var guessedPreset = (level) => level === "low" || level === "none";
-var HERE = dirname7(fileURLToPath4(import.meta.url));
-var SINGLE_FILE = !existsSync10(join15(HERE, "..", "package.json"));
-var ENV_FILE = SINGLE_FILE ? resolve6(".env") : join15(HERE, "..", "..", ".env");
-var USER_ENV_FILE = join15(process.env.XDG_CONFIG_HOME || join15(homedir2(), ".config"), "loupe", ".env");
+var HERE = dirname10(fileURLToPath5(import.meta.url));
+var SINGLE_FILE = !existsSync10(join18(HERE, "..", "package.json"));
+var ENV_FILE = SINGLE_FILE ? resolve7(".env") : join18(HERE, "..", "..", ".env");
+var USER_ENV_FILE = join18(process.env.XDG_CONFIG_HOME || join18(homedir2(), ".config"), "loupe", ".env");
 var KEY_SOURCES = `the environment, the plugin's API key option, ${ENV_FILE}, or ${USER_ENV_FILE}`;
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
-  const entry = basename(HERE) === "src" ? "source" : "bundle";
-  return `loupe ${EMBEDDED_VERSION} (${entry}, ${resolve6(HERE, "..", "..")})`;
+  const entry = basename2(HERE) === "src" ? "source" : "bundle";
+  return `loupe ${EMBEDDED_VERSION} (${entry}, ${resolve7(HERE, "..", "..")})`;
 }
 var jsonKeys = (json) => json.replace(/"([^"\\]+)":/g, (_m, name) => `${dim(`"${name}"`)}:`);
 var usage = () => USAGE.replace(/^ {2}(--[a-z-]+)/gm, (_m, flag) => `  ${cyan(flag)}`).replace(/^ {2}([a-z]+)\b/gm, (_m, cmd) => `  ${bold(cmd)}`).replace(/^(Commands|Options|Environment):$/gm, (_m, head2) => `${bold(`${head2}:`)}`);
@@ -32127,7 +34201,12 @@ var VALUE_FLAGS = [
   "components",
   "profiles",
   "profile",
-  "port"
+  "port",
+  "out",
+  "limit",
+  "tier",
+  "type",
+  "editor"
 ];
 var FORMATS = ["agent", "json", "sarif", "html", "pane"];
 var isFormat = (f) => FORMATS.includes(f);
@@ -32158,6 +34237,8 @@ Commands:
   suppressions          List every active suppression directive, and every
                         rule turned off in config, with its reason
   explain <rule>        Print a rule's guidance
+  map <a> <b>           Experimental. Map one DTCG token set onto another: for
+                        each token in a, which token in b is its counterpart
   presets               List bundled presets
   version               Print the version, whether it runs from source or the bundle, and where
   detect                Show the config that would be inferred for this project
@@ -32167,6 +34248,9 @@ Commands:
   status                Show the effective config: rules, severities, what blocks
   serve                 Serve the findings to the running app, so a stylesheet
                         finding can be resolved to the elements it styles
+  ui                    The findings, live on the working tree: re-analyzed on
+                        save, every location a link into your editor, and fix,
+                        baseline and suppress from the row. Loopback only
   lsp                   Language server on stdin/stdout: diagnostics on save,
                         the rule's guidance on hover, and its fix as a quick
                         fix. Editors launch this; you do not run it by hand
@@ -32195,12 +34279,15 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --no-suppressions     Report what suppression directives would mute; with
                         --no-baseline, the full audit
+  --no-cache            Rebuild the index and re-ask every judgement instead of
+                        reusing the last run's (also LOUPE_NO_CACHE=1)
   --stale               For suppressions, list only the directives naming a
                         rule that muted nothing \u2014 no finding left, the rule
                         off, or an id that is not a rule \u2014 and exit 1 if any
   --dry-run             Report what 'fix' would change without writing; for
                         'baseline', what it would record by rule, new and
-                        fixed against the existing baseline
+                        fixed against the existing baseline; with 'map', print
+                        the shortlists without asking anything
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
                         pattern it was built as (patterns/judged-redirect), and
@@ -32210,7 +34297,16 @@ Options:
                         and suppresses the ones it kept; add --dry-run to
                         review them first. (TYPESAFE_API_KEY from the
                         environment or ~/.config/loupe/.env)
-  --port <n>            Port for 'serve' (default: 7331)
+  --port <n>            Port for 'serve' (7331) or 'ui' (7332)
+  --editor <t>          What a location in 'ui' links to. {path} is the file's
+                        absolute path and {line} its line
+                        (default: vscode://file{path}:{line}; for Cursor or Zed,
+                        swap the scheme: cursor://file{path}:{line})
+  --out <path>          Write the map here as JSON (map)
+  --tier <t,...>        Only map tokens in these tiers: base, semantic,
+                        component (map)
+  --type <t,...>        Only map tokens of these DTCG $types (map)
+  --limit <n>           Only map the first n tokens in scope (map)
   --force               Overwrite an existing config, or write a guessed design
                         system (init)
   --version             Same as the version command
@@ -32220,8 +34316,11 @@ Options:
   --patterns <path>     Composite pattern registry (JSON)
   --components <path>   Component currency registry (JSON)
   --profiles <dir>      Directory of design-system profiles; the ones matching
-                        this project's imports supply their registries
+                        this project's imports supply their registries. The
+                        project's own (config "profiles", .loupe/profiles/) are
+                        read as well, and win on a shared id or package
   --profile <id>        Use this profile regardless of what the project imports
+                        ("none" for no profile); outranks the config's "profile"
   --config <path>       Explicit config file
   --root <path>         Project root (default: the directory holding the config
                         that governs the cwd, or CLAUDE_PROJECT_DIR under hook)
@@ -32252,7 +34351,7 @@ var needsProject = (command, args, isHook) => {
   if (args.flags.all || args.flags.files) return false;
   return isHook || Boolean(args.flags.changed) && SCOPED_COMMANDS.has(command);
 };
-var looksLikeProject = (root2) => existsSync10(join15(root2, "package.json")) || existsSync10(join15(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
+var looksLikeProject = (root2) => existsSync10(join18(root2, "package.json")) || existsSync10(join18(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
 var CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString("en-US")}-entry ceiling`;
 var CEILING_WHY = "this root is larger than a project, so the namespaces are a guess from the part of it that was read";
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
@@ -32261,12 +34360,12 @@ var CEILING_SUFFIX = ` (inference stopped at the ${CEILING}; namespaces are a gu
 function expandDirs(config, given) {
   const isDir = (rel) => {
     try {
-      return statSync5(resolve6(config.root, rel)).isDirectory();
+      return statSync8(resolve7(config.root, rel)).isDirectory();
     } catch {
       return false;
     }
   };
-  const dirs2 = given.filter(isDir).map((d) => toPosix(relative5(config.root, resolve6(config.root, d))));
+  const dirs2 = given.filter(isDir).map((d) => toPosix(relative6(config.root, resolve7(config.root, d))));
   if (!dirs2.length) return given.filter(Boolean);
   const limit = analyzeEntryBudget(config.maxEntries);
   const found = discover({ root: config.root, sources: config.sources, limit });
@@ -32282,7 +34381,7 @@ function resolveScope(config, args, { defaultChanged = false }) {
   if (args.flags.files)
     return expandDirs(
       config,
-      args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative5(config.root, resolve6(f)) : f)).filter((f) => !f.startsWith(".."))
+      args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute7(f) ? relative6(config.root, resolve7(f)) : f)).filter((f) => !f.startsWith(".."))
     );
   if (args.flags.changed || defaultChanged) {
     const changed = changedFiles(config.root);
@@ -32290,6 +34389,134 @@ function resolveScope(config, args, { defaultChanged = false }) {
     return [...changed];
   }
   return null;
+}
+var listFlag = (value) => (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+function mapLabels(a, b) {
+  const base = (p) => basename2(resolve7(p)).replace(/\.json$/i, "");
+  if (base(a) !== base(b)) return [base(a), base(b)];
+  const withDir = (p) => `${basename2(dirname10(resolve7(p)))}/${base(p)}`;
+  return withDir(a) === withDir(b) ? [`${base(a)} (a)`, `${base(b)} (b)`] : [withDir(a), withDir(b)];
+}
+async function runMap(args) {
+  const [, fromPath, toPath, ...extra] = args._;
+  if (!fromPath || !toPath) {
+    fail("loupe: map needs two token sets \u2014 `loupe map <from> <to>`, each a DTCG file or a directory of them\n");
+    return EXIT.CANNOT_RUN;
+  }
+  if (extra.length) {
+    fail(`loupe: map takes two token sets, got ${extra.length + 2} \u2014 name a directory rather than a glob
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  const format = args.flags.format ?? "agent";
+  if (format !== "agent" && format !== "json") {
+    fail(`loupe: map writes agent or json, not "${format}"
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  if (args.flags["dry-run"] && (format === "json" || args.flags.out)) {
+    fail("loupe: map --dry-run prints the shortlists as text; --format json and --out apply to a real run\n");
+    return EXIT.CANNOT_RUN;
+  }
+  const tiers = listFlag(args.flags.tier);
+  const badTiers = tiers.filter((t) => !isTier(t));
+  if (badTiers.length) {
+    fail(`loupe: unknown tier(s) ${badTiers.join(", ")} \u2014 expected base, semantic, component
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  const limit = args.flags.limit === void 0 ? 0 : Number(args.flags.limit);
+  if (args.flags.limit !== void 0 && !(Number.isInteger(limit) && limit > 0)) {
+    fail(`loupe: --limit takes a positive whole number, not "${args.flags.limit}"
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  const out = args.flags.out ? resolve7(args.flags.out) : null;
+  if (out && !existsSync10(dirname10(out))) {
+    fail(`loupe: cannot write the map to ${out} \u2014 ${dirname10(out)} does not exist
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  let from;
+  let to;
+  try {
+    const [fromLabel, toLabel] = mapLabels(fromPath, toPath);
+    from = readTokenDoc(fromPath, fromLabel);
+    to = readTokenDoc(toPath, toLabel);
+  } catch (err) {
+    fail(`loupe: ${messageOf(err)}
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  const types = listFlag(args.flags.type);
+  const present = new Set(from.tokens.map((t) => t.type).filter(Boolean));
+  const badTypes = types.filter((t) => !present.has(t));
+  if (badTypes.length) {
+    fail(
+      `loupe: ${from.label} has no ${badTypes.join(", ")} token(s) \u2014 it has ${[...present].sort().join(", ")}
+`
+    );
+    return EXIT.CANNOT_RUN;
+  }
+  const plan = planMap(from, to, { tiers, types, limit });
+  process.stderr.write(
+    dim(
+      `loupe: ${from.label} ${from.tokens.length} token(s) from ${from.files.length} file(s), ${to.label} ${to.tokens.length} from ${to.files.length}
+`
+    )
+  );
+  if (!plan.jobs.length && !plan.settled.length) {
+    const scope = `--tier ${tiers.join(",")}${types.length ? ` --type ${types.join(",")}` : ""}`;
+    fail(`loupe: no token in ${from.label} is in scope for ${scope}
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  if (args.flags["dry-run"]) {
+    process.stdout.write(formatPlan(plan, CANDIDATES));
+    return EXIT.OK;
+  }
+  const apiKey = plan.jobs.length ? judgeKey() : "";
+  if (plan.jobs.length && !apiKey) {
+    fail(`loupe: map needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE} \u2014 or use --dry-run
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  if (plan.jobs.length) process.stderr.write(dim(`loupe: asking ${MODEL} about ${plan.jobs.length} token(s)\u2026
+`));
+  let mappings;
+  const client = judgeClient(apiKey ?? "", {
+    cache: answerCache(resolve7(process.cwd()), args.flags["no-cache"], "map-cache.json")
+  });
+  try {
+    ({ mappings } = await askCounterparts(plan, client));
+  } catch (err) {
+    client.cache?.save();
+    fail(`loupe: ${messageOf(err)}
+`);
+    return EXIT.CANNOT_RUN;
+  }
+  client.cache?.save();
+  const spent = judgeSummary(client);
+  if (spent) process.stderr.write(dim(`loupe: ${spent}
+`));
+  const json = `${JSON.stringify(mapPayload(plan, mappings, MODEL), null, 2)}
+`;
+  process.stdout.write(format === "json" ? json : formatMap(plan, mappings));
+  if (out) {
+    try {
+      writeFileSync6(out, json);
+    } catch (err) {
+      fail(`loupe: could not write the map to ${out}: ${messageOf(err)}
+`);
+      return EXIT.CANNOT_RUN;
+    }
+    const said = green(`loupe: map written to ${out}
+`);
+    if (format === "json") process.stderr.write(said);
+    else process.stdout.write(`
+${said}`);
+  }
+  return EXIT.OK;
 }
 async function findingsBeforeEdit(config, touched, before, { judge, suppress }) {
   if (before === null) return [];
@@ -32372,6 +34599,7 @@ async function main() {
 `);
     return EXIT.OK;
   }
+  if (command === "map") return runMap(args);
   const isHook = command === "hook";
   const payload = isHook ? parsePayload(await readStdin()) : {};
   const projectDir = claudeProjectDir(args.flags.root);
@@ -32382,21 +34610,19 @@ async function main() {
     if (off) return hookSilenced(projectDir, resolved) ? emitClean(`loupe: skipped \u2014 ${off}`) : EXIT.OK;
   }
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
-  const anchor = explicitRoot ? null : findConfig(resolve6(process.cwd()));
-  const root2 = resolve6(explicitRoot ?? (anchor ? dirname7(anchor) : process.cwd()));
+  const anchor = explicitRoot ? null : findConfig(resolve7(process.cwd()));
+  const root2 = resolve7(explicitRoot ?? (anchor ? dirname10(anchor) : process.cwd()));
   if (!existsSync10(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
 `);
     return EXIT.CANNOT_RUN;
   }
-  const profiles = readProfiles(args.flags.profiles ? resolve6(args.flags.profiles) : null);
-  const forced = args.flags.profile ? profiles.find((p) => p.id === args.flags.profile) ?? null : null;
-  if (args.flags.profile && !forced && !isHook)
-    note(
-      `loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve6(args.flags.profiles) : "any profiles directory (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
-`
-    );
+  const flagProfiles = args.flags.profiles ? resolve7(args.flags.profiles) : null;
+  let unreadable = [];
+  let profiles = readProfileRoots(profileRoots({ root: root2, flag: flagProfiles }), unreadable);
+  const byId = (id) => id && id !== NO_PROFILE ? profiles.find((p) => p.id === id) ?? null : null;
+  let forced = byId(args.flags.profile);
   let config;
   let detected = null;
   let profilePreset = null;
@@ -32411,7 +34637,7 @@ async function main() {
     const projectConfig = args.flags.config ? null : findConfig(root2);
     const optionPreset = options.preset && options.preset !== "auto" ? options.preset : null;
     const explicitPreset = args.flags.preset ?? (projectConfig ? null : optionPreset);
-    ownConfig = args.flags.config ? resolve6(args.flags.config) : explicitPreset ? null : projectConfig;
+    ownConfig = args.flags.config ? resolve7(args.flags.config) : explicitPreset ? null : projectConfig;
     const statedProject = Boolean(args.flags.config) || Boolean(args.flags.preset) || Boolean(projectConfig);
     if (!statedProject && needsProject(command, args, isHook) && !looksLikeProject(root2)) {
       if (isHook) return emitClean(`loupe: skipped \u2014 ${NOT_A_WORKTREE}`);
@@ -32445,14 +34671,31 @@ async function main() {
 `);
     return EXIT.CANNOT_RUN;
   }
-  const active = selectProfiles(profiles, config, args.flags.profile ?? null);
+  if (config.profileDirs.length) {
+    unreadable = [];
+    profiles = readProfileRoots(profileRoots({ root: root2, configured: config.profileDirs, flag: flagProfiles }), unreadable);
+    forced = byId(args.flags.profile);
+  }
+  const pin = args.flags.profile ?? config.profilePin;
+  const pinned = byId(pin);
+  if (pin && pin !== NO_PROFILE && !pinned && !isHook)
+    note(
+      `loupe: no profile "${pin}"${args.flags.profile ? "" : ` (the config's "profile")`} in ${profileRoots({
+        root: root2,
+        configured: config.profileDirs,
+        flag: flagProfiles
+      }).map((r) => r.dir).join(", ")}${flagProfiles ? "" : " (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
+`
+    );
+  const active = selectProfiles(profiles, config, pin);
   const sources = active.map((p) => ({
     label: `profile ${p.id}`,
     patterns: p.patterns,
     components: p.components,
     // Naming a profile has already answered the question its registries would
-    // be scope-checked against.
-    forced: p.id === forced?.id
+    // be scope-checked against — whether it was named on the command line or in
+    // the config.
+    forced: p.id === pinned?.id
   }));
   if (args.flags.patterns || args.flags.components)
     sources.push({
@@ -32464,6 +34707,8 @@ async function main() {
   config.profiles = { available: profiles, active, ...registries };
   if (!isHook) {
     for (const err of registries.errors) fail(`loupe: ${err}
+`);
+    for (const u of unreadable) note(`loupe: project profile skipped, could not load ${u}
 `);
     for (const p of active)
       for (const problem of p.problems) fail(`loupe: profile ${p.id} ${problem} \u2014 its token scopes are ignored
@@ -32547,6 +34792,7 @@ async function main() {
     }
     return EXIT.OK;
   }
+  const useCache = !cacheDisabled(args.flags["no-cache"]);
   if (command === "status") {
     const off = hookOff(projectDir, resolved);
     const gateBlocks = blockingAllowed && !off;
@@ -32575,7 +34821,7 @@ async function main() {
       // easy to assume still do: the retry counter is the one that stays out of the
       // repo. The marker is computed, not assumed — a root above the temp
       // directory would contain it.
-      `${dim("state:      ")}${state}${relative5(root2, state).startsWith("..") ? "  (retry counter only, outside your repo)" : ""}`,
+      `${dim("state:      ")}${state}${relative6(root2, state).startsWith("..") ? "  (retry counter only, outside your repo)" : ""}`,
       // The Claude Code hook has CLAUDE_PLUGIN_DATA and a terminal does not, so
       // the line above is not the hook's file unless this run has it too.
       ...process.env.CLAUDE_PLUGIN_DATA ? [] : [
@@ -32589,6 +34835,16 @@ async function main() {
       // key. A report that quietly stopped asking and one that found nothing to
       // ask read identically, so name which this is.
       `${dim("judge:      ")}${judgeKey() ? "on \u2014 TYPESAFE_API_KEY found" : `off \u2014 no TYPESAFE_API_KEY (${KEY_SOURCES})`}`,
+      // Where the caches are and what is in them: a run that seems to ignore an
+      // edit is a question this line answers, and `--no-cache` is the remedy.
+      `${dim("cache:      ")}${useCache ? cacheLine(root2) : "off \u2014 LOUPE_NO_CACHE or --no-cache"}`,
+      // The same split as the retry counter's: a terminal's caches are not the
+      // hook's, which live under its plugin data, keyed on its project.
+      ...useCache && !process.env.CLAUDE_PLUGIN_DATA ? [
+        dim(
+          `            for this terminal; the Claude Code hook's are in ${toPosix(projectStateDir(hookDir, "$CLAUDE_PLUGIN_DATA"))}`
+        )
+      ] : [],
       // Asked through the same predicate the gate uses: reporting on mere truthiness
       // meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
       ...off ? [yellow(`hook:       OFF \u2014 ${off}`)] : [],
@@ -32596,7 +34852,7 @@ async function main() {
       // were on offer: "no composite findings" and "no composite registry" look
       // identical in a report and must not look identical here. The directory, not
       // just the id: a profile carries its authoring prose beside its registries.
-      `${dim("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(", ") : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
+      `${dim("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(", ") : (args.flags.profile ?? config.profilePin) === NO_PROFILE ? `none selected \u2014 pinned to "${NO_PROFILE}" by ${args.flags.profile ? "--profile" : `the config's "profile"`}` : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
       // What adopting the system costs this project: which packages the host
       // provides and which get bundled, and which sheet carries the tokens. A
       // remedy naming a bundled package is a new runtime dependency, and a token
@@ -32609,9 +34865,9 @@ async function main() {
       const def = RULES[id];
       const sev = config.severityOf(id);
       const judgeOnly = id === "patterns/judged-redirect";
-      const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red(judgeOnly ? "BLOCKS (--judge only)" : "BLOCKS") : judgeOnly ? yellow("advisory, --judge only") : sev === "error" ? yellow("advisory in the hook (would block if enabled); fails `check`") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
+      const verdict3 = config.enabled[id] ? sev === "error" && gateBlocks ? red(judgeOnly ? "BLOCKS (--judge only)" : "BLOCKS") : judgeOnly ? yellow("advisory, --judge only") : sev === "error" ? yellow("advisory in the hook (would block if enabled); fails `check`") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
       const reason = config.rules[id].reason;
-      lines.push(`  ${magenta(id.padEnd(32))} ${verdict}${reason ? dim(` \u2014 ${reason}`) : ""}`);
+      lines.push(`  ${magenta(id.padEnd(32))} ${verdict3}${reason ? dim(` \u2014 ${reason}`) : ""}`);
     }
     const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
     const quiet = off ? "Nothing blocks turns: the hook is off." : "Nothing blocks turns; the hook reports every finding as advisory.";
@@ -32675,7 +34931,7 @@ ${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id))
 `);
       return EXIT.OK;
     }
-    const target = join15(root2, "loupe.config.json");
+    const target = join18(root2, "loupe.config.json");
     if (existsSync10(target) && !args.flags.force) {
       fail(`loupe: ${target} already exists (use --force)
 `);
@@ -32703,7 +34959,7 @@ ${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id))
       fail("loupe: refusing to write a guessed design system to a config.\n");
       return EXIT.CANNOT_RUN;
     }
-    writeFileSync4(target, `${JSON.stringify(info.config, null, 2)}
+    writeFileSync6(target, `${JSON.stringify(info.config, null, 2)}
 `);
     process.stdout.write(`${lines.join("\n")}
 
@@ -32711,10 +34967,9 @@ ${green(`Wrote ${target}`)}
 `);
     return EXIT.OK;
   }
-  const baselinedRun = (notice) => {
+  const presenter = (notice) => {
     let warned = false;
-    return async () => {
-      const fresh = await analyze(config, { scope: null });
+    return (fresh) => {
       if (args.flags["no-baseline"]) return fresh;
       const { path: bPath, found } = findExistingBaseline(root2, namedBaseline, config.baselinePath);
       const baseline = found ? readBaseline(bPath) : null;
@@ -32725,6 +34980,10 @@ ${green(`Wrote ${target}`)}
       }
       return applyBaseline(fresh, baseline, { enabled: config.enabled });
     };
+  };
+  const baselinedRun = (notice) => {
+    const present = presenter(notice);
+    return async () => present(await analyze(config, { scope: null, cache: useCache }));
   };
   if (command === "lsp") {
     const { closed } = lsp({
@@ -32746,7 +35005,13 @@ ${green(`Wrote ${target}`)}
       return EXIT.CANNOT_RUN;
     }
     const run = baselinedRun(note);
-    const { url } = await serve({ port, config, run });
+    let url;
+    try {
+      ({ url } = await serve({ port, config, run }));
+    } catch (err) {
+      fail(listenFailure(err, "serve", port));
+      return EXIT.CANNOT_RUN;
+    }
     process.stdout.write(
       `${green(`loupe serve \u2014 ${url}`)}
 ${dim("  Open that URL for the bookmarklet, then click it on the page you are developing.")}
@@ -32757,12 +35022,58 @@ ${dim("  Ctrl-C to stop.")}
     });
     return EXIT.OK;
   }
+  if (command === "ui") {
+    const port = Number(args.flags.port ?? 7332);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+      fail(`loupe: --port wants a port number, got ${args.flags.port}
+`);
+      return EXIT.CANNOT_RUN;
+    }
+    const unhonored = ["severity", "files", "changed", "judge"].filter((f) => args.flags[f]);
+    if (unhonored.length) {
+      fail(
+        `loupe: ui does not take ${unhonored.map((f) => `--${f}`).join(" ")} \u2014 it shows the whole tree; filter in the page, or use \`check\` for a narrowed run
+`
+      );
+      return EXIT.CANNOT_RUN;
+    }
+    const present = presenter(note);
+    let handle;
+    try {
+      handle = await ui({
+        port,
+        config,
+        root: root2,
+        analyze: () => analyze(config, { scope: null, cache: useCache }),
+        present,
+        baselineTarget: baselinePath(root2, namedBaseline ?? config.baselinePath),
+        baselineFound: () => findExistingBaseline(root2, namedBaseline, config.baselinePath).found,
+        // `||`, not `??`: an empty `--editor=` is not a template. Taken as
+        // nullish-only it reaches the page as '', and every location renders
+        // `href=""` — a link that reloads the report instead of opening a file.
+        editor: args.flags.editor || "vscode://file{path}:{line}",
+        log: (line) => process.stderr.write(line)
+      });
+    } catch (err) {
+      fail(listenFailure(err, "ui", port));
+      return EXIT.CANNOT_RUN;
+    }
+    process.stdout.write(
+      `${green(`loupe ui \u2014 ${handle.url}`)}
+${dim("  Findings, live on the working tree: re-analyzed on save, with fix, baseline and suppress.")}
+${dim("  Ctrl-C to stop.")}
+`
+    );
+    await new Promise(() => {
+    });
+    return EXIT.OK;
+  }
   if (command === "baseline") {
-    const result2 = await analyze(config, { scope: null });
+    const result2 = await analyze(config, { scope: null, cache: useCache });
     const target = baselinePath(root2, namedBaseline ?? config.baselinePath);
     const counted = (findings2, entries2) => findings2 === entries2 ? `${findings2} finding(s)` : `${findings2} finding(s) as ${entries2} ${entries2 === 1 ? "entry" : "entries"}`;
     const ignoredWarning = (findings2) => gitIgnores(root2, target) ? yellow(
-      `  Warning: ${relative5(root2, target) || target} is gitignored. It will not reach CI or other clones,
+      `  Warning: ${relative6(root2, target) || target} is gitignored. It will not reach CI or other clones,
   which will run without it and report all ${findings2} finding(s). Un-ignore it, or \`git add -f\` it.`
     ) : null;
     if (args.flags["dry-run"]) {
@@ -32813,7 +35124,7 @@ ${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked
 `);
       return EXIT.CANNOT_RUN;
     }
-    const all = (await analyze(config, { scope: null })).directives;
+    const all = (await analyze(config, { scope: null, cache: useCache })).directives;
     const staleOnly = Boolean(args.flags.stale);
     const directives = staleOnly ? all.filter((d) => d.stale) : all;
     const kw = config.suppression.keyword;
@@ -32896,26 +35207,32 @@ ${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked
     }
     let toFix;
     try {
-      toFix = filterRules(await analyze(config, { scope: fixScope }), rules2);
+      toFix = filterRules(await analyze(config, { scope: fixScope, cache: useCache }), rules2);
     } catch (err) {
       fail(`loupe: ${messageOf(err)}
 `);
       return EXIT.CANNOT_RUN;
     }
     const about = tokenDescriptions(config.profiles?.active ?? []);
-    try {
-      const judgeable = toFix.findings.filter((f) => f.suggest?.length);
-      if (apiKey && judgeable.length) await judgeValues(root2, judgeable, toFix.tokens, apiKey, about);
-    } catch (err) {
-      note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
+    const judgeable = toFix.findings.filter((f) => f.suggest?.length);
+    const client = apiKey ? judgeClient(apiKey, { cache: answerCache(root2, args.flags["no-cache"]) }) : null;
+    await Promise.all([
+      // With no design-system tokens, `judgeValues` is the one to refuse, and
+      // the refusal is noted like any other failure.
+      client && judgeable.length ? judgeValues(root2, judgeable, toFix.tokens, client, about).catch((err) => {
+        note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
 `);
-    }
-    try {
-      if (apiKey && toFix.tokens) await judgeRenames(root2, toFix.findings, toFix.tokens, apiKey, about);
-    } catch (err) {
-      note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
+      }) : null,
+      // A judged rename is written like a spelled one, every line naming it.
+      client && toFix.tokens ? judgeRenames(root2, toFix.findings, toFix.tokens, client, about).catch((err) => {
+        note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
 `);
-    }
+      }) : null
+    ]);
+    client?.cache?.save();
+    const spent = client && judgeSummary(client);
+    if (spent) process.stderr.write(dim(`loupe: ${spent}
+`));
     const dry = Boolean(args.flags["dry-run"]);
     const { applied, skipped } = applyTokenFixes(root2, toFix.findings, { dry });
     const kept = apiKey ? applyKeeps(root2, toFix.findings, config.suppression.keyword, { dry, directives: toFix.directives }) : { applied: [], skipped: [] };
@@ -32980,7 +35297,12 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   let result;
   try {
     result = filterRules(
-      await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags["no-suppressions"] }),
+      await analyze(config, {
+        scope,
+        judge: Boolean(apiKey),
+        suppress: !args.flags["no-suppressions"],
+        cache: useCache
+      }),
       rules2
     );
   } catch (err) {
@@ -33002,74 +35324,81 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     result = applyBaseline(result, baseline, { scoped: scope !== null, rules: rules2, enabled: config.enabled });
   }
   if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
+  const budgetKey = `${payload.session_id ?? ""}${touched ? `\0${touched}` : ""}`;
+  let verdict2 = null;
+  const hookVerdict = () => verdict2 ??= (async () => {
+    const errors = result.findings.filter((f) => f.severity === "error");
+    if (!touched || !errors.length) return { errors, blocking: errors };
+    const stopScope = resolveScope(config, args, { defaultChanged: true });
+    if (stopScope !== null && !Array.isArray(stopScope)) return { errors, blocking: errors };
+    const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
+      judge: Boolean(apiKey),
+      suppress: !args.flags["no-suppressions"]
+    });
+    return { errors, blocking: introducedBy(errors, before) };
+  })();
+  const hookShows = async () => {
+    const { blocking } = await hookVerdict();
+    if (!blocking.length) return [];
+    if (!payload.session_id && payload.stop_hook_active) return [];
+    if (peekAttempts(root2, budgetKey) + 1 > config.hook.maxAttempts) return [];
+    return shownFindings(blocking, config.hook.maxFindings);
+  };
+  let judged = null;
   if (apiKey) {
     const deadline = isHook ? AbortSignal.timeout(config.hook.timeoutMs) : null;
-    const judgeFetch = deadline ? deadlineFetch(deadline) : fetch;
-    const inTime = () => !deadline?.aborted;
-    try {
-      const redirectSeverity = config.severityOf("patterns/judged-redirect");
-      if (inTime() && result.controls?.length && (args.flags.severity !== "error" || redirectSeverity === "error") && (!rules2 || rules2.has("patterns/judged-redirect"))) {
-        result.findings.push(...await judgeRedirects(result.controls, apiKey, redirectSeverity, judgeFetch));
-        result.findings = dedupe(result.findings);
-      }
-      if (inTime()) await judgeVariants(root2, result.findings, config.componentRegistry, apiKey, judgeFetch);
-    } catch (err) {
+    const client = judgeClient(apiKey, {
+      fetchImpl: deadline ? deadlineFetch(deadline) : fetch,
+      cache: answerCache(root2, args.flags["no-cache"])
+    });
+    const redirectSeverity = config.severityOf("patterns/judged-redirect");
+    const askRedirects = Boolean(result.controls?.length) && (args.flags.severity !== "error" || redirectSeverity === "error") && (!isHook || redirectSeverity === "error") && (!rules2 || rules2.has("patterns/judged-redirect"));
+    const redirects = askRedirects ? judgeRedirects(result.controls ?? [], client, redirectSeverity).catch((err) => {
       note(`loupe: --judge skipped \u2014 ${messageOf(err)}
 `);
-    }
-    try {
-      if (inTime() && result.findings.some((f) => f.suggest?.length))
-        await judgeValues(
-          root2,
-          result.findings,
-          result.tokens,
-          apiKey,
-          tokenDescriptions(config.profiles?.active ?? []),
-          judgeFetch
-        );
-    } catch (err) {
-      note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
+      return [];
+    }) : Promise.resolve([]);
+    const addRedirects = (found) => {
+      if (!found.length) return;
+      result.findings.push(...found);
+      result.findings = dedupe(result.findings);
+    };
+    if (isHook) addRedirects(await redirects);
+    const targets = isHook ? await hookShows() : result.findings;
+    const about = tokenDescriptions(config.profiles?.active ?? []);
+    const settled = await Promise.all([
+      isHook ? Promise.resolve([]) : redirects,
+      judgeVariants(root2, targets, config.componentRegistry, client).catch((err) => {
+        note(`loupe: --judge skipped \u2014 ${messageOf(err)}
 `);
-    }
-    try {
-      if (inTime() && result.tokens && result.findings.some((f) => f.unknown))
-        await judgeRenames(
-          root2,
-          result.findings,
-          result.tokens,
-          apiKey,
-          tokenDescriptions(config.profiles?.active ?? []),
-          judgeFetch
-        );
-    } catch (err) {
-      note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
+      }),
+      // Its own note: the judgements above stand when this one cannot run. Asked
+      // without a token set too, so its refusal is said rather than skipped.
+      targets.some((f) => f.suggest?.length) ? judgeValues(root2, targets, result.tokens, client, about).catch((err) => {
+        note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
 `);
-    }
-    if (!inTime()) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)
+      }) : null,
+      result.tokens && targets.some((f) => f.unknown) ? judgeRenames(root2, targets, result.tokens, client, about).catch((err) => {
+        note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
+`);
+      }) : null
+    ]);
+    addRedirects(settled[0]);
+    client.cache?.save();
+    judged = judgeSummary(client);
+    if (deadline?.aborted) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)
 `);
     result.blocking = result.findings.some((f) => f.severity === "error");
   }
+  const spentSuffix = judged ? dim(` (${judged})`) : "";
   if (isHook) {
     const sessionId = payload.session_id ?? "";
-    const budgetKey = touched ? `${sessionId}\0${touched}` : sessionId;
-    const errors = result.findings.filter((f) => f.severity === "error");
-    let blocking = errors;
-    const stopSees = () => {
-      const stopScope = resolveScope(config, args, { defaultChanged: true });
-      return stopScope === null || Array.isArray(stopScope);
-    };
-    if (touched && errors.length && stopSees()) {
-      const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
-        judge: Boolean(apiKey),
-        suppress: !args.flags["no-suppressions"]
-      });
-      blocking = introducedBy(errors, before);
-    }
+    const { errors, blocking } = await hookVerdict();
     const standing = errors.length - blocking.length;
     const standingNote = standing ? ` ${standing} blocking finding(s) already in ${touched} before this edit, left for the Stop check.` : "";
     if (!blocking.length) {
       clearAttempts(root2, budgetKey);
-      if (!standing) return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
+      if (!standing) return emitClean(`${formatSummary(result)}${spentSuffix}${ceilingSuffix}`);
       const message = `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`;
       const report2 = formatAgent({ ...result, findings: errors }, config, {
         maxFindings: config.hook.maxFindings,
@@ -33093,9 +35422,10 @@ ${report2}`, payload);
       maxFindings: config.hook.maxFindings,
       terse: true
     });
+    const spent = judged ? `; ${judged}` : "";
     return emitBlocking(`${report}
 
-(attempt ${attempts} of ${max})${standingNote}${ceilingSuffix}`);
+(attempt ${attempts} of ${max}${spent})${standingNote}${ceilingSuffix}`);
   }
   const maxFindings = Number(args.flags["max-findings"] ?? 0) || 0;
   if (format === "json") process.stdout.write(`${JSON.stringify(reportPayload(result, config), null, 2)}
@@ -33122,12 +35452,15 @@ loupe: no config, and no design system recognised \u2014 ran as generic, with ${
       );
     }
   }
+  if (judged) process.stderr.write(dim(`loupe: ${judged}
+`));
   return result.blocking ? EXIT.BLOCKED : EXIT.OK;
 }
-main().then((code) => {
-  process.exitCode = code;
-}).catch((err) => {
-  fail(`loupe: ${err instanceof TreeTooLarge ? err.message : err instanceof Error ? err.stack : String(err)}
+if (isMainThread2)
+  main().then((code) => {
+    process.exitCode = code;
+  }).catch((err) => {
+    fail(`loupe: ${err instanceof TreeTooLarge ? err.message : err instanceof Error ? err.stack : String(err)}
 `);
-  process.exitCode = EXIT.CANNOT_RUN;
-});
+    process.exitCode = EXIT.CANNOT_RUN;
+  });

@@ -46,20 +46,26 @@ import { RULES } from './rules.ts';
 import { annotateReach, mergeDeliveries, projectDependencies } from './delivery.ts';
 import { TreeTooLarge, analyzeEntryBudget, byBytes, discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
-import { scanMarkup, harvestTokens } from './markup.ts';
+import { harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
 import { surfaceFor, surfacesRecorded } from './components.ts';
 import { boundMessage, oneLine, parseMessageOf, parseReasonOf, snippet } from './text.ts';
 import {
+	addTokenDef,
 	cssFilesUnder,
 	declarationMessage,
 	emptyTokenSet,
 	harvestTokenDefs,
 	planValue,
 	readTokenSources,
+	tokenDefsIn,
 	tokensFor,
 	tokenRefsIn,
 } from './tokens.ts';
+import { IndexCache, loadScan, storeScan } from './index-cache.ts';
+import { scanMany } from './scan-pool.ts';
+import type { ScanJob } from './scan-pool.ts';
+import type { Lookup, RuleExtract, SheetExtract } from './index-cache.ts';
 import {
 	APPEARANCE_PROPS,
 	GAP_PROPS,
@@ -118,6 +124,7 @@ import type {
 	RawElement,
 	RuleHit,
 	RuleId,
+	ScanResult,
 	StylingSurface,
 	Suppressions,
 	TokenSet,
@@ -412,12 +419,42 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 	return out;
 }
 
+/**
+ * A parsed stylesheet, reduced to what the walk reads: each rule that names a
+ * class, with its own declarations, and every token the sheet defines. Plain
+ * data, so a sheet whose bytes have not changed is never parsed again.
+ */
+function extractSheet(root: Root, text: string, tokenPrefixes: readonly string[]): SheetExtract {
+	// What a rule's own lines say, for the deletion `css/dead-class` offers in
+	// the editor: an extent in lines is only safe if it is the whole of them.
+	const srcLines = text.split('\n');
+	const rules: RuleExtract[] = [];
+	root.walkRules((cssRule) => {
+		const selectors = resolvedSelectors(cssRule);
+		if (!selectors.some((s) => classesIn(s).length)) return;
+		const line = cssRule.source?.start?.line ?? 1;
+		const media = mediaQuery(cssRule) || undefined;
+		rules.push({
+			line,
+			selectors,
+			isGrid: ruleIsGrid(cssRule),
+			...(media === undefined ? {} : { media }),
+			decls: [...ownDecls(cssRule)].map((d) => ({ prop: d.prop, value: d.value, line: d.source?.start?.line ?? line })),
+			cut: deletableRule(cssRule, srcLines),
+		});
+	});
+	return { rules, defs: tokenDefsIn(root, tokenPrefixes) };
+}
+
 export async function analyze(
 	config: Config,
 	// `judge` collects the controls a `judge` detector names, for `check --judge`
 	// to ask about. Off, the scanner never sees those detectors.
 	// `suppress: false` reads directives (still listed, still checked for form)
 	// but mutes nothing: the full audit.
+	// `cache` reuses each unchanged file's contribution from the last run
+	// (`index-cache.ts`). Off unless asked for: the CLI, the server and the
+	// language server ask; a library caller gets a run that writes nothing.
 	// `contents` stands in for what is on disk, by repo-relative path: the hook
 	// asks what a file's findings were before the edit it is looking at the
 	// result of, and the file now holds the edit.
@@ -425,11 +462,13 @@ export async function analyze(
 		scope = null,
 		judge = false,
 		suppress = true,
+		cache: useCache = false,
 		contents,
 	}: {
 		scope?: readonly string[] | null;
 		judge?: boolean;
 		suppress?: boolean;
+		cache?: boolean;
 		contents?: ReadonlyMap<string, string>;
 	} = {},
 ): Promise<AnalyzeResult> {
@@ -535,24 +574,90 @@ export async function analyze(
 	// The registry's AST rules, run per file by the scanner. They exist for the
 	// wrong choice the composite matcher cannot see: one control, under the
 	// four-node floor.
+	// `judge` detectors only when this run judges: one costs a walk of the file's
+	// component ranges, which no other run should pay for. The rules are in the
+	// cache's fingerprint, so a judged run and a plain one keep a copy each.
 	const patternRules: PatternRule[] = (config.patterns ?? []).flatMap((p) =>
 		p.rules.filter((spec) => judge || spec.rule !== 'judge').map((spec) => ({ patternId: p.id, spec })),
 	);
+	const cache = useCache
+		? new IndexCache(config.root, {
+				ds,
+				patternRules,
+				suppression: config.suppression,
+				tokenPrefixes,
+				maxBytes: MAX_BYTES,
+			})
+		: null;
+	/** A file's bytes, or null when it cannot be read: an unreadable file contributes nothing. */
+	const readOrNull = (abs: string, rel: string): string | null => {
+		try {
+			return read(abs, rel);
+		} catch {
+			return null;
+		}
+	};
+	/**
+	 * What the cache knows about a file. Never asked about a file `contents`
+	 * stands in for: the cache describes the bytes on disk, and those are not
+	 * the ones being analyzed. With no lookup, nothing is stored either.
+	 */
+	const lookup = (abs: string, rel: string): Lookup | null =>
+		contents?.has(rel) ? null : (cache?.lookup(abs, rel) ?? null);
+	/** Whether a file holds anything the suppression parser read as a directive. */
+	const hasDirectives = (supp: Suppressions): boolean => supp.directives.length > 0 || supp.malformed.length > 0;
+	/**
+	 * Too big to be anything a person wrote — from the stat a cache lookup already
+	 * made, where one did.
+	 */
+	const oversized = (abs: string, rel: string, look: Lookup | null): boolean =>
+		look ? (look.stat?.size ?? 0) > MAX_BYTES : tooBig(abs, rel);
 	const controls: Control[] = [];
 	const ruleHits: (RuleHit & { file: string })[] = [];
 	const importsByFile = new Map<string, Set<string>>();
 	const componentImports: ComponentImport[] = [];
 
+	// Two passes over the markup. The first decides, per file, whether the cache
+	// answers or the file has to be scanned, reading only what it must; the
+	// misses are then scanned together, across workers when there are enough of
+	// them. The second consumes every file in discovery order, exactly as one
+	// pass would have, so where a scan was made never shows in the result.
+	type MarkupFile = { rel: string; look: Lookup | null; text: string | null; scan: ScanResult | null };
+	const markup: MarkupFile[] = [];
+	const misses: ScanJob[] = [];
+	const missAt: number[] = [];
 	for (const { abs, rel } of files.markup) {
-		if (tooBig(abs, rel)) continue;
-		let text: string;
-		try {
-			text = read(abs, rel);
-		} catch {
-			continue;
+		const look = lookup(abs, rel);
+		if (oversized(abs, rel, look)) continue;
+		const hit = look?.entry?.scan ? look.entry : null;
+		// The bytes are needed to scan, and to read suppressions from a file that
+		// has any; a cached file without one is never opened.
+		let text = look?.text ?? null;
+		if (!hit || hit.d) {
+			text ??= readOrNull(abs, rel);
+			if (text === null) continue;
 		}
+		const file: MarkupFile = { rel, look, text, scan: hit?.scan ? loadScan(hit.scan) : null };
+		if (!file.scan) {
+			missAt.push(markup.length);
+			misses.push({ rel, text: text ?? '' });
+		}
+		markup.push(file);
+	}
+	const scans = await scanMany(misses, ds, patternRules);
+	missAt.forEach((at, k) => {
+		const file = markup[at] as MarkupFile;
+		file.scan = scans[k] as ScanResult;
+	});
+
+	for (const { rel, look, text, scan } of markup) {
+		const scanned = scan as ScanResult;
 		diagnostics.filesScanned++;
-		const scanned = scanMarkup(text, rel, ds, patternRules);
+		const supp = suppressionsFor(rel, text ?? '');
+		// A parse failure is never kept: it can be the parser's, and an upgraded
+		// parser is not in the fingerprint. A file that fails is rare and re-read.
+		if (look && !look.entry?.scan && !scanned.parseError)
+			cache?.store(look, rel, text ?? '', { d: hasDirectives(supp), scan: storeScan(scanned) });
 		if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
 		for (const t of scanned.referenced) referenced.add(t);
 		for (const t of scanned.stems) stems.add(t);
@@ -578,7 +683,6 @@ export async function analyze(
 		controls.push(...scanned.controls);
 		if (scanned.imports) importsByFile.set(rel, scanned.imports);
 		for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
-		suppressionsFor(rel, text);
 	}
 
 	/**
@@ -608,13 +712,20 @@ export async function analyze(
 	};
 
 	for (const { abs, rel } of files.references) {
-		if (tooBig(abs, rel)) continue;
-		try {
-			harvestTokens(read(abs, rel), referenced);
+		const look = lookup(abs, rel);
+		if (oversized(abs, rel, look)) continue;
+		if (look?.entry?.refs) {
+			for (const t of look.entry.refs) referenced.add(t);
 			diagnostics.filesScanned++;
-		} catch {
-			/* unreadable reference file just contributes nothing */
+			continue;
 		}
+		// An unreadable reference file just contributes nothing.
+		const text = look?.text ?? readOrNull(abs, rel);
+		if (text === null) continue;
+		const found = harvestTokens(text);
+		for (const t of found) referenced.add(t);
+		diagnostics.filesScanned++;
+		if (look) cache?.store(look, rel, text, { d: false, refs: [...found] });
 	}
 
 	// ── walk CSS ──────────────────────────────────────────────────────────────
@@ -636,14 +747,15 @@ export async function analyze(
 	//   otherwise                                         → walked, and its rules checked
 	for (const { abs, rel } of files.styles) {
 		if (isLibrarySheet(rel)) continue; // the design system's own sheet, not the project's
-		let text: string;
-		try {
-			text = read(abs, rel);
-		} catch {
-			continue;
+		const look = lookup(abs, rel);
+		const hit = look?.entry?.sheet ? look.entry : null;
+		let text = look?.text ?? null;
+		if (!hit || hit.d) {
+			text ??= readOrNull(abs, rel);
+			if (text === null) continue;
 		}
 		diagnostics.filesScanned++;
-		suppressionsFor(rel, text); // cached for `report`
+		const supp = suppressionsFor(rel, text ?? ''); // cached for `report`
 		// Unreadable is a hole in coverage, not a diagnostic: it reports as a
 		// finding, so a clean run always means "checked and clean".
 		const unparsed = (message: string, code?: string): void => {
@@ -660,63 +772,76 @@ export async function analyze(
 				});
 		};
 
-		if (tooBig(abs, rel)) {
+		if (oversized(abs, rel, look)) {
 			unparsed(`stylesheet over ${Math.round(MAX_BYTES / 1000)}kB — skipped as generated`);
 			continue;
 		}
 
+		// Asked even of a cached sheet: whether the syntax plugin is installed is
+		// about this machine now, not about the bytes.
 		const syntax = await syntaxFor(rel);
 		if (syntax.missing !== undefined) {
 			unparsed(`needs \`npm i -D ${syntax.missing}\` to be checked`);
 			continue;
 		}
 
-		// `map: false`: a sheet naming its source map otherwise reports a syntax
-		// error at the original file's absolute path, which no other clone has.
-		let root: Root;
-		try {
-			root = syntax.parse(text, { from: abs, map: false });
-		} catch (err) {
-			// Keyed on the reason alone. The position moves with every line added
-			// above the error, and the hook would call the same error a new one.
-			unparsed(parseMessageOf(err, abs), parseReasonOf(err));
+		let sheet: SheetExtract;
+		if (hit?.sheet) sheet = hit.sheet;
+		else {
+			const src = text ?? '';
+			let root: Root | undefined;
+			let failed: SheetExtract | undefined;
+			// `map: false`: a sheet naming its source map otherwise reports a syntax
+			// error at the original file's absolute path, which no other clone has.
+			try {
+				root = syntax.parse(src, { from: abs, map: false });
+			} catch (err) {
+				// Keyed on the reason alone. The position moves with every line added
+				// above the error, and the hook would call the same error a new one.
+				failed = { error: parseMessageOf(err, abs), reason: parseReasonOf(err) };
+			}
+			sheet = failed ?? extractSheet(root as Root, src, tokenPrefixes);
+			// Kept only when it parsed, for the reason above: a project's postcss-scss
+			// is not in the fingerprint either.
+			if (look && !failed) cache?.store(look, rel, src, { d: hasDirectives(supp), sheet });
+		}
+		if ('error' in sheet) {
+			unparsed(sheet.error, sheet.reason);
 			continue;
 		}
 
 		const emit = (f: PendingFinding): void => report({ ...f, file: rel, code: f.code ?? f.message });
 
-		harvestTokenDefs(root, tokenPrefixes, tokenSet);
-		// Kept apart as well: a token the project defines itself arrives with its
-		// own stylesheet, and is no evidence about the design system's.
-		if (delivery?.tokens) harvestTokenDefs(root, tokenPrefixes, projectTokens);
+		for (const [name, value] of sheet.defs) {
+			addTokenDef(tokenSet, name, value);
+			// Kept apart as well: a token the project defines itself arrives with its
+			// own stylesheet, and is no evidence about the design system's.
+			if (delivery?.tokens) addTokenDef(projectTokens, name, value);
+		}
 
-		// What a rule's own lines say, for the deletion `css/dead-class` offers in
-		// the editor: an extent in lines is only safe if it is the whole of them.
-		const srcLines = text.split('\n');
-
-		root.walkRules((cssRule) => {
-			const ruleLine = cssRule.source?.start?.line ?? 1;
-			const selectors = resolvedSelectors(cssRule);
+		for (const cssRule of sheet.rules) {
+			const ruleLine = cssRule.line;
+			const selectors = cssRule.selectors;
 			const allClasses = [...new Set(selectors.flatMap(classesIn))];
 			// Kept per selector as well as pooled: deleting the rule for one dead
 			// class is only safe if every selector in the list names that class.
 			const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
 			const keyClasses = [...new Set(keyClassesPer.flat())];
-			if (!allClasses.length) return;
+			if (!allClasses.length) continue;
 
 			// Bindings correlate against the KEY selector only: `.card .title`
 			// styles `.title`, so `.card`'s component must not answer for it.
 			const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
 			const boundSystem = bound.filter((b) => b.isSystem);
 			const boundText = bound.filter((b) => b.isText);
-			const isGrid = ruleIsGrid(cssRule);
+			const isGrid = cssRule.isGrid;
 			const scopeLines = [ruleLine, ruleLine - 1];
 			// Carried so a browser-side reader can resolve this rule to the elements
 			// it styles: the comma-joined selector list is a valid `querySelectorAll`
 			// argument, the media condition what `matchMedia` takes. `undefined`
 			// rather than `''`, so the field is absent when a rule is unconditional.
 			const selector = selectors.join(', ');
-			const media = mediaQuery(cssRule) || undefined;
+			const media = cssRule.media;
 			const elements = elementsOf(selectors);
 			let touchesStyle = false;
 			let touchesLayout = false;
@@ -728,9 +853,9 @@ export async function analyze(
 			const onRawKeys = keyClasses.filter((c) => onRaw.has(c));
 			const classDecls: ClassDecl[] = [];
 
-			for (const decl of ownDecls(cssRule)) {
+			for (const decl of cssRule.decls) {
 				const prop = decl.prop.toLowerCase();
-				const line = decl.source?.start?.line ?? ruleLine;
+				const line = decl.line;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
 					{ boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive },
@@ -767,7 +892,7 @@ export async function analyze(
 					rawClassDecls.set(c, list);
 				}
 
-			const cut = deletableRule(cssRule, srcLines);
+			const cut = cssRule.cut;
 			for (const cls of keyClasses)
 				declared.push({
 					file: rel,
@@ -776,7 +901,7 @@ export async function analyze(
 					scopeLines,
 					cut: cut && keyClassesPer.every((k) => k.includes(cls)) ? cut : undefined,
 				});
-		});
+		}
 	}
 
 	for (const f of deadClasses(declared, {
@@ -1085,6 +1210,8 @@ export async function analyze(
 			directives.filter((d) => reports(d.file)),
 			new Set(judge ? [] : ['patterns/judged-redirect']),
 		);
+
+	cache?.save();
 
 	return {
 		findings: unique,

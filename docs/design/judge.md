@@ -29,7 +29,11 @@ came from the plugin manifest, because in that case the user never asked.
 
 Each request gives up after 20s. `fetch` has no deadline of its own, and one
 socket that never answers is otherwise a hook killed by Claude Code's timeout on
-every write; an abort leaves the deterministic findings standing.
+every write; an abort leaves the deterministic findings standing. A server's
+`retry-after` is honoured for at most 5s, for the same reason. In the hook the
+whole judge phase also shares one deadline, `hook.timeoutMs` (30s by default):
+every request goes through a fetch bound to it, so what is still in flight when
+it passes is aborted, and the run says it stopped.
 
 ## The model is pinned to a version
 
@@ -51,6 +55,43 @@ against an endpoint that answers a single control in about 200ms.
 
 Every element in a batch is visible to every question in it, which is also why a
 batched question has to be *scored* batched.
+
+## What a judged run spends
+
+Batching is ruled out above, so the savings come from not asking.
+
+**One client per run.** The four kinds of question — redirects, variants,
+values, renames — write to disjoint findings, so they run side by side through
+one `JudgeClient`, whose slots hold the whole run to 6 requests in flight. Wall
+time is the slowest pass, not the sum of four pools. Two passes asking the
+byte-identical question share one request.
+
+**Answers are cached by the request that bought them.** The key is a hash of the
+endpoint and the exact request body — model, element, question — so an answer is
+reused only for exactly the question it answered. Context lines are part of the
+element, so an edit near what was asked is a new question and an edit anywhere
+else is not. The model is in the body, so bumping `MODEL` is a miss, never a
+stale answer, and the evals-then-bump rule above holds unchanged. Entries age out
+after 30 days, the file keeps the newest 20,000, and a reply missing an answer is
+never stored, or the gap would be served forever. A bare key string where a
+client is expected builds a private client with no cache: the evals and the unit
+tests want every request real.
+
+**The hook pays only for what it prints.** A hook run that does not block prints
+a tally, so it judges nothing; one that blocks prints the blocking findings its
+`maxFindings` cap has room for, so it judges exactly those (`shownFindings` in
+`report.ts` is the same selection the report makes); one that has stood down
+prints a summary, so it judges nothing. A redirect configured to block is the
+one question asked before the rest, because its answer decides which of those
+the run is. A typed `check --judge` prints everything, so it judges everything.
+
+**The spend is said.** `judge: 4 asked, 37 from cache` closes a typed run's
+stderr and rides on the hook's summary line. `tests/judge-cache.ts` runs the CLI
+against a local stand-in endpoint (`LOUPE_JUDGE_ENDPOINT`, accepted only for
+`127.0.0.1` or `localhost`, since a project's own settings can put variables in
+the hook's environment and this is where the key is sent) and counts requests:
+an advisory hook sends none, a repeat run sends none, a blocking hook sends
+what it prints.
 
 ## Which variant (`judge/variant.ts`)
 
@@ -219,11 +260,13 @@ decoration.
   the project itself defines under the prefix to the same set, so `analyze`
   hands back no set at all when `diagnostics.tokensKnown` is 0.
 - **One failure fails the whole ask.** The pool stops its other workers rather
-  than pay for answers that are about to be thrown away; the caller reports the
-  failure and keeps what it had.
+  than pay for answers that are about to be thrown away — a worker mid-retry
+  stops at its next attempt; the caller reports the failure and keeps what it had.
 - **Overload is transient.** A run is a hundred requests, so one 529 should not
   lose the other ninety-nine — retried with the server's own wait where it names
-  one, doubling otherwise. The server's wait is capped at 5s, a little past the
+  one, doubling otherwise. A dropped connection is retried on the same budget,
+  whether it drops before the response or while its body is read; an abort is
+  a deadline, and is not. The server's wait is capped at 5s, a little past the
   longest the doubling would pick (4s): a `retry-after: 3600` is not a wait a
   run, or a hook inside Claude Code's timeout, can afford.
 

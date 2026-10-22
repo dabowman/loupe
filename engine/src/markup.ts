@@ -420,7 +420,15 @@ export function scanMarkup(
 	let ast: ParseResult<File>;
 	try {
 		// errorRecovery keeps one malformed file from blanking the whole run.
-		ast = babelParse(text, { sourceType: 'unambiguous', errorRecovery: true, plugins: PLUGINS });
+		// attachComment off: nothing here reads a node's comments (the walk skips
+		// them, and suppressions are parsed from the raw text), and attaching them
+		// is a third of what parsing costs.
+		ast = babelParse(text, {
+			sourceType: 'unambiguous',
+			errorRecovery: true,
+			attachComment: false,
+			plugins: PLUGINS,
+		});
 	} catch (err) {
 		return { ...result, parseError: messageLineOf(err) };
 	}

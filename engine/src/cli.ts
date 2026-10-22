@@ -9,22 +9,31 @@
  * Design notes: docs/design/cli.md
  */
 
-import { existsSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
+import { isMainThread } from 'node:worker_threads';
 import { analyze, declarationKeys, dedupe } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import {
+	MODEL,
+	judgeClient,
 	judgeRedirects,
 	judgeRenames,
+	judgeSummary,
 	judgeValues,
 	judgeVariants,
 	redirectIdentity,
 	tokenDescriptions,
 } from './judge.ts';
+import { readTokenDoc, isTier } from './dtcg.ts';
+import type { Tier, TokenDoc } from './dtcg.ts';
+import { CANDIDATES, askCounterparts, formatMap, formatPlan, mapPayload, planMap } from './mapping.ts';
+import type { Mapping } from './mapping.ts';
+import { AnswerCache, readJson } from './cache.ts';
 import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset, presetKey } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
@@ -42,23 +51,34 @@ import {
 	toPosix,
 } from './discover.ts';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
-import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
+import {
+	GROUP_BYS,
+	formatAgent,
+	formatSarif,
+	formatSummary,
+	isGroupBy,
+	reportPayload,
+	shownFindings,
+} from './report.ts';
 import { formatHtml } from './report-html.ts';
 import { formatPane } from './report-pane.ts';
 import { lsp } from './lsp.ts';
 import { serve } from './serve.ts';
+import { ui } from './ui.ts';
 import { messageOf, oneLine } from './text.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
-import { applyRegistries, readProfiles, selectProfiles } from './profiles.ts';
+import { NO_PROFILE, applyRegistries, profileRoots, readProfileRoots, selectProfiles } from './profiles.ts';
 import { deliverySummary, mergeDeliveries, REMEDY_RULES } from './delivery.ts';
-import type { RegistrySource } from './profiles.ts';
+import type { Profile, RegistrySource } from './profiles.ts';
 import {
 	attemptsPath,
 	baselinePath,
+	cacheDisabled,
 	findExistingBaseline,
 	isPluginContext,
 	legacyBaseline,
 	legacyBaselineNotice,
+	projectStateDir,
 } from './paths.ts';
 import {
 	bumpAttempts,
@@ -74,6 +94,7 @@ import {
 	hookSilenced,
 	parsePayload,
 	payloadFile,
+	peekAttempts,
 	preEditContent,
 	readStdin,
 	resolvedOptions,
@@ -123,6 +144,52 @@ const fail = (msg: string): void => {
 const note = (msg: string): void => {
 	process.stderr.write(yellow(msg));
 };
+
+/** `status`'s cache line: the directory, the index size, the answers held. */
+function cacheLine(root: string): string {
+	const dir = projectStateDir(root);
+	let bytes = 0;
+	try {
+		for (const name of readdirSync(dir))
+			if (/^index-[0-9a-f]+\.json$/.test(name)) bytes += statSync(join(dir, name)).size;
+	} catch {
+		/* nothing cached yet */
+	}
+	const answers = Object.keys(
+		((readJson(join(dir, 'judge-cache.json')) as { entries?: object } | null)?.entries ?? {}) as object,
+	).length;
+	const parts = [
+		bytes ? `index ${(bytes / 1e6).toFixed(1)} MB` : 'no index yet',
+		`${answers} judgement${answers === 1 ? '' : 's'}`,
+	];
+	return `${dir}  (${parts.join(', ')})`;
+}
+
+/**
+ * Answers already paid for, unless the run asked for every one to be fresh.
+ * `map` keeps its own file: its answers are many and large, and the judge cache
+ * is the one the hook reads on every edit.
+ */
+const answerCache = (root: string, noCache: boolean | undefined, file = 'judge-cache.json'): AnswerCache | null =>
+	cacheDisabled(noCache) ? null : new AnswerCache(join(projectStateDir(root), file));
+
+/**
+ * Why a server could not start, in a line a person can act on.
+ *
+ * The default is the stack, which is right for a bug and wrong for the two
+ * failures a reader actually hits: the port is taken, or it is one they are not
+ * allowed to bind. Both are ordinary, and both read as a crash without this.
+ */
+function listenFailure(err: unknown, command: string, port: number): string {
+	const code = (err as NodeJS.ErrnoException | null)?.code;
+	const why =
+		code === 'EADDRINUSE'
+			? `port ${port} is already in use — run \`loupe ${command} --port <n>\` on another, or --port 0 to be given a free one`
+			: code === 'EACCES'
+				? `not allowed to bind port ${port} — ports below 1024 need privileges`
+				: `${command} could not start — ${messageOf(err)}`;
+	return `loupe: ${why}\n`;
+}
 
 /**
  * How far a detection result is to be trusted, coloured to match. `detect`
@@ -204,6 +271,11 @@ const VALUE_FLAGS = [
 	'profiles',
 	'profile',
 	'port',
+	'out',
+	'limit',
+	'tier',
+	'type',
+	'editor',
 ] as const;
 
 type ValueFlag = (typeof VALUE_FLAGS)[number];
@@ -232,6 +304,7 @@ type Flags = { [K in ValueFlag]?: string } & {
 	changed?: boolean;
 	'no-baseline'?: boolean;
 	'no-suppressions'?: boolean;
+	'no-cache'?: boolean;
 	stale?: boolean;
 	'dry-run'?: boolean;
 	judge?: boolean;
@@ -276,6 +349,8 @@ Commands:
   suppressions          List every active suppression directive, and every
                         rule turned off in config, with its reason
   explain <rule>        Print a rule's guidance
+  map <a> <b>           Experimental. Map one DTCG token set onto another: for
+                        each token in a, which token in b is its counterpart
   presets               List bundled presets
   version               Print the version, whether it runs from source or the bundle, and where
   detect                Show the config that would be inferred for this project
@@ -285,6 +360,9 @@ Commands:
   status                Show the effective config: rules, severities, what blocks
   serve                 Serve the findings to the running app, so a stylesheet
                         finding can be resolved to the elements it styles
+  ui                    The findings, live on the working tree: re-analyzed on
+                        save, every location a link into your editor, and fix,
+                        baseline and suppress from the row. Loopback only
   lsp                   Language server on stdin/stdout: diagnostics on save,
                         the rule's guidance on hover, and its fix as a quick
                         fix. Editors launch this; you do not run it by hand
@@ -313,12 +391,15 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --no-suppressions     Report what suppression directives would mute; with
                         --no-baseline, the full audit
+  --no-cache            Rebuild the index and re-ask every judgement instead of
+                        reusing the last run's (also LOUPE_NO_CACHE=1)
   --stale               For suppressions, list only the directives naming a
                         rule that muted nothing — no finding left, the rule
                         off, or an id that is not a rule — and exit 1 if any
   --dry-run             Report what 'fix' would change without writing; for
                         'baseline', what it would record by rule, new and
-                        fixed against the existing baseline
+                        fixed against the existing baseline; with 'map', print
+                        the shortlists without asking anything
   --judge               Ask TypeSafe what a parse cannot see: the variant a raw
                         element needs, whether a control stands for the
                         pattern it was built as (patterns/judged-redirect), and
@@ -328,7 +409,16 @@ Options:
                         and suppresses the ones it kept; add --dry-run to
                         review them first. (TYPESAFE_API_KEY from the
                         environment or ~/.config/loupe/.env)
-  --port <n>            Port for 'serve' (default: 7331)
+  --port <n>            Port for 'serve' (7331) or 'ui' (7332)
+  --editor <t>          What a location in 'ui' links to. {path} is the file's
+                        absolute path and {line} its line
+                        (default: vscode://file{path}:{line}; for Cursor or Zed,
+                        swap the scheme: cursor://file{path}:{line})
+  --out <path>          Write the map here as JSON (map)
+  --tier <t,...>        Only map tokens in these tiers: base, semantic,
+                        component (map)
+  --type <t,...>        Only map tokens of these DTCG $types (map)
+  --limit <n>           Only map the first n tokens in scope (map)
   --force               Overwrite an existing config, or write a guessed design
                         system (init)
   --version             Same as the version command
@@ -338,8 +428,11 @@ Options:
   --patterns <path>     Composite pattern registry (JSON)
   --components <path>   Component currency registry (JSON)
   --profiles <dir>      Directory of design-system profiles; the ones matching
-                        this project's imports supply their registries
+                        this project's imports supply their registries. The
+                        project's own (config "profiles", .loupe/profiles/) are
+                        read as well, and win on a shared id or package
   --profile <id>        Use this profile regardless of what the project imports
+                        ("none" for no profile); outranks the config's "profile"
   --config <path>       Explicit config file
   --root <path>         Project root (default: the directory holding the config
                         that governs the cwd, or CLAUDE_PROJECT_DIR under hook)
@@ -498,6 +591,183 @@ function resolveScope(
 	return null;
 }
 
+/** A comma-separated flag value as a trimmed list. */
+const listFlag = (value: string | undefined): string[] =>
+	(value ?? '')
+		.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean);
+
+/**
+ * What to call each set, in the report and in the question put to the model.
+ *
+ * The model is told it is mapping "wpds" onto "archer", and those names are
+ * doing work: they are most of what says the two sets are different systems
+ * rather than two halves of one. Two paths that read as the same name — a
+ * `tokens.json` in each of two checkouts — would describe the run as a system
+ * mapped onto itself, so the directory above breaks the tie.
+ */
+function mapLabels(a: string, b: string): [string, string] {
+	const base = (p: string): string => basename(resolve(p)).replace(/\.json$/i, '');
+	if (base(a) !== base(b)) return [base(a), base(b)];
+	const withDir = (p: string): string => `${basename(dirname(resolve(p)))}/${base(p)}`;
+	return withDir(a) === withDir(b) ? [`${base(a)} (a)`, `${base(b)} (b)`] : [withDir(a), withDir(b)];
+}
+
+/**
+ * `map` — one DTCG token set onto another.
+ *
+ * The one command that reads design systems rather than a codebase: both sets
+ * are named on the command line, so there is no project, no config and no walk,
+ * and it returns before any of that is resolved.
+ *
+ * It is also the one command whose whole answer is a judgement — there is no
+ * deterministic verdict underneath it to fall back on — so unlike `--judge` a
+ * missing key is a refusal rather than a degraded run. `--dry-run` is the free
+ * half: the shortlists, which is what decides whether the right answer is even
+ * on offer.
+ *
+ * Design notes: docs/design/map.md
+ */
+async function runMap(args: Args): Promise<number> {
+	const [, fromPath, toPath, ...extra] = args._;
+	if (!fromPath || !toPath) {
+		fail('loupe: map needs two token sets \u2014 `loupe map <from> <to>`, each a DTCG file or a directory of them\n');
+		return EXIT.CANNOT_RUN;
+	}
+	// An unquoted glob expands to several paths, and taking the first two maps the wrong pair.
+	if (extra.length) {
+		fail(`loupe: map takes two token sets, got ${extra.length + 2} \u2014 name a directory rather than a glob\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// `map` has no report to paint as SARIF or HTML; a run that accepted the flag
+	// and printed the readable report would look like it had honoured it.
+	const format = args.flags.format ?? 'agent';
+	if (format !== 'agent' && format !== 'json') {
+		fail(`loupe: map writes agent or json, not "${format}"\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// The dry run prints the shortlists as text and writes nothing.
+	if (args.flags['dry-run'] && (format === 'json' || args.flags.out)) {
+		fail('loupe: map --dry-run prints the shortlists as text; --format json and --out apply to a real run\n');
+		return EXIT.CANNOT_RUN;
+	}
+
+	const tiers = listFlag(args.flags.tier);
+	const badTiers = tiers.filter((t) => !isTier(t));
+	if (badTiers.length) {
+		fail(`loupe: unknown tier(s) ${badTiers.join(', ')} \u2014 expected base, semantic, component\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// A cap that does not parse must not mean "no cap": every token is a paid request.
+	const limit = args.flags.limit === undefined ? 0 : Number(args.flags.limit);
+	if (args.flags.limit !== undefined && !(Number.isInteger(limit) && limit > 0)) {
+		fail(`loupe: --limit takes a positive whole number, not "${args.flags.limit}"\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	// Checked before anything is asked, so a mistyped path cannot cost the run.
+	const out = args.flags.out ? resolve(args.flags.out) : null;
+	if (out && !existsSync(dirname(out))) {
+		fail(`loupe: cannot write the map to ${out} \u2014 ${dirname(out)} does not exist\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	let from: TokenDoc;
+	let to: TokenDoc;
+	try {
+		const [fromLabel, toLabel] = mapLabels(fromPath, toPath);
+		from = readTokenDoc(fromPath, fromLabel);
+		to = readTokenDoc(toPath, toLabel);
+	} catch (err) {
+		fail(`loupe: ${messageOf(err)}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	// Checked against the set rather than against the spec's list: a set is free
+	// to carry types the spec never named, and a typo here would otherwise map
+	// nothing at all and report it as a clean run over zero tokens.
+	const types = listFlag(args.flags.type);
+	const present = new Set(from.tokens.map((t) => t.type).filter(Boolean));
+	const badTypes = types.filter((t) => !present.has(t));
+	if (badTypes.length) {
+		fail(
+			`loupe: ${from.label} has no ${badTypes.join(', ')} token(s) \u2014 it has ${[...present].sort().join(', ')}\n`,
+		);
+		return EXIT.CANNOT_RUN;
+	}
+
+	const plan = planMap(from, to, { tiers: tiers as Tier[], types, limit });
+	process.stderr.write(
+		dim(
+			`loupe: ${from.label} ${from.tokens.length} token(s) from ${from.files.length} file(s), ` +
+				`${to.label} ${to.tokens.length} from ${to.files.length}\n`,
+		),
+	);
+	// A valid tier the set does not use, or a tier and type that never meet, is
+	// the same clean run over zero tokens the type check refuses.
+	if (!plan.jobs.length && !plan.settled.length) {
+		const scope = `--tier ${tiers.join(',')}${types.length ? ` --type ${types.join(',')}` : ''}`;
+		fail(`loupe: no token in ${from.label} is in scope for ${scope}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	if (args.flags['dry-run']) {
+		process.stdout.write(formatPlan(plan, CANDIDATES));
+		return EXIT.OK;
+	}
+
+	// Only a run that has something to ask needs the key: a set mapped onto
+	// itself settles every row without one.
+	const apiKey = plan.jobs.length ? judgeKey() : '';
+	if (plan.jobs.length && !apiKey) {
+		fail(`loupe: map needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE} \u2014 or use --dry-run\n`);
+		return EXIT.CANNOT_RUN;
+	}
+
+	if (plan.jobs.length) process.stderr.write(dim(`loupe: asking ${MODEL} about ${plan.jobs.length} token(s)\u2026\n`));
+	let mappings: Mapping[];
+	// The run's one client: its request limit, its retries, and the answers
+	// already paid for. A map is hundreds of questions, and a run that failed
+	// halfway, or one re-run with the same sets, asks again only what it has
+	// no answer for. Kept beside the directory it was run from, since a map
+	// has no project, in a file of its own; an answer is keyed by its exact
+	// request, so where it is kept never makes it the wrong one.
+	const client = judgeClient(apiKey ?? '', {
+		cache: answerCache(resolve(process.cwd()), args.flags['no-cache'], 'map-cache.json'),
+	});
+	try {
+		({ mappings } = await askCounterparts(plan, client));
+	} catch (err) {
+		// Nothing partial is written: half a map read as a whole one would report
+		// every unasked token as having no counterpart. What was answered is kept.
+		client.cache?.save();
+		fail(`loupe: ${messageOf(err)}\n`);
+		return EXIT.CANNOT_RUN;
+	}
+	client.cache?.save();
+	const spent = judgeSummary(client);
+	if (spent) process.stderr.write(dim(`loupe: ${spent}\n`));
+
+	const json = `${JSON.stringify(mapPayload(plan, mappings, MODEL), null, 2)}\n`;
+	// Printed before the file is written, so a write that fails still leaves the
+	// paid answers on screen.
+	process.stdout.write(format === 'json' ? json : formatMap(plan, mappings));
+	if (out) {
+		try {
+			writeFileSync(out, json);
+		} catch (err) {
+			fail(`loupe: could not write the map to ${out}: ${messageOf(err)}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		// To stderr under --format json, where stdout is the map itself and a line of
+		// prose in it is corruption.
+		const said = green(`loupe: map written to ${out}\n`);
+		if (format === 'json') process.stderr.write(said);
+		else process.stdout.write(`\n${said}`);
+	}
+	return EXIT.OK;
+}
+
 /** What a finding is matched by across an edit: its baseline key, and its message. */
 type Identity = Pick<Finding, 'rule' | 'file' | 'code' | 'message'>;
 
@@ -636,6 +906,9 @@ async function main(): Promise<number> {
 		process.stdout.write(`${listPresets().join('\n')}\n`);
 		return EXIT.OK;
 	}
+	// Before the root is resolved: both token sets are named on the command line,
+	// so there is no project here for `map` to need one of.
+	if (command === 'map') return runMap(args);
 
 	const isHook = command === 'hook';
 
@@ -681,17 +954,19 @@ async function main(): Promise<number> {
 	// Read before the config rather than with the other registry work below: a
 	// profile names the preset that configures its design system, and that has
 	// to be settled before the config it would configure is loaded.
-	const profiles = readProfiles(args.flags.profiles ? resolve(args.flags.profiles) : null);
-	const forced = args.flags.profile ? (profiles.find((p) => p.id === args.flags.profile) ?? null) : null;
-	// A named profile that resolves to nothing is not a no-op: it also suppresses
-	// the profile *selection* would have made, so a typo checks strictly less than
-	// no flag at all.
-	if (args.flags.profile && !forced && !isHook)
-		note(
-			`loupe: no profile "${args.flags.profile}" in ${args.flags.profiles ? resolve(args.flags.profiles) : 'any profiles directory (--profiles was not given)'}${
-				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
-			}\n`,
-		);
+	//
+	// The project's own profiles are read here too, from `.loupe/profiles/`: a
+	// project's profile is what its hooks, commands and skills must see, and none
+	// of them passes anything but the shipped directory. The directories a config
+	// lists can only be added once it is loaded, below — but the preset a profile
+	// names matters only to a project with no config, which lists none.
+	const flagProfiles = args.flags.profiles ? resolve(args.flags.profiles) : null;
+	// Refilled by every read, so it names the failures of the read that counted.
+	let unreadable: string[] = [];
+	let profiles = readProfileRoots(profileRoots({ root, flag: flagProfiles }), unreadable);
+	const byId = (id: string | null | undefined): Profile | null =>
+		id && id !== NO_PROFILE ? (profiles.find((p) => p.id === id) ?? null) : null;
+	let forced = byId(args.flags.profile);
 
 	let config: Config;
 	let detected: DetectedConfig | null = null;
@@ -791,14 +1066,42 @@ async function main(): Promise<number> {
 	// design-system profile that the project's own imports selected. Both merge
 	// with the project winning on id, because a repo that has written down its
 	// own `page-header` means that one, not the shipped generic.
-	const active = selectProfiles(profiles, config, args.flags.profile ?? null);
+	//
+	// The directories the config lists are read first, ahead of the convention and
+	// of `--profiles`, so on a shared id the project's own profile is the one kept.
+	if (config.profileDirs.length) {
+		unreadable = [];
+		profiles = readProfileRoots(profileRoots({ root, configured: config.profileDirs, flag: flagProfiles }), unreadable);
+		forced = byId(args.flags.profile);
+	}
+	// What selection is pinned to: `--profile`, typed at the moment of use, over
+	// the config's `profile`, over the packages the config declares.
+	const pin = args.flags.profile ?? config.profilePin;
+	const pinned = byId(pin);
+	// A named profile that resolves to nothing is not a no-op: it also suppresses
+	// the profile *selection* would have made, so a typo checks strictly less than
+	// no pin at all.
+	if (pin && pin !== NO_PROFILE && !pinned && !isHook)
+		note(
+			`loupe: no profile "${pin}"${args.flags.profile ? '' : ' (the config\'s "profile")'} in ${profileRoots({
+				root,
+				configured: config.profileDirs,
+				flag: flagProfiles,
+			})
+				.map((r) => r.dir)
+				.join(', ')}${flagProfiles ? '' : ' (--profiles was not given)'}${
+				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
+			}\n`,
+		);
+	const active = selectProfiles(profiles, config, pin);
 	const sources: RegistrySource[] = active.map((p) => ({
 		label: `profile ${p.id}`,
 		patterns: p.patterns,
 		components: p.components,
 		// Naming a profile has already answered the question its registries would
-		// be scope-checked against.
-		forced: p.id === forced?.id,
+		// be scope-checked against — whether it was named on the command line or in
+		// the config.
+		forced: p.id === pinned?.id,
 	}));
 	if (args.flags.patterns || args.flags.components)
 		sources.push({
@@ -811,6 +1114,7 @@ async function main(): Promise<number> {
 	config.profiles = { available: profiles, active, ...registries };
 	if (!isHook) {
 		for (const err of registries.errors) fail(`loupe: ${err}\n`);
+		for (const u of unreadable) note(`loupe: project profile skipped, could not load ${u}\n`);
 		// A scope declaration refused at load leaves its profile on the generic token
 		// table, which reads exactly like one that declared nothing — so it says so.
 		for (const p of active)
@@ -933,6 +1237,9 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
+	// Each unchanged file's scan is reused from the last run (`index-cache.ts`).
+	const useCache = !cacheDisabled(args.flags['no-cache']);
+
 	if (command === 'status') {
 		// One conclusion, asked once. `blockingAllowed` answers "do the severities
 		// permit blocking", which is not "will this gate stop a turn" — a silenced hook
@@ -1011,6 +1318,18 @@ async function main(): Promise<number> {
 			`${dim('judge:      ')}${
 				judgeKey() ? 'on \u2014 TYPESAFE_API_KEY found' : `off \u2014 no TYPESAFE_API_KEY (${KEY_SOURCES})`
 			}`,
+			// Where the caches are and what is in them: a run that seems to ignore an
+			// edit is a question this line answers, and `--no-cache` is the remedy.
+			`${dim('cache:      ')}${useCache ? cacheLine(root) : 'off \u2014 LOUPE_NO_CACHE or --no-cache'}`,
+			// The same split as the retry counter's: a terminal's caches are not the
+			// hook's, which live under its plugin data, keyed on its project.
+			...(useCache && !process.env.CLAUDE_PLUGIN_DATA
+				? [
+						dim(
+							`            for this terminal; the Claude Code hook's are in ${toPosix(projectStateDir(hookDir, '$CLAUDE_PLUGIN_DATA'))}`,
+						),
+					]
+				: []),
 			// Asked through the same predicate the gate uses: reporting on mere truthiness
 			// meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
 			...(off ? [yellow(`hook:       OFF \u2014 ${off}`)] : []),
@@ -1021,9 +1340,11 @@ async function main(): Promise<number> {
 			`${dim('profile:    ')}${
 				config.profiles?.active?.length
 					? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(', ')
-					: config.profiles?.available?.length
-						? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(', ')}`
-						: 'none available'
+					: (args.flags.profile ?? config.profilePin) === NO_PROFILE
+						? `none selected \u2014 pinned to "${NO_PROFILE}" by ${args.flags.profile ? '--profile' : 'the config\'s "profile"'}`
+						: config.profiles?.available?.length
+							? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(', ')}`
+							: 'none available'
 			}`,
 			// What adopting the system costs this project: which packages the host
 			// provides and which get bundled, and which sheet carries the tokens. A
@@ -1187,10 +1508,15 @@ async function main(): Promise<number> {
 	// loaded at startup, with the baseline applied. Both return before the shared
 	// baseline block below, so they apply it here or show a backlog the project
 	// has already accepted.
-	const baselinedRun = (notice: (line: string) => void): (() => Promise<AnalyzeResult | BaselinedResult>) => {
+	//
+	// Split in two because `ui` needs both halves separately: it displays the
+	// baselined result and baselines the unbaselined one, and a runner that had
+	// already collapsed them would make `accept as baseline` record a backlog
+	// with the accepted part missing — which is every previously accepted finding
+	// turned live again.
+	const presenter = (notice: (line: string) => void): ((fresh: AnalyzeResult) => AnalyzeResult | BaselinedResult) => {
 		let warned = false;
-		return async () => {
-			const fresh = await analyze(config, { scope: null });
+		return (fresh) => {
 			if (args.flags['no-baseline']) return fresh;
 			const { path: bPath, found } = findExistingBaseline(root, namedBaseline, config.baselinePath);
 			const baseline = found ? readBaseline(bPath) : null;
@@ -1202,6 +1528,10 @@ async function main(): Promise<number> {
 			}
 			return applyBaseline(fresh, baseline, { enabled: config.enabled });
 		};
+	};
+	const baselinedRun = (notice: (line: string) => void): (() => Promise<AnalyzeResult | BaselinedResult>) => {
+		const present = presenter(notice);
+		return async () => present(await analyze(config, { scope: null, cache: useCache }));
 	};
 
 	// Before every reporting path below: only framed protocol messages may reach
@@ -1227,7 +1557,13 @@ async function main(): Promise<number> {
 			return EXIT.CANNOT_RUN;
 		}
 		const run = baselinedRun(note);
-		const { url } = await serve({ port, config, run });
+		let url: string;
+		try {
+			({ url } = await serve({ port, config, run }));
+		} catch (err) {
+			fail(listenFailure(err, 'serve', port));
+			return EXIT.CANNOT_RUN;
+		}
 		process.stdout.write(
 			`${green(`loupe serve — ${url}`)}\n` +
 				`${dim('  Open that URL for the bookmarklet, then click it on the page you are developing.')}\n` +
@@ -1238,10 +1574,64 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
+	// `serve`'s sibling, and deliberately a separate command rather than a flag on
+	// it: that one is read-only and answers any origin, this one rewrites source
+	// files and answers only the page it served. Folding them together would put a
+	// writer behind `access-control-allow-origin: *`.
+	if (command === 'ui') {
+		const port = Number(args.flags.port ?? 7332);
+		if (!Number.isInteger(port) || port < 0 || port > 65535) {
+			fail(`loupe: --port wants a port number, got ${args.flags.port}\n`);
+			return EXIT.CANNOT_RUN;
+		}
+		// Refused rather than ignored. This command re-analyzes the whole tree on
+		// every save and shows everything it finds, so a narrowing flag has nowhere
+		// to apply — and a page that silently showed 300 findings under
+		// `--severity error` would be reporting something other than what it was
+		// asked for. Filter in the page instead; the toolbar does both.
+		const unhonored = (['severity', 'files', 'changed', 'judge'] as const).filter((f) => args.flags[f]);
+		if (unhonored.length) {
+			fail(
+				`loupe: ui does not take ${unhonored.map((f) => `--${f}`).join(' ')} — it shows the whole tree; ` +
+					'filter in the page, or use `check` for a narrowed run\n',
+			);
+			return EXIT.CANNOT_RUN;
+		}
+		const present = presenter(note);
+		let handle: Awaited<ReturnType<typeof ui>>;
+		try {
+			handle = await ui({
+				port,
+				config,
+				root,
+				analyze: () => analyze(config, { scope: null, cache: useCache }),
+				present,
+				baselineTarget: baselinePath(root, namedBaseline ?? config.baselinePath),
+				baselineFound: () => findExistingBaseline(root, namedBaseline, config.baselinePath).found,
+				// `||`, not `??`: an empty `--editor=` is not a template. Taken as
+				// nullish-only it reaches the page as '', and every location renders
+				// `href=""` — a link that reloads the report instead of opening a file.
+				editor: args.flags.editor || 'vscode://file{path}:{line}',
+				log: (line) => process.stderr.write(line),
+			});
+		} catch (err) {
+			fail(listenFailure(err, 'ui', port));
+			return EXIT.CANNOT_RUN;
+		}
+		process.stdout.write(
+			`${green(`loupe ui — ${handle.url}`)}\n` +
+				`${dim('  Findings, live on the working tree: re-analyzed on save, with fix, baseline and suppress.')}\n` +
+				`${dim('  Ctrl-C to stop.')}\n`,
+		);
+		// Nothing resolves this: the server holds the process open until killed.
+		await new Promise(() => {});
+		return EXIT.OK;
+	}
+
 	// Writes to the project path: a backlog recorded here has to be visible to
 	// the hook, which is a different process with a different environment.
 	if (command === 'baseline') {
-		const result = await analyze(config, { scope: null });
+		const result = await analyze(config, { scope: null, cache: useCache });
 		const target = baselinePath(root, namedBaseline ?? config.baselinePath);
 		// Nothing collapsed means nothing to reconcile, and saying the same number
 		// twice invents a distinction the reader then has to go and check.
@@ -1325,7 +1715,7 @@ async function main(): Promise<number> {
 			fail(`loupe: unknown grouping "${by}" \u2014 expected ${GROUP_BYS.join(', ')}\n`);
 			return EXIT.CANNOT_RUN;
 		}
-		const all = (await analyze(config, { scope: null })).directives;
+		const all = (await analyze(config, { scope: null, cache: useCache })).directives;
 		const staleOnly = Boolean(args.flags.stale);
 		const directives = staleOnly ? all.filter((d) => d.stale) : all;
 		const kw = config.suppression.keyword;
@@ -1440,32 +1830,39 @@ async function main(): Promise<number> {
 		let toFix: AnalyzeResult;
 		try {
 			// Before the judgements, so a rule left out costs no paid question.
-			toFix = filterRules(await analyze(config, { scope: fixScope }), rules);
+			toFix = filterRules(await analyze(config, { scope: fixScope, cache: useCache }), rules);
 		} catch (err) {
 			fail(`loupe: ${messageOf(err)}\n`);
 			return EXIT.CANNOT_RUN;
 		}
-		// Each judgement in its own `try`, as in `check`: a failed request leaves
+		// Each judgement fails on its own, as in `check`: a failed request leaves
 		// those findings unjudged, and every fix that needed no model is still
 		// written below.
 		const about = tokenDescriptions(config.profiles?.active ?? []);
-		try {
-			// Every channel: a judged replacement is written in all three. Only a
-			// judged `keep` outside a stylesheet has nowhere to go, and that one is
-			// reported as a skip rather than paid for silently.
+		// Every channel: a judged replacement is written in all three. Only a
+		// judged `keep` outside a stylesheet has nowhere to go, and that one is
+		// reported as a skip rather than paid for silently.
+		const judgeable = toFix.findings.filter((f) => f.suggest?.length);
+		const client = apiKey ? judgeClient(apiKey, { cache: answerCache(root, args.flags['no-cache']) }) : null;
+		// Side by side: values and renames settle different findings.
+		await Promise.all([
 			// With no design-system tokens, `judgeValues` is the one to refuse, and
 			// the refusal is noted like any other failure.
-			const judgeable = toFix.findings.filter((f) => f.suggest?.length);
-			if (apiKey && judgeable.length) await judgeValues(root, judgeable, toFix.tokens, apiKey, about);
-		} catch (err) {
-			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
-		}
-		try {
+			client && judgeable.length
+				? judgeValues(root, judgeable, toFix.tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
 			// A judged rename is written like a spelled one, every line naming it.
-			if (apiKey && toFix.tokens) await judgeRenames(root, toFix.findings, toFix.tokens, apiKey, about);
-		} catch (err) {
-			note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
-		}
+			client && toFix.tokens
+				? judgeRenames(root, toFix.findings, toFix.tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
+		]);
+		client?.cache?.save();
+		const spent = client && judgeSummary(client);
+		if (spent) process.stderr.write(dim(`loupe: ${spent}\n`));
 		const dry = Boolean(args.flags['dry-run']);
 		const { applied, skipped } = applyTokenFixes(root, toFix.findings, { dry });
 		// After the rewrites, which never move a line, and bottom up within a file,
@@ -1553,7 +1950,12 @@ async function main(): Promise<number> {
 	try {
 		// Before the baseline, so the count of what it hides is this rule's too.
 		result = filterRules(
-			await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags['no-suppressions'] }),
+			await analyze(config, {
+				scope,
+				judge: Boolean(apiKey),
+				suppress: !args.flags['no-suppressions'],
+				cache: useCache,
+			}),
 			rules,
 		);
 	} catch (err) {
@@ -1586,100 +1988,134 @@ async function main(): Promise<number> {
 	}
 	// Before the judgements: a finding the filter drops is not worth a paid question.
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
+	const budgetKey = `${payload.session_id ?? ''}${touched ? `\u0000${touched}` : ''}`;
+	/**
+	 * What the hook blocks on: every blocking finding, or for a PostToolUse only
+	 * those the edit introduced. Settled once, before any judgement, so judging
+	 * pays for what the hook will print, and the comparison reads the messages
+	 * the engine wrote on both sides of the edit.
+	 *
+	 * Two questions, one per hook. PostToolUse asks whether this edit made the
+	 * file worse, and blocks only on what it introduced: a refactor passes
+	 * through states that are worse before they are better, and a finding the
+	 * edit walked past is not the edit's fault. Stop asks whether the turn's work
+	 * is conformant, absolutely — the JSX converted and the CSS left behind is an
+	 * omission by then, not an intermediate state.
+	 *
+	 * The "before" is only analyzed when the "after" would block, so a clean
+	 * edit pays nothing for the question.
+	 *
+	 * Passing a standing finding over is a deferral only where Stop will see it.
+	 * Where Stop cannot resolve the files the turn changed — no git worktree, or
+	 * a repository git refuses to read — it stands down, and a finding passed
+	 * over here is never enforced at all: that is the absolute check, as before.
+	 */
+	let verdict: Promise<{ errors: Finding[]; blocking: Finding[] }> | null = null;
+	const hookVerdict = (): Promise<{ errors: Finding[]; blocking: Finding[] }> =>
+		(verdict ??= (async () => {
+			const errors = result.findings.filter((f) => f.severity === 'error');
+			if (!touched || !errors.length) return { errors, blocking: errors };
+			const stopScope = resolveScope(config, args, { defaultChanged: true });
+			if (stopScope !== null && !Array.isArray(stopScope)) return { errors, blocking: errors };
+			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
+				judge: Boolean(apiKey),
+				suppress: !args.flags['no-suppressions'],
+			});
+			return { errors, blocking: introducedBy(errors, before) };
+		})());
+	/**
+	 * The findings the hook will print, decided the way the branch below decides
+	 * it: none when nothing blocks or the gate has stood down (a summary line
+	 * either way), else the blocking ones under the findings cap.
+	 */
+	const hookShows = async (): Promise<Finding[]> => {
+		const { blocking } = await hookVerdict();
+		if (!blocking.length) return [];
+		if (!payload.session_id && payload.stop_hook_active) return [];
+		// Peeked under the key the branch below bumps, session id or not.
+		if (peekAttempts(root, budgetKey) + 1 > config.hook.maxAttempts) return [];
+		return shownFindings(blocking, config.hook.maxFindings);
+	};
+	let judged: string | null = null;
 	if (apiKey) {
 		// Judged after the baseline, so accepted findings cost nothing, and a
 		// judged finding never enters one: its confidence moves between runs, and
 		// a baselined finding that comes and goes is noise in both directions.
 		// A failed request leaves the findings as the engine wrote them.
 		//
-		// In the hook the phase has one deadline, `hook.timeoutMs`. Each request has
-		// its own limit, but the stages run one after another, and a hook past
-		// Claude Code's timeout is dropped whole, deterministic findings and all.
-		// A stage the deadline has passed is not started.
+		// In the hook the phase has one deadline, `hook.timeoutMs`: every request
+		// goes through a fetch bound to it. Each request has its own limit too, but
+		// a hook past Claude Code's timeout is dropped whole, deterministic findings
+		// and all, so what is still in flight when it passes is aborted and its
+		// findings stand as the engine wrote them.
 		const deadline = isHook ? AbortSignal.timeout(config.hook.timeoutMs) : null;
-		const judgeFetch = deadline ? deadlineFetch(deadline) : fetch;
-		const inTime = (): boolean => !deadline?.aborted;
-		try {
-			// The same filter, for the findings this adds.
-			const redirectSeverity = config.severityOf('patterns/judged-redirect');
-			if (
-				inTime() &&
-				result.controls?.length &&
-				(args.flags.severity !== 'error' || redirectSeverity === 'error') &&
-				(!rules || rules.has('patterns/judged-redirect'))
-			) {
-				result.findings.push(...(await judgeRedirects(result.controls, apiKey, redirectSeverity, judgeFetch)));
-				// Written after `analyze` returned, so past its dedupe: two controls on
-				// one line judged alike are one finding, as every other rule's are.
-				result.findings = dedupe(result.findings);
-			}
-			if (inTime()) await judgeVariants(root, result.findings, config.componentRegistry, apiKey, judgeFetch);
-		} catch (err) {
-			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
-		}
-		// Its own note: the judgements above stand when this one cannot run.
-		try {
-			if (inTime() && result.findings.some((f) => f.suggest?.length))
-				await judgeValues(
-					root,
-					result.findings,
-					result.tokens,
-					apiKey,
-					tokenDescriptions(config.profiles?.active ?? []),
-					judgeFetch,
-				);
-		} catch (err) {
-			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
-		}
-		try {
-			if (inTime() && result.tokens && result.findings.some((f) => f.unknown))
-				await judgeRenames(
-					root,
-					result.findings,
-					result.tokens,
-					apiKey,
-					tokenDescriptions(config.profiles?.active ?? []),
-					judgeFetch,
-				);
-		} catch (err) {
-			note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
-		}
-		if (!inTime()) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)\n`);
+		const client = judgeClient(apiKey, {
+			fetchImpl: deadline ? deadlineFetch(deadline) : fetch,
+			cache: answerCache(root, args.flags['no-cache']),
+		});
+		const redirectSeverity = config.severityOf('patterns/judged-redirect');
+		// The same filters, for the findings the redirects add. In the hook a
+		// redirect that cannot block is never printed: only blocking findings are
+		// handed back.
+		const askRedirects =
+			Boolean(result.controls?.length) &&
+			(args.flags.severity !== 'error' || redirectSeverity === 'error') &&
+			(!isHook || redirectSeverity === 'error') &&
+			(!rules || rules.has('patterns/judged-redirect'));
+		const redirects = askRedirects
+			? judgeRedirects(result.controls ?? [], client, redirectSeverity).catch((err: unknown) => {
+					note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
+					return [];
+				})
+			: Promise.resolve([]);
+		// Written after `analyze` returned, so past its dedupe: two controls on one
+		// line judged alike are one finding, as every other rule's are.
+		const addRedirects = (found: Finding[]): void => {
+			if (!found.length) return;
+			result.findings.push(...found);
+			result.findings = dedupe(result.findings);
+		};
+		// What the rest is asked about. A typed run prints everything; the hook
+		// prints a tally when nothing blocks, and only the blocking findings it has
+		// room for when something does — so that is all it pays to have judged.
+		// A redirect configured to block decides which of those it is, so the hook
+		// waits for it first; everywhere else every pass runs at once.
+		if (isHook) addRedirects(await redirects);
+		const targets = isHook ? await hookShows() : result.findings;
+		const about = tokenDescriptions(config.profiles?.active ?? []);
+		const settled = await Promise.all([
+			isHook ? Promise.resolve([]) : redirects,
+			judgeVariants(root, targets, config.componentRegistry, client).catch((err: unknown) => {
+				note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
+			}),
+			// Its own note: the judgements above stand when this one cannot run. Asked
+			// without a token set too, so its refusal is said rather than skipped.
+			targets.some((f) => f.suggest?.length)
+				? judgeValues(root, targets, result.tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
+			result.tokens && targets.some((f) => f.unknown)
+				? judgeRenames(root, targets, result.tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
+		]);
+		addRedirects(settled[0]);
+		client.cache?.save();
+		judged = judgeSummary(client);
+		if (deadline?.aborted) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)\n`);
 		// Computed before the redirects above existed: one configured to `error`
 		// has to be able to fail the run it is reported in.
 		result.blocking = result.findings.some((f) => f.severity === 'error');
 	}
 
+	// What judging cost, beside the summary the user sees: a gate that is
+	// spending money says so.
+	const spentSuffix = judged ? dim(` (${judged})`) : '';
 	if (isHook) {
 		const sessionId = payload.session_id ?? '';
-		const budgetKey = touched ? `${sessionId}\u0000${touched}` : sessionId;
-		// Two questions, one per hook. PostToolUse asks whether this edit made the
-		// file worse, and blocks only on what it introduced: a refactor passes
-		// through states that are worse before they are better, and a finding the
-		// edit walked past is not the edit's fault. Stop asks whether the turn's work
-		// is conformant, absolutely — the JSX converted and the CSS left behind is an
-		// omission by then, not an intermediate state.
-		//
-		// The "before" is only analyzed when the "after" would block, so a clean
-		// edit pays nothing for the question.
-		//
-		// Passing a standing finding over is a deferral only where Stop will see it.
-		// Where Stop cannot resolve the files the turn changed — no git worktree, or
-		// a repository git refuses to read — it stands down, and a finding passed
-		// over here is never enforced at all: that is the absolute check, as before.
-		const errors = result.findings.filter((f) => f.severity === 'error');
-		let blocking: Finding[] = errors;
-		const stopSees = (): boolean => {
-			const stopScope = resolveScope(config, args, { defaultChanged: true });
-			return stopScope === null || Array.isArray(stopScope);
-		};
-		if (touched && errors.length && stopSees()) {
-			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
-				judge: Boolean(apiKey),
-				suppress: !args.flags['no-suppressions'],
-			});
-			blocking = introducedBy(errors, before);
-		}
+		const { errors, blocking } = await hookVerdict();
 		// What stood before the edit and still does: never more than stood before it.
 		const standing = errors.length - blocking.length;
 		// Said, not dropped: the agent should know what it is walking past, and that
@@ -1689,7 +2125,7 @@ async function main(): Promise<number> {
 			: '';
 		if (!blocking.length) {
 			clearAttempts(root, budgetKey);
-			if (!standing) return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
+			if (!standing) return emitClean(`${formatSummary(result)}${spentSuffix}${ceilingSuffix}`);
 			// The agent hears it too, with the findings: it is the agent Stop holds to them.
 			const message = `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`;
 			const report = formatAgent({ ...result, findings: errors }, config, {
@@ -1720,7 +2156,10 @@ async function main(): Promise<number> {
 			maxFindings: config.hook.maxFindings,
 			terse: true,
 		});
-		return emitBlocking(`${report}\n\n(attempt ${attempts} of ${max})${standingNote}${ceilingSuffix}`);
+		// Beside the attempt count: the blocking report is where the hook judges, so
+		// it is where the spend is said.
+		const spent = judged ? `; ${judged}` : '';
+		return emitBlocking(`${report}\n\n(attempt ${attempts} of ${max}${spent})${standingNote}${ceilingSuffix}`);
 	}
 
 	const maxFindings = Number(args.flags['max-findings'] ?? 0) || 0;
@@ -1747,19 +2186,25 @@ async function main(): Promise<number> {
 			);
 		}
 	}
+	// stderr, so it never lands inside a JSON, SARIF or HTML report.
+	if (judged) process.stderr.write(dim(`loupe: ${judged}\n`));
 	return result.blocking ? EXIT.BLOCKED : EXIT.OK;
 }
 
+// Off the main thread this module is a scan worker's copy of the bundle
+// (`scan-pool.ts`), and the CLI stands aside.
+//
 // Set exitCode rather than calling process.exit(): exit() tears down the
 // process before a large stdout write has drained to a pipe, which silently
 // truncates JSON and SARIF output when a caller pipes it anywhere.
-main()
-	.then((code) => {
-		process.exitCode = code;
-	})
-	.catch((err: unknown) => {
-		// A refusal is a message, not a crash: `baseline` and `suppressions` reach
-		// the tree ceiling here rather than through a catch of their own.
-		fail(`loupe: ${err instanceof TreeTooLarge ? err.message : err instanceof Error ? err.stack : String(err)}\n`);
-		process.exitCode = EXIT.CANNOT_RUN;
-	});
+if (isMainThread)
+	main()
+		.then((code) => {
+			process.exitCode = code;
+		})
+		.catch((err: unknown) => {
+			// A refusal is a message, not a crash: `baseline` and `suppressions` reach
+			// the tree ceiling here rather than through a catch of their own.
+			fail(`loupe: ${err instanceof TreeTooLarge ? err.message : err instanceof Error ? err.stack : String(err)}\n`);
+			process.exitCode = EXIT.CANNOT_RUN;
+		});

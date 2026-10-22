@@ -18,8 +18,9 @@ This command renders; it does not decide. The engine already produced the page �
 the charts, the directory rollup, the composite clusters, the grouped findings
 table are all in it. Do not rewrite, restyle, summarize into, or re-author the
 HTML. Anything you would change about how it looks is a change to
-`engine/src/report-html.ts`, so that every run gets it and two people running
-this never see two different reports.
+`engine/src/report-view.ts` — the one renderer this page and `loupe ui` both
+draw from — so that every run gets it and two people running this never see two
+different reports.
 
 ## 1. Render
 

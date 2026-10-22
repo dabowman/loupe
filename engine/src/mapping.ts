@@ -1,0 +1,749 @@
+/**
+ * One token set mapped onto another.
+ *
+ * The question the whole module exists to answer: given a token in set A, which
+ * token in set B is the same decision? Answer it for every token and the two
+ * systems become comparable — a design in one can be read in the other, a
+ * migration has a lookup table, and the tokens B is missing are exactly the rows
+ * that come back with no counterpart.
+ *
+ * Two halves, split the way `judge/value.ts` splits its question. Here: which
+ * tokens are even of the same kind — the `$type` is the one filter — and, only
+ * where that pool is larger than one question can carry (`CANDIDATES`), the
+ * arithmetic that ranks it: how far apart two values are, how much two names
+ * have in common, whether the tiers agree. In `judge/counterpart.ts`: the half
+ * arithmetic cannot do, which is which of those plays the same *role*. Names
+ * across two systems are related by meaning and not by spelling, and values
+ * agree by coincidence as often as by design, so a ranking cut short drops
+ * right answers; `evals/counterparts` measured that, and is why the pool is
+ * offered whole wherever it fits.
+ *
+ * The ranking's weights are still argued rather than measured; the floor is
+ * measured (`evals/counterparts/floor.ts`). docs/design/map.md says which is
+ * which.
+ *
+ * Design notes: docs/design/map.md
+ */
+
+import { ask } from './judge.ts';
+import type { Auth, Choice } from './judge.ts';
+import { DEFAULT_CONTEXT, counterpartQuery, noneKey } from './judge/counterpart.ts';
+import type { Context, CounterpartItem } from './judge/counterpart.ts';
+import { bold, dim, green, yellow } from './color.ts';
+import { byBytes } from './discover.ts';
+import { ALL_TIERS, isTierWord, toSrgb } from './dtcg.ts';
+import type { Tier, Token, TokenDoc } from './dtcg.ts';
+
+type Fetch = typeof fetch;
+
+// ── values ──────────────────────────────────────────────────────────────────
+
+/** A value reduced to something two sets can be measured against. */
+type Measured =
+	| { kind: 'color'; lab: readonly [number, number, number]; alpha: number }
+	| { kind: 'number'; n: number; unit: string }
+	| null;
+
+/** What a length is worth in px, so `1rem` and `16px` are one value. */
+const AS_PX: Record<string, number> = { px: 1, rem: 16, em: 16, pt: 4 / 3 };
+/** The same for time. */
+const AS_MS: Record<string, number> = { ms: 1, s: 1000 };
+
+/** The named colours token sets actually use. */
+const NAMED = new Map([
+	['white', '#ffffff'],
+	['black', '#000000'],
+	['transparent', '#00000000'],
+]);
+
+/** `#abc`, `#aabbcc`, `#aabbccdd`, `rgb()`, `hsl()`, `hwb()` and the common names as sRGB 0..1 plus alpha. */
+function parseColor(text: string): { rgb: [number, number, number]; alpha: number } | null {
+	const lower = text.trim().toLowerCase();
+	const v = NAMED.get(lower) ?? lower;
+	const hex = /^#([0-9a-f]{3,8})$/.exec(v)?.[1];
+	if (hex && (hex.length === 3 || hex.length === 4 || hex.length === 6 || hex.length === 8)) {
+		const wide = hex.length <= 4;
+		const at = (i: number): number => {
+			const part = wide ? hex.slice(i, i + 1).repeat(2) : hex.slice(i * 2, i * 2 + 2);
+			return part ? Number.parseInt(part, 16) / 255 : 0;
+		};
+		const has = wide ? hex.length === 4 : hex.length === 8;
+		return { rgb: [at(0), at(1), at(2)], alpha: has ? at(3) : 1 };
+	}
+	const fn = /^(rgb|hsl|hwb)a?\(([^)]+)\)$/.exec(v);
+	if (!fn?.[1] || !fn[2]) return null;
+	const parts = fn[2].split(/[\s,/]+/).filter(Boolean);
+	const [x, y, z] = parts.map((p) => Number.parseFloat(p));
+	if (x === undefined || y === undefined || z === undefined || [x, y, z].some(Number.isNaN)) return null;
+	const a = parts[3] === undefined ? 1 : Number.parseFloat(parts[3]) / (parts[3].endsWith('%') ? 100 : 1);
+	// An rgb channel is 0..255, or 0..100 with `%`; hsl and hwb take the same
+	// 0..100 percentages the 2025 colour object does.
+	const rgb =
+		fn[1] === 'rgb'
+			? ([x, y, z].map((n, i) => n / (parts[i]?.endsWith('%') ? 100 : 255)) as [number, number, number])
+			: toSrgb(fn[1], [x, y, z]);
+	return rgb && { rgb, alpha: Number.isNaN(a) ? 1 : a };
+}
+
+/**
+ * sRGB to OKLab (Ottosson's transform), so "how different are these two
+ * colours" is a distance and not a guess.
+ *
+ * Distance in sRGB is not the question anyone is asking: `#000` to `#111` and
+ * `#ee0000` to `#ff0000` are the same distance there and nothing alike to a
+ * reader. A perceptual space is what makes "these two systems chose the same
+ * grey" separable from "these two greys are three steps apart on the scale",
+ * which is the whole job value closeness does in the ranking.
+ */
+function oklab([r, g, b]: readonly [number, number, number]): [number, number, number] {
+	const lin = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+	const [R, G, B] = [lin(r), lin(g), lin(b)];
+	const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
+	const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
+	const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+	return [
+		0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+		1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+		0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+	];
+}
+
+/**
+ * A rendered literal reduced to a comparable measure, or null.
+ *
+ * Null is the ordinary answer for a font stack, an easing curve or a typography
+ * composite: there is no arithmetic on those, so they score on exact equality
+ * and on their names, and the model settles the rest.
+ */
+export function measure(literal: string): Measured {
+	const v = literal.trim().toLowerCase();
+	if (!v) return null;
+	const color = parseColor(v);
+	if (color) return { kind: 'color', lab: oklab(color.rgb), alpha: color.alpha };
+	const num = /^(-?\d*\.?\d+)([a-z%]*)$/.exec(v);
+	if (!num) return null;
+	const n = Number.parseFloat(num[1] ?? '');
+	if (Number.isNaN(n)) return null;
+	const unit = num[2] ?? '';
+	if (unit in AS_PX) return { kind: 'number', n: n * (AS_PX[unit] ?? 1), unit: 'px' };
+	if (unit in AS_MS) return { kind: 'number', n: n * (AS_MS[unit] ?? 1), unit: 'ms' };
+	return { kind: 'number', n, unit };
+}
+
+/**
+ * How close two colours are, as 0..1.
+ *
+ * Hyperbolic rather than linear, so the top of the range stays legible: the
+ * pairs worth separating are all bunched near zero distance, and `1 - d` would
+ * score "the same grey, rounded differently" and "a different grey" within a few
+ * points of each other. {@link COLOR_STEP} is roughly one step of a well-spaced
+ * palette, and a pair that far apart scores 0.5.
+ */
+const COLOR_STEP = 0.06;
+
+/** What scoring reads off one token. `rank` meets every token once per token on the other side, so it is worked out once. */
+interface Features {
+	measured: Measured;
+	words: Set<string>;
+	leaf: Set<string>;
+	leafName: string;
+}
+
+const FEATURES = new WeakMap<Token, Features>();
+
+function featuresOf(t: Token): Features {
+	let f = FEATURES.get(t);
+	if (!f) {
+		f = {
+			measured: measure(t.literal),
+			words: words(t),
+			leaf: new Set(splitWords(t.leaf)),
+			leafName: t.leaf.toLowerCase(),
+		};
+		FEATURES.set(t, f);
+	}
+	return f;
+}
+
+/** How close two values are, as 0..1. Two things nothing can measure score on equality alone. */
+export function valueScore(a: Token, b: Token): number {
+	const [x, y] = [featuresOf(a).measured, featuresOf(b).measured];
+	if (!x || !y) return a.literal !== '' && a.literal === b.literal ? 1 : 0;
+	if (x.kind !== y.kind) return 0;
+	if (x.kind === 'color' && y.kind === 'color') {
+		const d = Math.hypot(x.lab[0] - y.lab[0], x.lab[1] - y.lab[1], x.lab[2] - y.lab[2]);
+		// Opacity is a large part of what a colour token means — a scrim at 0.5 is
+		// not the colour it is 50% of — so it carries its own weight rather than
+		// being folded into the distance.
+		return 1 / (1 + (d + Math.abs(x.alpha - y.alpha) * 0.5) / COLOR_STEP);
+	}
+	if (x.kind === 'number' && y.kind === 'number') {
+		// px and ms are already normalised, and a bare number is read in the unit it
+		// is compared against (the `number` row of `comparable`). Anything else has
+		// to be the same unit, since `50%` and `50deg` are not near each other.
+		if (x.unit !== y.unit && x.unit && y.unit) return 0;
+		if (x.n === y.n) return 1;
+		if (x.n === 0 || y.n === 0 || x.n * y.n < 0) return 0;
+		// The ratio, squared: on a scale that doubles, one step away should not
+		// score anything like a hit.
+		const ratio = Math.min(Math.abs(x.n), Math.abs(y.n)) / Math.max(Math.abs(x.n), Math.abs(y.n));
+		return ratio * ratio;
+	}
+	return 0;
+}
+
+// ── names ───────────────────────────────────────────────────────────────────
+
+/** Words a path is carrying for structure rather than for meaning. */
+const NOISE = /^(tokens?|values?|css|json|web|default)$/;
+
+/** `colorForeground-primary` → `color foreground primary`, in pieces. */
+const splitWords = (text: string): string[] =>
+	text
+		.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+		.split(/[^A-Za-z0-9]+/)
+		.map((w) => w.toLowerCase())
+		.filter(Boolean);
+
+/**
+ * The words in a token's path that say what it is for.
+ *
+ * The tier words go, because they describe the file's organisation rather than
+ * the token. The type's own name goes with them: every colour token in a set has
+ * `color` somewhere, so counting it as agreement would add the same constant to
+ * every candidate and separate none of them — and `$type` has already gated the
+ * comparison on exactly that fact.
+ */
+export function words(t: Token): Set<string> {
+	const typeWords = new Set(splitWords(t.type));
+	return new Set(
+		splitWords(t.path).filter((w) => !isTierWord(w) && !typeWords.has(w) && !NOISE.test(w) && !/^colou?rs?$/.test(w)),
+	);
+}
+
+/** Sørensen–Dice over two word sets: the share of words they have in common. */
+function dice(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
+	if (!a.size || !b.size) return 0;
+	let hit = 0;
+	for (const w of a) if (b.has(w)) hit++;
+	return (2 * hit) / (a.size + b.size);
+}
+
+/**
+ * How much two names have in common, as 0..1.
+ *
+ * The leaf carries its own weight because it is where the systems most often
+ * agree outright: `foreground.primary` and `text.primary` name the same decision
+ * under different groups, and whole-path overlap alone scores that pair the same
+ * as `foreground.primary` against `foreground.inverted`.
+ */
+export function nameScore(a: Token, b: Token): number {
+	const [fa, fb] = [featuresOf(a), featuresOf(b)];
+	const whole = dice(fa.words, fb.words);
+	const leaf = fa.leafName === fb.leafName ? 1 : dice(fa.leaf, fb.leaf);
+	return 0.6 * whole + 0.4 * leaf;
+}
+
+// ── the shortlist ───────────────────────────────────────────────────────────
+
+/** Types that are the same question asked in different units. */
+const NUMERIC = new Set(['dimension', 'duration', 'fontWeight', 'number']);
+
+/**
+ * Whether two tokens are even candidates for each other.
+ *
+ * `$type` is the one thing the spec makes both sets say in the same words, so it
+ * is the only hard gate here — a colour is never a duration's counterpart, and
+ * admitting the pair costs an option in every shortlist. A set that writes its
+ * spacing scale as bare numbers is the exception the `number` row covers: it
+ * means the same as `dimension` and says so in a different draft.
+ */
+export const comparable = (a: string, b: string): boolean =>
+	a === b || (NUMERIC.has(a) && NUMERIC.has(b) && (a === 'number' || b === 'number'));
+
+/** What each half of the ranking is worth, per tier of the token being mapped. */
+const WEIGHT: Record<Tier, { value: number; name: number }> = {
+	// A primitive *is* its value: two palettes are comparable by colour long
+	// before they are comparable by whatever each calls its greys.
+	base: { value: 0.75, name: 0.25 },
+	// A role is a name. Two systems that both have a default text colour will
+	// have rounded it differently, and the value is the weaker signal of the two.
+	semantic: { value: 0.35, name: 0.65 },
+	component: { value: 0.3, name: 0.7 },
+	// The set never said which tier this is, so there is no reason to prefer
+	// either signal over the other.
+	unknown: { value: 0.5, name: 0.5 },
+};
+
+/** What agreeing on the tier is worth, out of the whole score. */
+const TIER_WEIGHT = 0.2;
+
+/**
+ * How many candidates a question offers.
+ *
+ * The API caps a question at 255 choices, so this is 254 and the last slot is
+ * `none`. It is a limit, not a judgement: **every token of a compatible type is
+ * offered whenever they fit**, and the ranking below only runs when they do not.
+ *
+ * Narrowing further actively costs answers. On WPDS against Archer, cutting 255
+ * dimension candidates to 200 turned 10 `none` answers into 24 and dropped the
+ * median confidence, because the ranking cut the *right* answers: Archer's
+ * spacing scale is authored as `clamp()`, which no arithmetic can measure, so
+ * `wpds-dimension.padding.xs` scored `space.3xs` at value 0.00 / name 0.00 and
+ * ranked it 235th of 255 — behind `autocomplete.item-radius` and
+ * `checkbox.radius`, which scored 0.40 apiece for sharing a pixel value by
+ * coincidence.
+ *
+ * That is the general shape of it. A ranking built on value distance and name
+ * overlap is only as good as the two sets happening to express themselves
+ * comparably, and two systems worth mapping are exactly the ones that do not.
+ * `evals/counterparts` says the same thing from the other side: accuracy tracks
+ * whether the answer was *offered*, and the model is not confused by more
+ * options.
+ *
+ * docs/design/map.md#what-context-a-judgement-needs has the tables.
+ */
+export const CANDIDATES = 254;
+
+/** One candidate and why it ranked where it did. */
+export interface Scored {
+	token: Token;
+	score: number;
+	value: number;
+	name: number;
+	sameTier: boolean;
+}
+
+/**
+ * Rank every comparable token in `targets` against `t`, best first.
+ *
+ * `gate` off compares a token against the whole set, types and all. It is here
+ * for `evals/counterparts` to score: whether the gate earns its place, or
+ * whether a set's other types are context that helps the model place the one it
+ * is asked about, is a measurement rather than an opinion.
+ */
+export function rank(t: Token, targets: readonly Token[], gate = true): Scored[] {
+	const w = WEIGHT[t.tier];
+	return targets
+		.filter((c) => !gate || comparable(t.type, c.type))
+		.map((c): Scored => {
+			const value = valueScore(t, c);
+			const name = nameScore(t, c);
+			// Two tokens neither of whose sets declared a tier have not agreed about
+			// anything, so an unknown never counts as a match — in either direction.
+			const sameTier = t.tier !== 'unknown' && c.tier === t.tier;
+			return {
+				token: c,
+				value,
+				name,
+				sameTier,
+				score: TIER_WEIGHT * (sameTier ? 1 : 0) + (1 - TIER_WEIGHT) * (w.value * value + w.name * name),
+			};
+		})
+		.sort((a, b) => b.score - a.score || byBytes(a.token.path, b.token.path));
+}
+
+// ── the map ─────────────────────────────────────────────────────────────────
+
+/**
+ * How a row of the map was settled.
+ *
+ * `exact` and `absent` are answered without a model, for the same reason
+ * `judgeValues` answers "no token for this property" without one: there is no
+ * question to put. `unsure` is a question that was put and came back under the
+ * floor — which is a row to look at by hand, not a row with no counterpart.
+ */
+export type How = 'exact' | 'judged' | 'none' | 'absent' | 'unsure';
+
+/** One token of the source set, and what the target set has for it. */
+export interface Mapping {
+	from: string;
+	/** The counterpart's path, or null where there is none or none was settled. */
+	to: string | null;
+	confidence: number;
+	how: How;
+	type: string;
+	tier: Tier;
+	fromValue: string;
+	toValue?: string | undefined;
+	/** The next most likely option, where the answer carried probabilities. Says how close the call was. */
+	runnerUp?: { to: string; confidence: number } | undefined;
+	/**
+	 * Which way an `unsure` row was leaning, `null` meaning toward no counterpart.
+	 *
+	 * The row's own `to` stays null either way — nothing under the floor is
+	 * written into the map as a counterpart, and nothing under it is written as a
+	 * gap in the target system. But throwing the pick away as well costs a reader
+	 * the part they can check in a second.
+	 */
+	leaning?: { to: string | null; value?: string | undefined } | undefined;
+	/** The shortlist the answer was chosen from, best first. */
+	considered: string[];
+}
+
+/**
+ * Below this a judgement is recorded as `unsure` rather than written into the map.
+ *
+ * Swept against the labelled pairs — `evals/counterparts/floor.ts`, tables in
+ * docs/design/map.md#where-to-put-the-floor. Confidence is not smooth: answers
+ * at 0.70 and above are right **97%** of the time, and everything below is right
+ * 58–74% of the time whichever band it falls in. That is a step rather than a
+ * slope, and an answer at 0.55 is not meaningfully better evidence than one at
+ * 0.40, so a floor anywhere in that range is cutting a flat region rather than
+ * separating anything.
+ *
+ * 0.5 was inherited from `check --judge`, where a question offers a handful of
+ * options; it admitted the whole flat region and stated it as fact at 93%
+ * precision. The floor belongs at the step. That roughly halves what a map
+ * states — tolerable only because a withheld row now keeps its answer as
+ * {@link Mapping.leaning}, so the rows this excludes are moved from the map to
+ * a reader's desk rather than thrown away.
+ */
+export const FLOOR = 0.7;
+
+export interface PlanOptions {
+	tiers?: readonly Tier[] | undefined;
+	types?: readonly string[] | undefined;
+	limit?: number | undefined;
+	candidates?: number | undefined;
+	/** Gate candidates on `$type`. Off compares against the whole set; see {@link rank}. */
+	typeGate?: boolean | undefined;
+	/**
+	 * Settle a path that exists in both sets without asking. Off for an eval,
+	 * which has to score every row the model would answer, not only the hard ones.
+	 */
+	settleExact?: boolean | undefined;
+}
+
+/** What a run will do, worked out before a single request is sent. */
+export interface MapPlan {
+	jobs: CounterpartItem[];
+	/**
+	 * The scores behind each job's shortlist, aligned with `jobs` by index.
+	 *
+	 * Carried rather than discarded because the ranking is the half of this that
+	 * can be checked without spending anything: `--dry-run` prints it, and a
+	 * shortlist that does not contain the right answer is a weighting problem no
+	 * amount of model accuracy will fix.
+	 */
+	shortlists: Scored[][];
+	/**
+	 * Per job, whether its shortlist was ranked: false where every compatible
+	 * token fitted in the question and was offered as the set wrote them, so its
+	 * scores were never computed and say nothing.
+	 */
+	ranked?: boolean[];
+	/** The rows that needed no model, in source order. */
+	settled: Mapping[];
+	/** Tokens the `--tier`/`--type`/`--limit` scope left out. */
+	skipped: number;
+	from: TokenDoc;
+	to: TokenDoc;
+}
+
+/**
+ * Work out every row that can be settled without asking, and shortlist the rest.
+ *
+ * Two rows need no model. A token whose path exists verbatim in the other set at
+ * a comparable type is its own counterpart — two systems that agree on the whole
+ * path have agreed, and putting that to a model is paying for a lookup. A token
+ * whose type the other set has none of at all has no counterpart to choose
+ * among, and saying so is a fact about the second system rather than a judgement
+ * about this token.
+ */
+export function planMap(from: TokenDoc, to: TokenDoc, opts: PlanOptions = {}): MapPlan {
+	const size = opts.candidates ?? CANDIDATES;
+	const byPath = new Map(to.tokens.map((t) => [t.path, t]));
+	const inScope = (t: Token): boolean =>
+		(!opts.tiers?.length || opts.tiers.includes(t.tier)) && (!opts.types?.length || opts.types.includes(t.type));
+
+	const wanted = from.tokens.filter(inScope);
+	const capped = opts.limit && opts.limit > 0 ? wanted.slice(0, opts.limit) : wanted;
+
+	const jobs: CounterpartItem[] = [];
+	const shortlists: Scored[][] = [];
+	const ranks: boolean[] = [];
+	const settled: Mapping[] = [];
+	for (const t of capped) {
+		const row = {
+			from: t.path,
+			type: t.type,
+			tier: t.tier,
+			fromValue: t.literal,
+		};
+		const twin = opts.settleExact === false ? undefined : byPath.get(t.path);
+		if (twin && comparable(t.type, twin.type)) {
+			settled.push({ ...row, to: twin.path, toValue: twin.literal, confidence: 1, how: 'exact', considered: [] });
+			continue;
+		}
+		// Everything of a compatible type, in the order the set authored it. The
+		// ranking is a last resort for a pool too big to send, not a filter.
+		const pool = to.tokens.filter((c) => opts.typeGate === false || comparable(t.type, c.type));
+		const ranked =
+			pool.length <= size
+				? pool.map((token): Scored => ({ token, score: 0, value: 0, name: 0, sameTier: false }))
+				: rank(t, pool, false).slice(0, size);
+		if (!ranked.length) {
+			settled.push({ ...row, to: null, confidence: 1, how: 'absent', considered: [] });
+			continue;
+		}
+		jobs.push({
+			token: t,
+			candidates: ranked.map((c) => c.token),
+			fromLabel: from.label,
+			toLabel: to.label,
+		});
+		shortlists.push(ranked);
+		ranks.push(pool.length > size);
+	}
+	return { jobs, shortlists, ranked: ranks, settled, skipped: from.tokens.length - capped.length, from, to };
+}
+
+/**
+ * Ask about every shortlisted token and turn the answers into rows.
+ *
+ * One request per token, which is what `ask` does by default and what this wants
+ * anyway: two tokens sharing a state would see each other's candidates, and the
+ * answers would stop being independent readings of one question.
+ */
+export async function askCounterparts(
+	plan: MapPlan,
+	auth: Auth,
+	fetchImpl: Fetch = fetch,
+	ctx: Context = DEFAULT_CONTEXT,
+): Promise<{ mappings: Mapping[]; answers: (Choice | undefined)[] }> {
+	const answers = plan.jobs.length ? await ask(counterpartQuery(ctx), plan.jobs, auth, fetchImpl) : [];
+	const judged = plan.jobs.map((job, i): Mapping => rowFor(job, answers[i]));
+	// Back into the order the tokens were authored in: a map read by a person is
+	// read beside the file it came from, and which rows needed a model is not an
+	// order anyone wants it in.
+	const order = new Map(plan.from.tokens.map((t, i) => [t.path, i]));
+	const mappings = [...plan.settled, ...judged].sort(
+		(a, b) => (order.get(a.from) ?? 0) - (order.get(b.from) ?? 0) || byBytes(a.from, b.from),
+	);
+	return { mappings, answers };
+}
+
+/** One answer, read against the shortlist it was chosen from. */
+function rowFor(job: CounterpartItem, answer: Choice | undefined): Mapping {
+	const { token, candidates } = job;
+	const none = noneKey(candidates);
+	const row = {
+		from: token.path,
+		type: token.type,
+		tier: token.tier,
+		fromValue: token.literal,
+		considered: candidates.map((c) => c.path),
+	};
+	if (!answer || !(answer.confidence >= FLOOR)) {
+		// Under the floor the answer is not written as a counterpart — but it is
+		// still shown. A row here is a question for a person, and `space.3xs, 0.41`
+		// is a question they can settle at a glance where a blank is one they have
+		// to start from scratch. `to` staying null is what keeps it a question.
+		const at = answer?.choice === none ? null : candidates.find((c) => c.path === answer?.choice);
+		return {
+			...row,
+			to: null,
+			confidence: answer?.confidence ?? 0,
+			how: 'unsure',
+			// `undefined` here is the third case, and the only one with nothing to
+			// say: no answer came back, or the one that did named an option that was
+			// never offered.
+			...(at !== undefined ? { leaning: at ? { to: at.path, value: at.literal } : { to: null } } : {}),
+		};
+	}
+	// The best option that is neither the pick nor `none`: how close the call was,
+	// which is the thing a reader of an uncalibrated map most wants to see.
+	const rest = Object.entries(answer.probabilities ?? {})
+		.filter(([k]) => k !== answer.choice && k !== none)
+		.sort((a, b) => b[1] - a[1])[0];
+	const runnerUp = rest ? { runnerUp: { to: rest[0], confidence: rest[1] } } : {};
+	if (answer.choice === none) return { ...row, to: null, confidence: answer.confidence, how: 'none', ...runnerUp };
+	const picked = candidates.find((c) => c.path === answer.choice);
+	// An answer that is not one of the options offered is not an answer: recorded
+	// as unsure rather than written into the map as a path the target set may not
+	// even have.
+	if (!picked) return { ...row, to: null, confidence: answer.confidence, how: 'unsure' };
+	return {
+		...row,
+		to: picked.path,
+		toValue: picked.literal,
+		confidence: answer.confidence,
+		how: 'judged',
+		...runnerUp,
+	};
+}
+
+/**
+ * The target tokens more than one source token landed on, most claimed first.
+ *
+ * A map is not a bijection, but a report that lists every row as `a \u2192 b` reads
+ * like one. Each row landing on a shared target can be defensible on its own, so
+ * the collapse is said out loud: it is where one system draws a distinction the
+ * other does not, and it is only visible across rows.
+ *
+ * Design notes: docs/design/map.md#what-two-real-pairs-look-like
+ */
+export function collisionsIn(mappings: readonly Mapping[]): { to: string; from: string[] }[] {
+	const claims = new Map<string, string[]>();
+	for (const m of mappings) if (m.to) claims.set(m.to, [...(claims.get(m.to) ?? []), m.from]);
+	return [...claims]
+		.filter(([, from]) => from.length > 1)
+		.map(([to, from]) => ({ to, from }))
+		.sort((a, b) => b.from.length - a.from.length || byBytes(a.to, b.to));
+}
+
+/** How many rows landed each way. */
+export type Counts = Record<How, number>;
+
+export const countBy = (mappings: readonly Mapping[]): Counts => {
+	const counts: Counts = { exact: 0, judged: 0, none: 0, absent: 0, unsure: 0 };
+	for (const m of mappings) counts[m.how]++;
+	return counts;
+};
+
+// ── output ──────────────────────────────────────────────────────────────────
+
+/** The map, as a file: what was read, how it was settled, and every row. */
+export interface MapPayload {
+	from: { label: string; path: string; files: number; tokens: number };
+	to: { label: string; path: string; files: number; tokens: number };
+	model: string;
+	/** The confidence a judgement had to clear to be written as a counterpart. */
+	floor: number;
+	/** Source tokens `--tier`/`--type`/`--limit` left out: non-zero means the map is not the whole set. */
+	skipped: number;
+	counts: Counts;
+	/** Where the map is not one-to-one. See {@link collisionsIn}. */
+	collisions: { to: string; from: string[] }[];
+	mappings: Mapping[];
+}
+
+export const mapPayload = (plan: MapPlan, mappings: readonly Mapping[], model: string): MapPayload => ({
+	from: {
+		label: plan.from.label,
+		path: plan.from.path,
+		files: plan.from.files.length,
+		tokens: plan.from.tokens.length,
+	},
+	to: { label: plan.to.label, path: plan.to.path, files: plan.to.files.length, tokens: plan.to.tokens.length },
+	model,
+	floor: FLOOR,
+	skipped: plan.skipped,
+	counts: countBy(mappings),
+	collisions: collisionsIn(mappings),
+	mappings: [...mappings],
+});
+
+/** How each outcome reads in the summary line, singular count and all. */
+const OUTCOMES: [How, string][] = [
+	['exact', 'named identically in both'],
+	['judged', 'judged'],
+	['none', 'no counterpart'],
+	['unsure', 'under the floor'],
+	['absent', 'nothing of their type to compare'],
+];
+
+/**
+ * The map as a reader reads it: grouped by tier, one line per token, the
+ * counterpart and the certainty behind it painted.
+ *
+ * Grouped by tier rather than by outcome because the tiers are the thing a
+ * reader is checking — a map whose semantic rows are all sound and whose
+ * component rows are all `none` says something specific about the two systems,
+ * and an outcome grouping hides exactly that.
+ */
+export function formatMap(plan: MapPlan, mappings: readonly Mapping[]): string {
+	const width = (xs: readonly string[]): number => Math.min(48, Math.max(0, ...xs.map((x) => x.length)));
+	const pathW = width(mappings.map((m) => m.from));
+	const valueW = width(mappings.map((m) => m.fromValue));
+	const pad = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
+
+	const collisions = collisionsIn(mappings);
+	const shared = new Map(collisions.map((c) => [c.to, c.from.length]));
+
+	const out: string[] = [`${bold(`${plan.from.label} → ${plan.to.label}`)}\n`];
+	for (const tier of ALL_TIERS) {
+		const rows = mappings.filter((m) => m.tier === tier);
+		if (!rows.length) continue;
+		out.push(`${bold(tier)} ${dim(`(${rows.length})`)}\n`);
+		for (const m of rows) {
+			const head = `  ${pad(m.from, pathW)}  ${dim(pad(m.fromValue, valueW))}  →  `;
+			// Marked on the row as well as listed below, because a row read on its own
+			// is where the one-to-one reading is formed.
+			const many = m.to ? shared.get(m.to) : undefined;
+			out.push(`${head}${verdict(m)}${many ? dim(`  shared ×${many}`) : ''}\n`);
+		}
+		out.push('\n');
+	}
+	if (collisions.length) {
+		const claimed = collisions.reduce((n, c) => n + c.from.length, 0);
+		out.push(
+			`${bold('not one-to-one')} ${dim(
+				`(${collisions.length} token(s) in ${plan.to.label} claimed by ${claimed} in ${plan.from.label})`,
+			)}\n`,
+		);
+		for (const c of collisions) {
+			out.push(`  ${yellow(c.to)} ${dim(`×${c.from.length}`)}\n`);
+			for (const f of c.from) out.push(`      ${dim(f)}\n`);
+		}
+		out.push('\n');
+	}
+	const counts = countBy(mappings);
+	const said = OUTCOMES.filter(([how]) => counts[how]).map(([how, text]) => `${counts[how]} ${text}`);
+	const scoped = plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : '';
+	out.push(`${mappings.length} token(s): ${said.join(', ')}.${scoped}\n`);
+	return out.join('');
+}
+
+/** One row's right-hand side: the counterpart, or why there isn't one. */
+function verdict(m: Mapping): string {
+	const sure = m.how === 'exact' ? dim('identical') : dim(`${m.confidence.toFixed(2)}`);
+	if (m.to) return `${green(m.to)}  ${dim(m.toValue ?? '')}  ${sure}`;
+	if (m.how === 'absent') return dim(`nothing of type ${m.type || 'unknown'} to compare`);
+	if (m.how === 'unsure') {
+		const lean = m.leaning
+			? ['leaning', m.leaning.to ?? 'no counterpart', m.leaning.value].filter(Boolean).join(' ')
+			: 'no answer';
+		return `${yellow('unsettled')}  ${dim(`${lean}  ${m.confidence.toFixed(2)}`)}`;
+	}
+	return `${dim('no counterpart')}  ${sure}`;
+}
+
+/**
+ * The plan, without spending anything: what each token would be asked about.
+ *
+ * This is the half of a mapping run that can be checked for free. A shortlist
+ * that does not contain the right answer cannot be rescued by the model, so the
+ * first thing to look at on a new pair of sets is whether the ranking is putting
+ * the counterpart in front of it at all.
+ */
+export function formatPlan(plan: MapPlan, show: number): string {
+	const out: string[] = [`${bold(`${plan.from.label} → ${plan.to.label}`)} ${dim('(dry run)')}\n\n`];
+	for (const [i, job] of plan.jobs.entries()) {
+		const t = job.token;
+		out.push(`${t.path}  ${dim(`${t.literal}  ${t.tier}`)}\n`);
+		// Nothing was ranked, so there is no order to show: the scores would print
+		// as zeros, and read as a ranking that found nothing.
+		if (plan.ranked?.[i] === false) {
+			out.push(dim(`    all ${job.candidates.length} compatible token(s) offered, unranked\n\n`));
+			continue;
+		}
+		for (const c of (plan.shortlists[i] ?? []).slice(0, show))
+			out.push(
+				`    ${dim(c.score.toFixed(2))}  ${c.token.path}  ${dim(
+					`${c.token.literal}  ${c.token.tier}  value ${c.value.toFixed(2)} name ${c.name.toFixed(2)}`,
+				)}\n`,
+			);
+		out.push('\n');
+	}
+	const counts = countBy(plan.settled);
+	const said = OUTCOMES.filter(([how]) => counts[how]).map(([how, text]) => `${counts[how]} ${text}`);
+	const scoped = plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : '';
+	out.push(
+		`${plan.jobs.length + plan.settled.length} token(s): ${
+			said.length ? `${said.join(', ')}, ` : ''
+		}${plan.jobs.length} would be asked.${scoped}\n`,
+	);
+	return out.join('');
+}

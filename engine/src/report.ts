@@ -255,6 +255,53 @@ const collapse = (findings: readonly Finding[]): Finding[][] =>
 		.sort((a, b) => b.length - a.length);
 
 /**
+ * What a report capped at `maxFindings` prints of each group: its collapsed
+ * runs, and how many of them.
+ *
+ * Spent round-robin across the groups: filling the budget first-come buries
+ * every other group behind whichever one sorts highest. What it counts is
+ * printed lines, so identical findings collapsed onto one cost one: duplicates
+ * make the budget go further rather than eat it.
+ */
+function quotas(
+	groups: readonly Group[],
+	maxFindings: number,
+): { runs: Map<string, Finding[][]>; quota: Map<string, number> } {
+	const runs = new Map<string, Finding[][]>(groups.map(([key, all]) => [key, collapse(all)]));
+	const quota = new Map<string, number>(groups.map(([key]) => [key, 0]));
+	let budget = maxFindings > 0 ? maxFindings : Infinity;
+	let progress = true;
+	while (budget > 0 && progress) {
+		progress = false;
+		for (const [key] of groups) {
+			if (budget <= 0) break;
+			const taken = quota.get(key) ?? 0;
+			if (taken >= (runs.get(key)?.length ?? 0)) continue;
+			quota.set(key, taken + 1);
+			budget--;
+			progress = true;
+		}
+	}
+	return { runs, quota };
+}
+
+/**
+ * The findings {@link formatAgent} prints under the same cap and grouping — the
+ * ones worth a paid judgement when nothing else will be read. Every finding of
+ * a printed `×N` line counts, since the line stands for all of them.
+ *
+ * Judging rewrites a message, never a rule, file or order, but the collapse
+ * reads the message: two findings judged apart print as two lines, which can
+ * push a line past the cap. What is printed is then still a subset of what was
+ * judged, never a finding that was skipped.
+ */
+export function shownFindings(findings: readonly Finding[], maxFindings: number, group: GroupBy = 'rule'): Finding[] {
+	const groups = groupsOf(findings, group);
+	const { runs, quota } = quotas(groups, maxFindings);
+	return groups.flatMap(([key]) => (runs.get(key) ?? []).slice(0, quota.get(key) ?? 0).flat());
+}
+
+/**
  * How concentrated a rule's findings are: `25 in 9 files, 11 distinct`.
  *
  * The total alone cannot say whether 25 is 25 decisions or the same three
@@ -360,26 +407,7 @@ export function formatAgent(
 	} else if (findings.length) {
 		const sub: GroupBy = group === 'rule' ? 'file' : 'rule';
 		const groups = groupsOf(findings, group);
-
-		// Spend the budget round-robin across the groups being shown: filling it
-		// first-come buries every other group behind whichever one sorts highest.
-		// What it counts is printed lines, so identical findings collapsed onto one
-		// cost one: duplicates make the budget go further rather than eat it.
-		const runs = new Map<string, Finding[][]>(groups.map(([key, all]) => [key, collapse(all)]));
-		const quota = new Map<string, number>(groups.map(([key]) => [key, 0]));
-		let budget = maxFindings > 0 ? maxFindings : Infinity;
-		let progress = true;
-		while (budget > 0 && progress) {
-			progress = false;
-			for (const [key] of groups) {
-				if (budget <= 0) break;
-				const taken = quota.get(key) ?? 0;
-				if (taken >= (runs.get(key)?.length ?? 0)) continue;
-				quota.set(key, taken + 1);
-				budget--;
-				progress = true;
-			}
-		}
+		const { runs, quota } = quotas(groups, maxFindings);
 
 		let hidden = 0;
 		for (const [key, all] of groups) {

@@ -65,6 +65,7 @@ than using it.
 | `engine/` | `loupe` — the conformance engine |
 | `editors/vscode/` | The VS Code / Cursor launcher for `loupe lsp`. Other editors need no extension |
 | `integrations/wordpress/` | A dev mu-plugin that loads the `serve` overlay itself, so wp-admin is not a bookmarklet click per screen |
+| `integrations/devtools/` | A Chrome DevTools extension: a panel listing every finding resolved against the page, and an Elements sidebar saying what is wrong with the selected node |
 | `docs/design/` | Design notes: why the engine is built the way it is, and the measurements behind its tuned numbers |
 
 The three skills are design-system agnostic: each one starts at `loupe status`
@@ -159,12 +160,25 @@ Parse errors and a token set that came back empty still print — a run that
 quietly skipped half the CSS reads as a clean one at either verbosity.
 
 `bin/loupe` is on PATH inside any Claude Code session — Claude Code adds each
-enabled plugin's `bin/` to the environment it runs commands in. For plain
-terminals, symlink it somewhere on your `PATH`:
+enabled plugin's `bin/` to the environment it runs commands in, and only
+there. A plain terminal reports `command not found` until you symlink it
+somewhere on your `PATH`:
 
 ```bash
-ln -s "$HOME/.claude/plugins/<marketplace>/loupe/bin/loupe" ~/.local/bin/loupe
+ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
 ```
+
+Link the marketplace clone, not the copy Claude Code runs: that one sits under
+`~/.claude/plugins/cache/loupe/loupe/<commit>/`, and the commit changes on every
+update. The clone moves with `/plugin marketplace update`, so it can be a
+commit ahead of the installed plugin between updates. From a checkout of this
+repository, link its `bin/loupe` the same way. Loupe is not on npm yet, so a
+`lint:loupe` script in a project's `package.json` works only for people who
+have made this link.
+
+A terminal sees none of the plugin's settings (blocking, preset, API key) —
+Claude Code passes them to hooks only. `loupe status` says where it found its
+settings, and a hand-run `loupe check` exits 1 on errors either way.
 
 It runs against the project you are in — the directory holding the
 `loupe.config.json` that governs your cwd, so a command typed in
@@ -426,6 +440,38 @@ advisory and never baselined. A control that already carries `href` is not
 asked. See `engine/README.md` for how it decides and how
 it scored.
 
+### Mapping one token set onto another
+
+Experimental, and off to one side of everything above: the rest of loupe asks
+whether code conforms to *its* design system, and this asks a question with two
+systems in it. Given two DTCG token sets it answers, for every token in the
+first, which token in the second is the same decision — which is what makes two
+systems comparable at all.
+
+```bash
+loupe map ./wpds/tokens ./primer/tokens --out map.json
+loupe map ./a ./b --dry-run            # the shortlists, asking nothing
+```
+
+Both sides are assumed to be standard DTCG and three-tiered; nothing else about
+them has to agree, and nothing is configured per system. `$type` is a hard gate;
+every token of a compatible type is then offered, and only where there are more
+of them than a question can carry is the list ranked down — colour distance in
+OKLab, names as word sets with the organising words dropped. The model picks
+among them or says the second system has no counterpart. Where several tokens
+land on one counterpart the report says so rather than reading like a bijection
+— which is often the finding: nine WPDS tokens map onto Primer's single
+`bgColor.disabled`. `--dry-run` shows the shortlists for free, which is the first
+thing to run on a new pair.
+
+Some of it is measured. `engine/evals/counterparts` builds labelled pairs by
+renaming a real set, and says what the question needs (the `$description`
+carries the meaning; a name alone declines 41% of the time when a counterpart
+exists) and where the confidence floor goes (0.70, the one point where precision
+steps — 97% above it, about 75% anywhere below). The ranking weights are still
+arguments rather than numbers. `docs/design/map.md` says which is which, and
+`engine/README.md` documents the flags.
+
 ### Composites
 
 The expensive drift is compositional: six page headers, four modal footers, each
@@ -535,7 +581,8 @@ design system is never mistaken for one of these.
 Everything above that is specific to WPDS — the two registries, the preset that
 configures them, the packages that identify it — lives in `profiles/wpds/`. The
 engine takes `--profiles`, which the hooks, commands and `bin/loupe` all pass,
-and applies a profile only to a project importing its packages.
+and applies a profile only to a project importing its packages. A project's own
+profiles are read as well — see [Your own profile](#your-own-profile).
 
 ```jsonc
 // profiles/wpds/profile.json
@@ -597,6 +644,34 @@ scales so an agent holds the `sx` half by hand.
 Adding a fourth is adding a directory here plus a preset in `engine/presets/` —
 see **Adding a design system** in the
 [engine README](engine/README.md#adding-a-design-system).
+
+#### Your own profile
+
+A design system that ships its own profile, in its own repo, does not need a
+fork of this one. Put the profile directory in `.loupe/profiles/`, or list
+wherever it lives under `profiles` in `loupe.config.json` (relative to the
+config file):
+
+```jsonc
+{
+  "extends": "generic",
+  "profiles": "./loupe/profiles",
+  "designSystem": { "name": "VIP v3", "packages": ["@automattic/vip-design-system"] }
+}
+```
+
+Both are read on every run — the hooks, the commands and a typed `loupe` alike
+— alongside the shipped profiles, not instead of them. A project profile wins
+over a shipped one with the same `id`, and over one claiming the same package,
+which is what a design system rebuilt under its old package name needs: the
+shipped `vip` profile describes VIP's Theme UI system, not the v3 rebuild. The
+shadowed profile is still there to name with `--profile`.
+
+`"profile"` pins the choice outright: an id, or `"none"` for no profile, while
+`designSystem.packages` — and every rule that needs it — stays as it is.
+
+`loupe status` prints the chosen profile's directory, and the skills read its
+`authoring.md`, `patterns.md` and `remediation.md` from there.
 
 ### Config
 
@@ -843,6 +918,14 @@ timeout — 60s on `PostToolUse`, 120s on `Stop`. Each request gives up after 20
 seconds and the run keeps the deterministic findings it already had. To stay
 offline, drop `--judge` from `hooks/hooks.json`, or just leave the key unset.
 
+The hook only pays for what it prints. A run that does not block prints a
+one-line tally, so it asks nothing; a blocking run asks only about the findings
+its cap has room to show. Answers are cached per project, keyed by the exact
+question, so the next write in the same file, and the `Stop` after it, re-ask
+only what changed. What a run spent rides on its summary line —
+`judge: 2 asked, 9 from cache` — and `--no-cache` asks everything fresh. See
+[What a judged run spends](docs/design/judge.md#what-a-judged-run-spends).
+
 ## Reading the report
 
 `--format agent` is the default because its reader is an agent and context is
@@ -893,10 +976,49 @@ alone.
 sharing a drift audit with people who are not going to run the CLI. It only
 renders and publishes: the page comes from the engine, so two people running it
 never see two different reports. Anything you want to change about how it looks
-belongs in `engine/src/report-html.ts`. `/loupe-report --local` stops at the
+belongs in `engine/src/report-view.ts`, which is the one renderer both the file
+and the live UI below draw from. `/loupe-report --local` stops at the
 file, `.loupe/report.html` in the project, and hands back the path: in the
 Claude Code desktop app a click on it opens the page beside the conversation,
 and in a fullscreen terminal a Cmd/Ctrl-click opens it in the browser.
+
+### Live, while you work
+
+```bash
+loupe ui                            # then open http://127.0.0.1:7332
+```
+
+The same page, on the working tree instead of on a moment. It re-runs on save —
+a watcher over the directories the analysis read, pushed to the page — so the
+counts restate themselves as you fix things, and it crosses into clean and back
+without a reload. Every location links into your editor at the line
+(`--editor` takes a template, so Cursor, Zed and the JetBrains IDEs all work).
+Each row carries `fix` where the engine settled on exactly one token, and `mute`,
+which asks for a reason before it writes the directive — the quick fix leaves
+that blank because it has nowhere to ask, and a page does. `accept as baseline`
+is a button.
+
+Because it writes to your files it is not `loupe serve`: it binds loopback, sends
+no CORS header, and every write carries a secret minted at startup plus the run
+it was aimed at, so a click against a page the tree has moved past is refused
+rather than applied to whatever now sits at that index.
+
+### In the browser's inspector
+
+`integrations/devtools/` is a Manifest V3 extension over `loupe serve`. It adds a
+**Loupe panel** — the findings resolved against the page you are looking at, each
+row saying how many elements it currently styles and whether its `@media` query
+holds at this width — and a **Loupe pane in Elements**, which is the inversion:
+select a node, see the findings that style *that node*.
+
+That second one is the question a person in DevTools actually has. They have
+already found the thing that looks wrong; every other output loupe produces
+starts from the findings and asks where they are. It is also the only surface
+that cannot be a bookmarklet, because it needs the inspector's selection.
+
+Load it unpacked — `integrations/devtools/README.md` has the steps. It reads, it does
+not write: `loupe ui` is the surface that changes files, and it answers only the
+page it served.
 
 ### The pane
 
@@ -975,8 +1097,8 @@ those rules are off, and the report is silently clean of them.
 - run: |
     curl -fsSL -O https://github.com/dabowman/loupe/releases/latest/download/loupe-linux-x64
     chmod +x loupe-linux-x64
-    git clone --depth 1 https://github.com/dabowman/loupe .loupe
-    ./loupe-linux-x64 check --all --format sarif --profiles .loupe/profiles > loupe.sarif
+    git clone --depth 1 https://github.com/dabowman/loupe .loupe-engine
+    ./loupe-linux-x64 check --all --format sarif --profiles .loupe-engine/profiles > loupe.sarif
 ```
 
 `--judge` still needs `TYPESAFE_API_KEY` from the environment — no key is
@@ -1152,13 +1274,14 @@ Known limits, in rough priority order:
 4. **Composite matching is greedy.** A registered child claims the first node it
    fits. For registries of a handful of nodes this is exact; a large pattern with
    several interchangeable children could in principle miss a match.
-5. **No index cache.** Every hook run rebuilds the repo index, and the language
-   server re-analyzes whole on every save. At ~115ms warm on an ordinary project
-   this has not been worth the complexity; Gutenberg's ~2.4s is the case that
-   would justify splitting `analyze` into index and check phases.
+5. **The index is cached per file, not held in memory.** Each unchanged file's
+   scan is reused from the last run (see [Caches](docs/design/cli.md#caches)),
+   which took a hook run on a Gutenberg-sized tree from 3.8s to about 0.8s. What
+   is left is mostly Node starting and the cache file loading; a long-lived
+   process holding the index would remove that, and has not been needed yet.
 6. **The editor reports on save.** A dirty buffer shows the previous verdict.
    Diagnosing unsaved text means threading a buffer overlay through every read
-   in the analyzer, which is what (5) would also want.
+   in the analyzer.
 
 ## Working on the engine
 
