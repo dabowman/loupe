@@ -400,7 +400,7 @@ export interface TokenSet {
 
 /** One `designSystem.tokenSources` path, and what reading it yielded. */
 export interface TokenSourceRead {
-	/** As configured, relative to the root. */
+	/** As configured, relative to the project root or absolute. */
 	path: string;
 	/** The stylesheets found under it. 0: not installed, or no stylesheet there. */
 	files: number;
