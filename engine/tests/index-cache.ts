@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
 import { loadConfig } from '../src/config.ts';
+import { readProfiles } from '../src/profiles.ts';
 import type { AnalyzeResult } from '../src/types.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write } from './harness.ts';
 
@@ -225,4 +226,66 @@ await check(
 );
 
 cleanup(state);
+// What the profile-driven passes read off the walk: the elements a class lands
+// on (token scopes), the tokens the project defines (`tokens/undelivered`), a
+// parse error's reason (its key). And `contents`, the hook's "before the edit":
+// a file it stands in for is never answered from the cache, nor stored in it.
+await check('with a profile active, and under `contents`, cached output is uncached output', async () => {
+	const root = scratch('loupe-index-profile-');
+	const PROFILES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'profiles');
+	const wpds = readProfiles(PROFILES).filter((p) => p.id === 'wpds');
+	assert(wpds.length === 1, 'the wpds profile ships');
+	const analyzed = async (opts: { cache: boolean; contents?: ReadonlyMap<string, string> }): Promise<string> => {
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		config.profiles = { available: wpds, active: wpds, applied: [], skipped: [], notes: [], errors: [] };
+		return snapshot(await analyze(config, { scope: null, ...opts }));
+	};
+	try {
+		write(root, 'package.json', JSON.stringify({ dependencies: { '@wordpress/components': '*' } }));
+		write(root, 'loupe.config.json', JSON.stringify({ extends: 'wpds', namespaces: { project: ['rp-'] } }));
+		write(
+			root,
+			'node_modules/@wordpress/theme/prebuilt/css/design-tokens.css',
+			':root { --wpds-border-radius-md: 4px; --wpds-border-radius-sm: 2px; --wpds-color-bg-surface-neutral: #fff; }',
+		);
+		write(
+			root,
+			'src/App.jsx',
+			[
+				"import { Button } from '@wordpress/components';",
+				"import './app.css';",
+				'export const App = () => (<><Button className="rp-b">Go</Button><dialog className="rp-d" /></>);',
+			].join('\n'),
+		);
+		write(
+			root,
+			'src/app.css',
+			[
+				':root { --wpds-project-brand: #c00; }',
+				'.rp-b { border-radius: var(--wpds-border-radius-md); background: var(--wpds-color-bg-surface-neutral); }',
+				'.rp-d { border-radius: 4px; }',
+			].join('\n'),
+		);
+		write(root, 'src/broken.css', '.rp-x { color: red;\n.rp-y {');
+		write(root, 'plugin.php', "<?php wp_enqueue_style( 'rp', 'app.css', array( 'wp-components' ) );");
+
+		const want = await analyzed({ cache: false });
+		assert(want.includes('tokens/misapplied-token'), 'the fixture should exercise token scopes');
+		assert(want.includes('Unclosed block'), 'the fixture should carry a parse error keyed on its reason');
+		assert((await analyzed({ cache: true })) === want, 'cold');
+		age(root);
+		assert((await analyzed({ cache: true })) === want, 'warm');
+
+		// The hook's question: the same tree with one file as it was before an edit.
+		const before = new Map([['src/app.css', '.rp-b { border-radius: 2px; }\n']]);
+		const asWas = await analyzed({ cache: false, contents: before });
+		assert(asWas !== want, 'the stand-in should change the answer, or this proves nothing');
+		assert((await analyzed({ cache: true, contents: before })) === asWas, 'warm, under contents');
+		// And it was not stored as the file's: the disk's answer is unchanged.
+		assert((await analyzed({ cache: true })) === want, 'after a run under contents');
+	} finally {
+		cleanup(root);
+	}
+});
+
 finish();

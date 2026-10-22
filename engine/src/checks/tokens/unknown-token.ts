@@ -29,6 +29,7 @@
  */
 
 import type { Candidate } from '../../analyze.ts';
+import type { TokenScopes } from '../../scopes.ts';
 import { onRole } from '../../tokens.ts';
 import type { TokenRename } from '../../types.ts';
 
@@ -79,12 +80,22 @@ function nearMiss(name: string, known: ReadonlySet<string>): string | undefined 
  * answers — a `transform`, `--sf-accent` — the family is the known tokens
  * sharing the most leading segments with the name, down to the one after the
  * system's prefix.
+ *
+ * The family is the one the profile's token scopes put on the property where
+ * they say, as it is for a value's suggestion: a rename asked among the generic
+ * table's family would offer, and could settle on, a token the profile says is
+ * not for this property at all.
  */
-export function renameCandidates(name: string, prop: string, known: ReadonlySet<string>): string[] {
+export function renameCandidates(
+	name: string,
+	prop: string,
+	known: ReadonlySet<string>,
+	scopes?: TokenScopes | undefined,
+): string[] {
 	const names = [...known];
 	const tails = prop.startsWith('--') ? prop.slice(2).split('-') : [];
-	let family = onRole(names, prop);
-	for (let k = 0; !family.length && k < tails.length; k++) family = onRole(names, tails.slice(k).join('-'));
+	let family = onRole(names, prop, scopes);
+	for (let k = 0; !family.length && k < tails.length; k++) family = onRole(names, tails.slice(k).join('-'), scopes);
 	const segs = name.split('-');
 	// `--wpds-color-x` splits to ['', '', 'wpds', 'color', 'x']: four is the
 	// shortest head that still names a category.

@@ -49,7 +49,8 @@ export type SheetExtract =
 			/** Every custom property the sheet defines, in source order: `[name, value]`. */
 			defs: [string, string][];
 	  }
-	| { error: string };
+	/** `error` is the message, `reason` the parse error's identity: what it is keyed on. */
+	| { error: string; reason?: string | undefined };
 
 /** A scan with its sets written out as arrays, the form JSON can hold. */
 type StoredScan = Omit<ScanResult, 'imports' | 'referenced' | 'stems'> & {

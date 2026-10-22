@@ -6,11 +6,13 @@
  * regression here silently changes behaviour in every project at once.
  */
 
-import { mkdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DETECT_ENTRY_BUDGET, detectConfig } from '../src/detect.ts';
+import { DETECT_ENTRY_BUDGET, STYLE_FILE_BUDGET, STYLE_MAX_BYTES, detectConfig } from '../src/detect.ts';
+import { listPresets } from '../src/config.ts';
 import { discover } from '../src/discover.ts';
-import { assert, check, cleanup, fail, finish, scratch, write } from './harness.ts';
+import { CLI, assert, check, cleanup, fail, finish, scratch, write } from './harness.ts';
 
 /** One detection scenario: a repo to build, and what should come back. */
 interface Case {
@@ -301,6 +303,289 @@ await check('a truncated walk that found nothing still answers none', () => {
 			bounded.namespaceConfidence === 'none',
 			`nothing was found, so the confidence is none — got ${bounded.namespaceConfidence}`,
 		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// ── the read budgets ────────────────────────────────────────────────────────
+// The walk ceiling bounds entries visited, not bytes read: markup was capped at
+// 2000 files and stylesheets at nothing, so a tree of large generated CSS was
+// read in full before inference answered. A budget that trips is a guess from
+// less than was found, and has to read as one.
+
+/** A project inference can name with high confidence: `own-` in CSS and markup. */
+const ownProject = (root: string): void => {
+	write(root, 'package.json', '{}');
+	write(root, 'App.jsx', 'export const App = () => <div className="own-box own-card own-hero" />;');
+	write(root, 'a.css', '.own-box{color:#111}\n.own-card{color:#222}\n.own-hero{color:#333}');
+};
+
+await check('a stylesheet over the size cap is skipped, and the confidence says so', () => {
+	const root = scratch('dsh-budget-bytes-');
+	try {
+		ownProject(root);
+		const whole = detectConfig(root);
+		assert(whole.namespaceConfidence === 'high', `baseline should be high, got ${whole.namespaceConfidence}`);
+		assert(whole.namespaceNotes.length === 0, `nothing was skipped: ${JSON.stringify(whole.namespaceNotes)}`);
+
+		// One generated blob over the cap, full of a prefix the markup also names —
+		// read, it would outvote the project's own CSS.
+		const rule = '.gen-x{color:#000}\n';
+		write(root, 'styles/tokens.css', rule.repeat(Math.ceil((STYLE_MAX_BYTES + 1) / rule.length)));
+		write(root, 'Gen.jsx', 'export const G = () => <div className="gen-x" />;');
+		const capped = detectConfig(root);
+		assert(
+			!capped.namespaces.project.includes('gen-'),
+			`an oversized stylesheet named a namespace: ${JSON.stringify(capped.namespaces)}`,
+		);
+		assert(
+			capped.namespaceConfidence === 'low',
+			`a skipped stylesheet cannot leave a high-confidence answer — got ${capped.namespaceConfidence}`,
+		);
+		assert(
+			capped.namespaceNotes.some((n) => /skipped 1 stylesheet\(s\) over \d+kB/.test(n)),
+			`the skip has to be said: ${JSON.stringify(capped.namespaceNotes)}`,
+		);
+		assert(!capped.truncated, 'a skipped file is not a truncated walk; init must not refuse over it');
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('stylesheets past the count cap are not read, and the confidence says so', () => {
+	const root = scratch('dsh-budget-count-');
+	try {
+		ownProject(root);
+		// Deeper than the project's own stylesheet, so the walk finds it first.
+		for (let i = 0; i < STYLE_FILE_BUDGET; i++) write(root, `gen/g${i}.css`, `.own-g${i}{color:#000}`);
+		const got = detectConfig(root);
+		assert(got.namespaces.project.includes('own-'), `the root's stylesheet is read first: ${JSON.stringify(got)}`);
+		assert(got.namespaceConfidence === 'low', `a capped read cannot be high — got ${got.namespaceConfidence}`);
+		assert(
+			got.namespaceNotes.some((n) => n.includes(`first ${STYLE_FILE_BUDGET} of ${STYLE_FILE_BUDGET + 1}`)),
+			`the cap has to be said: ${JSON.stringify(got.namespaceNotes)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('the count cap reads shallowest first, not alphabetically first', () => {
+	const root = scratch('dsh-budget-depth-');
+	try {
+		write(root, 'package.json', '{}');
+		write(root, 'src/A.jsx', 'export const A = () => <div className="acme-a acme-b acme-c acme-d" />;');
+		write(root, 'styles/main.css', '.acme-a{color:#1}\n.acme-b{color:#2}\n.acme-c{color:#3}\n.acme-d{color:#4}');
+		// `assets/` sorts before `styles/` by bytes, so a byte-ordered budget spends
+		// itself on these and never reaches the project's own sheet.
+		for (let i = 0; i < STYLE_FILE_BUDGET + 10; i++) write(root, `assets/gen/g${i}.css`, `.gen-g${i}{color:#000}`);
+		const got = detectConfig(root);
+		assert(
+			got.namespaces.project.includes('acme-'),
+			`the shallow stylesheet has to be read within the budget: ${JSON.stringify(got.namespaces)} ${JSON.stringify(got.namespaceNotes)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// ── possible external prefixes ──────────────────────────────────────────────
+// `namespaces.external` only ever came from presets, so a vendored bundle no
+// preset knows read as project code: `.ChatFooter-module_container` drew a
+// hardcoded-value finding, and `loupe fix` staged a substitution into a remote
+// widget's CSS-module internals.
+
+/** `own-` in CSS and markup, plus three kinds of somebody else's CSS. */
+const vendoredProject = (root: string): void => {
+	ownProject(root);
+	write(
+		root,
+		'chat-mount.scss',
+		'.ChatFooter-module_container{background:#fff}\n.ChatFooter-module_input{color:#111}\n.ChatFooter-module_send{color:#222}\n' +
+			'.Header_nav__3xYz9{color:#333}\n',
+	);
+	write(root, 'ghost.css', '.ghost-a{color:#444}\n.ghost-b{color:#555}\n.ghost-c{color:#666}');
+	for (let i = 0; i < 3; i++) write(root, `cal${i}.css`, `.rbc-event{color:#777}\n.rbc-e${i}{color:#888}`);
+	write(root, 'Cal.jsx', 'export const Cal = () => <div className="rbc-event" />;');
+	write(root, 'node_modules/react-big-calendar/lib/css/react-big-calendar.css', '.rbc-event{padding:2px}');
+};
+
+await check('detection proposes external prefixes, and writes none of them', () => {
+	const root = scratch('dsh-external-');
+	try {
+		vendoredProject(root);
+		const got = detectConfig(root);
+		const reasonOf = (prefix: string): string | undefined =>
+			got.possibleExternal.find((c) => c.prefix === prefix)?.reason;
+		const listed = JSON.stringify(got.possibleExternal);
+		assert(/CSS-module/.test(reasonOf('ChatFooter-module_') ?? ''), `the CSS-module bundle is not listed: ${listed}`);
+		assert(
+			got.possibleExternal.find((c) => c.prefix === 'ChatFooter-module_')?.classes === 3,
+			`three distinct module classes: ${listed}`,
+		);
+		assert(/hashed/.test(reasonOf('Header_') ?? ''), `the hashed class is not listed: ${listed}`);
+		assert(/node_modules/.test(reasonOf('rbc-') ?? ''), `the vendored dependency is not listed: ${listed}`);
+		assert(/no markup/.test(reasonOf('ghost-') ?? ''), `the unreferenced prefix is not listed: ${listed}`);
+		assert(reasonOf('own-') === undefined, `the project's own namespace is not external: ${listed}`);
+		assert(JSON.stringify(got.namespaces.project) === '["own-"]', `namespaces: ${JSON.stringify(got.namespaces)}`);
+		assert(got.config.namespaces?.external === undefined, `a guess was written: ${JSON.stringify(got.config)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+/** The CLI, isolated from the developer's own plugin settings. */
+const cli = (argv: readonly string[]): { status: number | null; stdout: string; stderr: string } => {
+	const home = scratch('dsh-home-');
+	try {
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
+		const r = spawnSync(process.execPath, [CLI, ...argv], { encoding: 'utf8', env });
+		if (r.error) throw r.error;
+		return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+	} finally {
+		cleanup(home);
+	}
+};
+
+await check('detect reports the possible external list in text and in JSON', () => {
+	const root = scratch('dsh-external-cli-');
+	try {
+		vendoredProject(root);
+		const text = cli(['detect', '--root', root, '--no-color']).stdout;
+		assert(/possible external:\s+ChatFooter-module_/.test(text), `not in the text report:\n${text}`);
+		assert(/confirm with `namespaces.external`/.test(text), `no hint to confirm:\n${text}`);
+		const json = JSON.parse(cli(['detect', '--root', root, '--format', 'json']).stdout) as {
+			possibleExternal?: { prefix: string }[];
+		};
+		assert(
+			json.possibleExternal?.some((c) => c.prefix === 'ChatFooter-module_'),
+			`not in the JSON: ${JSON.stringify(json.possibleExternal)}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// ── init on a guess ─────────────────────────────────────────────────────────
+// `init` wrote whatever detection returned, the `generic` fallback included —
+// and once the file exists inference never runs again, so a WordPress plugin
+// built on `@wordpress/scripts`' externals was pinned to a ruleset with most
+// rules off, silently, for good.
+
+/** The externals shape: WordPress everywhere except `dependencies`. */
+const externalsPlugin = (root: string): void => {
+	write(
+		root,
+		'package.json',
+		JSON.stringify({ devDependencies: { '@wordpress/scripts': '*', '@types/wordpress__components': '*' } }),
+	);
+	write(
+		root,
+		'src/A.jsx',
+		'import { Button } from \'@wordpress/components\';\nexport const A = () => <Button className="own-box own-card own-hero" />;',
+	);
+	write(root, 'src/a.css', '.own-box{color:#111}\n.own-card{color:#222}\n.own-hero{color:#333}');
+	write(root, 'build/index.asset.php', "<?php return array('dependencies' => array('wp-components', 'wp-element'));");
+	write(root, '.wp-env.json', '{}');
+	write(root, 'composer.json', JSON.stringify({ type: 'wordpress-plugin' }));
+};
+
+await check('init refuses a guessed design system, and says what it saw instead', () => {
+	const root = scratch('dsh-init-guess-');
+	try {
+		externalsPlugin(root);
+		const { status, stdout } = cli(['init', '--root', root, '--no-color']);
+		assert(status === 2, `init on a guess exited ${status}:\n${stdout}`);
+		assert(!existsSync(join(root, 'loupe.config.json')), 'init wrote the guess anyway');
+		// Read from the presets directory, so a new preset shows up unasked.
+		for (const name of listPresets()) assert(stdout.includes(name), `available presets omit ${name}:\n${stdout}`);
+		for (const evidence of [
+			/source imports: @wordpress\/components \[a wpds marker\]/,
+			/@types\/wordpress__components/,
+			/build\/index\.asset\.php dependencies: wp-components, wp-element/,
+			/\.wp-env\.json/,
+			/composer\.json \(type wordpress-plugin\)/,
+		])
+			assert(evidence.test(stdout), `missing evidence ${evidence}:\n${stdout}`);
+		assert(/loupe init --preset <name>/.test(stdout), `no re-run command:\n${stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('init --preset names the design system and writes it; --force writes the guess', () => {
+	const root = scratch('dsh-init-named-');
+	try {
+		externalsPlugin(root);
+		const named = cli(['init', '--root', root, '--preset', 'wpds']);
+		assert(named.status === 0, `init --preset exited ${named.status}:\n${named.stdout}${named.stderr}`);
+		const cfg = JSON.parse(readFileSync(join(root, 'loupe.config.json'), 'utf8')) as {
+			extends?: string;
+			namespaces?: { project?: string[] };
+		};
+		assert(cfg.extends === 'wpds', `init --preset wrote the guess instead: ${JSON.stringify(cfg)}`);
+		assert(cfg.namespaces?.project?.join(',') === 'own-', `the namespaces were lost: ${JSON.stringify(cfg)}`);
+
+		const forced = cli(['init', '--root', root, '--force']);
+		assert(forced.status === 0, `init --force exited ${forced.status}`);
+		const guessed = JSON.parse(readFileSync(join(root, 'loupe.config.json'), 'utf8')) as { extends?: string };
+		assert(guessed.extends === 'generic', `--force writes what detection found: ${JSON.stringify(guessed)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The guess refusal ran ahead of the existence check and recommended
+// `init --force` without saying a config was already there — and `--force`
+// overwrites, so following the advice replaced a hand-written config with
+// `generic`.
+await check('init on a guess says a config exists before it suggests --force', () => {
+	const root = scratch('dsh-init-exists-');
+	try {
+		externalsPlugin(root);
+		const own = JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } });
+		write(root, 'loupe.config.json', own);
+		const { status, stdout, stderr } = cli(['init', '--root', root, '--no-color']);
+		assert(status === 2, `init over an existing config exited ${status}`);
+		assert(/already exists \(use --force\)/.test(stderr), `the existing config went unmentioned:\n${stderr}`);
+		assert(!/--force/.test(stdout), `--force was suggested without naming the config:\n${stdout}`);
+		assert(readFileSync(join(root, 'loupe.config.json'), 'utf8') === own, 'the existing config was touched');
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a recognised design system is written without being asked twice', () => {
+	const root = scratch('dsh-init-sure-');
+	try {
+		externalsPlugin(root);
+		write(root, 'package.json', JSON.stringify({ dependencies: { '@wordpress/components': '*' } }));
+		const { status } = cli(['init', '--root', root]);
+		assert(status === 0, `init on a high-confidence match exited ${status}`);
+		assert(existsSync(join(root, 'loupe.config.json')), 'nothing was written');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The other half: with no config, that same guess ran on every check, and the
+// only place it said so was `status`.
+await check('check on a guessed generic config points at init, in the agent format only', () => {
+	const root = scratch('dsh-init-hint-');
+	try {
+		externalsPlugin(root);
+		const agent = cli(['check', '--all', '--root', root, '--no-color']).stdout;
+		assert(/no design system recognised .* Run `loupe init`/.test(agent), `no init hint:\n${agent}`);
+		// JSON is parsed: a trailing line would break every consumer.
+		const json = cli(['check', '--all', '--root', root, '--format', 'json']).stdout;
+		JSON.parse(json);
+		assert(!json.includes('loupe init'), 'the hint leaked into the JSON report');
+
+		write(root, 'loupe.config.json', JSON.stringify({ extends: 'generic' }));
+		const written = cli(['check', '--all', '--root', root, '--no-color']).stdout;
+		assert(!written.includes('loupe init'), `a written config is a decision, not a guess:\n${written}`);
 	} finally {
 		cleanup(root);
 	}

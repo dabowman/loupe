@@ -9,9 +9,11 @@
  *
  *   profiles/
  *     wpds/
- *       profile.json          { id, name, packages, preset, patterns, components }
+ *       profile.json          { id, name, packages, preset, patterns, components,
+ *                               tokenDescriptions, tokenScopes, delivery }
  *       patterns/index.json
  *       components/index.json
+ *       delivery.json         how its packages and tokens reach a page (delivery.ts)
  *
  * A profile with no `packages` is never selected automatically — there is
  * nothing to recognize it by — and has to be named with `--profile <id>`.
@@ -24,8 +26,11 @@ import { byBytes, readDir } from './discover.ts';
 import { isAbsolute, join, resolve } from 'node:path';
 import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
+import { readDelivery } from './delivery.ts';
 import { setComponentRegistry, setPatterns } from './config.ts';
 import { declaredPackages, registryApplies } from './registry.ts';
+import { parseTokenScopes } from './scopes.ts';
+import { messageOf } from './text.ts';
 import type { ComponentEntry, Config, Pattern, Profile, RegistryNote, SkippedRegistry } from './types.ts';
 
 export type { Profile, RegistryNote, SkippedRegistry };
@@ -65,6 +70,26 @@ interface RawProfile {
 	patterns?: unknown;
 	components?: unknown;
 	tokenDescriptions?: unknown;
+	tokenScopes?: unknown;
+	delivery?: unknown;
+}
+
+/**
+ * A profile's `tokenScopes`: the block inline, or a profile-relative path to a
+ * file holding it. A file that cannot be read is a problem with the profile,
+ * named like any other, not a reason to drop the profile's registries.
+ */
+function readScopes(dir: string, raw: unknown): ReturnType<typeof parseTokenScopes> {
+	// Inline too: a throw from parsing would otherwise reach `readProfiles`'s
+	// catch and drop the whole profile, where the same block by path is kept.
+	try {
+		return parseTokenScopes(typeof raw === 'string' ? readJson(under(dir, raw)) : raw);
+	} catch (err) {
+		return {
+			scopes: null,
+			errors: [`tokenScopes: could not read ${typeof raw === 'string' ? raw : 'the inline block'} — ${messageOf(err)}`],
+		};
+	}
 }
 
 /**
@@ -92,6 +117,10 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 			const patterns = asString(raw.patterns);
 			const components = asString(raw.components);
 			const tokenDescriptions = asString(raw.tokenDescriptions);
+			// Validated here, once, so a mistake surfaces as the profile loads rather than
+			// as suggestions that quietly fell back to the generic table.
+			const scopes = raw.tokenScopes === undefined ? null : readScopes(dir, raw.tokenScopes);
+			const delivery = asString(raw.delivery);
 			out.push({
 				id,
 				name: asString(raw.name) ?? asString(raw.id) ?? e.name,
@@ -100,6 +129,11 @@ export function readProfiles(root: string | null | undefined): Profile[] {
 				patterns: patterns ? under(dir, patterns) : null,
 				components: components ? under(dir, components) : null,
 				tokenDescriptions: tokenDescriptions ? under(dir, tokenDescriptions) : null,
+				tokenScopes: scopes?.scopes ?? null,
+				problems: scopes?.errors ?? [],
+				// Read now, not by path later: two consumers want it, and a block that
+				// does not validate is no block rather than a profile that cannot load.
+				delivery: delivery ? readDelivery(under(dir, delivery)) : null,
 				dir,
 			});
 			// Claimed only once the entry is on the list: reserving it above let a
@@ -186,7 +220,7 @@ export function applyRegistries(
 				saw[kind] = used = true;
 				if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
 			} catch (err) {
-				errors.push(`could not read ${src.label} ${kind} — ${err instanceof Error ? err.message : String(err)}`);
+				errors.push(`could not read ${src.label} ${kind} — ${messageOf(err)}`);
 			}
 		}
 		if (used) applied.push(src.label);

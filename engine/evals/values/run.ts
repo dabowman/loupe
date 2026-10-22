@@ -106,7 +106,8 @@ for (const tier of ['exact', 'near', 'end', 'family'] as const) {
 }
 
 // The two ways to be wrong cost differently: a wrong token changes the design, a
-// wrong keep suppresses a mistake for good. Scored as `fix --judge` would act.
+// wrong keep leaves a mistake for review labelled deliberate (`fix --judge` no
+// longer suppresses it). An answer over the floor counts as acted on either way.
 process.stdout.write('\nfloor  acted  right  wrong-token  wrong-keep\n');
 for (const floor of [0.5, 0.7, 0.8, 0.9]) {
 	let acted = 0;

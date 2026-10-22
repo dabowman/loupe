@@ -15,9 +15,39 @@
  * Design notes: docs/design/report.md#bounding
  */
 
-/** First line of an unknown throw — a parser may reject with anything. */
-export const messageOf = (err: unknown): string =>
-	(err instanceof Error ? err.message : String(err)).split('\n')[0] ?? 'parse failed';
+/** The message of an unknown throw. Anything can be thrown; only Errors carry a message. */
+export const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * The first line of the same, for a message that has to fit on one — a parser
+ * may reject with anything, a code frame included.
+ */
+export const messageLineOf = (err: unknown): string => messageOf(err).split('\n')[0] ?? 'parse failed';
+
+/**
+ * `messageLineOf` for a parse handed `{ from: abs }`. postcss opens a syntax error
+ * with that path — `/home/alice/proj/a.css:1:1: Unclosed block` — and an
+ * absolute path is a fact about the machine, not the project, so it does not
+ * belong in a report another clone reads. The finding already names the file,
+ * so only `line:column` is kept.
+ */
+export const parseMessageOf = (err: unknown, abs: string): string => {
+	const message = messageLineOf(err);
+	return message.startsWith(`${abs}:`) ? message.slice(abs.length + 1) : message;
+};
+
+/**
+ * What a parse error says is wrong, without where: postcss's `reason`,
+ * `Unclosed block`. A finding's `code` is part of its baseline key, and the
+ * position moves whenever a line is added above it — so a code carrying it
+ * matches no baseline after an unrelated edit, and the hook calls an error the
+ * file already had a new one. Undefined for a throw that gives no reason, which
+ * keeps its message.
+ */
+export const parseReasonOf = (err: unknown): string | undefined => {
+	const reason = (err as { reason?: unknown } | null)?.reason;
+	return typeof reason === 'string' && reason ? reason : undefined;
+};
 
 /** `s` as a literal inside a regex. */
 export const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -100,6 +130,14 @@ export const messageLine = (body: string, tail = ''): string => {
 	const end = clipFront(tail, TAIL_MAX);
 	return clip(body, MESSAGE_MAX - [...end].length) + end;
 };
+
+/**
+ * A composed message, bounded with its `tail` kept last: what the finalize pass
+ * at the end of `analyze` does to every finding, and what `--judge` does again
+ * to a message it recomposes after that pass.
+ */
+export const boundMessage = (message: string, tail = ''): string =>
+	messageLine(tail && message.endsWith(tail) ? message.slice(0, -tail.length) : message, tail);
 
 /** What separates one composed part of a message from the next. */
 const JOIN = '; ';

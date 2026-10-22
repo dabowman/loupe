@@ -76,6 +76,22 @@ export const RULES = {
 		title:
 			'unknown token — no {tokenPrefix} token by this name is defined; check the spelling against the design system',
 	},
+	'tokens/misapplied-token': {
+		severity: 'warn',
+		rank: 2,
+		needs: ['tokenPrefixes'],
+		title:
+			'misapplied token — it exists, but {system} scopes it to another property or another kind of element; use the token whose role matches',
+	},
+	'tokens/undelivered': {
+		severity: 'warn',
+		rank: 21,
+		// The other half of what it needs — a profile's delivery block — arrives
+		// with the profiles, after availability is settled; without one it is silent.
+		needs: ['tokenPrefixes'],
+		title:
+			'{tokenPrefix} tokens are used, and nothing shows the stylesheet defining them reaches the page — every var() of them resolves to nothing there, and the declaration drops',
+	},
 	'tokens/hardcoded-value': {
 		severity: 'warn',
 		rank: 9,
@@ -110,7 +126,8 @@ export const RULES = {
 		severity: 'warn',
 		rank: 11,
 		needs: ['components'],
-		title: 'overrides a design-system component — restyle via its props/tokens, not CSS',
+		title:
+			'overrides styling a design-system component owns \u2014 use the prop the finding names; where it says there is none, keep the component\u2019s own styling or suppress with the reason the design needs it; where it says restyle via props/tokens, nothing records what the component owns, so find the prop or token in its docs',
 	},
 	'system/inline-style': {
 		severity: 'warn',

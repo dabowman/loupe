@@ -13,6 +13,7 @@
 
 import { createHash } from 'node:crypto';
 import { findingKey } from './analyze.ts';
+import { byBytes } from './discover.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, yellow } from './color.ts';
 import { RULES, renderTitle } from './rules.ts';
 import { messageLine } from './text.ts';
@@ -131,7 +132,7 @@ function nearMisses(result: AnalyzeResult | BaselinedResult): string[] {
 const tally = (keys: readonly string[]): [string, number][] => {
 	const counts = new Map<string, number>();
 	for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
-	return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+	return [...counts].sort((a, b) => b[1] - a[1] || byBytes(a[0], b[0]));
 };
 
 /** How many entries a one-line tally may name before it starts counting the rest. */
@@ -215,7 +216,7 @@ const byRank = (a: Group, b: Group): number => RULES[b[0] as RuleId].rank - RULE
  */
 const byWeight = (a: Group, b: Group): number => {
 	const blocking = (g: Finding[]): number => g.filter((f) => f.severity === 'error').length;
-	return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || a[0].localeCompare(b[0]);
+	return blocking(b[1]) - blocking(a[1]) || b[1].length - a[1].length || byBytes(a[0], b[0]);
 };
 
 /** The findings grouped on one axis, that axis's own order. */
@@ -223,49 +224,103 @@ const groupsOf = (findings: readonly Finding[], by: GroupBy): Group[] =>
 	by === 'rule' ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
 
 /**
- * How many of each group's findings a report capped at `maxFindings` prints.
+ * What a finding says, wherever it is: its code, its whole message and its note.
+ *
+ * Whole, not the printed line: that one is capped, so two declarations whose
+ * text differs only past the cap printed alike and were counted as one. Nor
+ * `code` alone: for a margin it is the property, so `margin-top: 2px` and
+ * `margin-top: 12px` share it, and a line printing one of them under the
+ * other's count would be stating something false about the file.
+ */
+const sameText = (f: Finding): string => `${f.code ?? ''}\u0000${f.message}\u0000${f.note ?? ''}`;
+
+/** What makes two findings one line of the report: the same rule, in the same file, saying the same thing. */
+const sameLine = (f: Finding): string => `${f.rule}\u0000${f.file}\u0000${sameText(f)}`;
+
+/**
+ * Identical findings, one entry each, largest first and then first-seen. Each
+ * entry is sorted by line.
+ *
+ * Duplicates are the ordinary case in a real stylesheet — the same declaration
+ * seven times in one file — and listed one by one they spend the budget seven
+ * times on one decision. The count is also the signal: `×7` in one file says
+ * "write a script", eleven singletons say "read each one".
+ */
+const collapse = (findings: readonly Finding[]): Finding[][] =>
+	bucket(findings, sameLine)
+		.map(([, run]) => run.sort((a, b) => a.line - b.line))
+		.sort((a, b) => b.length - a.length);
+
+/**
+ * What a report capped at `maxFindings` prints of each group: its collapsed
+ * runs, and how many of them.
  *
  * Spent round-robin across the groups: filling the budget first-come buries
- * every other group behind whichever one sorts highest.
+ * every other group behind whichever one sorts highest. What it counts is
+ * printed lines, so identical findings collapsed onto one cost one: duplicates
+ * make the budget go further rather than eat it.
  */
-function quotas(groups: readonly Group[], maxFindings: number): Map<string, number> {
+function quotas(
+	groups: readonly Group[],
+	maxFindings: number,
+): { runs: Map<string, Finding[][]>; quota: Map<string, number> } {
+	const runs = new Map<string, Finding[][]>(groups.map(([key, all]) => [key, collapse(all)]));
 	const quota = new Map<string, number>(groups.map(([key]) => [key, 0]));
 	let budget = maxFindings > 0 ? maxFindings : Infinity;
 	let progress = true;
 	while (budget > 0 && progress) {
 		progress = false;
-		for (const [key, all] of groups) {
+		for (const [key] of groups) {
 			if (budget <= 0) break;
 			const taken = quota.get(key) ?? 0;
-			if (taken >= all.length) continue;
+			if (taken >= (runs.get(key)?.length ?? 0)) continue;
 			quota.set(key, taken + 1);
 			budget--;
 			progress = true;
 		}
 	}
-	return quota;
+	return { runs, quota };
 }
 
 /**
  * The findings {@link formatAgent} prints under the same cap and grouping — the
- * ones worth a paid judgement when nothing else will be read. Judging rewrites
- * a message, never a rule, file or order, so the pick is the same either side
- * of it.
+ * ones worth a paid judgement when nothing else will be read. Every finding of
+ * a printed `×N` line counts, since the line stands for all of them.
+ *
+ * Judging rewrites a message, never a rule, file or order, but the collapse
+ * reads the message: two findings judged apart print as two lines, which can
+ * push a line past the cap. What is printed is then still a subset of what was
+ * judged, never a finding that was skipped.
  */
 export function shownFindings(findings: readonly Finding[], maxFindings: number, group: GroupBy = 'rule'): Finding[] {
 	const groups = groupsOf(findings, group);
-	const quota = quotas(groups, maxFindings);
-	return groups.flatMap(([key, all]) => all.slice(0, quota.get(key) ?? 0));
+	const { runs, quota } = quotas(groups, maxFindings);
+	return groups.flatMap(([key]) => (runs.get(key) ?? []).slice(0, quota.get(key) ?? 0).flat());
 }
 
-/** `✗ layout/margin-on-child (3) blocking — margin — move spacing to the parent…` */
-function ruleHeading(id: string, group: readonly Finding[], title: (id: RuleId) => string): string {
+/**
+ * How concentrated a rule's findings are: `25 in 9 files, 11 distinct`.
+ *
+ * The total alone cannot say whether 25 is 25 decisions or the same three
+ * repeated, and those want different remedies. Distinct counts the text, repo
+ * wide, so one declaration copied into nine files is one. Under a file heading
+ * the file count is that heading, and is left off.
+ */
+function concentration(group: readonly Finding[], nested: boolean): string {
+	if (group.length < 2) return String(group.length);
+	const files = new Set(group.map((f) => f.file)).size;
+	const distinct = new Set(group.map(sameText)).size;
+	return `${group.length}${nested ? '' : ` in ${files} ${files === 1 ? 'file' : 'files'}`}, ${distinct} distinct`;
+}
+
+/** `✗ layout/margin-on-child (25 in 9 files, 11 distinct) blocking — margin — move spacing to the parent…` */
+function ruleHeading(id: string, group: readonly Finding[], title: (id: RuleId) => string, nested: boolean): string {
 	const sev = group[0]?.severity ?? 'warn';
 	// Spans, not one paint: severity carries the mark and the word beside it, the
 	// id carries the colour rules wear everywhere else, and the count is
 	// arithmetic.
 	return (
-		`${SEV_PAINT[sev](SEV_MARK[sev] ?? '•')} ${magenta(id)} ${dim(`(${group.length})`)} ` +
+		`${SEV_PAINT[sev](SEV_MARK[sev] ?? '•')} ${magenta(id)} ${dim(`(${concentration(group, nested)})`)} ` +
 		`${SEV_PAINT[sev](SEV_WORD[sev] ?? 'advisory')} — ${title(id as RuleId)}`
 	);
 }
@@ -273,21 +328,37 @@ function ruleHeading(id: string, group: readonly Finding[], title: (id: RuleId) 
 /** `styles/card.css (3)` */
 const fileHeading = (file: string, group: readonly Finding[]): string => `${bold(file)} ${dim(`(${group.length})`)}`;
 
-const heading = (by: GroupBy, key: string, group: readonly Finding[], title: (id: RuleId) => string): string =>
-	by === 'rule' ? ruleHeading(key, group, title) : fileHeading(key, group);
+/** A heading on either axis; `nested` when it is the sub-heading, under the other one. */
+const heading = (
+	by: GroupBy,
+	key: string,
+	group: readonly Finding[],
+	title: (id: RuleId) => string,
+	nested = false,
+): string => (by === 'rule' ? ruleHeading(key, group, title, nested) : fileHeading(key, group));
+
+/** How many line numbers a collapsed line lists before it stops; the count is already said. */
+const MAX_LINES = 10;
 
 /**
- * The findings of one group, by line.
+ * The findings of one group, by line, identical ones collapsed onto the first.
  *
  * The number alone: the path is the heading in either mode. Right-aligned so a
  * three-digit line does not push a two-digit one out of column — the message is
- * what the eye is scanning down.
+ * what the eye is scanning down. A collapsed line carries its count and every
+ * line it stands for, so the batch can be found without a second run.
  */
 function findingLines(group: readonly Finding[]): string[] {
-	const width = Math.max(...group.map((f) => String(f.line).length));
-	return [...group]
-		.sort((a, b) => a.line - b.line)
-		.map((f) => `      ${dim(String(f.line).padStart(width))}  ${painted(f)}`);
+	const runs = collapse(group).sort((a, b) => (a[0]?.line ?? 0) - (b[0]?.line ?? 0));
+	const width = Math.max(...runs.map((run) => String(run[0]?.line).length));
+	return runs.map((run) => {
+		const [f] = run as [Finding, ...Finding[]];
+		const at = run.map((g) => g.line);
+		const more = at.length > MAX_LINES ? `, \u2026 +${at.length - MAX_LINES} more` : '';
+		const times =
+			run.length > 1 ? `  \u00d7${run.length} ${dim(`(lines ${at.slice(0, MAX_LINES).join(', ')}${more})`)}` : '';
+		return `      ${dim(String(f.line).padStart(width))}  ${painted(f)}${times}`;
+	});
 }
 
 /**
@@ -333,16 +404,16 @@ export function formatAgent(
 	} else if (findings.length) {
 		const sub: GroupBy = group === 'rule' ? 'file' : 'rule';
 		const groups = groupsOf(findings, group);
-		const quota = quotas(groups, maxFindings);
+		const { runs, quota } = quotas(groups, maxFindings);
 
 		let hidden = 0;
 		for (const [key, all] of groups) {
 			lines.push('');
 			lines.push(heading(group, key, all, title));
-			const show = all.slice(0, quota.get(key) ?? 0);
+			const show = (runs.get(key) ?? []).slice(0, quota.get(key) ?? 0).flat();
 			hidden += all.length - show.length;
 			for (const [subKey, subGroup] of groupsOf(show, sub)) {
-				lines.push(`  ${heading(sub, subKey, subGroup, title)}`);
+				lines.push(`  ${heading(sub, subKey, subGroup, title, true)}`);
 				lines.push(...findingLines(subGroup));
 			}
 			if (all.length > show.length) lines.push(dim(`  \u2026 ${all.length - show.length} more`));
@@ -459,7 +530,7 @@ function fingerprints(findings: readonly Finding[]): string[] {
 export function reportPayload(result: AnalyzeResult | BaselinedResult, config: Config): ReportPayload {
 	const title = titleFor(config);
 	return {
-		version: 1,
+		version: 2,
 		tool: 'loupe',
 		blocking: result.blocking,
 		summary: {
@@ -475,6 +546,7 @@ export function reportPayload(result: AnalyzeResult | BaselinedResult, config: C
 			// format prints has no counterpart here, and a consumer cannot tell a
 			// clean repo from one whose whole backlog is accepted.
 			...('baselined' in result ? { baselined: result.baselined } : {}),
+			...('fixed' in result && result.fixed !== null ? { fixed: result.fixed } : {}),
 		},
 		rules: usedRules(result, config),
 		// `rank` orders the report and `suffix` carries the channel marker; both are
@@ -486,9 +558,23 @@ export function reportPayload(result: AnalyzeResult | BaselinedResult, config: C
 	};
 }
 
+/**
+ * How a baselined finding is marked in SARIF. `external`: the decision lives in
+ * the baseline file, not in a directive beside the code. No `status`, which the
+ * spec reads as `accepted` when absent.
+ */
+const BASELINE_SUPPRESSION = { kind: 'external', justification: 'accepted in the loupe baseline' } as const;
+
 export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Config): string {
 	const title = titleFor(config);
-	const fps = fingerprints(result.findings);
+	// Listed, not just counted: code scanning shows a suppressed result as
+	// suppressed, where a backlog that is simply absent reads as a clean repo.
+	// After the live findings, so their order is untouched; fingerprinted
+	// together, which changes nothing — a baselined finding never shares a key
+	// with a live one.
+	const accepted = 'baselinedFindings' in result ? result.baselinedFindings : [];
+	const all = [...result.findings, ...accepted];
+	const fps = fingerprints(all);
 	return JSON.stringify(
 		{
 			$schema: 'https://json.schemastore.org/sarif-2.1.0.json',
@@ -499,7 +585,7 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 						driver: {
 							name: 'Loupe',
 							informationUri: 'https://github.com/dvdbwmn/loupe',
-							rules: usedRules(result, config).map((r) => ({
+							rules: usedRules({ ...result, findings: all }, config).map((r) => ({
 								id: r.id,
 								shortDescription: { text: r.title },
 								// No `fullDescription`: the catalog holds one line of guidance per
@@ -513,7 +599,7 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 							})),
 						},
 					},
-					results: result.findings.map((f, i) => ({
+					results: all.map((f, i) => ({
 						ruleId: f.rule,
 						level: f.severity === 'error' ? 'error' : 'warning',
 						message: { text: `${f.message} \u2014 ${title(f.rule)}` },
@@ -526,7 +612,17 @@ export function formatSarif(result: AnalyzeResult | BaselinedResult, config: Con
 								},
 							},
 						],
+						...(i >= result.findings.length ? { suppressions: [BASELINE_SUPPRESSION] } : {}),
 					})),
+					// The same counts `--format json` carries in its summary.
+					...('baselined' in result
+						? {
+								properties: {
+									baselined: result.baselined,
+									...(result.fixed !== null ? { fixed: result.fixed } : {}),
+								},
+							}
+						: {}),
 				},
 			],
 		},

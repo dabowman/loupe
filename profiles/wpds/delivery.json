@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "verifiedAgainst": "2026-10-02. Packages: @wordpress/dependency-extraction-webpack-plugin 6.56.0, lib/util.js — `BUNDLED_PACKAGES` (returned `undefined` from `defaultRequestToExternal`, so webpack compiles them into the bundle) and `defaultRequestToHandle` (`@wordpress/<x>` -> `wp-<x>` for every other @wordpress package); WordPress/wordpress-develop trunk (7.2-alpha) src/wp-includes/assets/script-loader-packages.php registers `components.js` and no `ui.js`, so there is a `wp-components` script handle and no `wp-ui` one. Tokens: WordPress/wordpress-develop src/wp-includes/script-loader.php — `wp-theme` is registered as a style (src /wp-includes/css/dist/theme/design-tokens.css) and `wp-components` lists it as a dependency in 7.1.0 and trunk, and in neither 6.9.0 nor 7.0.0; WordPress/gutenberg trunk lib/client-assets.php registers `wp-theme` (build/styles/theme/design-tokens.css) and appends it to `wp-components`' deps, and puts it first in `wp-edit-blocks`. `wp-block-editor` and `wp-commands` depend on `wp-components` in core's `$package_styles`. @wordpress/theme 2.2.0 README: 'WordPress registers the design tokens stylesheet as the `wp-theme` style handle'; a separate app shell or iframe must enqueue it itself; its build plugins (`*-ds-token-fallbacks`, applied automatically by @wordpress/build 0.24.0 when @wordpress/theme is installed — not by @wordpress/scripts 35.0.0) write the generated value into every bare var(--wpds-*) as a fallback.",
+  "note": "How the WordPress Design System reaches a page, as declared context rather than engine logic. `packages`: `external` means WordPress provides the package as a script handle and dependency-extraction maps the import to it, so adopting it costs the bundle nothing; `bundled` means dependency-extraction leaves it in BUNDLED_PACKAGES and webpack compiles it into the plugin's own bundle — the first import is a new runtime dependency, a larger bundle, a `react` entry in the asset manifest, and test config for its ESM build. `tokens`: the --wpds-* custom properties are defined only by the `wp-theme` stylesheet; a page that does not load it resolves every var(--wpds-*) to nothing, and a declaration with an unresolvable var() is invalid at computed-value time — it drops, it does not fall back. Re-verify the BUNDLED_PACKAGES list against the installed plugin before bumping `version` — it moves between releases.",
+  "host": "WordPress",
+  "packages": {
+    "@wordpress/ui": {
+      "provided": "bundled",
+      "note": "In BUNDLED_PACKAGES; WordPress registers no `wp-ui` script handle, so bundling is the only route."
+    },
+    "@wordpress/dataviews": { "provided": "bundled" },
+    "@wordpress/admin-ui": { "provided": "bundled" },
+    "@wordpress/global-styles-ui": { "provided": "bundled" },
+    "@wordpress/icons": { "provided": "bundled" },
+    "@wordpress/components": { "provided": "external", "handle": "wp-components" }
+  },
+  "tokens": {
+    "stylesheet": "@wordpress/theme/design-tokens.css",
+    "handle": "wp-theme",
+    "prefixes": ["--wpds-"],
+    "note": "List 'wp-theme' in the dependency array of the wp_enqueue_style that loads this CSS. WordPress core registers it from 7.1, the Gutenberg plugin before that; on an older core without Gutenberg there is no handle, and the sheet has to be bundled. Build-time fallbacks keep the declarations from dropping, but render the default theme's values whatever the site's theme is, so they do not count as delivery.",
+    "evidence": [
+      {
+        "kind": "enqueue-dependency",
+        "files": ["**/*.php"],
+        "calls": ["wp_enqueue_style", "wp_register_style"],
+        "enqueues": ["wp_enqueue_style"],
+        "argument": 2,
+        "handles": ["wp-theme"],
+        "note": "`wp-theme` itself. A style depending on `wp-components`, `wp-block-editor`, `wp-edit-blocks` or `wp-commands` gets it transitively only on WordPress 7.1+ or with the Gutenberg plugin active, so it is not counted: name the handle the CSS needs."
+      },
+      {
+        "kind": "pattern",
+        "files": ["**/block.json"],
+        "pattern": "\"wp-theme\"",
+        "note": "A block's `style`/`editorStyle` naming `wp-theme` itself."
+      },
+      {
+        "kind": "import",
+        "files": ["**/*.{css,scss,sass,less,js,jsx,ts,tsx,mjs,cjs}"],
+        "specifiers": ["@wordpress/theme/design-tokens.css", "@wordpress/theme/prebuilt/css/design-tokens.css"],
+        "note": "The sheet bundled into the project's own CSS. The @wordpress/theme README advises enqueueing `wp-theme` instead inside WordPress."
+      }
+    ],
+    "fallbacks": [
+      {
+        "kind": "pattern",
+        "files": ["**/*.config.{js,cjs,mjs,ts}", "**/package.json"],
+        "pattern": "ds-token-fallbacks|\"@wordpress/build\"\\s*:",
+        "note": "Generated fallbacks in every var(): the declaration renders the default theme's value instead of dropping, and never the site's theme. Not delivery; the finding says it was found."
+      }
+    ]
+  }
+}

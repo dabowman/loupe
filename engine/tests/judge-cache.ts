@@ -152,11 +152,11 @@ const MARKUP = Array.from(
 ).join('\n');
 const PKG = JSON.stringify({ dependencies: { '@wordpress/components': '*', '@wordpress/ui': '*' } });
 
-function project(config?: object): { root: string; data: string } {
+function project(config?: object, markup = MARKUP): { root: string; data: string } {
 	const root = scratch('loupe-judged-');
 	writeAll(root, {
 		'package.json': PKG,
-		'src/P.jsx': MARKUP,
+		'src/P.jsx': markup,
 		'.claude/settings.local.json': JSON.stringify({ env: { LOUPE: 'on' } }),
 		...(config ? { 'loupe.config.json': JSON.stringify(config) } : {}),
 	});
@@ -230,12 +230,20 @@ await check('an advisory hook run prints a tally, so it asks nothing', async () 
 	}
 });
 
+// Five tags, five different lines: the report has room for two of them.
+const DISTINCT = ['p', 'h1', 'h2', 'h3', 'h4']
+	.map((tag, i) => `export const E${i} = () => <${tag} className="e${i}">Line ${i}</${tag}>;`)
+	.join('\n');
+
 await check('a blocking hook run asks only about the findings it prints', async () => {
-	const { root, data } = project({
-		extends: 'wpds',
-		rules: { 'system/raw-element': 'error' },
-		hook: { maxFindings: 2 },
-	});
+	const { root, data } = project(
+		{
+			extends: 'wpds',
+			rules: { 'system/raw-element': 'error' },
+			hook: { maxFindings: 2 },
+		},
+		DISTINCT,
+	);
 	try {
 		const hookEnv = env(data, { CLAUDE_PROJECT_DIR: root });
 		const first = await judged(['hook', '--judge', '--profiles', PROFILES], hookEnv, hookPayload(root));
@@ -243,6 +251,23 @@ await check('a blocking hook run asks only about the findings it prints', async 
 		// The same turn's next write, and the Stop after it: nothing new to pay for.
 		const again = await judged(['hook', '--judge', '--profiles', PROFILES], hookEnv, hookPayload(root));
 		assert(again.n === 0, `the second hook run sent ${again.n}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Five `<p>` print as one `×5` line, which stands for all five: judging only
+// some would split the line and print the rest unjudged beside it.
+await check('a printed ×N line is judged whole', async () => {
+	const { root, data } = project({
+		extends: 'wpds',
+		rules: { 'system/raw-element': 'error' },
+		hook: { maxFindings: 1 },
+	});
+	try {
+		const hookEnv = env(data, { CLAUDE_PROJECT_DIR: root });
+		const first = await judged(['hook', '--judge', '--profiles', PROFILES], hookEnv, hookPayload(root));
+		assert(first.n === 5, `the hook sent ${first.n} request(s), expected one per <p> on the line it prints`);
 	} finally {
 		cleanup(root);
 	}
