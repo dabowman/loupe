@@ -30,6 +30,43 @@ Negative margins split out on their own: a bleed is a real technique, so it
 warrants a "confirm this" rather than the "move it to `gap`" remedy, which
 would be wrong advice.
 
+### A margin on a bare element is prose
+
+`.wp-block-acme-card p { margin: 0 0 1em }` spaces paragraphs, not parts. The
+elements it lands on are content — a post's blocks, a `RichText`, whatever an
+author typed — and no layout primitive stands between them to own a `gap`:
+there is no parent the component lays out, only a flow of text. Under `wpds`
+the rule blocked it all the same, tokenized margins included, so a block
+plugin's ordinary front-end stylesheet failed `check` (#100).
+
+So `layout/margin-on-child` claims and passes a stylesheet rule whose every
+selector keys on a bare element: its key compound names a tag and puts no
+class on it, read at the compound's own level the way the bindings read it
+([reading a stylesheet](analysis.md#reading-a-stylesheet)). `.card p`,
+`article > p:first-child` and `li:not(.more)` are bare; `.row > li.item` is
+not. A class is a component's part, and spacing between parts is what `gap` is
+for, so a class-keyed rule keeps the verdict, a tokenized margin included.
+
+- **A tag, not just no class.** `.stack > * + *` names no class either, and it
+  is the margin `gap` replaces exactly; `*`, `[data-slot]` and a bare
+  `:first-child` keep firing.
+- **Every selector in the list.** `.card p, .card__lead` lands the margin on a
+  classed element too, so it reports.
+- **`layout/negative-margin` is untouched.** A bleed on a `p` is still a bleed,
+  and still worth confirming.
+- **Stylesheets only.** An inline style and a CSS-in-JS template's own
+  declarations have no selector to be bare. A nested group in a template
+  (`` styled.div`p { … }` ``) keeps the verdict as well: its selector can be
+  an interpolated component, `${Icon}`, which reads as a tag.
+
+A rule naming no class at all — `h2 { … }` — was never in question: the
+stylesheet pass reads only rules that name a class.
+
+The cost is a missed finding, the cheap direction: a margin on an unclassed
+element inside a layout primitive now passes. `.acme-toolbar button {
+margin-right: 8px }` is the drift `gap` exists for, and it goes unreported
+until the button carries a class.
+
 ## `layout/in-css`
 
 Collapsed to one finding per CSS rule. `display:flex; flex-direction:column;
@@ -155,6 +192,33 @@ separate reading from the currency one.
 **A project prefix wins over a library one** in the whole-rule form.
 `wp-parsely-*` matches the `wp-` external prefix, and reporting a project's own
 class as a library internal sends the agent to fix something it does not own.
+
+### A block's own wrapper is not a library internal
+
+WordPress renders every block's wrapper with a class built from its name —
+`wp-block-`, then the name with `/` as `-` and a leading `core-` dropped — so a
+block plugin's stylesheet opens with `.wp-block-acme-card`. `wp-block-` is an
+external prefix in the WordPress presets, which is right for core's
+`.wp-block-group` and was wrong for the commonest WordPress stylesheet there
+is: the plugin's own block reported as a blocking library internal on day one,
+with every finding in the rule — the hardcoded padding, the margin — hidden
+behind it and out of `loupe fix`'s reach.
+
+So the `name` in each `block.json` the walk finds is read on the reference pass
+that already opens the file, and cached with the rest of its entry. A class
+under the prefix of its namespace (`wp-block-acme-`, which covers the block's
+element classes too) is the project's own: the whole-rule form skips it, and
+its declarations get their own verdicts. A `core/` block's class carries no
+namespace, so `.wp-block-group` stays external whatever the project ships.
+Only a `block.json` the source globs list is read: the WordPress presets list
+`**/block.json`, and `generic`, which does not, has no external `wp-block-`
+to exempt a class from.
+
+**Recognised, not claimed.** The prefix is never added to `namespaces.project`,
+which is what would make the wrapper eligible for `css/dead-class`, and the
+wrapper is exactly the class no source spells. `detect` and `status` print the
+prefixes with the block names they came from, so the recognition can be seen;
+`init` writes none of them.
 
 ## `system/raw-element`
 
@@ -484,6 +548,14 @@ only ever renders there suppresses the finding with that reason.
 The reference index over-collects on purpose (see
 [markup scanning](analysis.md#markup-scanning-two-passes-two-characters)): a false "referenced"
 costs one missed finding, a false "dead" tells an agent to delete live CSS.
+
+**A block's wrapper class is never dead.** WordPress writes
+`.wp-block-acme-card` at render time, so no markup or reference file can
+mention it. The shipped presets keep it out twice over — it is under no project
+namespace, and `wp-*` is never-dead — but a config claiming `wp-block-acme-`
+keeps neither, so the wrapper of each block a `block.json` names is never-dead
+whatever the config says. Its element classes (`__title`) are spelled in
+source, and a claimed prefix still checks those.
 
 The remedy is a deletion, which is why it is the one finding the editor offers
 a quick fix for that `loupe fix` refuses — see [deleting is the editor's

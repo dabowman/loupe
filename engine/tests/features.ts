@@ -18,6 +18,7 @@ import { loadPatterns, matches, resolveRule, toNode } from '../src/patterns.ts';
 import { loadComponents, surfacesRecorded } from '../src/components.ts';
 import { readProfiles } from '../src/profiles.ts';
 import { APPEARANCE_PROPS, propsOverlap } from '../src/styles.ts';
+import { blockClasses, blockName } from '../src/blocks.ts';
 import { LANGUAGE, ask, judgeRedirects, judgeVariants, redirectIdentity } from '../src/judge.ts';
 import { forceQuery } from '../src/judge/force.ts';
 import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
@@ -1407,6 +1408,58 @@ await check('a project class never reads as a library internal, even when the sy
 		'src/A.jsx': 'export const A = () => <div className="acme-bar" />;',
 	});
 	assert(!r.findings.some((f) => f.message.includes('library internal')), 'the project prefix wins');
+});
+
+// ── a project's own blocks ───────────────────────────────────────────────────
+// WordPress renders `.wp-block-acme-card` on the wrapper of the block
+// `acme/card`, under the `wp-block-` the WordPress presets call external, and
+// no source file spells it. Read as a library internal, the override was
+// blocking and hid every finding in the rule.
+
+await check('a wrapper class is derived from the block name the way WordPress derives it', () => {
+	const of = (name: string): string => JSON.stringify(blockClasses(name));
+	assert(of('acme/card') === '{"wrapper":"wp-block-acme-card","prefix":"wp-block-acme-"}', of('acme/card'));
+	// WordPress drops a leading `core-` from the joined name, so a core block's
+	// class carries no namespace for the project to own.
+	assert(of('core/group') === 'null', `a core block is WordPress's: ${of('core/group')}`);
+	assert(of('core-kit/tile') === '{"wrapper":"wp-block-kit-tile","prefix":"wp-block-kit-"}', of('core-kit/tile'));
+	assert(of('Acme/Card') === 'null' && of('card') === 'null', 'only a valid block name derives a class');
+	assert(blockName('{ "name": "acme/card" }') === 'acme/card', 'the name is read');
+	assert(blockName('{ "name": 3 }') === null && blockName('{ name: ') === null, 'a broken manifest names none');
+});
+
+await check("a project block's classes are its own; a core block's stay a library internal", async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'src/blocks/card/block.json': '{ "name": "acme/card" }',
+		'src/blocks/tile/block.json': '{ "name": "core/tile" }',
+		'src/blocks/card/style.css':
+			'.wp-block-acme-card { margin-bottom: 1em; }\n.wp-block-acme-card__title { margin-top: 8px; }\n' +
+			'.wp-block-tile { margin-top: 8px; }\n.wp-block-acmeish { margin-top: 8px; }',
+	});
+	const overrides = at(r, 'system/override').map((f) => f.message);
+	assert(
+		JSON.stringify(overrides) === '[".wp-block-tile (library internal)",".wp-block-acmeish (library internal)"]',
+		`wrong overrides: ${JSON.stringify(overrides)}`,
+	);
+	const margins = at(r, 'layout/margin-on-child').map((f) => f.line);
+	assert(JSON.stringify(margins) === '[1,2]', `the block's own declarations lost their verdicts: ${margins}`);
+});
+
+// The shipped presets already keep it out of dead-class twice over: `wp-block-`
+// is no project namespace, and `wp-*` is never-dead. A config claiming the
+// prefix keeps neither, and the wrapper is still referenced nowhere.
+await check('a block wrapper is never dead, even where a config claims its prefix', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG({
+			namespaces: { project: ['acme-', 'wp-block-acme-'], neverDead: [] },
+			rules: { 'css/dead-class': 'error' },
+		}),
+		'src/blocks/card/block.json': '{ "name": "acme/card" }',
+		'src/blocks/card/style.css': '.wp-block-acme-card { color: red; }\n.wp-block-acme-card__gone { color: red; }',
+	});
+	const dead = at(r, 'css/dead-class').map((f) => f.message);
+	assert(JSON.stringify(dead) === '[".wp-block-acme-card__gone"]', `wrong dead classes: ${JSON.stringify(dead)}`);
 });
 
 // ── --judge ─────────────────────────────────────────────────────────────────
