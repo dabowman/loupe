@@ -2027,7 +2027,7 @@ var require_util = __commonJS({
         }
         path = url.path;
       }
-      var isAbsolute7 = exports.isAbsolute(path);
+      var isAbsolute8 = exports.isAbsolute(path);
       var parts = [];
       var start = 0;
       var i = 0;
@@ -2062,7 +2062,7 @@ var require_util = __commonJS({
       }
       path = parts.join("/");
       if (path === "") {
-        path = isAbsolute7 ? "/" : ".";
+        path = isAbsolute8 ? "/" : ".";
       }
       if (url) {
         url.path = path;
@@ -2107,7 +2107,7 @@ var require_util = __commonJS({
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
-    function relative6(aRoot, aPath) {
+    function relative7(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -2126,7 +2126,7 @@ var require_util = __commonJS({
       }
       return Array(level + 1).join("../") + aPath.substr(aRoot.length + 1);
     }
-    exports.relative = relative6;
+    exports.relative = relative7;
     var supportsNullProto = (function() {
       var obj = /* @__PURE__ */ Object.create(null);
       return !("__proto__" in obj);
@@ -3758,7 +3758,7 @@ var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
     var { existsSync: existsSync11, readFileSync: readFileSync19, realpathSync: realpathSync3 } = __require("fs");
-    var { dirname: dirname10, isAbsolute: isAbsolute7, join: join18, relative: relative6, sep: sep3 } = __require("path");
+    var { dirname: dirname10, isAbsolute: isAbsolute8, join: join18, relative: relative7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -3831,8 +3831,8 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative6(realPath2(dirname10(cssFile)), realPath2(path));
-          if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute7(rel)) {
+          let rel = relative7(realPath2(dirname10(cssFile)), realPath2(path));
+          if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute8(rel)) {
             return void 0;
           }
         }
@@ -3903,7 +3903,7 @@ var require_input = __commonJS({
   "node_modules/postcss/lib/input.js"(exports, module) {
     "use strict";
     var { nanoid } = require_non_secure();
-    var { isAbsolute: isAbsolute7, resolve: resolve8 } = __require("path");
+    var { isAbsolute: isAbsolute8, resolve: resolve8 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { fileURLToPath: fileURLToPath6, pathToFileURL: pathToFileURL3 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
@@ -3911,7 +3911,7 @@ var require_input = __commonJS({
     var terminalHighlight = require_terminal_highlight();
     var lineToIndexCache = Symbol("lineToIndexCache");
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(resolve8 && isAbsolute7);
+    var pathAvailable = Boolean(resolve8 && isAbsolute8);
     function getLineToIndex(input) {
       if (input[lineToIndexCache]) return input[lineToIndexCache];
       let lines = input.css.split("\n");
@@ -3942,7 +3942,7 @@ var require_input = __commonJS({
         this.document = this.css;
         if (opts.document) this.document = opts.document.toString();
         if (opts.from) {
-          if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute7(opts.from)) {
+          if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute8(opts.from)) {
             this.file = opts.from;
           } else {
             this.file = resolve8(opts.from);
@@ -4082,7 +4082,7 @@ var require_input = __commonJS({
           if (toPosition.source) to = toPosition;
         }
         let fromUrl;
-        if (isAbsolute7(from.source)) {
+        if (isAbsolute8(from.source)) {
           fromUrl = pathToFileURL3(from.source);
         } else {
           fromUrl = new URL(
@@ -4376,12 +4376,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname10, relative: relative6, resolve: resolve8, sep: sep3 } = __require("path");
+    var { dirname: dirname10, relative: relative7, resolve: resolve8, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL3 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname10 && resolve8 && relative6 && sep3);
+    var pathAvailable = Boolean(dirname10 && resolve8 && relative7 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -4612,7 +4612,7 @@ var require_map_generator = __commonJS({
         if (typeof this.mapOpts.annotation === "string") {
           from = dirname10(resolve8(from, this.mapOpts.annotation));
         }
-        let path = relative6(from, file);
+        let path = relative7(from, file);
         this.memoizedPaths.set(file, path);
         return path;
       }
@@ -23495,7 +23495,7 @@ var require_lib2 = __commonJS({
 
 // src/cli.ts
 import { existsSync as existsSync10, readdirSync as readdirSync4, statSync as statSync7, writeFileSync as writeFileSync5 } from "node:fs";
-import { basename as basename2, dirname as dirname9, isAbsolute as isAbsolute6, join as join17, relative as relative5, resolve as resolve7 } from "node:path";
+import { basename as basename2, dirname as dirname9, isAbsolute as isAbsolute7, join as join17, relative as relative6, resolve as resolve7 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { fileURLToPath as fileURLToPath5 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
@@ -29466,6 +29466,8 @@ async function ask(query, items, auth, fetchImpl = fetch, size = 1, backoff = 50
       } catch (err) {
         const name = err instanceof Error ? err.name : "";
         if (name === "AbortError" || name === "TimeoutError") throw err;
+        if (err instanceof SyntaxError)
+          throw new Error(`TypeSafe answered with a body that is not JSON: ${messageOf(err)}`);
         if (attempt >= RETRIES) {
           const cause = err instanceof Error && err.cause ? `: ${messageOf(err.cause)}` : "";
           throw new Error(`TypeSafe unreachable: ${messageOf(err)}${cause}`);
@@ -29755,7 +29757,7 @@ async function judgeRenames(root2, findings, set, auth, about = /* @__PURE__ */ 
 
 // src/dtcg.ts
 import { readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
-import { basename, join as join10 } from "node:path";
+import { basename, isAbsolute as isAbsolute3, join as join10, relative as relative3, resolve as resolvePath } from "node:path";
 var TIERS = ["base", "semantic", "component"];
 var ALL_TIERS = [...TIERS, "unknown"];
 var isTier = (s) => ALL_TIERS.includes(s);
@@ -29948,7 +29950,8 @@ function tierOf(segments, dirs = []) {
   return { tier: "unknown", tierFrom: "unstated" };
 }
 function dirsOf(root2, file) {
-  const rel = file.startsWith(root2) ? file.slice(root2.length) : file;
+  const within = relative3(resolvePath(root2), resolvePath(file));
+  const rel = within.startsWith("..") || isAbsolute3(within) ? file : within;
   return rel.split(/[/\\]/).slice(0, -1).filter(Boolean);
 }
 var SIBLINGS = 12;
@@ -29985,6 +29988,7 @@ function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
 
 // src/judge/counterpart.ts
 var NONE2 = "none";
+var noneKey = (candidates) => candidates.some((c) => c.path === NONE2) ? `$${NONE2}` : NONE2;
 var NONE_CRITERION2 = "None of these. The second system has no counterpart for this token \u2014 it models this part of the interface differently, or does not model it at all \u2014 and a port would have to add a token rather than reuse one.";
 var FULL_CONTEXT = {
   element: { name: true, type: true, tier: true, value: true, alias: true, description: true, siblings: true },
@@ -30031,7 +30035,7 @@ var counterpartQuery = (ctx = DEFAULT_CONTEXT) => ({
     instructions: `\`elements[${i}]\` is one design token from the design system "${fromLabel}". Each option below is a token from a different design system, "${toLabel}", given as ${optionShape(ctx.option)}. Which option is the counterpart of \`elements[${i}]\` \u2014 the token an interface being ported from ${fromLabel} to ${toLabel} should use in its place, or does ${toLabel} have no counterpart for it? Match the intent of the token: the decision it records, and how specific that decision is. Two systems can agree on an intent and still round the value differently, and two unrelated tokens can share a value by coincidence.`,
     criteria: {
       ...Object.fromEntries(candidates.map((c) => [c.path, describe(c, ctx.option)])),
-      [NONE2]: NONE_CRITERION2
+      [noneKey(candidates)]: NONE_CRITERION2
     }
   })
 });
@@ -30204,6 +30208,7 @@ function planMap(from, to, opts = {}) {
   const capped = opts.limit && opts.limit > 0 ? wanted.slice(0, opts.limit) : wanted;
   const jobs = [];
   const shortlists = [];
+  const ranks = [];
   const settled = [];
   for (const t of capped) {
     const row = {
@@ -30218,7 +30223,7 @@ function planMap(from, to, opts = {}) {
       continue;
     }
     const pool = to.tokens.filter((c) => opts.typeGate === false || comparable(t.type, c.type));
-    const ranked = pool.length <= size ? pool.map((token) => ({ token, score: 0, value: 0, name: 0, sameTier: false })) : rank(t, to.tokens, opts.typeGate !== false).slice(0, size);
+    const ranked = pool.length <= size ? pool.map((token) => ({ token, score: 0, value: 0, name: 0, sameTier: false })) : rank(t, pool, false).slice(0, size);
     if (!ranked.length) {
       settled.push({ ...row, to: null, confidence: 1, how: "absent", considered: [] });
       continue;
@@ -30230,8 +30235,9 @@ function planMap(from, to, opts = {}) {
       toLabel: to.label
     });
     shortlists.push(ranked);
+    ranks.push(pool.length > size);
   }
-  return { jobs, shortlists, settled, skipped: from.tokens.length - capped.length, from, to };
+  return { jobs, shortlists, ranked: ranks, settled, skipped: from.tokens.length - capped.length, from, to };
 }
 async function askCounterparts(plan, auth, fetchImpl = fetch, ctx = DEFAULT_CONTEXT) {
   const answers = plan.jobs.length ? await ask(counterpartQuery(ctx), plan.jobs, auth, fetchImpl) : [];
@@ -30244,6 +30250,7 @@ async function askCounterparts(plan, auth, fetchImpl = fetch, ctx = DEFAULT_CONT
 }
 function rowFor(job, answer) {
   const { token, candidates } = job;
+  const none = noneKey(candidates);
   const row = {
     from: token.path,
     type: token.type,
@@ -30252,7 +30259,7 @@ function rowFor(job, answer) {
     considered: candidates.map((c) => c.path)
   };
   if (!answer || !(answer.confidence >= FLOOR2)) {
-    const at = answer?.choice === NONE2 ? null : candidates.find((c) => c.path === answer?.choice);
+    const at = answer?.choice === none ? null : candidates.find((c) => c.path === answer?.choice);
     return {
       ...row,
       to: null,
@@ -30264,9 +30271,9 @@ function rowFor(job, answer) {
       ...at !== void 0 ? { leaning: at ? { to: at.path, value: at.literal } : { to: null } } : {}
     };
   }
-  const rest = Object.entries(answer.probabilities ?? {}).filter(([k]) => k !== answer.choice && k !== NONE2).sort((a, b) => b[1] - a[1])[0];
+  const rest = Object.entries(answer.probabilities ?? {}).filter(([k]) => k !== answer.choice && k !== none).sort((a, b) => b[1] - a[1])[0];
   const runnerUp = rest ? { runnerUp: { to: rest[0], confidence: rest[1] } } : {};
-  if (answer.choice === NONE2) return { ...row, to: null, confidence: answer.confidence, how: "none", ...runnerUp };
+  if (answer.choice === none) return { ...row, to: null, confidence: answer.confidence, how: "none", ...runnerUp };
   const picked = candidates.find((c) => c.path === answer.choice);
   if (!picked) return { ...row, to: null, confidence: answer.confidence, how: "unsure" };
   return {
@@ -30360,7 +30367,7 @@ function verdict(m) {
   if (m.to) return `${green(m.to)}  ${dim(m.toValue ?? "")}  ${sure}`;
   if (m.how === "absent") return dim(`nothing of type ${m.type || "unknown"} to compare`);
   if (m.how === "unsure") {
-    const lean = m.leaning ? ["leaning", m.leaning.to ?? "no counterpart", m.leaning.value].filter(Boolean).join(" ") : "best was";
+    const lean = m.leaning ? ["leaning", m.leaning.to ?? "no counterpart", m.leaning.value].filter(Boolean).join(" ") : "no answer";
     return `${yellow("unsettled")}  ${dim(`${lean}  ${m.confidence.toFixed(2)}`)}`;
   }
   return `${dim("no counterpart")}  ${sure}`;
@@ -30373,6 +30380,12 @@ function formatPlan(plan, show) {
     const t = job.token;
     out.push(`${t.path}  ${dim(`${t.literal}  ${t.tier}`)}
 `);
+    if (plan.ranked?.[i] === false) {
+      out.push(dim(`    all ${job.candidates.length} compatible token(s) offered, unranked
+
+`));
+      continue;
+    }
     for (const c of (plan.shortlists[i] ?? []).slice(0, show))
       out.push(
         `    ${dim(c.score.toFixed(2))}  ${c.token.path}  ${dim(
@@ -30474,7 +30487,7 @@ function applyBaseline(result, baseline, {
 
 // src/config.ts
 import { existsSync as existsSync6, readFileSync as readFileSync13 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute3, join as join11, relative as relative3, resolve as resolve4 } from "node:path";
+import { dirname as dirname6, isAbsolute as isAbsolute4, join as join11, relative as relative4, resolve as resolve4 } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // src/registry.ts
@@ -30578,7 +30591,7 @@ async function readConfigFile(path) {
 }
 async function resolveExtends(spec, fromDir) {
   if (hasPreset(spec)) return { path: join11(PRESET_DIR, `${presetKey(spec)}.json`), dir: PRESET_DIR };
-  const asPath = isAbsolute3(spec) ? spec : join11(fromDir, spec);
+  const asPath = isAbsolute4(spec) ? spec : join11(fromDir, spec);
   if (existsSync6(asPath)) return { path: asPath, dir: dirname6(asPath) };
   throw new Error(`cannot resolve extends: ${spec}`);
 }
@@ -30657,7 +30670,7 @@ function normalize(raw, { root: root2, ruleFrom = {} }) {
     if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
     rules[id] = ruleSetting(rawId, value);
     const from = ruleFrom[rawId];
-    ruleOrigins[id] = from === void 0 ? "config" : isAbsolute3(from) ? relative3(root2, from) || from : from;
+    ruleOrigins[id] = from === void 0 ? "config" : isAbsolute4(from) ? relative4(root2, from) || from : from;
   }
   const elementMap = /* @__PURE__ */ new Map();
   for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
@@ -30779,7 +30792,7 @@ function readRegistry(spec, root2, packages, load, empty) {
   if (Array.isArray(spec)) return load(spec);
   if (typeof spec !== "string") return empty;
   try {
-    const raw = JSON.parse(readFileSync13(isAbsolute3(spec) ? spec : join11(root2, spec), "utf8"));
+    const raw = JSON.parse(readFileSync13(isAbsolute4(spec) ? spec : join11(root2, spec), "utf8"));
     return registryApplies(raw, packages) ? load(raw) : empty;
   } catch {
     return empty;
@@ -32665,11 +32678,11 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 
 // src/profiles.ts
 import { existsSync as existsSync8, readFileSync as readFileSync17 } from "node:fs";
-import { isAbsolute as isAbsolute4, join as join15, resolve as resolve5 } from "node:path";
+import { isAbsolute as isAbsolute5, join as join15, resolve as resolve5 } from "node:path";
 var PROJECT_PROFILES = join15(".loupe", "profiles");
 var NO_PROFILE = "none";
 var readJson3 = (p) => JSON.parse(readFileSync17(p, "utf8"));
-var under = (dir, rel) => isAbsolute4(rel) ? rel : join15(dir, rel);
+var under = (dir, rel) => isAbsolute5(rel) ? rel : join15(dir, rel);
 var asStrings2 = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
 var asString2 = (v) => typeof v === "string" && v !== "" ? v : null;
 function readScopes(dir, raw) {
@@ -32833,7 +32846,7 @@ function applyRegistries(config, sources) {
 
 // src/hook.ts
 import { existsSync as existsSync9, readFileSync as readFileSync18, realpathSync as realpathSync2, writeFileSync as writeFileSync4 } from "node:fs";
-import { dirname as dirname8, isAbsolute as isAbsolute5, join as join16, relative as relative4, resolve as resolve6 } from "node:path";
+import { dirname as dirname8, isAbsolute as isAbsolute6, join as join16, relative as relative5, resolve as resolve6 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
@@ -32888,10 +32901,10 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute5(raw) ? raw : join16(root2, raw);
+  const abs = isAbsolute6(raw) ? raw : join16(root2, raw);
   const inside = (from, to) => {
-    const rel2 = relative4(from, to);
-    return rel2 && !rel2.startsWith("..") && !isAbsolute5(rel2) ? rel2 : null;
+    const rel2 = relative5(from, to);
+    return rel2 && !rel2.startsWith("..") && !isAbsolute6(rel2) ? rel2 : null;
   };
   let rel = inside(root2, abs);
   if (rel === null) {
@@ -33100,7 +33113,7 @@ function cacheLine(root2) {
   ];
   return `${dir}  (${parts.join(", ")})`;
 }
-var answerCache = (root2, noCache) => cacheDisabled(noCache) ? null : new AnswerCache(join17(projectStateDir(root2), "judge-cache.json"));
+var answerCache = (root2, noCache, file = "judge-cache.json") => cacheDisabled(noCache) ? null : new AnswerCache(join17(projectStateDir(root2), file));
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
 var guessedPreset = (level) => level === "low" || level === "none";
 var HERE = dirname9(fileURLToPath5(import.meta.url));
@@ -33285,7 +33298,7 @@ function expandDirs(config, given) {
       return false;
     }
   };
-  const dirs = given.filter(isDir).map((d) => toPosix(relative5(config.root, resolve7(config.root, d))));
+  const dirs = given.filter(isDir).map((d) => toPosix(relative6(config.root, resolve7(config.root, d))));
   if (!dirs.length) return given.filter(Boolean);
   const limit = analyzeEntryBudget(config.maxEntries);
   const found = discover({ root: config.root, sources: config.sources, limit });
@@ -33301,7 +33314,7 @@ function resolveScope(config, args, { defaultChanged = false }) {
   if (args.flags.files)
     return expandDirs(
       config,
-      args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute6(f) ? relative5(config.root, resolve7(f)) : f)).filter((f) => !f.startsWith(".."))
+      args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute7(f) ? relative6(config.root, resolve7(f)) : f)).filter((f) => !f.startsWith(".."))
     );
   if (args.flags.changed || defaultChanged) {
     const changed = changedFiles(config.root);
@@ -33404,7 +33417,9 @@ async function runMap(args) {
   if (plan.jobs.length) process.stderr.write(dim(`loupe: asking ${MODEL} about ${plan.jobs.length} token(s)\u2026
 `));
   let mappings;
-  const client = judgeClient(apiKey ?? "", { cache: answerCache(resolve7(process.cwd()), args.flags["no-cache"]) });
+  const client = judgeClient(apiKey ?? "", {
+    cache: answerCache(resolve7(process.cwd()), args.flags["no-cache"], "map-cache.json")
+  });
   try {
     ({ mappings } = await askCounterparts(plan, client));
   } catch (err) {
@@ -33739,7 +33754,7 @@ async function main() {
       // easy to assume still do: the retry counter is the one that stays out of the
       // repo. The marker is computed, not assumed — a root above the temp
       // directory would contain it.
-      `${dim("state:      ")}${state}${relative5(root2, state).startsWith("..") ? "  (retry counter only, outside your repo)" : ""}`,
+      `${dim("state:      ")}${state}${relative6(root2, state).startsWith("..") ? "  (retry counter only, outside your repo)" : ""}`,
       // The Claude Code hook has CLAUDE_PLUGIN_DATA and a terminal does not, so
       // the line above is not the hook's file unless this run has it too.
       ...process.env.CLAUDE_PLUGIN_DATA ? [] : [
@@ -33936,7 +33951,7 @@ ${dim("  Ctrl-C to stop.")}
     const target = baselinePath(root2, namedBaseline ?? config.baselinePath);
     const counted = (findings2, entries2) => findings2 === entries2 ? `${findings2} finding(s)` : `${findings2} finding(s) as ${entries2} ${entries2 === 1 ? "entry" : "entries"}`;
     const ignoredWarning = (findings2) => gitIgnores(root2, target) ? yellow(
-      `  Warning: ${relative5(root2, target) || target} is gitignored. It will not reach CI or other clones,
+      `  Warning: ${relative6(root2, target) || target} is gitignored. It will not reach CI or other clones,
   which will run without it and report all ${findings2} finding(s). Un-ignore it, or \`git add -f\` it.`
     ) : null;
     if (args.flags["dry-run"]) {
