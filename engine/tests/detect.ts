@@ -7,9 +7,10 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { DETECT_ENTRY_BUDGET, STYLE_FILE_BUDGET, STYLE_MAX_BYTES, detectConfig } from '../src/detect.ts';
+import type { DetectedConfig } from '../src/detect.ts';
 import { listPresets } from '../src/config.ts';
 import { discover } from '../src/discover.ts';
 import { CLI, assert, check, cleanup, fail, finish, scratch, write } from './harness.ts';
@@ -586,6 +587,61 @@ await check('check on a guessed generic config points at init, in the agent form
 		write(root, 'loupe.config.json', JSON.stringify({ extends: 'generic' }));
 		const written = cli(['check', '--all', '--root', root, '--no-color']).stdout;
 		assert(!written.includes('loupe init'), `a written config is a decision, not a guess:\n${written}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// ── a project's own blocks ──────────────────────────────────────────────────
+// The analysis takes the wrapper classes of the blocks the project's block.json
+// files name as its own, under the external `wp-block-`. `detect` and `status`
+// say which, and `init` writes none of it into `namespaces.project`, where a
+// wrapper no source spells could be called dead.
+
+const blockPlugin = (root: string): void => {
+	write(root, 'package.json', JSON.stringify({ devDependencies: { '@wordpress/components': '^29.0.0' } }));
+	write(root, 'src/blocks/card/block.json', '{ "name": "acme/card" }');
+	write(root, 'src/blocks/hero/block.json', '{ "name": "acme/hero" }');
+	write(root, 'src/blocks/group/block.json', '{ "name": "core/group" }');
+	// What the build copied, which the walk prunes.
+	write(root, 'build/blocks/card/block.json', '{ "name": "built/card" }');
+	write(root, 'src/blocks/card/Edit.jsx', 'export const Edit = () => <div className="acme-card acme-a acme-b" />;');
+	write(
+		root,
+		'src/blocks/card/style.css',
+		'.wp-block-acme-card { padding: 8px; }\n.acme-card { color: #111; }\n.acme-a { color: #222; }\n.acme-b { color: #333; }',
+	);
+};
+
+const BLOCKS_LINE = /^blocks: {5}wp-block-acme- \(block\.json: acme\/card, acme\/hero\)$/m;
+
+await check("detect and status name the blocks whose wrappers are the project's, and init writes none", () => {
+	const root = scratch('dsh-blocks-');
+	try {
+		blockPlugin(root);
+		const got = detectConfig(root);
+		assert(
+			JSON.stringify(got.blocks) === '[{"prefix":"wp-block-acme-","blocks":["acme/card","acme/hero"]}]',
+			`blocks: ${JSON.stringify(got.blocks)}`,
+		);
+		assert(
+			JSON.stringify(got.config.namespaces) === '{"project":["acme-"]}',
+			`a block prefix was written: ${JSON.stringify(got.config.namespaces)}`,
+		);
+		const text = cli(['detect', '--root', root, '--no-color']).stdout;
+		assert(BLOCKS_LINE.test(text), `not in the detect report:\n${text}`);
+		const json = JSON.parse(cli(['detect', '--root', root, '--format', 'json']).stdout) as DetectedConfig;
+		assert(json.blocks?.[0]?.prefix === 'wp-block-acme-', `not in the JSON: ${JSON.stringify(json.blocks)}`);
+
+		// A written config is read the same way: off the analysis's own walk.
+		write(root, 'loupe.config.json', JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }));
+		const status = cli(['status', '--root', root, '--no-color']).stdout;
+		assert(BLOCKS_LINE.test(status), `not in status:\n${status}`);
+
+		// No block, no line: the reports read as they always did.
+		for (const b of ['card', 'hero', 'group']) rmSync(join(root, 'src/blocks', b, 'block.json'));
+		const plain = cli(['status', '--root', root, '--no-color']).stdout + cli(['detect', '--root', root]).stdout;
+		assert(!/^blocks:/m.test(plain), `a blocks line with no block.json:\n${plain}`);
 	} finally {
 		cleanup(root);
 	}

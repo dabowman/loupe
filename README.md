@@ -205,7 +205,7 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | `layout/margin-on-child` | Spacing margin, which belongs on the parent's `gap` | error |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own | error |
 | `typography/in-css` | A text component typed in CSS instead of via props | error |
-| `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals | error |
+| `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals — which a block's own `.wp-block-{namespace}-*` wrapper, named by its `block.json`, is not | error |
 | `system/inline-style` | `style={{ … }}` on a design-system component — it overrides the props | error |
 | `system/locked-component` | A private API the design system does not recommend outside its own core | error |
 | `layout/negative-margin` | A bleed — confirm it is deliberate | warn |
@@ -689,6 +689,14 @@ shadowed profile is still there to name with `--profile`.
   }
 }
 ```
+
+`wp-block-` is external in the WordPress presets, which is right for core's
+`.wp-block-group`. Your own blocks need no config: the `name` in each
+`block.json` (`acme/card`) makes `.wp-block-acme-card`, and every class under
+`wp-block-acme-`, yours — never a library internal, so the findings inside the
+rule report as they would on any class — and the wrapper itself never dead,
+since only WordPress's rendered output carries it. `detect` and `status` list
+them under `blocks:`; nothing is written into `namespaces.project`.
 
 Presets: `wpds` (WPDS tokens + a severity policy that actually blocks),
 `wordpress-components` (the older admin surface), `wordpress-block-theme`,

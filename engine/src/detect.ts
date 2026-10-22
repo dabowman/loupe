@@ -15,6 +15,8 @@
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { blockPrefixes, blocksIn } from './blocks.ts';
+import type { BlockPrefix } from './blocks.ts';
 import { DEFAULTS, compilePatterns, merge } from './config.ts';
 import { byBytes, discover, readDir } from './discover.ts';
 import { presetKey, presetNames, readPreset } from './embedded.ts';
@@ -56,6 +58,7 @@ interface NamespaceDetection {
 	/** What the stylesheet budgets left unread, as sentences; empty when nothing was. */
 	notes: string[];
 	external: ExternalCandidate[];
+	blocks: BlockPrefix[];
 	/** Scoped packages the markup imports, by count: evidence a manifest may not carry. */
 	imports: Map<string, number>;
 }
@@ -95,6 +98,13 @@ export interface DetectedConfig {
 	 * only somebody who can read the enqueue code can tell the two apart.
 	 */
 	possibleExternal: ExternalCandidate[];
+	/**
+	 * The wrapper prefixes of the blocks the project's `block.json` files name
+	 * (`acme/card` → `wp-block-acme-`). Reported, and recognised by the analysis
+	 * on its own walk, but never written into `namespaces.project`: that would
+	 * make a wrapper class no source spells eligible to be called dead.
+	 */
+	blocks: BlockPrefix[];
 	/**
 	 * When the preset is a weak guess, what the project shows that the markers
 	 * could not rank: imports no manifest declares, type packages, build
@@ -615,6 +625,7 @@ function detectNamespaces(
 		truncated: files.truncated,
 		notes,
 		external: foreign,
+		blocks: blockPrefixes(blocksIn(files.references)),
 		imports,
 	};
 }
@@ -663,6 +674,7 @@ export function detectConfig(
 		truncated: ns.truncated,
 		namespaceNotes: ns.notes,
 		possibleExternal: ns.external,
+		blocks: ns.blocks,
 		presetEvidence: presetConfidence === 'low' || presetConfidence === 'none' ? presetEvidence(root, ns.imports) : [],
 		config,
 	};
