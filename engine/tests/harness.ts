@@ -13,6 +13,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Every CLI a test spawns inherits this, so suites that are not about the
+// caches neither read a warm one nor leave index files behind in the user's
+// temp directory. The cache suites turn it back on for the runs they measure.
+process.env.LOUPE_NO_CACHE ??= '1';
+
 let failed = 0;
 
 /** Run one named assertion. A throw is a failure, not a crash. */

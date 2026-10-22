@@ -1001,6 +1001,26 @@ writes the payload into this process, and a `Write` of a large file carries the
 whole file body in it. Exiting without reading leaves that write on a pipe with
 no reader.
 
+### Caches
+
+Every run indexes the whole repo, but only files that changed since the last run
+are parsed: each file's scan is cached per project, in the plugin's data
+directory or a temp directory of your own, never in the repo. A hook run on a
+Gutenberg-sized tree takes about 0.8s instead of 3.8s. Judged answers are cached
+the same way, keyed by the exact question asked, so a repeated write re-asks
+only what changed. A cold run with a lot to parse spreads it across worker
+threads.
+
+| | |
+| --- | --- |
+| `--no-cache`, `LOUPE_NO_CACHE=1` | Parse every file and ask every judgement fresh. A cache never changes an answer, so this is for doubting one. |
+| `LOUPE_NO_WORKERS=1` | Scan in-process even on a cold run. |
+| `LOUPE_DEBUG_SCAN=1` | Say on stderr whether the scans ran in workers or in-process. |
+
+`loupe status` prints a `cache:` line with the directory and what it holds. Why
+it is built this way, and the one case it cannot see (a same-size rewrite with
+the old mtime put back): [docs/design/cli.md#caches](../docs/design/cli.md#caches).
+
 ## Output
 
 ```bash
@@ -1124,8 +1144,10 @@ import { analyze } from 'loupe';
 import { loadConfig } from 'loupe/config';
 
 const config = await loadConfig({ root: process.cwd() });
-const { findings, blocking, directives } = analyze(config, { scope: null });
+const { findings, blocking, directives } = await analyze(config, { scope: null });
 ```
+
+A library call writes nothing anywhere unless it passes `cache: true`.
 
 ### Config keys added for these rules
 

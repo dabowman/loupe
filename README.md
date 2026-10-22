@@ -884,6 +884,14 @@ timeout — 60s on `PostToolUse`, 120s on `Stop`. Each request gives up after 20
 seconds and the run keeps the deterministic findings it already had. To stay
 offline, drop `--judge` from `hooks/hooks.json`, or just leave the key unset.
 
+The hook only pays for what it prints. A run that does not block prints a
+one-line tally, so it asks nothing; a blocking run asks only about the findings
+its cap has room to show. Answers are cached per project, keyed by the exact
+question, so the next write in the same file, and the `Stop` after it, re-ask
+only what changed. What a run spent rides on its summary line —
+`judge: 2 asked, 9 from cache` — and `--no-cache` asks everything fresh. See
+[What a judged run spends](docs/design/judge.md#what-a-judged-run-spends).
+
 ## Reading the report
 
 `--format agent` is the default because its reader is an agent and context is
@@ -1160,13 +1168,14 @@ Known limits, in rough priority order:
 4. **Composite matching is greedy.** A registered child claims the first node it
    fits. For registries of a handful of nodes this is exact; a large pattern with
    several interchangeable children could in principle miss a match.
-5. **No index cache.** Every hook run rebuilds the repo index, and the language
-   server re-analyzes whole on every save. At ~115ms warm on an ordinary project
-   this has not been worth the complexity; Gutenberg's ~2.4s is the case that
-   would justify splitting `analyze` into index and check phases.
+5. **The index is cached per file, not held in memory.** Each unchanged file's
+   scan is reused from the last run (see [Caches](docs/design/cli.md#caches)),
+   which took a hook run on a Gutenberg-sized tree from 3.8s to about 0.8s. What
+   is left is mostly Node starting and the cache file loading; a long-lived
+   process holding the index would remove that, and has not been needed yet.
 6. **The editor reports on save.** A dirty buffer shows the previous verdict.
    Diagnosing unsaved text means threading a buffer overlay through every read
-   in the analyzer, which is what (5) would also want.
+   in the analyzer.
 
 ## Working on the engine
 

@@ -16,6 +16,13 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
+/**
+ * One spelling of "on" for every switch this tool reads. Written out per door,
+ * it let `status` disagree with the gate: `LOUPE_OFF=0` reported the hook OFF
+ * while the hook went right on blocking.
+ */
+export const isOn = (v: string | undefined): boolean => v !== undefined && /^(1|true|yes|on)$/i.test(v);
+
 export const isPluginContext = (): boolean => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
 
 /** Stable per-project key: basename for legibility, path hash for uniqueness. */
@@ -36,7 +43,8 @@ export function ensureDir(dir: string): string | null {
 }
 
 /**
- * The hook's retry counter. Writers create the directory.
+ * This project's directory for state that is about runs rather than about the
+ * repo: the retry counter and the caches. Writers create it.
  *
  * Per user, never shared: on Linux `tmpdir()` is the one `/tmp`, where a
  * `loupe/` another user made first is not writable, so every count would be lost
@@ -45,8 +53,19 @@ export function ensureDir(dir: string): string | null {
  * `data` is the plugin data directory, from the environment unless named: a
  * terminal has none, so `status` names the hook's own by passing it.
  */
+export const projectStateDir = (root: string, data = process.env.CLAUDE_PLUGIN_DATA): string =>
+	join(data || join(tmpdir(), `loupe-${process.getuid?.() ?? 'user'}`), projectKey(root));
+
+/** The hook's retry counter. */
 export const attemptsPath = (root: string, data = process.env.CLAUDE_PLUGIN_DATA): string =>
-	join(data || join(tmpdir(), `loupe-${process.getuid?.() ?? 'user'}`), projectKey(root), 'attempts.json');
+	join(projectStateDir(root, data), 'attempts.json');
+
+/**
+ * Whether the caches are bypassed: `--no-cache`, or `LOUPE_NO_CACHE` set to any
+ * of the spellings of "on". A cache is an optimisation, so turning it off never
+ * changes an answer, only what it costs.
+ */
+export const cacheDisabled = (flag: boolean | undefined): boolean => Boolean(flag) || isOn(process.env.LOUPE_NO_CACHE);
 
 /** Where a baseline goes when nothing names one. Overridable via config `baseline`. */
 export const DEFAULT_BASELINE = '.loupe-baseline.json';

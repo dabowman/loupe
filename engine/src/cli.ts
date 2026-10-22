@@ -9,22 +9,26 @@
  * Design notes: docs/design/cli.md
  */
 
-import { existsSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs as parseArgv } from 'node:util';
+import { isMainThread } from 'node:worker_threads';
 import { analyze, declarationKeys, dedupe } from './analyze.ts';
 import { supersededEverywhere, usableReplacement } from './checks/system/currency.ts';
 import { applyKeeps, applyTokenFixes, settledBy } from './autofix.ts';
 import {
+	judgeClient,
 	judgeRedirects,
 	judgeRenames,
+	judgeSummary,
 	judgeValues,
 	judgeVariants,
 	redirectIdentity,
 	tokenDescriptions,
 } from './judge.ts';
+import { AnswerCache, readJson } from './cache.ts';
 import { applyBaseline, diffBaseline, readBaseline, writeBaseline } from './baseline.ts';
 import { EMBEDDED_VERSION, hasPreset, presetKey } from './embedded.ts';
 import { findConfig, listPresets, loadConfig } from './config.ts';
@@ -42,7 +46,15 @@ import {
 	toPosix,
 } from './discover.ts';
 import { RULES, RULE_IDS, canonicalRuleId, isRuleId, renderTitle } from './rules.ts';
-import { GROUP_BYS, formatAgent, formatSarif, formatSummary, isGroupBy, reportPayload } from './report.ts';
+import {
+	GROUP_BYS,
+	formatAgent,
+	formatSarif,
+	formatSummary,
+	isGroupBy,
+	reportPayload,
+	shownFindings,
+} from './report.ts';
 import { formatHtml } from './report-html.ts';
 import { lsp } from './lsp.ts';
 import { serve } from './serve.ts';
@@ -54,10 +66,12 @@ import type { Profile, RegistrySource } from './profiles.ts';
 import {
 	attemptsPath,
 	baselinePath,
+	cacheDisabled,
 	findExistingBaseline,
 	isPluginContext,
 	legacyBaseline,
 	legacyBaselineNotice,
+	projectStateDir,
 } from './paths.ts';
 import {
 	bumpAttempts,
@@ -73,6 +87,7 @@ import {
 	hookSilenced,
 	parsePayload,
 	payloadFile,
+	peekAttempts,
 	preEditContent,
 	readStdin,
 	resolvedOptions,
@@ -122,6 +137,30 @@ const fail = (msg: string): void => {
 const note = (msg: string): void => {
 	process.stderr.write(yellow(msg));
 };
+
+/** `status`'s cache line: the directory, the index size, the answers held. */
+function cacheLine(root: string): string {
+	const dir = projectStateDir(root);
+	let bytes = 0;
+	try {
+		for (const name of readdirSync(dir))
+			if (/^index-[0-9a-f]+\.json$/.test(name)) bytes += statSync(join(dir, name)).size;
+	} catch {
+		/* nothing cached yet */
+	}
+	const answers = Object.keys(
+		((readJson(join(dir, 'judge-cache.json')) as { entries?: object } | null)?.entries ?? {}) as object,
+	).length;
+	const parts = [
+		bytes ? `index ${(bytes / 1e6).toFixed(1)} MB` : 'no index yet',
+		`${answers} judgement${answers === 1 ? '' : 's'}`,
+	];
+	return `${dir}  (${parts.join(', ')})`;
+}
+
+/** Answers already paid for, unless the run asked for every one to be fresh. */
+const answerCache = (root: string, noCache: boolean | undefined): AnswerCache | null =>
+	cacheDisabled(noCache) ? null : new AnswerCache(join(projectStateDir(root), 'judge-cache.json'));
 
 /**
  * How far a detection result is to be trusted, coloured to match. `detect`
@@ -231,6 +270,7 @@ type Flags = { [K in ValueFlag]?: string } & {
 	changed?: boolean;
 	'no-baseline'?: boolean;
 	'no-suppressions'?: boolean;
+	'no-cache'?: boolean;
 	stale?: boolean;
 	'dry-run'?: boolean;
 	judge?: boolean;
@@ -311,6 +351,8 @@ Options:
   --no-baseline         Ignore the baseline file for this run
   --no-suppressions     Report what suppression directives would mute; with
                         --no-baseline, the full audit
+  --no-cache            Rebuild the index and re-ask every judgement instead of
+                        reusing the last run's (also LOUPE_NO_CACHE=1)
   --stale               For suppressions, list only the directives naming a
                         rule that muted nothing — no finding left, the rule
                         off, or an id that is not a rule — and exit 1 if any
@@ -965,6 +1007,9 @@ async function main(): Promise<number> {
 		return EXIT.OK;
 	}
 
+	// Each unchanged file's scan is reused from the last run (`index-cache.ts`).
+	const useCache = !cacheDisabled(args.flags['no-cache']);
+
 	if (command === 'status') {
 		// One conclusion, asked once. `blockingAllowed` answers "do the severities
 		// permit blocking", which is not "will this gate stop a turn" — a silenced hook
@@ -1043,6 +1088,18 @@ async function main(): Promise<number> {
 			`${dim('judge:      ')}${
 				judgeKey() ? 'on \u2014 TYPESAFE_API_KEY found' : `off \u2014 no TYPESAFE_API_KEY (${KEY_SOURCES})`
 			}`,
+			// Where the caches are and what is in them: a run that seems to ignore an
+			// edit is a question this line answers, and `--no-cache` is the remedy.
+			`${dim('cache:      ')}${useCache ? cacheLine(root) : 'off \u2014 LOUPE_NO_CACHE or --no-cache'}`,
+			// The same split as the retry counter's: a terminal's caches are not the
+			// hook's, which live under its plugin data, keyed on its project.
+			...(useCache && !process.env.CLAUDE_PLUGIN_DATA
+				? [
+						dim(
+							`            for this terminal; the Claude Code hook's are in ${toPosix(projectStateDir(hookDir, '$CLAUDE_PLUGIN_DATA'))}`,
+						),
+					]
+				: []),
 			// Asked through the same predicate the gate uses: reporting on mere truthiness
 			// meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
 			...(off ? [yellow(`hook:       OFF \u2014 ${off}`)] : []),
@@ -1224,7 +1281,7 @@ async function main(): Promise<number> {
 	const baselinedRun = (notice: (line: string) => void): (() => Promise<AnalyzeResult | BaselinedResult>) => {
 		let warned = false;
 		return async () => {
-			const fresh = await analyze(config, { scope: null });
+			const fresh = await analyze(config, { scope: null, cache: useCache });
 			if (args.flags['no-baseline']) return fresh;
 			const { path: bPath, found } = findExistingBaseline(root, namedBaseline, config.baselinePath);
 			const baseline = found ? readBaseline(bPath) : null;
@@ -1275,7 +1332,7 @@ async function main(): Promise<number> {
 	// Writes to the project path: a backlog recorded here has to be visible to
 	// the hook, which is a different process with a different environment.
 	if (command === 'baseline') {
-		const result = await analyze(config, { scope: null });
+		const result = await analyze(config, { scope: null, cache: useCache });
 		const target = baselinePath(root, namedBaseline ?? config.baselinePath);
 		// Nothing collapsed means nothing to reconcile, and saying the same number
 		// twice invents a distinction the reader then has to go and check.
@@ -1359,7 +1416,7 @@ async function main(): Promise<number> {
 			fail(`loupe: unknown grouping "${by}" \u2014 expected ${GROUP_BYS.join(', ')}\n`);
 			return EXIT.CANNOT_RUN;
 		}
-		const all = (await analyze(config, { scope: null })).directives;
+		const all = (await analyze(config, { scope: null, cache: useCache })).directives;
 		const staleOnly = Boolean(args.flags.stale);
 		const directives = staleOnly ? all.filter((d) => d.stale) : all;
 		const kw = config.suppression.keyword;
@@ -1474,32 +1531,39 @@ async function main(): Promise<number> {
 		let toFix: AnalyzeResult;
 		try {
 			// Before the judgements, so a rule left out costs no paid question.
-			toFix = filterRules(await analyze(config, { scope: fixScope }), rules);
+			toFix = filterRules(await analyze(config, { scope: fixScope, cache: useCache }), rules);
 		} catch (err) {
 			fail(`loupe: ${messageOf(err)}\n`);
 			return EXIT.CANNOT_RUN;
 		}
-		// Each judgement in its own `try`, as in `check`: a failed request leaves
+		// Each judgement fails on its own, as in `check`: a failed request leaves
 		// those findings unjudged, and every fix that needed no model is still
 		// written below.
 		const about = tokenDescriptions(config.profiles?.active ?? []);
-		try {
-			// Every channel: a judged replacement is written in all three. Only a
-			// judged `keep` outside a stylesheet has nowhere to go, and that one is
-			// reported as a skip rather than paid for silently.
+		// Every channel: a judged replacement is written in all three. Only a
+		// judged `keep` outside a stylesheet has nowhere to go, and that one is
+		// reported as a skip rather than paid for silently.
+		const judgeable = toFix.findings.filter((f) => f.suggest?.length);
+		const client = apiKey ? judgeClient(apiKey, { cache: answerCache(root, args.flags['no-cache']) }) : null;
+		// Side by side: values and renames settle different findings.
+		await Promise.all([
 			// With no design-system tokens, `judgeValues` is the one to refuse, and
 			// the refusal is noted like any other failure.
-			const judgeable = toFix.findings.filter((f) => f.suggest?.length);
-			if (apiKey && judgeable.length) await judgeValues(root, judgeable, toFix.tokens, apiKey, about);
-		} catch (err) {
-			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
-		}
-		try {
+			client && judgeable.length
+				? judgeValues(root, judgeable, toFix.tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
 			// A judged rename is written like a spelled one, every line naming it.
-			if (apiKey && toFix.tokens) await judgeRenames(root, toFix.findings, toFix.tokens, apiKey, about);
-		} catch (err) {
-			note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
-		}
+			client && toFix.tokens
+				? judgeRenames(root, toFix.findings, toFix.tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
+		]);
+		client?.cache?.save();
+		const spent = client && judgeSummary(client);
+		if (spent) process.stderr.write(dim(`loupe: ${spent}\n`));
 		const dry = Boolean(args.flags['dry-run']);
 		const { applied, skipped } = applyTokenFixes(root, toFix.findings, { dry });
 		// After the rewrites, which never move a line, and bottom up within a file,
@@ -1587,7 +1651,12 @@ async function main(): Promise<number> {
 	try {
 		// Before the baseline, so the count of what it hides is this rule's too.
 		result = filterRules(
-			await analyze(config, { scope, judge: Boolean(apiKey), suppress: !args.flags['no-suppressions'] }),
+			await analyze(config, {
+				scope,
+				judge: Boolean(apiKey),
+				suppress: !args.flags['no-suppressions'],
+				cache: useCache,
+			}),
 			rules,
 		);
 	} catch (err) {
@@ -1620,100 +1689,134 @@ async function main(): Promise<number> {
 	}
 	// Before the judgements: a finding the filter drops is not worth a paid question.
 	if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
+	const budgetKey = `${payload.session_id ?? ''}${touched ? `\u0000${touched}` : ''}`;
+	/**
+	 * What the hook blocks on: every blocking finding, or for a PostToolUse only
+	 * those the edit introduced. Settled once, before any judgement, so judging
+	 * pays for what the hook will print, and the comparison reads the messages
+	 * the engine wrote on both sides of the edit.
+	 *
+	 * Two questions, one per hook. PostToolUse asks whether this edit made the
+	 * file worse, and blocks only on what it introduced: a refactor passes
+	 * through states that are worse before they are better, and a finding the
+	 * edit walked past is not the edit's fault. Stop asks whether the turn's work
+	 * is conformant, absolutely — the JSX converted and the CSS left behind is an
+	 * omission by then, not an intermediate state.
+	 *
+	 * The "before" is only analyzed when the "after" would block, so a clean
+	 * edit pays nothing for the question.
+	 *
+	 * Passing a standing finding over is a deferral only where Stop will see it.
+	 * Where Stop cannot resolve the files the turn changed — no git worktree, or
+	 * a repository git refuses to read — it stands down, and a finding passed
+	 * over here is never enforced at all: that is the absolute check, as before.
+	 */
+	let verdict: Promise<{ errors: Finding[]; blocking: Finding[] }> | null = null;
+	const hookVerdict = (): Promise<{ errors: Finding[]; blocking: Finding[] }> =>
+		(verdict ??= (async () => {
+			const errors = result.findings.filter((f) => f.severity === 'error');
+			if (!touched || !errors.length) return { errors, blocking: errors };
+			const stopScope = resolveScope(config, args, { defaultChanged: true });
+			if (stopScope !== null && !Array.isArray(stopScope)) return { errors, blocking: errors };
+			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
+				judge: Boolean(apiKey),
+				suppress: !args.flags['no-suppressions'],
+			});
+			return { errors, blocking: introducedBy(errors, before) };
+		})());
+	/**
+	 * The findings the hook will print, decided the way the branch below decides
+	 * it: none when nothing blocks or the gate has stood down (a summary line
+	 * either way), else the blocking ones under the findings cap.
+	 */
+	const hookShows = async (): Promise<Finding[]> => {
+		const { blocking } = await hookVerdict();
+		if (!blocking.length) return [];
+		if (!payload.session_id && payload.stop_hook_active) return [];
+		// Peeked under the key the branch below bumps, session id or not.
+		if (peekAttempts(root, budgetKey) + 1 > config.hook.maxAttempts) return [];
+		return shownFindings(blocking, config.hook.maxFindings);
+	};
+	let judged: string | null = null;
 	if (apiKey) {
 		// Judged after the baseline, so accepted findings cost nothing, and a
 		// judged finding never enters one: its confidence moves between runs, and
 		// a baselined finding that comes and goes is noise in both directions.
 		// A failed request leaves the findings as the engine wrote them.
 		//
-		// In the hook the phase has one deadline, `hook.timeoutMs`. Each request has
-		// its own limit, but the stages run one after another, and a hook past
-		// Claude Code's timeout is dropped whole, deterministic findings and all.
-		// A stage the deadline has passed is not started.
+		// In the hook the phase has one deadline, `hook.timeoutMs`: every request
+		// goes through a fetch bound to it. Each request has its own limit too, but
+		// a hook past Claude Code's timeout is dropped whole, deterministic findings
+		// and all, so what is still in flight when it passes is aborted and its
+		// findings stand as the engine wrote them.
 		const deadline = isHook ? AbortSignal.timeout(config.hook.timeoutMs) : null;
-		const judgeFetch = deadline ? deadlineFetch(deadline) : fetch;
-		const inTime = (): boolean => !deadline?.aborted;
-		try {
-			// The same filter, for the findings this adds.
-			const redirectSeverity = config.severityOf('patterns/judged-redirect');
-			if (
-				inTime() &&
-				result.controls?.length &&
-				(args.flags.severity !== 'error' || redirectSeverity === 'error') &&
-				(!rules || rules.has('patterns/judged-redirect'))
-			) {
-				result.findings.push(...(await judgeRedirects(result.controls, apiKey, redirectSeverity, judgeFetch)));
-				// Written after `analyze` returned, so past its dedupe: two controls on
-				// one line judged alike are one finding, as every other rule's are.
-				result.findings = dedupe(result.findings);
-			}
-			if (inTime()) await judgeVariants(root, result.findings, config.componentRegistry, apiKey, judgeFetch);
-		} catch (err) {
-			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
-		}
-		// Its own note: the judgements above stand when this one cannot run.
-		try {
-			if (inTime() && result.findings.some((f) => f.suggest?.length))
-				await judgeValues(
-					root,
-					result.findings,
-					result.tokens,
-					apiKey,
-					tokenDescriptions(config.profiles?.active ?? []),
-					judgeFetch,
-				);
-		} catch (err) {
-			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
-		}
-		try {
-			if (inTime() && result.tokens && result.findings.some((f) => f.unknown))
-				await judgeRenames(
-					root,
-					result.findings,
-					result.tokens,
-					apiKey,
-					tokenDescriptions(config.profiles?.active ?? []),
-					judgeFetch,
-				);
-		} catch (err) {
-			note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
-		}
-		if (!inTime()) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)\n`);
+		const client = judgeClient(apiKey, {
+			fetchImpl: deadline ? deadlineFetch(deadline) : fetch,
+			cache: answerCache(root, args.flags['no-cache']),
+		});
+		const redirectSeverity = config.severityOf('patterns/judged-redirect');
+		// The same filters, for the findings the redirects add. In the hook a
+		// redirect that cannot block is never printed: only blocking findings are
+		// handed back.
+		const askRedirects =
+			Boolean(result.controls?.length) &&
+			(args.flags.severity !== 'error' || redirectSeverity === 'error') &&
+			(!isHook || redirectSeverity === 'error') &&
+			(!rules || rules.has('patterns/judged-redirect'));
+		const redirects = askRedirects
+			? judgeRedirects(result.controls ?? [], client, redirectSeverity).catch((err: unknown) => {
+					note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
+					return [];
+				})
+			: Promise.resolve([]);
+		// Written after `analyze` returned, so past its dedupe: two controls on one
+		// line judged alike are one finding, as every other rule's are.
+		const addRedirects = (found: Finding[]): void => {
+			if (!found.length) return;
+			result.findings.push(...found);
+			result.findings = dedupe(result.findings);
+		};
+		// What the rest is asked about. A typed run prints everything; the hook
+		// prints a tally when nothing blocks, and only the blocking findings it has
+		// room for when something does — so that is all it pays to have judged.
+		// A redirect configured to block decides which of those it is, so the hook
+		// waits for it first; everywhere else every pass runs at once.
+		if (isHook) addRedirects(await redirects);
+		const targets = isHook ? await hookShows() : result.findings;
+		const about = tokenDescriptions(config.profiles?.active ?? []);
+		const settled = await Promise.all([
+			isHook ? Promise.resolve([]) : redirects,
+			judgeVariants(root, targets, config.componentRegistry, client).catch((err: unknown) => {
+				note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
+			}),
+			// Its own note: the judgements above stand when this one cannot run. Asked
+			// without a token set too, so its refusal is said rather than skipped.
+			targets.some((f) => f.suggest?.length)
+				? judgeValues(root, targets, result.tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
+			result.tokens && targets.some((f) => f.unknown)
+				? judgeRenames(root, targets, result.tokens, client, about).catch((err: unknown) => {
+						note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
+					})
+				: null,
+		]);
+		addRedirects(settled[0]);
+		client.cache?.save();
+		judged = judgeSummary(client);
+		if (deadline?.aborted) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)\n`);
 		// Computed before the redirects above existed: one configured to `error`
 		// has to be able to fail the run it is reported in.
 		result.blocking = result.findings.some((f) => f.severity === 'error');
 	}
 
+	// What judging cost, beside the summary the user sees: a gate that is
+	// spending money says so.
+	const spentSuffix = judged ? dim(` (${judged})`) : '';
 	if (isHook) {
 		const sessionId = payload.session_id ?? '';
-		const budgetKey = touched ? `${sessionId}\u0000${touched}` : sessionId;
-		// Two questions, one per hook. PostToolUse asks whether this edit made the
-		// file worse, and blocks only on what it introduced: a refactor passes
-		// through states that are worse before they are better, and a finding the
-		// edit walked past is not the edit's fault. Stop asks whether the turn's work
-		// is conformant, absolutely — the JSX converted and the CSS left behind is an
-		// omission by then, not an intermediate state.
-		//
-		// The "before" is only analyzed when the "after" would block, so a clean
-		// edit pays nothing for the question.
-		//
-		// Passing a standing finding over is a deferral only where Stop will see it.
-		// Where Stop cannot resolve the files the turn changed — no git worktree, or
-		// a repository git refuses to read — it stands down, and a finding passed
-		// over here is never enforced at all: that is the absolute check, as before.
-		const errors = result.findings.filter((f) => f.severity === 'error');
-		let blocking: Finding[] = errors;
-		const stopSees = (): boolean => {
-			const stopScope = resolveScope(config, args, { defaultChanged: true });
-			return stopScope === null || Array.isArray(stopScope);
-		};
-		if (touched && errors.length && stopSees()) {
-			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
-				judge: Boolean(apiKey),
-				suppress: !args.flags['no-suppressions'],
-			});
-			blocking = introducedBy(errors, before);
-		}
+		const { errors, blocking } = await hookVerdict();
 		// What stood before the edit and still does: never more than stood before it.
 		const standing = errors.length - blocking.length;
 		// Said, not dropped: the agent should know what it is walking past, and that
@@ -1723,7 +1826,7 @@ async function main(): Promise<number> {
 			: '';
 		if (!blocking.length) {
 			clearAttempts(root, budgetKey);
-			if (!standing) return emitClean(`${formatSummary(result)}${ceilingSuffix}`);
+			if (!standing) return emitClean(`${formatSummary(result)}${spentSuffix}${ceilingSuffix}`);
 			// The agent hears it too, with the findings: it is the agent Stop holds to them.
 			const message = `loupe: this edit added no blocking findings.${standingNote}${ceilingSuffix}`;
 			const report = formatAgent({ ...result, findings: errors }, config, {
@@ -1754,7 +1857,10 @@ async function main(): Promise<number> {
 			maxFindings: config.hook.maxFindings,
 			terse: true,
 		});
-		return emitBlocking(`${report}\n\n(attempt ${attempts} of ${max})${standingNote}${ceilingSuffix}`);
+		// Beside the attempt count: the blocking report is where the hook judges, so
+		// it is where the spend is said.
+		const spent = judged ? `; ${judged}` : '';
+		return emitBlocking(`${report}\n\n(attempt ${attempts} of ${max}${spent})${standingNote}${ceilingSuffix}`);
 	}
 
 	const maxFindings = Number(args.flags['max-findings'] ?? 0) || 0;
@@ -1778,19 +1884,25 @@ async function main(): Promise<number> {
 			);
 		}
 	}
+	// stderr, so it never lands inside a JSON, SARIF or HTML report.
+	if (judged) process.stderr.write(dim(`loupe: ${judged}\n`));
 	return result.blocking ? EXIT.BLOCKED : EXIT.OK;
 }
 
+// Off the main thread this module is a scan worker's copy of the bundle
+// (`scan-pool.ts`), and the CLI stands aside.
+//
 // Set exitCode rather than calling process.exit(): exit() tears down the
 // process before a large stdout write has drained to a pipe, which silently
 // truncates JSON and SARIF output when a caller pipes it anywhere.
-main()
-	.then((code) => {
-		process.exitCode = code;
-	})
-	.catch((err: unknown) => {
-		// A refusal is a message, not a crash: `baseline` and `suppressions` reach
-		// the tree ceiling here rather than through a catch of their own.
-		fail(`loupe: ${err instanceof TreeTooLarge ? err.message : err instanceof Error ? err.stack : String(err)}\n`);
-		process.exitCode = EXIT.CANNOT_RUN;
-	});
+if (isMainThread)
+	main()
+		.then((code) => {
+			process.exitCode = code;
+		})
+		.catch((err: unknown) => {
+			// A refusal is a message, not a crash: `baseline` and `suppressions` reach
+			// the tree ceiling here rather than through a catch of their own.
+			fail(`loupe: ${err instanceof TreeTooLarge ? err.message : err instanceof Error ? err.stack : String(err)}\n`);
+			process.exitCode = EXIT.CANNOT_RUN;
+		});
