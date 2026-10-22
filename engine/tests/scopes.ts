@@ -607,16 +607,19 @@ export const A = () => (
 `,
 	});
 	// The control cursor is on-role on every spelling of Button; the surface
-	// background is not, and a card's header is not the card.
+	// background is not.
 	const said = misapplied.map((f) => `${f.file}:${f.line} ${f.message}`).sort();
 	assert(
-		said.length === 2 &&
+		said.length === 1 &&
 			said[0]?.startsWith('src/a.css:2 background: --wpds-color-background-surface-neutral-strong') &&
-			said[0].endsWith('this styles <Button>') &&
-			said[1]?.startsWith('src/a.css:3 border-radius: --wpds-border-radius-lg') &&
-			said[1].endsWith('this styles <Card.Header>'),
+			said[0].endsWith('this styles <Button>'),
 		said.join('\n'),
 	);
+	// A card's header is not the card. No kind lists the part, so the container
+	// radius on it is unknown rather than reported or confirmed.
+	assert(WPDS, 'wpds scopes loaded');
+	assert(fitOf(WPDS, '--wpds-border-radius-lg', ['Card.Header']).fit === 'unknown', 'the header is not the card');
+	assert(fitOf(WPDS, '--wpds-border-radius-lg', ['Card']).fit === 'on', 'the card is a container');
 });
 
 // What a rule lands on is read from selector text and the markup the index
@@ -691,6 +694,43 @@ await check('elements that disagree, or a kind no markup can show, are never rep
 	assert(surface.fit === 'on', `"not interactive" holds by default where nothing is shown: ${surface.fit}`);
 	const on = fitOf(WPDS, '--wpds-border-radius-lg', ['Modal']);
 	assert(on.fit === 'on', `a Modal is a container: ${on.fit}`);
+});
+
+// A kind's list says what an element is, never what it is not: a `<div>`, a
+// `<span>` inside a button, or a component the profile has not read could be
+// any kind, and reading it as none reported a card's radius, an icon's
+// interactive colour and a menu's radius as misapplied.
+await check('an element no kind lists is unknown, never the wrong kind', async () => {
+	assert(WPDS, 'wpds scopes loaded');
+	for (const [token, els] of [
+		['--wpds-border-radius-lg', ['div']],
+		['--wpds-color-background-interactive-neutral', ['span']],
+		['--wpds-border-radius-md', ['div']],
+		['--wpds-border-radius-lg', ['Dialog.Popup']],
+		['--wpds-cursor-control', ['ToolbarButton']],
+		['--wpds-border-radius-lg', ['dialog', 'div']],
+	] as const) {
+		const fit = fitOf(WPDS, token, els);
+		assert(fit.fit === 'unknown', `${token} on ${els.join(', ')}: ${fit.fit}`);
+	}
+	const { misapplied } = await run({
+		'src/A.jsx': `export const A = () => (
+	<>
+		<div className="rp-card" />
+		<button className="rp-b"><svg className="rp-i" /><span className="rp-s" /></button>
+		<div className="rp-menu" />
+	</>
+);
+`,
+		'src/a.css': `.rp-card { border-radius: var(--wpds-border-radius-lg); }
+.rp-i { fill: var(--wpds-color-foreground-interactive-neutral); }
+.rp-s { background: var(--wpds-color-background-interactive-neutral); }
+.rp-menu { border-radius: var(--wpds-border-radius-md); }
+`,
+	});
+	assert(!misapplied.length, misapplied.map((f) => `${f.line} ${f.message}`).join('\n'));
+	// Every element listed and none the kind is still reported.
+	assert(fitOf(WPDS, '--wpds-border-radius-lg', ['button']).fit === 'off', 'a button is not a container');
 });
 
 await check('profile kinds of one name pool when two profiles are active', async () => {

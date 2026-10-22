@@ -409,7 +409,10 @@ export function fitOf(scopes: TokenScopes, token: string, elements: readonly str
 			return mixed ? { fit: 'unknown', why: `${scope}; ${shown} do not agree`, elements: els } : { fit: 'on' };
 		// A kind no markup can show — "nested inside a control" — can never be ruled out.
 		const undeterminable = requires.some((k) => !scopes.kinds.get(k)?.size);
-		if (!undeterminable && kinds.every((ks) => !ks.some((k) => requires.includes(k))))
+		// Nor can it for an element no kind lists: a `<div>`, a `<span>` inside a
+		// button, a component the profile has not read. The lists say what an
+		// element is, never what it is not.
+		if (!undeterminable && kinds.every((ks) => ks.length && !ks.some((k) => requires.includes(k))))
 			return { fit: 'off', why: `${scope}; this styles ${shown}`, elements: els };
 		return { fit: 'unknown', why: `${scope}; ${shown} cannot be shown to be`, elements: els };
 	}
