@@ -15,13 +15,13 @@
 
 import { readFileSync, statSync } from 'node:fs';
 import type { Stats } from 'node:fs';
-import { isAbsolute, join } from 'node:path';
-import { readDir } from './discover.ts';
+import { filesUnder } from './discover.ts';
+import { under } from './paths.ts';
 import postcss from 'postcss';
 import type { Root } from 'postcss';
 import { scopedFamily } from './scopes.ts';
 import type { TokenScopes } from './scopes.ts';
-import { COLOR_SHORTHANDS } from './styles.ts';
+import { COLOR_SHORTHANDS, isColorLiteral } from './styles.ts';
 import { messageParts, snippet } from './text.ts';
 import type { Suggestion, TokenSet } from './types.ts';
 
@@ -136,20 +136,14 @@ export function cssFilesUnder(
 	}
 	if (st.isFile()) return wanted(path) ? [path] : [];
 	const out: string[] = [];
-	const walk = (dir: string): void => {
-		if (budget.left <= 0) return;
-		for (const e of readDir(dir)) {
-			if (budget.left <= 0) return;
-			const full = join(dir, e.name);
-			if (e.isDirectory()) {
-				if (e.name !== 'node_modules') walk(full); // a dependency's sheets are not this package's
-			} else if (wanted(e.name)) {
-				out.push(full);
-				budget.left--;
-			}
-		}
-	};
-	walk(path);
+	// Checked before the walk and right after each take: pulling one more file
+	// from the generator reads every directory up to it, which a spent budget
+	// must not pay for.
+	if (budget.left <= 0) return out;
+	for (const file of filesUnder(path, wanted)) {
+		out.push(file);
+		if (--budget.left <= 0) break;
+	}
 	return out;
 }
 
@@ -166,7 +160,7 @@ export function readTokenSources(
 	const set = emptyTokenSet();
 	if (!prefixes.length) return set;
 	for (const src of sources ?? []) {
-		for (const file of cssFilesUnder(isAbsolute(src) ? src : join(root, src))) {
+		for (const file of cssFilesUnder(under(root, src))) {
 			try {
 				harvestTokenDefs(postcss.parse(readFileSync(file, 'utf8'), { from: file }), prefixes, set);
 				set.sources++;
@@ -275,7 +269,7 @@ function measure(value: string): { kind: 'px' | 'ms'; n: number } | { kind: 'col
 	if (len) return { kind: 'px', n: Number(len[1]) * (len[2] === 'rem' ? 16 : 1) };
 	const time = /^(\d*\.?\d+)(ms|s)$/.exec(v);
 	if (time) return { kind: 'ms', n: Number(time[1]) * (time[2] === 's' ? 1000 : 1) };
-	return /^#[0-9a-f]{3,8}$|^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/.test(v) ? { kind: 'color' } : null;
+	return isColorLiteral(v) ? { kind: 'color' } : null;
 }
 
 /** What a value may be replaced with, and how it was narrowed. */
@@ -373,9 +367,7 @@ function partsOf(value: string): string[] {
 
 /** A part a token could stand for. Zeros, keywords and `url()` pass through. */
 const isLiteralPart = (p: string): boolean =>
-	(/^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0) ||
-	/^#[0-9a-f]+$/i.test(p) ||
-	/^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
+	(/^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0) || isColorLiteral(p);
 
 /** What `check --judge` answers for a value that should stay as written. */
 export const KEEP = 'keep';
