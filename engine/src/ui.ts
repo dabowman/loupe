@@ -32,6 +32,12 @@
  * most of these on its own, by finding no declaration on the reported line —
  * this makes the refusal certain rather than likely.
  *
+ * `rev` names the state of the tree, not the analysis run: a write this server
+ * makes moves it too, at once. A directive spliced in shifts every line below
+ * it, so a second mute aimed at the same page before the re-analysis lands
+ * would name a line that has moved; it is refused instead, and the page is
+ * redrawn from the run that sees the first write.
+ *
  * **Watching is reported, never assumed.** Where the watch set cannot be
  * established the page says so and the re-run button stays; it does not display
  * a stale payload under a live-looking dot.
@@ -341,6 +347,16 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 	 * grows directories while it is being worked on, and a watcher pinned to the
 	 * tree as it was at boot goes quiet on exactly the files someone just added.
 	 */
+	/**
+	 * After a write lands: the page's payload no longer describes the tree, so
+	 * the revision moves before anything else can be aimed at it. Synchronous
+	 * with the write — no await between the check and here — so nothing slips in.
+	 */
+	const wrote = (): void => {
+		rev++;
+		schedule(0);
+	};
+
 	const runOnce = async (): Promise<void> => {
 		const started = Date.now();
 		fresh = await analyze();
@@ -624,7 +640,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 				applied: applied.length,
 				skipped: skipped.map((s) => ({ file: s.file, line: s.line, why: s.why })),
 			});
-			if (applied.length) schedule(0);
+			if (applied.length) wrote();
 		},
 
 		'POST /baseline': async (_req, res) => {
@@ -634,7 +650,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 			} catch (err) {
 				return send(res, 500, { error: messageOf(err) });
 			}
-			schedule(0);
+			wrote();
 		},
 
 		/**
@@ -686,11 +702,11 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 				const directive = commentFor(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${flat}`);
 				lines.splice(finding.line - 1, 0, `${indent}${directive}${eol}`);
 				writeFileSync(full, lines.join('\n'));
+				wrote();
 				send(res, 200, { file: finding.file, line: finding.line, rule: finding.rule });
 			} catch (err) {
 				return send(res, 500, { error: messageOf(err) });
 			}
-			schedule(0);
 		},
 	};
 

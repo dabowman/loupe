@@ -62,6 +62,14 @@ export default () => (
 	margin-top: 13px;
 }
 `,
+	// Two findings a mute can sit above, in a file of their own, for the check
+	// that a second write against the same page is refused. No token carries
+	// either colour, so neither is offered as a fix.
+	'styles/extra.css': `.wf-x {
+	color: #123456;
+	background: #654321;
+}
+`,
 };
 
 const root = scratch('loupe-ui-');
@@ -357,6 +365,39 @@ await check('fix writes exactly what `loupe fix` writes, and the page re-runs', 
 	assert(!after.includes(`${expected.prop}: ${expected.value};`), 'the old declaration is still there');
 	const next = await settled(s.rev);
 	assert(next.payload.summary.total < s.payload.summary.total, 're-analysis did not drop the fixed finding');
+});
+
+// A write moves the revision at once. A directive spliced in shifts every line
+// below it, so a second write aimed at the same page, landing before the
+// re-analysis, would name a line that has moved: it is refused instead.
+await check('a second write aimed at the same page is refused until the page is redrawn', async () => {
+	const s = await state();
+	// Findings a mute can be written above: not a rule's opening line, and no
+	// directive already on the line above.
+	const muteable = s.payload.findings.flatMap((f, i) => {
+		if (f.file !== 'styles/extra.css') return [];
+		const lines = read(f.file).split('\n');
+		const at = lines[f.line - 1] ?? '{';
+		const above = lines[f.line - 2] ?? '';
+		return /(?:^|[^#])\{/.test(at) || above.includes(config.suppression.keyword) ? [] : [i];
+	});
+	const [a, b] = muteable;
+	assert(a !== undefined && b !== undefined, `the fixture needs two findings a mute can sit above: ${muteable}`);
+	const fileOf = (i: number): string => s.payload.findings[i]?.file ?? '';
+	const before = new Map([fileOf(a), fileOf(b)].map((f) => [f, read(f)]));
+	const first = await post('/suppress', { finding: a, reason: 'first' }, { token, rev: s.rev });
+	assert(first.status === 200, `the first write answered ${first.status}: ${JSON.stringify(first.body)}`);
+	const second = await post('/suppress', { finding: b, reason: 'second' }, { token, rev: s.rev });
+	assert(second.status === 409, `the second write answered ${second.status}: ${JSON.stringify(second.body)}`);
+	for (const [f, was] of before) {
+		const now = read(f);
+		assert(!now.includes('-- second'), `the refused write reached ${f}`);
+		if (f === fileOf(a))
+			assert(now.split('\n').length === was.split('\n').length + 1, `${f} gained more than one line`);
+	}
+	// And the page is redrawn from the run that sees the first write.
+	const next = await settled(s.rev + 1);
+	assert(next.rev > s.rev + 1, `redrawn at ${next.rev}`);
 });
 
 await check("suppress writes a directive that actually mutes, in the file's own comment syntax", async () => {

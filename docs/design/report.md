@@ -422,6 +422,10 @@ So the write surface is guarded three ways, and each closes a different door:
   aimed at, and a mismatch is a 409 the page recovers from by reloading.
   `substituteOnLine` would refuse most of these anyway by finding no declaration
   on the reported line; this makes the refusal certain rather than likely.
+  The revision names the tree, not the run: a write this server makes moves it
+  at once. A directive spliced in shifts every line below it, so a second mute
+  sent from the same page before the re-analysis lands is refused rather than
+  written above a line that has moved.
 
 `/source` is allowlisted to the files the current run reported, rather than
 checked against the project root. A prefix comparison has to get symlinks,

@@ -32215,6 +32215,10 @@ async function ui(opts) {
 `;
     for (const res of clients) res.write(frame);
   };
+  const wrote = () => {
+    rev++;
+    schedule(0);
+  };
   const runOnce = async () => {
     const started = Date.now();
     fresh = await analyze2();
@@ -32426,7 +32430,7 @@ async function ui(opts) {
         applied: applied.length,
         skipped: skipped.map((s) => ({ file: s.file, line: s.line, why: s.why }))
       });
-      if (applied.length) schedule(0);
+      if (applied.length) wrote();
     },
     "POST /baseline": async (_req, res) => {
       if (!fresh) return send(res, 503, { error: "still analyzing" });
@@ -32435,7 +32439,7 @@ async function ui(opts) {
       } catch (err) {
         return send(res, 500, { error: messageOf(err) });
       }
-      schedule(0);
+      wrote();
     },
     /**
      * Write a suppression directive above the finding.
@@ -32473,11 +32477,11 @@ async function ui(opts) {
         const directive = commentFor2(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${flat}`);
         lines.splice(finding.line - 1, 0, `${indent}${directive}${eol}`);
         writeFileSync4(full, lines.join("\n"));
+        wrote();
         send(res, 200, { file: finding.file, line: finding.line, rule: finding.rule });
       } catch (err) {
         return send(res, 500, { error: messageOf(err) });
       }
-      schedule(0);
     }
   };
   const server = createServer2((req, res) => {
