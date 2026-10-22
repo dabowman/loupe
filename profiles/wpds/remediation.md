@@ -55,7 +55,7 @@ before writing the replacement — do not assume the old props carry over.
 Only fires when the replacement's own status is `recommended` — an
 `experimental`-status alternative (most of the newer `@wordpress/ui` overlay
 components right now — `Dialog`, `AlertDialog`, `Drawer`, `Menu`, `Button`,
-`IconButton`, `LinkButton`, `Notice`, `Popover`) never generates this finding,
+`IconButton`, `ButtonLink`, `Notice`, `Popover`) never generates this finding,
 because WPDS itself flags those not yet safe to mix with
 `@wordpress/components`. If you see one of those names and no finding fired,
 that is correct — do not "fix" it preemptively.
