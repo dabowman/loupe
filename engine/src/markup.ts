@@ -248,32 +248,35 @@ function readStyleAttr(value: JSXAttribute['value']): {
 	return { decls, dynamic, dynamicProps, present: true };
 }
 
-function walkAst(node: unknown, visit: (n: Node) => void): void {
+/** The keys of a Babel node that hold positions and comments rather than children. */
+const NOT_CHILDREN = new Set(['loc', 'start', 'end', 'leadingComments', 'trailingComments']);
+
+/**
+ * Every node below `node`, in source order. `visit` returning `false` keeps the
+ * walk out of that node's children — how a reader of direct children stops at
+ * the first element it meets.
+ */
+function walkAst(node: unknown, visit: (n: Node) => unknown): void {
 	if (!node || typeof node !== 'object') return;
 	if (Array.isArray(node)) {
 		for (const n of node) walkAst(n, visit);
 		return;
 	}
 	const rec = node as Record<string, unknown>;
-	if (typeof rec.type === 'string') visit(node as Node);
-	for (const key of Object.keys(rec)) {
-		if (key === 'loc' || key === 'start' || key === 'end' || key === 'leadingComments' || key === 'trailingComments')
-			continue;
-		walkAst(rec[key], visit);
-	}
+	if (typeof rec.type === 'string' && visit(node as Node) === false) return;
+	for (const key of Object.keys(rec)) if (!NOT_CHILDREN.has(key)) walkAst(rec[key], visit);
 }
 
 /**
- * Local names imported from a design-system package, classified as layout or
- * text. Export names are normalized first: `@wordpress/components` publishes
- * `__experimentalText`, which never matches a raw specifier of `Text`.
+ * Local names imported from a design-system package, and what each one is.
+ * Export names are normalized first (`canonical`): `@wordpress/components`
+ * publishes `__experimentalText`, which never matches a raw specifier of `Text`.
  */
 function systemImports(
 	ast: File,
 	ds: DesignSystem,
+	canonical: (name: string) => string,
 ): {
-	text: Set<string>;
-	layout: Set<string>;
 	componentImports: ComponentImport[];
 	packages: Map<string, string>;
 	canonicals: Map<string, string>;
@@ -282,8 +285,6 @@ function systemImports(
 	// local name -> canonical name, so a rule written against `SelectControl`
 	// finds it under whatever alias the file bound.
 	const canonicals = new Map<string, string>();
-	const text = new Set<string>();
-	const layout = new Set<string>();
 	// One entry per imported local: which package it actually came from, since
 	// the same canonical name can mean a stable component in one package and an
 	// experimental one in the other (Button, Notice, Popover, ...).
@@ -294,7 +295,6 @@ function systemImports(
 	// `import * as UI` binds the package, not a component: `<UI.Button>` is the
 	// package's `Button`, where `<Card.Header>` is a part of `Card`.
 	const namespaces = new Set<string>();
-	const canonical = (name: string): string => canonicalName(name, ds.normalizeExports);
 
 	for (const node of ast.program.body) {
 		if (node.type !== 'ImportDeclaration' || !fromPackage(ds.packages, node.source.value)) continue;
@@ -302,8 +302,6 @@ function systemImports(
 			const local = spec.local.name;
 			const c = canonical(spec.type === 'ImportSpecifier' ? importedName(spec) : local);
 			canonicals.set(local, c);
-			if (ds.textComponents.includes(c)) text.add(local);
-			if (ds.layoutComponents.includes(c)) layout.add(local);
 			packages.set(local, node.source.value);
 			if (spec.type === 'ImportNamespaceSpecifier') namespaces.add(local);
 			// The specifier's line, not the declaration's: the placement a reader
@@ -318,7 +316,7 @@ function systemImports(
 			});
 		}
 	}
-	return { text, layout, componentImports, packages, canonicals, namespaces };
+	return { componentImports, packages, canonicals, namespaces };
 }
 
 /** An expression with any type assertion peeled off; the value is the same. */
@@ -465,7 +463,8 @@ export function scanMarkup(
 		return { ...result, parseError: messageLineOf(err) };
 	}
 
-	const { text: textLike, layout, componentImports, packages, canonicals, namespaces } = systemImports(ast, ds);
+	const canonical = (name: string): string => canonicalName(name, ds.normalizeExports);
+	const { componentImports, packages, canonicals, namespaces } = systemImports(ast, ds, canonical);
 	const tags = cssInJsLocals(ast, ds.cssInJsPackages);
 	// `<Button css={css`…`}>` binds a template to an element the walk sees
 	// first, so the owner is recorded before the template is reached.
@@ -498,17 +497,11 @@ export function scanMarkup(
 	 */
 	const jsxChildElements = (el: JSXElement): JSXElement[] => {
 		const out: JSXElement[] = [];
-		const dig = (n: unknown): void => {
-			if (!n || typeof n !== 'object') return;
-			if (Array.isArray(n)) {
-				n.forEach(dig);
-				return;
-			}
-			const rec = n as Record<string, unknown>;
-			if (rec.type === 'JSXElement') return void out.push(n as JSXElement);
-			for (const k of Object.keys(rec)) if (k !== 'loc' && k !== 'start' && k !== 'end') dig(rec[k]);
-		};
-		for (const c of el.children ?? []) dig(c);
+		walkAst(el.children ?? [], (n) => {
+			if (n.type !== 'JSXElement') return;
+			out.push(n);
+			return false;
+		});
 		return out;
 	};
 
@@ -636,15 +629,22 @@ export function scanMarkup(
 	 * the component — `<UI.Button>` is `Button`, not a part of `UI`.
 	 */
 	const identityOf = (local: string, member: string | null = null): string => {
-		if (member && namespaces.has(local)) return canonicalName(member, ds.normalizeExports);
+		if (member && namespaces.has(local)) return canonical(member);
 		const name = canonicals.get(local) ?? local;
 		return member ? `${name}.${member}` : name;
 	};
+	/**
+	 * The canonical name a local element is tested against the design system's
+	 * component lists by: the member under a namespace import, else the local's
+	 * own canonical. Undefined for a local no design-system import bound.
+	 */
+	const listedAs = (local: string, member: string | null): string | undefined =>
+		member && namespaces.has(local) ? canonical(member) : canonicals.get(local);
 	/** Whether a design-system element is one of the text components, under a namespace too. */
-	const isTextElement = (local: string, member: string | null = null): boolean =>
-		member && namespaces.has(local)
-			? ds.textComponents.includes(canonicalName(member, ds.normalizeExports))
-			: textLike.has(local);
+	const isTextElement = (local: string, member: string | null = null): boolean => {
+		const name = listedAs(local, member);
+		return name !== undefined && ds.textComponents.includes(name);
+	};
 
 	// What keys the component registry: its identity and the package the local
 	// came from. A name with no recorded package keys nothing.
@@ -714,17 +714,14 @@ export function scanMarkup(
 		}
 
 		// Which carriers can earn the substitution exemption: the components whose
-		// job is emitting a tag, which is exactly the text and layout sets. Not every
-		// export of a design-system package — `@wordpress/components` ships
-		// `FormFileUpload`, whose `render` is an ordinary render callback.
+		// job is emitting a tag, which is exactly the text and layout sets
+		// (`knownComponents`). Not every export of a design-system package —
+		// `@wordpress/components` ships `FormFileUpload`, whose `render` is an
+		// ordinary render callback. `<UI.Text render={ <h4 /> }>` names the
+		// component by its member, the namespace being what was imported.
 		const member = tag.includes('.') ? tag.slice(tag.indexOf('.') + 1) : null;
-		const emitsTag = member
-			? // `<UI.Text render={ <h4 /> }>` — the namespace is what was imported,
-				// so the component name is the member.
-				canonicals.has(root) &&
-				(ds.textComponents.includes(canonicalName(member, ds.normalizeExports)) ||
-					ds.layoutComponents.includes(canonicalName(member, ds.normalizeExports)))
-			: textLike.has(root) || layout.has(root);
+		const emitsTag =
+			canonicals.has(root) && ds.knownComponents.has(member ? canonical(member) : (canonicals.get(root) ?? root));
 
 		const strings: string[] = [];
 		let style: ReturnType<typeof readStyleAttr> | null = null;
@@ -750,17 +747,16 @@ export function scanMarkup(
 		}
 		const classes = classesFrom(strings);
 
+		// What this element is to the channels that style it: a component by its
+		// local root, a raw element by its lowercased tag.
+		const self = isComponent ? root : tag.toLowerCase();
 		const owned = cssAttr?.type === 'JSXExpressionContainer' ? cssAttr.expression : null;
 		if (owned?.type === 'TaggedTemplateExpression' && typeof owned.start === 'number')
-			cssPropOwner.set(owned.start, {
-				target: isComponent ? root : tag.toLowerCase(),
-				member: isComponent ? member : null,
-				isSystem,
-			});
+			cssPropOwner.set(owned.start, { target: self, member: isComponent ? member : null, isSystem });
 
 		if (style?.present)
 			inlineStyles.push({
-				tag: isComponent ? root : tag.toLowerCase(),
+				tag: self,
 				component: isSystem ? (canonicals.get(root) ?? root) : null,
 				// A project component renders whatever its own markup says, and
 				// `?.Header` is a part of a namespace member no import names.

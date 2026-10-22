@@ -23,6 +23,8 @@
  * with two hosts. The artifact's own reasoning is #the-html-report.
  */
 
+import { DIR_CAP, SEV_MARK, SEV_WORD } from './report.ts';
+
 /**
  * Palette and chrome.
  *
@@ -204,8 +206,9 @@ a.jump:hover { color: var(--seq); border-bottom-color: var(--seq); }
 `;
 /**
  * The client. Written without template literals on purpose: this whole string is
- * itself inside one, and a stray `${` would be interpolated by the bundler
- * rather than shipped.
+ * itself inside one, and a stray `${` would be interpolated rather than shipped.
+ * The three `${…}` it does carry are deliberate — the engine's own severity
+ * tables and directory cap, so the page and the terminal cannot draw them apart.
  */
 const JS = `
 (function () {
@@ -220,8 +223,10 @@ const JS = `
   var byRank = new Map();
   var fixable = new Set();
   var state = { rule: null, severity: null, q: '' };
-  var MARK = { error: '\\u2717', warn: '\\u2022' };
-  var WORD = { error: 'blocking', warn: 'advisory' };
+  // The engine's own tables, interpolated: the page draws a severity exactly
+  // as the terminal and the pane do.
+  var MARK = ${JSON.stringify(SEV_MARK)};
+  var WORD = ${JSON.stringify(SEV_WORD)};
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -372,8 +377,8 @@ const JS = `
   }
 
   // Top directories only. Past the cap the tail is folded into one row rather
-  // than truncated silently.
-  var DIR_CAP = 12;
+  // than truncated silently. The pane folds at the same row (\`DIR_CAP\` in report.ts).
+  var DIR_CAP = ${DIR_CAP};
   function renderPaths(rows) {
     var counts = tally(rows, function (f) { return dirOf(f.file); });
     var shown = counts.slice(0, DIR_CAP);
@@ -548,6 +553,25 @@ export interface BodyOptions {
  * rule only one of them applied is a rule the other was going to get wrong.
  */
 export const embed = (json: string): string => json.replace(/</g, '\\u003c');
+
+/**
+ * The document around a body: what both HTML hosts wrap theirs in. `head` is
+ * anything a host adds after the title — the live page declares an empty icon
+ * there, so the browser does not open a report with a 404 of its own.
+ */
+export const htmlDocument = ({ title, head = '', body }: { title: string; head?: string; body: string }): string =>
+	`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>${head}
+</head>
+<body>
+${body}
+</body>
+</html>
+`;
 
 /**
  * The unparsed-files banner, in one place.
