@@ -46,12 +46,12 @@
  */
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { type FSWatcher, readFileSync, watch, writeFileSync } from 'node:fs';
+import { type FSWatcher, readFileSync, statSync, watch, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import { CSS_FILE, applyTokenFixes, tokenFixes } from './autofix.ts';
 import { writeBaseline } from './baseline.ts';
-import { discover, toPosix } from './discover.ts';
+import { analyzeEntryBudget, discover, toPosix } from './discover.ts';
 import { body, embed } from './report-view.ts';
 import { reportPayload } from './report.ts';
 import { messageOf, oneLine } from './text.ts';
@@ -90,7 +90,11 @@ const BODY_LIMIT = 64 * 1024;
 const PEEK = 12;
 
 export interface UiState {
-	/** Increments once per completed analysis. Every write names the one it was aimed at. */
+	/**
+	 * The state of the tree this payload describes. Moves on every analysis, on
+	 * every write this server makes, and on every change the watch sees. Every
+	 * write names the one it was aimed at.
+	 */
 	rev: number;
 	ranAt: string;
 	ms: number;
@@ -106,6 +110,16 @@ export interface UiState {
 	/** Directories under watch, or null where a watch could not be established. */
 	watching: number | null;
 	baseline: { path: string; found: boolean };
+	/**
+	 * Why the latest analysis failed, while the payload is the last one that did
+	 * not. Absent once an analysis succeeds again.
+	 */
+	error?: string;
+	/**
+	 * The config file changed since the server read it. Every run still uses the
+	 * config it started with, so the page says a restart is what applies it.
+	 */
+	configChanged?: boolean;
 }
 
 export interface UiHandle {
@@ -176,6 +190,10 @@ const CLIENT = `
     // is named, so a stale page never sits under a live-looking dot.
     conn(s.watching === null ? 'busy' : 'on',
       s.watching === null ? 'not watching \\u2014 re-run by hand' : 'watching ' + s.watching + ' directories');
+    // A failed run leaves the last good payload on screen, and says so in the
+    // place that otherwise reads as live.
+    if (s.error) conn('off', 'analysis failed \\u2014 ' + s.error + ' \\u2014 showing the last run that worked');
+    if (s.configChanged) say('the config file changed \\u2014 restart loupe ui to apply it', true);
     el('accept').disabled = s.payload.summary.total === 0;
     el('accept').textContent = s.baseline.found ? 're-baseline' : 'accept as baseline';
   }
@@ -320,6 +338,20 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 
 	// ── analysis ──────────────────────────────────────────────────────────────
 
+	// The config is read once, at startup, and every run uses it. The file sits
+	// in the watched root, so an edit to it re-runs the analysis with the old
+	// one — a fresh timestamp over findings that do not reflect the edit. Its
+	// bytes are kept so the page can say a restart is what applies it.
+	const configFile = config.source.kind === 'file' ? config.source.path : null;
+	const readConfig = (): string | null => {
+		try {
+			return configFile ? readFileSync(configFile, 'utf8') : null;
+		} catch {
+			return null;
+		}
+	};
+	const configAtStart = readConfig();
+
 	const snapshot = (): UiState => {
 		if (!fresh || !shown) throw new Error('no analysis yet');
 		const payload = reportPayload(shown, config);
@@ -331,6 +363,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 			fixable: shown.findings.flatMap((f, i) => (tokenFixes([f]).length > 0 ? [i] : [])),
 			watching,
 			baseline: { path: baselineTarget, found: baselineFound() },
+			...(configFile && readConfig() !== configAtStart ? { configChanged: true } : {}),
 		};
 	};
 
@@ -356,10 +389,38 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 		rev++;
 		schedule(0);
 	};
+	/**
+	 * When the latest analysis began reading the tree. A watch event can arrive
+	 * after the run that already read its change — an editor's save is several
+	 * events, and one of this server's writes is heard a moment late — and moving
+	 * the revision for it would refuse the page's next write against a run that
+	 * has seen everything. A file written before this, by its mtime, has been.
+	 */
+	let readFrom = 0;
+	const alreadyRead = (path: string): boolean => {
+		// A file that is gone was removed from its directory, which a removal
+		// stamps: that directory's mtime says when.
+		for (const p of [path, dirname(path)]) {
+			try {
+				return statSync(p).mtimeMs < readFrom;
+			} catch {
+				/* gone: ask its directory */
+			}
+		}
+		return false;
+	};
 
 	const runOnce = async (): Promise<void> => {
 		const started = Date.now();
-		fresh = await analyze();
+		readFrom = started;
+		const at = rev;
+		const result = await analyze();
+		// The tree moved while it was read — a write here, or a change the watch
+		// saw — so this describes a state that is gone. Published, it would carry a
+		// new and valid revision over old line numbers. The move queued a run of
+		// its own, which `drain` takes next.
+		if (rev !== at) return;
+		fresh = result;
 		shown = present(fresh);
 		rev++;
 		rewatch();
@@ -379,9 +440,14 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 				try {
 					await runOnce();
 				} catch (err) {
-					// A failed analysis must not read as a clean page. The last good
-					// state stays on screen and the reason goes to the terminal.
+					// A failed analysis must not read as a clean page, nor as a current
+					// one: the last good payload stays, and the page says it is stale
+					// and why. The terminal hears it too.
 					log(`loupe: analysis failed — ${messageOf(err)}\n`);
+					if (state) {
+						state = { ...state, error: messageOf(err) };
+						push();
+					}
 				}
 			}
 		} finally {
@@ -403,8 +469,13 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 	function rewatch(): void {
 		let dirs: Set<string>;
 		try {
-			const found = discover({ root, sources: config.sources });
-			dirs = new Set([root, ...[...found.styles, ...found.markup, ...found.references].map((f) => dirname(f.abs))]);
+			// The analysis's own ceiling, so the two walks agree on what the tree is.
+			const found = discover({ root, sources: config.sources, limit: analyzeEntryBudget(config.maxEntries) });
+			dirs = new Set([root]);
+			// Every directory between a file and the root as well: a folder created
+			// under one that holds no file of its own is seen only from its parent.
+			for (const f of [...found.styles, ...found.markup, ...found.references])
+				for (let d = dirname(f.abs); d.length > root.length && !dirs.has(d); d = dirname(d)) dirs.add(d);
 		} catch (err) {
 			log(`loupe: cannot establish a watch — ${messageOf(err)}\n`);
 			watching = null;
@@ -429,7 +500,13 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 			try {
 				// `persistent: false`: the server holds the process open, and a watcher
 				// that also did would keep it alive after the server closed.
-				const w = watch(dir, { persistent: false }, () => schedule());
+				// The tree moved, so the page's payload no longer describes it: the
+				// revision moves now, not when the run lands, or a write aimed at it
+				// in between would name lines the editor has already shifted.
+				const w = watch(dir, { persistent: false }, (_event, name) => {
+					if (!name || !alreadyRead(join(dir, String(name)))) rev++;
+					schedule();
+				});
 				w.on('error', () => {
 					w.close();
 					watchers.delete(dir);
@@ -500,7 +577,10 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 	 *             a cross-origin reader cannot see a response to go and fetch it.
 	 *             Sending it as a custom header also forces a preflight, which
 	 *             this server answers for nobody.
-	 *   rev       the page's payload is the one still on disk. See the header.
+	 *
+	 * The revision — that the page's payload is the one still on disk — is each
+	 * route's own check, made after its body is read: `/run` addresses nothing,
+	 * so it has none, and is how a page whose revision fell behind catches up.
 	 *
 	 * Returns null when the request may proceed, or the refusal to send.
 	 */
@@ -510,7 +590,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 		const presented = req.headers[TOKEN_HEADER];
 		if (typeof presented !== 'string' || !secretEquals(presented, token))
 			return { status: 403, error: 'this page was not served by this process' };
-		return revCheck(req);
+		return null;
 	};
 
 	/**
@@ -612,7 +692,8 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 			if (!shown || !want) return send(res, 400, { error: 'name a file' });
 			const known = new Set(shown.findings.map((f) => f.file));
 			if (!known.has(want)) return send(res, 404, { error: 'not a file in this run' });
-			const at = Number(q.get('line') ?? 1);
+			const asked = Number(q.get('line') ?? 1);
+			const at = Number.isInteger(asked) && asked > 0 ? asked : 1;
 			try {
 				const lines = readFileSync(join(root, want), 'utf8').split('\n');
 				const from = Math.max(1, at - PEEK);
@@ -643,7 +724,9 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 			if (applied.length) wrote();
 		},
 
-		'POST /baseline': async (_req, res) => {
+		'POST /baseline': async (req, res) => {
+			const stale = revCheck(req);
+			if (stale) return send(res, stale.status, { error: stale.error });
 			if (!fresh) return send(res, 503, { error: 'still analyzing' });
 			try {
 				send(res, 200, writeBaseline(baselineTarget, fresh));
@@ -670,6 +753,10 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 			const reason = typeof payload?.reason === 'string' ? payload.reason.trim() : '';
 			if (!finding) return send(res, 400, { error: 'no finding named' });
 			if (!reason) return send(res, 400, { error: 'a suppression needs a reason' });
+			// As `applyKeeps` refuses it: a directive line in markup lands among JSX
+			// children, where it renders as text or breaks the parse.
+			if (!CSS_FILE.test(finding.file))
+				return send(res, 409, { error: 'only a stylesheet finding is muted from here — suppress markup by hand' });
 			// A reason spanning lines would end the comment early on the first one.
 			const flat = oneLine(reason);
 			const full = join(root, finding.file);

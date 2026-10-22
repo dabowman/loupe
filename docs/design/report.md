@@ -423,9 +423,18 @@ So the write surface is guarded three ways, and each closes a different door:
   `substituteOnLine` would refuse most of these anyway by finding no declaration
   on the reported line; this makes the refusal certain rather than likely.
   The revision names the tree, not the run: a write this server makes moves it
-  at once. A directive spliced in shifts every line below it, so a second mute
-  sent from the same page before the re-analysis lands is refused rather than
-  written above a line that has moved.
+  at once, and so does any change the watch sees. A directive spliced in, or a
+  line added in an editor, shifts every line below it, so a write aimed at the
+  page before the re-analysis lands is refused rather than written above a line
+  that has moved. A run whose tree moved while it was reading is dropped for the
+  one queued behind it, and a change is not counted twice: an event for a file
+  the latest run started after (by mtime, or for a removal its directory's)
+  leaves the revision alone. `/run` names nothing, so it is the one write with no
+  revision check, and is how a page whose revision fell behind catches up.
+- **A failed run is said, not hidden.** The page keeps the last payload that
+  worked, and says in the status it otherwise uses for "live" that it is stale
+  and why. An edit to the config file is named too: the server read it once, so
+  only a restart applies it.
 
 `/source` is allowlisted to the files the current run reported, rather than
 checked against the project root. A prefix comparison has to get symlinks,

@@ -70,6 +70,15 @@ export default () => (
 	background: #654321;
 }
 `,
+	// A stylesheet two levels under a directory that holds no file itself, so
+	// the watch has to cover that directory to see a sibling folder appear.
+	'styles/deep/nested/n.css': `.wf-n {
+	color: #abcdef;
+}
+`,
+	// A finding in markup, which a mute cannot be written above.
+	'src/Extra.jsx': `export const X = () => <div className="wf-x" style={{ color: '#fedcba' }} />;
+`,
 };
 
 const root = scratch('loupe-ui-');
@@ -313,7 +322,7 @@ await check('a suppression that would mute more than the row is refused', async 
 	assert(String(res.body.error).includes('mute the whole rule'), `unexpected refusal: ${String(res.body.error)}`);
 	assert(read('styles/wide.css') === before, 'the refusal had already written');
 	rmSync(join(root, 'styles/wide.css'));
-	await settled(withIt.rev);
+	await gone('styles/wide.css');
 });
 
 await check("a suppression keeps the file's own line ending", async () => {
@@ -331,10 +340,42 @@ await check("a suppression keeps the file's own line ending", async () => {
 	const text = read('styles/crlf.css');
 	assert(!/(^|[^\r])\n/.test(text), `a line lost its carriage return:\n${JSON.stringify(text)}`);
 	rmSync(join(root, 'styles/crlf.css'));
-	await settled(withIt.rev);
+	await gone('styles/crlf.css');
 });
 
 // ── the writes ──────────────────────────────────────────────────────────────
+
+/**
+ * Wait for a run that no longer reports `file`. Not any newer run: the one a
+ * write of ours started can publish before the removal is read, and a check that
+ * posted against it would be aimed at a tree that has since moved.
+ */
+async function gone(file: string): Promise<UiState> {
+	for (let i = 0; i < 100; i++) {
+		const s = await state();
+		if (!s.payload.findings.some((f) => f.file === file)) return quiet();
+		await new Promise((r) => setTimeout(r, 50));
+	}
+	throw new Error(`${file} is still reported`);
+}
+
+/**
+ * Wait for the server to stop moving: no new run across a span longer than the
+ * debounce and a run. A removal is heard from its directory, and the run that
+ * read it may have started a moment before it — so its event can still move
+ * the revision after that run has published, and the next check would be
+ * aimed at a page that is about to be redrawn.
+ */
+async function quiet(): Promise<UiState> {
+	let last = await state();
+	for (let i = 0; i < 40; i++) {
+		await new Promise((r) => setTimeout(r, 400));
+		const now = await state();
+		if (now.rev === last.rev) return now;
+		last = now;
+	}
+	throw new Error('the server never settled');
+}
 
 /** Wait for the server to publish a run newer than `was`. */
 async function settled(was: number): Promise<UiState> {
@@ -425,6 +466,65 @@ await check("suppress writes a directive that actually mutes, in the file's own 
 	assert(next.payload.summary.suppressions > 0, 'the suppression is not counted');
 });
 
+await check('an edit made outside the server refuses a write aimed at the page before it', async () => {
+	const s = await state();
+	// A finding a mute could sit above, so only the revision can refuse it.
+	const lines = read('styles/extra.css').split('\n');
+	const i = s.payload.findings.findIndex(
+		(f) =>
+			f.file === 'styles/extra.css' && f.line > 1 && !(lines[f.line - 2] ?? '').includes(config.suppression.keyword),
+	);
+	assert(
+		i >= 0,
+		`the fixture lost its background finding: ${JSON.stringify(s.payload.findings.map((f) => `${f.file}:${f.line}`))}`,
+	);
+	const was = read('styles/extra.css');
+	writeFileSync(join(root, 'styles/extra.css'), `/* moved */\n${was}`);
+	// The watch hears it within a few milliseconds; the run it schedules waits
+	// out its debounce, which is the window this is about.
+	await new Promise((r) => setTimeout(r, 60));
+	const res = await post('/suppress', { finding: i, reason: 'late' }, { token, rev: s.rev });
+	assert(res.status === 409, `answered ${res.status}: ${JSON.stringify(res.body)}`);
+	assert(!read('styles/extra.css').includes('-- late'), 'the refused write reached the file');
+	await settled(s.rev + 1);
+});
+
+// `/run` names no finding, so it carries no revision check: it is how a page
+// that fell behind — a run that failed after a write — catches up.
+await check('a re-run is accepted whatever revision the page holds', async () => {
+	const res = await post('/run', {}, { token, rev: -5 });
+	assert(res.status === 200, `answered ${res.status}: ${JSON.stringify(res.body)}`);
+});
+
+await check('a markup finding is not muted from here', async () => {
+	const s = await state();
+	const i = s.payload.findings.findIndex((f) => f.file === 'src/Extra.jsx');
+	assert(i >= 0, 'the fixture lost its markup finding');
+	const was = read('src/Extra.jsx');
+	const res = await post('/suppress', { finding: i, reason: 'markup' }, { token, rev: s.rev });
+	assert(res.status === 409, `answered ${res.status}: ${JSON.stringify(res.body)}`);
+	assert(read('src/Extra.jsx') === was, 'the refused write reached the file');
+});
+
+await check('a folder created under one that holds no file is seen', async () => {
+	const s = await state();
+	writeAll(root, { 'styles/deep/fresh/f.css': '.wf-f {\n\tcolor: #0f0f0f;\n}\n' });
+	const next = await settled(s.rev);
+	assert(
+		next.payload.findings.some((f) => f.file === 'styles/deep/fresh/f.css'),
+		'the new folder was not analyzed',
+	);
+});
+
+await check('an edit to the config is named, since only a restart applies it', async () => {
+	const s = await state();
+	assert(!s.configChanged, 'flagged before any edit');
+	const file = join(root, 'loupe.config.json');
+	writeFileSync(file, `${readFileSync(file, 'utf8')}\n`);
+	const next = await settled(s.rev);
+	assert(next.configChanged === true, `not flagged: ${JSON.stringify(next.configChanged)}`);
+});
+
 await check('baseline records the whole backlog, not the part still on screen', async () => {
 	const first = await state();
 	assert(first.payload.summary.total > 0, 'nothing left to baseline');
@@ -460,6 +560,8 @@ await check('baseline records the whole backlog, not the part still on screen', 
 	assert(end.payload.summary.total === 0, 'the second baseline left findings live');
 });
 
+// A change the watch sees moves the revision at once, not when the run lands:
+// an editor that shifted lines leaves the page's indices naming the wrong ones.
 await handle.close();
 cleanup(root);
 finish();
