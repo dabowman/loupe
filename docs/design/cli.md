@@ -14,8 +14,9 @@ CI jobs, hooks and quality runners branch on these, so they are part of the
 public surface and change like one.
 
 The hook's protocol sits on top of them: `0` with a `systemMessage` for clean,
-advisory-only, or gave-up-after-N-attempts; `2` with stderr for blocking
-findings, where stderr is what gets handed back to the agent.
+advisory-only, or gave-up-after-N-attempts, and on PostToolUse the findings the
+edit introduced also go to the agent as `additionalContext`; `2` with stderr for
+blocking findings, where stderr is what gets handed back to the agent.
 
 **Bounded retry, not an absolute bail on `stop_hook_active`.** Skipping every
 hook-triggered turn means the turn that *fixes* a finding is never checked, so
@@ -212,6 +213,12 @@ project's own namespace appears nowhere in `node_modules`.
   defines, and a prefix only stylesheets mention. The last is also exactly what
   dead CSS looks like, which is why the list is a question for whoever can read
   the enqueue code — `/loupe-init` asks it — and `init` writes none of them.
+- **Block wrapper prefixes are reported, never written.** Each `block.json` the
+  walk lists gives `wp-block-{namespace}-` (`acme/card` → `wp-block-acme-`),
+  printed under `blocks:` with the names it came from. The analysis recognises
+  them on its own walk; written into `namespaces.project`, they would make a
+  wrapper class no source spells eligible to be called dead — see
+  [checks.md](checks.md#a-blocks-own-wrapper-is-not-a-library-internal).
 - **`--profile <id>` beats a guess.** Inference's own verdict is still returned
   as `preset` so `status` and `init` can report it, but the config extends what
   the flag named — and everything derived from the preset has to follow, or the
@@ -803,8 +810,9 @@ fix.
 
 ### Silence, not advisory mode
 
-The `off` switch makes the hook check nothing. An advisory finding still lands
-in the agent's context, and an agent that sees a finding starts fixing it —
+The `off` switch makes the hook check nothing. On PostToolUse an advisory
+finding the edit introduced still lands in the agent's context (on Stop it is a
+tally the person sees), and an agent that sees a finding starts fixing it —
 which is the whole complaint. Deliberately hook-only: `loupe check` typed by
 hand is someone asking, and answering "nothing" would be a lie.
 
@@ -908,6 +916,17 @@ fields are printed as such**: "no layout primitive" is a fact about the system,
 and inferring it from a missing line is how a skill ends up recommending one
 that isn't there.
 
+The `tokens:` line says what the `tokenSources` yielded, per path, from the
+same `readTokenSources` read the analysis seeds its set with: a source that is
+not installed leaves `tokens/unknown-token` off and every hardcoded value
+unnamed, and `--wpds-*` printed alone read as a working set.
+
+And the blocks whose wrapper classes the analysis takes as the project's own,
+read off a walk with the analysis's own source globs and ceiling — for a
+config file too, where nothing else in `status` walks — because an exemption
+nobody can see reads exactly like a rule that has stopped working. The line is
+there only when a `block.json` is.
+
 And which profiles are in play, with their directories — "no composite findings"
 and "no composite registry" look identical in a report and must not look
 identical here. The directory, not just the id, because a profile carries the
@@ -1001,11 +1020,12 @@ over:
   wherever the new text occurs more than once — a deletion's empty
   `new_string` occurs everywhere — and impossible for a Write.
 
-**Only when it would block.** The "before" is analyzed only when the "after"
-has a blocking finding, so an edit that leaves the file clean pays nothing for
-the question. One that would block pays a second analysis: on a synthetic
-2,460-file project, a blocking hook run went from 0.94s to 1.41s, and a clean
-one stayed at 1.0s.
+**Only when the "after" has a finding.** The "before" is analyzed once per
+run, and only then, so an edit that leaves the file clean pays nothing for the
+question. One that leaves a finding — blocking, or advisory, which the
+non-blocking report subtracts the same way (see below) — pays a second
+analysis: on a synthetic 2,460-file project, a blocking hook run went from
+0.94s to 1.41s, and a clean one stayed at 1.0s.
 
 **Keyed like the baseline**: rule + file + normalized code, not line. An edit
 above a finding moves it down the file, and a key with the line in it would
@@ -1047,6 +1067,48 @@ standing findings says how many in its message, and a blocking report names the
 count beneath the new ones — the agent should know what Stop will hold it to.
 The retry budget is untouched: it counts the runs that blocked, keyed as before
 on session and file.
+
+## Advisory findings reach the agent on PostToolUse only
+
+With `blocking` off — the plugin's default — every finding is advisory, and both
+hooks used to say so with a `systemMessage` tally alone. Claude Code shows that
+to the person, not the model, so a write-time gate told nothing at write time to
+the one reader who could act on it.
+
+A PostToolUse that blocks nothing now hands the agent the report a blocking one
+would, as `hookSpecificOutput.additionalContext`, beside the tally: under the
+same `maxFindings` cap and round-robin sample (`shownFindings`), in the same
+terse agent format, so the agent reads one shape whether or not the turn
+stopped.
+
+**What the edit introduced, not the file.** Handing over every finding the file
+had gave each edit to a legacy file its backlog — up to the cap, on every write
+— and an agent that sees a finding starts fixing it, so an edit became a cleanup
+of findings that were not the edit's: what the delta above keeps the blocking
+report from doing. So the advisory findings are subtracted against the "before"
+exactly as blocking ones are, and what the edit walked past is one count, on
+the tally and at the head of the context: `2 advisory finding(s) already in
+styles/a.css before this edit, left out of the agent's report`. Standing
+*blocking* findings are still listed — Stop will hold the agent to them. With
+no "before" (a created file, an older payload) everything is handed over, as
+the absolute check would.
+
+The selection is the one the judge phase reads, so with a key the findings
+handed over carry the judged suggestions a blocking report would, and nothing
+the agent is not shown is paid for. A redirect that cannot block is still never
+asked for: that pass asks about every control in scope, before there is a
+finding to choose among, so it cannot be held to what is shown.
+
+**Stop keeps the tally.** Its only channel to the model is `decision: "block"`,
+which refuses the stop and hands the reason back as the next instruction. Using
+it for advisory findings would make every Stop with one a blocked Stop —
+`blocking` on in all but name, spending the retry budget on findings nobody chose
+to enforce — so it stays reserved for blocking. Turning `blocking` on by default
+for a project with a written config would reach the model on Stop too, at the
+price of stopping turns in every such project; the default stays off, and a
+project that wants Stop to hand findings back turns it on. What the turn's own
+writes added already reached the agent, at the PostToolUse of the write that
+added it.
 
 ## The stand-down latches
 

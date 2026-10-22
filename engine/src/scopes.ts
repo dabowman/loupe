@@ -22,6 +22,7 @@
  * Design notes: docs/design/analysis.md#token-scopes
  */
 
+import { isRecord as isObject } from './json.ts';
 import { escapeRe } from './text.ts';
 
 /** The CSS properties one property segment answers for. */
@@ -82,8 +83,6 @@ const PROP = /^-?[a-z][a-z-]*(\*[a-z-]*)?$/;
 const ELEMENT = /^([a-z][a-z0-9-]*|[A-Z][A-Za-z0-9_]*(\.[A-Z][A-Za-z0-9_]*)*)$/;
 const KIND = /^[a-z][a-z0-9-]*$/;
 const PLACEHOLDER = /\{([^}]*)\}/g;
-
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Keys an author may annotate with: `$comment`, `$source`. Never read. */
 const authored = (o: Record<string, unknown>): [string, unknown][] =>

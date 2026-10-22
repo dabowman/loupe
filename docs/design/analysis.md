@@ -109,7 +109,9 @@ anything against it. Reading the real set — the design system ships its tokens
 as plain custom properties in a stylesheet; `@wordpress/theme` emits 190 of them
 — is what lets a finding name a token instead of a namespace. Token source paths
 deliberately reach into `node_modules`, which the project walk prunes: the
-design system's tokens are the whole point, and they live there.
+design system's tokens are the whole point, and they live there. A path is the
+project root's unless it is absolute, the same as a `styleSources` path, so a
+system kept outside the project can be named directly.
 
 Everything degrades to the old behaviour when no definitions are found: no
 annotation on hardcoded values, and `tokens/unknown-token` stays silent rather
@@ -356,7 +358,17 @@ import once rather than 400 times.
   parent as a grid. At-rules are transparent — a `@media` block's declarations
   still belong to the enclosing selector — but nested rules are not.
 - **Bindings correlate against the key selector only.** `.card .title` styles
-  `.title`, so `.card`'s component must not answer for it.
+  `.title`, so `.card`'s component must not answer for it. The key is cut only
+  at a combinator outside brackets, parentheses and quotes, and its classes are
+  the ones the compound puts on the element itself — the reading the token
+  scopes use. Splitting on every space and `+` keyed `.item:nth-child(2n+1)` to
+  `1)` and `.x[aria-label="Close dialog"]` to `dialog"]`, so the class the rule
+  styles was never declared and never reported dead; and keying `li:not(.btn)`
+  to `.btn` reported a `system/override` on the one `<Button>` the rule
+  excludes. Every check that keys — the bindings, `system/override`,
+  `css/dead-class`, the raw-element lookup, a library sheet's parts — reads this
+  one key. A class only inside `:is()`, `:where()` or `:has()` is not keyed: the
+  element may not carry it, and the cost is a missed finding, never a false one.
 - **A `var(--x)` margin has no visible sign.** A leading `--` is a custom
   property name, not a minus: `var( --gap )` splits on the spaces prettier
   writes, and reading that as a bleed flags every tokenized margin in the repo.
