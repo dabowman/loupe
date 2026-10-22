@@ -23494,7 +23494,7 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync10, readdirSync as readdirSync4, statSync as statSync6, writeFileSync as writeFileSync6 } from "node:fs";
+import { existsSync as existsSync10, readdirSync as readdirSync4, statSync as statSync7, writeFileSync as writeFileSync6 } from "node:fs";
 import { basename, dirname as dirname10, isAbsolute as isAbsolute6, join as join17, relative as relative5, resolve as resolve6 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { fileURLToPath as fileURLToPath5 } from "node:url";
@@ -31455,7 +31455,7 @@ import { dirname as dirname7, join as join12 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/dom-match.ts
-var MATCH_VERSION = 2;
+var MATCH_VERSION = 3;
 var MATCH_JS = `
 (function () {
   if (window.__loupeMatch && window.__loupeMatch.version === ${MATCH_VERSION}) return;
@@ -31582,29 +31582,36 @@ var MATCH_JS = `
    */
   function bucket(n, on) { return n > 0 ? (on ? 0 : 1) : n === 0 ? 2 : 3; }
 
-  var loaded = [];
+  // One list per reader. The panel, the Elements sidebar and the overlay each
+  // hand over findings fetched at their own moment and address them by index,
+  // so one shared list let the last to load answer for the others: a highlight
+  // on the wrong elements, or a row for an index the overlay never had. A call
+  // that names no reader uses the one list there was before.
+  var lists = {};
+  function listOf(who) { return lists[who || 'page'] || []; }
 
   var api = {
     version: ${MATCH_VERSION},
 
     /** Hand over the findings. Only \`selector\`, \`media\` and \`severity\` are read. */
-    load: function (findings) {
-      loaded = (findings || []).map(function (f) {
+    load: function (findings, who) {
+      var list = (findings || []).map(function (f) {
         return { selector: f.selector || null, media: f.media || null, severity: f.severity || 'warn' };
       });
-      return loaded.length;
+      lists[who || 'page'] = list;
+      return list.length;
     },
 
     domSelector: domSelector,
-    active: function (i) { return active(loaded[i]); },
+    active: function (i, who) { return active(listOf(who)[i]); },
 
     /**
      * One row per loaded finding: how many elements it reaches and whether its
      * condition holds. One eval for the whole list \u2014 a call per finding would
      * cost a round trip each across the DevTools boundary.
      */
-    snapshot: function () {
-      return loaded.map(function (f, i) {
+    snapshot: function (who) {
+      return listOf(who).map(function (f, i) {
         var els = elementsFor(f);
         var n = els ? els.length : -1;
         var on = active(f);
@@ -31619,8 +31626,9 @@ var MATCH_JS = `
      * "what is wrong with *this*". \`matches\` rather than re-querying, because
      * the question is about one node.
      */
-    forElement: function (el) {
+    forElement: function (el, who) {
       if (!el || el.nodeType !== 1) return [];
+      var loaded = listOf(who);
       var out = [];
       for (var i = 0; i < loaded.length; i++) {
         var f = loaded[i];
@@ -31635,10 +31643,10 @@ var MATCH_JS = `
     },
 
     /** Outline what finding \`i\` reaches. Returns how many boxes were drawn. */
-    highlight: function (i) {
+    highlight: function (i, who) {
       ensure();
       layer.innerHTML = '';
-      var els = elementsFor(loaded[i]);
+      var els = elementsFor(listOf(who)[i]);
       if (!els || !els.length) return 0;
       var drawn = 0;
       els.forEach(function (el, k) {
@@ -31689,15 +31697,15 @@ var MATCH_JS = `
       layer = null;
     },
 
-    scrollTo: function (i) {
-      var els = elementsFor(loaded[i]);
+    scrollTo: function (i, who) {
+      var els = elementsFor(listOf(who)[i]);
       if (!els || !els.length) return false;
       els[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
       return true;
     },
 
     /** Marks are absolutely positioned against the viewport, so a scroll moves them. */
-    reposition: function (i) { return i === null || i === undefined ? api.clear() : api.highlight(i); },
+    reposition: function (i, who) { return i === null || i === undefined ? api.clear() : api.highlight(i, who); },
   };
 
   window.__loupeMatch = api;
@@ -31782,7 +31790,7 @@ var JS2 = `
   // nothing, then what was never a browser question.
   function rows() {
     var needle = q.toLowerCase();
-    return M.snapshot().map(function (r) {
+    return M.snapshot('overlay').map(function (r) {
       return { i: r.i, f: data.findings[r.i], n: r.n, on: r.on, bucket: r.bucket };
     }).filter(function (r) {
       if (!needle) return true;
@@ -31860,13 +31868,13 @@ var JS2 = `
     panel.querySelectorAll('.row').forEach(function (el, k) {
       var row = rs[k];
       var i = row.i;
-      el.onmouseenter = function () { if (pinned === null) M.highlight(i); };
+      el.onmouseenter = function () { if (pinned === null) M.highlight(i, 'overlay'); };
       el.onmouseleave = function () { if (pinned === null) M.clear(); };
       el.onclick = function () {
         if (!row || row.n <= 0) return;
         pinned = pinned === i ? null : i;
         if (pinned === null) M.clear();
-        else { M.highlight(i); M.scrollTo(i); }
+        else { M.highlight(i, 'overlay'); M.scrollTo(i, 'overlay'); }
         render();
       };
     });
@@ -31881,7 +31889,7 @@ var JS2 = `
   var frame = null;
   function reposition() {
     if (pinned === null || frame !== null) return;
-    frame = requestAnimationFrame(function () { frame = null; if (pinned !== null) M.highlight(pinned); });
+    frame = requestAnimationFrame(function () { frame = null; if (pinned !== null) M.highlight(pinned, 'overlay'); });
   }
   // A resize changes the answers themselves: crossing a breakpoint turns findings
   // on and off, so the boxes move *and* the list is restated. Debounced, because
@@ -31903,7 +31911,7 @@ var JS2 = `
           throw new Error(j && j.error || 'HTTP ' + r.status);
         });
       })
-      .then(function (j) { data = j; pinned = null; M.load(data.findings); render(); })
+      .then(function (j) { data = j; pinned = null; M.load(data.findings, 'overlay'); render(); })
       .catch(function (e) {
         panel.innerHTML = '<div class="head"><span class="title">loupe</span></div><div class="empty">' +
           esc(String(e && e.message || e)) + '<br>Is \\u0060loupe serve\\u0060 still running?</div>';
@@ -32029,7 +32037,7 @@ function serve(opts) {
 
 // src/ui.ts
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync as readFileSync15, watch, writeFileSync as writeFileSync4 } from "node:fs";
+import { readFileSync as readFileSync15, statSync as statSync5, watch, writeFileSync as writeFileSync4 } from "node:fs";
 import { createServer as createServer2 } from "node:http";
 import { dirname as dirname8, join as join13 } from "node:path";
 var TOKEN_HEADER = "x-loupe-token";
@@ -32071,6 +32079,10 @@ var CLIENT = `
     // is named, so a stale page never sits under a live-looking dot.
     conn(s.watching === null ? 'busy' : 'on',
       s.watching === null ? 'not watching \\u2014 re-run by hand' : 'watching ' + s.watching + ' directories');
+    // A failed run leaves the last good payload on screen, and says so in the
+    // place that otherwise reads as live.
+    if (s.error) conn('off', 'analysis failed \\u2014 ' + s.error + ' \\u2014 showing the last run that worked');
+    if (s.configChanged) say('the config file changed \\u2014 restart loupe ui to apply it', true);
     el('accept').disabled = s.payload.summary.total === 0;
     el('accept').textContent = s.baseline.found ? 're-baseline' : 'accept as baseline';
   }
@@ -32195,6 +32207,15 @@ async function ui(opts) {
   let state = null;
   let watching = null;
   const clients = /* @__PURE__ */ new Set();
+  const configFile = config.source.kind === "file" ? config.source.path : null;
+  const readConfig = () => {
+    try {
+      return configFile ? readFileSync15(configFile, "utf8") : null;
+    } catch {
+      return null;
+    }
+  };
+  const configAtStart = readConfig();
   const snapshot = () => {
     if (!fresh || !shown) throw new Error("no analysis yet");
     const payload = reportPayload(shown, config);
@@ -32205,7 +32226,8 @@ async function ui(opts) {
       payload,
       fixable: shown.findings.flatMap((f, i) => tokenFixes([f]).length > 0 ? [i] : []),
       watching,
-      baseline: { path: baselineTarget, found: baselineFound() }
+      baseline: { path: baselineTarget, found: baselineFound() },
+      ...configFile && readConfig() !== configAtStart ? { configChanged: true } : {}
     };
   };
   const push = () => {
@@ -32219,9 +32241,23 @@ async function ui(opts) {
     rev++;
     schedule(0);
   };
+  let readFrom = 0;
+  const alreadyRead = (path) => {
+    for (const p of [path, dirname8(path)]) {
+      try {
+        return statSync5(p).mtimeMs < readFrom;
+      } catch {
+      }
+    }
+    return false;
+  };
   const runOnce = async () => {
     const started = Date.now();
-    fresh = await analyze2();
+    readFrom = started;
+    const at = rev;
+    const result = await analyze2();
+    if (rev !== at) return;
+    fresh = result;
     shown = present(fresh);
     rev++;
     rewatch();
@@ -32242,6 +32278,10 @@ async function ui(opts) {
         } catch (err) {
           log(`loupe: analysis failed \u2014 ${messageOf(err)}
 `);
+          if (state) {
+            state = { ...state, error: messageOf(err) };
+            push();
+          }
         }
       }
     } finally {
@@ -32260,8 +32300,10 @@ async function ui(opts) {
   function rewatch() {
     let dirs;
     try {
-      const found = discover({ root: root2, sources: config.sources });
-      dirs = /* @__PURE__ */ new Set([root2, ...[...found.styles, ...found.markup, ...found.references].map((f) => dirname8(f.abs))]);
+      const found = discover({ root: root2, sources: config.sources, limit: analyzeEntryBudget(config.maxEntries) });
+      dirs = /* @__PURE__ */ new Set([root2]);
+      for (const f of [...found.styles, ...found.markup, ...found.references])
+        for (let d = dirname8(f.abs); d.length > root2.length && !dirs.has(d); d = dirname8(d)) dirs.add(d);
     } catch (err) {
       log(`loupe: cannot establish a watch \u2014 ${messageOf(err)}
 `);
@@ -32284,7 +32326,10 @@ async function ui(opts) {
     for (const dir of dirs) {
       if (watchers.has(dir)) continue;
       try {
-        const w = watch(dir, { persistent: false }, () => schedule());
+        const w = watch(dir, { persistent: false }, (_event, name) => {
+          if (!name || !alreadyRead(join13(dir, String(name)))) rev++;
+          schedule();
+        });
         w.on("error", () => {
           w.close();
           watchers.delete(dir);
@@ -32336,7 +32381,7 @@ async function ui(opts) {
     const presented = req.headers[TOKEN_HEADER];
     if (typeof presented !== "string" || !secretEquals(presented, token))
       return { status: 403, error: "this page was not served by this process" };
-    return revCheck(req);
+    return null;
   };
   const LOOPBACK = /* @__PURE__ */ new Set(["127.0.0.1", "localhost", "[::1]"]);
   const isOurs2 = (origin) => {
@@ -32404,7 +32449,8 @@ async function ui(opts) {
       if (!shown || !want) return send(res, 400, { error: "name a file" });
       const known = new Set(shown.findings.map((f) => f.file));
       if (!known.has(want)) return send(res, 404, { error: "not a file in this run" });
-      const at = Number(q.get("line") ?? 1);
+      const asked = Number(q.get("line") ?? 1);
+      const at = Number.isInteger(asked) && asked > 0 ? asked : 1;
       try {
         const lines = readFileSync15(join13(root2, want), "utf8").split("\n");
         const from = Math.max(1, at - PEEK);
@@ -32432,7 +32478,9 @@ async function ui(opts) {
       });
       if (applied.length) wrote();
     },
-    "POST /baseline": async (_req, res) => {
+    "POST /baseline": async (req, res) => {
+      const stale = revCheck(req);
+      if (stale) return send(res, stale.status, { error: stale.error });
       if (!fresh) return send(res, 503, { error: "still analyzing" });
       try {
         send(res, 200, writeBaseline(baselineTarget, fresh));
@@ -32458,6 +32506,8 @@ async function ui(opts) {
       const reason = typeof payload?.reason === "string" ? payload.reason.trim() : "";
       if (!finding) return send(res, 400, { error: "no finding named" });
       if (!reason) return send(res, 400, { error: "a suppression needs a reason" });
+      if (!CSS_FILE.test(finding.file))
+        return send(res, 409, { error: "only a stylesheet finding is muted from here \u2014 suppress markup by hand" });
       const flat = oneLine(reason);
       const full = join13(root2, finding.file);
       try {
@@ -32538,7 +32588,7 @@ async function ui(opts) {
 }
 
 // src/detect.ts
-import { existsSync as existsSync7, readFileSync as readFileSync16, statSync as statSync5 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync16, statSync as statSync6 } from "node:fs";
 import { join as join14 } from "node:path";
 var readJson2 = (p) => {
   try {
@@ -32571,7 +32621,7 @@ function markerAt(dir, marker) {
   if (!existsSync7(full)) return false;
   if (!marker.endsWith("/")) return true;
   try {
-    return statSync5(full).isDirectory();
+    return statSync6(full).isDirectory();
   } catch {
     return false;
   }
@@ -32769,7 +32819,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   for (const { abs } of read) {
     let text2;
     try {
-      if (statSync5(abs).size > STYLE_MAX_BYTES) {
+      if (statSync6(abs).size > STYLE_MAX_BYTES) {
         oversized++;
         continue;
       }
@@ -33299,7 +33349,7 @@ function cacheLine(root2) {
   let bytes = 0;
   try {
     for (const name of readdirSync4(dir))
-      if (/^index-[0-9a-f]+\.json$/.test(name)) bytes += statSync6(join17(dir, name)).size;
+      if (/^index-[0-9a-f]+\.json$/.test(name)) bytes += statSync7(join17(dir, name)).size;
   } catch {
   }
   const answers = Object.keys(
@@ -33493,7 +33543,7 @@ var CEILING_SUFFIX = ` (inference stopped at the ${CEILING}; namespaces are a gu
 function expandDirs(config, given) {
   const isDir = (rel) => {
     try {
-      return statSync6(resolve6(config.root, rel)).isDirectory();
+      return statSync7(resolve6(config.root, rel)).isDirectory();
     } catch {
       return false;
     }
