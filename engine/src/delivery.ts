@@ -22,8 +22,8 @@
  * Design notes: docs/design/checks.md#delivery
  */
 
-import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { asString, asStrings, isRecord, readJson } from './json.ts';
 import type {
 	ComponentImport,
 	Delivery,
@@ -33,11 +33,6 @@ import type {
 	RuleId,
 	TokenDelivery,
 } from './types.ts';
-
-const asStrings = (v: unknown): string[] =>
-	Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x !== '') : [];
-const asString = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 function readPackages(raw: unknown): Map<string, PackageDelivery> {
 	const out = new Map<string, PackageDelivery>();
@@ -115,14 +110,7 @@ export function loadDelivery(raw: unknown): Delivery | null {
 }
 
 /** Read and validate a delivery file. Unreadable is the same as absent. */
-export function readDelivery(path: string | null): Delivery | null {
-	if (!path || !existsSync(path)) return null;
-	try {
-		return loadDelivery(JSON.parse(readFileSync(path, 'utf8')));
-	} catch {
-		return null;
-	}
-}
+export const readDelivery = (path: string | null): Delivery | null => (path ? loadDelivery(readJson(path)) : null);
 
 // ── reachability ────────────────────────────────────────────────────────────
 
@@ -157,16 +145,12 @@ export function remedyPackages(message: string, dsPackages: readonly string[]): 
  * declare their own.
  */
 export function projectDependencies(root: string): Set<string> | null {
-	try {
-		const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as Record<string, unknown>;
-		if (pkg.workspaces) return null;
-		const out = new Set<string>();
-		for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'])
-			if (isRecord(pkg[field])) for (const name of Object.keys(pkg[field])) out.add(name);
-		return out;
-	} catch {
-		return null;
-	}
+	const pkg = readJson(join(root, 'package.json'));
+	if (!isRecord(pkg) || pkg.workspaces) return null;
+	const out = new Set<string>();
+	for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'])
+		if (isRecord(pkg[field])) for (const name of Object.keys(pkg[field])) out.add(name);
+	return out;
 }
 
 /**
