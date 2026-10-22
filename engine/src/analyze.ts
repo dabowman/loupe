@@ -46,7 +46,7 @@ import { RULES } from './rules.ts';
 import { annotateReach, mergeDeliveries, projectDependencies } from './delivery.ts';
 import { TreeTooLarge, analyzeEntryBudget, byBytes, discover, toPosix } from './discover.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
-import { harvestTokens } from './markup.ts';
+import { harvestPhpStems, harvestStems, harvestTokens } from './markup.ts';
 import { syntaxFor } from './syntax.ts';
 import { surfaceFor, surfacesRecorded } from './components.ts';
 import { boundMessage, oneLine, parseMessageOf, parseReasonOf, snippet } from './text.ts';
@@ -716,6 +716,7 @@ export async function analyze(
 		if (oversized(abs, rel, look)) continue;
 		if (look?.entry?.refs) {
 			for (const t of look.entry.refs) referenced.add(t);
+			for (const t of look.entry.stems ?? []) stems.add(t);
 			diagnostics.filesScanned++;
 			continue;
 		}
@@ -723,9 +724,11 @@ export async function analyze(
 		const text = look?.text ?? readOrNull(abs, rel);
 		if (text === null) continue;
 		const found = harvestTokens(text);
+		const built = harvestPhpStems(text, harvestStems(text));
 		for (const t of found) referenced.add(t);
+		for (const t of built) stems.add(t);
 		diagnostics.filesScanned++;
-		if (look) cache?.store(look, rel, text, { d: false, refs: [...found] });
+		if (look) cache?.store(look, rel, text, { d: false, refs: [...found], stems: [...built] });
 	}
 
 	// ── walk CSS ──────────────────────────────────────────────────────────────

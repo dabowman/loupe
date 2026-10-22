@@ -1,5 +1,5 @@
 {
-  "note": "Live via JSX, via a template-literal stem, and via block markup in templates/*.html. Only .wf-orphan is dead. Render-time classes (has-*, wp-block-*) are never dead; .wp-block-group is a library internal, and that override supersedes the per-declaration advice inside it. .wf-live is a colour-only <div>: no layout, so no layout-primitive analog.",
+  "note": "Live via JSX, via a template-literal stem, via block markup in templates/*.html, via the four ways templates/card.php builds a class name (concatenation, $var, {$var}, sprintf), and via templates/card.html.twig, which wordpress-components reads as a reference. Only .wf-orphan is dead. Render-time classes (has-*, wp-block-*) are never dead; .wp-block-group is a library internal, and that override supersedes the per-declaration advice inside it. .wf-live is a colour-only <div>: no layout, so no layout-primitive analog.",
   "findings": [
     { "rule": "css/dead-class", "file": "styles/app.css", "line": 4 },
     { "rule": "system/override", "file": "styles/app.css", "line": 6 },

@@ -55,7 +55,7 @@
   "sources": {
     "markup": ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx", "**/*.mjs", "**/*.cjs"],
     "references": [
-      "**/*.php", "**/*.html", "**/block.json", "**/theme.json",
+      "**/*.php", "**/*.html", "**/*.twig", "**/block.json", "**/theme.json",
       "**/patterns/**/*.php", "**/patterns/**/*.html"
     ]
   }

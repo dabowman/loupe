@@ -143,14 +143,46 @@ export function harvestTokens(text: string, into: Set<string> = new Set()): Set<
 const MAX_STEM = 128;
 export function harvestStems(text: string, into: Set<string> = new Set()): Set<string> {
 	for (let i = text.indexOf('${'); i !== -1; i = text.indexOf('${', i + 2)) {
-		let s = i;
-		const floor = Math.max(0, i - MAX_STEM);
-		while (s > floor && isWordChar(text.charCodeAt(s - 1))) s--;
-		const stem = text.slice(s, i);
-		if (stem.includes('-') && /^[A-Za-z_]/.test(stem)) into.add(stem);
+		const stem = text.slice(runStart(text, i), i);
+		if (isStem(stem)) into.add(stem);
 	}
 	return into;
 }
+
+/**
+ * The same stems, built the ways PHP builds a class name — for reference files:
+ *
+ *   'wf-item-' . $id               a literal ending in the stem, then `.`
+ *   "wf-item-$id"                  a variable interpolated after it
+ *   "wf-item-{$id}"                an expression interpolated after it
+ *   sprintf( 'wf-item-%s', $id )   a `%s`, `%d` or `%1$s` after it
+ *
+ * Each alternative starts on a quote, `{`, `$` or `%` and repeats at most one
+ * character class, so the scan stays linear.
+ */
+const PHP_STEM_END = /['"]\s*\.|\{?\$[A-Za-z_]|%(?:\d+\$)?[sd]/g;
+export function harvestPhpStems(text: string, into: Set<string> = new Set()): Set<string> {
+	for (const { index: end } of text.matchAll(PHP_STEM_END)) {
+		const s = runStart(text, end);
+		// After `$` the run is a variable's name, after `%` a specifier: not text.
+		const before = text[s - 1];
+		if (before === '$' || before === '%') continue;
+		const stem = text.slice(s, end);
+		if (isStem(stem)) into.add(stem);
+	}
+	return into;
+}
+
+/** Where the run of word characters ending at `end` starts, at most `MAX_STEM` back. */
+function runStart(text: string, end: number): number {
+	let s = end;
+	const floor = Math.max(0, end - MAX_STEM);
+	while (s > floor && isWordChar(text.charCodeAt(s - 1))) s--;
+	return s;
+}
+
+/** A run is a class stem when it is hyphenated and starts the way a class can. */
+const isStem = (run: string): boolean => run.includes('-') && /^[A-Za-z_]/.test(run);
 
 /** [A-Za-z0-9_-] */
 function isWordChar(c: number): boolean {

@@ -484,8 +484,8 @@ no answer, and `--no-cache` or `LOUPE_NO_CACHE=1` bypasses both. `status` prints
 where they are and what they hold.
 
 **The index cache** (`index-cache.ts`) keeps each file's contribution to the
-index: its markup scan, the class names a reference file mentions, a
-stylesheet's rules reduced to plain data. A hook run reports on one file but
+index: its markup scan, the class names a reference file mentions and the
+stems it builds them from, a stylesheet's rules reduced to plain data. A hook run reports on one file but
 indexes every one, and before this three quarters of every run was re-parsing
 files nothing had touched — 3.8s per edit on a Gutenberg-sized tree, now about
 0.8s from the bundle, about half of that Node starting up and the cache file

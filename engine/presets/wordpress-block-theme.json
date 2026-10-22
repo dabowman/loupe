@@ -22,7 +22,7 @@
     "markup": [],
     "references": [
       "**/*.php", "templates/**/*.html", "parts/**/*.html",
-      "patterns/**/*.php", "**/theme.json", "**/block.json", "**/*.html"
+      "patterns/**/*.php", "**/theme.json", "**/block.json", "**/*.html", "**/*.twig"
     ]
   }
 }
