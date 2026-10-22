@@ -82,6 +82,7 @@ import {
 	isMarginProp,
 	keyClassesIn,
 	keySelector,
+	keysBareElement,
 	mediaQuery,
 	ownDecls,
 	ownLevel,
@@ -297,6 +298,7 @@ function classifyDeclaration(
 		boundSystem = [],
 		boundText = [],
 		isGrid = false,
+		bareElement = false,
 		surfaceOf = () => undefined,
 		surfaced = () => true,
 		enabled,
@@ -309,7 +311,7 @@ function classifyDeclaration(
 		TYPE_PROPS.has(prop) ||
 		isHardcodedTokenValue(prop, value) ||
 		APPEARANCE_PROPS.has(prop);
-	const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled };
+	const ctx = { boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled };
 	// Deliberately unbounded: `message` is part of what the dedupe tells two
 	// findings apart by. The line is bounded once, at the end of `analyze`.
 	for (const check of DECLARATIONS) {
@@ -833,6 +835,9 @@ export async function analyze(
 			const boundSystem = bound.filter((b) => b.isSystem);
 			const boundText = bound.filter((b) => b.isText);
 			const isGrid = cssRule.isGrid;
+			// Every selector: one classed selector in the list, and the margin lands
+			// on a component's part as well.
+			const bareElement = selectors.every(keysBareElement);
 			const scopeLines = nearby(ruleLine);
 			// Carried so a browser-side reader can resolve this rule to the elements
 			// it styles: the comma-joined selector list is a valid `querySelectorAll`
@@ -856,7 +861,7 @@ export async function analyze(
 				const line = decl.line;
 				const { finding, styling } = classifyDeclaration(
 					{ prop, value: decl.value },
-					{ boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive },
+					{ boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled: ruleIsLive },
 				);
 				if (onRawKeys.length)
 					classDecls.push({ prop, value: decl.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });

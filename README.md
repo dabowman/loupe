@@ -202,7 +202,7 @@ answer; everything needing judgment is `loupe-remediation`'s job.
 | --- | --- | --- |
 | `stylesheet/unparsed` | A stylesheet nothing could read — a hole in coverage | error |
 | `suppression/malformed` | A blanket disable, or one missing a rule id or reason | error |
-| `layout/margin-on-child` | Spacing margin, which belongs on the parent's `gap` | error |
+| `layout/margin-on-child` | Spacing margin, which belongs on the parent's `gap` — not on a bare element (`.card p`), which is prose | error |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own | error |
 | `typography/in-css` | A text component typed in CSS instead of via props | error |
 | `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals — which a block's own `.wp-block-{namespace}-*` wrapper, named by its `block.json`, is not | error |

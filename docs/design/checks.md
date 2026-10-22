@@ -30,6 +30,43 @@ Negative margins split out on their own: a bleed is a real technique, so it
 warrants a "confirm this" rather than the "move it to `gap`" remedy, which
 would be wrong advice.
 
+### A margin on a bare element is prose
+
+`.wp-block-acme-card p { margin: 0 0 1em }` spaces paragraphs, not parts. The
+elements it lands on are content — a post's blocks, a `RichText`, whatever an
+author typed — and no layout primitive stands between them to own a `gap`:
+there is no parent the component lays out, only a flow of text. Under `wpds`
+the rule blocked it all the same, tokenized margins included, so a block
+plugin's ordinary front-end stylesheet failed `check` (#100).
+
+So `layout/margin-on-child` claims and passes a stylesheet rule whose every
+selector keys on a bare element: its key compound names a tag and puts no
+class on it, read at the compound's own level the way the bindings read it
+([reading a stylesheet](analysis.md#reading-a-stylesheet)). `.card p`,
+`article > p:first-child` and `li:not(.more)` are bare; `.row > li.item` is
+not. A class is a component's part, and spacing between parts is what `gap` is
+for, so a class-keyed rule keeps the verdict, a tokenized margin included.
+
+- **A tag, not just no class.** `.stack > * + *` names no class either, and it
+  is the margin `gap` replaces exactly; `*`, `[data-slot]` and a bare
+  `:first-child` keep firing.
+- **Every selector in the list.** `.card p, .card__lead` lands the margin on a
+  classed element too, so it reports.
+- **`layout/negative-margin` is untouched.** A bleed on a `p` is still a bleed,
+  and still worth confirming.
+- **Stylesheets only.** An inline style and a CSS-in-JS template's own
+  declarations have no selector to be bare. A nested group in a template
+  (`` styled.div`p { … }` ``) keeps the verdict as well: its selector can be
+  an interpolated component, `${Icon}`, which reads as a tag.
+
+A rule naming no class at all — `h2 { … }` — was never in question: the
+stylesheet pass reads only rules that name a class.
+
+The cost is a missed finding, the cheap direction: a margin on an unclassed
+element inside a layout primitive now passes. `.acme-toolbar button {
+margin-right: 8px }` is the drift `gap` exists for, and it goes unreported
+until the button carries a class.
+
 ## `layout/in-css`
 
 Collapsed to one finding per CSS rule. `display:flex; flex-direction:column;
