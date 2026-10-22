@@ -106,10 +106,10 @@ it knows one was not.
 
 `tokenPrefixes` used to be cosmetic: it shaped a message and nothing validated
 anything against it. Reading the real set — the design system ships its tokens
-as plain custom properties in a stylesheet; `@wordpress/theme` emits 190 of them
-— is what lets a finding name a token instead of a namespace. Token source paths
-deliberately reach into `node_modules`, which the project walk prunes: the
-design system's tokens are the whole point, and they live there.
+as plain custom properties in a stylesheet; `@wordpress/theme` 3.0.0 emits 171
+of them — is what lets a finding name a token instead of a namespace. Token
+source paths deliberately reach into `node_modules`, which the project walk
+prunes: the design system's tokens are the whole point, and they live there.
 
 Everything degrades to the old behaviour when no definitions are found: no
 annotation on hardcoded values, and `tokens/unknown-token` stays silent rather

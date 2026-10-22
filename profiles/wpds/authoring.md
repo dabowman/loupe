@@ -209,6 +209,12 @@ the WPDS MCP server (`get_design_tokens`) rather than guessing a plausible
 shape; `--wpds-font-size-13` is the classic invented token and it resolves to
 nothing.
 
+The legacy admin palette (`--wp-admin-theme-*`, `--wp-components-*`) is not a
+token under the `wpds` preset: it is neither validated nor suggested, so a
+project still writing `var(--wp-admin-theme-color)` should move it to the
+`--wpds-*` token for its role, or run the `wordpress-components` preset
+(`"extends": "wordpress-components"` in `loupe.config.json`) instead.
+
 ## Library internals are off limits
 
 Reaching into another library's DOM — `.components-*`, `.block-editor-*`,

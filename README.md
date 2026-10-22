@@ -246,8 +246,9 @@ having no list to choose from, invented `--wpds-font-size-13`. A finding that
 names a namespace instead of a value manufactures its own next bug.
 
 `designSystem.tokenSources` points at the stylesheets that *define* the tokens —
-for `wpds` that is `@wordpress/theme`, 190 of them in one file — and anything the
-project defines itself is added to the set. Findings then name the token:
+for `wpds` that is `@wordpress/theme`, 171 of them in one file as of 3.0.0 — and
+anything the project defines itself is added to the set. Findings then name the
+token:
 
 ```
 • tokens/hardcoded-value (1) advisory — hardcoded value — replace with a --wpds-* token
