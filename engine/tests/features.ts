@@ -145,6 +145,46 @@ await check('unknown-token fires once a token set exists', async () => {
 	assert(found.message.includes('--wpds-nope'), found.message);
 });
 
+// One verdict whichever channel the name arrives by. The inline channel and a
+// rule naming no class were both read by nothing, so the same misspelling was
+// renamed in `.acme-card { … }` and silent in `style={{ … }}` and `h1 { … }`.
+await check('a misspelled token is reported in every channel, and in a rule naming no class', async () => {
+	const typo = 'var(--wpds-colr-fg-content-neutral)';
+	const r = await run({
+		'loupe.config.json': CONFIG({ designSystem: { tokenSources: ['tokens.css'] } }),
+		'tokens.css': TOKENS,
+		'styles/a.css': `.acme-card {\n\tcolor: ${typo};\n}`,
+		// Nothing binds these, so nothing but the token is checked: the flex and
+		// the margin are not this rule's to report.
+		'styles/base.css': `h1 {\n\tdisplay: flex;\n\tmargin-bottom: 8px;\n\tcolor: ${typo};\n}\n:root {\n\t--acme-ink: ${typo};\n}`,
+		'src/A.jsx': `export const A = () => <div className="acme-card" style={{ color: '${typo}' }} />;`,
+		'src/B.jsx': `import styled from 'styled-components';\nexport const B = styled.div\`\n\tcolor: ${typo};\n\`;`,
+	});
+	const unknown = at(r, 'tokens/unknown-token');
+	const where = unknown.map((f) => `${f.file}:${f.line}`).sort();
+	assert(
+		where.join() === 'src/A.jsx:1,src/B.jsx:3,styles/a.css:2,styles/base.css:4',
+		`expected one finding per file: ${where}`,
+	);
+	for (const f of unknown) {
+		assert(f.code === '--wpds-colr-fg-content-neutral', `${f.file}: ${f.code}`);
+		assert(f.rename?.to === '--wpds-color-fg-content-neutral', `${f.file} renamed to ${f.rename?.to}`);
+	}
+	const inline = one(
+		unknown.filter((f) => f.file === 'src/A.jsx'),
+		'the inline one',
+	);
+	assert(inline.message.endsWith(' (inline)'), `the inline channel is named: ${inline.message}`);
+	// Once per file and name: the `h1` and the `:root` rule are one finding.
+	const base = one(
+		unknown.filter((f) => f.file === 'styles/base.css'),
+		'the classless rules',
+	);
+	assert(base.rename?.lines.join() === '4,7', `every line naming it: ${base.rename?.lines}`);
+	const other = r.findings.filter((f) => f.file === 'styles/base.css' && f.rule !== 'tokens/unknown-token');
+	assert(!other.length, `a rule naming no class was checked: ${other.map((f) => f.rule)}`);
+});
+
 // A reset has no token to reach for, and demanding one for every `inherit` is
 // how a rule gets switched off.
 await check('a keyword or zero is not untokenized type styling', async () => {

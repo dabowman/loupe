@@ -261,7 +261,8 @@ wrong meaning, which survives review precisely because it looks correct. When
 nothing on-role matches, the finding names no token rather than a plausible one.
 
 `tokens/unknown-token` catches the other direction — a `var()` naming nothing the
-design system defines.
+design system defines, in any of the three channels and in a rule like
+`h1 { … }` that names no class.
 
 `tokens/undelivered` asks whether the tokens arrive at all. An undefined custom
 property makes its whole declaration invalid, so `background:

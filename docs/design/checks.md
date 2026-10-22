@@ -380,6 +380,15 @@ written instead, and `--judge` asks which real token was meant — see
 a reader. The defence of that threshold — and why a scale step is
 never read as a spelling — is in [fixing](report.md#fixing).
 
+Every reference counts, whichever channel writes it: a stylesheet rule, one
+naming no class included (`h1 { … }`, `:root { … }`), a `style={{ … }}` object
+and a CSS-in-JS template. The finding sits at the first reference read; one at
+an inline style ends in ` (inline)`, as the channel's other findings do, and
+its `code` is still the bare name. The rename is matched inside the `var()`,
+which is the same text in a style object's string as in CSS, so `loupe fix`
+writes it in all three. See
+[one classifier, three channels](analysis.md#one-classifier-three-channels).
+
 ## `tokens/misapplied-token`
 
 The other half of `tokens/unknown-token`: the name is real, and it is used
@@ -464,7 +473,8 @@ literal → silent. No enqueue at all → silent: nothing shows this project is 
 one that delivers the sheet (a component library's consumer does that). Only
 enqueues found, every one read, none qualifying, reports — at the first `var()`
 of the namespace, in byte order of path, so the anchor is stable across runs.
-Every token use counts towards that anchor, in scope or not, CSS-in-JS included.
+Every token use counts towards that anchor, in scope or not: CSS-in-JS and
+inline styles included, and a rule that names no class.
 The anchor still moves when another file starts using tokens, so the baseline
 key leaves it out: `tokens/undelivered|<project>|tokens/undelivered:<handle>`.
 A token the project's own stylesheets define is excluded: it arrives with the

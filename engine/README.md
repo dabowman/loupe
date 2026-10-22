@@ -40,7 +40,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `suppression/malformed` | A blanket disable, or a directive missing a rule id or reason |
 | `stylesheet/unparsed` | A stylesheet the parser could not read, so nothing in it was checked |
 | `css/dead-class` | A project-namespaced class referenced in no markup or reference file |
-| `tokens/unknown-token` | A `var()` naming no token any known source defines |
+| `tokens/unknown-token` | A `var()` naming no token any known source defines, in any channel or rule |
 | `tokens/misapplied-token` | A real token used outside the scope the profile declares for it — another property, or another kind of element |
 | `tokens/undelivered` | Tokens used with no evidence their stylesheet reaches the page — from the profile's delivery block |
 | `patterns/duplicate-composite` | A registered composite reassembled by hand in 2+ files |
@@ -583,7 +583,9 @@ review src/a.scss:3  border-radius: 4px 4px 0 0 — --wpds-border-radius-md for 
 `tokens/unknown-token` is fixed on the same terms. A `var()` naming a token
 nothing defines is usually a misspelling, so where exactly **one** known token
 is one keystroke away — one insertion, deletion or substitution, and not a
-digit — the name is renamed on every line of the file that references it. Two
+digit — the name is renamed on every line of the file that references it,
+whichever channel the line is in: the rename is matched inside the `var()`,
+which a style object's string writes as CSS does. Two
 candidates, or none, and the finding stands, unless `--judge` settles it
 ([judged renames](#judged-renames)). A digit is excluded because
 `--wpds-dimension-space-20` and `--wpds-dimension-space-30` are one keystroke

@@ -495,6 +495,29 @@ await check('a misspelled token in a CSS-in-JS template is renamed too', async (
 	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
 });
 
+// And the third. A style object's string holds the `var()` as written, so the
+// rename is the same match inside it, on the line the property is written on.
+await check('a misspelled token in an inline style is renamed too', async () => {
+	const { applied, read, findings, remaining, parseErrors } = await fixture({
+		[DS_TOKENS]: NEAR,
+		'src/AC.jsx': [
+			'export const AC = () => (',
+			"\t<div style={{ color: 'var(--wpds-colr-foreground)' }}>",
+			"\t\t<span style={{ borderColor: 'var(--wpds-colr-foreground)' }} />",
+			'\t</div>',
+			');',
+		].join('\n'),
+	});
+	const unknown = findings.filter((f) => f.rule === 'tokens/unknown-token');
+	assert(unknown.length === 1, `expected one finding for the file and name, got ${unknown.length}`);
+	assert(applied.length === 2, `expected a fix per line, got ${JSON.stringify(applied)}`);
+	const out = read('src/AC.jsx');
+	assert(!out.includes('--wpds-colr-'), `an occurrence survived:\n${out}`);
+	assert(settledBy(findings, applied) === 1, 'every line renamed, so the finding is cleared');
+	assert(!remaining.some((f) => f.rule === 'tokens/unknown-token'), 'the next run must not report it again');
+	assert(!parseErrors.length, `the file no longer parses: ${JSON.stringify(parseErrors)}`);
+});
+
 // What a spelling cannot settle, put to a stub: what is asked, and that a judged
 // rename is written exactly as a spelled one, on every line naming it.
 await check('fix --judge renames what the judgement settled, and nothing under the floor', async () => {
@@ -937,6 +960,37 @@ await check('a judged rename of a long unknown name is still one bounded line', 
 			`the judgement did not survive the bound: ${f.message}`,
 		);
 		assert(f.rename?.to === '--wpds-dimension-space-xl', 'the rename itself was lost to the bound');
+	} finally {
+		cleanup(root);
+	}
+});
+
+// The judgement recomposes the line, and the channel marker is the part of it
+// nothing else can recover.
+await check('a judged rename in an inline style still names the channel', async () => {
+	const root = scratch('dsh-judge-rename-inline-');
+	try {
+		writeAll(root, {
+			'loupe.config.json': CONFIG,
+			[DS_TOKENS]: NEAR,
+			'src/X.jsx': "export const X = () => <div style={{ padding: 'var(--wpds-dimension-space-xm)' }} />;\n",
+		});
+		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+		const result = await analyze(config, { scope: null });
+		assert(result.tokens, 'analyze did not hand back its token set');
+		const stub = (async (_url: string, init: { body: string }) => {
+			const questions = JSON.parse(init.body).questions as Record<string, unknown>;
+			const answers = Object.fromEntries(
+				Object.keys(questions).map((k) => [k, { choice: '--wpds-dimension-space-xl', confidence: 0.95 }]),
+			);
+			return new Response(JSON.stringify({ answers }));
+		}) as unknown as typeof fetch;
+		assert((await judgeRenames(root, result.findings, result.tokens, 'key', new Map(), stub)) === 1, 'not settled');
+		const f = result.findings.find((x) => x.rule === 'tokens/unknown-token');
+		assert(
+			f?.message === '--wpds-dimension-space-xm → --wpds-dimension-space-xl (judged 0.95) (inline)',
+			`the marker was dropped: ${f?.message}`,
+		);
 	} finally {
 		cleanup(root);
 	}

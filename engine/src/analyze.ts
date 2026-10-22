@@ -362,6 +362,9 @@ function classifyDeclaration(
  */
 const COLLAPSE_PER_RULE = new Set(['layout/in-css', 'typography/untokenized']);
 
+/** The channel marker on every finding the inline channel reports, the token checks' included. */
+const INLINE = ' (inline)';
+
 /** The property a collapsible finding's message opens with: `gap: 8px` → `gap`. */
 const propOf = (message: string): string => (message.split(':')[0] ?? message).trim();
 
@@ -420,9 +423,9 @@ function collapsePerRule(pending: readonly PendingFinding[]): PendingFinding[] {
 }
 
 /**
- * A parsed stylesheet, reduced to what the walk reads: each rule that names a
- * class, with its own declarations, and every token the sheet defines. Plain
- * data, so a sheet whose bytes have not changed is never parsed again.
+ * A parsed stylesheet, reduced to what the walk reads: each rule, with its own
+ * declarations, and every token the sheet defines. Plain data, so a sheet whose
+ * bytes have not changed is never parsed again.
  */
 function extractSheet(root: Root, text: string, tokenPrefixes: readonly string[]): SheetExtract {
 	// What a rule's own lines say, for the deletion `css/dead-class` offers in
@@ -431,7 +434,8 @@ function extractSheet(root: Root, text: string, tokenPrefixes: readonly string[]
 	const rules: RuleExtract[] = [];
 	root.walkRules((cssRule) => {
 		const selectors = resolvedSelectors(cssRule);
-		if (!selectors.some((s) => classesIn(s).length)) return;
+		// Kept, marked: no markup binds it, but its `var()`s are still read.
+		const unbound = !selectors.some((s) => classesIn(s).length);
 		const line = cssRule.source?.start?.line ?? 1;
 		const media = mediaQuery(cssRule) || undefined;
 		rules.push({
@@ -440,7 +444,9 @@ function extractSheet(root: Root, text: string, tokenPrefixes: readonly string[]
 			isGrid: ruleIsGrid(cssRule),
 			...(media === undefined ? {} : { media }),
 			decls: [...ownDecls(cssRule)].map((d) => ({ prop: d.prop, value: d.value, line: d.source?.start?.line ?? line })),
-			cut: deletableRule(cssRule, srcLines),
+			// No class, so nothing can be dead.
+			cut: unbound ? null : deletableRule(cssRule, srcLines),
+			...(unbound ? { unbound } : {}),
 		});
 	});
 	return { rules, defs: tokenDefsIn(root, tokenPrefixes) };
@@ -822,12 +828,21 @@ export async function analyze(
 		for (const cssRule of sheet.rules) {
 			const ruleLine = cssRule.line;
 			const selectors = cssRule.selectors;
+			const scopeLines = [ruleLine, ruleLine - 1];
+			// A rule naming no class correlates with no markup, so no other check has
+			// anything to say about it. A token it names is as misspelled, and as
+			// undelivered, as one in a class rule.
+			if (cssRule.unbound) {
+				for (const decl of cssRule.decls)
+					for (const name of tokenRefsIn(decl.value, tokenPrefixes))
+						tokenRefs.push({ file: rel, line: decl.line, name, prop: decl.prop.toLowerCase(), scopeLines });
+				continue;
+			}
 			const allClasses = [...new Set(selectors.flatMap(classesIn))];
 			// Kept per selector as well as pooled: deleting the rule for one dead
 			// class is only safe if every selector in the list names that class.
 			const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
 			const keyClasses = [...new Set(keyClassesPer.flat())];
-			if (!allClasses.length) continue;
 
 			// Bindings correlate against the KEY selector only: `.card .title`
 			// styles `.title`, so `.card`'s component must not answer for it.
@@ -835,7 +850,6 @@ export async function analyze(
 			const boundSystem = bound.filter((b) => b.isSystem);
 			const boundText = bound.filter((b) => b.isText);
 			const isGrid = cssRule.isGrid;
-			const scopeLines = [ruleLine, ruleLine - 1];
 			// Carried so a browser-side reader can resolve this rule to the elements
 			// it styles: the comma-joined selector list is a valid `querySelectorAll`
 			// argument, the media condition what `matchMedia` takes. `undefined`
@@ -915,10 +929,15 @@ export async function analyze(
 	// ── inline styles ─────────────────────────────────────────────────────────
 	// Same rules, other channel.
 	for (const el of inlineStyles) {
+		const scopeLines = [el.line, el.line - 1];
+		// Read before the scope skip, as a CSS-in-JS template's are: a token use
+		// outside the scope still decides where `tokens/undelivered` is anchored.
+		for (const d of el.decls)
+			for (const name of tokenRefsIn(d.value, tokenPrefixes))
+				tokenRefs.push({ file: el.file, line: d.line ?? el.line, name, prop: d.prop, scopeLines, suffix: INLINE });
 		// `report` would drop it anyway; skipping first keeps a scoped hook run
 		// from classifying every inline style in the repo on every edit.
 		if (!reports(el.file)) continue;
-		const scopeLines = [el.line, el.line - 1];
 		const whole = ruleIsLive('system/inline-style') ? inlineStyle(el, ds.allowedInlineStyles) : null;
 		if (whole) {
 			report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
@@ -951,7 +970,7 @@ export async function analyze(
 					hints: finding.hints?.map((h) => ({ ...h, span: d.span })),
 					line: d.line ?? el.line,
 					code: finding.code ?? finding.message,
-					suffix: ' (inline)',
+					suffix: INLINE,
 				});
 		}
 		for (const f of collapsePerRule(pending))

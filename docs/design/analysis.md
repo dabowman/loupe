@@ -39,6 +39,15 @@ The two superseding checks — `typography/in-css` and `system/override` — onl
 supersede while their rule is live. Off, they must step aside so the declaration
 reaches the generic verdict it still deserves.
 
+**The token checks read every channel too.** A `var()` is collected for
+`tokens/unknown-token` and `tokens/undelivered` wherever it is written, before
+any check claims the declaration. The inline channel's references once went to
+`tokens/misapplied-token` alone, so the misspelling renamed in `.acme-x { … }`
+was silent in `style={{ … }}` — two verdicts on one mistake, which is what this
+section exists to rule out. A name is still one finding per file, and one
+reported at an inline style carries ` (inline)` like the channel's other
+findings.
+
 ### Why the other two channels exist at all
 
 A stylesheet-only checker leaves `style={{ … }}` and CSS-in-JS entirely
@@ -357,6 +366,14 @@ import once rather than 400 times.
   still belong to the enclosing selector — but nested rules are not.
 - **Bindings correlate against the key selector only.** `.card .title` styles
   `.title`, so `.card`'s component must not answer for it.
+- **A rule naming no class is read for its tokens alone.** Everything the walk
+  correlates keys on a class — a binding, a dead class, the class a raw element
+  is styled through — so `h1 { … }` and `:root { … }` give those rules nothing
+  to say, and the extract used to drop them whole. That dropped their `var()`s
+  with them, and `h1 { color: var(--wpds-colr-…) }` is as misspelled, and its
+  token as undelivered, as the same name in a class rule. Such a rule is kept,
+  marked `unbound`, and only the token references in it are read: no other
+  check sees it, so nothing the correlation rules report changes.
 - **A `var(--x)` margin has no visible sign.** A leading `--` is a custom
   property name, not a minus: `var( --gap )` splits on the spaces prettier
   writes, and reading that as a bleed flags every tokenized margin in the repo.
