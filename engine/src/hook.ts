@@ -3,8 +3,8 @@
  *
  * Exit protocol:
  *   0 + {systemMessage}  clean, or advisory-only, or gave up after N attempts;
- *                        on PostToolUse, findings that do not block also reach
- *                        the agent as hookSpecificOutput.additionalContext
+ *                        on PostToolUse, the findings the edit introduced also
+ *                        reach the agent as hookSpecificOutput.additionalContext
  *   2 + stderr           blocking findings; stderr is handed back to the agent
  *
  * Bounded retry rather than an absolute bail on `stop_hook_active`: skipping

@@ -2003,26 +2003,44 @@ async function main(): Promise<number> {
 	 * is conformant, absolutely — the JSX converted and the CSS left behind is an
 	 * omission by then, not an intermediate state.
 	 *
-	 * The "before" is only analyzed when the "after" would block, so a clean
-	 * edit pays nothing for the question.
+	 * `handed` is what a PostToolUse that blocks nothing hands the agent: every
+	 * blocking finding, all of them standing by then and each one Stop will hold
+	 * it to, and of the rest only those the edit introduced. A created file, or a
+	 * payload with no pre-edit content, compares against nothing and hands over
+	 * everything.
+	 *
+	 * The "before" is analyzed once, and only when the "after" has a finding, so
+	 * a clean edit pays nothing for the question.
 	 *
 	 * Passing a standing finding over is a deferral only where Stop will see it.
 	 * Where Stop cannot resolve the files the turn changed — no git worktree, or
-	 * a repository git refuses to read — it stands down, and a finding passed
-	 * over here is never enforced at all: that is the absolute check, as before.
+	 * a repository git refuses to read — it stands down, and a blocking finding
+	 * passed over here is never enforced at all: that is the absolute check, as
+	 * before.
 	 */
-	let verdict: Promise<{ errors: Finding[]; blocking: Finding[] }> | null = null;
-	const hookVerdict = (): Promise<{ errors: Finding[]; blocking: Finding[] }> =>
+	type Verdict = { errors: Finding[]; blocking: Finding[]; handed: Finding[] };
+	let verdict: Promise<Verdict> | null = null;
+	const hookVerdict = (): Promise<Verdict> =>
 		(verdict ??= (async () => {
 			const errors = result.findings.filter((f) => f.severity === 'error');
-			if (!touched || !errors.length) return { errors, blocking: errors };
-			const stopScope = resolveScope(config, args, { defaultChanged: true });
-			if (stopScope !== null && !Array.isArray(stopScope)) return { errors, blocking: errors };
+			const absolute = { errors, blocking: errors, handed: result.findings };
+			if (!touched || !result.findings.length) return absolute;
+			if (errors.length) {
+				const stopScope = resolveScope(config, args, { defaultChanged: true });
+				if (stopScope !== null && !Array.isArray(stopScope)) return absolute;
+			}
 			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
 				judge: Boolean(apiKey),
 				suppress: !args.flags['no-suppressions'],
 			});
-			return { errors, blocking: introducedBy(errors, before) };
+			// One pass over every finding: the keys carry the rule, so the errors
+			// among them are the ones `introducedBy(errors, before)` would answer.
+			const introduced = new Set(introducedBy(result.findings, before));
+			return {
+				errors,
+				blocking: errors.filter((f) => introduced.has(f)),
+				handed: result.findings.filter((f) => f.severity === 'error' || introduced.has(f)),
+			};
 		})());
 	/**
 	 * Whether the event has a way into the agent's context that does not block:
@@ -2033,14 +2051,14 @@ async function main(): Promise<number> {
 	const hookAdvises = hookEvent(payload) === 'PostToolUse';
 	/**
 	 * The findings the hook will print, decided the way the branch below decides
-	 * it. When nothing blocks: on PostToolUse every finding under the findings
-	 * cap, handed to the agent as context, and on Stop none (a tally). When
+	 * it. When nothing blocks: on PostToolUse the ones it hands the agent as
+	 * context, under the findings cap, and on Stop none (a tally). When
 	 * something does: the blocking ones under the cap, or none once the gate has
 	 * stood down (a summary line).
 	 */
 	const hookShows = async (): Promise<Finding[]> => {
-		const { blocking } = await hookVerdict();
-		if (!blocking.length) return hookAdvises ? shownFindings(result.findings, config.hook.maxFindings) : [];
+		const { blocking, handed } = await hookVerdict();
+		if (!blocking.length) return hookAdvises ? shownFindings(handed, config.hook.maxFindings) : [];
 		if (!payload.session_id && payload.stop_hook_active) return [];
 		// Peeked under the key the branch below bumps, session id or not.
 		if (peekAttempts(root, budgetKey) + 1 > config.hook.maxAttempts) return [];
@@ -2088,8 +2106,8 @@ async function main(): Promise<number> {
 		};
 		// What the rest is asked about. A typed run prints everything; the hook
 		// prints only the findings it has room for — the blocking ones when
-		// something blocks, every one on a PostToolUse when nothing does — and a
-		// tally otherwise, so that is all it pays to have judged.
+		// something blocks, the ones a PostToolUse hands the agent when nothing
+		// does — and a tally otherwise, so that is all it pays to have judged.
 		// A redirect configured to block decides which of those it is, so the hook
 		// waits for it first; everywhere else every pass runs at once.
 		if (isHook) addRedirects(await redirects);
@@ -2127,7 +2145,7 @@ async function main(): Promise<number> {
 	const spentSuffix = judged ? dim(` (${judged})`) : '';
 	if (isHook) {
 		const sessionId = payload.session_id ?? '';
-		const { errors, blocking } = await hookVerdict();
+		const { errors, blocking, handed } = await hookVerdict();
 		// What stood before the edit and still does: never more than stood before it.
 		const standing = errors.length - blocking.length;
 		// Said, not dropped: the agent should know what it is walking past, and that
@@ -2137,16 +2155,25 @@ async function main(): Promise<number> {
 			: '';
 		if (!blocking.length) {
 			clearAttempts(root, budgetKey);
+			// The advisory ones the edit walked past: counted, never listed, or every
+			// edit to a legacy file hands the agent its backlog to start fixing.
+			const passed = result.findings.length - handed.length;
+			const passedNote = passed
+				? ` ${passed} advisory finding(s) already in ${touched} before this edit, left out of the agent's report.`
+				: '';
 			const message = standing
-				? `loupe: this edit added no blocking findings.${standingNote}${spentSuffix}${ceilingSuffix}`
-				: `${formatSummary(result)}${spentSuffix}${ceilingSuffix}`;
-			if (!hookAdvises || !result.findings.length) return emitClean(message);
-			// The agent hears every finding in the blocking report's format and under
-			// its cap: the standing ones, which Stop will hold it to, and the advisory
-			// ones. The report opens with the tally, so the message leads it only
-			// where it says more.
-			const report = formatAgent(result, config, { maxFindings: config.hook.maxFindings, terse: true });
-			return emitAdvisory(message, standing || ceilingSuffix ? `${message}\n\n${report}` : report, payload);
+				? `loupe: this edit added no blocking findings.${standingNote}${passedNote}${spentSuffix}${ceilingSuffix}`
+				: `${formatSummary(result)}${passedNote}${spentSuffix}${ceilingSuffix}`;
+			if (!hookAdvises || !handed.length) return emitClean(message);
+			// The agent hears what was handed over in the blocking report's format and
+			// under its cap. The report opens with its own tally, so the message leads
+			// it only where it says more.
+			const report = formatAgent({ ...result, findings: handed }, config, {
+				maxFindings: config.hook.maxFindings,
+				terse: true,
+			});
+			const context = standing || passed || ceilingSuffix ? `${message}\n\n${report}` : report;
+			return emitAdvisory(message, context, payload);
 		}
 		const attempts = bumpAttempts(root, budgetKey);
 		const max = config.hook.maxAttempts;

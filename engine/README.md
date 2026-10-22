@@ -1025,7 +1025,9 @@ On blocking findings it exits 2 and hands a budgeted report back to the agent:
 guidance printed once per rule, a sample of each rule rather than a flood of
 the first one. With findings and nothing blocking it exits 0 with a one-line
 tally for the person, and on `PostToolUse` hands the agent the same budgeted
-report as `hookSpecificOutput.additionalContext`. `Stop` has no way into the
+report as `hookSpecificOutput.additionalContext` — of the findings the edit
+introduced, with a count of the advisory ones it walked past (everything, when
+there is no pre-edit content to compare against). `Stop` has no way into the
 agent's context that does not block the turn, so there the tally is all there
 is. On a clean run it exits 0 with the tally alone.
 
@@ -1061,10 +1063,10 @@ put `"env": { "LOUPE_OFF": "1" }` in the project's `.claude/settings.local.json`
 session as `LOUPE_OFF=1 claude`. All three feed the same option. The hook then
 checks nothing and says only `loupe: skipped — silenced by …` to the user,
 rather than downgrading to advisory, because on `PostToolUse` an advisory
-finding still reaches the agent and an agent that sees a finding starts fixing
-it (on `Stop` an advisory finding is only a tally the user sees). `loupe status`
-reports the switch on its `options:` line with where it was set. `loupe` run by
-hand ignores it.
+finding the edit introduced still reaches the agent and an agent that sees a
+finding starts fixing it (on `Stop` an advisory finding is only a tally the user
+sees). `loupe status` reports the switch on its `options:` line with where it
+was set. `loupe` run by hand ignores it.
 
 Both read the same on/off spelling as every plugin option: `1`, `true`, `yes`,
 `on`, case-insensitively. `LOUPE_OFF=0` is not one of them and leaves the hook

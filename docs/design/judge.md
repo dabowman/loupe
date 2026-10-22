@@ -79,12 +79,12 @@ tests want every request real.
 
 **The hook pays only for what it prints.** A Stop that does not block prints a
 tally, so it judges nothing; a PostToolUse that does not block hands the agent
-the findings its `maxFindings` cap has room for, and a run that blocks prints
-the blocking ones the cap has room for, so each judges exactly those
-(`shownFindings` in `report.ts` is the same selection the report makes); one
-that has stood down prints a summary, so it judges nothing. A redirect
-configured to block is the one question asked before the rest, because its
-answer decides which of those the run is. A typed `check --judge` prints
+the findings the edit introduced that its `maxFindings` cap has room for, and a
+run that blocks prints the blocking ones the cap has room for, so each judges
+exactly those (`shownFindings` in `report.ts` is the same selection the report
+makes); one that has stood down prints a summary, so it judges nothing. A
+redirect configured to block is the one question asked before the rest, because
+its answer decides which of those the run is. A typed `check --judge` prints
 everything, so it judges everything.
 
 **The spend is said.** `judge: 4 asked, 37 from cache` closes a typed run's

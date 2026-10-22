@@ -109,7 +109,7 @@ off.
 
 Blocking findings handed back mid-turn, to a reader about to spend its retry
 budget on exactly those findings — or, on a PostToolUse that blocks nothing,
-the touched file's findings, handed over as context. Two of the full report's
+the findings the edit introduced, handed over as context. Two of the full report's
 lines answer questions only somebody auditing a whole repo asks — where findings
 cluster, what is already silenced — and the suppression inventory is repo-wide
 where a hook run has looked at two files, so under the hook they would be noise

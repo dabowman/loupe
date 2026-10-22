@@ -14,8 +14,8 @@ CI jobs, hooks and quality runners branch on these, so they are part of the
 public surface and change like one.
 
 The hook's protocol sits on top of them: `0` with a `systemMessage` for clean,
-advisory-only, or gave-up-after-N-attempts, and on PostToolUse findings that do
-not block also go to the agent as `additionalContext`; `2` with stderr for
+advisory-only, or gave-up-after-N-attempts, and on PostToolUse the findings the
+edit introduced also go to the agent as `additionalContext`; `2` with stderr for
 blocking findings, where stderr is what gets handed back to the agent.
 
 **Bounded retry, not an absolute bail on `stop_hook_active`.** Skipping every
@@ -804,10 +804,10 @@ fix.
 ### Silence, not advisory mode
 
 The `off` switch makes the hook check nothing. On PostToolUse an advisory
-finding still lands in the agent's context (on Stop it is a tally the person
-sees), and an agent that sees a finding starts fixing it — which is the whole
-complaint. Deliberately hook-only: `loupe check` typed by hand is someone
-asking, and answering "nothing" would be a lie.
+finding the edit introduced still lands in the agent's context (on Stop it is a
+tally the person sees), and an agent that sees a finding starts fixing it —
+which is the whole complaint. Deliberately hook-only: `loupe check` typed by
+hand is someone asking, and answering "nothing" would be a lie.
 
 It tells the user, though — a `skipped` systemMessage, the path every other
 stand-down takes. When it said nothing at all, a stale `export LOUPE_OFF=1` in
@@ -1002,11 +1002,12 @@ over:
   wherever the new text occurs more than once — a deletion's empty
   `new_string` occurs everywhere — and impossible for a Write.
 
-**Only when it would block.** The "before" is analyzed only when the "after"
-has a blocking finding, so an edit that leaves the file clean pays nothing for
-the question. One that would block pays a second analysis: on a synthetic
-2,460-file project, a blocking hook run went from 0.94s to 1.41s, and a clean
-one stayed at 1.0s.
+**Only when the "after" has a finding.** The "before" is analyzed once per
+run, and only then, so an edit that leaves the file clean pays nothing for the
+question. One that leaves a finding — blocking, or advisory, which the
+non-blocking report subtracts the same way (see below) — pays a second
+analysis: on a synthetic 2,460-file project, a blocking hook run went from
+0.94s to 1.41s, and a clean one stayed at 1.0s.
 
 **Keyed like the baseline**: rule + file + normalized code, not line. An edit
 above a finding moves it down the file, and a key with the line in it would
@@ -1057,13 +1058,26 @@ to the person, not the model, so a write-time gate told nothing at write time to
 the one reader who could act on it.
 
 A PostToolUse that blocks nothing now hands the agent the report a blocking one
-would, as `hookSpecificOutput.additionalContext`, beside the tally: the touched
-file's findings under the same `maxFindings` cap and round-robin sample
-(`shownFindings`), in the same terse agent format, so the agent reads one shape
-whether or not the turn stopped. Standing blocking findings the edit walked past
-ride in the same report, after the line naming them. The selection is the one
-the judge phase reads, so with a key the findings handed over carry the judged
-suggestions a blocking report would. A redirect that cannot block is still never
+would, as `hookSpecificOutput.additionalContext`, beside the tally: under the
+same `maxFindings` cap and round-robin sample (`shownFindings`), in the same
+terse agent format, so the agent reads one shape whether or not the turn
+stopped.
+
+**What the edit introduced, not the file.** Handing over every finding the file
+had gave each edit to a legacy file its backlog — up to the cap, on every write
+— and an agent that sees a finding starts fixing it, so an edit became a cleanup
+of findings that were not the edit's: what the delta above keeps the blocking
+report from doing. So the advisory findings are subtracted against the "before"
+exactly as blocking ones are, and what the edit walked past is one count, on
+the tally and at the head of the context: `2 advisory finding(s) already in
+styles/a.css before this edit, left out of the agent's report`. Standing
+*blocking* findings are still listed — Stop will hold the agent to them. With
+no "before" (a created file, an older payload) everything is handed over, as
+the absolute check would.
+
+The selection is the one the judge phase reads, so with a key the findings
+handed over carry the judged suggestions a blocking report would, and nothing
+the agent is not shown is paid for. A redirect that cannot block is still never
 asked for: that pass asks about every control in scope, before there is a
 finding to choose among, so it cannot be held to what is shown.
 
@@ -1074,9 +1088,9 @@ it for advisory findings would make every Stop with one a blocked Stop —
 to enforce — so it stays reserved for blocking. Turning `blocking` on by default
 for a project with a written config would reach the model on Stop too, at the
 price of stopping turns in every such project; the default stays off, and a
-project that wants Stop to hand findings back turns it on. Most of what Stop's
-tally counts already reached the agent once, at the PostToolUse of the write
-that left it.
+project that wants Stop to hand findings back turns it on. What the turn's own
+writes added already reached the agent, at the PostToolUse of the write that
+added it.
 
 ## The stand-down latches
 

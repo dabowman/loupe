@@ -272,14 +272,14 @@ await check('a blocking hook run asks only about the findings it prints', async 
 	}
 });
 
-// The PostToolUse report prints what the edit introduced, not every blocking
-// finding the file has: the judgements go there, or the one finding the agent
-// is shown reaches it unjudged while the standing ones were paid for.
-await check('a PostToolUse asks about the finding the edit introduced, not the ones it walked past', async () => {
+// The PostToolUse report prints what the edit introduced, not every finding the
+// file has, blocking or advisory: the judgements go there, or the one finding
+// the agent is shown reaches it unjudged while the standing ones were paid for.
+async function asksAboutWhatTheEditIntroduced(severity: 'error' | 'warn'): Promise<void> {
 	const { root, data } = project(
 		{
 			extends: 'wpds',
-			rules: { 'system/raw-element': 'error' },
+			rules: { 'system/raw-element': severity },
 			hook: { maxFindings: 1 },
 		},
 		DISTINCT,
@@ -311,7 +311,13 @@ await check('a PostToolUse asks about the finding the edit introduced, not the o
 	} finally {
 		cleanup(root);
 	}
-});
+}
+await check('a PostToolUse asks about the finding the edit introduced, not the ones it walked past', () =>
+	asksAboutWhatTheEditIntroduced('error'),
+);
+await check('an advisory PostToolUse asks about the finding the edit introduced, not the ones it walked past', () =>
+	asksAboutWhatTheEditIntroduced('warn'),
+);
 
 // Five `<p>` print as one `×5` line, which stands for all five: judging only
 // some would split the line and print the rest unjudged beside it.
