@@ -374,6 +374,73 @@ await check('tokens used, and the only enqueue does not depend on wp-theme: one 
 	assert(f.note?.includes("'wp-theme'"), `the note names the handle to add: ${f.note}`);
 });
 
+/** A CLI run in `root` with the shipped profiles, its JSON findings and summary. */
+function runJson(root: string, args: string[]): { findings: Finding[]; summary: { fixed?: number | null } } {
+	const r = spawnSync('node', [CLI, ...args, '--format', 'json', '--root', root, '--preset', 'wpds', '--profiles', PROFILES], {
+		encoding: 'utf8',
+	});
+	assert(r.status === 0 || r.status === 1, `loupe could not run (${r.status}): ${r.stderr}`);
+	return JSON.parse(r.stdout);
+}
+
+// The finding is about the project, anchored at its first token use only so
+// there is a line to show. Which file comes first moves with edits elsewhere
+// and with the run's scope; the baseline's identity must not move with it.
+await check('a baselined tokens/undelivered stays baselined when another file starts using tokens', () => {
+	const root = scratch('loupe-undeliv-base-');
+	try {
+		writeAll(root, {
+			'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '^30.0.0' } }),
+			'styles/main.css': TOKENS_CSS,
+			'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+		});
+		const b = spawnSync('node', [CLI, 'baseline', '--root', root, '--preset', 'wpds', '--profiles', PROFILES], {
+			encoding: 'utf8',
+		});
+		assert(b.status === 0, `baseline failed: ${b.stderr}`);
+		writeAll(root, { 'src/a.css': '.x {\n  color: var(--wpds-color-foreground-content-neutral);\n}\n' });
+		const { findings, summary } = runJson(root, ['check', '--all']);
+		const live = findings.filter((f) => f.rule === 'tokens/undelivered');
+		assert(!live.length, `the accepted finding came back at ${live.map((f) => f.file)}`);
+		assert(summary.fixed === 0, `nothing was fixed: ${summary.fixed}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('a run scoped to another file neither re-anchors tokens/undelivered nor reports it', () => {
+	const root = scratch('loupe-undeliv-scope-');
+	try {
+		writeAll(root, {
+			'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '^30.0.0' } }),
+			'src/Card.jsx': "import styled from 'styled-components';\nexport const Card = styled.div`\n\tbackground: var(--wpds-color-background-surface-neutral-strong);\n`;\n",
+			'style.css': '.x {\n  color: var(--wpds-color-foreground-content-neutral);\n}\n',
+			'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+		});
+		const all = one(
+			runJson(root, ['check', '--all', '--no-baseline']).findings.filter((f) => f.rule === 'tokens/undelivered'),
+			'the whole-repo run reports it once',
+		);
+		assert(all.file === 'src/Card.jsx', `anchored at the first use, a css-in-js one: ${all.file}`);
+		const scoped = runJson(root, ['check', '--no-baseline', '--files', 'style.css']).findings;
+		const moved = scoped.filter((f) => f.rule === 'tokens/undelivered');
+		assert(!moved.length, `a scoped run re-anchored it: ${moved.map((f) => f.file)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('tokens/undelivered is keyed on the project, not the file it is shown at', () => {
+	const at = (file: string): string =>
+		findingKey({ rule: 'tokens/undelivered', file, code: 'tokens/undelivered:wp-theme', message: '' });
+	assert(at('src/a.css') === at('styles/main.css'), `the key moves with the anchor: ${at('src/a.css')}`);
+	assert(
+		findingKey({ rule: 'tokens/unknown-token', file: 'a.css', code: 'x', message: '' }) !==
+			findingKey({ rule: 'tokens/unknown-token', file: 'b.css', code: 'x', message: '' }),
+		'every other rule keeps its file',
+	);
+});
+
 await check('a commented-out dependency is not one', () => {
 	const php = `${enqueue("array( /* 'wp-theme', */ 'site-spec-styles' )")}// wp_enqueue_style( 'x', 'y', array( 'wp-theme' ) );\n`;
 	one(undeliveredIn({ 'src/a.css': TOKENS_CSS, 'includes/admin.php': php }), 'a comment delivers nothing');

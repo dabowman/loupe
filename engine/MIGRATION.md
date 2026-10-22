@@ -195,3 +195,18 @@ the turn over it — it stands aside — so until the config is fixed **the gate
 checks nothing**: it tells the user `loupe: skipped — config error: …` and, on a
 write, hands the agent the same error as advisory context so it can offer the
 rewrite. Run `loupe status` after upgrading to catch it before a session does.
+
+## Baseline entries to re-record
+
+Two rules' baseline keys changed, because the old ones moved under edits that
+introduced nothing. An entry recorded under the old key no longer matches, so
+the finding it accepted comes back as new. Run `loupe baseline` once after
+upgrading (`loupe baseline --dry-run` first shows the `+N new` and `-N fixed`
+pairs this produces) and commit the result.
+
+- **`tokens/undelivered`** is a finding about the project, shown at its first
+  token use. The key no longer names that file:
+  `tokens/undelivered|src/a.css|tokens/undelivered:wp-theme` is now
+  `tokens/undelivered|<project>|tokens/undelivered:wp-theme`.
+- **`stylesheet/unparsed`** keys on postcss's reason alone (`Unclosed block`),
+  without the `line:column` in front of it.

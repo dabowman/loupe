@@ -461,9 +461,12 @@ candidate files, a file over 1.5MB, a list that does not close or is not a
 literal → silent. No enqueue at all → silent: nothing shows this project is the
 one that delivers the sheet (a component library's consumer does that). Only
 enqueues found, every one read, none qualifying, reports — at the first `var()`
-of the namespace, in byte order of path, so the anchor and the key
-(`tokens/undelivered:<handle>`) are stable across runs. A token the project's own
-stylesheets define is excluded: it arrives with the sheet that defines it.
+of the namespace, in byte order of path, so the anchor is stable across runs.
+Every token use counts towards that anchor, in scope or not, CSS-in-JS included.
+The anchor still moves when another file starts using tokens, so the baseline
+key leaves it out: `tokens/undelivered|<project>|tokens/undelivered:<handle>`.
+A token the project's own stylesheets define is excluded: it arrives with the
+sheet that defines it.
 
 The evidence walk is the rule's only cost, so it runs only when the anchor is in
 the run's scope — a scoped hook run that cannot report the finding does not pay
