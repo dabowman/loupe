@@ -1,0 +1,6 @@
+{
+  "extends": "wpds",
+  "namespaces": { "project": ["acme-"], "neverDead": ["acme-*"] },
+  "sources": { "references": [], "markup": ["src/**/*.jsx"] },
+  "rules": { "system/raw-element": "off" }
+}
