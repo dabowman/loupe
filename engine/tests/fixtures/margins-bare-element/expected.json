@@ -1,0 +1,15 @@
+{
+  "note": "A margin on a bare element is prose, not layout drift: layout/margin-on-child passes a stylesheet rule whose every selector keys on a tag with no class of its own (lines 1, 5, 7 for li:not(.x), and the nested p on 12), tokenized or not. h2 (line 4) names no class, so the rule is never read. A class-keyed rule keeps the verdict, a tokenized margin included (2, 6, 8, 13); so do the universal * of an owl selector (9) and a list with one classed selector (10). A bleed on a p is still layout/negative-margin (3). An inline style and a CSS-in-JS template, its nested p group included, have no stylesheet rule to read and keep firing (Card.jsx 4, 9, 15).",
+  "findings": [
+    { "rule": "layout/margin-on-child", "file": "styles/card.css", "line": 2 },
+    { "rule": "layout/negative-margin", "file": "styles/card.css", "line": 3 },
+    { "rule": "layout/margin-on-child", "file": "styles/card.css", "line": 6 },
+    { "rule": "layout/margin-on-child", "file": "styles/card.css", "line": 8 },
+    { "rule": "layout/margin-on-child", "file": "styles/card.css", "line": 9 },
+    { "rule": "layout/margin-on-child", "file": "styles/card.css", "line": 10 },
+    { "rule": "layout/margin-on-child", "file": "styles/card.css", "line": 13 },
+    { "rule": "layout/margin-on-child", "file": "src/Card.jsx", "line": 4 },
+    { "rule": "layout/margin-on-child", "file": "src/Card.jsx", "line": 9 },
+    { "rule": "layout/margin-on-child", "file": "src/Card.jsx", "line": 15 }
+  ]
+}

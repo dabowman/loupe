@@ -351,6 +351,13 @@ export interface ClassifyContext {
 	boundText?: readonly Binding[];
 	isGrid?: boolean;
 	/**
+	 * Every selector of the stylesheet rule keys on a bare element — a tag with
+	 * no class of its own (`keysBareElement`). Only the stylesheet channel sets
+	 * it, so an inline style and a CSS-in-JS template, nested groups included,
+	 * never read as bare.
+	 */
+	bareElement?: boolean;
+	/**
 	 * The styling surface the registry records for a bound component, if any.
 	 * `undefined` is "nobody recorded one", which is not "it owns nothing".
 	 */

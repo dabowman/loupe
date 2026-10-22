@@ -424,6 +424,18 @@ export const classesIn = (sel: string): string[] =>
  */
 export const keyClassesIn = (sel: string): string[] => classesIn(ownLevel(keySelector(sel)));
 
+/**
+ * Does a selector style an element by its tag alone? Its key compound names a
+ * tag and puts no class on it: `.card p`, `h2` and `li:not(.x)` do, and
+ * `.row > li.item`, `.stack > *` and `[data-slot]` do not.
+ *
+ * Design notes: docs/design/checks.md#a-margin-on-a-bare-element-is-prose
+ */
+export const keysBareElement = (sel: string): boolean => {
+	const own = ownLevel(keySelector(sel));
+	return /^[a-z]/i.test(own) && !classesIn(own).length;
+};
+
 /** Does this rule establish a CSS Grid? */
 export const ruleIsGrid = (rule: Container): boolean =>
 	[...ownDecls(rule)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
