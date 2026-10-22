@@ -9,7 +9,7 @@
  * Design notes: docs/design/cli.md
  */
 
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -31,8 +31,10 @@ import { findConfig, listPresets, loadConfig } from './config.ts';
 import { SEV_PAINT, bold, cyan, dim, green, magenta, red, setColor, yellow } from './color.ts';
 import {
 	TreeTooLarge,
+	analyzeEntryBudget,
 	byBytes,
 	changedFiles,
+	discover,
 	gitIgnores,
 	hasGitDir,
 	isSource,
@@ -290,7 +292,8 @@ Commands:
 Options:
   --changed             Only report findings in files changed vs. HEAD (default for hook)
   --all                 Report across the whole repo (default for check)
-  --files a,b           Only report findings in these files
+  --files a,b           Only report findings in these files (a directory: the
+                        source files under it)
   --rule <id>           Only report (check) or fix (fix) this rule's findings;
                         repeat it, or give a comma list, for more than one
   --format <f>          agent | json | sarif | html  (default: agent)
@@ -439,6 +442,32 @@ const TRUNCATED_NOTE =
 /** The same fact, sized for a hook message that has to stay one line. */
 const CEILING_SUFFIX = ` (inference stopped at the ${CEILING}; namespaces are a guess)`;
 
+/**
+ * `--files`, with each directory replaced by the source files under it.
+ *
+ * Findings are keyed by file, so a directory taken as given matched nothing and
+ * the run reported clean. Read off the same walk the analysis makes, so the
+ * source globs and `sources.ignore` decide what is under it exactly as they
+ * decide what `--all` covers.
+ */
+function expandDirs(config: Config, given: readonly string[]): ScopeResult {
+	const isDir = (rel: string): boolean => {
+		try {
+			return statSync(resolve(config.root, rel)).isDirectory();
+		} catch {
+			return false;
+		}
+	};
+	const dirs = given.filter(isDir).map((d) => toPosix(relative(config.root, resolve(config.root, d))));
+	if (!dirs.length) return given.filter(Boolean);
+	const limit = analyzeEntryBudget(config.maxEntries);
+	const found = discover({ root: config.root, sources: config.sources, limit });
+	if (found.truncated) return { error: new TreeTooLarge(limit).message };
+	const under = (rel: string): boolean => dirs.some((d) => d === '' || rel.startsWith(`${d}/`));
+	const files = [...found.styles, ...found.markup, ...found.references].map((f) => f.rel).filter(under);
+	return [...new Set([...given.filter((f) => f && !isDir(f)), ...files])];
+}
+
 function resolveScope(
 	config: Config,
 	args: Args,
@@ -448,7 +477,8 @@ function resolveScope(
 	if (given.length > 1) return { error: `conflicting scope flags: ${given.map((f) => `--${f}`).join(' ')}` };
 	if (args.flags.all) return null;
 	if (args.flags.files)
-		return (
+		return expandDirs(
+			config,
 			args.flags.files
 				.split(',')
 				.map((f) => f.trim())
@@ -456,7 +486,7 @@ function resolveScope(
 				// Findings are keyed repo-relative, so an absolute path matches nothing and the
 				// run reports clean.
 				.map((f) => toPosix(isAbsolute(f) ? relative(config.root, resolve(f)) : f))
-				.filter((f) => f && !f.startsWith('..'))
+				.filter((f) => !f.startsWith('..')),
 		);
 	if (args.flags.changed || defaultChanged) {
 		const changed = changedFiles(config.root);

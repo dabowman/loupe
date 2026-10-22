@@ -1156,4 +1156,39 @@ await check('a baseline entry that is not a string is dropped, not thrown on', (
 	}
 });
 
+// `--files` took a directory as a file name: nothing is keyed by it, so
+// `--files styles` reported "clean. 1 file(s) scanned." on a tree whose
+// stylesheets had findings in them.
+await check('--files expands a directory to the source files under it', () => {
+	const dir = scratch('loupe-files-dir-');
+	writeAll(dir, { ...RULED, 'vendor/skip.css': '.v { margin-bottom: 8px; }' });
+	writeAll(dir, {
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			rules: { 'layout/margin-on-child': 'error' },
+			sources: { ignore: ['vendor/**'] },
+		}),
+	});
+	try {
+		const files = (...argv: string[]): string[] =>
+			[
+				...new Set(
+					(
+						JSON.parse(cli(dir, 'check', '--no-baseline', '--format', 'json', ...argv).stdout) as {
+							findings: Finding[];
+						}
+					).findings.map((f) => f.file),
+				),
+			].sort();
+		const all = files('--all');
+		assert(all.join() === 'styles/a.css,styles/b.css', `fixture: ${all.join()}`);
+		for (const given of ['styles', 'styles/', '.', join(dir, 'styles')])
+			assert(files('--files', given).join() === all.join(), `--files ${given}: ${files('--files', given).join()}`);
+		// A file beside a directory, and the ignore globs still apply under it.
+		assert(files('--files', 'styles/b.css').join() === 'styles/b.css', 'a plain file is no longer taken as given');
+	} finally {
+		cleanup(dir);
+	}
+});
+
 finish();
