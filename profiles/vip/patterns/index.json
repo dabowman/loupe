@@ -1,7 +1,7 @@
 {
   "packages": ["@automattic/vip-design-system"],
   "version": 1,
-  "note": "Sanctioned VIP Design System compositions. `signature` is the normalized component tree — a node is `[name, ...children]`, matching is containment rather than equality, and anything under four nodes the engine ignores as too generic to check. Namespaced parts are written as the code writes them (`Dropdown.Item`, `Accordion.Root`); `canonical` is always the name the file imports (`Dropdown`, `Accordion`). **Anatomy entries** record a shape the library requires — a `Table` is rows of cells in every file that has one — and carry `canonical` set to the root import, so they keep `patterns/unregistered-composite` quiet about mandatory structure and never produce a finding of their own. **Judgement entries** record a composite with a right and a wrong form. `NewDialog.Root` and `Drawer` take their regions as props (`trigger`, `title`, `description`, `content`), which a signature does not see, so neither has an anatomy entry. Entries with no `canonical` are shapes the package does not ship: the first project to need one extracts it and fills `canonical` in. Seeded from the composites vip-dashboard actually repeats (2026-09-24).",
+  "note": "Sanctioned VIP Design System compositions. `signature` is the normalized component tree — a node is `[name, ...children]`, matching is containment rather than equality, and anything under four nodes the engine ignores as too generic to check. Namespaced parts are written as the code writes them (`Dropdown.Item`, `Accordion.Root`); `canonical` is always the name the file imports (`Dropdown`, `Accordion`). **Anatomy entries** record a shape the library requires — a `Table` is rows of cells in every file that has one — and carry `canonical` set to the root import, so they keep `patterns/unregistered-composite` quiet about mandatory structure and never produce a finding of their own. **Judgement entries** record a composite with a right and a wrong form. `NewDialog.Root` and `Drawer` take their regions as props (`trigger`, `title`, `description`, `content`), which a signature does not see, so neither has an anatomy entry. Entries with no `canonical` are shapes the package does not ship: the first project to need one extracts it and fills `canonical` in. Seeded from composites that already recur in a real VIP Design System codebase (2026-09-24).",
   "patterns": [
     {
       "id": "table-anatomy",
@@ -68,7 +68,7 @@
       "instead_of": [
         "Rebuilding the row per form, with the label/toggle/description wiring re-typed each time"
       ],
-      "note": "Not shipped. `ToggleRow` is a different shape — a list row with a `Heading` title, an optional image and badge, and no `<label>` association — so it is not a drop-in for this. vip-dashboard assembles this row by hand in 17 files; the first one extracted becomes `canonical`, and the rest import it."
+      "note": "Not shipped. `ToggleRow` is a different shape — a list row with a `Heading` title, an optional image and badge, and no `<label>` association — so it is not a drop-in for this. Projects assemble this row by hand; the first one extracted becomes `canonical`, and the rest import it."
     }
   ]
 }
