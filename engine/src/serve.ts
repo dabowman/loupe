@@ -292,9 +292,13 @@ const JS = `
   function load() {
     fetch(ORIGIN + '/findings.json', { cache: 'no-store' })
       // A refused analysis is a 500 carrying { error }: shown as the reason, never
-      // rendered as a payload it is not.
+      // rendered as a payload it is not. Any other failure, a proxy's HTML among
+      // them, is shown by its status.
       .then(function (r) {
-        return r.json().then(function (j) { if (!r.ok) throw new Error(j && j.error || 'HTTP ' + r.status); return j; });
+        if (r.ok) return r.json();
+        return r.json().catch(function () { return null; }).then(function (j) {
+          throw new Error(j && j.error || 'HTTP ' + r.status);
+        });
       })
       .then(function (j) { data = j; pinned = null; render(); })
       .catch(function (e) {
