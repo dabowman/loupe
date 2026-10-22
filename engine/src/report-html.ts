@@ -19,22 +19,14 @@
  * Design notes: docs/design/report.md#the-html-report
  */
 
-import { body, embed } from './report-view.ts';
+import { body, embed, htmlDocument } from './report-view.ts';
 import { reportPayload } from './report.ts';
 import type { AnalyzeResult, BaselinedResult, Config } from './types.ts';
 
 export function formatHtml(result: AnalyzeResult | BaselinedResult, config: Config): string {
 	const payload = embed(JSON.stringify(reportPayload(result, config)));
-	return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loupe report</title>
-</head>
-<body>
-${body({ payload, clean: result.findings.length === 0, parseErrors: result.diagnostics.parseErrors.length })}
-</body>
-</html>
-`;
+	return htmlDocument({
+		title: 'Loupe report',
+		body: body({ payload, clean: result.findings.length === 0, parseErrors: result.diagnostics.parseErrors.length }),
+	});
 }
