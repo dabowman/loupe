@@ -3050,6 +3050,55 @@ await check('the hook runs --judge without a key instead of refusing', () => {
 	}
 });
 
+// Each judge request had a 20s limit and the phase none: three or four stages
+// in a row against an endpoint that never answers ran the hook past Claude
+// Code's 60s timeout, which drops its result. One deadline covers the phase,
+// `hook.timeoutMs`, and the hook keeps the deterministic findings it has.
+await check('the hook bounds the whole judge phase by hook.timeoutMs', () => {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({
+			extends: 'wpds',
+			namespaces: { project: ['wf-'] },
+			hook: { timeoutMs: 1500 },
+		}),
+		'node_modules/@wordpress/theme/prebuilt/css/design-tokens.css':
+			':root {\n\t--wpds-dimension-padding-sm: 8px;\n\t--wpds-dimension-padding-md: 12px;\n}',
+		// 6px sits between two padding steps, so the judge is asked about it.
+		'styles/a.css': '.wf-a {\n\tpadding: 6px;\n}',
+	});
+	const asked = join(root, 'asked');
+	// A socket that never answers: the request ends only when its signal aborts.
+	const hang = `data:text/javascript,${encodeURIComponent(
+		[
+			"import { appendFileSync } from 'node:fs';",
+			'globalThis.fetch = (_url, init) => new Promise((_, reject) => {',
+			"\tappendFileSync(process.env.LOUPE_TEST_ASKED, 'x');",
+			// A real socket holds the process open; an interval stands in for it.
+			'\tconst open = setInterval(() => {}, 1000);',
+			"\tinit?.signal?.addEventListener('abort', () => {",
+			'\t\tclearInterval(open);',
+			"\t\treject(init.signal.reason ?? new Error('aborted'));",
+			'\t});',
+			'});',
+		].join('\n'),
+	)}`;
+	try {
+		const t = Date.now();
+		const r = spawnSync(process.execPath, ['--import', hang, CLI, 'hook', '--root', root, '--judge'], {
+			encoding: 'utf8',
+			input: JSON.stringify({ session_id: 'x', tool_input: { file_path: 'styles/a.css' } }),
+			env: env({ TYPESAFE_API_KEY: 'key', LOUPE_TEST_ASKED: asked }),
+		});
+		const took = Date.now() - t;
+		assert(existsSync(asked), `the judge was never asked, so the deadline went untested: ${r.stdout}${r.stderr}`);
+		assert(r.status === 0, `exited ${r.status}: ${r.stderr}`);
+		assert(took < 10_000, `the judge phase ran ${took}ms against a 1.5s deadline`);
+		assert(JSON.parse(r.stdout).systemMessage, `unexpected output: ${r.stdout}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // The PATH shim found itself with `realpath`, which macOS 12 and earlier do not
 // ship: every invocation died on "command not found" before loupe ran. Both
 // routes onto PATH go through a symlink — Claude Code links the plugin

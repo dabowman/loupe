@@ -503,6 +503,22 @@ async function findingsBeforeEdit(
 }
 
 /**
+ * `fetch` under one deadline shared by every request made through it, on top
+ * of each request's own signal. Combined by hand: `AbortSignal.any` is Node 20.
+ */
+function deadlineFetch(deadline: AbortSignal): typeof fetch {
+	return (input, init) => {
+		const both = new AbortController();
+		for (const s of [deadline, init?.signal]) {
+			if (!s) continue;
+			if (s.aborted) both.abort(s.reason);
+			else s.addEventListener('abort', () => both.abort(s.reason), { once: true });
+		}
+		return fetch(input, { ...init, signal: both.signal });
+	};
+}
+
+/**
  * The findings in `after` that the edit introduced.
  *
  * Counted, not looked up: a file with one margin on a child that now has two
@@ -1519,48 +1535,60 @@ async function main(): Promise<number> {
 		// judged finding never enters one: its confidence moves between runs, and
 		// a baselined finding that comes and goes is noise in both directions.
 		// A failed request leaves the findings as the engine wrote them.
+		//
+		// In the hook the phase has one deadline, `hook.timeoutMs`. Each request has
+		// its own limit, but the stages run one after another, and a hook past
+		// Claude Code's timeout is dropped whole, deterministic findings and all.
+		// A stage the deadline has passed is not started.
+		const deadline = isHook ? AbortSignal.timeout(config.hook.timeoutMs) : null;
+		const judgeFetch = deadline ? deadlineFetch(deadline) : fetch;
+		const inTime = (): boolean => !deadline?.aborted;
 		try {
 			// The same filter, for the findings this adds.
 			const redirectSeverity = config.severityOf('patterns/judged-redirect');
 			if (
+				inTime() &&
 				result.controls?.length &&
 				(args.flags.severity !== 'error' || redirectSeverity === 'error') &&
 				(!rules || rules.has('patterns/judged-redirect'))
 			) {
-				result.findings.push(...(await judgeRedirects(result.controls, apiKey, redirectSeverity)));
+				result.findings.push(...(await judgeRedirects(result.controls, apiKey, redirectSeverity, judgeFetch)));
 				// Written after `analyze` returned, so past its dedupe: two controls on
 				// one line judged alike are one finding, as every other rule's are.
 				result.findings = dedupe(result.findings);
 			}
-			await judgeVariants(root, result.findings, config.componentRegistry, apiKey);
+			if (inTime()) await judgeVariants(root, result.findings, config.componentRegistry, apiKey, judgeFetch);
 		} catch (err) {
 			note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
 		}
 		// Its own note: the judgements above stand when this one cannot run.
 		try {
-			if (result.findings.some((f) => f.suggest?.length))
+			if (inTime() && result.findings.some((f) => f.suggest?.length))
 				await judgeValues(
 					root,
 					result.findings,
 					result.tokens,
 					apiKey,
 					tokenDescriptions(config.profiles?.active ?? []),
+					judgeFetch,
 				);
 		} catch (err) {
 			note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
 		}
 		try {
-			if (result.tokens && result.findings.some((f) => f.unknown))
+			if (inTime() && result.tokens && result.findings.some((f) => f.unknown))
 				await judgeRenames(
 					root,
 					result.findings,
 					result.tokens,
 					apiKey,
 					tokenDescriptions(config.profiles?.active ?? []),
+					judgeFetch,
 				);
 		} catch (err) {
 			note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
 		}
+		if (!inTime()) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)\n`);
 		// Computed before the redirects above existed: one configured to `error`
 		// has to be able to fail the run it is reported in.
 		result.blocking = result.findings.some((f) => f.severity === 'error');

@@ -70,7 +70,9 @@ export const DEFAULTS: MergedConfig = {
 	// (the layout/text categorization) — same word, unrelated concern.
 	componentRegistry: null,
 	baseline: DEFAULT_BASELINE,
-	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 120000 },
+	// timeoutMs is the hook's whole judge phase, well inside the 60s Claude Code
+	// gives PostToolUse: the analysis on either side of it needs the rest.
+	hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 30000 },
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
