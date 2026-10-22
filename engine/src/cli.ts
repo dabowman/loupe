@@ -1812,7 +1812,10 @@ async function main(): Promise<number> {
 			maxFindings: config.hook.maxFindings,
 			terse: true,
 		});
-		return emitBlocking(`${report}\n\n(attempt ${attempts} of ${max})${standingNote}${ceilingSuffix}`);
+		// Beside the attempt count: the blocking report is where the hook judges, so
+		// it is where the spend is said.
+		const spent = judged ? `; ${judged}` : '';
+		return emitBlocking(`${report}\n\n(attempt ${attempts} of ${max}${spent})${standingNote}${ceilingSuffix}`);
 	}
 
 	const maxFindings = Number(args.flags['max-findings'] ?? 0) || 0;

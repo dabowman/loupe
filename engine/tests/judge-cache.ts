@@ -248,6 +248,10 @@ await check('a blocking hook run asks only about the findings it prints', async 
 		const hookEnv = env(data, { CLAUDE_PROJECT_DIR: root });
 		const first = await judged(['hook', '--judge', '--profiles', PROFILES], hookEnv, hookPayload(root));
 		assert(first.n === 2, `the hook sent ${first.n} request(s), expected the 2 it has room to print`);
+		assert(
+			/\(attempt 1 of \d+; judge: 2 asked\)/.test(first.stderr),
+			`the block does not say what it spent: ${first.stderr}`,
+		);
 		// The same turn's next write, and the Stop after it: nothing new to pay for.
 		const again = await judged(['hook', '--judge', '--profiles', PROFILES], hookEnv, hookPayload(root));
 		assert(again.n === 0, `the second hook run sent ${again.n}`);
