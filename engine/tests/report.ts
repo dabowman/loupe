@@ -1037,4 +1037,30 @@ await check('--concise still reports what could not be parsed', async () => {
 	}
 });
 
+// `--severity error` dropped the live warnings and left the baselined ones, so
+// SARIF still listed accepted warnings as suppressed results and counted them.
+await check('--severity error filters the baselined findings too', () => {
+	const dir = scratch('loupe-severity-baseline-');
+	writeAll(dir, RULED);
+	try {
+		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
+		const out = cli(dir, 'check', '--all', '--severity', 'error', '--format', 'sarif');
+		const run0 = (
+			JSON.parse(out.stdout) as {
+				runs: { results: { level: string; suppressions?: unknown[] }[]; properties?: { baselined: number } }[];
+			}
+		).runs[0];
+		assert(run0, 'no sarif run');
+		const suppressed = run0.results.filter((r) => r.suppressions);
+		assert(suppressed.length === 3, `${suppressed.length} suppressed, expected the 3 margin errors`);
+		assert(
+			suppressed.every((r) => r.level === 'error'),
+			`a baselined warning survived --severity error: ${JSON.stringify(suppressed)}`,
+		);
+		assert(run0.properties?.baselined === 3, `baselined ${run0.properties?.baselined}, expected 3`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
 finish();

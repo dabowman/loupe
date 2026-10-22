@@ -552,10 +552,14 @@ function filterRules<T extends AnalyzeResult>(result: T, rules: ReadonlySet<Rule
 	return { ...result, findings, blocking: findings.some((f) => f.severity === 'error') };
 }
 
-function filterSeverity<T extends AnalyzeResult>(result: T, min: string): T {
+function filterSeverity<T extends AnalyzeResult | BaselinedResult>(result: T, min: string): T {
 	if (min !== 'error') return result;
 	const findings = result.findings.filter((f) => f.severity === 'error');
-	return { ...result, findings };
+	if (!('baselinedFindings' in result)) return { ...result, findings };
+	// The accepted findings too: SARIF lists them as suppressed results, and a
+	// warning the filter asked to leave out is no more wanted there.
+	const baselinedFindings = result.baselinedFindings.filter((f) => f.severity === 'error');
+	return { ...result, findings, baselinedFindings, baselined: baselinedFindings.length };
 }
 
 async function main(): Promise<number> {
