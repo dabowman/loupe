@@ -26474,7 +26474,12 @@ var typographyInCss = ({ prop }, { boundText, enabled: enabled2, surfaceOf }) =>
   const text2 = owner?.binding ?? boundText.find((b) => !surfaceOf(b));
   if (!text2) return void 0;
   const head2 = `${prop} on <${text2.tag}>`;
-  return owner?.via.length ? { rule: "typography/in-css", message: `${head2} \u2014 set via ${viaProps(owner.via)}`, code: head2 } : { rule: "typography/in-css", message: head2 };
+  const code = `${prop} on <${boundText[0].tag}>`;
+  return {
+    rule: "typography/in-css",
+    message: owner?.via.length ? `${head2} \u2014 set via ${viaProps(owner.via)}` : head2,
+    code
+  };
 };
 
 // src/checks/typography/untokenized.ts
@@ -31087,9 +31092,13 @@ var JS2 = `
   function load() {
     fetch(ORIGIN + '/findings.json', { cache: 'no-store' })
       // A refused analysis is a 500 carrying { error }: shown as the reason, never
-      // rendered as a payload it is not.
+      // rendered as a payload it is not. Any other failure, a proxy's HTML among
+      // them, is shown by its status.
       .then(function (r) {
-        return r.json().then(function (j) { if (!r.ok) throw new Error(j && j.error || 'HTTP ' + r.status); return j; });
+        if (r.ok) return r.json();
+        return r.json().catch(function () { return null; }).then(function (j) {
+          throw new Error(j && j.error || 'HTTP ' + r.status);
+        });
       })
       .then(function (j) { data = j; pinned = null; render(); })
       .catch(function (e) {
@@ -32389,7 +32398,8 @@ async function main() {
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ""}` : config.source.kind;
     const base = findExistingBaseline(root2, namedBaseline, config.baselinePath);
     const legacy = base.found ? null : legacyBaseline(root2);
-    const state = attemptsPath(root2);
+    const hookDir = args.flags.root ? root2 : claudeProjectDir();
+    const state = attemptsPath(hookDir);
     const ds = config.designSystem;
     const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
     const orNone = (arr) => arr?.length ? arr.join(", ") : "(none)";
@@ -32415,7 +32425,7 @@ async function main() {
       // the line above is not the hook's file unless this run has it too.
       ...process.env.CLAUDE_PLUGIN_DATA ? [] : [
         dim(
-          `            without CLAUDE_PLUGIN_DATA; the Claude Code hook's is ${toPosix(attemptsPath(root2, "$CLAUDE_PLUGIN_DATA"))}`
+          `            without CLAUDE_PLUGIN_DATA; the Claude Code hook's is ${toPosix(attemptsPath(hookDir, "$CLAUDE_PLUGIN_DATA"))}`
         )
       ],
       `${dim("options:    ")}${describeOptions(resolved)}`,
