@@ -465,12 +465,7 @@ export function planMap(from: TokenDoc, to: TokenDoc, opts: PlanOptions = {}): M
 	const ranks: boolean[] = [];
 	const settled: Mapping[] = [];
 	for (const t of capped) {
-		const row = {
-			from: t.path,
-			type: t.type,
-			tier: t.tier,
-			fromValue: t.literal,
-		};
+		const row = rowOf(t);
 		const twin = opts.settleExact === false ? undefined : byPath.get(t.path);
 		if (twin && comparable(t.type, twin.type)) {
 			settled.push({ ...row, to: twin.path, toValue: twin.literal, confidence: 1, how: 'exact', considered: [] });
@@ -524,17 +519,19 @@ export async function askCounterparts(
 	return { mappings, answers };
 }
 
+/** The half of a row that is the source token itself, however the row was settled. */
+const rowOf = (t: Token): Pick<Mapping, 'from' | 'type' | 'tier' | 'fromValue'> => ({
+	from: t.path,
+	type: t.type,
+	tier: t.tier,
+	fromValue: t.literal,
+});
+
 /** One answer, read against the shortlist it was chosen from. */
 function rowFor(job: CounterpartItem, answer: Choice | undefined): Mapping {
 	const { token, candidates } = job;
 	const none = noneKey(candidates);
-	const row = {
-		from: token.path,
-		type: token.type,
-		tier: token.tier,
-		fromValue: token.literal,
-		considered: candidates.map((c) => c.path),
-	};
+	const row = { ...rowOf(token), considered: candidates.map((c) => c.path) };
 	if (!answer || !(answer.confidence >= FLOOR)) {
 		// Under the floor the answer is not written as a counterpart — but it is
 		// still shown. A row here is a question for a person, and `space.3xs, 0.41`
@@ -644,6 +641,14 @@ const OUTCOMES: [How, string][] = [
 	['absent', 'nothing of their type to compare'],
 ];
 
+/** `3 judged, 1 no counterpart`: each outcome that happened, with its count. */
+const outcomesLine = (counts: Counts): string[] =>
+	OUTCOMES.filter(([how]) => counts[how]).map(([how, text]) => `${counts[how]} ${text}`);
+
+/** What `--tier`, `--type` and `--limit` left out, where they left anything. */
+const scopeNote = (plan: MapPlan): string =>
+	plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : '';
+
 /**
  * The map as a reader reads it: grouped by tier, one line per token, the
  * counterpart and the certainty behind it painted.
@@ -689,10 +694,7 @@ export function formatMap(plan: MapPlan, mappings: readonly Mapping[]): string {
 		}
 		out.push('\n');
 	}
-	const counts = countBy(mappings);
-	const said = OUTCOMES.filter(([how]) => counts[how]).map(([how, text]) => `${counts[how]} ${text}`);
-	const scoped = plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : '';
-	out.push(`${mappings.length} token(s): ${said.join(', ')}.${scoped}\n`);
+	out.push(`${mappings.length} token(s): ${outcomesLine(countBy(mappings)).join(', ')}.${scopeNote(plan)}\n`);
 	return out.join('');
 }
 
@@ -737,13 +739,11 @@ export function formatPlan(plan: MapPlan, show: number): string {
 			);
 		out.push('\n');
 	}
-	const counts = countBy(plan.settled);
-	const said = OUTCOMES.filter(([how]) => counts[how]).map(([how, text]) => `${counts[how]} ${text}`);
-	const scoped = plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : '';
+	const said = outcomesLine(countBy(plan.settled));
 	out.push(
 		`${plan.jobs.length + plan.settled.length} token(s): ${
 			said.length ? `${said.join(', ')}, ` : ''
-		}${plan.jobs.length} would be asked.${scoped}\n`,
+		}${plan.jobs.length} would be asked.${scopeNote(plan)}\n`,
 	);
 	return out.join('');
 }

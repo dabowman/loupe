@@ -2027,7 +2027,7 @@ var require_util = __commonJS({
         }
         path = url.path;
       }
-      var isAbsolute8 = exports.isAbsolute(path);
+      var isAbsolute6 = exports.isAbsolute(path);
       var parts = [];
       var start = 0;
       var i = 0;
@@ -2062,7 +2062,7 @@ var require_util = __commonJS({
       }
       path = parts.join("/");
       if (path === "") {
-        path = isAbsolute8 ? "/" : ".";
+        path = isAbsolute6 ? "/" : ".";
       }
       if (url) {
         url.path = path;
@@ -2071,7 +2071,7 @@ var require_util = __commonJS({
       return path;
     });
     exports.normalize = normalize2;
-    function join19(aRoot, aPath) {
+    function join18(aRoot, aPath) {
       if (aRoot === "") {
         aRoot = ".";
       }
@@ -2103,7 +2103,7 @@ var require_util = __commonJS({
       }
       return joined;
     }
-    exports.join = join19;
+    exports.join = join18;
     exports.isAbsolute = function(aPath) {
       return aPath.charAt(0) === "/" || urlRegexp.test(aPath);
     };
@@ -2317,7 +2317,7 @@ var require_util = __commonJS({
             parsed.path = parsed.path.substring(0, index2 + 1);
           }
         }
-        sourceURL = join19(urlGenerate(parsed), sourceURL);
+        sourceURL = join18(urlGenerate(parsed), sourceURL);
       }
       return normalize2(sourceURL);
     }
@@ -3757,8 +3757,8 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync11, readFileSync: readFileSync20, realpathSync: realpathSync3 } = __require("fs");
-    var { dirname: dirname11, isAbsolute: isAbsolute8, join: join19, relative: relative7, sep: sep3 } = __require("path");
+    var { existsSync: existsSync10, readFileSync: readFileSync15, realpathSync: realpathSync3 } = __require("fs");
+    var { dirname: dirname10, isAbsolute: isAbsolute6, join: join18, relative: relative7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
@@ -3785,7 +3785,7 @@ var require_previous_map = __commonJS({
         if (!this.mapFile && opts.from) {
           this.mapFile = opts.from;
         }
-        if (this.mapFile) this.root = dirname11(this.mapFile);
+        if (this.mapFile) this.root = dirname10(this.mapFile);
         if (text2) this.text = text2;
       }
       consumer() {
@@ -3831,15 +3831,15 @@ var require_previous_map = __commonJS({
         if (!trusted && !this.unsafeMap) {
           if (!/\.map$/i.test(path)) return void 0;
           if (!cssFile) return void 0;
-          let rel = relative7(realPath2(dirname11(cssFile)), realPath2(path));
-          if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute8(rel)) {
+          let rel = relative7(realPath2(dirname10(cssFile)), realPath2(path));
+          if (rel === ".." || rel.startsWith(".." + sep3) || isAbsolute6(rel)) {
             return void 0;
           }
         }
-        this.root = dirname11(path);
-        if (existsSync11(path)) {
+        this.root = dirname10(path);
+        if (existsSync10(path)) {
           this.mapFile = path;
-          return readFileSync20(path, "utf-8").toString().trim();
+          return readFileSync15(path, "utf-8").toString().trim();
         }
       }
       loadMap(file, prev) {
@@ -3873,7 +3873,7 @@ var require_previous_map = __commonJS({
           return this.decodeInline(this.annotation);
         } else if (this.annotation) {
           let map = this.annotation;
-          if (file) map = join19(dirname11(file), map);
+          if (file) map = join18(dirname10(file), map);
           let unknown = this.loadFile(map, file, false);
           if (unknown) {
             try {
@@ -3903,7 +3903,7 @@ var require_input = __commonJS({
   "node_modules/postcss/lib/input.js"(exports, module) {
     "use strict";
     var { nanoid } = require_non_secure();
-    var { isAbsolute: isAbsolute8, resolve: resolve8 } = __require("path");
+    var { isAbsolute: isAbsolute6, resolve: resolve8 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { fileURLToPath: fileURLToPath6, pathToFileURL: pathToFileURL3 } = __require("url");
     var CssSyntaxError2 = require_css_syntax_error();
@@ -3911,7 +3911,7 @@ var require_input = __commonJS({
     var terminalHighlight = require_terminal_highlight();
     var lineToIndexCache = Symbol("lineToIndexCache");
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(resolve8 && isAbsolute8);
+    var pathAvailable = Boolean(resolve8 && isAbsolute6);
     function getLineToIndex(input) {
       if (input[lineToIndexCache]) return input[lineToIndexCache];
       let lines = input.css.split("\n");
@@ -3942,7 +3942,7 @@ var require_input = __commonJS({
         this.document = this.css;
         if (opts.document) this.document = opts.document.toString();
         if (opts.from) {
-          if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute8(opts.from)) {
+          if (!pathAvailable || /^\w+:\/\//.test(opts.from) || isAbsolute6(opts.from)) {
             this.file = opts.from;
           } else {
             this.file = resolve8(opts.from);
@@ -4082,7 +4082,7 @@ var require_input = __commonJS({
           if (toPosition.source) to = toPosition;
         }
         let fromUrl;
-        if (isAbsolute8(from.source)) {
+        if (isAbsolute6(from.source)) {
           fromUrl = pathToFileURL3(from.source);
         } else {
           fromUrl = new URL(
@@ -4376,12 +4376,12 @@ var require_fromJSON = __commonJS({
 var require_map_generator = __commonJS({
   "node_modules/postcss/lib/map-generator.js"(exports, module) {
     "use strict";
-    var { dirname: dirname11, relative: relative7, resolve: resolve8, sep: sep3 } = __require("path");
+    var { dirname: dirname10, relative: relative7, resolve: resolve8, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     var { pathToFileURL: pathToFileURL3 } = __require("url");
     var Input2 = require_input();
     var sourceMapAvailable = Boolean(SourceMapConsumer && SourceMapGenerator);
-    var pathAvailable = Boolean(dirname11 && resolve8 && relative7 && sep3);
+    var pathAvailable = Boolean(dirname10 && resolve8 && relative7 && sep3);
     var MapGenerator = class {
       constructor(stringify3, root2, opts, cssString) {
         this.stringify = stringify3;
@@ -4413,7 +4413,7 @@ var require_map_generator = __commonJS({
       applyPrevMaps() {
         for (let prev of this.previous()) {
           let from = this.toUrl(this.path(prev.file));
-          let root2 = prev.root || dirname11(prev.file);
+          let root2 = prev.root || dirname10(prev.file);
           let map;
           if (this.mapOpts.sourcesContent === false) {
             map = new SourceMapConsumer(prev.text);
@@ -4608,9 +4608,9 @@ var require_map_generator = __commonJS({
         if (/^\w+:\/\//.test(file)) return file;
         let cached = this.memoizedPaths.get(file);
         if (cached) return cached;
-        let from = this.opts.to ? dirname11(this.opts.to) : ".";
+        let from = this.opts.to ? dirname10(this.opts.to) : ".";
         if (typeof this.mapOpts.annotation === "string") {
-          from = dirname11(resolve8(from, this.mapOpts.annotation));
+          from = dirname10(resolve8(from, this.mapOpts.annotation));
         }
         let path = relative7(from, file);
         this.memoizedPaths.set(file, path);
@@ -7772,7 +7772,7 @@ var require_picomatch = __commonJS({
     var parse3 = require_parse2();
     var utils = require_utils();
     var constants = require_constants();
-    var isObject2 = (val) => val && typeof val === "object" && !Array.isArray(val);
+    var isObject = (val) => val && typeof val === "object" && !Array.isArray(val);
     var picomatch3 = (glob, options, returnState = false) => {
       if (Array.isArray(glob)) {
         const fns = glob.map((input) => picomatch3(input, options, returnState));
@@ -7785,7 +7785,7 @@ var require_picomatch = __commonJS({
         };
         return arrayMatcher;
       }
-      const isState = isObject2(glob) && glob.tokens && glob.input;
+      const isState = isObject(glob) && glob.tokens && glob.input;
       if (glob === "" || typeof glob !== "string" && !isState) {
         throw new TypeError("Expected pattern to be a non-empty string");
       }
@@ -8492,13 +8492,13 @@ var require_lib = __commonJS({
         chain.expression = node;
         return this.finishNodeAt(chain, "ChainExpression", endLoc);
       }
-      directiveToStmt(directive) {
-        const expression = directive.value;
-        delete directive.value;
+      directiveToStmt(directive2) {
+        const expression = directive2.value;
+        delete directive2.value;
         this.castNodeTo(expression, "Literal");
         expression.raw = expression.extra.raw;
         expression.value = expression.extra.expressionValue;
-        const stmt = this.castNodeTo(directive, "ExpressionStatement");
+        const stmt = this.castNodeTo(directive2, "ExpressionStatement");
         stmt.expression = expression;
         stmt.directive = expression.extra.rawValue;
         delete expression.extra;
@@ -18866,8 +18866,8 @@ var require_lib = __commonJS({
             node.left = left;
             node.operator = this.state.value;
             const logical = op === 41 || op === 42;
-            const coalesce = op === 40;
-            if (coalesce) {
+            const coalesce2 = op === 40;
+            if (coalesce2) {
               prec = tokenOperatorPrecedence(42);
             }
             this.next();
@@ -18879,9 +18879,9 @@ var require_lib = __commonJS({
               }
             }
             node.right = this.parseExprOpRightExpr(op, prec);
-            const finishedNode = this.finishNode(node, logical || coalesce ? "LogicalExpression" : "BinaryExpression");
+            const finishedNode = this.finishNode(node, logical || coalesce2 ? "LogicalExpression" : "BinaryExpression");
             const nextOp = this.state.type;
-            if (coalesce && (nextOp === 41 || nextOp === 42) || logical && nextOp === 40) {
+            if (coalesce2 && (nextOp === 41 || nextOp === 42) || logical && nextOp === 40) {
               throw this.raise(Errors.MixingCoalesceWithLogical, this.state.startLoc);
             }
             return this.parseExprOp(finishedNode, leftStartLoc, minPrec);
@@ -20568,7 +20568,7 @@ var require_lib = __commonJS({
         return finishedProgram;
       }
       stmtToDirective(stmt) {
-        const directive = this.castNodeTo(stmt, "Directive");
+        const directive2 = this.castNodeTo(stmt, "Directive");
         const directiveLiteral = this.castNodeTo(stmt.expression, "DirectiveLiteral");
         const expressionValue = directiveLiteral.value;
         const raw = this.input.slice(this.offsetToSourcePos(directiveLiteral.start), this.offsetToSourcePos(directiveLiteral.end));
@@ -20576,9 +20576,9 @@ var require_lib = __commonJS({
         this.addExtra(directiveLiteral, "raw", raw);
         this.addExtra(directiveLiteral, "rawValue", val);
         this.addExtra(directiveLiteral, "expressionValue", expressionValue);
-        directive.value = directiveLiteral;
+        directive2.value = directiveLiteral;
         delete stmt.expression;
-        return directive;
+        return directive2;
       }
       parseInterpreterDirective() {
         if (!this.match(28)) {
@@ -21239,9 +21239,9 @@ var require_lib = __commonJS({
           const stmt = topLevel ? this.parseModuleItem() : this.parseStatementListItem();
           if (directives && !parsedNonDirective) {
             if (this.isValidDirective(stmt)) {
-              const directive = this.stmtToDirective(stmt);
-              directives.push(directive);
-              if (!hasStrictModeDirective && directive.value.value === "use strict") {
+              const directive2 = this.stmtToDirective(stmt);
+              directives.push(directive2);
+              if (!hasStrictModeDirective && directive2.value.value === "use strict") {
                 hasStrictModeDirective = true;
                 this.setStrict(true);
               }
@@ -23494,8 +23494,8 @@ var require_lib2 = __commonJS({
 });
 
 // src/cli.ts
-import { existsSync as existsSync10, readdirSync as readdirSync4, statSync as statSync8, writeFileSync as writeFileSync6 } from "node:fs";
-import { basename as basename2, dirname as dirname10, isAbsolute as isAbsolute7, join as join18, relative as relative6, resolve as resolve7 } from "node:path";
+import { existsSync as existsSync9, readdirSync as readdirSync4, statSync as statSync8, writeFileSync as writeFileSync5 } from "node:fs";
+import { basename as basename2, dirname as dirname9, isAbsolute as isAbsolute5, join as join17, relative as relative6, resolve as resolve7 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { fileURLToPath as fileURLToPath5 } from "node:url";
 import { parseArgs as parseArgv } from "node:util";
@@ -23533,7 +23533,7 @@ var Root = import_postcss.default.Root;
 var Node = import_postcss.default.Node;
 
 // src/analyze.ts
-import { isAbsolute as isAbsolute2, join as join7, relative as relative2, sep as sep2 } from "node:path";
+import { join as join9, relative as relative3, sep as sep2 } from "node:path";
 
 // src/rules.ts
 var RULES = {
@@ -23583,6 +23583,7 @@ var RULES = {
     severity: "warn",
     rank: 3,
     needs: ["patternRegistry"],
+    judgeOnly: true,
     title: "judged, advisory \u2014 a model read what this control stands for, and the pattern it was built as redirects that reading elsewhere; confirm before changing it"
   },
   "patterns/unregistered-composite": {
@@ -23667,6 +23668,9 @@ var RULES = {
   }
 };
 var RULE_IDS = Object.keys(RULES);
+var ruleDef = (id) => RULES[id];
+var rulesNeeding = (capability) => RULE_IDS.filter((id) => ruleDef(id).needs.includes(capability));
+var JUDGE_ONLY_RULES = new Set(RULE_IDS.filter((id) => ruleDef(id).judgeOnly));
 var ALIASES = {
   R0: "suppression/malformed",
   R1: "css/dead-class",
@@ -23693,11 +23697,146 @@ function renderTitle(ruleId, ds, keyword) {
 }
 
 // src/delivery.ts
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
-var asString = (v) => typeof v === "string" && v !== "" ? v : void 0;
+import { join as join2 } from "node:path";
+
+// src/json.ts
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+
+// src/paths.ts
+import { existsSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
+
+// src/text.ts
+import { createHash } from "node:crypto";
+var sha256 = (text2) => createHash("sha256").update(text2).digest("hex");
+var messageOf = (err) => err instanceof Error ? err.message : String(err);
+var messageLineOf = (err) => messageOf(err).split("\n")[0] ?? "parse failed";
+var parseMessageOf = (err, abs) => {
+  const message = messageLineOf(err);
+  return message.startsWith(`${abs}:`) ? message.slice(abs.length + 1) : message;
+};
+var parseReasonOf = (err) => {
+  const reason = err?.reason;
+  return typeof reason === "string" && reason ? reason : void 0;
+};
+var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+var flatten = (text2) => text2.replace(/\s+/g, " ");
+var oneLine = (text2) => flatten(text2).trim();
+var clip = (text2, max) => {
+  const line = oneLine(text2);
+  if (max <= 0) return "";
+  if (line.length <= max) return line;
+  const chars = [...line];
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}\u2026` : line;
+};
+var head = (text2, max) => text2.length <= max ? text2 : [...text2].slice(0, max).join("");
+var SNIPPET_MAX = 80;
+var snippet = (text2) => clip(text2, SNIPPET_MAX);
+var MESSAGE_MAX = 200;
+var TAIL_MAX = 100;
+var clipFront = (text2, max) => {
+  const line = flatten(text2);
+  if (line.length <= max) return line;
+  const chars = [...line];
+  return chars.length > max ? `\u2026${chars.slice(chars.length - (max - 1)).join("")}` : line;
+};
+var messageLine = (body2, tail = "") => {
+  const end = clipFront(tail, TAIL_MAX);
+  return clip(body2, MESSAGE_MAX - [...end].length) + end;
+};
+var boundMessage = (message, tail = "") => messageLine(tail && message.endsWith(tail) ? message.slice(0, -tail.length) : message, tail);
+var JOIN = "; ";
+var messageParts = (parts, tail = "") => {
+  const budget = MESSAGE_MAX - [...clipFront(tail, TAIL_MAX)].length;
+  const pieces = parts.map(oneLine);
+  const whole = pieces.join(JOIN);
+  if ([...whole].length <= budget) return whole + tail;
+  const room = budget - ` (+${pieces.length} more)`.length;
+  const kept = [];
+  let used = 0;
+  for (const p of pieces) {
+    const cost = (kept.length ? JOIN.length : 0) + [...p].length;
+    if (kept.length && used + cost > room) break;
+    kept.push(p);
+    used += cost;
+  }
+  const dropped = pieces.length - kept.length;
+  return `${clip(kept.join(JOIN), room)}${dropped ? ` (+${dropped} more)` : ""}${tail}`;
+};
+
+// src/paths.ts
+var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
+var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
+function projectKey(root2) {
+  const full = resolve(root2);
+  const hash = sha256(full).slice(0, 10);
+  const name = full.split(/[/\\]/).filter(Boolean).pop() ?? "project";
+  return `${name.replace(/[^\w.-]/g, "-")}-${hash}`;
+}
+var under = (dir, p) => isAbsolute(p) ? p : join(dir, p);
+function ensureDir(dir) {
+  try {
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  } catch {
+    return null;
+  }
+}
+var projectStateDir = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join(data || join(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`), projectKey(root2));
+var attemptsPath = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join(projectStateDir(root2, data), "attempts.json");
+var cacheDisabled = (flag) => Boolean(flag) || isOn(process.env.LOUPE_NO_CACHE);
+var DEFAULT_BASELINE = ".loupe-baseline.json";
+var baselinePath = (root2, p) => under(root2, p);
+function legacyBaseline(root2) {
+  const data = process.env.CLAUDE_PLUGIN_DATA;
+  const candidates = [
+    join(root2, ".loupe", "baseline.json"),
+    ...data ? [join(data, "projects", projectKey(root2), "baseline.json")] : []
+  ];
+  return candidates.find((path) => existsSync(path)) ?? null;
+}
+var legacyBaselineNotice = (path) => `${path} is a 0.1.x baseline, which this version no longer reads \u2014 re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
+function findExistingBaseline(root2, explicit, configured) {
+  if (explicit !== null) {
+    const path = baselinePath(root2, explicit);
+    return { path, found: existsSync(path), fallback: "none" };
+  }
+  const target = baselinePath(root2, configured);
+  if (existsSync(target)) return { path: target, found: true, fallback: "none" };
+  const byDefaultName = join(root2, DEFAULT_BASELINE);
+  if (byDefaultName !== target && existsSync(byDefaultName))
+    return { path: byDefaultName, found: true, fallback: "default-name" };
+  return { path: target, found: false, fallback: "none" };
+}
+
+// src/json.ts
 var isRecord = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+var asString = (v) => typeof v === "string" && v !== "" ? v : void 0;
+var asStrings = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
+var listOf = (v) => v === void 0 || v === null ? [] : Array.isArray(v) ? [...v] : [v];
+function readJson(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+function writeJsonAtomic(path, data) {
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    if (!ensureDir(dirname(path))) return false;
+    writeFileSync(tmp, JSON.stringify(data));
+    renameSync(tmp, path);
+    return true;
+  } catch {
+    rmSync(tmp, { force: true });
+    return false;
+  }
+}
+
+// src/delivery.ts
 function readPackages(raw) {
   const out = /* @__PURE__ */ new Map();
   if (!isRecord(raw)) return out;
@@ -23762,14 +23901,7 @@ function loadDelivery(raw) {
   if (!packages.size && !tokens) return null;
   return { host: asString(raw.host) ?? "the host", packages, tokens };
 }
-function readDelivery(path) {
-  if (!path || !existsSync(path)) return null;
-  try {
-    return loadDelivery(JSON.parse(readFileSync(path, "utf8")));
-  } catch {
-    return null;
-  }
-}
+var readDelivery = (path) => path ? loadDelivery(readJson(path)) : null;
 var REMEDY_RULES = /* @__PURE__ */ new Set([
   "system/raw-element",
   "system/superseded-component",
@@ -23786,16 +23918,12 @@ function remedyPackages(message, dsPackages) {
   return [...new Set(named2.filter((p) => p.startsWith("@") && p.includes("/") || dsPackages.includes(p)))];
 }
 function projectDependencies(root2) {
-  try {
-    const pkg = JSON.parse(readFileSync(join(root2, "package.json"), "utf8"));
-    if (pkg.workspaces) return null;
-    const out = /* @__PURE__ */ new Set();
-    for (const field2 of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"])
-      if (isRecord(pkg[field2])) for (const name of Object.keys(pkg[field2])) out.add(name);
-    return out;
-  } catch {
-    return null;
-  }
+  const pkg = readJson(join2(root2, "package.json"));
+  if (!isRecord(pkg) || pkg.workspaces) return null;
+  const out = /* @__PURE__ */ new Set();
+  for (const field2 of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"])
+    if (isRecord(pkg[field2])) for (const name of Object.keys(pkg[field2])) out.add(name);
+  return out;
 }
 function reachNote(pkg, {
   delivery,
@@ -23853,7 +23981,7 @@ function deliverySummary(d) {
 var import_picomatch = __toESM(require_picomatch2(), 1);
 import { existsSync as existsSync2, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { dirname, join as join2, relative, resolve, sep } from "node:path";
+import { dirname as dirname2, join as join3, relative, resolve as resolve2, sep } from "node:path";
 var toPosix = (p) => p.split(sep).join("/").split("\\").join("/");
 var byBytes = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function readDir(dir) {
@@ -23861,6 +23989,20 @@ function readDir(dir) {
     return readdirSync(dir, { withFileTypes: true }).sort((a, b) => byBytes(a.name, b.name));
   } catch {
     return [];
+  }
+}
+function* dirsUp(start) {
+  for (let dir = resolve2(start); ; dir = dirname2(dir)) {
+    yield dir;
+    if (dirname2(dir) === dir) return;
+  }
+}
+function* filesUnder(dir, wanted) {
+  for (const e of readDir(dir)) {
+    const full = join3(dir, e.name);
+    if (e.isDirectory()) {
+      if (e.name !== "node_modules") yield* filesUnder(full, wanted);
+    } else if (wanted(e.name)) yield full;
   }
 }
 var git = (root2, args) => execFileSync("git", [...args], { cwd: root2, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
@@ -23910,7 +24052,7 @@ function discover({
         return;
       }
       seen++;
-      const full = join2(dir, e.name);
+      const full = join3(dir, e.name);
       const rel = toPosix(relative(root2, full));
       if (e.isDirectory()) {
         if (HARD_SKIP.has(e.name)) continue;
@@ -23946,13 +24088,8 @@ function isWorktree(root2) {
   }
 }
 function hasGitDir(root2) {
-  let dir = resolve(root2);
-  for (; ; ) {
-    if (existsSync2(join2(dir, ".git"))) return true;
-    const up = dirname(dir);
-    if (up === dir) return false;
-    dir = up;
-  }
+  for (const dir of dirsUp(root2)) if (existsSync2(join3(dir, ".git"))) return true;
+  return false;
 }
 function gitIgnores(root2, path) {
   try {
@@ -23986,257 +24123,128 @@ function changedFiles(root2) {
   return set;
 }
 
-// src/text.ts
-var messageOf = (err) => err instanceof Error ? err.message : String(err);
-var messageLineOf = (err) => messageOf(err).split("\n")[0] ?? "parse failed";
-var parseMessageOf = (err, abs) => {
-  const message = messageLineOf(err);
-  return message.startsWith(`${abs}:`) ? message.slice(abs.length + 1) : message;
-};
-var parseReasonOf = (err) => {
-  const reason = err?.reason;
-  return typeof reason === "string" && reason ? reason : void 0;
-};
-var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-var flatten = (text2) => text2.replace(/\s+/g, " ");
-var oneLine = (text2) => flatten(text2).trim();
-var clip = (text2, max) => {
-  const line = oneLine(text2);
-  if (max <= 0) return "";
-  if (line.length <= max) return line;
-  const chars = [...line];
-  return chars.length > max ? `${chars.slice(0, max - 1).join("")}\u2026` : line;
-};
-var head = (text2, max) => text2.length <= max ? text2 : [...text2].slice(0, max).join("");
-var SNIPPET_MAX = 80;
-var snippet = (text2) => clip(text2, SNIPPET_MAX);
-var MESSAGE_MAX = 200;
-var TAIL_MAX = 100;
-var clipFront = (text2, max) => {
-  const line = flatten(text2);
-  if (line.length <= max) return line;
-  const chars = [...line];
-  return chars.length > max ? `\u2026${chars.slice(chars.length - (max - 1)).join("")}` : line;
-};
-var messageLine = (body2, tail = "") => {
-  const end = clipFront(tail, TAIL_MAX);
-  return clip(body2, MESSAGE_MAX - [...end].length) + end;
-};
-var boundMessage = (message, tail = "") => messageLine(tail && message.endsWith(tail) ? message.slice(0, -tail.length) : message, tail);
-var JOIN = "; ";
-var messageParts = (parts, tail = "") => {
-  const budget = MESSAGE_MAX - [...clipFront(tail, TAIL_MAX)].length;
-  const pieces = parts.map(oneLine);
-  const whole = pieces.join(JOIN);
-  if ([...whole].length <= budget) return whole + tail;
-  const room = budget - ` (+${pieces.length} more)`.length;
-  const kept = [];
-  let used = 0;
-  for (const p of pieces) {
-    const cost = (kept.length ? JOIN.length : 0) + [...p].length;
-    if (kept.length && used + cost > room) break;
-    kept.push(p);
-    used += cost;
-  }
-  const dropped = pieces.length - kept.length;
-  return `${clip(kept.join(JOIN), room)}${dropped ? ` (+${dropped} more)` : ""}${tail}`;
-};
+// src/profiles.ts
+import { existsSync as existsSync5, readFileSync as readFileSync3 } from "node:fs";
+import { join as join6, resolve as resolve4 } from "node:path";
 
-// src/suppressions.ts
-var ID = "(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)";
-var OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
-function spannedLines(lines, i, raw, stripped) {
-  const opener = raw.slice(0, raw.length - stripped.length);
-  const close = /\/\*/.test(opener) ? "*/" : /<!--/.test(opener) ? "-->" : null;
-  if (close === null || stripped.includes(close)) return [];
-  const LIMIT = 40;
-  for (let j = i + 1; j < lines.length && j - i <= LIMIT; j++) {
-    const cont = lines[j];
-    if (cont === void 0) break;
-    if (cont.includes(close)) return Array.from({ length: j - i }, (_, k) => i + k + 2);
-  }
-  return [];
-}
-function makeSuppressionParser({
-  keyword,
-  blanket = [],
-  aliases = []
-}) {
-  const heads = [keyword, ...aliases.filter((a) => a !== keyword && !blanket.includes(a))];
-  const alternation = (terms) => [...new Set(terms)].sort((a, b) => b.length - a.length).map(escapeRe).join("|");
-  const keywordHead = `(${alternation(heads)})(?![\\w-])`;
-  const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
-  const strict = new RegExp(`^${keywordHead}\\s+(${IDS})\\s*--\\s*(?!\\*/|-->|\\})(\\S.*?)(?:\\*/|-->|\\}|$)`);
-  const shaped = new RegExp(`^${keywordHead}\\s*(?:${IDS}\\s*)?(?:--|\\*/|-->|\\}|$)`);
-  const written = new RegExp(`^(?:${alternation([keyword, ...blanket])})(?![\\w-])`);
-  const anyHead = [...heads, ...blanket];
-  return function scan(text2, relPath) {
-    const byLine = /* @__PURE__ */ new Map();
-    const owners = /* @__PURE__ */ new Map();
-    const directives = [];
-    const malformed = [];
-    const lines = text2.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const raw = lines[i];
-      if (raw === void 0 || !anyHead.some((p) => raw.includes(p))) continue;
-      const stripped = raw.replace(OPENER, "");
-      if (!anyHead.some((p) => stripped.startsWith(p))) continue;
-      const line = i + 1;
-      const m = stripped.match(strict);
-      if (m?.[2] !== void 0 && m[3] !== void 0) {
-        const ids = m[2].split(",").map((s) => canonicalRuleId(s.trim()));
-        const used = m[1] ?? keyword;
-        const directive = {
-          file: relPath,
-          line,
-          rules: ids,
-          reason: oneLine(m[3]),
-          // Carried only when it is not the keyword the config asks for, so
-          // `loupe suppressions` can name the rename.
-          ...used === keyword ? {} : { alias: used }
-        };
-        directives.push(directive);
-        for (const l of [line, ...spannedLines(lines, i, raw, stripped)]) {
-          const set = byLine.get(l) ?? /* @__PURE__ */ new Set();
-          for (const id of ids) set.add(id);
-          byLine.set(l, set);
-          owners.set(l, [...owners.get(l) ?? [], directive]);
-        }
-      } else if (written.test(stripped) || shaped.test(stripped)) {
-        malformed.push({
-          rule: "suppression/malformed",
-          file: relPath,
-          line,
-          // Cut on the raw text, and by code point: this string is also the
-          // finding's `code`, and `findingKey` collapses whitespace on `code`
-          // itself, so flattening first would only move the 60-character window
-          // and take every baseline key already written with it.
-          message: head(stripped.trim(), 60)
-        });
-      }
-    }
-    return { byLine, owners, directives, malformed };
+// src/patterns.ts
+var split = (raw) => {
+  const direct = raw.startsWith(">");
+  const spec = direct ? raw.slice(1).trimStart() : raw;
+  const i = spec.indexOf("::");
+  const named2 = i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
+  return direct ? { ...named2, direct } : named2;
+};
+function toNode(spec) {
+  if (typeof spec === "string") return { ...split(spec), children: [] };
+  if (!Array.isArray(spec) || !spec.length || typeof spec[0] !== "string") return null;
+  return {
+    ...split(spec[0]),
+    children: spec.slice(1).map(toNode).filter((n) => n !== null)
   };
 }
-function mutingLine(byLine, line, ruleId, scopeLines = []) {
-  for (const L of [line, line - 1, ...scopeLines]) {
-    const s = byLine.get(L);
-    if (s?.has(ruleId)) return L;
+var signatureOf = (node) => node.children.length ? `${node.name}(${node.children.map(signatureOf).join(",")})` : node.name;
+var nodeCount = (node) => 1 + node.children.reduce((n, c) => n + nodeCount(c), 0);
+var depthOf = (node) => node.children.length ? 1 + Math.max(...node.children.map(depthOf)) : 1;
+function descendants(tree, out = []) {
+  for (const c of tree.children) {
+    out.push(c);
+    descendants(c, out);
   }
-  return null;
+  return out;
 }
-var MuteLedger = class {
-  used = /* @__PURE__ */ new Map();
-  /** Mute `ruleId` at `line` if a directive covers it, crediting that directive. */
-  mute(supp, line, ruleId, scopeLines = []) {
-    const L = mutingLine(supp.byLine, line, ruleId, scopeLines);
-    if (L === null) return false;
-    for (const d of supp.owners.get(L) ?? [])
-      if (d.rules.includes(ruleId)) this.used.set(d, (this.used.get(d) ?? /* @__PURE__ */ new Set()).add(ruleId));
-    return true;
+var nameMatches = (spec, actual) => spec === actual || spec.includes("|") && spec.split("|").includes(actual);
+function matches(pattern, tree) {
+  if (!nameMatches(pattern.name, tree.name)) return false;
+  if (pattern.pkg && tree.pkg && pattern.pkg !== tree.pkg) return false;
+  if (!pattern.children.length) return true;
+  const pool = descendants(tree);
+  const own = new Set(tree.children);
+  const used = /* @__PURE__ */ new Set();
+  const wanted = [...pattern.children].sort(
+    (a, b) => Number(Boolean(b.direct)) - Number(Boolean(a.direct)) || nodeCount(b) - nodeCount(a)
+  );
+  for (const want of wanted) {
+    const hit = pool.find((n) => !used.has(n) && (!want.direct || own.has(n)) && matches(want, n));
+    if (!hit) return false;
+    used.add(hit);
   }
-  /** Set `stale` on each directive naming a rule that muted nothing; `skip` names rules this run could not exercise. */
-  settle(directives, skip = /* @__PURE__ */ new Set()) {
-    for (const d of directives) {
-      const stale = d.rules.filter((r) => !skip.has(r) && !this.used.get(d)?.has(r));
-      if (stale.length) d.stale = stale;
-    }
-  }
+  return true;
+}
+function partsOf(root2, tree) {
+  return tree.name.startsWith(root2) && /^([.A-Z]|$)/.test(tree.name.slice(root2.length)) && tree.children.every((c) => partsOf(root2, c));
+}
+var bindName = (c) => typeof c === "string" && c ? c.split(".", 1)[0] ?? c : null;
+var ruleSpecs = (detector) => {
+  return listOf(detector).filter(
+    (d) => typeof d === "object" && d !== null && typeof d.rule === "string"
+  );
 };
-
-// src/markup.ts
-var import_parser = __toESM(require_lib(), 1);
-
-// src/inline.ts
-var UNITLESS = /* @__PURE__ */ new Set([
-  "animation-iteration-count",
-  "aspect-ratio",
-  "border-image-outset",
-  "border-image-slice",
-  "border-image-width",
-  "box-flex",
-  "box-flex-group",
-  "box-ordinal-group",
-  "column-count",
-  "columns",
-  "flex",
-  "flex-grow",
-  "flex-positive",
-  "flex-shrink",
-  "flex-negative",
-  "flex-order",
-  "font-weight",
-  "grid-area",
-  "grid-row",
-  "grid-row-end",
-  "grid-row-start",
-  "grid-column",
-  "grid-column-end",
-  "grid-column-start",
-  "line-clamp",
-  "line-height",
-  "opacity",
-  "order",
-  "orphans",
-  "scale",
-  "tab-size",
-  "widows",
-  "z-index",
-  "zoom",
-  "fill-opacity",
-  "flood-opacity",
-  "stop-opacity",
-  "stroke-dasharray",
-  "stroke-dashoffset",
-  "stroke-miterlimit",
-  "stroke-opacity",
-  "stroke-width"
-]);
-function toCssProp(key) {
-  if (key.startsWith("--")) return key;
-  if (key.includes("-")) return key.toLowerCase();
-  const kebab = key.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`);
-  return /^[A-Z]/.test(key) ? `-${kebab.replace(/^-/, "")}` : kebab;
+var stringParam = (spec, key, fallback) => typeof spec[key] === "string" && spec[key] ? spec[key] : fallback;
+var numParam = (spec, key, fallback) => typeof spec[key] === "number" ? spec[key] : fallback;
+var listParam = (spec, key) => Array.isArray(spec[key]) ? spec[key].filter((x) => typeof x === "string") : [];
+function loadPatterns(raw) {
+  const rec = raw;
+  const list2 = Array.isArray(raw) ? raw : rec?.realizations ?? rec?.patterns ?? [];
+  const out = [];
+  const load = (p, id, inheritedCanonical) => {
+    const canonical = "canonical" in (p ?? {}) ? bindName(p.canonical) : inheritedCanonical;
+    const shapes = [toNode(p?.signature), toNode(p?.rendered_signature)].filter((n) => n !== null);
+    const authored2 = p?.instead_of_signature;
+    const antiShapes = !Array.isArray(authored2) ? [] : typeof authored2[0] === "string" ? [authored2] : authored2;
+    const avoid = antiShapes.map((shape) => toNode(shape)).filter((n) => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes);
+    const rules2 = ruleSpecs(p?.detector);
+    const summary = p?.summary ?? p?.note ?? "";
+    const own = id ?? (shapes[0] ? signatureOf(shapes[0]) : null);
+    if (own) {
+      const nodes = shapes.length ? shapes : [null];
+      nodes.forEach((node, i) => {
+        out.push({
+          id: own,
+          summary,
+          canonical,
+          node,
+          size: node ? nodeCount(node) : 0,
+          avoid: i === 0 ? avoid : [],
+          rules: i === 0 ? rules2 : []
+        });
+      });
+    }
+    const parts = p?.parts;
+    if (own && parts && typeof parts === "object")
+      for (const [name, part] of Object.entries(parts)) load(part, `${own}#${name}`, canonical);
+  };
+  for (const p of list2) load(p, p?.pattern ?? p?.id ?? null, null);
+  return out;
 }
-function toCssValue(prop, node) {
-  if (!node) return null;
-  switch (node.type) {
-    case "StringLiteral":
-      return node.value;
-    case "NumericLiteral":
-      return numeric(prop, node.value);
-    case "UnaryExpression":
-      if (node.operator === "-" && node.argument?.type === "NumericLiteral") return numeric(prop, -node.argument.value);
-      return null;
-    case "TemplateLiteral":
-      return node.expressions.length === 0 ? node.quasis[0]?.value?.cooked ?? null : null;
-    default:
-      return null;
+function systemTree(el, isSystemName, childrenOf, nameOf, packageOf = () => null, line) {
+  const name = nameOf(el);
+  if (!name || !isSystemName(name)) return null;
+  return {
+    name,
+    pkg: packageOf(name),
+    children: systemChildren(el, isSystemName, childrenOf, nameOf, packageOf),
+    ...line === void 0 ? {} : { line }
+  };
+}
+function systemChildren(el, isSystemName, childrenOf, nameOf, packageOf) {
+  const out = [];
+  for (const child of childrenOf(el)) {
+    const cname = nameOf(child);
+    if (cname && isSystemName(cname)) out.push(systemTree(child, isSystemName, childrenOf, nameOf, packageOf));
+    else out.push(...systemChildren(child, isSystemName, childrenOf, nameOf, packageOf));
   }
+  return out.filter((n) => n !== null);
 }
-function numeric(prop, n) {
-  if (n === 0) return "0";
-  return UNITLESS.has(prop) ? String(n) : `${n}px`;
-}
-function valueSpan(node, line) {
-  const loc = node?.loc;
-  if (!node || !loc || loc.start.line !== line || loc.end.line !== line) return void 0;
-  const text2 = rawOf(node);
-  return text2 === null ? void 0 : { col: loc.start.column, text: text2 };
-}
-function rawOf(node) {
-  if (node.type === "TemplateLiteral") return node.expressions.length ? null : `\`${node.quasis[0]?.value.raw ?? ""}\``;
-  if (node.type === "UnaryExpression") {
-    const inner = node.argument ? rawOf(node.argument) : null;
-    return inner === null ? null : `${node.operator}${inner}`;
+var SUBSTANTIAL = { minNodes: 4, minDepth: 2 };
+function resolveRule(rules2, forces) {
+  for (const r of rules2) {
+    if (!r.when) return r;
+    const conds = Object.entries(r.when);
+    if (conds.some(([f, v]) => f in forces && forces[f] !== v)) continue;
+    if (conds.every(([f, v]) => forces[f] === v)) return r;
+    return null;
   }
-  const raw = node.extra?.raw;
-  return typeof raw === "string" ? raw : null;
-}
-function keyName(node) {
-  if (!node) return null;
-  if (node.key.type === "Identifier" && !node.computed) return node.key.name;
-  if (node.key.type === "StringLiteral") return node.key.value;
   return null;
 }
 
@@ -24390,8 +24398,14 @@ function propsOverlap(a, b) {
 }
 var KEYWORD = /^(inherit|initial|unset|revert|revert-layer|none|auto|transparent|currentcolor|normal)$/i;
 var ZERO = /^0([a-z%]*)$/i;
+var isInertPart = (p) => ZERO.test(p) || KEYWORD.test(p);
 var usesToken = (value) => /var\(\s*--/.test(value);
-var isLiteralColor = (v) => /#[0-9a-f]{3,8}\b/i.test(v) || /\b(rgb|rgba|hsl|hsla|hwb|oklch|oklab|lab|lch|color)\(/i.test(v);
+var COLOR_FUNCTIONS = "(?:rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\\(";
+var HEX = /^#[0-9a-f]{3,8}$/i;
+var COLOR_FUNCTION_AT_START = new RegExp(`^${COLOR_FUNCTIONS}`, "i");
+var COLOR_FUNCTION_WITHIN = new RegExp(`\\b${COLOR_FUNCTIONS}`, "i");
+var isColorLiteral = (part) => HEX.test(part) || COLOR_FUNCTION_AT_START.test(part);
+var isLiteralColor = (v) => /#[0-9a-f]{3,8}\b/i.test(v) || COLOR_FUNCTION_WITHIN.test(v);
 function withoutRefs(value) {
   let out = "";
   for (let i = 0; i < value.length; ) {
@@ -24423,12 +24437,12 @@ function classifyMargin(value) {
   if (!parts.length) return null;
   if (parts.some((p) => /^-(?!-)/.test(p) && !ZERO.test(p))) return "negative";
   if (parts.some((p) => p === "auto")) return null;
-  if (parts.every((p) => ZERO.test(p) || KEYWORD.test(p))) return null;
+  if (parts.every(isInertPart)) return null;
   return "spacing";
 }
 var isInertValue = (value) => {
   const parts = String(value).trim().split(/\s+/).filter(Boolean);
-  return parts.length > 0 && parts.every((p) => ZERO.test(p) || KEYWORD.test(p));
+  return parts.length > 0 && parts.every(isInertPart);
 };
 function isHardcodedTokenValue(prop, value) {
   const v = value.trim();
@@ -24469,6 +24483,35 @@ function mediaQuery(rule2) {
   return conds.some((c) => c.includes(",")) ? "" : conds.join(" and ");
 }
 var keySelector = (sel) => sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean).pop() ?? sel;
+function eachTopLevel(sel, visit) {
+  let depth = 0;
+  let quote = "";
+  for (let i = 0; i < sel.length; i++) {
+    const ch = sel[i] ?? "";
+    if (ch === "\\") i++;
+    else if (quote) {
+      if (ch === quote) quote = "";
+    } else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
+    else if (!depth) visit(ch, i);
+  }
+}
+function keyCompound(sel) {
+  const s = sel.trim();
+  let start = 0;
+  eachTopLevel(s, (ch, i) => {
+    if (ch === " " || ch === "\n" || ch === "	" || ch === ">" || ch === "+" || ch === "~") start = i + 1;
+  });
+  return s.slice(start);
+}
+function ownLevel(compound) {
+  let out = "";
+  eachTopLevel(compound, (ch) => {
+    out += ch;
+  });
+  return out;
+}
 var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => m[1] === void 0 ? [] : [m[1]]);
 var ruleIsGrid = (rule2) => [...ownDecls(rule2)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
 function deletableRule(rule2, lines) {
@@ -24491,774 +24534,8 @@ function deletableRule(rule2, lines) {
   return { startLine: start.line, endLine: end.line };
 }
 
-// src/cssinjs.ts
-var importedName = (spec) => {
-  if (spec.type !== "ImportSpecifier") return "default";
-  return spec.imported.type === "Identifier" ? spec.imported.name : spec.imported.value;
-};
-var fromPackage = (packages, src) => packages.some((p) => src === p || src.startsWith(`${p}/`));
-function cssInJsLocals(ast, packages) {
-  const styled = /* @__PURE__ */ new Set();
-  const bare = /* @__PURE__ */ new Set();
-  if (!packages?.length) return { styled, bare, any: false };
-  for (const node of ast.program.body) {
-    if (node.type !== "ImportDeclaration" || !fromPackage(packages, node.source.value)) continue;
-    for (const spec of node.specifiers) {
-      const local = spec.local.name;
-      const imported = importedName(spec);
-      if (imported === "default" || imported === "styled") styled.add(local);
-      else if (imported === "css" || imported === "createGlobalStyle" || imported === "injectGlobal") bare.add(local);
-    }
-  }
-  return { styled, bare, any: styled.size + bare.size > 0 };
-}
-function templateText(quasi) {
-  let out = "";
-  for (let i = 0; i < quasi.quasis.length; i++) {
-    out += quasi.quasis[i]?.value.raw ?? "";
-    if (i < quasi.expressions.length) {
-      const prev = out.replace(/\s+$/, "").slice(-1);
-      out += prev === "" || prev === ";" || prev === "{" || prev === "}" ? "/*dsh*/" : "dsh-e";
-    }
-  }
-  return out;
-}
-function parseTemplate(cssText, startLine) {
-  let root2;
-  try {
-    root2 = postcss_default.parse(`.dsh-root{${cssText}
-}`, { from: void 0 });
-  } catch (err) {
-    return { groups: [], error: messageLineOf(err) };
-  }
-  const groups = [];
-  const at = (node) => startLine + ((node.source?.start?.line ?? 1) - 1);
-  const collect = (rule2, selector, onTarget) => {
-    const decls = [];
-    const nested = [];
-    const walk = (container) => {
-      for (const node of container.nodes ?? []) {
-        if (node.type === "decl") {
-          if (node.value.includes("dsh-e")) continue;
-          decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
-        } else if (node.type === "atrule")
-          walk(node);
-        else if (node.type === "rule") nested.push(node);
-      }
-    };
-    walk(rule2);
-    if (decls.length)
-      groups.push({ selector, decls, isGrid: decls.some((d) => isGridDecl(d.prop, d.value)), onTarget });
-    for (const child of nested) {
-      const sel = child.selectors.join(", ");
-      collect(child, sel, onTarget && child.selectors.every((s) => /^&[^\s>+~]*$/.test(s.trim())));
-    }
-  };
-  const top = root2.nodes.find((n) => n.type === "rule");
-  if (top) collect(top, null, true);
-  return { groups, error: null };
-}
-
-// src/patterns.ts
-var split = (raw) => {
-  const direct = raw.startsWith(">");
-  const spec = direct ? raw.slice(1).trimStart() : raw;
-  const i = spec.indexOf("::");
-  const named2 = i === -1 ? { name: spec, pkg: null } : { name: spec.slice(i + 2), pkg: spec.slice(0, i) || null };
-  return direct ? { ...named2, direct } : named2;
-};
-function toNode(spec) {
-  if (typeof spec === "string") return { ...split(spec), children: [] };
-  if (!Array.isArray(spec) || !spec.length || typeof spec[0] !== "string") return null;
-  return {
-    ...split(spec[0]),
-    children: spec.slice(1).map(toNode).filter((n) => n !== null)
-  };
-}
-var signatureOf = (node) => node.children.length ? `${node.name}(${node.children.map(signatureOf).join(",")})` : node.name;
-var nodeCount = (node) => 1 + node.children.reduce((n, c) => n + nodeCount(c), 0);
-var depthOf = (node) => node.children.length ? 1 + Math.max(...node.children.map(depthOf)) : 1;
-function descendants(tree, out = []) {
-  for (const c of tree.children) {
-    out.push(c);
-    descendants(c, out);
-  }
-  return out;
-}
-var nameMatches = (spec, actual) => spec === actual || spec.includes("|") && spec.split("|").includes(actual);
-function matches(pattern, tree) {
-  if (!nameMatches(pattern.name, tree.name)) return false;
-  if (pattern.pkg && tree.pkg && pattern.pkg !== tree.pkg) return false;
-  if (!pattern.children.length) return true;
-  const pool = descendants(tree);
-  const own = new Set(tree.children);
-  const used = /* @__PURE__ */ new Set();
-  const wanted = [...pattern.children].sort(
-    (a, b) => Number(Boolean(b.direct)) - Number(Boolean(a.direct)) || nodeCount(b) - nodeCount(a)
-  );
-  for (const want of wanted) {
-    const hit = pool.find((n) => !used.has(n) && (!want.direct || own.has(n)) && matches(want, n));
-    if (!hit) return false;
-    used.add(hit);
-  }
-  return true;
-}
-function partsOf(root2, tree) {
-  return tree.name.startsWith(root2) && /^([.A-Z]|$)/.test(tree.name.slice(root2.length)) && tree.children.every((c) => partsOf(root2, c));
-}
-var bindName = (c) => typeof c === "string" && c ? c.split(".", 1)[0] ?? c : null;
-var ruleSpecs = (detector) => {
-  const list2 = Array.isArray(detector) ? detector : [detector];
-  return list2.filter(
-    (d) => typeof d === "object" && d !== null && typeof d.rule === "string"
-  );
-};
-var stringParam = (spec, key, fallback) => typeof spec[key] === "string" && spec[key] ? spec[key] : fallback;
-var numParam = (spec, key, fallback) => typeof spec[key] === "number" ? spec[key] : fallback;
-var listParam = (spec, key) => Array.isArray(spec[key]) ? spec[key].filter((x) => typeof x === "string") : [];
-function loadPatterns(raw) {
-  const rec = raw;
-  const list2 = Array.isArray(raw) ? raw : rec?.realizations ?? rec?.patterns ?? [];
-  const out = [];
-  const load = (p, id, inheritedCanonical) => {
-    const canonical = "canonical" in (p ?? {}) ? bindName(p.canonical) : inheritedCanonical;
-    const shapes = [toNode(p?.signature), toNode(p?.rendered_signature)].filter((n) => n !== null);
-    const authored2 = p?.instead_of_signature;
-    const antiShapes = !Array.isArray(authored2) ? [] : typeof authored2[0] === "string" ? [authored2] : authored2;
-    const avoid = antiShapes.map((shape) => toNode(shape)).filter((n) => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes);
-    const rules2 = ruleSpecs(p?.detector);
-    const summary = p?.summary ?? p?.note ?? "";
-    const own = id ?? (shapes[0] ? signatureOf(shapes[0]) : null);
-    if (own) {
-      const nodes = shapes.length ? shapes : [null];
-      nodes.forEach((node, i) => {
-        out.push({
-          id: own,
-          summary,
-          canonical,
-          node,
-          size: node ? nodeCount(node) : 0,
-          avoid: i === 0 ? avoid : [],
-          rules: i === 0 ? rules2 : []
-        });
-      });
-    }
-    const parts = p?.parts;
-    if (own && parts && typeof parts === "object")
-      for (const [name, part] of Object.entries(parts)) load(part, `${own}#${name}`, canonical);
-  };
-  for (const p of list2) load(p, p?.pattern ?? p?.id ?? null, null);
-  return out;
-}
-function systemTree(el, isSystemName, childrenOf, nameOf, packageOf = () => null, line) {
-  const name = nameOf(el);
-  if (!name || !isSystemName(name)) return null;
-  return {
-    name,
-    pkg: packageOf(name),
-    children: systemChildren(el, isSystemName, childrenOf, nameOf, packageOf),
-    ...line === void 0 ? {} : { line }
-  };
-}
-function systemChildren(el, isSystemName, childrenOf, nameOf, packageOf) {
-  const out = [];
-  for (const child of childrenOf(el)) {
-    const cname = nameOf(child);
-    if (cname && isSystemName(cname)) out.push(systemTree(child, isSystemName, childrenOf, nameOf, packageOf));
-    else out.push(...systemChildren(child, isSystemName, childrenOf, nameOf, packageOf));
-  }
-  return out.filter((n) => n !== null);
-}
-var SUBSTANTIAL = { minNodes: 4, minDepth: 2 };
-function resolveRule(rules2, forces) {
-  for (const r of rules2) {
-    if (!r.when) return r;
-    const conds = Object.entries(r.when);
-    if (conds.some(([f, v]) => f in forces && forces[f] !== v)) continue;
-    if (conds.every(([f, v]) => forces[f] === v)) return r;
-    return null;
-  }
-  return null;
-}
-
-// src/checks/detectors/confirm-pair.ts
-var CONSENT = "^(cancel|delete|remove|discard|reset|confirm|ok|yes|no|continue|proceed|leave|revert)\\b";
-var CONTROLS = "(Control|Field|Picker|Input|Textarea|Editor)$|^(DataForm|Field\\.Root|Fieldset)";
-var confirmPair = (el, spec, ctx) => {
-  if (ctx.canonical !== stringParam(spec, "container", "")) return null;
-  const button = stringParam(spec, "button", "Button");
-  const consent = new RegExp(stringParam(spec, "labels", CONSENT), "i");
-  const controls = new RegExp(stringParam(spec, "controls", CONTROLS));
-  const inside = ctx.elementsIn(el);
-  const isControl2 = (c) => {
-    const name = ctx.nameOf(c);
-    const sys = ctx.canonicalOf(c);
-    if (sys) return controls.test(sys) || controls.test(name ?? "");
-    return !!name && /^(input|select|textarea)$/.test(name);
-  };
-  if (inside.some(isControl2)) return null;
-  const labels = inside.filter((c) => ctx.canonicalOf(c) === button).map(ctx.labelOf);
-  if (labels.length !== 2 || !labels.every((l) => l !== null && consent.test(l))) return null;
-  return `${ctx.canonical} with two consent buttons (${labels.join(" / ")}) and no form control`;
-};
-
-// src/checks/detectors/few-static-options.ts
-var fewStaticOptions = (el, spec, ctx) => {
-  if (!listParam(spec, "components").includes(ctx.canonical)) return null;
-  const prop = stringParam(spec, "prop", "options");
-  const attr = el.openingElement.attributes.find((a) => a.type === "JSXAttribute" && a.name.name === prop);
-  const value = attr?.type === "JSXAttribute" && attr.value?.type === "JSXExpressionContainer" ? attr.value.expression : null;
-  const options = value && value.type !== "JSXEmptyExpression" ? ctx.optionsIn(value) : null;
-  if (!options || options.length < numParam(spec, "min", 2) || options.length > numParam(spec, "max", 5)) return null;
-  if (!options.every((l) => l !== null)) return null;
-  if (options.reduce((n, l) => n + l.length, 0) > numParam(spec, "maxLabelChars", 32)) return null;
-  return `${ctx.canonical} with ${options.length} short static ${prop}`;
-};
-
-// src/checks/detectors/judge.ts
-var MAX_CONTROL_SOURCE = 2e3;
-function judgeControl(el, spec, ctx) {
-  const name = ctx.nameOf(el) ?? "";
-  const component = name.includes(".") ? `${ctx.canonical}${name.slice(name.indexOf("."))}` : ctx.canonical;
-  if (!listParam(spec, "components").includes(component)) return null;
-  const unless = listParam(spec, "unless");
-  const realized = unless.length > 0 && el.openingElement.attributes.some(
-    (a) => a.type === "JSXSpreadAttribute" || a.name.type === "JSXIdentifier" && unless.includes(a.name.name)
-  );
-  if (realized) return null;
-  return { component, enclosing: ctx.enclosingOf(el), source: ctx.sourceOf(el).slice(0, MAX_CONTROL_SOURCE) };
-}
-
-// src/markup.ts
-var PLUGINS = ["jsx", "typescript", "decorators-legacy", "classProperties", "importAttributes"];
-var memberObject = (t) => t.type === "MemberExpression" && t.object.type === "Identifier" ? t.object.name : void 0;
-var memberProperty = (t) => t.type === "MemberExpression" && t.property.type === "Identifier" ? t.property.name : void 0;
-var calleeOf = (t) => t.type === "CallExpression" && t.callee.type === "Identifier" ? t.callee.name : void 0;
-var firstArgOf = (t) => {
-  if (t.type !== "CallExpression") return void 0;
-  const arg = t.arguments[0];
-  return arg?.type === "Identifier" ? arg.name : void 0;
-};
-var identifierOf = (t) => t.type === "Identifier" ? t.name : void 0;
-function substitutionTargets(node, out = []) {
-  const expr = node && unwrapTs(node);
-  switch (expr?.type) {
-    case "JSXElement":
-      out.push(expr);
-      break;
-    case "ArrowFunctionExpression":
-    case "FunctionExpression": {
-      if (expr.body.type !== "BlockStatement") return substitutionTargets(expr.body, out);
-      for (const stmt of expr.body.body) if (stmt.type === "ReturnStatement") substitutionTargets(stmt.argument, out);
-      break;
-    }
-    case "ConditionalExpression":
-      substitutionTargets(expr.consequent, out);
-      substitutionTargets(expr.alternate, out);
-      break;
-    case "LogicalExpression":
-      substitutionTargets(expr.left, out);
-      substitutionTargets(expr.right, out);
-      break;
-    // `render={ <h4 /> }`. JSX also allows the braces to be dropped entirely
-    // (`render=<h4 />`), which arrives as the element itself and is caught by
-    // the `JSXElement` case above.
-    case "JSXExpressionContainer":
-      substitutionTargets(expr.expression, out);
-      break;
-  }
-  return out;
-}
-var canonicalName = (name, normalize2) => normalize2 ? name.replace(normalize2, "") : name;
-var held = (set, name) => name !== void 0 && set.has(name);
-function harvestTokens(text2, into = /* @__PURE__ */ new Set()) {
-  for (const t of text2.match(/[A-Za-z_][\w-]*/g) ?? []) into.add(t);
-  return into;
-}
-var MAX_STEM = 128;
-function harvestStems(text2, into = /* @__PURE__ */ new Set()) {
-  for (let i = text2.indexOf("${"); i !== -1; i = text2.indexOf("${", i + 2)) {
-    let s = i;
-    const floor = Math.max(0, i - MAX_STEM);
-    while (s > floor && isWordChar(text2.charCodeAt(s - 1))) s--;
-    const stem = text2.slice(s, i);
-    if (stem.includes("-") && /^[A-Za-z_]/.test(stem)) into.add(stem);
-  }
-  return into;
-}
-function isWordChar(c) {
-  return c >= 97 && c <= 122 || c >= 65 && c <= 90 || c >= 48 && c <= 57 || c === 95 || c === 45;
-}
-var CLASS_TOKEN = /^[a-z_][\w-]*$/i;
-function classesFrom(strings) {
-  const out = [];
-  for (const s of strings) {
-    for (const t of s.split(/\s+/)) {
-      const c = t.trim();
-      if (c && CLASS_TOKEN.test(c)) out.push(c);
-    }
-  }
-  return out;
-}
-function readStyleAttr(value) {
-  const decls = [];
-  const dynamicProps = [];
-  let dynamic = 0;
-  const container = value?.type === "JSXExpressionContainer" ? value.expression : value;
-  if (!container) return { decls, dynamic, dynamicProps, present: false };
-  if (container.type !== "ObjectExpression") {
-    return { decls, dynamic: 1, dynamicProps, present: true };
-  }
-  for (const prop of container.properties) {
-    if (prop.type !== "ObjectProperty") {
-      dynamic++;
-      continue;
-    }
-    const key = keyName(prop);
-    if (!key) {
-      dynamic++;
-      continue;
-    }
-    const cssProp = toCssProp(key);
-    const cssValue = toCssValue(cssProp, prop.value);
-    if (cssValue === null) {
-      dynamic++;
-      dynamicProps.push(cssProp);
-      continue;
-    }
-    const line = prop.loc?.start?.line ?? null;
-    decls.push({ prop: cssProp, value: cssValue, line, span: valueSpan(prop.value, line) });
-  }
-  return { decls, dynamic, dynamicProps, present: true };
-}
-function walkAst(node, visit) {
-  if (!node || typeof node !== "object") return;
-  if (Array.isArray(node)) {
-    for (const n of node) walkAst(n, visit);
-    return;
-  }
-  const rec = node;
-  if (typeof rec.type === "string") visit(node);
-  for (const key of Object.keys(rec)) {
-    if (key === "loc" || key === "start" || key === "end" || key === "leadingComments" || key === "trailingComments")
-      continue;
-    walkAst(rec[key], visit);
-  }
-}
-function systemImports(ast, ds) {
-  const canonicals = /* @__PURE__ */ new Map();
-  const text2 = /* @__PURE__ */ new Set();
-  const layout = /* @__PURE__ */ new Set();
-  const componentImports = [];
-  const packages = /* @__PURE__ */ new Map();
-  const namespaces = /* @__PURE__ */ new Set();
-  const canonical = (name) => canonicalName(name, ds.normalizeExports);
-  for (const node of ast.program.body) {
-    if (node.type !== "ImportDeclaration" || !fromPackage(ds.packages, node.source.value)) continue;
-    for (const spec of node.specifiers) {
-      const local = spec.local.name;
-      const c = canonical(spec.type === "ImportSpecifier" ? importedName(spec) : local);
-      canonicals.set(local, c);
-      if (ds.textComponents.includes(c)) text2.add(local);
-      if (ds.layoutComponents.includes(c)) layout.add(local);
-      packages.set(local, node.source.value);
-      if (spec.type === "ImportNamespaceSpecifier") namespaces.add(local);
-      componentImports.push({
-        canonical: c,
-        package: node.source.value,
-        uses: 0,
-        // the JSX walk counts them; this pass has only read the imports
-        line: spec.loc?.start?.line ?? node.loc?.start?.line ?? 1,
-        declLine: node.loc?.start?.line ?? 1
-      });
-    }
-  }
-  return { text: text2, layout, componentImports, packages, canonicals, namespaces };
-}
-var unwrapTs = (e) => e.type === "TSAsExpression" || e.type === "TSSatisfiesExpression" || e.type === "TSNonNullExpression" || e.type === "TSTypeAssertion" ? unwrapTs(e.expression) : e;
-function staticLabel(el) {
-  const parts = [];
-  for (const c of el.children) {
-    if (c.type === "JSXText") {
-      parts.push(c.value);
-      continue;
-    }
-    if (c.type === "JSXElement" || c.type === "JSXFragment") continue;
-    if (c.type !== "JSXExpressionContainer") return null;
-    if (c.expression.type === "JSXEmptyExpression") continue;
-    const text2 = staticString(c.expression);
-    if (text2 === null) return null;
-    parts.push(text2);
-  }
-  return parts.join("").replace(/\s+/g, " ").trim();
-}
-function staticString(node) {
-  const e = unwrapTs(node);
-  if (e.type === "StringLiteral") return e.value;
-  if (e.type === "TemplateLiteral" && !e.expressions.length) return e.quasis.map((q) => q.value.cooked ?? "").join("");
-  if (e.type === "CallExpression" && e.callee.type === "Identifier" && /^_[_xn]$/.test(e.callee.name)) {
-    const arg = e.arguments[0];
-    return arg?.type === "StringLiteral" ? arg.value : null;
-  }
-  return null;
-}
-var DETECTORS = /* @__PURE__ */ new Map([
-  ["few-static-options", fewStaticOptions],
-  ["confirm-pair", confirmPair]
-]);
-function componentRanges(program) {
-  const out = [];
-  walkAst(program, (n) => {
-    const [name, body2] = n.type === "FunctionDeclaration" || n.type === "ClassDeclaration" ? [n.id?.name, n] : n.type === "VariableDeclarator" && n.id.type === "Identifier" ? [n.id.name, n.init] : [void 0, null];
-    if (name && /^[A-Z]/.test(name) && typeof body2?.start === "number" && typeof body2.end === "number")
-      out.push({ start: body2.start, end: body2.end, name });
-  });
-  return out;
-}
-function scanMarkup(text2, relPath, ds, rules2 = []) {
-  const referenced = harvestTokens(text2);
-  const stems = harvestStems(text2);
-  const bindings = [];
-  const rawEls = [];
-  const carriers = [];
-  const inlineStyles = [];
-  const cssInJs = [];
-  const composites2 = [];
-  const ruleHits = [];
-  const controls = [];
-  const imports = /* @__PURE__ */ new Set();
-  const result = {
-    controls,
-    bindings,
-    rawEls,
-    carriers,
-    inlineStyles,
-    cssInJs,
-    composites: composites2,
-    ruleHits,
-    imports,
-    referenced,
-    stems,
-    componentImports: [],
-    parseError: null
-  };
-  let ast;
-  try {
-    ast = (0, import_parser.parse)(text2, {
-      sourceType: "unambiguous",
-      errorRecovery: true,
-      attachComment: false,
-      plugins: PLUGINS
-    });
-  } catch (err) {
-    return { ...result, parseError: messageLineOf(err) };
-  }
-  const { text: textLike, layout, componentImports, packages, canonicals, namespaces } = systemImports(ast, ds);
-  const tags = cssInJsLocals(ast, ds.cssInJsPackages);
-  const cssPropOwner = /* @__PURE__ */ new Map();
-  const substituted = /* @__PURE__ */ new Set();
-  const uses = /* @__PURE__ */ new Map();
-  for (const node of ast.program.body)
-    if (node.type === "ImportDeclaration") for (const sp of node.specifiers) imports.add(sp.local.name);
-  const jsxChildElements = (el) => {
-    const out = [];
-    const dig = (n) => {
-      if (!n || typeof n !== "object") return;
-      if (Array.isArray(n)) {
-        n.forEach(dig);
-        return;
-      }
-      const rec = n;
-      if (rec.type === "JSXElement") return void out.push(n);
-      for (const k of Object.keys(rec)) if (k !== "loc" && k !== "start" && k !== "end") dig(rec[k]);
-    };
-    for (const c of el.children ?? []) dig(c);
-    return out;
-  };
-  const jsxName = (el) => {
-    const n = ("openingElement" in el ? el.openingElement : el).name;
-    if (n.type === "JSXIdentifier") return n.name;
-    if (n.type === "JSXMemberExpression")
-      return n.object.type === "JSXIdentifier" ? `${n.object.name}.${n.property.name}` : null;
-    return null;
-  };
-  const baseOf = (name) => name.split(".", 1)[0] ?? name;
-  const readComposite = (el) => {
-    const name = jsxName(el);
-    if (!name || !canonicals.has(baseOf(name))) return;
-    const tree = systemTree(
-      el,
-      (n) => canonicals.has(baseOf(n)),
-      jsxChildElements,
-      jsxName,
-      (n) => packages.get(baseOf(n)) ?? null,
-      el.loc?.start?.line ?? 1
-    );
-    if (!tree || nodeCount(tree) < 2) return;
-    composites2.push({
-      file: relPath,
-      line: el.loc?.start?.line ?? 1,
-      signature: signatureOf(tree),
-      tree,
-      size: nodeCount(tree),
-      depth: depthOf(tree)
-    });
-  };
-  const canonicalOf = (el) => {
-    const name = jsxName(el);
-    return name ? canonicals.get(baseOf(name)) ?? null : null;
-  };
-  const allElements = (el, out = []) => {
-    for (const c of jsxChildElements(el)) {
-      out.push(c);
-      allElements(c, out);
-    }
-    return out;
-  };
-  const constArrays = /* @__PURE__ */ new Map();
-  for (const node of ast.program.body) {
-    const decl2 = node.type === "ExportNamedDeclaration" ? node.declaration : node;
-    if (decl2?.type !== "VariableDeclaration" || decl2.kind !== "const") continue;
-    for (const d of decl2.declarations)
-      if (d.id.type === "Identifier" && d.init) constArrays.set(d.id.name, staticOptions(d.init));
-  }
-  function staticOptions(e) {
-    const v = unwrapTs(e);
-    if (v.type === "Identifier") return constArrays.get(v.name) ?? null;
-    if (v.type !== "ArrayExpression") return null;
-    if (v.elements.some((x) => !x || x.type === "SpreadElement")) return null;
-    return v.elements.map((x) => {
-      if (x?.type !== "ObjectExpression") return null;
-      const label = x.properties.find(
-        (pr) => pr.type === "ObjectProperty" && !pr.computed && pr.key.type === "Identifier" && pr.key.name === "label"
-      );
-      return label?.type === "ObjectProperty" ? staticString(label.value) : null;
-    });
-  }
-  let scopes = null;
-  const enclosingOf = (el) => {
-    scopes ??= componentRanges(ast.program);
-    const at = el.start ?? 0;
-    let best = null;
-    for (const s of scopes) if (s.start <= at && s.end >= (el.end ?? at) && (!best || s.start > best.start)) best = s;
-    return best?.name ?? null;
-  };
-  const reading = {
-    nameOf: jsxName,
-    canonicalOf,
-    elementsIn: (el) => allElements(el),
-    optionsIn: staticOptions,
-    labelOf: staticLabel,
-    enclosingOf,
-    sourceOf: (el) => text2.slice(el.start ?? 0, el.end ?? 0)
-  };
-  const readRules = (el) => {
-    if (!rules2.length) return;
-    const canonical = canonicalOf(el);
-    if (!canonical) return;
-    const line = el.loc?.start?.line ?? 1;
-    const ctx = { ...reading, canonical };
-    for (const { patternId, spec } of rules2) {
-      if (spec.rule === "judge") {
-        const control = judgeControl(el, spec, ctx);
-        if (control) controls.push({ file: relPath, line, ...control, patternId });
-        continue;
-      }
-      const detail = DETECTORS.get(spec.rule)?.(el, spec, ctx);
-      if (detail) ruleHits.push({ patternId, rule: spec.rule, line, detail });
-    }
-  };
-  const identityOf = (local, member = null) => {
-    if (member && namespaces.has(local)) return canonicalName(member, ds.normalizeExports);
-    const name = canonicals.get(local) ?? local;
-    return member ? `${name}.${member}` : name;
-  };
-  const isTextElement = (local, member = null) => member && namespaces.has(local) ? ds.textComponents.includes(canonicalName(member, ds.normalizeExports)) : textLike.has(local);
-  const registryKey = (local, member = null) => {
-    const pkg = packages.get(local);
-    return pkg ? { component: identityOf(local, member), package: pkg } : {};
-  };
-  const readTaggedTemplate = (node) => {
-    if (!tags.any) return;
-    const t = node.tag;
-    const owner = typeof node.start === "number" ? cssPropOwner.get(node.start) : void 0;
-    let target = null;
-    let member = null;
-    let isSystem = false;
-    if (owner) {
-      ({ target, member, isSystem } = owner);
-      if (!held(tags.bare, identifierOf(t)) && !held(tags.styled, memberObject(t)) && !held(tags.styled, calleeOf(t)))
-        return;
-    } else if (held(tags.styled, memberObject(t))) {
-      target = memberProperty(t) ?? null;
-    } else if (held(tags.styled, calleeOf(t))) {
-      target = firstArgOf(t) ?? null;
-      isSystem = Boolean(target && canonicals.has(target));
-    } else if (held(tags.bare, identifierOf(t))) {
-      target = null;
-    } else {
-      return;
-    }
-    const line = node.quasi.quasis[0]?.loc?.start?.line ?? node.loc?.start?.line ?? 1;
-    const { groups, error } = parseTemplate(templateText(node.quasi), line);
-    cssInJs.push({
-      file: relPath,
-      line,
-      target,
-      isSystem,
-      isText: isSystem && target !== null && isTextElement(target, member),
-      ...isSystem && target ? registryKey(target, member) : {},
-      groups,
-      error
-    });
-  };
-  walkAst(ast.program, (node) => {
-    if (node.type === "TaggedTemplateExpression") return readTaggedTemplate(node);
-    if (node.type === "JSXElement") {
-      readComposite(node);
-      readRules(node);
-    }
-    if (node.type !== "JSXOpeningElement") return;
-    const tag = jsxName(node) ?? (node.name.type === "JSXMemberExpression" ? `?.${node.name.property.name}` : null);
-    if (!tag) return;
-    const line = node.loc?.start?.line ?? 1;
-    const root2 = tag.split(".")[0] ?? tag;
-    const isComponent = /^[A-Z]/.test(root2);
-    const isSystem = isComponent && canonicals.has(root2);
-    if (isSystem) {
-      const c = canonicals.get(root2) ?? root2;
-      uses.set(c, (uses.get(c) ?? 0) + 1);
-    }
-    const member = tag.includes(".") ? tag.slice(tag.indexOf(".") + 1) : null;
-    const emitsTag = member ? (
-      // `<UI.Text render={ <h4 /> }>` — the namespace is what was imported,
-      // so the component name is the member.
-      canonicals.has(root2) && (ds.textComponents.includes(canonicalName(member, ds.normalizeExports)) || ds.layoutComponents.includes(canonicalName(member, ds.normalizeExports)))
-    ) : textLike.has(root2) || layout.has(root2);
-    const strings = [];
-    let style = null;
-    let cssAttr = null;
-    for (const attr of node.attributes) {
-      if (attr.type !== "JSXAttribute") continue;
-      const an = attr.name.type === "JSXIdentifier" ? attr.name.name : attr.name.name.name;
-      if (an === "className" || an === "class")
-        walkAst(attr.value, (n) => {
-          if (n.type === "StringLiteral") strings.push(n.value);
-          else if (n.type === "TemplateElement") strings.push(n.value.cooked ?? n.value.raw);
-        });
-      else if (an === "style") style = readStyleAttr(attr.value);
-      else if (an === "css") cssAttr = attr.value;
-      else if (emitsTag && attr.name.type === "JSXIdentifier" && ds.substitutionProps.has(an))
-        for (const target of substitutionTargets(attr.value)) substituted.add(target.openingElement);
-    }
-    const classes = classesFrom(strings);
-    const owned = cssAttr?.type === "JSXExpressionContainer" ? cssAttr.expression : null;
-    if (owned?.type === "TaggedTemplateExpression" && typeof owned.start === "number")
-      cssPropOwner.set(owned.start, {
-        target: isComponent ? root2 : tag.toLowerCase(),
-        member: isComponent ? member : null,
-        isSystem
-      });
-    if (style?.present)
-      inlineStyles.push({
-        tag: isComponent ? root2 : tag.toLowerCase(),
-        component: isSystem ? canonicals.get(root2) ?? root2 : null,
-        // A project component renders whatever its own markup says, and
-        // `?.Header` is a part of a namespace member no import names.
-        element: isSystem ? identityOf(root2, member) : isComponent || tag.startsWith("?") ? null : tag.toLowerCase(),
-        isSystem,
-        isText: isSystem && isTextElement(root2, member),
-        decls: style.decls,
-        dynamic: style.dynamic,
-        dynamicProps: style.dynamicProps,
-        file: relPath,
-        line
-      });
-    const carrier = { element: null, classes };
-    if (classes.length) carriers.push(carrier);
-    if (isComponent) {
-      if (!isSystem) return;
-      const isText = isTextElement(root2, member);
-      const key = registryKey(root2, member);
-      carrier.element = identityOf(root2, member);
-      for (const cls of classes) bindings.push({ cls, tag: root2, isSystem: true, isText, ...key, file: relPath, line });
-    } else {
-      if (substituted.has(node)) return;
-      const lower = tag.toLowerCase();
-      const mapped = ds.elementMap.get(lower);
-      if (!mapped) return;
-      let suggest = mapped.component;
-      let render = mapped.render;
-      if (mapped.attribute && mapped.values) {
-        const attr = node.attributes.find(
-          (a) => a.type === "JSXAttribute" && a.name.type === "JSXIdentifier" && a.name.name === mapped.attribute
-        );
-        const v = attr?.type === "JSXAttribute" ? attr.value : null;
-        const raw = v?.type === "StringLiteral" ? v.value : v?.type === "JSXExpressionContainer" && v.expression.type !== "JSXEmptyExpression" ? staticString(v.expression) : null;
-        const value = raw?.trim().toLowerCase();
-        if (value !== void 0 && Object.hasOwn(mapped.values, value)) {
-          suggest = mapped.values[value] ?? null;
-          render = void 0;
-        }
-        if (suggest === null) return;
-      }
-      if (mapped.styledOnly && !classes.length && !style?.present) return;
-      carrier.element = lower;
-      rawEls.push({
-        tag: lower,
-        classes,
-        file: relPath,
-        line,
-        suggest,
-        render,
-        styledOnly: mapped.styledOnly,
-        inlineStyled: Boolean(style?.present),
-        inlineLayout: Boolean(style?.decls?.some(isLayoutDecl))
-      });
-    }
-  });
-  return { ...result, componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })) };
-}
-
-// src/syntax.ts
-var SYNTAX_PACKAGES = {
-  ".scss": "postcss-scss",
-  ".sass": "postcss-sass",
-  ".less": "postcss-less",
-  ".styl": "postcss-styl"
-};
-var BUNDLED_LOADERS = {
-  "postcss-scss": () => Promise.resolve().then(() => (init_scss_syntax(), scss_syntax_exports)),
-  "postcss-less": () => Promise.resolve().then(() => __toESM(require_lib2(), 1))
-};
-var cache = /* @__PURE__ */ new Map();
-var extOf = (path) => {
-  const i = path.lastIndexOf(".");
-  return i === -1 ? "" : path.slice(i).toLowerCase();
-};
-async function syntaxFor(path) {
-  const ext = extOf(path);
-  const pkg = SYNTAX_PACKAGES[ext];
-  if (!pkg) return { parse: (text2, opts) => postcss_default.parse(text2, opts) };
-  const cached = cache.get(pkg);
-  if (cached) return cached;
-  let resolved;
-  try {
-    const load = BUNDLED_LOADERS[pkg] ?? (() => import(pkg));
-    const mod = await load();
-    const syntax = mod.default ?? mod;
-    const parse3 = syntax.parse ?? syntax;
-    if (typeof parse3 !== "function") throw new Error(`${pkg} exposes no parse()`);
-    const parseFn = parse3;
-    resolved = { parse: (text2, opts) => parseFn(text2, opts) };
-  } catch {
-    resolved = { missing: pkg };
-  }
-  cache.set(pkg, resolved);
-  return resolved;
-}
-
 // src/components.ts
+var registryKey = (pkg, name) => `${pkg}::${name}`;
 var isEntry = (c) => Boolean(c?.name && c?.package && c?.status);
 var isControl = (v) => v === null || typeof v === "string" && v !== "" || Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && x !== "");
 function readSurface(raw) {
@@ -25282,15 +24559,15 @@ function loadComponents(raw) {
   });
   const surfaced = read.some((c) => c.surface !== void 0);
   const map = /* @__PURE__ */ new Map();
-  for (const c of read) map.set(`${c.package}::${c.name}`, surfaced ? { ...c, surfaced: true } : c);
+  for (const c of read) map.set(registryKey(c.package, c.name), surfaced ? { ...c, surfaced: true } : c);
   return map;
 }
 function surfaceFor(registry, pkg, name) {
   if (!pkg || !name) return void 0;
-  const exact = registry.get(`${pkg}::${name}`);
+  const exact = registry.get(registryKey(pkg, name));
   if (exact) return exact.surface;
   const [root2, ...parts] = name.split(".");
-  return parts.length === 1 && parts[0] === "Root" ? registry.get(`${pkg}::${root2}`)?.surface : void 0;
+  return parts.length === 1 && parts[0] === "Root" && root2 ? registry.get(registryKey(pkg, root2))?.surface : void 0;
 }
 function surfacesRecorded(registry) {
   const byPackage = /* @__PURE__ */ new Map();
@@ -25299,658 +24576,36 @@ function surfacesRecorded(registry) {
   const anywhere = [...byPackage.values()].some(Boolean);
   return (pkg, name) => {
     if (!pkg) return anywhere;
-    const entry = name && registry.get(`${pkg}::${name}`) || name && registry.get(`${pkg}::${name.split(".")[0]}`);
+    const entry = name && registry.get(registryKey(pkg, name)) || name && registry.get(registryKey(pkg, name.split(".")[0] ?? name));
     if (entry) return entry.surfaced === true;
     return byPackage.get(pkg) ?? anywhere;
   };
 }
 function ownership(surface, prop) {
   for (const [owned, control] of Object.entries(surface.properties))
-    if (propsOverlap(prop, owned))
-      return { owned, via: control === null ? [] : Array.isArray(control) ? control : [control] };
+    if (propsOverlap(prop, owned)) return { owned, via: listOf(control) };
   return void 0;
 }
 
-// src/tokens.ts
-import { readFileSync as readFileSync2, statSync } from "node:fs";
-import { join as join3 } from "node:path";
+// src/config.ts
+import { existsSync as existsSync4, readFileSync as readFileSync2 } from "node:fs";
+import { dirname as dirname4, isAbsolute as isAbsolute2, join as join5, relative as relative2, resolve as resolve3 } from "node:path";
+import { pathToFileURL } from "node:url";
 
-// src/scopes.ts
-var PROP = /^-?[a-z][a-z-]*(\*[a-z-]*)?$/;
-var ELEMENT = /^([a-z][a-z0-9-]*|[A-Z][A-Za-z0-9_]*(\.[A-Z][A-Za-z0-9_]*)*)$/;
-var KIND = /^[a-z][a-z0-9-]*$/;
-var PLACEHOLDER = /\{([^}]*)\}/g;
-var isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-var authored = (o) => Object.entries(o).filter(([k]) => !k.startsWith("$"));
-function parseTokenScopes(raw) {
-  const errors = [];
-  const err = (at, what) => {
-    errors.push(`tokenScopes${at}: ${what}`);
-  };
-  if (!isObject(raw)) {
-    err("", "expected an object of grammars, kinds and scales");
-    return { scopes: null, errors };
-  }
-  for (const [k] of authored(raw))
-    if (k !== "grammars" && k !== "kinds" && k !== "scales")
-      err(`.${k}`, "unknown key \u2014 expected grammars, kinds, scales");
-  const kinds = /* @__PURE__ */ new Map();
-  if (raw.kinds !== void 0) {
-    if (!isObject(raw.kinds)) err(".kinds", "expected an object of kind \u2192 element and component names");
-    else
-      for (const [kind, names] of authored(raw.kinds)) {
-        if (!KIND.test(kind)) err(`.kinds.${kind}`, "a kind is a lowercase name");
-        if (!Array.isArray(names)) {
-          err(`.kinds.${kind}`, "expected a list of element and component names (empty for a kind markup cannot show)");
-          continue;
-        }
-        const bad = names.filter((n) => typeof n !== "string" || !ELEMENT.test(n));
-        if (bad.length)
-          err(
-            `.kinds.${kind}`,
-            `not an element or component name: ${bad.map((b) => JSON.stringify(b)).join(", ")} \u2014 a tag is lowercase (\`button\`), a component capitalised (\`Button\`)`
-          );
-        kinds.set(kind, new Set(names.filter((n) => typeof n === "string")));
-      }
-  }
-  const kindList = (at, v) => {
-    if (!Array.isArray(v) || !v.length || v.some((x) => typeof x !== "string")) {
-      err(at, "expected a list of kind names");
-      return [];
-    }
-    const unknown = v.filter((x) => !kinds.has(x));
-    if (unknown.length) err(at, `undeclared kind ${unknown.join(", ")} \u2014 declare it under tokenScopes.kinds`);
-    return v;
-  };
-  const propList = (at, v) => {
-    if (!Array.isArray(v) || v.some((x) => typeof x !== "string" || !PROP.test(x))) {
-      err(at, "expected a list of lowercase CSS properties, with at most one `*` each");
-      return [];
-    }
-    return v;
-  };
-  const segment = (at, v) => {
-    if (Array.isArray(v)) return { sets: propList(at, v), also: [] };
-    if (!isObject(v)) {
-      err(at, "expected a list of CSS properties, or { sets, also }");
-      return { sets: [], also: [] };
-    }
-    for (const [k] of authored(v))
-      if (k !== "sets" && k !== "also") err(`${at}.${k}`, "unknown key \u2014 expected sets, also");
-    return {
-      sets: propList(`${at}.sets`, v.sets),
-      also: v.also === void 0 ? [] : propList(`${at}.also`, v.also)
-    };
-  };
-  const grammars = [];
-  if (raw.grammars !== void 0 && !Array.isArray(raw.grammars)) err(".grammars", "expected a list");
-  for (const [i, g] of (Array.isArray(raw.grammars) ? raw.grammars : []).entries()) {
-    const at = `.grammars[${i}]`;
-    if (!isObject(g)) {
-      err(at, "expected an object with a pattern");
-      continue;
-    }
-    for (const [k] of authored(g))
-      if (!["pattern", "property", "properties", "target"].includes(k))
-        err(`${at}.${k}`, "unknown key \u2014 expected pattern, property, properties, target");
-    const pattern = g.pattern;
-    if (typeof pattern !== "string" || !pattern.startsWith("--")) {
-      err(`${at}.pattern`, "expected a custom-property name pattern, like `--acme-color-{property}-{target}...`");
-      continue;
-    }
-    const holes = [...pattern.matchAll(PLACEHOLDER)].map((m) => m[1] ?? "");
-    const bad = holes.filter((h) => !/^[a-z][a-z-]*$/.test(h));
-    if (bad.length) err(`${at}.pattern`, `a placeholder is a lowercase name: ${bad.map((b) => `{${b}}`).join(", ")}`);
-    const repeated = ["property", "target"].filter((name) => holes.filter((h) => h === name).length > 1);
-    for (const name of repeated) err(`${at}.pattern`, `{${name}} appears more than once`);
-    if (/[^a-z0-9-]/.test(pattern.replace(/\.\.\.$/, "").replace(PLACEHOLDER, "")))
-      err(`${at}.pattern`, "only lowercase letters, digits, `-`, placeholders and a trailing `...`");
-    const hasProperty = holes.includes("property");
-    const property = /* @__PURE__ */ new Map();
-    if (hasProperty) {
-      if (g.properties !== void 0) err(`${at}.properties`, "a pattern with {property} maps it under `property`");
-      if (!isObject(g.property) || !authored(g.property).length)
-        err(`${at}.property`, "expected an object of property segment \u2192 CSS properties");
-      else
-        for (const [seg, v] of authored(g.property)) {
-          if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(seg))
-            err(`${at}.property.${seg}`, "a segment is lowercase words joined by `-`");
-          property.set(seg, segment(`${at}.property.${seg}`, v));
-        }
-    } else {
-      if (g.property !== void 0) err(`${at}.property`, "the pattern has no {property} to map");
-      if (g.properties === void 0)
-        err(`${at}.properties`, "a pattern without {property} names the CSS properties its family sets");
-      else property.set(pattern, segment(`${at}.properties`, g.properties));
-    }
-    const target = /* @__PURE__ */ new Map();
-    if (g.target !== void 0) {
-      if (!holes.includes("target")) err(`${at}.target`, "the pattern has no {target} to map");
-      if (!isObject(g.target)) err(`${at}.target`, "expected an object of target segment \u2192 { requires, not }");
-      else
-        for (const [seg, v] of authored(g.target)) {
-          const t = `${at}.target.${seg}`;
-          if (!isObject(v)) {
-            err(t, "expected { requires, not }");
-            continue;
-          }
-          for (const [k] of authored(v))
-            if (k !== "requires" && k !== "not") err(`${t}.${k}`, "unknown key \u2014 expected requires, not");
-          const requires = v.requires === void 0 ? [] : kindList(`${t}.requires`, v.requires);
-          const not = v.not === void 0 ? [] : kindList(`${t}.not`, v.not);
-          if (!requires.length && !not.length) err(t, "declares neither requires nor not");
-          target.set(seg, { requires, not });
-        }
-    }
-    if (repeated.length) continue;
-    const alternatives = [...property.keys()].sort((a, b) => b.length - a.length).map(escapeRe);
-    const open = pattern.endsWith("...");
-    const source = (open ? pattern.slice(0, -3) : pattern).split(/(\{[^}]*\})/).map((piece, k) => {
-      if (k % 2 === 0) return escapeRe(piece);
-      const name = piece.slice(1, -1);
-      if (name === "property") return `(?<property>${alternatives.join("|")})`;
-      return name === "target" ? "(?<target>[a-z0-9]+)" : "[a-z0-9]+";
-    }).join("");
-    grammars.push({
-      pattern,
-      re: new RegExp(`^${source}${open ? "(?:-[a-z0-9]+)*" : ""}$`),
-      claims: (open ? pattern.slice(0, -3) : pattern).split("{")[0] ?? pattern,
-      property,
-      target
-    });
-  }
-  const scales = /* @__PURE__ */ new Map();
-  if (raw.scales !== void 0) {
-    if (!isObject(raw.scales)) err(".scales", "expected an object of token \u2192 { on: [kinds] }");
-    else
-      for (const [token, v] of authored(raw.scales)) {
-        const at = `.scales.${token}`;
-        if (!token.startsWith("--")) err(at, "a scale step is a token name");
-        if (!isObject(v)) {
-          err(at, "expected { on: [kinds] }");
-          continue;
-        }
-        for (const [k] of authored(v)) if (k !== "on") err(`${at}.${k}`, "unknown key \u2014 expected on");
-        scales.set(token, kindList(`${at}.on`, v.on));
-      }
-  }
-  if (!grammars.length && !scales.size && !errors.length) err("", "declares no grammars and no scales");
-  return errors.length ? { scopes: null, errors } : { scopes: { grammars, kinds, scales }, errors };
-}
-function mergeScopes(list2) {
-  const present = list2.filter((s) => Boolean(s));
-  if (!present.length) return void 0;
-  if (present.length === 1) return present[0];
-  const kinds = /* @__PURE__ */ new Map();
-  for (const s of present) for (const [k, names] of s.kinds) kinds.set(k, /* @__PURE__ */ new Set([...kinds.get(k) ?? [], ...names]));
-  return {
-    grammars: present.flatMap((s) => s.grammars),
-    kinds,
-    scales: new Map(present.flatMap((s) => [...s.scales]))
-  };
-}
-var globCache = /* @__PURE__ */ new Map();
-function propMatches(list2, prop) {
-  return list2.some((p) => {
-    if (!p.includes("*")) return p === prop;
-    let re = globCache.get(p);
-    if (!re) {
-      re = new RegExp(`^${p.split("*").map(escapeRe).join("[a-z-]+")}$`);
-      globCache.set(p, re);
-    }
-    return re.test(prop);
-  });
-}
-var placed = /* @__PURE__ */ new WeakMap();
-function place(scopes, token) {
-  let memo = placed.get(scopes);
-  if (!memo) {
-    memo = /* @__PURE__ */ new Map();
-    placed.set(scopes, memo);
-  }
-  const hit = memo.get(token);
-  if (hit !== void 0) return hit;
-  const found = placeUncached(scopes, token);
-  memo.set(token, found);
-  return found;
-}
-function placeUncached(scopes, token) {
-  const on = scopes.scales.get(token);
-  for (const g of scopes.grammars) {
-    const m = g.re.exec(token);
-    if (!m) continue;
-    const property = m.groups?.property ?? g.pattern;
-    const segment = g.property.get(property);
-    if (!segment) continue;
-    const target = m.groups?.target;
-    const placing = target === void 0 ? void 0 : g.target.get(target);
-    return { property, sets: segment.sets, also: segment.also, target: placing ? target : void 0, placing, on };
-  }
-  return on ? { property: null, sets: [], also: [], on } : null;
-}
-var covers = (scopes, prop) => scopes.grammars.some((g) => [...g.property.values()].some((s) => propMatches(s.sets, prop)));
-function scopedFamily(scopes, names, prop, generic) {
-  if (!covers(scopes, prop)) return null;
-  const placed2 = names.filter((n) => {
-    const p = place(scopes, n);
-    return p !== null && propMatches(p.sets, prop);
-  });
-  const unclaimed = names.filter((n) => !scopes.grammars.some((g) => n.startsWith(g.claims)));
-  return [...placed2, ...generic(unclaimed, prop)];
-}
-var kindsOf = (scopes, element) => [...scopes.kinds].filter(([, names]) => names.has(element)).map(([k]) => k);
-function fitOf(scopes, token, elements) {
-  const p = place(scopes, token);
-  const requires = [...p?.placing?.requires ?? [], ...p?.on ?? []];
-  const not = p?.placing?.not ?? [];
-  if (!requires.length && !not.length) return { fit: "free" };
-  const scope = [
-    ...requires.length ? [`for ${requires.join(" or ")}`] : [],
-    ...not.length ? [`not for ${not.join(" or ")}`] : []
-  ].join(", ");
-  const els = [...new Set(elements)];
-  if (!els.length)
-    return requires.length ? { fit: "unknown", why: `${scope}; what this styles is not known`, elements: [] } : { fit: "on" };
-  const kinds = els.map((e) => kindsOf(scopes, e));
-  const shown = els.map((e) => `<${e}>`).join(", ");
-  if (not.length && kinds.every((ks) => ks.some((k) => not.includes(k))))
-    return { fit: "off", why: `${scope}; this styles ${shown}`, elements: els };
-  const mixed = not.length && kinds.some((ks) => ks.some((k) => not.includes(k)));
-  if (requires.length) {
-    if (kinds.every((ks) => ks.some((k) => requires.includes(k))))
-      return mixed ? { fit: "unknown", why: `${scope}; ${shown} do not agree`, elements: els } : { fit: "on" };
-    const undeterminable = requires.some((k) => !scopes.kinds.get(k)?.size);
-    if (!undeterminable && kinds.every((ks) => ks.length && !ks.some((k) => requires.includes(k))))
-      return { fit: "off", why: `${scope}; this styles ${shown}`, elements: els };
-    return { fit: "unknown", why: `${scope}; ${shown} cannot be shown to be`, elements: els };
-  }
-  return mixed ? { fit: "unknown", why: `${scope}; ${shown} do not agree`, elements: els } : { fit: "on" };
-}
-
-// src/tokens.ts
-var GENERIC_ROLES = [
-  [/^border-radius|radius$/, /radius/],
-  [/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
-  // Colour roles are split finer than the rest: a background token suggested for
-  // a `color` gives the right pixels and the wrong meaning.
-  [/^color$/, /colou?r-(fg|text|content|foreground)/],
-  [/^background(-color)?$|^background-image$/, /colou?r-(bg|background|surface)/],
-  [/border.*-color$|^border-color$|^outline-color$/, /colou?r-(border|line|stroke)/],
-  // A shorthand's token is its colour's: the width and style stay as written.
-  [
-    /^(border|outline|column-rule)(-(top|right|bottom|left|block|inline)(-(start|end))?)?(-color)?$/,
-    /colou?r-(border|line|stroke)/
-  ],
-  [/shadow/, /shadow/],
-  [/^fill$|^stroke$|caret-color|accent-color|^text-decoration(-color)?$/, /colou?r/],
-  [/^font-size$/, /font-size/],
-  [/^font-weight$/, /font-weight/],
-  [/^line-height$/, /line-height/],
-  [/^letter-spacing$/, /letter-spacing/],
-  [/^font-family$|^font$/, /font-family/],
-  // The third entry is the property's own family, preferred when the set has
-  // one: `padding: 8px` is `padding-sm`, not `gap-sm` or `size-4xs`.
-  [/padding/, /dimension|spac|padding|gap/, /padding/],
-  [/gap$/, /dimension|spac|padding|gap/, /gap/],
-  // Position is spacing: an offset from an edge. `dimension` alone would admit
-  // the sizes (icons, buttons) and surface widths a system also ships under it.
-  [/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
-  [/^cursor$/, /cursor/],
-  // Never flagged as a hardcoded value; here for the token a name in one meant.
-  [/^(min-|max-)?(width|height|inline-size|block-size)$/, /(?<!font-)size|surface-width/],
-  // By role word, not by one system's spelling: WPDS writes `motion-duration-*`,
-  // Archer `duration-*`.
-  [/^transition-duration$|^animation-duration$/, /duration/],
-  [/^transition-timing-function$|^animation-timing-function$/, /easing/]
-];
-function normalizeValue(value) {
-  let v = String(value).trim().toLowerCase().replace(/\s*!important\s*$/, "").replace(/\s+/g, " ");
-  v = v.replace(/#([0-9a-f])([0-9a-f])([0-9a-f])\b/g, "#$1$1$2$2$3$3");
-  return v;
-}
-var emptyTokenSet = () => ({ known: /* @__PURE__ */ new Set(), byValue: /* @__PURE__ */ new Map(), sources: 0 });
-function addTokenDef(into, name, value) {
-  if (into.known.has(name)) return;
-  into.known.add(name);
-  const v = normalizeValue(value);
-  if (!v || v.includes("var(")) return;
-  const names = into.byValue.get(v) ?? [];
-  if (!names.includes(name)) names.push(name);
-  into.byValue.set(v, names);
-}
-function tokenDefsIn(root2, prefixes) {
-  const out = [];
-  if (!prefixes.length) return out;
-  root2.walkDecls((decl2) => {
-    if (decl2.prop.startsWith("--") && prefixes.some((p) => decl2.prop.startsWith(p))) out.push([decl2.prop, decl2.value]);
-  });
-  return out;
-}
-function harvestTokenDefs(root2, prefixes, into) {
-  for (const [name, value] of tokenDefsIn(root2, prefixes)) addTokenDef(into, name, value);
-  return into;
-}
-function cssFilesUnder(path, budget = { left: 200 }, exts = [".css"]) {
-  const wanted = (name) => exts.some((e) => name.endsWith(e));
-  let st;
-  try {
-    st = statSync(path);
-  } catch {
-    return [];
-  }
-  if (st.isFile()) return wanted(path) ? [path] : [];
-  const out = [];
-  const walk = (dir) => {
-    if (budget.left <= 0) return;
-    for (const e of readDir(dir)) {
-      if (budget.left <= 0) return;
-      const full = join3(dir, e.name);
-      if (e.isDirectory()) {
-        if (e.name !== "node_modules") walk(full);
-      } else if (wanted(e.name)) {
-        out.push(full);
-        budget.left--;
-      }
-    }
-  };
-  walk(path);
-  return out;
-}
-function readTokenSources(root2, sources, prefixes) {
-  const set = emptyTokenSet();
-  if (!prefixes.length) return set;
-  for (const rel of sources ?? []) {
-    for (const file of cssFilesUnder(join3(root2, rel))) {
-      try {
-        harvestTokenDefs(postcss_default.parse(readFileSync2(file, "utf8"), { from: file }), prefixes, set);
-        set.sources++;
-      } catch {
-      }
-    }
-  }
-  return set;
-}
-function onRole(names, prop, scopes) {
-  return (scopes ? scopedFamily(scopes, names, prop, genericRole) : null) ?? genericRole(names, prop);
-}
-function genericRole(names, prop) {
-  const [, hint, own] = GENERIC_ROLES.find(([p]) => p.test(prop)) ?? [];
-  if (!hint) return [];
-  const onRole2 = names.filter((n) => hint.test(n));
-  const preferred = own ? onRole2.filter((n) => own.test(n)) : [];
-  return preferred.length ? preferred : onRole2;
-}
-function tokensFor(set, prop, value) {
-  const family = roleOf(set, prop);
-  return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
-}
-function familyFor(set, prop) {
-  const cache2 = familiesOf(set);
-  let family = cache2.literal.get(prop);
-  if (!family) {
-    const all = [...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v]));
-    const keep = new Set(
-      onRole(
-        all.map(([n]) => n),
-        prop,
-        set.scopes
-      )
-    );
-    family = all.filter(([n]) => keep.has(n));
-    cache2.literal.set(prop, family);
-  }
-  return family;
-}
-function roleOf(set, prop) {
-  const cache2 = familiesOf(set);
-  let family = cache2.all.get(prop);
-  if (!family) {
-    family = new Set(onRole([...set.known], prop, set.scopes));
-    cache2.all.set(prop, family);
-  }
-  return family;
-}
-var families = /* @__PURE__ */ new WeakMap();
-function familiesOf(set) {
-  let cache2 = families.get(set);
-  if (!cache2 || cache2.size !== set.known.size || cache2.scopes !== set.scopes) {
-    cache2 = { size: set.known.size, scopes: set.scopes, all: /* @__PURE__ */ new Map(), literal: /* @__PURE__ */ new Map() };
-    families.set(set, cache2);
-  }
-  return cache2;
-}
-function measure(value) {
-  const v = normalizeValue(value);
-  const len = /^(\d*\.?\d+)(px|rem)$/.exec(v);
-  if (len) return { kind: "px", n: Number(len[1]) * (len[2] === "rem" ? 16 : 1) };
-  const time = /^(\d*\.?\d+)(ms|s)$/.exec(v);
-  if (time) return { kind: "ms", n: Number(time[1]) * (time[2] === "s" ? 1e3 : 1) };
-  return /^#[0-9a-f]{3,8}$|^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/.test(v) ? { kind: "color" } : null;
-}
-var SPACING = /padding|gap$|^(inset|top|right|bottom|left)$/;
-function candidatesFor(set, prop, part) {
-  const family = familyFor(set, prop);
-  if (!family.length) return null;
-  const v = normalizeValue(part);
-  const spacing = SPACING.test(prop);
-  const exact = family.filter(([, fv]) => fv === v);
-  if (exact.length) return { tier: "exact", options: exact, keep: !spacing };
-  const kinds = new Set(family.map(([, fv]) => measure(fv)?.kind));
-  const m = measure(v);
-  if (!m) return kinds.has(void 0) && kinds.size === 1 ? { tier: "family", options: family, keep: true } : null;
-  if (!kinds.has(m.kind)) return null;
-  if (m.kind === "color") return { tier: "family", options: family, keep: true };
-  const steps = family.flatMap(([n, fv]) => {
-    const fm = measure(fv);
-    return fm && fm.kind === m.kind && "n" in fm ? [[n, fv, fm.n - m.n]] : [];
-  });
-  const same = steps.filter(([, , d]) => Math.abs(d) < 1e-6).map(([n, fv]) => [n, fv]);
-  if (same.length) return { tier: "exact", options: same, keep: !spacing };
-  const below = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
-  const above = Math.min(...steps.map(([, , d]) => d).filter((d) => d > 0));
-  const options = steps.filter(([, , d]) => d === below || d === above).map(([n, fv]) => [n, fv]);
-  const inside = Number.isFinite(below) && Number.isFinite(above);
-  return inside ? { tier: "near", options, keep: !spacing } : { tier: "end", options, keep: true };
-}
-function partsOf2(value) {
-  const out = [];
-  let part = "";
-  let depth = 0;
-  for (const ch of value.trim()) {
-    if (!depth && /\s/.test(ch)) {
-      if (part) out.push(part);
-      part = "";
-      continue;
-    }
-    if (ch === "(") depth++;
-    else if (ch === ")") depth = Math.max(0, depth - 1);
-    part += ch;
-  }
-  if (part) out.push(part);
-  return out;
-}
-var isLiteralPart = (p) => /^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0 || /^#[0-9a-f]+$/i.test(p) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/i.test(p);
-var KEEP = "keep";
-var DELIBERATE = "deliberate, no token fits";
-function planValue(set, prop, value, hold) {
-  const family = familyFor(set, prop);
-  if (!family.length) return roleOf(set, prop).size ? null : "none";
-  const measurable = family.some(([, fv]) => measure(fv));
-  const parts = measurable ? partsOf2(value) : [value.trim()];
-  const slots = [];
-  let review;
-  const settle = (at, part, token) => {
-    const why = review === void 0 ? hold?.(token) : null;
-    if (why) review = `${token} ${why}`;
-    slots.push({ at, part, token });
-  };
-  for (const [at, part] of parts.entries()) {
-    if (measurable && /^(calc|min|max|clamp)\(/i.test(part)) return null;
-    if (measurable && !isLiteralPart(part)) continue;
-    if (COLOR_SHORTHANDS.has(prop) && measure(part)?.kind !== "color") continue;
-    const [only, ...more] = tokensFor(set, prop, part);
-    if (only !== void 0 && !more.length) {
-      settle(at, part, only);
-      continue;
-    }
-    const candidates = candidatesFor(set, prop, part);
-    if (!candidates) return null;
-    const [one, ...others] = candidates.tier === "exact" ? candidates.options : [];
-    if (one && !others.length) settle(at, part, one[0]);
-    else slots.push({ at, part, candidates });
-  }
-  if (!slots.length) return null;
-  return review === void 0 ? { parts, slots } : { parts, slots, review };
-}
-var remedyFor = (names) => {
-  if (!names.length) return "";
-  const shown = names.slice(0, 2).join(" or ");
-  return ` \u2192 ${shown}${names.length > 2 ? ` (+${names.length - 2} more)` : ""}`;
+// src/registry.ts
+var declaredPackages = (raw) => {
+  const packages = raw?.packages;
+  return Array.isArray(packages) ? packages.filter((p) => typeof p === "string" && p !== "") : [];
 };
-var stated = (s) => {
-  const decl2 = snippet(`${s.prop}: ${s.value}`);
-  if (s.judged) return `${decl2} \u2192 ${s.judged.spans.join(" ")}`;
-  return `${decl2}${remedyFor(s.tokens)}${s.review ? ` (review: ${s.review})` : ""}`;
-};
-var declarationMessage = (parts, tail) => messageParts(parts.map(stated), tail);
-function tokenRefsIn(value, prefixes) {
-  if (!prefixes.length) return [];
-  const out = [];
-  for (const m of String(value).matchAll(/var\(\s*(--[\w-]+)/g)) {
-    const name = m[1];
-    if (name !== void 0 && prefixes.some((p) => name.startsWith(p))) out.push(name);
-  }
-  return out;
+function registryApplies(raw, dsPackages) {
+  const declared = declaredPackages(raw);
+  if (!declared.length) return true;
+  return (dsPackages ?? []).some((p) => declared.includes(p));
 }
-
-// src/index-cache.ts
-import { readdirSync as readdirSync3, readFileSync as readFileSync5, rmSync as rmSync2, statSync as statSync2 } from "node:fs";
-import { dirname as dirname4, join as join6 } from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-
-// src/cache.ts
-import { createHash as createHash2 } from "node:crypto";
-import { readFileSync as readFileSync3, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname as dirname2 } from "node:path";
-
-// src/paths.ts
-import { createHash } from "node:crypto";
-import { existsSync as existsSync3, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { isAbsolute, join as join4, resolve as resolve2 } from "node:path";
-var isOn = (v) => v !== void 0 && /^(1|true|yes|on)$/i.test(v);
-var isPluginContext = () => Boolean(process.env.CLAUDE_PLUGIN_ROOT);
-function projectKey(root2) {
-  const full = resolve2(root2);
-  const hash = createHash("sha256").update(full).digest("hex").slice(0, 10);
-  const name = full.split(/[/\\]/).filter(Boolean).pop() ?? "project";
-  return `${name.replace(/[^\w.-]/g, "-")}-${hash}`;
-}
-function ensureDir(dir) {
-  try {
-    mkdirSync(dir, { recursive: true });
-    return dir;
-  } catch {
-    return null;
-  }
-}
-var projectStateDir = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join4(data || join4(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`), projectKey(root2));
-var attemptsPath = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join4(projectStateDir(root2, data), "attempts.json");
-var cacheDisabled = (flag) => Boolean(flag) || isOn(process.env.LOUPE_NO_CACHE);
-var DEFAULT_BASELINE = ".loupe-baseline.json";
-var baselinePath = (root2, p) => isAbsolute(p) ? p : join4(root2, p);
-function legacyBaseline(root2) {
-  const data = process.env.CLAUDE_PLUGIN_DATA;
-  const candidates = [
-    join4(root2, ".loupe", "baseline.json"),
-    ...data ? [join4(data, "projects", projectKey(root2), "baseline.json")] : []
-  ];
-  return candidates.find((path) => existsSync3(path)) ?? null;
-}
-var legacyBaselineNotice = (path) => `${path} is a 0.1.x baseline, which this version no longer reads \u2014 re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
-function findExistingBaseline(root2, explicit, configured) {
-  if (explicit !== null) {
-    const path = baselinePath(root2, explicit);
-    return { path, found: existsSync3(path), fallback: "none" };
-  }
-  const target = baselinePath(root2, configured);
-  if (existsSync3(target)) return { path: target, found: true, fallback: "none" };
-  const byDefaultName = join4(root2, DEFAULT_BASELINE);
-  if (byDefaultName !== target && existsSync3(byDefaultName))
-    return { path: byDefaultName, found: true, fallback: "default-name" };
-  return { path: target, found: false, fallback: "none" };
-}
-
-// src/cache.ts
-var sha256 = (text2) => createHash2("sha256").update(text2).digest("hex");
-function readJson(path) {
-  try {
-    return JSON.parse(readFileSync3(path, "utf8"));
-  } catch {
-    return null;
-  }
-}
-function writeJsonAtomic(path, data) {
-  const tmp = `${path}.${process.pid}.tmp`;
-  try {
-    if (!ensureDir(dirname2(path))) return false;
-    writeFileSync(tmp, JSON.stringify(data));
-    renameSync(tmp, path);
-    return true;
-  } catch {
-    rmSync(tmp, { force: true });
-    return false;
-  }
-}
-var ANSWER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
-var ANSWER_MAX_ENTRIES = 2e4;
-var AnswerCache = class _AnswerCache {
-  path;
-  #entries = null;
-  #added = /* @__PURE__ */ new Map();
-  constructor(path) {
-    this.path = path;
-  }
-  #load() {
-    if (this.#entries) return this.#entries;
-    this.#entries = _AnswerCache.#read(this.path);
-    return this.#entries;
-  }
-  static #read(path) {
-    const raw = readJson(path);
-    const out = /* @__PURE__ */ new Map();
-    if (raw?.version !== 1 || !raw.entries || typeof raw.entries !== "object") return out;
-    const now = Date.now();
-    for (const [key, entry] of Object.entries(raw.entries))
-      if (Array.isArray(entry?.a) && typeof entry.t === "number" && now - entry.t < ANSWER_MAX_AGE_MS)
-        out.set(key, entry);
-    return out;
-  }
-  get(key) {
-    return this.#load().get(key)?.a;
-  }
-  set(key, answers) {
-    const entry = { a: answers, t: Date.now() };
-    this.#load().set(key, entry);
-    this.#added.set(key, entry);
-  }
-  /** How many answers this run bought; nothing to write when it is zero. */
-  get added() {
-    return this.#added.size;
-  }
-  save() {
-    if (!this.#added.size) return;
-    const merged = _AnswerCache.#read(this.path);
-    for (const [k, v] of this.#added) merged.set(k, v);
-    const kept = [...merged].sort((x, y) => y[1].t - x[1].t).slice(0, ANSWER_MAX_ENTRIES);
-    const file = { version: 1, entries: Object.fromEntries(kept) };
-    if (writeJsonAtomic(this.path, file)) this.#added.clear();
-  }
-};
 
 // src/embedded.ts
-import { existsSync as existsSync4, readFileSync as readFileSync4, readdirSync as readdirSync2 } from "node:fs";
-import { dirname as dirname3, join as join5 } from "node:path";
+import { existsSync as existsSync3, readdirSync as readdirSync2 } from "node:fs";
+import { dirname as dirname3, join as join4 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // presets/archer.json
@@ -27521,7 +26176,9 @@ var EMBEDDED_PRESETS = Object.assign(/* @__PURE__ */ Object.create(null), {
 var EMBEDDED_VERSION = package_default.version;
 var EMBEDDED_LANGUAGE = patterns_default;
 var presetKey = (spec) => spec.replace(/^loupe\/presets\//, "");
-var PRESET_DIR = join5(dirname3(fileURLToPath(import.meta.url)), "..", "presets");
+var PRESET_DIR = join4(dirname3(fileURLToPath(import.meta.url)), "..", "presets");
+var presetPath = (spec) => join4(PRESET_DIR, `${presetKey(spec)}.json`);
+var presetOf = (path) => path.startsWith(PRESET_DIR) ? path.slice(PRESET_DIR.length + 1).replace(/\.json$/, "") : null;
 var presetNames = () => {
   try {
     return readdirSync2(PRESET_DIR).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, "")).sort();
@@ -27530,19 +26187,1862 @@ var presetNames = () => {
   }
 };
 var readPreset = (name) => {
-  const onDisk = join5(PRESET_DIR, `${name}.json`);
-  if (existsSync4(onDisk)) {
-    try {
-      return JSON.parse(readFileSync4(onDisk, "utf8"));
-    } catch {
-      return void 0;
-    }
-  }
+  const onDisk = presetPath(name);
+  if (existsSync3(onDisk)) return readJson(onDisk) ?? void 0;
   return EMBEDDED_PRESETS[name];
 };
-var hasPreset = (spec) => existsSync4(join5(PRESET_DIR, `${presetKey(spec)}.json`)) || Boolean(EMBEDDED_PRESETS[presetKey(spec)]);
+var hasPreset = (spec) => existsSync3(presetPath(spec)) || Boolean(EMBEDDED_PRESETS[presetKey(spec)]);
+
+// src/config.ts
+var CONFIG_NAMES = ["loupe.config.mjs", "loupe.config.js", "loupe.config.json", ".louperc.json"];
+var DEFAULTS = {
+  designSystem: {
+    // What to call this design system in a finding. Rule guidance that names
+    // the system reads as advice about *your* stack; a generic phrase reads as
+    // advice about linting.
+    name: "",
+    packages: [],
+    tokenPrefixes: [],
+    tokenSources: [],
+    // The system's own stylesheets, read for the classes they define. A
+    // prefixed system is covered by `namespaces.external`; an unprefixed one
+    // (`.field-label`) is only recognisable by what its stylesheets declare.
+    styleSources: [],
+    cssInJsPackages: [],
+    normalizeExports: "",
+    components: { layout: [], text: [] },
+    elementMap: {},
+    // Props that hand a component the element it should render — `render` in WPDS
+    // and Base UI, `as` and `component` elsewhere. The element in one of these is
+    // an argument naming a tag, not markup being rendered. `[]` turns it off.
+    substitutionProps: ["render", "as", "component"],
+    allowedInlineStyles: {}
+  },
+  namespaces: { project: [], external: [], neverDead: [] },
+  sources: {
+    styles: ["**/*.css", "**/*.scss"],
+    markup: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
+    references: ["**/*.php", "**/*.html"],
+    ignore: ["**/node_modules/**", "**/build/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
+  },
+  suppression: { keyword: "ds-allow", blanket: ["ds-disable"], aliases: [] },
+  rules: {},
+  patterns: null,
+  // The component-currency registry (recommended/legacy/locked/experimental
+  // per component+package). Named distinctly from `designSystem.components`
+  // (the layout/text categorization) — same word, unrelated concern.
+  componentRegistry: null,
+  baseline: DEFAULT_BASELINE,
+  // timeoutMs is the hook's whole judge phase, well inside the 60s Claude Code
+  // gives PostToolUse: the analysis on either side of it needs the rest.
+  hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 3e4 }
+};
+function merge(base, over) {
+  if (!isRecord(base) || !isRecord(over)) return over === void 0 ? base : over;
+  const out = { ...base };
+  for (const [k, v] of Object.entries(over)) out[k] = isRecord(v) && isRecord(base[k]) ? merge(base[k], v) : v;
+  return out;
+}
+function mergeConfig(base, over) {
+  const out = merge(base, over);
+  if (isRecord(base.rules) && isRecord(over.rules)) out.rules = { ...base.rules, ...over.rules };
+  return out;
+}
+function findConfig(start) {
+  for (const dir of dirsUp(start)) {
+    for (const name of CONFIG_NAMES) {
+      const p = join5(dir, name);
+      if (existsSync4(p)) return p;
+    }
+    const pkg = join5(dir, "package.json");
+    const parsed = existsSync4(pkg) ? readJson(pkg) : null;
+    if (isRecord(parsed) && parsed.loupe) return pkg;
+  }
+  return null;
+}
+async function readConfigFile(path) {
+  const preset2 = presetOf(path);
+  if (preset2 !== null && !existsSync4(path)) {
+    const embedded = EMBEDDED_PRESETS[preset2];
+    if (embedded) return embedded;
+  }
+  if (path.endsWith(".json")) {
+    const parsed = JSON.parse(readFileSync2(path, "utf8"));
+    return path.endsWith("package.json") ? parsed.loupe : parsed;
+  }
+  const mod = await import(pathToFileURL(path).href);
+  return mod.default ?? mod;
+}
+async function resolveExtends(spec, fromDir) {
+  if (hasPreset(spec)) return { path: presetPath(spec), dir: PRESET_DIR };
+  const asPath = under(fromDir, spec);
+  if (existsSync4(asPath)) return { path: asPath, dir: dirname4(asPath) };
+  throw new Error(`cannot resolve extends: ${spec}`);
+}
+var freshWalk = () => ({ ancestors: /* @__PURE__ */ new Set(), applied: /* @__PURE__ */ new Set() });
+async function loadChain(path, walk = freshWalk()) {
+  const real = resolve3(path);
+  if (walk.ancestors.has(real)) throw new Error(`circular extends at ${real}`);
+  if (walk.applied.has(real)) return { raw: {}, ruleFrom: {} };
+  walk.applied.add(real);
+  const raw = await readConfigFile(real) ?? {};
+  const preset2 = presetOf(real);
+  const label = preset2 === null ? real : `preset ${preset2}`;
+  return expandExtends(raw, dirname4(real), label, {
+    ancestors: /* @__PURE__ */ new Set([...walk.ancestors, real]),
+    applied: walk.applied
+  });
+}
+async function expandExtends(raw, fromDir, label, walk = freshWalk()) {
+  raw = anchorProfiles(raw, fromDir);
+  const own = Object.fromEntries(Object.keys(isRecord(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
+  if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
+  let base = {};
+  let ruleFrom = {};
+  for (const spec of listOf(raw.extends)) {
+    const { path: p } = await resolveExtends(spec, fromDir);
+    const parent = await loadChain(p, walk);
+    base = mergeConfig(base, parent.raw);
+    ruleFrom = { ...ruleFrom, ...parent.ruleFrom };
+  }
+  const { extends: _drop, ...rest } = raw;
+  return { raw: mergeConfig(base, rest), ruleFrom: { ...ruleFrom, ...own } };
+}
+function anchorProfiles(raw, fromDir) {
+  if (!raw || raw.profiles === void 0) return raw;
+  const at = (p) => typeof p === "string" && p !== "" ? resolve3(fromDir, p) : p;
+  const spec = raw.profiles;
+  return { ...raw, profiles: Array.isArray(spec) ? spec.map(at) : at(spec) };
+}
+function listPresets() {
+  return presetNames().sort((a, b) => Number(a === "generic") - Number(b === "generic"));
+}
+function shippedVocabulary() {
+  const keywords = /* @__PURE__ */ new Set([DEFAULTS.suppression.keyword]);
+  const blanket = new Set(DEFAULTS.suppression.blanket);
+  try {
+    for (const name of presetNames()) {
+      try {
+        const raw = readPreset(name);
+        const supp = isRecord(raw) ? raw.suppression : void 0;
+        if (!isRecord(supp)) continue;
+        const kw = supp.keyword;
+        if (typeof kw === "string" && kw) keywords.add(kw);
+        const bl = supp.blanket;
+        if (Array.isArray(bl)) {
+          for (const b of bl) if (typeof b === "string" && b) blanket.add(b);
+        }
+      } catch {
+      }
+    }
+  } catch {
+  }
+  return { keywords: [...keywords], blanket };
+}
+function compilePatterns(patterns) {
+  return (patterns ?? []).map((p) => new RegExp(`^${escapeRe(p).replace(/\\\*/g, ".*")}$`));
+}
+function normalize(raw, { root: root2, ruleFrom = {} }) {
+  const cfg = merge(DEFAULTS, raw ?? {});
+  const ds = cfg.designSystem;
+  const patterns = readRegistry(cfg.patterns, root2, ds.packages, loadPatterns, []);
+  const componentRegistry = readRegistry(cfg.componentRegistry, root2, ds.packages, loadComponents, /* @__PURE__ */ new Map());
+  const rules2 = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity }]));
+  const ruleOrigins = {};
+  for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
+    const id = canonicalRuleId(rawId);
+    if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
+    rules2[id] = ruleSetting(rawId, value);
+    const from = ruleFrom[rawId];
+    ruleOrigins[id] = from === void 0 ? "config" : isAbsolute2(from) ? relative2(root2, from) || from : from;
+  }
+  const elementMap = /* @__PURE__ */ new Map();
+  for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
+    const entry = typeof v === "string" ? { component: v, styledOnly: false } : v;
+    if (entry.values === void 0 !== (entry.attribute === void 0))
+      throw new Error(`elementMap.${tag}: attribute and values go together`);
+    if (entry.render !== void 0 && !(typeof entry.render === "string" && /^[a-z][a-z0-9-]*$/i.test(entry.render)))
+      throw new Error(
+        `elementMap.${tag}.render must be an element name like "h4", got: ${JSON.stringify(entry.render)}`
+      );
+    elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
+  }
+  const substitutionProps = ds.substitutionProps ?? DEFAULTS.designSystem.substitutionProps;
+  if (!Array.isArray(substitutionProps) || substitutionProps.some((p) => typeof p !== "string"))
+    throw new Error(
+      `designSystem.substitutionProps must be an array of prop names, got: ${JSON.stringify(substitutionProps)}`
+    );
+  const styleSources = ds.styleSources ?? [];
+  if (!Array.isArray(styleSources) || styleSources.some((p) => typeof p !== "string" || p === ""))
+    throw new Error(`designSystem.styleSources must be an array of paths, got: ${JSON.stringify(styleSources)}`);
+  const allowedInlineStyles = ds.allowedInlineStyles ?? {};
+  if (!isRecord(allowedInlineStyles) || Object.values(allowedInlineStyles).some((v) => !Array.isArray(v) || v.some((p) => typeof p !== "string")))
+    throw new Error(
+      `designSystem.allowedInlineStyles must map component names to arrays of CSS properties, got: ${JSON.stringify(allowedInlineStyles)}`
+    );
+  const maxEntries = cfg.maxEntries;
+  if (maxEntries !== void 0 && maxEntries !== null && !(Number.isInteger(maxEntries) && maxEntries > 0))
+    throw new Error(`maxEntries must be a positive whole number of entries, got: ${JSON.stringify(maxEntries)}`);
+  const profileSpec = cfg.profiles ?? [];
+  const profileList = listOf(profileSpec);
+  if (profileList.some((p) => typeof p !== "string" || p === ""))
+    throw new Error(`profiles must be a directory or an array of directories, got: ${JSON.stringify(profileSpec)}`);
+  const profileDirs = profileList.map((p) => resolve3(root2, p));
+  const pin = cfg.profile;
+  if (pin !== void 0 && pin !== null && !(typeof pin === "string" && pin !== ""))
+    throw new Error(`profile must be a profile id or "none", got: ${JSON.stringify(pin)}`);
+  const layoutComponents = ds.components?.layout ?? [];
+  const textComponents = ds.components?.text ?? [];
+  const shipped = shippedVocabulary();
+  const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
+  const isTerm = (v) => typeof v === "string" && v !== "";
+  const keyword = isTerm(cfg.suppression.keyword) ? cfg.suppression.keyword : DEFAULTS.suppression.keyword;
+  const blanket = Array.isArray(cfg.suppression.blanket) ? cfg.suppression.blanket.filter(isTerm) : [...DEFAULTS.suppression.blanket];
+  const suppression = {
+    ...cfg.suppression,
+    keyword,
+    blanket,
+    aliases: [.../* @__PURE__ */ new Set([...shipped.keywords, ...declared])].filter(
+      (a) => isTerm(a) && a !== keyword && !shipped.blanket.has(a)
+    )
+  };
+  const neverDead = compilePatterns(cfg.namespaces.neverDead);
+  const projectPrefixes = cfg.namespaces.project ?? [];
+  const externalPrefixes = cfg.namespaces.external ?? [];
+  const config = {
+    root: root2,
+    raw: cfg,
+    // Overwritten by `loadConfig`, which knows which of the five resolution
+    // paths won. Normalizing a bare object is the inline case by definition.
+    source: { kind: "inline" },
+    inferred: false,
+    profileDirs,
+    profilePin: typeof pin === "string" ? pin : null,
+    designSystem: {
+      name: ds.name || "",
+      packages: ds.packages ?? [],
+      tokenPrefixes: ds.tokenPrefixes ?? [],
+      tokenSources: ds.tokenSources ?? [],
+      styleSources,
+      cssInJsPackages: ds.cssInJsPackages ?? [],
+      normalizeExports: ds.normalizeExports ? new RegExp(ds.normalizeExports) : null,
+      layoutComponents,
+      textComponents,
+      knownComponents: /* @__PURE__ */ new Set([...layoutComponents, ...textComponents]),
+      elementMap,
+      substitutionProps: new Set(substitutionProps),
+      allowedInlineStyles: new Map(
+        Object.entries(allowedInlineStyles).map(([c, props]) => [
+          c,
+          new Set(props.map((p) => p.toLowerCase()))
+        ])
+      )
+    },
+    patterns,
+    componentRegistry,
+    sources: cfg.sources,
+    suppression,
+    // An empty `baseline` names nothing, as an empty `--baseline=` does.
+    baselinePath: cfg.baseline || DEFAULT_BASELINE,
+    hook: cfg.hook,
+    ...typeof maxEntries === "number" ? { maxEntries } : {},
+    rules: rules2,
+    ruleFrom: ruleOrigins,
+    severityOf: (id) => rules2[id].severity,
+    isProject: (cls) => projectPrefixes.some((p) => cls.startsWith(p)),
+    isExternal: (cls) => externalPrefixes.some((p) => cls.startsWith(p)),
+    isNeverDead: (cls) => neverDead.some((re) => re.test(cls))
+  };
+  return { ...config, enabled: enabledRules(config) };
+}
+function ruleSetting(rawId, value) {
+  if (isSeverity(value)) return { severity: value };
+  if (Array.isArray(value))
+    throw new Error(`rule options are no longer supported \u2014 write "${rawId}": ${JSON.stringify(value[0])}`);
+  if (!isRecord(value)) throw new Error(`bad severity for ${rawId}: ${String(value)}`);
+  const extra = Object.keys(value).filter((k) => k !== "severity" && k !== "reason");
+  if (extra.length)
+    throw new Error(
+      `unknown key${extra.length > 1 ? "s" : ""} in the setting for ${rawId}: ${extra.join(", ")} \u2014 a rule setting takes only severity and reason`
+    );
+  const { severity, reason } = value;
+  if (!isSeverity(severity)) throw new Error(`bad severity for ${rawId}: ${String(severity)}`);
+  if (reason === void 0) return { severity };
+  if (typeof reason !== "string" || !reason.trim())
+    throw new Error(`the reason for ${rawId} must be a non-empty string, got: ${JSON.stringify(reason)}`);
+  return { severity, reason: reason.trim() };
+}
+function readRegistry(spec, root2, packages, load, empty) {
+  if (Array.isArray(spec)) return load(spec);
+  if (typeof spec !== "string") return empty;
+  try {
+    const raw = JSON.parse(readFileSync2(under(root2, spec), "utf8"));
+    return registryApplies(raw, packages) ? load(raw) : empty;
+  } catch {
+    return empty;
+  }
+}
+function enabledRules(config) {
+  const ds = config.designSystem;
+  const hasPackages = ds.packages.length > 0;
+  const hasComponents = hasPackages && ds.layoutComponents.length + ds.textComponents.length > 0;
+  const capability = {
+    packages: hasPackages,
+    components: hasComponents,
+    layoutComponents: hasComponents && ds.layoutComponents.length > 0,
+    textComponents: hasComponents && ds.textComponents.length > 0,
+    elementMap: ds.elementMap.size > 0,
+    tokenPrefixes: ds.tokenPrefixes.length > 0,
+    patternRegistry: hasPackages && config.patterns.length > 0,
+    componentRegistry: config.componentRegistry.size > 0,
+    projectNamespace: (config.raw.namespaces.project ?? []).length > 0
+  };
+  return Object.fromEntries(
+    RULE_IDS.map((id) => [
+      id,
+      RULES[id].needs.every((n) => capability[n]) && config.rules[id].severity !== "off"
+    ])
+  );
+}
+function setPatterns(config, patterns) {
+  config.patterns = patterns ?? [];
+  config.enabled = enabledRules(config);
+  return config;
+}
+function setComponentRegistry(config, componentRegistry) {
+  config.componentRegistry = componentRegistry ?? /* @__PURE__ */ new Map();
+  config.enabled = enabledRules(config);
+  return config;
+}
+async function loadConfig({
+  root: root2,
+  configPath,
+  preset: preset2,
+  inline,
+  inferred = false
+}) {
+  let chain;
+  let source;
+  if (configPath) {
+    chain = await loadChain(resolve3(configPath));
+    source = { kind: "file", path: resolve3(configPath) };
+  } else if (preset2) {
+    if (!hasPreset(preset2)) throw new Error(`unknown preset: ${preset2}`);
+    chain = await loadChain(presetPath(preset2));
+    source = { kind: "preset", name: preset2 };
+  } else {
+    const found = findConfig(root2);
+    if (found) {
+      chain = await loadChain(found);
+      source = { kind: "file", path: found };
+    } else if (inline) {
+      chain = await expandExtends(inline, root2, inferred ? "inferred config" : "inline config");
+      source = { kind: inferred ? "inferred" : "inline" };
+    } else {
+      chain = await loadChain(presetPath("generic"));
+      source = { kind: "preset", name: "generic" };
+    }
+  }
+  const normalized = normalize(chain.raw, { root: root2, ruleFrom: chain.ruleFrom });
+  normalized.source = source;
+  normalized.inferred = source.kind === "inferred";
+  return normalized;
+}
+
+// src/scopes.ts
+var PROP = /^-?[a-z][a-z-]*(\*[a-z-]*)?$/;
+var ELEMENT = /^([a-z][a-z0-9-]*|[A-Z][A-Za-z0-9_]*(\.[A-Z][A-Za-z0-9_]*)*)$/;
+var KIND = /^[a-z][a-z0-9-]*$/;
+var PLACEHOLDER = /\{([^}]*)\}/g;
+var authored = (o) => Object.entries(o).filter(([k]) => !k.startsWith("$"));
+function parseTokenScopes(raw) {
+  const errors = [];
+  const err = (at, what) => {
+    errors.push(`tokenScopes${at}: ${what}`);
+  };
+  if (!isRecord(raw)) {
+    err("", "expected an object of grammars, kinds and scales");
+    return { scopes: null, errors };
+  }
+  for (const [k] of authored(raw))
+    if (k !== "grammars" && k !== "kinds" && k !== "scales")
+      err(`.${k}`, "unknown key \u2014 expected grammars, kinds, scales");
+  const kinds = /* @__PURE__ */ new Map();
+  if (raw.kinds !== void 0) {
+    if (!isRecord(raw.kinds)) err(".kinds", "expected an object of kind \u2192 element and component names");
+    else
+      for (const [kind, names] of authored(raw.kinds)) {
+        if (!KIND.test(kind)) err(`.kinds.${kind}`, "a kind is a lowercase name");
+        if (!Array.isArray(names)) {
+          err(`.kinds.${kind}`, "expected a list of element and component names (empty for a kind markup cannot show)");
+          continue;
+        }
+        const bad = names.filter((n) => typeof n !== "string" || !ELEMENT.test(n));
+        if (bad.length)
+          err(
+            `.kinds.${kind}`,
+            `not an element or component name: ${bad.map((b) => JSON.stringify(b)).join(", ")} \u2014 a tag is lowercase (\`button\`), a component capitalised (\`Button\`)`
+          );
+        kinds.set(kind, new Set(names.filter((n) => typeof n === "string")));
+      }
+  }
+  const kindList = (at, v) => {
+    if (!Array.isArray(v) || !v.length || v.some((x) => typeof x !== "string")) {
+      err(at, "expected a list of kind names");
+      return [];
+    }
+    const unknown = v.filter((x) => !kinds.has(x));
+    if (unknown.length) err(at, `undeclared kind ${unknown.join(", ")} \u2014 declare it under tokenScopes.kinds`);
+    return v;
+  };
+  const propList = (at, v) => {
+    if (!Array.isArray(v) || v.some((x) => typeof x !== "string" || !PROP.test(x))) {
+      err(at, "expected a list of lowercase CSS properties, with at most one `*` each");
+      return [];
+    }
+    return v;
+  };
+  const segment = (at, v) => {
+    if (Array.isArray(v)) return { sets: propList(at, v), also: [] };
+    if (!isRecord(v)) {
+      err(at, "expected a list of CSS properties, or { sets, also }");
+      return { sets: [], also: [] };
+    }
+    for (const [k] of authored(v))
+      if (k !== "sets" && k !== "also") err(`${at}.${k}`, "unknown key \u2014 expected sets, also");
+    return {
+      sets: propList(`${at}.sets`, v.sets),
+      also: v.also === void 0 ? [] : propList(`${at}.also`, v.also)
+    };
+  };
+  const grammars = [];
+  if (raw.grammars !== void 0 && !Array.isArray(raw.grammars)) err(".grammars", "expected a list");
+  for (const [i, g] of (Array.isArray(raw.grammars) ? raw.grammars : []).entries()) {
+    const at = `.grammars[${i}]`;
+    if (!isRecord(g)) {
+      err(at, "expected an object with a pattern");
+      continue;
+    }
+    for (const [k] of authored(g))
+      if (!["pattern", "property", "properties", "target"].includes(k))
+        err(`${at}.${k}`, "unknown key \u2014 expected pattern, property, properties, target");
+    const pattern = g.pattern;
+    if (typeof pattern !== "string" || !pattern.startsWith("--")) {
+      err(`${at}.pattern`, "expected a custom-property name pattern, like `--acme-color-{property}-{target}...`");
+      continue;
+    }
+    const holes = [...pattern.matchAll(PLACEHOLDER)].map((m) => m[1] ?? "");
+    const bad = holes.filter((h) => !/^[a-z][a-z-]*$/.test(h));
+    if (bad.length) err(`${at}.pattern`, `a placeholder is a lowercase name: ${bad.map((b) => `{${b}}`).join(", ")}`);
+    const repeated = ["property", "target"].filter((name) => holes.filter((h) => h === name).length > 1);
+    for (const name of repeated) err(`${at}.pattern`, `{${name}} appears more than once`);
+    if (/[^a-z0-9-]/.test(pattern.replace(/\.\.\.$/, "").replace(PLACEHOLDER, "")))
+      err(`${at}.pattern`, "only lowercase letters, digits, `-`, placeholders and a trailing `...`");
+    const hasProperty = holes.includes("property");
+    const property = /* @__PURE__ */ new Map();
+    if (hasProperty) {
+      if (g.properties !== void 0) err(`${at}.properties`, "a pattern with {property} maps it under `property`");
+      if (!isRecord(g.property) || !authored(g.property).length)
+        err(`${at}.property`, "expected an object of property segment \u2192 CSS properties");
+      else
+        for (const [seg, v] of authored(g.property)) {
+          if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(seg))
+            err(`${at}.property.${seg}`, "a segment is lowercase words joined by `-`");
+          property.set(seg, segment(`${at}.property.${seg}`, v));
+        }
+    } else {
+      if (g.property !== void 0) err(`${at}.property`, "the pattern has no {property} to map");
+      if (g.properties === void 0)
+        err(`${at}.properties`, "a pattern without {property} names the CSS properties its family sets");
+      else property.set(pattern, segment(`${at}.properties`, g.properties));
+    }
+    const target = /* @__PURE__ */ new Map();
+    if (g.target !== void 0) {
+      if (!holes.includes("target")) err(`${at}.target`, "the pattern has no {target} to map");
+      if (!isRecord(g.target)) err(`${at}.target`, "expected an object of target segment \u2192 { requires, not }");
+      else
+        for (const [seg, v] of authored(g.target)) {
+          const t = `${at}.target.${seg}`;
+          if (!isRecord(v)) {
+            err(t, "expected { requires, not }");
+            continue;
+          }
+          for (const [k] of authored(v))
+            if (k !== "requires" && k !== "not") err(`${t}.${k}`, "unknown key \u2014 expected requires, not");
+          const requires = v.requires === void 0 ? [] : kindList(`${t}.requires`, v.requires);
+          const not = v.not === void 0 ? [] : kindList(`${t}.not`, v.not);
+          if (!requires.length && !not.length) err(t, "declares neither requires nor not");
+          target.set(seg, { requires, not });
+        }
+    }
+    if (repeated.length) continue;
+    const alternatives = [...property.keys()].sort((a, b) => b.length - a.length).map(escapeRe);
+    const open = pattern.endsWith("...");
+    const source = (open ? pattern.slice(0, -3) : pattern).split(/(\{[^}]*\})/).map((piece, k) => {
+      if (k % 2 === 0) return escapeRe(piece);
+      const name = piece.slice(1, -1);
+      if (name === "property") return `(?<property>${alternatives.join("|")})`;
+      return name === "target" ? "(?<target>[a-z0-9]+)" : "[a-z0-9]+";
+    }).join("");
+    grammars.push({
+      pattern,
+      re: new RegExp(`^${source}${open ? "(?:-[a-z0-9]+)*" : ""}$`),
+      claims: (open ? pattern.slice(0, -3) : pattern).split("{")[0] ?? pattern,
+      property,
+      target
+    });
+  }
+  const scales = /* @__PURE__ */ new Map();
+  if (raw.scales !== void 0) {
+    if (!isRecord(raw.scales)) err(".scales", "expected an object of token \u2192 { on: [kinds] }");
+    else
+      for (const [token, v] of authored(raw.scales)) {
+        const at = `.scales.${token}`;
+        if (!token.startsWith("--")) err(at, "a scale step is a token name");
+        if (!isRecord(v)) {
+          err(at, "expected { on: [kinds] }");
+          continue;
+        }
+        for (const [k] of authored(v)) if (k !== "on") err(`${at}.${k}`, "unknown key \u2014 expected on");
+        scales.set(token, kindList(`${at}.on`, v.on));
+      }
+  }
+  if (!grammars.length && !scales.size && !errors.length) err("", "declares no grammars and no scales");
+  return errors.length ? { scopes: null, errors } : { scopes: { grammars, kinds, scales }, errors };
+}
+function mergeScopes(list2) {
+  const present = list2.filter((s) => Boolean(s));
+  if (!present.length) return void 0;
+  if (present.length === 1) return present[0];
+  const kinds = /* @__PURE__ */ new Map();
+  for (const s of present) for (const [k, names] of s.kinds) kinds.set(k, /* @__PURE__ */ new Set([...kinds.get(k) ?? [], ...names]));
+  return {
+    grammars: present.flatMap((s) => s.grammars),
+    kinds,
+    scales: new Map(present.flatMap((s) => [...s.scales]))
+  };
+}
+var globCache = /* @__PURE__ */ new Map();
+function propMatches(list2, prop) {
+  return list2.some((p) => {
+    if (!p.includes("*")) return p === prop;
+    let re = globCache.get(p);
+    if (!re) {
+      re = new RegExp(`^${p.split("*").map(escapeRe).join("[a-z-]+")}$`);
+      globCache.set(p, re);
+    }
+    return re.test(prop);
+  });
+}
+var placed = /* @__PURE__ */ new WeakMap();
+function place(scopes, token) {
+  let memo = placed.get(scopes);
+  if (!memo) {
+    memo = /* @__PURE__ */ new Map();
+    placed.set(scopes, memo);
+  }
+  const hit = memo.get(token);
+  if (hit !== void 0) return hit;
+  const found = placeUncached(scopes, token);
+  memo.set(token, found);
+  return found;
+}
+function placeUncached(scopes, token) {
+  const on = scopes.scales.get(token);
+  for (const g of scopes.grammars) {
+    const m = g.re.exec(token);
+    if (!m) continue;
+    const property = m.groups?.property ?? g.pattern;
+    const segment = g.property.get(property);
+    if (!segment) continue;
+    const target = m.groups?.target;
+    const placing = target === void 0 ? void 0 : g.target.get(target);
+    return { property, sets: segment.sets, also: segment.also, target: placing ? target : void 0, placing, on };
+  }
+  return on ? { property: null, sets: [], also: [], on } : null;
+}
+var covers = (scopes, prop) => scopes.grammars.some((g) => [...g.property.values()].some((s) => propMatches(s.sets, prop)));
+function scopedFamily(scopes, names, prop, generic) {
+  if (!covers(scopes, prop)) return null;
+  const placed2 = names.filter((n) => {
+    const p = place(scopes, n);
+    return p !== null && propMatches(p.sets, prop);
+  });
+  const unclaimed = names.filter((n) => !scopes.grammars.some((g) => n.startsWith(g.claims)));
+  return [...placed2, ...generic(unclaimed, prop)];
+}
+var kindsOf = (scopes, element) => [...scopes.kinds].filter(([, names]) => names.has(element)).map(([k]) => k);
+function fitOf(scopes, token, elements) {
+  const p = place(scopes, token);
+  const requires = [...p?.placing?.requires ?? [], ...p?.on ?? []];
+  const not = p?.placing?.not ?? [];
+  if (!requires.length && !not.length) return { fit: "free" };
+  const scope = [
+    ...requires.length ? [`for ${requires.join(" or ")}`] : [],
+    ...not.length ? [`not for ${not.join(" or ")}`] : []
+  ].join(", ");
+  const els = [...new Set(elements)];
+  if (!els.length)
+    return requires.length ? { fit: "unknown", why: `${scope}; what this styles is not known`, elements: [] } : { fit: "on" };
+  const kinds = els.map((e) => kindsOf(scopes, e));
+  const shown = els.map((e) => `<${e}>`).join(", ");
+  if (not.length && kinds.every((ks) => ks.some((k) => not.includes(k))))
+    return { fit: "off", why: `${scope}; this styles ${shown}`, elements: els };
+  const mixed = not.length && kinds.some((ks) => ks.some((k) => not.includes(k)));
+  if (requires.length) {
+    if (kinds.every((ks) => ks.some((k) => requires.includes(k))))
+      return mixed ? { fit: "unknown", why: `${scope}; ${shown} do not agree`, elements: els } : { fit: "on" };
+    const undeterminable = requires.some((k) => !scopes.kinds.get(k)?.size);
+    if (!undeterminable && kinds.every((ks) => ks.length && !ks.some((k) => requires.includes(k))))
+      return { fit: "off", why: `${scope}; this styles ${shown}`, elements: els };
+    return { fit: "unknown", why: `${scope}; ${shown} cannot be shown to be`, elements: els };
+  }
+  return mixed ? { fit: "unknown", why: `${scope}; ${shown} do not agree`, elements: els } : { fit: "on" };
+}
+
+// src/profiles.ts
+var PROJECT_PROFILES = join6(".loupe", "profiles");
+var NO_PROFILE = "none";
+var readJsonStrict = (p) => JSON.parse(readFileSync3(p, "utf8"));
+var activeProfiles = (config) => config.profiles?.active ?? [];
+var activeDelivery = (config) => mergeDeliveries(activeProfiles(config).map((p) => p.delivery));
+function readScopes(dir, raw) {
+  try {
+    return parseTokenScopes(typeof raw === "string" ? readJsonStrict(under(dir, raw)) : raw);
+  } catch (err) {
+    return {
+      scopes: null,
+      errors: [`tokenScopes: could not read ${typeof raw === "string" ? raw : "the inline block"} \u2014 ${messageOf(err)}`]
+    };
+  }
+}
+function readProfiles(root2, origin = "shipped", unreadable) {
+  if (!root2 || !existsSync5(root2)) return [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const e of readDir(root2)) {
+    if (!e.isDirectory()) continue;
+    const dir = join6(root2, e.name);
+    const manifest = join6(dir, "profile.json");
+    if (!existsSync5(manifest)) continue;
+    try {
+      const raw = readJsonStrict(manifest);
+      const id = asString(raw.id) ?? e.name;
+      if (id === NO_PROFILE || seen.has(id)) continue;
+      const patterns = asString(raw.patterns);
+      const components2 = asString(raw.components);
+      const tokenDescriptions2 = asString(raw.tokenDescriptions);
+      const scopes = raw.tokenScopes === void 0 ? null : readScopes(dir, raw.tokenScopes);
+      const delivery = asString(raw.delivery);
+      out.push({
+        id,
+        name: asString(raw.name) ?? asString(raw.id) ?? e.name,
+        preset: asString(raw.preset) ?? null,
+        packages: asStrings(raw.packages),
+        patterns: patterns ? under(dir, patterns) : null,
+        components: components2 ? under(dir, components2) : null,
+        tokenDescriptions: tokenDescriptions2 ? under(dir, tokenDescriptions2) : null,
+        tokenScopes: scopes?.scopes ?? null,
+        problems: scopes?.errors ?? [],
+        // Read now, not by path later: two consumers want it, and a block that
+        // does not validate is no block rather than a profile that cannot load.
+        delivery: delivery ? readDelivery(under(dir, delivery)) : null,
+        dir,
+        origin
+      });
+      seen.add(id);
+    } catch (err) {
+      unreadable?.push(`${manifest} \u2014 ${messageOf(err)}`);
+    }
+  }
+  return out.sort((a, b) => byBytes(a.id, b.id));
+}
+function profileRoots({
+  root: root2,
+  configured = [],
+  flag = null
+}) {
+  const roots = [
+    ...configured.map((dir) => ({ dir: resolve4(dir), origin: "project" })),
+    { dir: resolve4(root2, PROJECT_PROFILES), origin: "project" },
+    ...flag ? [{ dir: resolve4(flag), origin: "shipped" }] : []
+  ];
+  const seen = /* @__PURE__ */ new Set();
+  return roots.filter((r) => !seen.has(r.dir) && Boolean(seen.add(r.dir)));
+}
+function readProfileRoots(roots, unreadable) {
+  const out = /* @__PURE__ */ new Map();
+  for (const { dir, origin } of roots)
+    for (const p of readProfiles(dir, origin, origin === "project" ? unreadable : void 0))
+      if (!out.has(p.id)) out.set(p.id, p);
+  return [...out.values()].sort((a, b) => byBytes(a.id, b.id));
+}
+function selectProfiles(profiles, config, force = null) {
+  if (force === NO_PROFILE) return [];
+  if (force) return profiles.filter((p) => p.id === force);
+  const pkgs = config.designSystem?.packages ?? [];
+  if (!pkgs.length) return [];
+  const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
+  const claimed = new Set(
+    matched.filter((p) => p.origin === "project").flatMap((p) => p.packages.filter((pkg) => pkgs.includes(pkg)))
+  );
+  return matched.filter((p) => p.origin === "project" || !p.packages.some((pkg) => claimed.has(pkg)));
+}
+function applyRegistries(config, sources) {
+  const applied = [];
+  const skipped = [];
+  const errors = [];
+  const forced = [];
+  let patterns = config.patterns ?? [];
+  const components2 = new Map(config.componentRegistry ?? []);
+  const add = {
+    patterns: (raw) => {
+      const own = new Set(patterns.map((p) => p.id));
+      const fresh = loadPatterns(raw).filter((p) => !own.has(p.id));
+      patterns = [...patterns, ...fresh];
+      return fresh.length;
+    },
+    components: (raw) => {
+      const before = components2.size;
+      for (const [key, entry] of loadComponents(raw)) if (!components2.has(key)) components2.set(key, entry);
+      return components2.size - before;
+    }
+  };
+  const saw = { patterns: false, components: false };
+  for (const src of sources) {
+    let used = false;
+    for (const kind of ["patterns", "components"]) {
+      const path = src[kind];
+      if (!path) continue;
+      try {
+        const raw = readJsonStrict(resolve4(path));
+        const inScope = registryApplies(raw, config.designSystem.packages);
+        if (!src.forced && !inScope) {
+          skipped.push({ label: src.label, kind, packages: declaredPackages(raw) });
+          continue;
+        }
+        const added = add[kind](raw);
+        saw[kind] = used = true;
+        if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
+      } catch (err) {
+        errors.push(`could not read ${src.label} ${kind} \u2014 ${messageOf(err)}`);
+      }
+    }
+    if (used) applied.push(src.label);
+  }
+  if (saw.patterns) setPatterns(config, patterns);
+  if (saw.components) setComponentRegistry(config, components2);
+  const allOff = (kind) => rulesNeeding(kind).every((rule2) => config.severityOf(rule2) === "off");
+  const patternsNote = (added) => allOff("patternRegistry") ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
+    // A composite is only ever built from names imported out of
+    // `designSystem.packages` (see markup.ts), so with none declared
+    // there is nothing for a signature to be compared against.
+    !config.designSystem.packages.length ? "merged but enabled nothing \u2014 this config declares no designSystem.packages, so no composite is ever built to compare" : (
+      // `knownComponents` is `designSystem.components.layout` + `.text`.
+      // A merged component *registry* does not feed it, so "components"
+      // alone would point at the wrong file.
+      !config.designSystem.knownComponents.size ? "merged but enabled nothing \u2014 this config declares no designSystem.components for its signatures to match" : null
+    )
+  );
+  const componentsNote = (added) => added || allOff("componentRegistry") ? null : "merged but enabled nothing \u2014 it added no entries this config did not already have";
+  const notes = [];
+  for (const f of forced) {
+    if (f.offScope.length)
+      notes.push({
+        label: f.label,
+        kind: f.kind,
+        // Named against what the *config* declares, not what the project imports:
+        // those differ on an inferred config.
+        note: `forced past the scope check \u2014 it is scoped to ${f.offScope.join(", ")} and this config declares ${config.designSystem.packages.length ? `${config.designSystem.packages.join(", ")} \u2014 so its findings name a design system this config does not declare` : "no design-system packages, so nothing here says which design system its findings are about"}`
+      });
+    const note2 = f.kind === "patterns" ? patternsNote(f.added) : componentsNote(f.added);
+    if (note2) notes.push({ label: f.label, kind: f.kind, note: note2 });
+  }
+  return { applied, skipped, notes, errors };
+}
+
+// src/suppressions.ts
+var ID = "(?:[A-Za-z][\\w-]*(?:/[\\w-]+)*)";
+var directive = (keyword, rules2, reason) => `${keyword} ${rules2} -- ${reason}`;
+var OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
+function spannedLines(lines, i, raw, stripped) {
+  const opener = raw.slice(0, raw.length - stripped.length);
+  const close = /\/\*/.test(opener) ? "*/" : /<!--/.test(opener) ? "-->" : null;
+  if (close === null || stripped.includes(close)) return [];
+  const LIMIT = 40;
+  for (let j = i + 1; j < lines.length && j - i <= LIMIT; j++) {
+    const cont = lines[j];
+    if (cont === void 0) break;
+    if (cont.includes(close)) return Array.from({ length: j - i }, (_, k) => i + k + 2);
+  }
+  return [];
+}
+function makeSuppressionParser({
+  keyword,
+  blanket = [],
+  aliases = []
+}) {
+  const heads = [keyword, ...aliases.filter((a) => a !== keyword && !blanket.includes(a))];
+  const alternation = (terms) => [...new Set(terms)].sort((a, b) => b.length - a.length).map(escapeRe).join("|");
+  const keywordHead = `(${alternation(heads)})(?![\\w-])`;
+  const IDS = `${ID}(?:\\s*,\\s*${ID})*`;
+  const strict = new RegExp(`^${keywordHead}\\s+(${IDS})\\s*--\\s*(?!\\*/|-->|\\})(\\S.*?)(?:\\*/|-->|\\}|$)`);
+  const shaped = new RegExp(`^${keywordHead}\\s*(?:${IDS}\\s*)?(?:--|\\*/|-->|\\}|$)`);
+  const written = new RegExp(`^(?:${alternation([keyword, ...blanket])})(?![\\w-])`);
+  const anyHead = [...heads, ...blanket];
+  return function scan(text2, relPath) {
+    const byLine = /* @__PURE__ */ new Map();
+    const owners = /* @__PURE__ */ new Map();
+    const directives = [];
+    const malformed = [];
+    const lines = text2.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      if (raw === void 0 || !anyHead.some((p) => raw.includes(p))) continue;
+      const stripped = raw.replace(OPENER, "");
+      if (!anyHead.some((p) => stripped.startsWith(p))) continue;
+      const line = i + 1;
+      const m = stripped.match(strict);
+      if (m?.[2] !== void 0 && m[3] !== void 0) {
+        const ids = m[2].split(",").map((s) => canonicalRuleId(s.trim()));
+        const used = m[1] ?? keyword;
+        const directive2 = {
+          file: relPath,
+          line,
+          rules: ids,
+          reason: oneLine(m[3]),
+          // Carried only when it is not the keyword the config asks for, so
+          // `loupe suppressions` can name the rename.
+          ...used === keyword ? {} : { alias: used }
+        };
+        directives.push(directive2);
+        for (const l of [line, ...spannedLines(lines, i, raw, stripped)]) {
+          const set = byLine.get(l) ?? /* @__PURE__ */ new Set();
+          for (const id of ids) set.add(id);
+          byLine.set(l, set);
+          owners.set(l, [...owners.get(l) ?? [], directive2]);
+        }
+      } else if (written.test(stripped) || shaped.test(stripped)) {
+        malformed.push({
+          rule: "suppression/malformed",
+          file: relPath,
+          line,
+          // Cut on the raw text, and by code point: this string is also the
+          // finding's `code`, and `findingKey` collapses whitespace on `code`
+          // itself, so flattening first would only move the 60-character window
+          // and take every baseline key already written with it.
+          message: head(stripped.trim(), 60)
+        });
+      }
+    }
+    return { byLine, owners, directives, malformed };
+  };
+}
+function mutingLine(byLine, line, ruleId, scopeLines = []) {
+  for (const L of [line, line - 1, ...scopeLines]) {
+    const s = byLine.get(L);
+    if (s?.has(ruleId)) return L;
+  }
+  return null;
+}
+var MuteLedger = class {
+  used = /* @__PURE__ */ new Map();
+  /** Mute `ruleId` at `line` if a directive covers it, crediting that directive. */
+  mute(supp, line, ruleId, scopeLines = []) {
+    const L = mutingLine(supp.byLine, line, ruleId, scopeLines);
+    if (L === null) return false;
+    for (const d of supp.owners.get(L) ?? [])
+      if (d.rules.includes(ruleId)) this.used.set(d, (this.used.get(d) ?? /* @__PURE__ */ new Set()).add(ruleId));
+    return true;
+  }
+  /** Set `stale` on each directive naming a rule that muted nothing; `skip` names rules this run could not exercise. */
+  settle(directives, skip = /* @__PURE__ */ new Set()) {
+    for (const d of directives) {
+      const stale = d.rules.filter((r) => !skip.has(r) && !this.used.get(d)?.has(r));
+      if (stale.length) d.stale = stale;
+    }
+  }
+};
+
+// src/markup.ts
+var import_parser = __toESM(require_lib(), 1);
+
+// src/inline.ts
+var UNITLESS = /* @__PURE__ */ new Set([
+  "animation-iteration-count",
+  "aspect-ratio",
+  "border-image-outset",
+  "border-image-slice",
+  "border-image-width",
+  "box-flex",
+  "box-flex-group",
+  "box-ordinal-group",
+  "column-count",
+  "columns",
+  "flex",
+  "flex-grow",
+  "flex-positive",
+  "flex-shrink",
+  "flex-negative",
+  "flex-order",
+  "font-weight",
+  "grid-area",
+  "grid-row",
+  "grid-row-end",
+  "grid-row-start",
+  "grid-column",
+  "grid-column-end",
+  "grid-column-start",
+  "line-clamp",
+  "line-height",
+  "opacity",
+  "order",
+  "orphans",
+  "scale",
+  "tab-size",
+  "widows",
+  "z-index",
+  "zoom",
+  "fill-opacity",
+  "flood-opacity",
+  "stop-opacity",
+  "stroke-dasharray",
+  "stroke-dashoffset",
+  "stroke-miterlimit",
+  "stroke-opacity",
+  "stroke-width"
+]);
+function toCssProp(key) {
+  if (key.startsWith("--")) return key;
+  if (key.includes("-")) return key.toLowerCase();
+  const kebab = key.replace(/([A-Z])/g, (m) => `-${m.toLowerCase()}`);
+  return /^[A-Z]/.test(key) ? `-${kebab.replace(/^-/, "")}` : kebab;
+}
+function toCssValue(prop, node) {
+  if (!node) return null;
+  switch (node.type) {
+    case "StringLiteral":
+      return node.value;
+    case "NumericLiteral":
+      return numeric(prop, node.value);
+    case "UnaryExpression":
+      if (node.operator === "-" && node.argument?.type === "NumericLiteral") return numeric(prop, -node.argument.value);
+      return null;
+    case "TemplateLiteral":
+      return node.expressions.length === 0 ? node.quasis[0]?.value?.cooked ?? null : null;
+    default:
+      return null;
+  }
+}
+function numeric(prop, n) {
+  if (n === 0) return "0";
+  return UNITLESS.has(prop) ? String(n) : `${n}px`;
+}
+function valueSpan(node, line) {
+  const loc = node?.loc;
+  if (!node || !loc || loc.start.line !== line || loc.end.line !== line) return void 0;
+  const text2 = rawOf(node);
+  return text2 === null ? void 0 : { col: loc.start.column, text: text2 };
+}
+function rawOf(node) {
+  if (node.type === "TemplateLiteral") return node.expressions.length ? null : `\`${node.quasis[0]?.value.raw ?? ""}\``;
+  if (node.type === "UnaryExpression") {
+    const inner = node.argument ? rawOf(node.argument) : null;
+    return inner === null ? null : `${node.operator}${inner}`;
+  }
+  const raw = node.extra?.raw;
+  return typeof raw === "string" ? raw : null;
+}
+function keyName(node) {
+  if (!node) return null;
+  if (node.key.type === "Identifier" && !node.computed) return node.key.name;
+  if (node.key.type === "StringLiteral") return node.key.value;
+  return null;
+}
+
+// src/cssinjs.ts
+var importedName = (spec) => {
+  if (spec.type !== "ImportSpecifier") return "default";
+  return spec.imported.type === "Identifier" ? spec.imported.name : spec.imported.value;
+};
+var fromPackage = (packages, src) => packages.some((p) => src === p || src.startsWith(`${p}/`));
+function cssInJsLocals(ast, packages) {
+  const styled = /* @__PURE__ */ new Set();
+  const bare = /* @__PURE__ */ new Set();
+  if (!packages?.length) return { styled, bare, any: false };
+  for (const node of ast.program.body) {
+    if (node.type !== "ImportDeclaration" || !fromPackage(packages, node.source.value)) continue;
+    for (const spec of node.specifiers) {
+      const local = spec.local.name;
+      const imported = importedName(spec);
+      if (imported === "default" || imported === "styled") styled.add(local);
+      else if (imported === "css" || imported === "createGlobalStyle" || imported === "injectGlobal") bare.add(local);
+    }
+  }
+  return { styled, bare, any: styled.size + bare.size > 0 };
+}
+function templateText(quasi) {
+  let out = "";
+  for (let i = 0; i < quasi.quasis.length; i++) {
+    out += quasi.quasis[i]?.value.raw ?? "";
+    if (i < quasi.expressions.length) {
+      const prev = out.replace(/\s+$/, "").slice(-1);
+      out += prev === "" || prev === ";" || prev === "{" || prev === "}" ? "/*dsh*/" : "dsh-e";
+    }
+  }
+  return out;
+}
+function parseTemplate(cssText, startLine) {
+  let root2;
+  try {
+    root2 = postcss_default.parse(`.dsh-root{${cssText}
+}`, { from: void 0 });
+  } catch (err) {
+    return { groups: [], error: messageLineOf(err) };
+  }
+  const groups = [];
+  const at = (node) => startLine + ((node.source?.start?.line ?? 1) - 1);
+  const collect = (rule2, selector, onTarget) => {
+    const decls = [];
+    const nested = [];
+    const walk = (container) => {
+      for (const node of container.nodes ?? []) {
+        if (node.type === "decl") {
+          if (node.value.includes("dsh-e")) continue;
+          decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
+        } else if (node.type === "atrule")
+          walk(node);
+        else if (node.type === "rule") nested.push(node);
+      }
+    };
+    walk(rule2);
+    if (decls.length)
+      groups.push({ selector, decls, isGrid: decls.some((d) => isGridDecl(d.prop, d.value)), onTarget });
+    for (const child of nested) {
+      const sel = child.selectors.join(", ");
+      collect(child, sel, onTarget && child.selectors.every((s) => /^&[^\s>+~]*$/.test(s.trim())));
+    }
+  };
+  const top = root2.nodes.find((n) => n.type === "rule");
+  if (top) collect(top, null, true);
+  return { groups, error: null };
+}
+
+// src/checks/detectors/confirm-pair.ts
+var CONSENT = "^(cancel|delete|remove|discard|reset|confirm|ok|yes|no|continue|proceed|leave|revert)\\b";
+var CONTROLS = "(Control|Field|Picker|Input|Textarea|Editor)$|^(DataForm|Field\\.Root|Fieldset)";
+var confirmPair = (el, spec, ctx) => {
+  if (ctx.canonical !== stringParam(spec, "container", "")) return null;
+  const button = stringParam(spec, "button", "Button");
+  const consent = new RegExp(stringParam(spec, "labels", CONSENT), "i");
+  const controls = new RegExp(stringParam(spec, "controls", CONTROLS));
+  const inside = ctx.elementsIn(el);
+  const isControl2 = (c) => {
+    const name = ctx.nameOf(c);
+    const sys = ctx.canonicalOf(c);
+    if (sys) return controls.test(sys) || controls.test(name ?? "");
+    return !!name && /^(input|select|textarea)$/.test(name);
+  };
+  if (inside.some(isControl2)) return null;
+  const labels = inside.filter((c) => ctx.canonicalOf(c) === button).map(ctx.labelOf);
+  if (labels.length !== 2 || !labels.every((l) => l !== null && consent.test(l))) return null;
+  return `${ctx.canonical} with two consent buttons (${labels.join(" / ")}) and no form control`;
+};
+
+// src/checks/detectors/few-static-options.ts
+var fewStaticOptions = (el, spec, ctx) => {
+  if (!listParam(spec, "components").includes(ctx.canonical)) return null;
+  const prop = stringParam(spec, "prop", "options");
+  const attr = el.openingElement.attributes.find((a) => a.type === "JSXAttribute" && a.name.name === prop);
+  const value = attr?.type === "JSXAttribute" && attr.value?.type === "JSXExpressionContainer" ? attr.value.expression : null;
+  const options = value && value.type !== "JSXEmptyExpression" ? ctx.optionsIn(value) : null;
+  if (!options || options.length < numParam(spec, "min", 2) || options.length > numParam(spec, "max", 5)) return null;
+  if (!options.every((l) => l !== null)) return null;
+  if (options.reduce((n, l) => n + l.length, 0) > numParam(spec, "maxLabelChars", 32)) return null;
+  return `${ctx.canonical} with ${options.length} short static ${prop}`;
+};
+
+// src/checks/detectors/judge.ts
+var MAX_CONTROL_SOURCE = 2e3;
+function judgeControl(el, spec, ctx) {
+  const name = ctx.nameOf(el) ?? "";
+  const component = name.includes(".") ? `${ctx.canonical}${name.slice(name.indexOf("."))}` : ctx.canonical;
+  if (!listParam(spec, "components").includes(component)) return null;
+  const unless = listParam(spec, "unless");
+  const realized = unless.length > 0 && el.openingElement.attributes.some(
+    (a) => a.type === "JSXSpreadAttribute" || a.name.type === "JSXIdentifier" && unless.includes(a.name.name)
+  );
+  if (realized) return null;
+  return { component, enclosing: ctx.enclosingOf(el), source: ctx.sourceOf(el).slice(0, MAX_CONTROL_SOURCE) };
+}
+
+// src/markup.ts
+var PLUGINS = ["jsx", "typescript", "decorators-legacy", "classProperties", "importAttributes"];
+var memberObject = (t) => t.type === "MemberExpression" && t.object.type === "Identifier" ? t.object.name : void 0;
+var memberProperty = (t) => t.type === "MemberExpression" && t.property.type === "Identifier" ? t.property.name : void 0;
+var calleeOf = (t) => t.type === "CallExpression" && t.callee.type === "Identifier" ? t.callee.name : void 0;
+var firstArgOf = (t) => {
+  if (t.type !== "CallExpression") return void 0;
+  const arg = t.arguments[0];
+  return arg?.type === "Identifier" ? arg.name : void 0;
+};
+var identifierOf = (t) => t.type === "Identifier" ? t.name : void 0;
+function substitutionTargets(node, out = []) {
+  const expr = node && unwrapTs(node);
+  switch (expr?.type) {
+    case "JSXElement":
+      out.push(expr);
+      break;
+    case "ArrowFunctionExpression":
+    case "FunctionExpression": {
+      if (expr.body.type !== "BlockStatement") return substitutionTargets(expr.body, out);
+      for (const stmt of expr.body.body) if (stmt.type === "ReturnStatement") substitutionTargets(stmt.argument, out);
+      break;
+    }
+    case "ConditionalExpression":
+      substitutionTargets(expr.consequent, out);
+      substitutionTargets(expr.alternate, out);
+      break;
+    case "LogicalExpression":
+      substitutionTargets(expr.left, out);
+      substitutionTargets(expr.right, out);
+      break;
+    // `render={ <h4 /> }`. JSX also allows the braces to be dropped entirely
+    // (`render=<h4 />`), which arrives as the element itself and is caught by
+    // the `JSXElement` case above.
+    case "JSXExpressionContainer":
+      substitutionTargets(expr.expression, out);
+      break;
+  }
+  return out;
+}
+var canonicalName = (name, normalize2) => normalize2 ? name.replace(normalize2, "") : name;
+var held = (set, name) => name !== void 0 && set.has(name);
+function harvestTokens(text2, into = /* @__PURE__ */ new Set()) {
+  for (const t of text2.match(/[A-Za-z_][\w-]*/g) ?? []) into.add(t);
+  return into;
+}
+var MAX_STEM = 128;
+function harvestStems(text2, into = /* @__PURE__ */ new Set()) {
+  for (let i = text2.indexOf("${"); i !== -1; i = text2.indexOf("${", i + 2)) {
+    let s = i;
+    const floor = Math.max(0, i - MAX_STEM);
+    while (s > floor && isWordChar(text2.charCodeAt(s - 1))) s--;
+    const stem = text2.slice(s, i);
+    if (stem.includes("-") && /^[A-Za-z_]/.test(stem)) into.add(stem);
+  }
+  return into;
+}
+function isWordChar(c) {
+  return c >= 97 && c <= 122 || c >= 65 && c <= 90 || c >= 48 && c <= 57 || c === 95 || c === 45;
+}
+var CLASS_TOKEN = /^[a-z_][\w-]*$/i;
+function classesFrom(strings) {
+  const out = [];
+  for (const s of strings) {
+    for (const t of s.split(/\s+/)) {
+      const c = t.trim();
+      if (c && CLASS_TOKEN.test(c)) out.push(c);
+    }
+  }
+  return out;
+}
+function readStyleAttr(value) {
+  const decls = [];
+  const dynamicProps = [];
+  let dynamic = 0;
+  const container = value?.type === "JSXExpressionContainer" ? value.expression : value;
+  if (!container) return { decls, dynamic, dynamicProps, present: false };
+  if (container.type !== "ObjectExpression") {
+    return { decls, dynamic: 1, dynamicProps, present: true };
+  }
+  for (const prop of container.properties) {
+    if (prop.type !== "ObjectProperty") {
+      dynamic++;
+      continue;
+    }
+    const key = keyName(prop);
+    if (!key) {
+      dynamic++;
+      continue;
+    }
+    const cssProp = toCssProp(key);
+    const cssValue = toCssValue(cssProp, prop.value);
+    if (cssValue === null) {
+      dynamic++;
+      dynamicProps.push(cssProp);
+      continue;
+    }
+    const line = prop.loc?.start?.line ?? null;
+    decls.push({ prop: cssProp, value: cssValue, line, span: valueSpan(prop.value, line) });
+  }
+  return { decls, dynamic, dynamicProps, present: true };
+}
+var NOT_CHILDREN = /* @__PURE__ */ new Set(["loc", "start", "end", "leadingComments", "trailingComments"]);
+function walkAst(node, visit) {
+  if (!node || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const n of node) walkAst(n, visit);
+    return;
+  }
+  const rec = node;
+  if (typeof rec.type === "string" && visit(node) === false) return;
+  for (const key of Object.keys(rec)) if (!NOT_CHILDREN.has(key)) walkAst(rec[key], visit);
+}
+function systemImports(ast, ds, canonical) {
+  const canonicals = /* @__PURE__ */ new Map();
+  const componentImports = [];
+  const packages = /* @__PURE__ */ new Map();
+  const namespaces = /* @__PURE__ */ new Set();
+  for (const node of ast.program.body) {
+    if (node.type !== "ImportDeclaration" || !fromPackage(ds.packages, node.source.value)) continue;
+    for (const spec of node.specifiers) {
+      const local = spec.local.name;
+      const c = canonical(spec.type === "ImportSpecifier" ? importedName(spec) : local);
+      canonicals.set(local, c);
+      packages.set(local, node.source.value);
+      if (spec.type === "ImportNamespaceSpecifier") namespaces.add(local);
+      componentImports.push({
+        canonical: c,
+        package: node.source.value,
+        uses: 0,
+        // the JSX walk counts them; this pass has only read the imports
+        line: spec.loc?.start?.line ?? node.loc?.start?.line ?? 1,
+        declLine: node.loc?.start?.line ?? 1
+      });
+    }
+  }
+  return { componentImports, packages, canonicals, namespaces };
+}
+var unwrapTs = (e) => e.type === "TSAsExpression" || e.type === "TSSatisfiesExpression" || e.type === "TSNonNullExpression" || e.type === "TSTypeAssertion" ? unwrapTs(e.expression) : e;
+function staticLabel(el) {
+  const parts = [];
+  for (const c of el.children) {
+    if (c.type === "JSXText") {
+      parts.push(c.value);
+      continue;
+    }
+    if (c.type === "JSXElement" || c.type === "JSXFragment") continue;
+    if (c.type !== "JSXExpressionContainer") return null;
+    if (c.expression.type === "JSXEmptyExpression") continue;
+    const text2 = staticString(c.expression);
+    if (text2 === null) return null;
+    parts.push(text2);
+  }
+  return parts.join("").replace(/\s+/g, " ").trim();
+}
+function staticString(node) {
+  const e = unwrapTs(node);
+  if (e.type === "StringLiteral") return e.value;
+  if (e.type === "TemplateLiteral" && !e.expressions.length) return e.quasis.map((q) => q.value.cooked ?? "").join("");
+  if (e.type === "CallExpression" && e.callee.type === "Identifier" && /^_[_xn]$/.test(e.callee.name)) {
+    const arg = e.arguments[0];
+    return arg?.type === "StringLiteral" ? arg.value : null;
+  }
+  return null;
+}
+var DETECTORS = /* @__PURE__ */ new Map([
+  ["few-static-options", fewStaticOptions],
+  ["confirm-pair", confirmPair]
+]);
+function componentRanges(program) {
+  const out = [];
+  walkAst(program, (n) => {
+    const [name, body2] = n.type === "FunctionDeclaration" || n.type === "ClassDeclaration" ? [n.id?.name, n] : n.type === "VariableDeclarator" && n.id.type === "Identifier" ? [n.id.name, n.init] : [void 0, null];
+    if (name && /^[A-Z]/.test(name) && typeof body2?.start === "number" && typeof body2.end === "number")
+      out.push({ start: body2.start, end: body2.end, name });
+  });
+  return out;
+}
+function scanMarkup(text2, relPath, ds, rules2 = []) {
+  const referenced = harvestTokens(text2);
+  const stems = harvestStems(text2);
+  const bindings = [];
+  const rawEls = [];
+  const carriers = [];
+  const inlineStyles = [];
+  const cssInJs = [];
+  const composites2 = [];
+  const ruleHits = [];
+  const controls = [];
+  const imports = /* @__PURE__ */ new Set();
+  const result = {
+    controls,
+    bindings,
+    rawEls,
+    carriers,
+    inlineStyles,
+    cssInJs,
+    composites: composites2,
+    ruleHits,
+    imports,
+    referenced,
+    stems,
+    componentImports: [],
+    parseError: null
+  };
+  let ast;
+  try {
+    ast = (0, import_parser.parse)(text2, {
+      sourceType: "unambiguous",
+      errorRecovery: true,
+      attachComment: false,
+      plugins: PLUGINS
+    });
+  } catch (err) {
+    return { ...result, parseError: messageLineOf(err) };
+  }
+  const canonical = (name) => canonicalName(name, ds.normalizeExports);
+  const { componentImports, packages, canonicals, namespaces } = systemImports(ast, ds, canonical);
+  const tags = cssInJsLocals(ast, ds.cssInJsPackages);
+  const cssPropOwner = /* @__PURE__ */ new Map();
+  const substituted = /* @__PURE__ */ new Set();
+  const uses = /* @__PURE__ */ new Map();
+  for (const node of ast.program.body)
+    if (node.type === "ImportDeclaration") for (const sp of node.specifiers) imports.add(sp.local.name);
+  const jsxChildElements = (el) => {
+    const out = [];
+    walkAst(el.children ?? [], (n) => {
+      if (n.type !== "JSXElement") return;
+      out.push(n);
+      return false;
+    });
+    return out;
+  };
+  const jsxName = (el) => {
+    const n = ("openingElement" in el ? el.openingElement : el).name;
+    if (n.type === "JSXIdentifier") return n.name;
+    if (n.type === "JSXMemberExpression")
+      return n.object.type === "JSXIdentifier" ? `${n.object.name}.${n.property.name}` : null;
+    return null;
+  };
+  const baseOf = (name) => name.split(".", 1)[0] ?? name;
+  const readComposite = (el) => {
+    const name = jsxName(el);
+    if (!name || !canonicals.has(baseOf(name))) return;
+    const tree = systemTree(
+      el,
+      (n) => canonicals.has(baseOf(n)),
+      jsxChildElements,
+      jsxName,
+      (n) => packages.get(baseOf(n)) ?? null,
+      el.loc?.start?.line ?? 1
+    );
+    if (!tree || nodeCount(tree) < 2) return;
+    composites2.push({
+      file: relPath,
+      line: el.loc?.start?.line ?? 1,
+      signature: signatureOf(tree),
+      tree,
+      size: nodeCount(tree),
+      depth: depthOf(tree)
+    });
+  };
+  const canonicalOf = (el) => {
+    const name = jsxName(el);
+    return name ? canonicals.get(baseOf(name)) ?? null : null;
+  };
+  const allElements = (el, out = []) => {
+    for (const c of jsxChildElements(el)) {
+      out.push(c);
+      allElements(c, out);
+    }
+    return out;
+  };
+  const constArrays = /* @__PURE__ */ new Map();
+  for (const node of ast.program.body) {
+    const decl2 = node.type === "ExportNamedDeclaration" ? node.declaration : node;
+    if (decl2?.type !== "VariableDeclaration" || decl2.kind !== "const") continue;
+    for (const d of decl2.declarations)
+      if (d.id.type === "Identifier" && d.init) constArrays.set(d.id.name, staticOptions(d.init));
+  }
+  function staticOptions(e) {
+    const v = unwrapTs(e);
+    if (v.type === "Identifier") return constArrays.get(v.name) ?? null;
+    if (v.type !== "ArrayExpression") return null;
+    if (v.elements.some((x) => !x || x.type === "SpreadElement")) return null;
+    return v.elements.map((x) => {
+      if (x?.type !== "ObjectExpression") return null;
+      const label = x.properties.find(
+        (pr) => pr.type === "ObjectProperty" && !pr.computed && pr.key.type === "Identifier" && pr.key.name === "label"
+      );
+      return label?.type === "ObjectProperty" ? staticString(label.value) : null;
+    });
+  }
+  let scopes = null;
+  const enclosingOf = (el) => {
+    scopes ??= componentRanges(ast.program);
+    const at = el.start ?? 0;
+    let best = null;
+    for (const s of scopes) if (s.start <= at && s.end >= (el.end ?? at) && (!best || s.start > best.start)) best = s;
+    return best?.name ?? null;
+  };
+  const reading = {
+    nameOf: jsxName,
+    canonicalOf,
+    elementsIn: (el) => allElements(el),
+    optionsIn: staticOptions,
+    labelOf: staticLabel,
+    enclosingOf,
+    sourceOf: (el) => text2.slice(el.start ?? 0, el.end ?? 0)
+  };
+  const readRules = (el) => {
+    if (!rules2.length) return;
+    const canonical2 = canonicalOf(el);
+    if (!canonical2) return;
+    const line = el.loc?.start?.line ?? 1;
+    const ctx = { ...reading, canonical: canonical2 };
+    for (const { patternId, spec } of rules2) {
+      if (spec.rule === "judge") {
+        const control = judgeControl(el, spec, ctx);
+        if (control) controls.push({ file: relPath, line, ...control, patternId });
+        continue;
+      }
+      const detail = DETECTORS.get(spec.rule)?.(el, spec, ctx);
+      if (detail) ruleHits.push({ patternId, rule: spec.rule, line, detail });
+    }
+  };
+  const identityOf = (local, member = null) => {
+    if (member && namespaces.has(local)) return canonical(member);
+    const name = canonicals.get(local) ?? local;
+    return member ? `${name}.${member}` : name;
+  };
+  const listedAs = (local, member) => member && namespaces.has(local) ? canonical(member) : canonicals.get(local);
+  const isTextElement = (local, member = null) => {
+    const name = listedAs(local, member);
+    return name !== void 0 && ds.textComponents.includes(name);
+  };
+  const registryKey2 = (local, member = null) => {
+    const pkg = packages.get(local);
+    return pkg ? { component: identityOf(local, member), package: pkg } : {};
+  };
+  const readTaggedTemplate = (node) => {
+    if (!tags.any) return;
+    const t = node.tag;
+    const owner = typeof node.start === "number" ? cssPropOwner.get(node.start) : void 0;
+    let target = null;
+    let member = null;
+    let isSystem = false;
+    if (owner) {
+      ({ target, member, isSystem } = owner);
+      if (!held(tags.bare, identifierOf(t)) && !held(tags.styled, memberObject(t)) && !held(tags.styled, calleeOf(t)))
+        return;
+    } else if (held(tags.styled, memberObject(t))) {
+      target = memberProperty(t) ?? null;
+    } else if (held(tags.styled, calleeOf(t))) {
+      target = firstArgOf(t) ?? null;
+      isSystem = Boolean(target && canonicals.has(target));
+    } else if (held(tags.bare, identifierOf(t))) {
+      target = null;
+    } else {
+      return;
+    }
+    const line = node.quasi.quasis[0]?.loc?.start?.line ?? node.loc?.start?.line ?? 1;
+    const { groups, error } = parseTemplate(templateText(node.quasi), line);
+    cssInJs.push({
+      file: relPath,
+      line,
+      target,
+      isSystem,
+      isText: isSystem && target !== null && isTextElement(target, member),
+      ...isSystem && target ? registryKey2(target, member) : {},
+      groups,
+      error
+    });
+  };
+  walkAst(ast.program, (node) => {
+    if (node.type === "TaggedTemplateExpression") return readTaggedTemplate(node);
+    if (node.type === "JSXElement") {
+      readComposite(node);
+      readRules(node);
+    }
+    if (node.type !== "JSXOpeningElement") return;
+    const tag = jsxName(node) ?? (node.name.type === "JSXMemberExpression" ? `?.${node.name.property.name}` : null);
+    if (!tag) return;
+    const line = node.loc?.start?.line ?? 1;
+    const root2 = tag.split(".")[0] ?? tag;
+    const isComponent = /^[A-Z]/.test(root2);
+    const isSystem = isComponent && canonicals.has(root2);
+    if (isSystem) {
+      const c = canonicals.get(root2) ?? root2;
+      uses.set(c, (uses.get(c) ?? 0) + 1);
+    }
+    const member = tag.includes(".") ? tag.slice(tag.indexOf(".") + 1) : null;
+    const emitsTag = canonicals.has(root2) && ds.knownComponents.has(member ? canonical(member) : canonicals.get(root2) ?? root2);
+    const strings = [];
+    let style = null;
+    let cssAttr = null;
+    for (const attr of node.attributes) {
+      if (attr.type !== "JSXAttribute") continue;
+      const an = attr.name.type === "JSXIdentifier" ? attr.name.name : attr.name.name.name;
+      if (an === "className" || an === "class")
+        walkAst(attr.value, (n) => {
+          if (n.type === "StringLiteral") strings.push(n.value);
+          else if (n.type === "TemplateElement") strings.push(n.value.cooked ?? n.value.raw);
+        });
+      else if (an === "style") style = readStyleAttr(attr.value);
+      else if (an === "css") cssAttr = attr.value;
+      else if (emitsTag && attr.name.type === "JSXIdentifier" && ds.substitutionProps.has(an))
+        for (const target of substitutionTargets(attr.value)) substituted.add(target.openingElement);
+    }
+    const classes = classesFrom(strings);
+    const self = isComponent ? root2 : tag.toLowerCase();
+    const owned = cssAttr?.type === "JSXExpressionContainer" ? cssAttr.expression : null;
+    if (owned?.type === "TaggedTemplateExpression" && typeof owned.start === "number")
+      cssPropOwner.set(owned.start, { target: self, member: isComponent ? member : null, isSystem });
+    if (style?.present)
+      inlineStyles.push({
+        tag: self,
+        component: isSystem ? canonicals.get(root2) ?? root2 : null,
+        // A project component renders whatever its own markup says, and
+        // `?.Header` is a part of a namespace member no import names.
+        element: isSystem ? identityOf(root2, member) : isComponent || tag.startsWith("?") ? null : tag.toLowerCase(),
+        isSystem,
+        isText: isSystem && isTextElement(root2, member),
+        decls: style.decls,
+        dynamic: style.dynamic,
+        dynamicProps: style.dynamicProps,
+        file: relPath,
+        line
+      });
+    const carrier = { element: null, classes };
+    if (classes.length) carriers.push(carrier);
+    if (isComponent) {
+      if (!isSystem) return;
+      const isText = isTextElement(root2, member);
+      const key = registryKey2(root2, member);
+      carrier.element = identityOf(root2, member);
+      for (const cls of classes) bindings.push({ cls, tag: root2, isSystem: true, isText, ...key, file: relPath, line });
+    } else {
+      if (substituted.has(node)) return;
+      const lower = tag.toLowerCase();
+      const mapped = ds.elementMap.get(lower);
+      if (!mapped) return;
+      let suggest = mapped.component;
+      let render = mapped.render;
+      if (mapped.attribute && mapped.values) {
+        const attr = node.attributes.find(
+          (a) => a.type === "JSXAttribute" && a.name.type === "JSXIdentifier" && a.name.name === mapped.attribute
+        );
+        const v = attr?.type === "JSXAttribute" ? attr.value : null;
+        const raw = v?.type === "StringLiteral" ? v.value : v?.type === "JSXExpressionContainer" && v.expression.type !== "JSXEmptyExpression" ? staticString(v.expression) : null;
+        const value = raw?.trim().toLowerCase();
+        if (value !== void 0 && Object.hasOwn(mapped.values, value)) {
+          suggest = mapped.values[value] ?? null;
+          render = void 0;
+        }
+        if (suggest === null) return;
+      }
+      if (mapped.styledOnly && !classes.length && !style?.present) return;
+      carrier.element = lower;
+      rawEls.push({
+        tag: lower,
+        classes,
+        file: relPath,
+        line,
+        suggest,
+        render,
+        styledOnly: mapped.styledOnly,
+        inlineStyled: Boolean(style?.present),
+        inlineLayout: Boolean(style?.decls?.some(isLayoutDecl))
+      });
+    }
+  });
+  return { ...result, componentImports: componentImports.map((ci) => ({ ...ci, uses: uses.get(ci.canonical) ?? 0 })) };
+}
+
+// src/syntax.ts
+var SYNTAX_PACKAGES = {
+  ".scss": "postcss-scss",
+  ".sass": "postcss-sass",
+  ".less": "postcss-less",
+  ".styl": "postcss-styl"
+};
+var BUNDLED_LOADERS = {
+  "postcss-scss": () => Promise.resolve().then(() => (init_scss_syntax(), scss_syntax_exports)),
+  "postcss-less": () => Promise.resolve().then(() => __toESM(require_lib2(), 1))
+};
+var cache = /* @__PURE__ */ new Map();
+var extOf = (path) => {
+  const i = path.lastIndexOf(".");
+  return i === -1 ? "" : path.slice(i).toLowerCase();
+};
+async function syntaxFor(path) {
+  const ext = extOf(path);
+  const pkg = SYNTAX_PACKAGES[ext];
+  if (!pkg) return { parse: (text2, opts) => postcss_default.parse(text2, opts) };
+  const cached = cache.get(pkg);
+  if (cached) return cached;
+  let resolved;
+  try {
+    const load = BUNDLED_LOADERS[pkg] ?? (() => import(pkg));
+    const mod = await load();
+    const syntax = mod.default ?? mod;
+    const parse3 = syntax.parse ?? syntax;
+    if (typeof parse3 !== "function") throw new Error(`${pkg} exposes no parse()`);
+    const parseFn = parse3;
+    resolved = { parse: (text2, opts) => parseFn(text2, opts) };
+  } catch {
+    resolved = { missing: pkg };
+  }
+  cache.set(pkg, resolved);
+  return resolved;
+}
+
+// src/tokens.ts
+import { readFileSync as readFileSync4, statSync } from "node:fs";
+import { join as join7 } from "node:path";
+var GENERIC_ROLES = [
+  [/^border-radius|radius$/, /radius/],
+  [/^border(-(top|right|bottom|left))?-width$|^border-width$|^outline-width$/, /border-width/],
+  // Colour roles are split finer than the rest: a background token suggested for
+  // a `color` gives the right pixels and the wrong meaning.
+  [/^color$/, /colou?r-(fg|text|content|foreground)/],
+  [/^background(-color)?$|^background-image$/, /colou?r-(bg|background|surface)/],
+  [/border.*-color$|^border-color$|^outline-color$/, /colou?r-(border|line|stroke)/],
+  // A shorthand's token is its colour's: the width and style stay as written.
+  [
+    /^(border|outline|column-rule)(-(top|right|bottom|left|block|inline)(-(start|end))?)?(-color)?$/,
+    /colou?r-(border|line|stroke)/
+  ],
+  [/shadow/, /shadow/],
+  [/^fill$|^stroke$|caret-color|accent-color|^text-decoration(-color)?$/, /colou?r/],
+  [/^font-size$/, /font-size/],
+  [/^font-weight$/, /font-weight/],
+  [/^line-height$/, /line-height/],
+  [/^letter-spacing$/, /letter-spacing/],
+  [/^font-family$|^font$/, /font-family/],
+  // The third entry is the property's own family, preferred when the set has
+  // one: `padding: 8px` is `padding-sm`, not `gap-sm` or `size-4xs`.
+  [/padding/, /dimension|spac|padding|gap/, /padding/],
+  [/gap$/, /dimension|spac|padding|gap/, /gap/],
+  // Position is spacing: an offset from an edge. `dimension` alone would admit
+  // the sizes (icons, buttons) and surface widths a system also ships under it.
+  [/^inset$|^top$|^right$|^bottom$|^left$/, /spac|padding|gap/],
+  [/^cursor$/, /cursor/],
+  // Never flagged as a hardcoded value; here for the token a name in one meant.
+  [/^(min-|max-)?(width|height|inline-size|block-size)$/, /(?<!font-)size|surface-width/],
+  // By role word, not by one system's spelling: WPDS writes `motion-duration-*`,
+  // Archer `duration-*`.
+  [/^transition-duration$|^animation-duration$/, /duration/],
+  [/^transition-timing-function$|^animation-timing-function$/, /easing/]
+];
+function normalizeValue(value) {
+  let v = String(value).trim().toLowerCase().replace(/\s*!important\s*$/, "").replace(/\s+/g, " ");
+  v = v.replace(/#([0-9a-f])([0-9a-f])([0-9a-f])\b/g, "#$1$1$2$2$3$3");
+  return v;
+}
+var emptyTokenSet = () => ({ known: /* @__PURE__ */ new Set(), byValue: /* @__PURE__ */ new Map(), sources: 0 });
+function addTokenDef(into, name, value) {
+  if (into.known.has(name)) return;
+  into.known.add(name);
+  const v = normalizeValue(value);
+  if (!v || v.includes("var(")) return;
+  const names = into.byValue.get(v) ?? [];
+  if (!names.includes(name)) names.push(name);
+  into.byValue.set(v, names);
+}
+function tokenDefsIn(root2, prefixes) {
+  const out = [];
+  if (!prefixes.length) return out;
+  root2.walkDecls((decl2) => {
+    if (decl2.prop.startsWith("--") && prefixes.some((p) => decl2.prop.startsWith(p))) out.push([decl2.prop, decl2.value]);
+  });
+  return out;
+}
+function harvestTokenDefs(root2, prefixes, into) {
+  for (const [name, value] of tokenDefsIn(root2, prefixes)) addTokenDef(into, name, value);
+  return into;
+}
+function cssFilesUnder(path, budget = { left: 200 }, exts = [".css"]) {
+  const wanted = (name) => exts.some((e) => name.endsWith(e));
+  let st;
+  try {
+    st = statSync(path);
+  } catch {
+    return [];
+  }
+  if (st.isFile()) return wanted(path) ? [path] : [];
+  const out = [];
+  if (budget.left <= 0) return out;
+  for (const file of filesUnder(path, wanted)) {
+    out.push(file);
+    if (--budget.left <= 0) break;
+  }
+  return out;
+}
+function readTokenSources(root2, sources, prefixes) {
+  const set = emptyTokenSet();
+  if (!prefixes.length) return set;
+  for (const rel of sources ?? []) {
+    for (const file of cssFilesUnder(join7(root2, rel))) {
+      try {
+        harvestTokenDefs(postcss_default.parse(readFileSync4(file, "utf8"), { from: file }), prefixes, set);
+        set.sources++;
+      } catch {
+      }
+    }
+  }
+  return set;
+}
+function onRole(names, prop, scopes) {
+  return (scopes ? scopedFamily(scopes, names, prop, genericRole) : null) ?? genericRole(names, prop);
+}
+function genericRole(names, prop) {
+  const [, hint, own] = GENERIC_ROLES.find(([p]) => p.test(prop)) ?? [];
+  if (!hint) return [];
+  const onRole2 = names.filter((n) => hint.test(n));
+  const preferred = own ? onRole2.filter((n) => own.test(n)) : [];
+  return preferred.length ? preferred : onRole2;
+}
+function tokensFor(set, prop, value) {
+  const family = roleOf(set, prop);
+  return (set.byValue.get(normalizeValue(value)) ?? []).filter((n) => family.has(n));
+}
+function familyFor(set, prop) {
+  const cache2 = familiesOf(set);
+  let family = cache2.literal.get(prop);
+  if (!family) {
+    const all = [...set.byValue].flatMap(([v, names]) => names.map((n) => [n, v]));
+    const keep = new Set(
+      onRole(
+        all.map(([n]) => n),
+        prop,
+        set.scopes
+      )
+    );
+    family = all.filter(([n]) => keep.has(n));
+    cache2.literal.set(prop, family);
+  }
+  return family;
+}
+function roleOf(set, prop) {
+  const cache2 = familiesOf(set);
+  let family = cache2.all.get(prop);
+  if (!family) {
+    family = new Set(onRole([...set.known], prop, set.scopes));
+    cache2.all.set(prop, family);
+  }
+  return family;
+}
+var families = /* @__PURE__ */ new WeakMap();
+function familiesOf(set) {
+  let cache2 = families.get(set);
+  if (!cache2 || cache2.size !== set.known.size || cache2.scopes !== set.scopes) {
+    cache2 = { size: set.known.size, scopes: set.scopes, all: /* @__PURE__ */ new Map(), literal: /* @__PURE__ */ new Map() };
+    families.set(set, cache2);
+  }
+  return cache2;
+}
+function measure(value) {
+  const v = normalizeValue(value);
+  const len = /^(\d*\.?\d+)(px|rem)$/.exec(v);
+  if (len) return { kind: "px", n: Number(len[1]) * (len[2] === "rem" ? 16 : 1) };
+  const time = /^(\d*\.?\d+)(ms|s)$/.exec(v);
+  if (time) return { kind: "ms", n: Number(time[1]) * (time[2] === "s" ? 1e3 : 1) };
+  return isColorLiteral(v) ? { kind: "color" } : null;
+}
+var SPACING = /padding|gap$|^(inset|top|right|bottom|left)$/;
+function candidatesFor(set, prop, part) {
+  const family = familyFor(set, prop);
+  if (!family.length) return null;
+  const v = normalizeValue(part);
+  const spacing = SPACING.test(prop);
+  const exact = family.filter(([, fv]) => fv === v);
+  if (exact.length) return { tier: "exact", options: exact, keep: !spacing };
+  const kinds = new Set(family.map(([, fv]) => measure(fv)?.kind));
+  const m = measure(v);
+  if (!m) return kinds.has(void 0) && kinds.size === 1 ? { tier: "family", options: family, keep: true } : null;
+  if (!kinds.has(m.kind)) return null;
+  if (m.kind === "color") return { tier: "family", options: family, keep: true };
+  const steps = family.flatMap(([n, fv]) => {
+    const fm = measure(fv);
+    return fm && fm.kind === m.kind && "n" in fm ? [[n, fv, fm.n - m.n]] : [];
+  });
+  const same = steps.filter(([, , d]) => Math.abs(d) < 1e-6).map(([n, fv]) => [n, fv]);
+  if (same.length) return { tier: "exact", options: same, keep: !spacing };
+  const below = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
+  const above = Math.min(...steps.map(([, , d]) => d).filter((d) => d > 0));
+  const options = steps.filter(([, , d]) => d === below || d === above).map(([n, fv]) => [n, fv]);
+  const inside = Number.isFinite(below) && Number.isFinite(above);
+  return inside ? { tier: "near", options, keep: !spacing } : { tier: "end", options, keep: true };
+}
+function partsOf2(value) {
+  const out = [];
+  let part = "";
+  let depth = 0;
+  for (const ch of value.trim()) {
+    if (!depth && /\s/.test(ch)) {
+      if (part) out.push(part);
+      part = "";
+      continue;
+    }
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    part += ch;
+  }
+  if (part) out.push(part);
+  return out;
+}
+var isLiteralPart = (p) => /^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0 || isColorLiteral(p);
+var KEEP = "keep";
+var DELIBERATE = "deliberate, no token fits";
+function planValue(set, prop, value, hold) {
+  const family = familyFor(set, prop);
+  if (!family.length) return roleOf(set, prop).size ? null : "none";
+  const measurable = family.some(([, fv]) => measure(fv));
+  const parts = measurable ? partsOf2(value) : [value.trim()];
+  const slots = [];
+  let review;
+  const settle = (at, part, token) => {
+    const why = review === void 0 ? hold?.(token) : null;
+    if (why) review = `${token} ${why}`;
+    slots.push({ at, part, token });
+  };
+  for (const [at, part] of parts.entries()) {
+    if (measurable && /^(calc|min|max|clamp)\(/i.test(part)) return null;
+    if (measurable && !isLiteralPart(part)) continue;
+    if (COLOR_SHORTHANDS.has(prop) && measure(part)?.kind !== "color") continue;
+    const [only, ...more] = tokensFor(set, prop, part);
+    if (only !== void 0 && !more.length) {
+      settle(at, part, only);
+      continue;
+    }
+    const candidates = candidatesFor(set, prop, part);
+    if (!candidates) return null;
+    const [one, ...others] = candidates.tier === "exact" ? candidates.options : [];
+    if (one && !others.length) settle(at, part, one[0]);
+    else slots.push({ at, part, candidates });
+  }
+  if (!slots.length) return null;
+  return review === void 0 ? { parts, slots } : { parts, slots, review };
+}
+var remedyFor = (names) => {
+  if (!names.length) return "";
+  const shown = names.slice(0, 2).join(" or ");
+  return ` \u2192 ${shown}${names.length > 2 ? ` (+${names.length - 2} more)` : ""}`;
+};
+var stated = (s) => {
+  const decl2 = snippet(`${s.prop}: ${s.value}`);
+  if (s.judged) return `${decl2} \u2192 ${s.judged.spans.join(" ")}`;
+  return `${decl2}${remedyFor(s.tokens)}${s.review ? ` (review: ${s.review})` : ""}`;
+};
+var declarationMessage = (parts, tail) => messageParts(parts.map(stated), tail);
+function tokenRefsIn(value, prefixes) {
+  if (!prefixes.length) return [];
+  const out = [];
+  for (const m of String(value).matchAll(/var\(\s*(--[\w-]+)/g)) {
+    const name = m[1];
+    if (name !== void 0 && prefixes.some((p) => name.startsWith(p))) out.push(name);
+  }
+  return out;
+}
 
 // src/index-cache.ts
+import { readdirSync as readdirSync3, readFileSync as readFileSync5, rmSync as rmSync2, statSync as statSync2 } from "node:fs";
+import { dirname as dirname5, join as join8 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+var INDEX_FILE = /^index-[0-9a-f]+\.json$/;
 var RACY_MS = 2e3;
 var STALE_MS = 7 * 24 * 60 * 60 * 1e3;
 function stableJson(value) {
@@ -27563,11 +28063,11 @@ function codeStamp() {
   const stamp = (file, st) => `${file}:${st.size}:${st.mtimeMs}`;
   try {
     if (here.endsWith(".mjs")) return `${EMBEDDED_VERSION}|${stamp(here, statSync2(here))}`;
-    const dir = dirname4(here);
+    const dir = dirname5(here);
     const parts = [EMBEDDED_VERSION];
     const walk = (d) => {
-      for (const e of readdirSync3(d, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : 1)) {
-        const p = join6(d, e.name);
+      for (const e of readDir(d)) {
+        const p = join8(d, e.name);
         if (e.isDirectory()) walk(p);
         else if (e.name.endsWith(".ts")) parts.push(stamp(p, statSync2(p)));
       }
@@ -27588,7 +28088,7 @@ var IndexCache = class {
     CODE ??= codeStamp();
     const fp = sha256(`${CODE}
 ${stableJson(inputs)}`).slice(0, 16);
-    this.path = join6(projectStateDir(root2), `index-${fp}.json`);
+    this.path = join8(projectStateDir(root2), `index-${fp}.json`);
     const raw = readJson(this.path);
     this.#entries = new Map(raw?.version === 1 && raw.entries ? Object.entries(raw.entries) : []);
   }
@@ -27645,11 +28145,11 @@ ${stableJson(inputs)}`).slice(0, 16);
     const file = { version: 1, entries: Object.fromEntries(this.#entries) };
     if (writeJsonAtomic(this.path, file)) this.#dirty = false;
     try {
-      const dir = dirname4(this.path);
+      const dir = dirname5(this.path);
       const now = Date.now();
       for (const name of readdirSync3(dir))
-        if (/^index-[0-9a-f]+\.json$/.test(name) && join6(dir, name) !== this.path) {
-          const p = join6(dir, name);
+        if (INDEX_FILE.test(name) && join8(dir, name) !== this.path) {
+          const p = join8(dir, name);
           if (now - statSync2(p).mtimeMs > STALE_MS) rmSync2(p, { force: true });
         }
     } catch {
@@ -27701,7 +28201,7 @@ async function scanMany(jobs, ds, rules2) {
       debug(`scanned ${jobs.length} file(s) across ${n} worker(s)`);
       return out2;
     } catch (err) {
-      debug(`workers failed (${err instanceof Error ? err.message : String(err)}), scanning in-process`);
+      debug(`workers failed (${messageOf(err)}), scanning in-process`);
     }
   }
   const out = scanAll(jobs, ds, rules2);
@@ -27913,6 +28413,11 @@ function composites({
 }
 
 // src/checks/system/currency.ts
+var RULE_FOR_STATUS = {
+  locked: "system/locked-component",
+  legacy: "system/superseded-component"
+};
+var statusFlaggedBy = (id) => Object.keys(RULE_FOR_STATUS).find((s) => RULE_FOR_STATUS[s] === id) ?? null;
 var namedReplacements = (supersededBy) => [...(supersededBy ?? "").matchAll(/([A-Z][\w.]*)\s*\(\s*(@[\w@/.-]+)/g)].map((m) => ({
   name: String(m[1]),
   package: String(m[2])
@@ -27925,7 +28430,7 @@ function usableReplacement(registry, supersededBy) {
   const candidates = namedReplacements(supersededBy);
   if (!candidates.length) return true;
   return candidates.some((c) => {
-    const entry = registry.get(`${c.package}::${c.name}`) ?? registry.get(`${c.package}::${c.name.split(".")[0]}`);
+    const entry = registry.get(registryKey(c.package, c.name)) ?? registry.get(registryKey(c.package, c.name.split(".")[0] ?? c.name));
     return !entry || entry.status !== "locked" && entry.status !== "experimental";
   });
 }
@@ -27934,10 +28439,9 @@ function currency(imports, registry, enabled2) {
   const seen = /* @__PURE__ */ new Set();
   for (const ci of imports) {
     if (ci.file === void 0) continue;
-    const entry = registry.get(`${ci.package}::${ci.canonical}`);
-    if (!entry || entry.status !== "legacy" && entry.status !== "locked") continue;
-    const rule2 = entry.status === "locked" ? "system/locked-component" : "system/superseded-component";
-    if (!enabled2(rule2)) continue;
+    const entry = registry.get(registryKey(ci.package, ci.canonical));
+    const rule2 = entry && RULE_FOR_STATUS[entry.status];
+    if (!entry || !rule2 || !enabled2(rule2)) continue;
     if (!usableReplacement(registry, entry.supersededBy)) continue;
     const key = `${ci.file} ${rule2} ${ci.canonical} ${ci.package}`;
     if (seen.has(key)) continue;
@@ -28120,48 +28624,47 @@ function stripComments(text2) {
   }
   return out.join("");
 }
-function argumentsAt(text2, open) {
-  const args = [];
+var OPENERS = /* @__PURE__ */ new Set(["(", "[", "{"]);
+var CLOSERS = /* @__PURE__ */ new Set([")", "]", "}"]);
+function scanCode(text2, from, visit) {
   let depth = 0;
   let quote = null;
-  let start = open + 1;
-  const stop = Math.min(text2.length, open + ARGS_MAX);
-  for (let i = open + 1; i < stop; i++) {
-    const c = text2[i];
+  const stop = Math.min(text2.length, from + ARGS_MAX);
+  for (let i = from; i < stop; i++) {
+    const c = text2[i] ?? "";
     if (quote) {
       if (c === "\\") i++;
       else if (c === quote) quote = null;
       continue;
     }
-    if (c === "'" || c === '"') quote = c;
-    else if (c === "(" || c === "[" || c === "{") depth++;
-    else if (c === ")" && depth === 0) {
-      const last = text2.slice(start, i).trim();
-      if (last || args.length) args.push(last);
-      return args;
-    } else if (c === ")" || c === "]" || c === "}") depth--;
-    else if (c === "," && depth === 0) {
-      args.push(text2.slice(start, i).trim());
-      start = i + 1;
+    if (c === "'" || c === '"') {
+      quote = c;
+      continue;
     }
-  }
-  return null;
-}
-function closingAt(text2, open) {
-  let depth = 0;
-  let quote = null;
-  const stop = Math.min(text2.length, open + ARGS_MAX);
-  for (let i = open; i < stop; i++) {
-    const c = text2[i];
-    if (quote) {
-      if (c === "\\") i++;
-      else if (c === quote) quote = null;
-    } else if (c === "'" || c === '"') quote = c;
-    else if (c === "(" || c === "[" || c === "{") depth++;
-    else if ((c === ")" || c === "]" || c === "}") && --depth === 0) return i;
+    if (visit(c, i, depth)) return i;
+    if (OPENERS.has(c)) depth++;
+    else if (CLOSERS.has(c)) depth--;
   }
   return -1;
 }
+function argumentsAt(text2, open) {
+  const args = [];
+  let start = open + 1;
+  const end = scanCode(text2, open + 1, (c, i, depth) => {
+    if (depth !== 0) return false;
+    if (c === ")") return true;
+    if (c === ",") {
+      args.push(text2.slice(start, i).trim());
+      start = i + 1;
+    }
+    return false;
+  });
+  if (end === -1) return null;
+  const last = text2.slice(start, end).trim();
+  if (last || args.length) args.push(last);
+  return args;
+}
+var closingAt = (text2, open) => scanCode(text2, open, (c, _i, depth) => CLOSERS.has(c) && depth === 1);
 var literal = (arg) => {
   const m = /^'((?:[^'\\]|\\.)*)'$|^"((?:[^"\\$]|\\.)*)"$/.exec(arg.trim());
   return m ? m[1] ?? m[2] ?? "" : null;
@@ -28442,40 +28945,6 @@ var realPath = (path) => {
 };
 var partClass = (sel) => keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, "")).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
 var tagOf = (compound) => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
-function keyCompound(sel) {
-  let depth = 0;
-  let quote = "";
-  let start = 0;
-  const s = sel.trim();
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === "\\") i++;
-    else if (quote) {
-      if (ch === quote) quote = "";
-    } else if (ch === '"' || ch === "'") quote = ch;
-    else if (ch === "(" || ch === "[") depth++;
-    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
-    else if (!depth && (ch === " " || ch === "\n" || ch === "	" || ch === ">" || ch === "+" || ch === "~"))
-      start = i + 1;
-  }
-  return s.slice(start);
-}
-function ownLevel(compound) {
-  let depth = 0;
-  let quote = "";
-  let out = "";
-  for (let i = 0; i < compound.length; i++) {
-    const ch = compound[i] ?? "";
-    if (quote) {
-      if (ch === "\\") i++;
-      else if (ch === quote) quote = "";
-    } else if (ch === '"' || ch === "'") quote = ch;
-    else if (ch === "(" || ch === "[") depth++;
-    else if (ch === ")" || ch === "]") depth = Math.max(0, depth - 1);
-    else if (!depth) out += ch;
-  }
-  return out;
-}
 function compoundElements(compound, carriersByClass) {
   if (compound.includes("dsh-e") || compound.includes("\\")) return null;
   const own = ownLevel(compound);
@@ -28496,12 +28965,12 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
   const dirs2 = [];
   const unread = [];
   for (const src of sources) {
-    const dir = realPath(isAbsolute2(src) ? src : join7(root2, src));
+    const dir = realPath(under(root2, src));
     if (!dir) continue;
     dirs2.push(dir);
     const budget = { left: 400 };
     for (const file of cssFilesUnder(dir, budget, [".css", ".scss", ".less"])) {
-      const shown = toPosix(relative2(root2, file));
+      const shown = toPosix(relative3(root2, file));
       const syntax = await syntaxFor(file);
       if (!syntax.parse) {
         unread.push({ file: shown, message: `needs \`npm i -D ${syntax.missing}\` to be read` });
@@ -28527,10 +28996,11 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
       });
     }
     if (!budget.left)
-      unread.push({ file: toPosix(relative2(root2, dir)), message: "read the first 400 stylesheets only" });
+      unread.push({ file: toPosix(relative3(root2, dir)), message: "read the first 400 stylesheets only" });
   }
   return { classes, dirs: dirs2, unread };
 }
+var nearby = (line) => [line, line - 1];
 var DECLARATIONS = [
   typographyInCss,
   systemOverride,
@@ -28626,10 +29096,15 @@ async function analyze(config, {
 } = {}) {
   const ds = config.designSystem;
   const ruleIsLive = (rule2) => config.enabled[rule2];
+  const complete = (c) => ({
+    ...c,
+    severity: config.severityOf(c.rule),
+    rank: RULES[c.rule].rank
+  });
   const surfaceOf = (b) => surfaceFor(config.componentRegistry, b.package, b.component);
   const recorded = surfacesRecorded(config.componentRegistry);
   const surfaced = (b) => recorded(b.package, b.component);
-  const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+  const delivery = activeDelivery(config);
   const parseSuppressions = makeSuppressionParser(config.suppression);
   const limit = analyzeEntryBudget(config.maxEntries);
   const files = discover({ root: config.root, sources: config.sources, limit });
@@ -28647,12 +29122,12 @@ async function analyze(config, {
   const read = (abs, rel) => contents?.get(rel) ?? readFileSync7(abs, "utf8");
   const tokenPrefixes = ds.tokenPrefixes ?? [];
   const tokenSet = readTokenSources(config.root, ds.tokenSources, tokenPrefixes);
-  tokenSet.scopes = mergeScopes((config.profiles?.active ?? []).map((p) => p.tokenScopes));
+  tokenSet.scopes = mergeScopes(activeProfiles(config).map((p) => p.tokenScopes));
   const scopes = tokenSet.scopes;
   const realRoot = realPath(config.root) ?? config.root;
   const library = await readLibrary(realRoot, ds.styleSources, tokenPrefixes, tokenSet);
   const isLibrarySheet = (rel) => {
-    const abs = join7(realRoot, rel);
+    const abs = join9(realRoot, rel);
     return library.dirs.some((d) => abs === d || abs.startsWith(`${d}${sep2}`));
   };
   const tokenRefs = [];
@@ -28681,7 +29156,14 @@ async function analyze(config, {
     if (!config.enabled[rule2] || !reports(file)) return;
     const supp = suppByFile.get(file);
     if (supp && ledger.mute(supp, line, rule2, scopeLines)) return;
-    findings.push({ rule: rule2, severity: config.severityOf(rule2), file, line, message, ...f, rank: RULES[rule2].rank });
+    const { severity, rank: rank2 } = complete({ rule: rule2, file, line, message });
+    findings.push({ rule: rule2, severity, file, line, message, ...f, rank: rank2 });
+  };
+  const noteTokenRefs = (value, at, elements, { refs = true } = {}) => {
+    for (const name of tokenRefsIn(value, tokenPrefixes)) {
+      if (refs) tokenRefs.push({ ...at, name });
+      if (scopes && elements) scopedRefs.push({ ...at, name, value, elements: [...elements] });
+    }
   };
   const referenced = /* @__PURE__ */ new Set();
   const stems = /* @__PURE__ */ new Set();
@@ -28818,15 +29300,7 @@ async function analyze(config, {
     const unparsed = (message, code) => {
       diagnostics.parseErrors.push({ file: rel, message });
       if (config.enabled["stylesheet/unparsed"] && reports(rel))
-        findings.push({
-          rule: "stylesheet/unparsed",
-          severity: config.severityOf("stylesheet/unparsed"),
-          file: rel,
-          line: 1,
-          message,
-          code: code ?? message,
-          rank: RULES["stylesheet/unparsed"].rank
-        });
+        findings.push(complete({ rule: "stylesheet/unparsed", file: rel, line: 1, message, code: code ?? message }));
     };
     if (oversized(abs, rel, look)) {
       unparsed(`stylesheet over ${Math.round(MAX_BYTES2 / 1e3)}kB \u2014 skipped as generated`);
@@ -28871,7 +29345,7 @@ async function analyze(config, {
       const boundSystem = bound.filter((b) => b.isSystem);
       const boundText = bound.filter((b) => b.isText);
       const isGrid = cssRule.isGrid;
-      const scopeLines = [ruleLine, ruleLine - 1];
+      const scopeLines = nearby(ruleLine);
       const selector = selectors.join(", ");
       const media = cssRule.media;
       const elements = elementsOf(selectors);
@@ -28891,11 +29365,7 @@ async function analyze(config, {
           classDecls.push({ prop, value: decl2.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
         if (styling) touchesStyle = true;
         if (isLayoutDecl({ prop, value: decl2.value })) touchesLayout = true;
-        for (const name of tokenRefsIn(decl2.value, tokenPrefixes)) {
-          const ref = { file: rel, line, name, prop, scopeLines };
-          tokenRefs.push(ref);
-          if (scopes) scopedRefs.push({ ...ref, value: decl2.value, elements });
-        }
+        noteTokenRefs(decl2.value, { file: rel, line, prop, scopeLines }, elements);
         if (finding) pending.push({ ...finding, line, scopeLines });
       }
       if (touchesStyle) for (const c of allClasses) styledClasses.add(c);
@@ -28929,7 +29399,7 @@ async function analyze(config, {
     report(f);
   for (const el of inlineStyles) {
     if (!reports(el.file)) continue;
-    const scopeLines = [el.line, el.line - 1];
+    const scopeLines = nearby(el.line);
     const whole = ruleIsLive("system/inline-style") ? inlineStyle(el, ds.allowedInlineStyles) : null;
     if (whole) {
       report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
@@ -28939,17 +29409,9 @@ async function analyze(config, {
     const pending = [];
     const elements = el.element ? [el.element] : [];
     for (const d of el.decls) {
-      if (scopes)
-        for (const name of tokenRefsIn(d.value, tokenPrefixes))
-          scopedRefs.push({
-            file: el.file,
-            line: d.line ?? el.line,
-            name,
-            prop: d.prop,
-            scopeLines,
-            value: d.value,
-            elements
-          });
+      noteTokenRefs(d.value, { file: el.file, line: d.line ?? el.line, prop: d.prop, scopeLines }, elements, {
+        refs: false
+      });
       const { finding } = classifyDeclaration(d, { isGrid, enabled: ruleIsLive });
       if (finding)
         pending.push({
@@ -28978,8 +29440,11 @@ async function analyze(config, {
       if (supp && !tpl.error)
         for (const group of tpl.groups)
           for (const d of group.decls)
-            for (const name of tokenRefsIn(d.value, tokenPrefixes))
-              tokenRefs.push({ file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] });
+            noteTokenRefs(
+              d.value,
+              { file: tpl.file, line: d.line ?? tpl.line, prop: d.prop, scopeLines: [tpl.line] },
+              null
+            );
       continue;
     }
     if (tpl.error) {
@@ -29001,11 +29466,11 @@ async function analyze(config, {
       else if (group.selector) elements = nestedElements(group.selector);
       for (const d of group.decls) {
         if (supp)
-          for (const name of tokenRefsIn(d.value, tokenPrefixes)) {
-            const ref = { file: tpl.file, line: d.line ?? tpl.line, name, prop: d.prop, scopeLines: [tpl.line] };
-            tokenRefs.push(ref);
-            if (scopes) scopedRefs.push({ ...ref, value: d.value, elements });
-          }
+          noteTokenRefs(
+            d.value,
+            { file: tpl.file, line: d.line ?? tpl.line, prop: d.prop, scopeLines: [tpl.line] },
+            elements
+          );
         const { finding } = classifyDeclaration(d, {
           boundSystem: onTarget ? boundSystem : [],
           boundText: onTarget ? boundText : [],
@@ -29024,7 +29489,7 @@ async function analyze(config, {
           message: `${f.message}${where} (css-in-js)`,
           code: `css-in-js:${f.code ?? f.message}`,
           suffix: `${where} (css-in-js)`,
-          scopeLines: [tpl.line, tpl.line - 1],
+          scopeLines: nearby(tpl.line),
           elements
         });
     }
@@ -29072,13 +29537,7 @@ async function analyze(config, {
   for (const [file, s] of suppByFile) {
     directives.push(...s.directives);
     if (!config.enabled["suppression/malformed"] || !reports(file)) continue;
-    for (const m of s.malformed)
-      findings.push({
-        ...m,
-        severity: config.severityOf("suppression/malformed"),
-        code: m.message,
-        rank: RULES["suppression/malformed"].rank
-      });
+    for (const m of s.malformed) findings.push(complete({ ...m, code: m.message }));
   }
   for (const f of findings) {
     const elements = f.elements ?? [];
@@ -29130,14 +29589,14 @@ async function analyze(config, {
   if (suppress)
     ledger.settle(
       directives.filter((d) => reports(d.file)),
-      new Set(judge ? [] : ["patterns/judged-redirect"])
+      judge ? /* @__PURE__ */ new Set() : JUDGE_ONLY_RULES
     );
   cache2?.save();
   return {
     findings: unique,
     directives,
     diagnostics,
-    blocking: unique.some((f) => f.severity === "error"),
+    blocking: isBlocking(unique),
     // Only when the design system's own sources yielded tokens. The walk adds
     // whatever the project defines under the same prefix to this same set, and
     // one `--wpds-brand-color` of the project's own would otherwise pass for a
@@ -29148,6 +29607,7 @@ async function analyze(config, {
     ...liveControls ? { controls: liveControls } : {}
   };
 }
+var isBlocking = (findings) => findings.some((f) => f.severity === "error");
 function dedupe(findings) {
   const seen = /* @__PURE__ */ new Set();
   return findings.filter((f) => {
@@ -29162,8 +29622,22 @@ var findingKey = (f) => `${f.rule}|${PROJECT_RULES.has(f.rule) ? "<project>" : f
 
 // src/autofix.ts
 import { readFileSync as readFileSync8, writeFileSync as writeFileSync2 } from "node:fs";
-import { join as join8 } from "node:path";
+import { join as join10 } from "node:path";
 var CSS_FILE = /\.(css|scss|sass|less|pcss|postcss)$/i;
+var commentFor = (file, text2) => CSS_FILE.test(file) ? `/* ${text2} */` : `// ${text2}`;
+function directiveRefusal(lines, at, taken) {
+  const line = lines[at - 1];
+  if (line === void 0) return "line out of range";
+  if (taken(at - 1)) return "the line above already carries a directive \u2014 add the rule to it by hand";
+  if (/(?:^|[^#])\{/.test(line)) return "on the rule's opening line, where a directive would mute the whole rule";
+  return null;
+}
+function writeAbove(lines, at, text2) {
+  const line = lines[at - 1] ?? "";
+  const indent = /^[ \t]*/.exec(line)?.[0] ?? "";
+  const eol = line.endsWith("\r") ? "\r" : "";
+  lines.splice(at - 1, 0, `${indent}${text2}${eol}`);
+}
 function tokenFixes(findings) {
   const out = [];
   for (const f of findings) {
@@ -29220,7 +29694,7 @@ function applyTokenFixes(root2, findings, { dry = false } = {}) {
   const applied = [];
   const skipped = [];
   for (const [file, group] of byFile) {
-    const abs = join8(root2, file);
+    const abs = join10(root2, file);
     let text2;
     try {
       text2 = readFileSync8(abs, "utf8");
@@ -29284,7 +29758,7 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
   }
   const applied = [];
   for (const [file, group] of byFile) {
-    const abs = join8(root2, file);
+    const abs = join10(root2, file);
     let text2;
     try {
       text2 = readFileSync8(abs, "utf8");
@@ -29300,23 +29774,13 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
         applied.push(k);
         continue;
       }
-      const line = lines[k.line - 1];
-      if (line === void 0) {
-        skipped.push({ ...k, why: "line out of range" });
+      const why = directiveRefusal(lines, k.line, (line) => taken.has(`${file}\0${line}`));
+      if (why) {
+        skipped.push({ ...k, why });
         continue;
       }
-      if (taken.has(`${file}\0${k.line - 1}`)) {
-        skipped.push({ ...k, why: "the line above already carries a directive \u2014 add the rule to it by hand" });
-        continue;
-      }
-      if (/(?:^|[^#])\{/.test(line)) {
-        skipped.push({ ...k, why: "on the rule's opening line, where a directive would mute the whole rule" });
-        continue;
-      }
-      const indent = /^[ \t]*/.exec(line)?.[0] ?? "";
-      const eol = line.endsWith("\r") ? "\r" : "";
       const rules2 = rulesOn.get(`${file}\0${k.line}`) ?? "tokens/hardcoded-value";
-      lines.splice(k.line - 1, 0, `${indent}/* ${keyword} ${rules2} -- ${k.reason} */${eol}`);
+      writeAbove(lines, k.line, commentFor(file, directive(keyword, rules2, k.reason)));
       applied.push(k);
       last = k.line;
     }
@@ -29325,9 +29789,6 @@ function applyKeeps(root2, findings, keyword, { dry = false, directives = [] } =
   applied.sort((a, b) => byBytes(a.file, b.file) || a.line - b.line);
   return { applied, skipped };
 }
-
-// src/judge.ts
-import { readFileSync as readFileSync10 } from "node:fs";
 
 // src/judge/force.ts
 var forceQuery = (force) => ({
@@ -29373,9 +29834,9 @@ var valueQuery = (about) => ({
 
 // src/judge/variant.ts
 import { readFileSync as readFileSync9 } from "node:fs";
-import { join as join9 } from "node:path";
+import { join as join11 } from "node:path";
 function around(root2, file, line, before, after) {
-  const lines = readFileSync9(join9(root2, file), "utf8").split("\n");
+  const lines = readFileSync9(join11(root2, file), "utf8").split("\n");
   const i = line - 1;
   return {
     context_before: lines.slice(Math.max(0, i - before), i).join("\n"),
@@ -29537,6 +29998,7 @@ ${body2}`);
   return done.flat();
 }
 var judgedTail = (confidence2) => `(judged ${confidence2.toFixed(2)})`;
+var judgedAs = (a, spans) => ({ answer: a.choice, confidence: a.confidence, spans });
 function targetOf(f, withVariants) {
   if (f.rule !== "system/raw-element") return void 0;
   const name = /^\s*<?([A-Za-z_$][\w.$]*)/.exec(f.message.split("\u2192")[1] ?? "")?.[1];
@@ -29562,7 +30024,7 @@ async function judgeVariants(root2, findings, registry, auth, fetchImpl = fetch)
     const suggestion = not ? span : /variant="[^"]*"/.test(analog) ? analog.replace(/variant="[^"]*"/, span) : tag.test(analog) ? analog.replace(tag, `<${target.name} ${span}`) : `${analog} with ${span}`;
     const tail = judgedTail(a.confidence);
     f.message = messageLine(`${element} \u2192 ${suggestion}`, ` ${tail}`);
-    f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+    f.judged = judgedAs(a, [span, tail]);
     if (not) f.note = withoutReach(f.note, target.package);
     annotated++;
   });
@@ -29625,13 +30087,10 @@ async function judgeRedirects(controls, auth, severity, fetchImpl = fetch) {
 function tokenDescriptions(profiles) {
   const out = /* @__PURE__ */ new Map();
   for (const p of profiles) {
-    if (!p.tokenDescriptions) continue;
-    try {
-      const raw = JSON.parse(readFileSync10(p.tokenDescriptions, "utf8"));
-      for (const [name, text2] of Object.entries(raw))
-        if (!name.startsWith("$") && typeof text2 === "string") out.set(name, text2);
-    } catch {
-    }
+    const raw = p.tokenDescriptions ? readJson(p.tokenDescriptions) : null;
+    if (!isRecord(raw)) continue;
+    for (const [name, text2] of Object.entries(raw))
+      if (!name.startsWith("$") && typeof text2 === "string") out.set(name, text2);
   }
   return out;
 }
@@ -29748,7 +30207,7 @@ async function judgeRenames(root2, findings, set, auth, about = /* @__PURE__ */ 
     const tail = judgedTail(a.confidence);
     const span = a.choice === NONE ? "no token means this" : a.choice;
     f.message = messageLine(item.name, ` \u2192 ${span} ${tail}`);
-    f.judged = { answer: a.choice, confidence: a.confidence, spans: [span, tail] };
+    f.judged = judgedAs(a, [span, tail]);
     if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
     settled++;
   });
@@ -29756,12 +30215,11 @@ async function judgeRenames(root2, findings, set, auth, about = /* @__PURE__ */ 
 }
 
 // src/dtcg.ts
-import { readFileSync as readFileSync11, statSync as statSync5 } from "node:fs";
-import { basename, isAbsolute as isAbsolute3, join as join10, relative as relative3, resolve as resolvePath } from "node:path";
+import { readFileSync as readFileSync10, statSync as statSync5 } from "node:fs";
+import { basename, isAbsolute as isAbsolute3, relative as relative4, resolve as resolvePath } from "node:path";
 var TIERS = ["base", "semantic", "component"];
 var ALL_TIERS = [...TIERS, "unknown"];
 var isTier = (s) => ALL_TIERS.includes(s);
-var isNode = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
 function tokenFilesUnder(path, budget = 200) {
   let isDir;
   try {
@@ -29771,29 +30229,21 @@ function tokenFilesUnder(path, budget = 200) {
   }
   if (!isDir) return [path];
   const out = [];
-  const walk = (dir) => {
-    for (const e of readDir(dir)) {
-      const full = join10(dir, e.name);
-      if (e.isDirectory()) {
-        if (e.name !== "node_modules") walk(full);
-      } else if (e.name.endsWith(".json") && !e.name.startsWith(".")) {
-        if (out.length >= budget)
-          throw new Error(`more than ${budget} .json files under ${path}; point at the token sources`);
-        out.push(full);
-      }
-    }
-  };
-  walk(path);
+  for (const file of filesUnder(path, (name) => name.endsWith(".json") && !name.startsWith("."))) {
+    if (out.length >= budget)
+      throw new Error(`more than ${budget} .json files under ${path}; point at the token sources`);
+    out.push(file);
+  }
   if (!out.length) throw new Error(`no .json token files under ${path}`);
   return out;
 }
 var isToken = (n) => "$value" in n;
 function walkFile(raw, file, into, groupOf) {
-  if (!isNode(raw)) return;
+  if (!isRecord(raw)) return;
   const walk = (node, trail, inheritedType) => {
     const declared = typeof node.$type === "string" ? node.$type : inheritedType;
     for (const [key, child] of Object.entries(node)) {
-      if (key.startsWith("$") && key !== "$root" || !isNode(child)) continue;
+      if (key.startsWith("$") && key !== "$root" || !isRecord(child)) continue;
       const trailNext = [...trail, key];
       if (!isToken(child)) {
         walk(child, trailNext, declared);
@@ -29826,7 +30276,7 @@ function walkFile(raw, file, into, groupOf) {
 }
 var ALIAS = /^\{([^{}]+)\}$/;
 var aliasTarget = (value) => typeof value === "string" ? ALIAS.exec(value.trim())?.[1] ?? void 0 : void 0;
-function resolve3(tokens, groupOf) {
+function resolve5(tokens, groupOf) {
   const declaredOf = new Map([...tokens].map(([path, t]) => [path, t.type]));
   for (const t of tokens.values()) {
     const direct = aliasTarget(t.value);
@@ -29856,7 +30306,7 @@ function literalOf(value) {
   if (typeof value === "string") return value.trim();
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value)) return JSON.stringify(value);
-  if (!isNode(value)) return String(value);
+  if (!isRecord(value)) return String(value);
   if (typeof value.value === "number" && typeof value.unit === "string") return `${value.value}${value.unit}`;
   if (Array.isArray(value.components) && typeof value.colorSpace === "string") {
     const alpha = typeof value.alpha === "number" ? value.alpha : 1;
@@ -29913,7 +30363,7 @@ function hexOf(components2, alpha) {
   return `#${byte(r)}${byte(g)}${byte(b)}${alpha < 1 ? byte(alpha) : ""}`;
 }
 function inferType(value) {
-  if (isNode(value)) {
+  if (isRecord(value)) {
     if (Array.isArray(value.components)) return "color";
     if (typeof value.value === "number" && typeof value.unit === "string")
       return value.unit === "ms" || value.unit === "s" ? "duration" : "dimension";
@@ -29925,7 +30375,7 @@ function inferType(value) {
   if (typeof value === "number") return "number";
   if (typeof value !== "string") return "";
   const v = value.trim().toLowerCase();
-  if (/^#[0-9a-f]{3,8}$/.test(v) || /^(rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\(/.test(v)) return "color";
+  if (isColorLiteral(v)) return "color";
   if (/^-?[\d.]+(px|rem|em|%|vh|vw|pt)$/.test(v)) return "dimension";
   if (/^[\d.]+m?s$/.test(v)) return "duration";
   if (/^cubic-bezier\(/.test(v)) return "cubicBezier";
@@ -29950,7 +30400,7 @@ function tierOf(segments, dirs2 = []) {
   return { tier: "unknown", tierFrom: "unstated" };
 }
 function dirsOf(root2, file) {
-  const within = relative3(resolvePath(root2), resolvePath(file));
+  const within = relative4(resolvePath(root2), resolvePath(file));
   const rel = within.startsWith("..") || isAbsolute3(within) ? file : within;
   return rel.split(/[/\\]/).slice(0, -1).filter(Boolean);
 }
@@ -29962,14 +30412,14 @@ function readTokenDoc(path, label = basename(path).replace(/\.json$/, "")) {
   for (const file of files) {
     let raw;
     try {
-      raw = JSON.parse(readFileSync11(file, "utf8").replace(/^\uFEFF/, ""));
+      raw = JSON.parse(readFileSync10(file, "utf8").replace(/^\uFEFF/, ""));
     } catch (err) {
-      throw new Error(`${file} is not readable JSON: ${err instanceof Error ? err.message : String(err)}`);
+      throw new Error(`${file} is not readable JSON: ${messageOf(err)}`);
     }
     walkFile(raw, file, flat, groupOf);
   }
   if (!flat.size) throw new Error(`${path} holds no DTCG tokens ($value was not found anywhere)`);
-  resolve3(flat, groupOf);
+  resolve5(flat, groupOf);
   const byGroup = /* @__PURE__ */ new Map();
   for (const t of flat.values()) {
     const group = t.segments.slice(0, -1).join(".");
@@ -30211,12 +30661,7 @@ function planMap(from, to, opts = {}) {
   const ranks = [];
   const settled = [];
   for (const t of capped) {
-    const row = {
-      from: t.path,
-      type: t.type,
-      tier: t.tier,
-      fromValue: t.literal
-    };
+    const row = rowOf(t);
     const twin = opts.settleExact === false ? void 0 : byPath.get(t.path);
     if (twin && comparable(t.type, twin.type)) {
       settled.push({ ...row, to: twin.path, toValue: twin.literal, confidence: 1, how: "exact", considered: [] });
@@ -30248,16 +30693,16 @@ async function askCounterparts(plan, auth, fetchImpl = fetch, ctx = DEFAULT_CONT
   );
   return { mappings, answers };
 }
+var rowOf = (t) => ({
+  from: t.path,
+  type: t.type,
+  tier: t.tier,
+  fromValue: t.literal
+});
 function rowFor(job, answer) {
   const { token, candidates } = job;
   const none = noneKey(candidates);
-  const row = {
-    from: token.path,
-    type: token.type,
-    tier: token.tier,
-    fromValue: token.literal,
-    considered: candidates.map((c) => c.path)
-  };
+  const row = { ...rowOf(token), considered: candidates.map((c) => c.path) };
   if (!answer || !(answer.confidence >= FLOOR2)) {
     const at = answer?.choice === none ? null : candidates.find((c) => c.path === answer?.choice);
     return {
@@ -30317,6 +30762,8 @@ var OUTCOMES = [
   ["unsure", "under the floor"],
   ["absent", "nothing of their type to compare"]
 ];
+var outcomesLine = (counts) => OUTCOMES.filter(([how]) => counts[how]).map(([how, text2]) => `${counts[how]} ${text2}`);
+var scopeNote = (plan) => plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : "";
 function formatMap(plan, mappings) {
   const width = (xs) => Math.min(48, Math.max(0, ...xs.map((x) => x.length)));
   const pathW = width(mappings.map((m) => m.from));
@@ -30355,10 +30802,7 @@ function formatMap(plan, mappings) {
     }
     out.push("\n");
   }
-  const counts = countBy(mappings);
-  const said = OUTCOMES.filter(([how]) => counts[how]).map(([how, text2]) => `${counts[how]} ${text2}`);
-  const scoped = plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : "";
-  out.push(`${mappings.length} token(s): ${said.join(", ")}.${scoped}
+  out.push(`${mappings.length} token(s): ${outcomesLine(countBy(mappings)).join(", ")}.${scopeNote(plan)}
 `);
   return out.join("");
 }
@@ -30395,29 +30839,70 @@ function formatPlan(plan, show) {
       );
     out.push("\n");
   }
-  const counts = countBy(plan.settled);
-  const said = OUTCOMES.filter(([how]) => counts[how]).map(([how, text2]) => `${counts[how]} ${text2}`);
-  const scoped = plan.skipped ? dim(` (${plan.skipped} token(s) outside this run's scope)`) : "";
+  const said = outcomesLine(countBy(plan.settled));
   out.push(
-    `${plan.jobs.length + plan.settled.length} token(s): ${said.length ? `${said.join(", ")}, ` : ""}${plan.jobs.length} would be asked.${scoped}
+    `${plan.jobs.length + plan.settled.length} token(s): ${said.length ? `${said.join(", ")}, ` : ""}${plan.jobs.length} would be asked.${scopeNote(plan)}
 `
   );
   return out.join("");
 }
 
-// src/baseline.ts
-import { existsSync as existsSync5, readFileSync as readFileSync12, writeFileSync as writeFileSync3 } from "node:fs";
-import { dirname as dirname5 } from "node:path";
-function readBaseline(path) {
-  if (!existsSync5(path)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync12(path, "utf8"));
-    if (!Array.isArray(parsed.entries)) return null;
-    const entries = parsed.entries.filter((e) => typeof e === "string");
-    return { createdAt: parsed.createdAt ?? "", entries, set: new Set(entries) };
-  } catch {
-    return null;
+// src/cache.ts
+var ANSWER_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+var ANSWER_MAX_ENTRIES = 2e4;
+var AnswerCache = class _AnswerCache {
+  path;
+  #entries = null;
+  #added = /* @__PURE__ */ new Map();
+  constructor(path) {
+    this.path = path;
   }
+  #load() {
+    if (this.#entries) return this.#entries;
+    this.#entries = _AnswerCache.#read(this.path);
+    return this.#entries;
+  }
+  static #read(path) {
+    const raw = readJson(path);
+    const out = /* @__PURE__ */ new Map();
+    if (raw?.version !== 1 || !raw.entries || typeof raw.entries !== "object") return out;
+    const now = Date.now();
+    for (const [key, entry] of Object.entries(raw.entries))
+      if (Array.isArray(entry?.a) && typeof entry.t === "number" && now - entry.t < ANSWER_MAX_AGE_MS)
+        out.set(key, entry);
+    return out;
+  }
+  get(key) {
+    return this.#load().get(key)?.a;
+  }
+  set(key, answers) {
+    const entry = { a: answers, t: Date.now() };
+    this.#load().set(key, entry);
+    this.#added.set(key, entry);
+  }
+  /** How many answers this run bought; nothing to write when it is zero. */
+  get added() {
+    return this.#added.size;
+  }
+  save() {
+    if (!this.#added.size) return;
+    const merged = _AnswerCache.#read(this.path);
+    for (const [k, v] of this.#added) merged.set(k, v);
+    const kept = [...merged].sort((x, y) => y[1].t - x[1].t).slice(0, ANSWER_MAX_ENTRIES);
+    const file = { version: 1, entries: Object.fromEntries(kept) };
+    if (writeJsonAtomic(this.path, file)) this.#added.clear();
+  }
+};
+
+// src/baseline.ts
+import { existsSync as existsSync6, writeFileSync as writeFileSync3 } from "node:fs";
+import { dirname as dirname6 } from "node:path";
+function readBaseline(path) {
+  if (!existsSync6(path)) return null;
+  const parsed = readJson(path);
+  if (!isRecord(parsed) || !Array.isArray(parsed.entries)) return null;
+  const entries = parsed.entries.filter((e) => typeof e === "string");
+  return { createdAt: parsed.createdAt ?? "", entries, set: new Set(entries) };
 }
 var entriesOf = (result) => [...new Set(result.findings.map(findingKey))].sort();
 var ruleOf = (entry) => entry.slice(0, entry.indexOf("|"));
@@ -30438,11 +30923,11 @@ function diffBaseline(result, prior) {
     for (const e of entries) if (!prior.set.has(e)) row(ruleOf(e)).added++;
     for (const e of prior.entries) if (!now.has(e)) row(ruleOf(e)).removed++;
   }
-  const rules2 = [...rows.values()].sort((a, b) => b.findings - a.findings || (a.rule < b.rule ? -1 : 1));
+  const rules2 = [...rows.values()].sort((a, b) => b.findings - a.findings || byBytes(a.rule, b.rule));
   return { entries: entries.length, rules: rules2 };
 }
 function writeBaseline(full, result) {
-  ensureDir(dirname5(full));
+  ensureDir(dirname6(full));
   const entries = entriesOf(result);
   const prior = readBaseline(full);
   const unchanged = prior !== null && prior.entries.length === entries.length && prior.entries.every((e, i) => e === entries[i]);
@@ -30475,7 +30960,7 @@ function applyBaseline(result, baseline, {
   return {
     ...result,
     findings: kept,
-    blocking: kept.some((f) => f.severity === "error"),
+    blocking: isBlocking(kept),
     baselined: accepted.length,
     baselinedFindings: accepted,
     fixed: scoped ? null : [...baseline.set].filter((k) => {
@@ -30485,390 +30970,10 @@ function applyBaseline(result, baseline, {
   };
 }
 
-// src/config.ts
-import { existsSync as existsSync6, readFileSync as readFileSync13 } from "node:fs";
-import { dirname as dirname6, isAbsolute as isAbsolute4, join as join11, relative as relative4, resolve as resolve4 } from "node:path";
-import { pathToFileURL } from "node:url";
-
-// src/registry.ts
-var declaredPackages = (raw) => {
-  const packages = raw?.packages;
-  return Array.isArray(packages) ? packages.filter((p) => typeof p === "string" && p !== "") : [];
-};
-function registryApplies(raw, dsPackages) {
-  const declared = declaredPackages(raw);
-  if (!declared.length) return true;
-  return (dsPackages ?? []).some((p) => declared.includes(p));
-}
-
-// src/config.ts
-var CONFIG_NAMES = ["loupe.config.mjs", "loupe.config.js", "loupe.config.json", ".louperc.json"];
-var DEFAULTS = {
-  designSystem: {
-    // What to call this design system in a finding. Rule guidance that names
-    // the system reads as advice about *your* stack; a generic phrase reads as
-    // advice about linting.
-    name: "",
-    packages: [],
-    tokenPrefixes: [],
-    tokenSources: [],
-    // The system's own stylesheets, read for the classes they define. A
-    // prefixed system is covered by `namespaces.external`; an unprefixed one
-    // (`.field-label`) is only recognisable by what its stylesheets declare.
-    styleSources: [],
-    cssInJsPackages: [],
-    normalizeExports: "",
-    components: { layout: [], text: [] },
-    elementMap: {},
-    // Props that hand a component the element it should render — `render` in WPDS
-    // and Base UI, `as` and `component` elsewhere. The element in one of these is
-    // an argument naming a tag, not markup being rendered. `[]` turns it off.
-    substitutionProps: ["render", "as", "component"],
-    allowedInlineStyles: {}
-  },
-  namespaces: { project: [], external: [], neverDead: [] },
-  sources: {
-    styles: ["**/*.css", "**/*.scss"],
-    markup: ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"],
-    references: ["**/*.php", "**/*.html"],
-    ignore: ["**/node_modules/**", "**/build/**", "**/dist/**", "**/vendor/**", "**/.git/**"]
-  },
-  suppression: { keyword: "ds-allow", blanket: ["ds-disable"], aliases: [] },
-  rules: {},
-  patterns: null,
-  // The component-currency registry (recommended/legacy/locked/experimental
-  // per component+package). Named distinctly from `designSystem.components`
-  // (the layout/text categorization) — same word, unrelated concern.
-  componentRegistry: null,
-  baseline: DEFAULT_BASELINE,
-  // timeoutMs is the hook's whole judge phase, well inside the 60s Claude Code
-  // gives PostToolUse: the analysis on either side of it needs the rest.
-  hook: { maxAttempts: 3, maxFindings: 12, timeoutMs: 3e4 }
-};
-var isObj = (v) => Boolean(v) && typeof v === "object" && !Array.isArray(v);
-function merge(base, over) {
-  if (!isObj(base) || !isObj(over)) return over === void 0 ? base : over;
-  const out = { ...base };
-  for (const [k, v] of Object.entries(over)) out[k] = isObj(v) && isObj(base[k]) ? merge(base[k], v) : v;
-  return out;
-}
-function mergeConfig(base, over) {
-  const out = merge(base, over);
-  if (isObj(base.rules) && isObj(over.rules)) out.rules = { ...base.rules, ...over.rules };
-  return out;
-}
-function findConfig(start) {
-  let dir = resolve4(start);
-  for (; ; ) {
-    for (const name of CONFIG_NAMES) {
-      const p = join11(dir, name);
-      if (existsSync6(p)) return p;
-    }
-    const pkg = join11(dir, "package.json");
-    if (existsSync6(pkg)) {
-      try {
-        const parsed = JSON.parse(readFileSync13(pkg, "utf8"));
-        if (isObj(parsed) && parsed.loupe) return pkg;
-      } catch {
-      }
-    }
-    const up = dirname6(dir);
-    if (up === dir) return null;
-    dir = up;
-  }
-}
-async function readConfigFile(path) {
-  if (path.startsWith(PRESET_DIR) && !existsSync6(path)) {
-    const embedded = EMBEDDED_PRESETS[presetKey(path.slice(PRESET_DIR.length + 1).replace(/\.json$/, ""))];
-    if (embedded) return embedded;
-  }
-  if (path.endsWith(".json")) {
-    const parsed = JSON.parse(readFileSync13(path, "utf8"));
-    return path.endsWith("package.json") ? parsed.loupe : parsed;
-  }
-  const mod = await import(pathToFileURL(path).href);
-  return mod.default ?? mod;
-}
-async function resolveExtends(spec, fromDir) {
-  if (hasPreset(spec)) return { path: join11(PRESET_DIR, `${presetKey(spec)}.json`), dir: PRESET_DIR };
-  const asPath = isAbsolute4(spec) ? spec : join11(fromDir, spec);
-  if (existsSync6(asPath)) return { path: asPath, dir: dirname6(asPath) };
-  throw new Error(`cannot resolve extends: ${spec}`);
-}
-var freshWalk = () => ({ ancestors: /* @__PURE__ */ new Set(), applied: /* @__PURE__ */ new Set() });
-async function loadChain(path, walk = freshWalk()) {
-  const real = resolve4(path);
-  if (walk.ancestors.has(real)) throw new Error(`circular extends at ${real}`);
-  if (walk.applied.has(real)) return { raw: {}, ruleFrom: {} };
-  walk.applied.add(real);
-  const raw = await readConfigFile(real) ?? {};
-  const label = real.startsWith(PRESET_DIR) ? `preset ${real.slice(PRESET_DIR.length + 1).replace(/\.json$/, "")}` : real;
-  return expandExtends(raw, dirname6(real), label, {
-    ancestors: /* @__PURE__ */ new Set([...walk.ancestors, real]),
-    applied: walk.applied
-  });
-}
-async function expandExtends(raw, fromDir, label, walk = freshWalk()) {
-  raw = anchorProfiles(raw, fromDir);
-  const own = Object.fromEntries(Object.keys(isObj(raw?.rules) ? raw.rules : {}).map((id) => [id, label]));
-  if (!raw?.extends) return { raw: raw ?? {}, ruleFrom: own };
-  const specs = Array.isArray(raw.extends) ? raw.extends : [raw.extends];
-  let base = {};
-  let ruleFrom = {};
-  for (const spec of specs) {
-    const { path: p } = await resolveExtends(spec, fromDir);
-    const parent = await loadChain(p, walk);
-    base = mergeConfig(base, parent.raw);
-    ruleFrom = { ...ruleFrom, ...parent.ruleFrom };
-  }
-  const { extends: _drop, ...rest } = raw;
-  return { raw: mergeConfig(base, rest), ruleFrom: { ...ruleFrom, ...own } };
-}
-function anchorProfiles(raw, fromDir) {
-  if (!raw || raw.profiles === void 0) return raw;
-  const at = (p) => typeof p === "string" && p !== "" ? resolve4(fromDir, p) : p;
-  const spec = raw.profiles;
-  return { ...raw, profiles: Array.isArray(spec) ? spec.map(at) : at(spec) };
-}
-function listPresets() {
-  return presetNames().sort((a, b) => Number(a === "generic") - Number(b === "generic"));
-}
-function shippedVocabulary() {
-  const keywords = /* @__PURE__ */ new Set([DEFAULTS.suppression.keyword]);
-  const blanket = new Set(DEFAULTS.suppression.blanket);
-  try {
-    for (const name of presetNames()) {
-      try {
-        const raw = readPreset(name);
-        const supp = isObj(raw) ? raw.suppression : void 0;
-        if (!isObj(supp)) continue;
-        const kw = supp.keyword;
-        if (typeof kw === "string" && kw) keywords.add(kw);
-        const bl = supp.blanket;
-        if (Array.isArray(bl)) {
-          for (const b of bl) if (typeof b === "string" && b) blanket.add(b);
-        }
-      } catch {
-      }
-    }
-  } catch {
-  }
-  return { keywords: [...keywords], blanket };
-}
-function compilePatterns(patterns) {
-  return (patterns ?? []).map((p) => new RegExp(`^${p.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`));
-}
-function normalize(raw, { root: root2, ruleFrom = {} }) {
-  const cfg = merge(DEFAULTS, raw ?? {});
-  const ds = cfg.designSystem;
-  const patterns = readRegistry(cfg.patterns, root2, ds.packages, loadPatterns, []);
-  const componentRegistry = readRegistry(cfg.componentRegistry, root2, ds.packages, loadComponents, /* @__PURE__ */ new Map());
-  const rules2 = Object.fromEntries(RULE_IDS.map((id) => [id, { severity: RULES[id].severity }]));
-  const ruleOrigins = {};
-  for (const [rawId, value] of Object.entries(cfg.rules ?? {})) {
-    const id = canonicalRuleId(rawId);
-    if (!isRuleId(id)) throw new Error(`unknown rule in config: ${rawId}`);
-    rules2[id] = ruleSetting(rawId, value);
-    const from = ruleFrom[rawId];
-    ruleOrigins[id] = from === void 0 ? "config" : isAbsolute4(from) ? relative4(root2, from) || from : from;
-  }
-  const elementMap = /* @__PURE__ */ new Map();
-  for (const [tag, v] of Object.entries(ds.elementMap ?? {})) {
-    const entry = typeof v === "string" ? { component: v, styledOnly: false } : v;
-    if (entry.values === void 0 !== (entry.attribute === void 0))
-      throw new Error(`elementMap.${tag}: attribute and values go together`);
-    if (entry.render !== void 0 && !(typeof entry.render === "string" && /^[a-z][a-z0-9-]*$/i.test(entry.render)))
-      throw new Error(
-        `elementMap.${tag}.render must be an element name like "h4", got: ${JSON.stringify(entry.render)}`
-      );
-    elementMap.set(tag.toLowerCase(), { styledOnly: false, ...entry });
-  }
-  const substitutionProps = ds.substitutionProps ?? DEFAULTS.designSystem.substitutionProps;
-  if (!Array.isArray(substitutionProps) || substitutionProps.some((p) => typeof p !== "string"))
-    throw new Error(
-      `designSystem.substitutionProps must be an array of prop names, got: ${JSON.stringify(substitutionProps)}`
-    );
-  const styleSources = ds.styleSources ?? [];
-  if (!Array.isArray(styleSources) || styleSources.some((p) => typeof p !== "string" || p === ""))
-    throw new Error(`designSystem.styleSources must be an array of paths, got: ${JSON.stringify(styleSources)}`);
-  const allowedInlineStyles = ds.allowedInlineStyles ?? {};
-  if (!isObj(allowedInlineStyles) || Object.values(allowedInlineStyles).some((v) => !Array.isArray(v) || v.some((p) => typeof p !== "string")))
-    throw new Error(
-      `designSystem.allowedInlineStyles must map component names to arrays of CSS properties, got: ${JSON.stringify(allowedInlineStyles)}`
-    );
-  const maxEntries = cfg.maxEntries;
-  if (maxEntries !== void 0 && maxEntries !== null && !(Number.isInteger(maxEntries) && maxEntries > 0))
-    throw new Error(`maxEntries must be a positive whole number of entries, got: ${JSON.stringify(maxEntries)}`);
-  const profileSpec = cfg.profiles ?? [];
-  const profileList = typeof profileSpec === "string" ? [profileSpec] : Array.isArray(profileSpec) ? profileSpec : [profileSpec];
-  if (profileList.some((p) => typeof p !== "string" || p === ""))
-    throw new Error(`profiles must be a directory or an array of directories, got: ${JSON.stringify(profileSpec)}`);
-  const profileDirs = profileList.map((p) => resolve4(root2, p));
-  const pin = cfg.profile;
-  if (pin !== void 0 && pin !== null && !(typeof pin === "string" && pin !== ""))
-    throw new Error(`profile must be a profile id or "none", got: ${JSON.stringify(pin)}`);
-  const layoutComponents = ds.components?.layout ?? [];
-  const textComponents = ds.components?.text ?? [];
-  const shipped = shippedVocabulary();
-  const declared = Array.isArray(cfg.suppression.aliases) ? cfg.suppression.aliases : [];
-  const isTerm = (v) => typeof v === "string" && v !== "";
-  const keyword = isTerm(cfg.suppression.keyword) ? cfg.suppression.keyword : DEFAULTS.suppression.keyword;
-  const blanket = Array.isArray(cfg.suppression.blanket) ? cfg.suppression.blanket.filter(isTerm) : [...DEFAULTS.suppression.blanket];
-  const suppression = {
-    ...cfg.suppression,
-    keyword,
-    blanket,
-    aliases: [.../* @__PURE__ */ new Set([...shipped.keywords, ...declared])].filter(
-      (a) => isTerm(a) && a !== keyword && !shipped.blanket.has(a)
-    )
-  };
-  const neverDead = compilePatterns(cfg.namespaces.neverDead);
-  const projectPrefixes = cfg.namespaces.project ?? [];
-  const externalPrefixes = cfg.namespaces.external ?? [];
-  const config = {
-    root: root2,
-    raw: cfg,
-    // Overwritten by `loadConfig`, which knows which of the five resolution
-    // paths won. Normalizing a bare object is the inline case by definition.
-    source: { kind: "inline" },
-    inferred: false,
-    profileDirs,
-    profilePin: typeof pin === "string" ? pin : null,
-    designSystem: {
-      name: ds.name || "",
-      packages: ds.packages ?? [],
-      tokenPrefixes: ds.tokenPrefixes ?? [],
-      tokenSources: ds.tokenSources ?? [],
-      styleSources,
-      cssInJsPackages: ds.cssInJsPackages ?? [],
-      normalizeExports: ds.normalizeExports ? new RegExp(ds.normalizeExports) : null,
-      layoutComponents,
-      textComponents,
-      knownComponents: /* @__PURE__ */ new Set([...layoutComponents, ...textComponents]),
-      elementMap,
-      substitutionProps: new Set(substitutionProps),
-      allowedInlineStyles: new Map(
-        Object.entries(allowedInlineStyles).map(([c, props]) => [
-          c,
-          new Set(props.map((p) => p.toLowerCase()))
-        ])
-      )
-    },
-    patterns,
-    componentRegistry,
-    sources: cfg.sources,
-    suppression,
-    // An empty `baseline` names nothing, as an empty `--baseline=` does.
-    baselinePath: cfg.baseline || DEFAULT_BASELINE,
-    hook: cfg.hook,
-    ...typeof maxEntries === "number" ? { maxEntries } : {},
-    rules: rules2,
-    ruleFrom: ruleOrigins,
-    severityOf: (id) => rules2[id].severity,
-    isProject: (cls) => projectPrefixes.some((p) => cls.startsWith(p)),
-    isExternal: (cls) => externalPrefixes.some((p) => cls.startsWith(p)),
-    isNeverDead: (cls) => neverDead.some((re) => re.test(cls))
-  };
-  return { ...config, enabled: enabledRules(config) };
-}
-function ruleSetting(rawId, value) {
-  if (isSeverity(value)) return { severity: value };
-  if (Array.isArray(value))
-    throw new Error(`rule options are no longer supported \u2014 write "${rawId}": ${JSON.stringify(value[0])}`);
-  if (!isObj(value)) throw new Error(`bad severity for ${rawId}: ${String(value)}`);
-  const extra = Object.keys(value).filter((k) => k !== "severity" && k !== "reason");
-  if (extra.length)
-    throw new Error(
-      `unknown key${extra.length > 1 ? "s" : ""} in the setting for ${rawId}: ${extra.join(", ")} \u2014 a rule setting takes only severity and reason`
-    );
-  const { severity, reason } = value;
-  if (!isSeverity(severity)) throw new Error(`bad severity for ${rawId}: ${String(severity)}`);
-  if (reason === void 0) return { severity };
-  if (typeof reason !== "string" || !reason.trim())
-    throw new Error(`the reason for ${rawId} must be a non-empty string, got: ${JSON.stringify(reason)}`);
-  return { severity, reason: reason.trim() };
-}
-function readRegistry(spec, root2, packages, load, empty) {
-  if (Array.isArray(spec)) return load(spec);
-  if (typeof spec !== "string") return empty;
-  try {
-    const raw = JSON.parse(readFileSync13(isAbsolute4(spec) ? spec : join11(root2, spec), "utf8"));
-    return registryApplies(raw, packages) ? load(raw) : empty;
-  } catch {
-    return empty;
-  }
-}
-function enabledRules(config) {
-  const ds = config.designSystem;
-  const hasPackages = ds.packages.length > 0;
-  const hasComponents = hasPackages && ds.layoutComponents.length + ds.textComponents.length > 0;
-  const capability = {
-    packages: hasPackages,
-    components: hasComponents,
-    layoutComponents: hasComponents && ds.layoutComponents.length > 0,
-    textComponents: hasComponents && ds.textComponents.length > 0,
-    elementMap: ds.elementMap.size > 0,
-    tokenPrefixes: ds.tokenPrefixes.length > 0,
-    patternRegistry: hasPackages && config.patterns.length > 0,
-    componentRegistry: config.componentRegistry.size > 0,
-    projectNamespace: (config.raw.namespaces.project ?? []).length > 0
-  };
-  return Object.fromEntries(
-    RULE_IDS.map((id) => [
-      id,
-      RULES[id].needs.every((n) => capability[n]) && config.rules[id].severity !== "off"
-    ])
-  );
-}
-function setPatterns(config, patterns) {
-  config.patterns = patterns ?? [];
-  config.enabled = enabledRules(config);
-  return config;
-}
-function setComponentRegistry(config, componentRegistry) {
-  config.componentRegistry = componentRegistry ?? /* @__PURE__ */ new Map();
-  config.enabled = enabledRules(config);
-  return config;
-}
-async function loadConfig({
-  root: root2,
-  configPath,
-  preset: preset2,
-  inline,
-  inferred = false
-}) {
-  let chain;
-  let source;
-  if (configPath) {
-    chain = await loadChain(resolve4(configPath));
-    source = { kind: "file", path: resolve4(configPath) };
-  } else if (preset2) {
-    if (!hasPreset(preset2)) throw new Error(`unknown preset: ${preset2}`);
-    chain = await loadChain(join11(PRESET_DIR, `${presetKey(preset2)}.json`));
-    source = { kind: "preset", name: preset2 };
-  } else {
-    const found = findConfig(root2);
-    if (found) {
-      chain = await loadChain(found);
-      source = { kind: "file", path: found };
-    } else if (inline) {
-      chain = await expandExtends(inline, root2, inferred ? "inferred config" : "inline config");
-      source = { kind: inferred ? "inferred" : "inline" };
-    } else {
-      chain = await loadChain(join11(PRESET_DIR, "generic.json"));
-      source = { kind: "preset", name: "generic" };
-    }
-  }
-  const normalized = normalize(chain.raw, { root: root2, ruleFrom: chain.ruleFrom });
-  normalized.source = source;
-  normalized.inferred = source.kind === "inferred";
-  return normalized;
-}
-
 // src/report.ts
-import { createHash as createHash3 } from "node:crypto";
 var SEV_MARK = { error: "\u2717", warn: "\u2022" };
 var SEV_WORD = { error: "blocking", warn: "advisory" };
+var DIR_CAP = 12;
 var COMPONENT = /<\/?[A-Z][A-Za-z0-9]*\s*\/?>|<[A-Z][A-Za-z0-9]*(?=\s)|\b[A-Z][A-Za-z0-9]+(?=\s*[(),\u2192]|$)/g;
 var components = (message) => message.replace(COMPONENT, cyan);
 var painted = (f) => {
@@ -31041,7 +31146,7 @@ function formatAgent(result, config, {
     );
     lines.push(
       dim(
-        `To suppress a specific finding, add \`${kw} <ruleId> -- <reason>\` on the offending line or the line above.`
+        `To suppress a specific finding, add \`${directive(kw, "<ruleId>", "<reason>")}\` on the offending line or the line above.`
       )
     );
     for (const m of nearMisses(result)) lines.push(yellow(`  ! ${m}`));
@@ -31084,7 +31189,7 @@ function fingerprints(findings) {
     const key = findingKey(f);
     const nth = seen.get(key) ?? 0;
     seen.set(key, nth + 1);
-    return createHash3("sha256").update(nth === 0 ? key : `${key}|#${nth}`).digest("hex").slice(0, 16);
+    return sha256(nth === 0 ? key : `${key}|#${nth}`).slice(0, 16);
   });
 }
 function reportPayload(result, config) {
@@ -31349,8 +31454,10 @@ var JS = `
   var byRank = new Map();
   var fixable = new Set();
   var state = { rule: null, severity: null, q: '' };
-  var MARK = { error: '\\u2717', warn: '\\u2022' };
-  var WORD = { error: 'blocking', warn: 'advisory' };
+  // The engine's own tables, interpolated: the page draws a severity exactly
+  // as the terminal and the pane do.
+  var MARK = ${JSON.stringify(SEV_MARK)};
+  var WORD = ${JSON.stringify(SEV_WORD)};
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -31501,8 +31608,8 @@ var JS = `
   }
 
   // Top directories only. Past the cap the tail is folded into one row rather
-  // than truncated silently.
-  var DIR_CAP = 12;
+  // than truncated silently. The pane folds at the same row (\`DIR_CAP\` in report.ts).
+  var DIR_CAP = ${DIR_CAP};
   function renderPaths(rows) {
     var counts = tally(rows, function (f) { return dirOf(f.file); });
     var shown = counts.slice(0, DIR_CAP);
@@ -31655,6 +31762,18 @@ var JS = `
 })();
 `;
 var embed = (json) => json.replace(/</g, "\\u003c");
+var htmlDocument = ({ title, head: head2 = "", body: body2 }) => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title>${head2}
+</head>
+<body>
+${body2}
+</body>
+</html>
+`;
 var WHY_CLEAN = "a clean result covers only what could be read";
 var WHY_DIRTY = "every number below is a floor, not a total";
 var bannerBody = (n, why) => `<b>${n} file(s) could not be parsed</b> and were skipped entirely \u2014 ${why}. See <code>stylesheet/unparsed</code>.`;
@@ -31723,22 +31842,13 @@ ${banner}${main2}
 // src/report-html.ts
 function formatHtml(result, config) {
   const payload = embed(JSON.stringify(reportPayload(result, config)));
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loupe report</title>
-</head>
-<body>
-${body({ payload, clean: result.findings.length === 0, parseErrors: result.diagnostics.parseErrors.length })}
-</body>
-</html>
-`;
+  return htmlDocument({
+    title: "Loupe report",
+    body: body({ payload, clean: result.findings.length === 0, parseErrors: result.diagnostics.parseErrors.length })
+  });
 }
 
 // src/report-pane.ts
-var DIR_CAP = 12;
 var FILE_CAP = 8;
 var dirOf = (file) => {
   const i = file.lastIndexOf("/");
@@ -31835,7 +31945,6 @@ function barChart(rows, empty) {
   }).join("");
   return `${open}${body2}</svg>`;
 }
-var GLYPH = { error: "\u2717", warn: "\u2022", off: "" };
 function paneFromPayload(p) {
   const ruleRows = rules(p);
   const dirRows = dirs(p);
@@ -31844,7 +31953,7 @@ function paneFromPayload(p) {
       label: r.id,
       count: r.count,
       paint: r.severity,
-      glyph: GLYPH[r.severity],
+      glyph: SEV_MARK[r.severity] ?? "",
       title: `${r.count} \xD7 ${r.id}${r.title ? ` \u2014 ${r.title}` : ""}`
     })),
     empty
@@ -31892,9 +32001,46 @@ function formatPane(result, config) {
 }
 
 // src/lsp.ts
-import { readFileSync as readFileSync14 } from "node:fs";
+import { readFileSync as readFileSync11 } from "node:fs";
 import { join as join12 } from "node:path";
 import { fileURLToPath as fileURLToPath3, pathToFileURL as pathToFileURL2 } from "node:url";
+
+// src/coalesce.ts
+function coalesce(run, delay) {
+  let timer = null;
+  let running = false;
+  let queued = false;
+  const drain = async () => {
+    if (running) return;
+    running = true;
+    try {
+      while (queued) {
+        queued = false;
+        await run();
+      }
+    } finally {
+      running = false;
+    }
+  };
+  return {
+    /** Ask for a run after `wait` ms, superseding one already asked for and not yet started. */
+    schedule(wait = delay) {
+      queued = true;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        void drain();
+      }, wait);
+    },
+    /** Drop a run asked for and not yet started. One in flight finishes. */
+    cancel() {
+      if (timer) clearTimeout(timer);
+      timer = null;
+    }
+  };
+}
+
+// src/lsp.ts
 var SEVERITY = { error: 1, warn: 2, off: 2 };
 var field = (v, ...keys) => keys.reduce(
   (at, key) => at && typeof at === "object" ? at[key] : void 0,
@@ -31963,7 +32109,6 @@ function deleteRule(lines, dead, cls) {
     newText: ""
   };
 }
-var commentFor = (file, body2) => /\.(css|scss|sass|less|pcss|postcss)$/i.test(file) ? `/* ${body2} */` : `// ${body2}`;
 function lsp(opts) {
   const { config, run, input, output, log = () => {
   } } = opts;
@@ -32000,7 +32145,7 @@ function lsp(opts) {
       let text2 = buffer;
       if (text2 === void 0) {
         try {
-          text2 = readFileSync14(join12(root2, rel), "utf8");
+          text2 = readFileSync11(join12(root2, rel), "utf8");
         } catch {
           text2 = "";
         }
@@ -32051,29 +32196,7 @@ ${f.note}` : f.message
     for (const uri of published) if (!now.has(uri)) notify("textDocument/publishDiagnostics", { uri, diagnostics: [] });
     published = now;
   }
-  let timer = null;
-  let running = false;
-  let queued = false;
-  const drain = async () => {
-    if (running) return;
-    running = true;
-    try {
-      while (queued) {
-        queued = false;
-        await publish();
-      }
-    } finally {
-      running = false;
-    }
-  };
-  const schedule = (delay = 120) => {
-    queued = true;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      void drain();
-    }, delay);
-  };
+  const runs = coalesce(publish, 120);
   const at = (uri, line) => {
     const rel = relOf(uri);
     return rel ? (findings.get(rel) ?? []).filter((f) => f.line - 1 === line) : [];
@@ -32156,7 +32279,7 @@ ${f.note}` : f.message
               [uri]: [
                 {
                   range: { start: { line, character: 0 }, end: { line, character: 0 } },
-                  newText: `${indent}${commentFor(rel, `${config.suppression.keyword} ${finding.rule} -- `)}
+                  newText: `${indent}${commentFor(rel, directive(config.suppression.keyword, finding.rule, ""))}
 `
                 }
               ]
@@ -32189,7 +32312,7 @@ ${f.note}` : f.message
         });
         return;
       case "initialized":
-        schedule(0);
+        runs.schedule(0);
         return;
       case "shutdown":
         reply(id ?? 0, null);
@@ -32212,7 +32335,7 @@ ${f.note}` : f.message
         open.delete(uri);
         return;
       case "textDocument/didSave":
-        schedule();
+        runs.schedule();
         return;
       case "textDocument/codeAction": {
         reply(
@@ -32254,7 +32377,7 @@ ${renderTitle(rule2, config.designSystem, config.suppression.keyword)}`).join("\
 
 // src/serve.ts
 import { createServer } from "node:http";
-import { readFileSync as readFileSync15 } from "node:fs";
+import { readFileSync as readFileSync12 } from "node:fs";
 import { dirname as dirname7, join as join13 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -32783,47 +32906,32 @@ function serve(opts) {
       const origin = url;
       res.setHeader("access-control-allow-origin", "*");
       const path = (req.url ?? "/").split("?")[0];
-      if (path === "/overlay.js") {
-        res.setHeader("content-type", "text/javascript; charset=utf-8");
+      const send = (type, text2, status = 200) => {
+        res.statusCode = status;
+        res.setHeader("content-type", `${type}; charset=utf-8`);
         res.setHeader("cache-control", "no-store");
-        res.end(client(origin));
-        return;
-      }
+        res.end(text2);
+      };
+      if (path === "/overlay.js") return send("text/javascript", client(origin));
       if (path === "/findings.json") {
-        run().then((result) => {
-          res.setHeader("content-type", "application/json; charset=utf-8");
-          res.setHeader("cache-control", "no-store");
-          res.end(JSON.stringify(reportPayload(result, config)));
-        }).catch((err) => {
-          res.statusCode = 500;
-          res.setHeader("content-type", "application/json; charset=utf-8");
-          res.end(JSON.stringify({ error: messageOf(err) }));
-        });
+        run().then((result) => send("application/json", JSON.stringify(reportPayload(result, config)))).catch((err) => send("application/json", JSON.stringify({ error: messageOf(err) }), 500));
         return;
       }
       if (path === "/loupe-overlay.php") {
         let php;
         try {
-          php = readFileSync15(MU_PLUGIN, "utf8");
+          php = readFileSync12(MU_PLUGIN, "utf8");
         } catch {
-          res.statusCode = 404;
-          res.end(
-            "loupe: the WordPress mu-plugin is not readable from this build \u2014 copy it from integrations/wordpress/.\n"
+          return send(
+            "text/plain",
+            "loupe: the WordPress mu-plugin is not readable from this build \u2014 copy it from integrations/wordpress/.\n",
+            404
           );
-          return;
         }
-        res.setHeader("content-type", "text/plain; charset=utf-8");
-        res.setHeader("cache-control", "no-store");
-        res.end(php);
-        return;
+        return send("text/plain", php);
       }
-      if (path === "/") {
-        res.setHeader("content-type", "text/html; charset=utf-8");
-        res.end(INDEX(origin));
-        return;
-      }
-      res.statusCode = 404;
-      res.end("not found");
+      if (path === "/") return send("text/html", INDEX(origin));
+      send("text/plain", "not found", 404);
     });
     server.on("error", reject);
     server.listen(port, () => {
@@ -32841,12 +32949,11 @@ function serve(opts) {
 
 // src/ui.ts
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { readFileSync as readFileSync16, statSync as statSync6, watch, writeFileSync as writeFileSync4 } from "node:fs";
+import { readFileSync as readFileSync13, statSync as statSync6, watch, writeFileSync as writeFileSync4 } from "node:fs";
 import { createServer as createServer2 } from "node:http";
 import { dirname as dirname8, join as join14 } from "node:path";
 var TOKEN_HEADER = "x-loupe-token";
 var REV_HEADER = "x-loupe-rev";
-var commentFor2 = (file, text2) => CSS_FILE.test(file) ? `/* ${text2} */` : `// ${text2}`;
 var WATCH_CAP = 2048;
 var DEBOUNCE_MS = 140;
 var BODY_LIMIT = 64 * 1024;
@@ -32980,24 +33087,16 @@ function page(opts) {
   <button class="btn" id="accept" disabled>accept as baseline</button>
 </div>
 <div class="said" id="said"></div>`;
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loupe</title>
-<!-- Declared empty so the browser does not ask for /favicon.ico. A page whose
-     whole job is to report what is wrong should not open with a 404 of its own. -->
-<link rel="icon" href="data:,">
-</head>
-<body>
-<script>window.__loupe = ${host};</script>
+  return htmlDocument({
+    title: "Loupe",
+    // Declared empty so the browser does not ask for /favicon.ico. A page whose
+    // whole job is to report what is wrong should not open with a 404 of its own.
+    head: '\n<link rel="icon" href="data:,">',
+    body: `<script>window.__loupe = ${host};</script>
 ${toolbar}
 ${body({ clean: false, parseErrors: 0, live: true })}
-<script>${CLIENT.replace("__TOKEN__", opts.token)}</script>
-</body>
-</html>
-`;
+<script>${CLIENT.replace("__TOKEN__", opts.token)}</script>`
+  });
 }
 async function ui(opts) {
   const { port, config, root: root2, analyze: analyze2, present, baselineTarget, baselineFound, editor } = opts;
@@ -33014,7 +33113,7 @@ async function ui(opts) {
   const configFile = config.source.kind === "file" ? config.source.path : null;
   const readConfig = () => {
     try {
-      return configFile ? readFileSync16(configFile, "utf8") : null;
+      return configFile ? readFileSync13(configFile, "utf8") : null;
     } catch {
       return null;
     }
@@ -33043,7 +33142,7 @@ async function ui(opts) {
   };
   const wrote = () => {
     rev++;
-    schedule(0);
+    runs.schedule(0);
   };
   let readFrom = 0;
   const alreadyRead = (path) => {
@@ -33068,38 +33167,18 @@ async function ui(opts) {
     state = { ...snapshot(), ms: Date.now() - started };
     push();
   };
-  let running = false;
-  let queued = false;
-  let timer = null;
-  const drain = async () => {
-    if (running) return;
-    running = true;
+  const runs = coalesce(async () => {
     try {
-      while (queued) {
-        queued = false;
-        try {
-          await runOnce();
-        } catch (err) {
-          log(`loupe: analysis failed \u2014 ${messageOf(err)}
+      await runOnce();
+    } catch (err) {
+      log(`loupe: analysis failed \u2014 ${messageOf(err)}
 `);
-          if (state) {
-            state = { ...state, error: messageOf(err) };
-            push();
-          }
-        }
+      if (state) {
+        state = { ...state, error: messageOf(err) };
+        push();
       }
-    } finally {
-      running = false;
     }
-  };
-  const schedule = (delay = DEBOUNCE_MS) => {
-    queued = true;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      void drain();
-    }, delay);
-  };
+  }, DEBOUNCE_MS);
   const watchers = /* @__PURE__ */ new Map();
   function rewatch() {
     let dirs2;
@@ -33132,7 +33211,7 @@ async function ui(opts) {
       try {
         const w = watch(dir, { persistent: false }, (_event, name) => {
           if (!name || !alreadyRead(join14(dir, String(name)))) rev++;
-          schedule();
+          runs.schedule();
         });
         w.on("error", () => {
           w.close();
@@ -33256,7 +33335,7 @@ async function ui(opts) {
       const asked = Number(q.get("line") ?? 1);
       const at = Number.isInteger(asked) && asked > 0 ? asked : 1;
       try {
-        const lines = readFileSync16(join14(root2, want), "utf8").split("\n");
+        const lines = readFileSync13(join14(root2, want), "utf8").split("\n");
         const from = Math.max(1, at - PEEK);
         const to = Math.min(lines.length, at + PEEK);
         send(res, 200, { file: want, from, to, lines: lines.slice(from - 1, to) });
@@ -33266,7 +33345,7 @@ async function ui(opts) {
     },
     "POST /run": async (_req, res) => {
       send(res, 200, { rev });
-      schedule(0);
+      runs.schedule(0);
     },
     "POST /fix": async (req, res) => {
       const payload = await readBody(req);
@@ -33315,21 +33394,20 @@ async function ui(opts) {
       const flat = oneLine(reason);
       const full = join14(root2, finding.file);
       try {
-        const lines = readFileSync16(full, "utf8").split("\n");
-        const target = lines[finding.line - 1];
-        if (target === void 0) return send(res, 409, { error: "that line is no longer in the file" });
-        if (/(?:^|[^#])\{/.test(target))
-          return send(res, 409, {
-            error: "on the rule's opening line, where a directive would mute the whole rule \u2014 suppress it by hand"
-          });
-        if ((shown?.directives ?? []).some((d) => d.file === finding.file && d.line === finding.line - 1))
-          return send(res, 409, {
-            error: "the line above already carries a directive \u2014 add the rule to it by hand"
-          });
-        const indent = /^[ \t]*/.exec(target)?.[0] ?? "";
-        const eol = target.endsWith("\r") ? "\r" : "";
-        const directive = commentFor2(finding.file, `${config.suppression.keyword} ${finding.rule} -- ${flat}`);
-        lines.splice(finding.line - 1, 0, `${indent}${directive}${eol}`);
+        const lines = readFileSync13(full, "utf8").split("\n");
+        if (lines[finding.line - 1] === void 0)
+          return send(res, 409, { error: "that line is no longer in the file" });
+        const why = directiveRefusal(
+          lines,
+          finding.line,
+          (line) => (shown?.directives ?? []).some((d) => d.file === finding.file && d.line === line)
+        );
+        if (why) return send(res, 409, { error: why });
+        writeAbove(
+          lines,
+          finding.line,
+          commentFor(finding.file, directive(config.suppression.keyword, finding.rule, flat))
+        );
         writeFileSync4(full, lines.join("\n"));
         wrote();
         send(res, 200, { file: finding.file, line: finding.line, rule: finding.rule });
@@ -33375,7 +33453,7 @@ async function ui(opts) {
   });
   const close = () => new Promise((done) => {
     clearInterval(beat);
-    if (timer) clearTimeout(timer);
+    runs.cancel();
     for (const w of watchers.values()) w.close();
     watchers.clear();
     for (const res of clients) res.end();
@@ -33392,17 +33470,13 @@ async function ui(opts) {
 }
 
 // src/detect.ts
-import { existsSync as existsSync7, readFileSync as readFileSync17, statSync as statSync7 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync14, statSync as statSync7 } from "node:fs";
 import { join as join15 } from "node:path";
-var readJson2 = (p) => {
-  try {
-    return JSON.parse(readFileSync17(p, "utf8"));
-  } catch {
-    return null;
-  }
-};
 var preset = (name) => readPreset(name) ?? {};
 var SKIP_DIRS = /* @__PURE__ */ new Set(["node_modules", ".git", "vendor", "build", "dist", ".claude"]);
+var childDirs = (dir) => readDir(dir).filter((e) => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith(".")).map((e) => e.name);
+var readManifest = (root2, rel) => readJson(join15(root2, rel, "package.json")) ?? {};
+var manifestLabel = (rel) => rel ? `${rel}/package.json` : "package.json";
 var DETECT_ENTRY_BUDGET = 5e4;
 function manifests(root2, maxDepth = 3, budget = 60) {
   const out = [];
@@ -33411,10 +33485,7 @@ function manifests(root2, maxDepth = 3, budget = 60) {
     const pkg = join15(dir, "package.json");
     if (existsSync7(pkg)) out.push({ dir, rel });
     if (depth === maxDepth) return;
-    for (const e of readDir(dir)) {
-      if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-      walk(join15(dir, e.name), rel ? `${rel}/${e.name}` : e.name, depth + 1);
-    }
+    for (const name of childDirs(dir)) walk(join15(dir, name), rel ? `${rel}/${name}` : name, depth + 1);
   };
   walk(root2, "", 0);
   return out;
@@ -33431,23 +33502,18 @@ function markerAt(dir, marker) {
   }
 }
 function probeDirs(root2) {
-  const out = [{ dir: root2, rel: "" }];
-  for (const e of readDir(root2)) {
-    if (!e.isDirectory() || SKIP_DIRS.has(e.name) || e.name.startsWith(".")) continue;
-    out.push({ dir: join15(root2, e.name), rel: e.name });
-  }
-  return out;
+  return [{ dir: root2, rel: "" }, ...childDirs(root2).map((name) => ({ dir: join15(root2, name), rel: name }))];
 }
 var confidenceOf = (detect, kind) => typeof detect.confidence === "string" ? detect.confidence : detect.confidence?.[kind] ?? null;
 function matchPreset(name, detect, root2, found) {
   if (detect.dependencies?.length) {
     for (const { rel } of found) {
-      const pkg = readJson2(join15(root2, rel, "package.json")) ?? {};
+      const pkg = readManifest(root2, rel);
       const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies };
       const hit = detect.dependencies.filter((d) => deps[d] !== void 0);
       const first = hit[0];
       if (first === void 0) continue;
-      const reasons = [`${first} in ${rel ? `${rel}/package.json` : "package.json"}`];
+      const reasons = [`${first} in ${manifestLabel(rel)}`];
       if (found.length > 1) reasons.push(`${found.length} package.json files scanned`);
       return { preset: name, reasons, confidence: confidenceOf(detect, "full") ?? "high", packageDir: rel };
     }
@@ -33529,7 +33595,7 @@ function libraryPrefixes(dirs2, candidates) {
         budget--;
         let text2;
         try {
-          text2 = readFileSync17(full, "utf8");
+          text2 = readFileSync14(full, "utf8");
         } catch {
           continue;
         }
@@ -33564,9 +33630,9 @@ function presetEvidence(root2, imports) {
       `source imports: ${imported.slice(0, 5).map(([pkg, n]) => `${named2(pkg)} \xD7${n}`).join(", ")}${imported.length > 5 ? `, +${imported.length - 5} more` : ""}`
     );
   for (const { rel } of manifests(root2)) {
-    const pkg = readJson2(join15(root2, rel, "package.json")) ?? {};
+    const pkg = readManifest(root2, rel);
     const typed = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).map((dep) => /^@types\/([\w.-]+)__([\w.-]+)$/.exec(dep)).filter((m) => m !== null && known(`@${m[1]}/${m[2]}`)).map((m) => `${m[0]} \u2192 ${named2(`@${m[1]}/${m[2]}`)}`);
-    if (typed.length) out.push(`${rel ? `${rel}/package.json` : "package.json"}: ${typed.join(", ")}`);
+    if (typed.length) out.push(`${manifestLabel(rel)}: ${typed.join(", ")}`);
   }
   for (const { dir, rel } of probeDirs(root2)) {
     const build = join15(dir, "build");
@@ -33574,7 +33640,7 @@ function presetEvidence(root2, imports) {
     for (const e of assets) {
       let text2;
       try {
-        text2 = readFileSync17(join15(build, e.name), "utf8");
+        text2 = readFileSync14(join15(build, e.name), "utf8");
       } catch {
         continue;
       }
@@ -33584,7 +33650,7 @@ function presetEvidence(root2, imports) {
     }
   }
   if (existsSync7(join15(root2, ".wp-env.json"))) out.push(".wp-env.json (a WordPress development environment)");
-  const composer = readJson2(join15(root2, "composer.json"));
+  const composer = readJson(join15(root2, "composer.json"));
   if (composer) {
     const requires = Object.keys(composer.require ?? {}).filter((r) => r !== "php");
     const what = [
@@ -33599,8 +33665,7 @@ function resolvePreset(name, seen = /* @__PURE__ */ new Set()) {
   if (seen.has(name)) return {};
   seen.add(name);
   const { extends: parents, ...raw } = preset(name);
-  const specs = parents === void 0 ? [] : Array.isArray(parents) ? parents : [parents];
-  const base = specs.reduce((acc, spec) => merge(acc, resolvePreset(presetKey(spec), seen)), {});
+  const base = listOf(parents).reduce((acc, spec) => merge(acc, resolvePreset(presetKey(spec), seen)), {});
   return merge(base, raw);
 }
 function detectNamespaces(root2, presetName, packageDir = "", limit) {
@@ -33627,7 +33692,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
         oversized++;
         continue;
       }
-      text2 = readFileSync17(abs, "utf8");
+      text2 = readFileSync14(abs, "utf8");
     } catch {
       continue;
     }
@@ -33650,7 +33715,7 @@ function detectNamespaces(root2, presetName, packageDir = "", limit) {
   const markupText = [];
   for (const { abs } of [...files.markup, ...files.references].slice(0, 2e3)) {
     try {
-      markupText.push(readFileSync17(abs, "utf8"));
+      markupText.push(readFileSync14(abs, "utf8"));
     } catch {
     }
   }
@@ -33728,201 +33793,24 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
   };
 }
 
-// src/profiles.ts
-import { existsSync as existsSync8, readFileSync as readFileSync18 } from "node:fs";
-import { isAbsolute as isAbsolute5, join as join16, resolve as resolve5 } from "node:path";
-var PROJECT_PROFILES = join16(".loupe", "profiles");
-var NO_PROFILE = "none";
-var readJson3 = (p) => JSON.parse(readFileSync18(p, "utf8"));
-var under = (dir, rel) => isAbsolute5(rel) ? rel : join16(dir, rel);
-var asStrings2 = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && x !== "") : [];
-var asString2 = (v) => typeof v === "string" && v !== "" ? v : null;
-function readScopes(dir, raw) {
-  try {
-    return parseTokenScopes(typeof raw === "string" ? readJson3(under(dir, raw)) : raw);
-  } catch (err) {
-    return {
-      scopes: null,
-      errors: [`tokenScopes: could not read ${typeof raw === "string" ? raw : "the inline block"} \u2014 ${messageOf(err)}`]
-    };
-  }
-}
-function readProfiles(root2, origin = "shipped", unreadable) {
-  if (!root2 || !existsSync8(root2)) return [];
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const e of readDir(root2)) {
-    if (!e.isDirectory()) continue;
-    const dir = join16(root2, e.name);
-    const manifest = join16(dir, "profile.json");
-    if (!existsSync8(manifest)) continue;
-    try {
-      const raw = readJson3(manifest);
-      const id = asString2(raw.id) ?? e.name;
-      if (id === NO_PROFILE || seen.has(id)) continue;
-      const patterns = asString2(raw.patterns);
-      const components2 = asString2(raw.components);
-      const tokenDescriptions2 = asString2(raw.tokenDescriptions);
-      const scopes = raw.tokenScopes === void 0 ? null : readScopes(dir, raw.tokenScopes);
-      const delivery = asString2(raw.delivery);
-      out.push({
-        id,
-        name: asString2(raw.name) ?? asString2(raw.id) ?? e.name,
-        preset: asString2(raw.preset),
-        packages: asStrings2(raw.packages),
-        patterns: patterns ? under(dir, patterns) : null,
-        components: components2 ? under(dir, components2) : null,
-        tokenDescriptions: tokenDescriptions2 ? under(dir, tokenDescriptions2) : null,
-        tokenScopes: scopes?.scopes ?? null,
-        problems: scopes?.errors ?? [],
-        // Read now, not by path later: two consumers want it, and a block that
-        // does not validate is no block rather than a profile that cannot load.
-        delivery: delivery ? readDelivery(under(dir, delivery)) : null,
-        dir,
-        origin
-      });
-      seen.add(id);
-    } catch (err) {
-      unreadable?.push(`${manifest} \u2014 ${messageOf(err)}`);
-    }
-  }
-  return out.sort((a, b) => byBytes(a.id, b.id));
-}
-function profileRoots({
-  root: root2,
-  configured = [],
-  flag = null
-}) {
-  const roots = [
-    ...configured.map((dir) => ({ dir: resolve5(dir), origin: "project" })),
-    { dir: resolve5(root2, PROJECT_PROFILES), origin: "project" },
-    ...flag ? [{ dir: resolve5(flag), origin: "shipped" }] : []
-  ];
-  const seen = /* @__PURE__ */ new Set();
-  return roots.filter((r) => !seen.has(r.dir) && Boolean(seen.add(r.dir)));
-}
-function readProfileRoots(roots, unreadable) {
-  const out = /* @__PURE__ */ new Map();
-  for (const { dir, origin } of roots)
-    for (const p of readProfiles(dir, origin, origin === "project" ? unreadable : void 0))
-      if (!out.has(p.id)) out.set(p.id, p);
-  return [...out.values()].sort((a, b) => byBytes(a.id, b.id));
-}
-function selectProfiles(profiles, config, force = null) {
-  if (force === NO_PROFILE) return [];
-  if (force) return profiles.filter((p) => p.id === force);
-  const pkgs = config.designSystem?.packages ?? [];
-  if (!pkgs.length) return [];
-  const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
-  const claimed = new Set(
-    matched.filter((p) => p.origin === "project").flatMap((p) => p.packages.filter((pkg) => pkgs.includes(pkg)))
-  );
-  return matched.filter((p) => p.origin === "project" || !p.packages.some((pkg) => claimed.has(pkg)));
-}
-function applyRegistries(config, sources) {
-  const applied = [];
-  const skipped = [];
-  const errors = [];
-  const forced = [];
-  let patterns = config.patterns ?? [];
-  const components2 = new Map(config.componentRegistry ?? []);
-  const add = {
-    patterns: (raw) => {
-      const own = new Set(patterns.map((p) => p.id));
-      const fresh = loadPatterns(raw).filter((p) => !own.has(p.id));
-      patterns = [...patterns, ...fresh];
-      return fresh.length;
-    },
-    components: (raw) => {
-      const before = components2.size;
-      for (const [key, entry] of loadComponents(raw)) if (!components2.has(key)) components2.set(key, entry);
-      return components2.size - before;
-    }
-  };
-  const saw = { patterns: false, components: false };
-  for (const src of sources) {
-    let used = false;
-    for (const kind of ["patterns", "components"]) {
-      const path = src[kind];
-      if (!path) continue;
-      try {
-        const raw = readJson3(resolve5(path));
-        const inScope = registryApplies(raw, config.designSystem.packages);
-        if (!src.forced && !inScope) {
-          skipped.push({ label: src.label, kind, packages: declaredPackages(raw) });
-          continue;
-        }
-        const added = add[kind](raw);
-        saw[kind] = used = true;
-        if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
-      } catch (err) {
-        errors.push(`could not read ${src.label} ${kind} \u2014 ${messageOf(err)}`);
-      }
-    }
-    if (used) applied.push(src.label);
-  }
-  if (saw.patterns) setPatterns(config, patterns);
-  if (saw.components) setComponentRegistry(config, components2);
-  const registryRules = [
-    "patterns/duplicate-composite",
-    "patterns/superseded-composite",
-    "patterns/judged-redirect"
-  ];
-  const patternsNote = (added) => registryRules.every((rule2) => config.severityOf(rule2) === "off") ? null : !added ? "merged but enabled nothing \u2014 it added no patterns this config did not already have" : (
-    // A composite is only ever built from names imported out of
-    // `designSystem.packages` (see markup.ts), so with none declared
-    // there is nothing for a signature to be compared against.
-    !config.designSystem.packages.length ? "merged but enabled nothing \u2014 this config declares no designSystem.packages, so no composite is ever built to compare" : (
-      // `knownComponents` is `designSystem.components.layout` + `.text`.
-      // A merged component *registry* does not feed it, so "components"
-      // alone would point at the wrong file.
-      !config.designSystem.knownComponents.size ? "merged but enabled nothing \u2014 this config declares no designSystem.components for its signatures to match" : null
-    )
-  );
-  const componentsNote = (added) => added || config.severityOf("system/locked-component") === "off" && config.severityOf("system/superseded-component") === "off" ? null : "merged but enabled nothing \u2014 it added no entries this config did not already have";
-  const notes = [];
-  for (const f of forced) {
-    if (f.offScope.length)
-      notes.push({
-        label: f.label,
-        kind: f.kind,
-        // Named against what the *config* declares, not what the project imports:
-        // those differ on an inferred config.
-        note: `forced past the scope check \u2014 it is scoped to ${f.offScope.join(", ")} and this config declares ${config.designSystem.packages.length ? `${config.designSystem.packages.join(", ")} \u2014 so its findings name a design system this config does not declare` : "no design-system packages, so nothing here says which design system its findings are about"}`
-      });
-    const note2 = f.kind === "patterns" ? patternsNote(f.added) : componentsNote(f.added);
-    if (note2) notes.push({ label: f.label, kind: f.kind, note: note2 });
-  }
-  return { applied, skipped, notes, errors };
-}
-
 // src/hook.ts
-import { existsSync as existsSync9, readFileSync as readFileSync19, realpathSync as realpathSync2, writeFileSync as writeFileSync5 } from "node:fs";
-import { dirname as dirname9, isAbsolute as isAbsolute6, join as join17, relative as relative5, resolve as resolve6 } from "node:path";
+import { existsSync as existsSync8, realpathSync as realpathSync2 } from "node:fs";
+import { isAbsolute as isAbsolute4, join as join16, relative as relative5, resolve as resolve6 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
 var MAX_AGE_MS = 6 * 60 * 60 * 1e3;
 var readStdin = async () => process.stdin.isTTY ? "" : text(process.stdin);
 function readState(root2) {
-  try {
-    const raw = JSON.parse(readFileSync19(attemptsPath(root2), "utf8"));
-    const now = Date.now();
-    const sessions = {};
-    for (const [id, entry] of Object.entries(raw.sessions ?? {}))
-      if (now - (entry?.at ?? 0) < MAX_AGE_MS) sessions[id] = entry;
-    return { sessions };
-  } catch {
-    return { sessions: {} };
-  }
+  const raw = readJson(attemptsPath(root2));
+  const now = Date.now();
+  const sessions = {};
+  for (const [id, entry] of Object.entries(raw?.sessions ?? {}))
+    if (now - (entry?.at ?? 0) < MAX_AGE_MS) sessions[id] = entry;
+  return { sessions };
 }
-function writeState(root2, state) {
-  try {
-    const p = attemptsPath(root2);
-    ensureDir(dirname9(p));
-    writeFileSync5(p, JSON.stringify(state));
-  } catch {
-  }
-}
+var writeState = (root2, state) => {
+  writeJsonAtomic(attemptsPath(root2), state);
+};
 function bumpAttempts(root2, sessionId) {
   if (!sessionId) return 1;
   const state = readState(root2);
@@ -33953,10 +33841,10 @@ function parsePayload(raw) {
 function payloadFile(payload, root2) {
   const raw = payload?.tool_input?.file_path;
   if (typeof raw !== "string" || !raw) return null;
-  const abs = isAbsolute6(raw) ? raw : join17(root2, raw);
+  const abs = under(root2, raw);
   const inside = (from, to) => {
     const rel2 = relative5(from, to);
-    return rel2 && !rel2.startsWith("..") && !isAbsolute6(rel2) ? rel2 : null;
+    return rel2 && !rel2.startsWith("..") && !isAbsolute4(rel2) ? rel2 : null;
   };
   let rel = inside(root2, abs);
   if (rel === null) {
@@ -33974,21 +33862,22 @@ function preEditContent(payload) {
   const original = response.originalFile;
   return typeof original === "string" ? original : null;
 }
-function hookRoot() {
-  const fromEnv = process.env.CLAUDE_PROJECT_DIR;
-  if (fromEnv && existsSync9(fromEnv)) return fromEnv;
-  return process.cwd();
-}
+var envProjectDir = () => {
+  const dir = process.env.CLAUDE_PROJECT_DIR;
+  return dir && existsSync8(dir) ? dir : void 0;
+};
+var hookRoot = () => envProjectDir() ?? process.cwd();
 function claudeProjectDir(explicit) {
   if (!explicit) {
-    const fromEnv = process.env.CLAUDE_PROJECT_DIR;
-    if (fromEnv && existsSync9(fromEnv)) return fromEnv;
+    const fromEnv = envProjectDir();
+    if (fromEnv) return fromEnv;
   }
   const start = resolve6(explicit ?? process.cwd());
   const home = resolve6(homedir());
-  for (let dir = start; dir !== home; dir = dirname9(dir)) {
-    if (existsSync9(join17(dir, ".claude"))) return dir;
-    if (existsSync9(join17(dir, ".git")) || dirname9(dir) === dir) break;
+  for (const dir of dirsUp(start)) {
+    if (dir === home) break;
+    if (existsSync8(join16(dir, ".claude"))) return dir;
+    if (existsSync8(join16(dir, ".git"))) break;
   }
   return start;
 }
@@ -33996,16 +33885,13 @@ function settingsEnv(projectDir, name) {
   const fromEnv = process.env[name];
   if (fromEnv !== void 0) return { value: fromEnv, from: `${name} in the environment` };
   const files = [
-    [join17(projectDir, ".claude", "settings.local.json"), ".claude/settings.local.json"],
-    [join17(projectDir, ".claude", "settings.json"), ".claude/settings.json"],
-    [join17(homedir(), ".claude", "settings.json"), "~/.claude/settings.json"]
+    [join16(projectDir, ".claude", "settings.local.json"), ".claude/settings.local.json"],
+    [join16(projectDir, ".claude", "settings.json"), ".claude/settings.json"],
+    [join16(homedir(), ".claude", "settings.json"), "~/.claude/settings.json"]
   ];
   for (const [file, label] of files) {
-    try {
-      const v = JSON.parse(readFileSync19(file, "utf8")).env?.[name];
-      if (v !== void 0) return { value: String(v), from: `${name} in ${label}` };
-    } catch {
-    }
+    const v = readJson(file)?.env?.[name];
+    if (v !== void 0) return { value: String(v), from: `${name} in ${label}` };
   }
   return void 0;
 }
@@ -34047,12 +33933,7 @@ function resolvedOptions(projectDir) {
   const seen = [];
   let matched = false;
   for (const file of ["settings.json", "settings.local.json"]) {
-    let configs;
-    try {
-      configs = JSON.parse(readFileSync19(join17(homedir(), ".claude", file), "utf8")).pluginConfigs;
-    } catch {
-      continue;
-    }
+    const configs = readJson(join16(homedir(), ".claude", file))?.pluginConfigs;
     if (!configs || typeof configs !== "object") continue;
     const key = Object.keys(configs).find(isOurs);
     if (key === void 0) {
@@ -34108,21 +33989,15 @@ function coerce(opts) {
     off: str2(opts.off) === void 0 ? void 0 : isOn(String(opts.off))
   };
 }
-function emitClean(message) {
-  process.stdout.write(JSON.stringify({ systemMessage: message, suppressOutput: true }));
+var say = (message, extra = {}) => {
+  process.stdout.write(JSON.stringify({ systemMessage: message, suppressOutput: true, ...extra }));
   return 0;
-}
-function emitAdvisory(message, context, payload) {
-  const event = hookEvent(payload);
-  process.stdout.write(
-    JSON.stringify({
-      systemMessage: message,
-      suppressOutput: true,
-      ...event === "PostToolUse" ? { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context } } : {}
-    })
-  );
-  return 0;
-}
+};
+var emitClean = (message) => say(message);
+var emitAdvisory = (message, context, payload) => say(
+  message,
+  hookEvent(payload) === "PostToolUse" ? { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context } } : {}
+);
 function emitBlocking(report) {
   process.stderr.write(`${report}
 `);
@@ -34148,16 +34023,16 @@ var fail = (msg) => {
 var note = (msg) => {
   process.stderr.write(yellow(msg));
 };
+var JUDGE_CACHE = "judge-cache.json";
 function cacheLine(root2) {
   const dir = projectStateDir(root2);
   let bytes = 0;
   try {
-    for (const name of readdirSync4(dir))
-      if (/^index-[0-9a-f]+\.json$/.test(name)) bytes += statSync8(join18(dir, name)).size;
+    for (const name of readdirSync4(dir)) if (INDEX_FILE.test(name)) bytes += statSync8(join17(dir, name)).size;
   } catch {
   }
   const answers = Object.keys(
-    readJson(join18(dir, "judge-cache.json"))?.entries ?? {}
+    readJson(join17(dir, JUDGE_CACHE))?.entries ?? {}
   ).length;
   const parts = [
     bytes ? `index ${(bytes / 1e6).toFixed(1)} MB` : "no index yet",
@@ -34165,19 +34040,26 @@ function cacheLine(root2) {
   ];
   return `${dir}  (${parts.join(", ")})`;
 }
-var answerCache = (root2, noCache, file = "judge-cache.json") => cacheDisabled(noCache) ? null : new AnswerCache(join18(projectStateDir(root2), file));
+var answerCache = (root2, noCache, file = JUDGE_CACHE) => cacheDisabled(noCache) ? null : new AnswerCache(join17(projectStateDir(root2), file));
 function listenFailure(err, command, port) {
   const code = err?.code;
   const why = code === "EADDRINUSE" ? `port ${port} is already in use \u2014 run \`loupe ${command} --port <n>\` on another, or --port 0 to be given a free one` : code === "EACCES" ? `not allowed to bind port ${port} \u2014 ports below 1024 need privileges` : `${command} could not start \u2014 ${messageOf(err)}`;
   return `loupe: ${why}
 `;
 }
+var portFlag = (given, fallback) => {
+  const port = Number(given ?? fallback);
+  return Number.isInteger(port) && port >= 0 && port <= 65535 ? port : null;
+};
+var badPort = (given) => `loupe: --port wants a port number, got ${given}
+`;
+var groupByFlag = (given) => given === void 0 || isGroupBy(given) ? given : { error: `unknown grouping "${given}" \u2014 expected ${GROUP_BYS.join(", ")}` };
 var confidence = (level) => (level === "high" ? green : level === "none" ? red : yellow)(`[${level} confidence]`);
 var guessedPreset = (level) => level === "low" || level === "none";
-var HERE = dirname10(fileURLToPath5(import.meta.url));
-var SINGLE_FILE = !existsSync10(join18(HERE, "..", "package.json"));
-var ENV_FILE = SINGLE_FILE ? resolve7(".env") : join18(HERE, "..", "..", ".env");
-var USER_ENV_FILE = join18(process.env.XDG_CONFIG_HOME || join18(homedir2(), ".config"), "loupe", ".env");
+var HERE = dirname9(fileURLToPath5(import.meta.url));
+var SINGLE_FILE = !existsSync9(join17(HERE, "..", "package.json"));
+var ENV_FILE = SINGLE_FILE ? resolve7(".env") : join17(HERE, "..", "..", ".env");
+var USER_ENV_FILE = join17(process.env.XDG_CONFIG_HOME || join17(homedir2(), ".config"), "loupe", ".env");
 var KEY_SOURCES = `the environment, the plugin's API key option, ${ENV_FILE}, or ${USER_ENV_FILE}`;
 function versionLine() {
   if (SINGLE_FILE) return `loupe ${EMBEDDED_VERSION} (binary, ${process.execPath})`;
@@ -34351,7 +34233,7 @@ var needsProject = (command, args, isHook) => {
   if (args.flags.all || args.flags.files) return false;
   return isHook || Boolean(args.flags.changed) && SCOPED_COMMANDS.has(command);
 };
-var looksLikeProject = (root2) => existsSync10(join18(root2, "package.json")) || existsSync10(join18(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
+var looksLikeProject = (root2) => existsSync9(join17(root2, "package.json")) || existsSync9(join17(root2, "composer.json")) || hasGitDir(root2) || isWorktree(root2) || detectPreset(root2).preset !== "generic";
 var CEILING = `${DETECT_ENTRY_BUDGET.toLocaleString("en-US")}-entry ceiling`;
 var CEILING_WHY = "this root is larger than a project, so the namespaces are a guess from the part of it that was read";
 var TRUNCATED_NOTE = `loupe: inference stopped at the ${CEILING} \u2014 ${CEILING_WHY}. Point --root at the project, then write a config with \`loupe init\`.
@@ -34381,7 +34263,7 @@ function resolveScope(config, args, { defaultChanged = false }) {
   if (args.flags.files)
     return expandDirs(
       config,
-      args.flags.files.split(",").map((f) => f.trim()).filter(Boolean).map((f) => toPosix(isAbsolute7(f) ? relative6(config.root, resolve7(f)) : f)).filter((f) => !f.startsWith(".."))
+      listFlag(args.flags.files).map((f) => toPosix(isAbsolute5(f) ? relative6(config.root, resolve7(f)) : f)).filter((f) => !f.startsWith(".."))
     );
   if (args.flags.changed || defaultChanged) {
     const changed = changedFiles(config.root);
@@ -34394,7 +34276,7 @@ var listFlag = (value) => (value ?? "").split(",").map((s) => s.trim()).filter(B
 function mapLabels(a, b) {
   const base = (p) => basename2(resolve7(p)).replace(/\.json$/i, "");
   if (base(a) !== base(b)) return [base(a), base(b)];
-  const withDir = (p) => `${basename2(dirname10(resolve7(p)))}/${base(p)}`;
+  const withDir = (p) => `${basename2(dirname9(resolve7(p)))}/${base(p)}`;
   return withDir(a) === withDir(b) ? [`${base(a)} (a)`, `${base(b)} (b)`] : [withDir(a), withDir(b)];
 }
 async function runMap(args) {
@@ -34432,8 +34314,8 @@ async function runMap(args) {
     return EXIT.CANNOT_RUN;
   }
   const out = args.flags.out ? resolve7(args.flags.out) : null;
-  if (out && !existsSync10(dirname10(out))) {
-    fail(`loupe: cannot write the map to ${out} \u2014 ${dirname10(out)} does not exist
+  if (out && !existsSync9(dirname9(out))) {
+    fail(`loupe: cannot write the map to ${out} \u2014 ${dirname9(out)} does not exist
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -34477,7 +34359,7 @@ async function runMap(args) {
   }
   const apiKey = plan.jobs.length ? judgeKey() : "";
   if (plan.jobs.length && !apiKey) {
-    fail(`loupe: map needs TYPESAFE_API_KEY, in the environment or ${ENV_FILE} \u2014 or use --dry-run
+    fail(`loupe: map needs TYPESAFE_API_KEY, from ${KEY_SOURCES} \u2014 or use --dry-run
 `);
     return EXIT.CANNOT_RUN;
   }
@@ -34504,7 +34386,7 @@ async function runMap(args) {
   process.stdout.write(format === "json" ? json : formatMap(plan, mappings));
   if (out) {
     try {
-      writeFileSync6(out, json);
+      writeFileSync5(out, json);
     } catch (err) {
       fail(`loupe: could not write the map to ${out}: ${messageOf(err)}
 `);
@@ -34559,7 +34441,7 @@ function introducedBy(after, before) {
 function ruleScope(list2) {
   if (list2 === void 0) return null;
   const out = /* @__PURE__ */ new Set();
-  for (const given of list2.split(",").map((r) => r.trim())) {
+  for (const given of listFlag(list2)) {
     const id = canonicalRuleId(given);
     if (!isRuleId(id)) return { error: `unknown rule "${given}" \u2014 \`loupe status\` lists them` };
     out.add(id);
@@ -34569,7 +34451,7 @@ function ruleScope(list2) {
 function filterRules(result, rules2) {
   if (!rules2) return result;
   const findings = result.findings.filter((f) => rules2.has(f.rule));
-  return { ...result, findings, blocking: findings.some((f) => f.severity === "error") };
+  return { ...result, findings, blocking: isBlocking(findings) };
 }
 function filterSeverity(result, min) {
   if (min !== "error") return result;
@@ -34611,8 +34493,8 @@ async function main() {
   }
   const explicitRoot = args.flags.root ?? (isHook ? hookRoot() : null);
   const anchor = explicitRoot ? null : findConfig(resolve7(process.cwd()));
-  const root2 = resolve7(explicitRoot ?? (anchor ? dirname10(anchor) : process.cwd()));
-  if (!existsSync10(root2)) {
+  const root2 = resolve7(explicitRoot ?? (anchor ? dirname9(anchor) : process.cwd()));
+  if (!existsSync9(root2)) {
     if (isHook) return emitClean(`loupe: skipped \u2014 root does not exist: ${root2}`);
     fail(`loupe: root does not exist: ${root2}
 `);
@@ -34671,20 +34553,17 @@ async function main() {
 `);
     return EXIT.CANNOT_RUN;
   }
+  const roots = profileRoots({ root: root2, configured: config.profileDirs, flag: flagProfiles });
   if (config.profileDirs.length) {
     unreadable = [];
-    profiles = readProfileRoots(profileRoots({ root: root2, configured: config.profileDirs, flag: flagProfiles }), unreadable);
+    profiles = readProfileRoots(roots, unreadable);
     forced = byId(args.flags.profile);
   }
   const pin = args.flags.profile ?? config.profilePin;
   const pinned = byId(pin);
   if (pin && pin !== NO_PROFILE && !pinned && !isHook)
     note(
-      `loupe: no profile "${pin}"${args.flags.profile ? "" : ` (the config's "profile")`} in ${profileRoots({
-        root: root2,
-        configured: config.profileDirs,
-        flag: flagProfiles
-      }).map((r) => r.dir).join(", ")}${flagProfiles ? "" : " (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
+      `loupe: no profile "${pin}"${args.flags.profile ? "" : ` (the config's "profile")`} in ${roots.map((r) => r.dir).join(", ")}${flagProfiles ? "" : " (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
 `
     );
   const active = selectProfiles(profiles, config, pin);
@@ -34732,6 +34611,25 @@ async function main() {
   if (options.maxAttempts) config.hook.maxAttempts = options.maxAttempts;
   if (options.maxFindings) config.hook.maxFindings = options.maxFindings;
   const namedBaseline = args.flags.baseline || null;
+  const loadBaseline = () => {
+    const where = findExistingBaseline(root2, namedBaseline, config.baselinePath);
+    return { ...where, baseline: where.found ? readBaseline(where.path) : null };
+  };
+  const unreadableBaseline = (path) => `loupe: baseline at ${path} is unreadable \u2014 ignoring it.
+`;
+  const tokenJudgements = (targets, tokens, client) => {
+    const about = tokenDescriptions(activeProfiles(config));
+    return [
+      targets.some((f) => f.suggest?.length) ? judgeValues(root2, targets, tokens, client, about).catch((err) => {
+        note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
+`);
+      }) : null,
+      tokens && targets.some((f) => f.unknown) ? judgeRenames(root2, targets, tokens, client, about).catch((err) => {
+        note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
+`);
+      }) : null
+    ];
+  };
   if (command === "explain") {
     const id = canonicalRuleId(args._[1] ?? "");
     if (!isRuleId(id)) {
@@ -34745,14 +34643,14 @@ async function main() {
   ${renderTitle(id, config.designSystem, config.suppression.keyword)}
 `
     );
-    const flagged = id === "system/locked-component" ? "locked" : id === "system/superseded-component" ? "legacy" : null;
+    const flagged = statusFlaggedBy(id);
     if (flagged) {
       const entries = [...config.componentRegistry.values()];
       const fires = entries.filter(
         (e) => e.status === flagged && usableReplacement(config.componentRegistry, e.supersededBy)
       );
       const names = fires.slice(0, 5).map((e) => e.name);
-      const src = (config.profiles?.active ?? []).filter((p) => p.components);
+      const src = activeProfiles(config).filter((p) => p.components);
       process.stdout.write(
         `  ${dim(
           `${fires.length} of ${entries.length} entries in the active component registry fire it${names.length ? `: ${names.join(", ")}${fires.length > names.length ? `, +${fires.length - names.length} more` : ""}` : ""}.`
@@ -34765,7 +34663,7 @@ async function main() {
 `
         );
     }
-    const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+    const delivery = activeDelivery(config);
     const bundled = [...delivery?.packages ?? []].filter(([, e]) => e.provided === "bundled").map(([pkg]) => pkg);
     if (REMEDY_RULES.has(id) && delivery && bundled.length)
       process.stdout.write(
@@ -34797,12 +34695,12 @@ async function main() {
     const off = hookOff(projectDir, resolved);
     const gateBlocks = blockingAllowed && !off;
     const src = config.source.kind === "file" ? config.source.path : config.source.kind === "preset" ? `preset ${config.source.name}` : config.source.kind === "inferred" ? `inferred (no config file found)${profilePreset ? `, extending preset ${profilePreset}` : ""}` : config.source.kind;
-    const base = findExistingBaseline(root2, namedBaseline, config.baselinePath);
+    const base = loadBaseline();
     const legacy = base.found ? null : legacyBaseline(root2);
     const hookDir = args.flags.root ? root2 : claudeProjectDir();
     const state = attemptsPath(hookDir);
     const ds = config.designSystem;
-    const delivery = mergeDeliveries((config.profiles?.active ?? []).map((p) => p.delivery));
+    const delivery = activeDelivery(config);
     const orNone = (arr) => arr?.length ? arr.join(", ") : "(none)";
     const components2 = (arr) => arr?.length ? arr.map((n) => supersededEverywhere(config.componentRegistry, n) ? `${n} (legacy)` : n).join(", ") : "(none)";
     const lines = [
@@ -34814,8 +34712,8 @@ async function main() {
       `${dim("text:       ")}${components2(ds.textComponents)}`,
       `${dim("tokens:     ")}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(", ") : "(none \u2014 token rules inactive)"}`,
       `${dim("namespaces: ")}${(config.raw.namespaces?.project ?? []).join(", ") || "(none \u2014 css/dead-class inactive)"}`,
-      `${dim("suppress:   ")}${config.suppression.keyword} <ruleId> -- <reason>`,
-      `${dim("baseline:   ")}${base.path}${base.found && readBaseline(base.path) === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
+      `${dim("suppress:   ")}${directive(config.suppression.keyword, "<ruleId>", "<reason>")}`,
+      `${dim("baseline:   ")}${base.path}${base.found && base.baseline === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
       ...legacy ? [yellow(`            ${legacyBaselineNotice(legacy)}`)] : [],
       // Beside the baseline line, because the two used to share a directory and are
       // easy to assume still do: the retry counter is the one that stays out of the
@@ -34864,7 +34762,7 @@ async function main() {
     for (const id of RULE_IDS) {
       const def = RULES[id];
       const sev = config.severityOf(id);
-      const judgeOnly = id === "patterns/judged-redirect";
+      const judgeOnly = JUDGE_ONLY_RULES.has(id);
       const verdict3 = config.enabled[id] ? sev === "error" && gateBlocks ? red(judgeOnly ? "BLOCKS (--judge only)" : "BLOCKS") : judgeOnly ? yellow("advisory, --judge only") : sev === "error" ? yellow("advisory in the hook (would block if enabled); fails `check`") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
       const reason = config.rules[id].reason;
       lines.push(`  ${magenta(id.padEnd(32))} ${verdict3}${reason ? dim(` \u2014 ${reason}`) : ""}`);
@@ -34931,8 +34829,8 @@ ${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id))
 `);
       return EXIT.OK;
     }
-    const target = join18(root2, "loupe.config.json");
-    if (existsSync10(target) && !args.flags.force) {
+    const target = join17(root2, "loupe.config.json");
+    if (existsSync9(target) && !args.flags.force) {
       fail(`loupe: ${target} already exists (use --force)
 `);
       return EXIT.CANNOT_RUN;
@@ -34959,7 +34857,7 @@ ${yellow("`loupe check` still exits 1 on:")} ${blockers.map((id) => magenta(id))
       fail("loupe: refusing to write a guessed design system to a config.\n");
       return EXIT.CANNOT_RUN;
     }
-    writeFileSync6(target, `${JSON.stringify(info.config, null, 2)}
+    writeFileSync5(target, `${JSON.stringify(info.config, null, 2)}
 `);
     process.stdout.write(`${lines.join("\n")}
 
@@ -34971,12 +34869,10 @@ ${green(`Wrote ${target}`)}
     let warned = false;
     return (fresh) => {
       if (args.flags["no-baseline"]) return fresh;
-      const { path: bPath, found } = findExistingBaseline(root2, namedBaseline, config.baselinePath);
-      const baseline = found ? readBaseline(bPath) : null;
+      const { path: bPath, found, baseline } = loadBaseline();
       if (found && !baseline && !warned) {
         warned = true;
-        notice(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
-`);
+        notice(unreadableBaseline(bPath));
       }
       return applyBaseline(fresh, baseline, { enabled: config.enabled });
     };
@@ -34998,10 +34894,9 @@ ${green(`Wrote ${target}`)}
     return EXIT.OK;
   }
   if (command === "serve") {
-    const port = Number(args.flags.port ?? 7331);
-    if (!Number.isInteger(port) || port < 0 || port > 65535) {
-      fail(`loupe: --port wants a port number, got ${args.flags.port}
-`);
+    const port = portFlag(args.flags.port, 7331);
+    if (port === null) {
+      fail(badPort(args.flags.port));
       return EXIT.CANNOT_RUN;
     }
     const run = baselinedRun(note);
@@ -35023,10 +34918,9 @@ ${dim("  Ctrl-C to stop.")}
     return EXIT.OK;
   }
   if (command === "ui") {
-    const port = Number(args.flags.port ?? 7332);
-    if (!Number.isInteger(port) || port < 0 || port > 65535) {
-      fail(`loupe: --port wants a port number, got ${args.flags.port}
-`);
+    const port = portFlag(args.flags.port, 7332);
+    if (port === null) {
+      fail(badPort(args.flags.port));
       return EXIT.CANNOT_RUN;
     }
     const unhonored = ["severity", "files", "changed", "judge"].filter((f) => args.flags[f]);
@@ -35077,8 +34971,8 @@ ${dim("  Ctrl-C to stop.")}
   which will run without it and report all ${findings2} finding(s). Un-ignore it, or \`git add -f\` it.`
     ) : null;
     if (args.flags["dry-run"]) {
-      const base = findExistingBaseline(root2, namedBaseline, config.baselinePath);
-      const prior = base.found ? readBaseline(base.path) : null;
+      const base = loadBaseline();
+      const prior = base.baseline;
       const { entries: entries2, rules: rules3 } = diffBaseline(result2, prior);
       const width = Math.max(0, ...rules3.map((r) => r.rule.length));
       const lines = [`Would record ${counted(result2.findings.length, entries2)} \u2192 ${target}`, ""];
@@ -35118,9 +35012,9 @@ ${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked
     return EXIT.OK;
   }
   if (command === "suppressions") {
-    const by = args.flags["group-by"];
-    if (by !== void 0 && !isGroupBy(by)) {
-      fail(`loupe: unknown grouping "${by}" \u2014 expected ${GROUP_BYS.join(", ")}
+    const by = groupByFlag(args.flags["group-by"]);
+    if (typeof by === "object") {
+      fail(`loupe: ${by.error}
 `);
       return EXIT.CANNOT_RUN;
     }
@@ -35189,7 +35083,7 @@ ${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked
   for (const id of rules2 ?? [])
     if (!config.enabled[id]) note(`loupe: ${id} is off in this config \u2014 it reports nothing.
 `);
-    else if (id === "patterns/judged-redirect" && command === "check" && !args.flags.judge)
+    else if (JUDGE_ONLY_RULES.has(id) && command === "check" && !args.flags.judge)
       note(`loupe: ${id} reports only under --judge \u2014 this run reports nothing for it.
 `);
   const apiKey = args.flags.judge ? judgeKey() : void 0;
@@ -35213,22 +35107,8 @@ ${ignoredWarning(findings) ?? dim("  Commit this file \u2014 until it is tracked
 `);
       return EXIT.CANNOT_RUN;
     }
-    const about = tokenDescriptions(config.profiles?.active ?? []);
-    const judgeable = toFix.findings.filter((f) => f.suggest?.length);
     const client = apiKey ? judgeClient(apiKey, { cache: answerCache(root2, args.flags["no-cache"]) }) : null;
-    await Promise.all([
-      // With no design-system tokens, `judgeValues` is the one to refuse, and
-      // the refusal is noted like any other failure.
-      client && judgeable.length ? judgeValues(root2, judgeable, toFix.tokens, client, about).catch((err) => {
-        note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
-`);
-      }) : null,
-      // A judged rename is written like a spelled one, every line naming it.
-      client && toFix.tokens ? judgeRenames(root2, toFix.findings, toFix.tokens, client, about).catch((err) => {
-        note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
-`);
-      }) : null
-    ]);
+    if (client) await Promise.all(tokenJudgements(toFix.findings, toFix.tokens, client));
     client?.cache?.save();
     const spent = client && judgeSummary(client);
     if (spent) process.stderr.write(dim(`loupe: ${spent}
@@ -35277,12 +35157,13 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
 `);
     return EXIT.CANNOT_RUN;
   }
-  const group = args.flags["group-by"] ?? "rule";
-  if (!isGroupBy(group)) {
-    fail(`loupe: unknown grouping "${group}" \u2014 expected ${GROUP_BYS.join(", ")}
+  const grouping = groupByFlag(args.flags["group-by"]);
+  if (typeof grouping === "object") {
+    fail(`loupe: ${grouping.error}
 `);
     return EXIT.CANNOT_RUN;
   }
+  const group = grouping ?? "rule";
   const touched = isHook ? payloadFile(payload, root2) : null;
   if (isHook && !touched && hookEvent(payload) === "PostToolUse")
     return emitClean("loupe: skipped \u2014 not a file in this project.");
@@ -35312,10 +35193,8 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     return EXIT.CANNOT_RUN;
   }
   if (!args.flags["no-baseline"]) {
-    const { path: bPath, found } = findExistingBaseline(root2, namedBaseline, config.baselinePath);
-    const baseline = found ? readBaseline(bPath) : null;
-    if (found && !baseline) note(`loupe: baseline at ${bPath} is unreadable \u2014 ignoring it.
-`);
+    const { path: bPath, found, baseline } = loadBaseline();
+    if (found && !baseline) note(unreadableBaseline(bPath));
     if (!found && !isHook) {
       const legacy = legacyBaseline(root2);
       if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}
@@ -35367,37 +35246,29 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
 `);
       return [];
     }) : Promise.resolve([]);
-    const addRedirects = (found) => {
-      if (!found.length) return;
-      result.findings.push(...found);
+    const addRedirects = (found2) => {
+      if (!found2.length) return;
+      result.findings.push(...found2);
       result.findings = dedupe(result.findings);
     };
     if (isHook) addRedirects(await redirects);
     const targets = isHook ? await hookShows() : result.findings;
-    const about = tokenDescriptions(config.profiles?.active ?? []);
-    const settled = await Promise.all([
+    const [found] = await Promise.all([
       isHook ? Promise.resolve([]) : redirects,
-      judgeVariants(root2, targets, config.componentRegistry, client).catch((err) => {
-        note(`loupe: --judge skipped \u2014 ${messageOf(err)}
+      Promise.all([
+        judgeVariants(root2, targets, config.componentRegistry, client).catch((err) => {
+          note(`loupe: --judge skipped \u2014 ${messageOf(err)}
 `);
-      }),
-      // Its own note: the judgements above stand when this one cannot run. Asked
-      // without a token set too, so its refusal is said rather than skipped.
-      targets.some((f) => f.suggest?.length) ? judgeValues(root2, targets, result.tokens, client, about).catch((err) => {
-        note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}
-`);
-      }) : null,
-      result.tokens && targets.some((f) => f.unknown) ? judgeRenames(root2, targets, result.tokens, client, about).catch((err) => {
-        note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}
-`);
-      }) : null
+        }),
+        ...tokenJudgements(targets, result.tokens, client)
+      ])
     ]);
-    addRedirects(settled[0]);
+    addRedirects(found);
     client.cache?.save();
     judged = judgeSummary(client);
     if (deadline?.aborted) note(`loupe: --judge stopped at hook.timeoutMs (${config.hook.timeoutMs}ms)
 `);
-    result.blocking = result.findings.some((f) => f.severity === "error");
+    result.blocking = isBlocking(result.findings);
   }
   const spentSuffix = judged ? dim(` (${judged})`) : "";
   if (isHook) {

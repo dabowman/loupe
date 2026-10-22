@@ -101,57 +101,65 @@ export function stripComments(text: string): string {
 	return out.join('');
 }
 
+const OPENERS = new Set(['(', '[', '{']);
+const CLOSERS = new Set([')', ']', '}']);
+
+/**
+ * Walk PHP from `from`, for at most {@link ARGS_MAX} characters, with quotes
+ * honoured and bracket depth tracked. `visit` sees each unquoted character with
+ * the depth *before* it, and answers true to stop there; the offset stopped at
+ * comes back, or -1. The one scanner behind the two readers below.
+ */
+function scanCode(text: string, from: number, visit: (c: string, i: number, depth: number) => boolean): number {
+	let depth = 0;
+	let quote: string | null = null;
+	const stop = Math.min(text.length, from + ARGS_MAX);
+	for (let i = from; i < stop; i++) {
+		const c = text[i] ?? '';
+		if (quote) {
+			if (c === '\\') i++;
+			else if (c === quote) quote = null;
+			continue;
+		}
+		if (c === "'" || c === '"') {
+			quote = c;
+			continue;
+		}
+		if (visit(c, i, depth)) return i;
+		if (OPENERS.has(c)) depth++;
+		else if (CLOSERS.has(c)) depth--;
+	}
+	return -1;
+}
+
 /**
  * The top-level arguments of the call whose `(` is at `open`, or null when the
  * list does not close within {@link ARGS_MAX} characters.
  */
 export function argumentsAt(text: string, open: number): string[] | null {
 	const args: string[] = [];
-	let depth = 0;
-	let quote: string | null = null;
 	let start = open + 1;
-	const stop = Math.min(text.length, open + ARGS_MAX);
-	for (let i = open + 1; i < stop; i++) {
-		const c = text[i];
-		if (quote) {
-			if (c === '\\') i++;
-			else if (c === quote) quote = null;
-			continue;
-		}
-		if (c === "'" || c === '"') quote = c;
-		else if (c === '(' || c === '[' || c === '{') depth++;
-		else if (c === ')' && depth === 0) {
-			const last = text.slice(start, i).trim();
-			if (last || args.length) args.push(last);
-			return args;
-		} else if (c === ')' || c === ']' || c === '}') depth--;
-		else if (c === ',' && depth === 0) {
+	const end = scanCode(text, open + 1, (c, i, depth) => {
+		if (depth !== 0) return false;
+		if (c === ')') return true;
+		if (c === ',') {
 			args.push(text.slice(start, i).trim());
 			start = i + 1;
 		}
-	}
-	return null;
+		return false;
+	});
+	if (end === -1) return null;
+	const last = text.slice(start, end).trim();
+	if (last || args.length) args.push(last);
+	return args;
 }
 
 /**
  * The offset of the bracket closing the one at `open`, or -1 when it does not
  * close within {@link ARGS_MAX} characters. Quotes are honoured.
  */
-function closingAt(text: string, open: number): number {
-	let depth = 0;
-	let quote: string | null = null;
-	const stop = Math.min(text.length, open + ARGS_MAX);
-	for (let i = open; i < stop; i++) {
-		const c = text[i];
-		if (quote) {
-			if (c === '\\') i++;
-			else if (c === quote) quote = null;
-		} else if (c === "'" || c === '"') quote = c;
-		else if (c === '(' || c === '[' || c === '{') depth++;
-		else if ((c === ')' || c === ']' || c === '}') && --depth === 0) return i;
-	}
-	return -1;
-}
+const closingAt = (text: string, open: number): number =>
+	scanCode(text, open, (c, _i, depth) => CLOSERS.has(c) && depth === 1);
 
 /** A quoted string with nothing interpolated into it, unquoted; else null. */
 const literal = (arg: string): string | null => {
