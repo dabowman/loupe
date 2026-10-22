@@ -224,15 +224,18 @@ const groupsOf = (findings: readonly Finding[], by: GroupBy): Group[] =>
 	by === 'rule' ? bucket(findings, (f) => f.rule).sort(byRank) : bucket(findings, (f) => f.file).sort(byWeight);
 
 /**
- * What makes two findings one line of the report: the same rule, in the same
- * file, printing the same text.
+ * What a finding says, wherever it is: its code, its whole message and its note.
  *
- * The printed text rather than `code`: `code` is the baselining identity, and
- * for a margin it is the property alone — `margin-top: 2px` and `margin-top:
- * 12px` share it, and a line that printed one of them under the other's count
- * would be stating something false about the file.
+ * Whole, not the printed line: that one is capped, so two declarations whose
+ * text differs only past the cap printed alike and were counted as one. Nor
+ * `code` alone: for a margin it is the property, so `margin-top: 2px` and
+ * `margin-top: 12px` share it, and a line printing one of them under the
+ * other's count would be stating something false about the file.
  */
-const sameLine = (f: Finding): string => `${f.rule}\u0000${f.file}\u0000${painted(f)}`;
+const sameText = (f: Finding): string => `${f.code ?? ''}\u0000${f.message}\u0000${f.note ?? ''}`;
+
+/** What makes two findings one line of the report: the same rule, in the same file, saying the same thing. */
+const sameLine = (f: Finding): string => `${f.rule}\u0000${f.file}\u0000${sameText(f)}`;
 
 /**
  * Identical findings, one entry each, largest first and then first-seen. Each
@@ -259,7 +262,7 @@ const collapse = (findings: readonly Finding[]): Finding[][] =>
 function concentration(group: readonly Finding[], nested: boolean): string {
 	if (group.length < 2) return String(group.length);
 	const files = new Set(group.map((f) => f.file)).size;
-	const distinct = new Set(group.map(painted)).size;
+	const distinct = new Set(group.map(sameText)).size;
 	return `${group.length}${nested ? '' : ` in ${files} ${files === 1 ? 'file' : 'files'}`}, ${distinct} distinct`;
 }
 
@@ -304,7 +307,7 @@ function findingLines(group: readonly Finding[]): string[] {
 	return runs.map((run) => {
 		const [f] = run as [Finding, ...Finding[]];
 		const at = run.map((g) => g.line);
-		const more = at.length > MAX_LINES ? ', \u2026' : '';
+		const more = at.length > MAX_LINES ? `, \u2026 +${at.length - MAX_LINES} more` : '';
 		const times =
 			run.length > 1 ? `  \u00d7${run.length} ${dim(`(lines ${at.slice(0, MAX_LINES).join(', ')}${more})`)}` : '';
 		return `      ${dim(String(f.line).padStart(width))}  ${painted(f)}${times}`;

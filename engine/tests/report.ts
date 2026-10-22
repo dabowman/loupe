@@ -983,6 +983,35 @@ await check('the budget counts printed lines, so duplicates do not eat it', () =
 	assert(/4 finding\(s\) not shown/.test(single), `the total hidden is not in findings:\n${single}`);
 });
 
+// The collapse keyed on the painted line, which the line bound caps: two
+// findings with different codes and the same capped text merged into one
+// "×2", counted as one distinct. And past ten lines the rest went unlisted with
+// nothing to say how many.
+await check('a collapsed line is the same finding, and says how many lines it did not list', () => {
+	const { config } = dupes;
+	const at = (line: number, code: string): Finding => ({
+		rule: 'layout/margin-on-child',
+		severity: 'warn',
+		rank: 1,
+		file: 'styles/x.css',
+		line,
+		code,
+		message: 'margin-bottom: 8px (.acme-card-h\u2026',
+	});
+	const apart = formatAgent(
+		{ ...dupes.result, findings: [at(4, '.acme-card-head'), at(6, '.acme-card-hint')] },
+		config,
+	);
+	assert(!/×2/.test(apart), `two codes collapsed onto one line:\n${apart}`);
+	assert(/\(2 distinct\)|, 2 distinct\)/.test(apart), `two codes counted as one distinct:\n${apart}`);
+	const many = Array.from({ length: 13 }, (_, i) => at(i + 1, 'same'));
+	const listed = formatAgent({ ...dupes.result, findings: many }, config);
+	assert(
+		/×13 \(lines 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, \u2026 \+3 more\)/.test(listed),
+		`hidden lines uncounted:\n${listed}`,
+	);
+});
+
 await check('json and sarif stay one entry per finding', () => {
 	const { result, config } = dupes;
 	assert(reportPayload(result, config).findings.length === result.findings.length, 'json collapsed findings');
