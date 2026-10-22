@@ -1288,7 +1288,7 @@ Known limits, in rough priority order:
 ```bash
 cd engine
 npm install
-npm test           # typecheck, then all six suites
+npm test           # lint, typecheck, then every suite
 npm run build      # rebuild dist/loupe.mjs, and commit it
 ```
 
@@ -1356,7 +1356,8 @@ what the shared classifier decided from what a formatter is allowed to see.
 cd engine && npm test
 ```
 
-Seven suites over a shared harness. `tests/run.ts` is fixture-driven, one
+`npm test` runs the lint, then the typecheck, then every suite below, in this
+order and over a shared harness. `tests/run.ts` is fixture-driven, one
 directory per behaviour, each with a note explaining what it pins down — since
 behaviour is config-driven, this is the only thing standing between a preset
 edit and a rule silently switching itself off. `tests/detect.ts` covers
@@ -1367,15 +1368,48 @@ absolute path that matched nothing and returned clean. `tests/features.ts`
 covers the three channels and the two cross-file rules — everything that reports
 across a boundary a single-file linter cannot see. `tests/autofix.ts` covers
 `fix`, where every failure is invisible: the value is right, the file parses, the
-report goes clean, and the meaning has changed. `tests/multi-ds.ts` covers
-registry scoping and profile selection — which design system answers for a file,
-in a repo that has more than one. `tests/report.ts` covers the formats: that the
-HTML page and `--format json` cannot describe different reports, that a finding
-carrying `</script>` — CSS-in-JS source routinely does — cannot end the block its
-own data sits in, and that a misspelled `--format` is rejected instead of
-quietly printing the agent format and exiting 0.
+report goes clean, and the meaning has changed.
 
-`tests/harness.ts` holds what all seven were carrying their own copy of —
+`tests/judge-cache.ts` covers what a judged run spends — the shared client, the
+answer cache, and the hook paying only for what it prints — counted as requests
+to a local stand-in for TypeSafe. `tests/index-cache.ts` covers the index cache,
+which may change what a run costs and nothing else: after every kind of change a
+cache could miss, the cached result must equal an uncached run byte for byte.
+`tests/scan-pool.ts` covers the worker pool, whose scans must equal in-process
+ones from source and from the bundle, and checks that the workers actually ran —
+a pool that quietly fell back would pass every comparison.
+
+`tests/multi-ds.ts` covers registry scoping and profile selection — which design
+system answers for a file, in a repo that has more than one. `tests/scopes.ts`
+covers token scopes, where a suggestion from the wrong family is the right
+pixels with the wrong meaning and a scope declaration that failed to load reads
+exactly like one never written. `tests/delivery.ts` covers whether a project can
+actually use what a finding recommends — tokens its pages never load, a package
+it would have to bundle — with the profile's `delivery.json` read strictly and
+every consumer failing safe. `tests/map.ts` covers mapping one token set onto
+another, with two fixtures that record the same decisions and agree on nothing
+else, so a reader or a ranking that turns quietly system-specific shows up as a
+pair that stops matching.
+
+`tests/report.ts` covers the formats: that the HTML page and `--format json`
+cannot describe different reports, that a finding carrying `</script>` —
+CSS-in-JS source routinely does — cannot end the block its own data sits in, and
+that a misspelled `--format` is rejected instead of quietly printing the agent
+format and exiting 0. `tests/dom-match.ts` covers the selector matcher that
+`serve` and the DevTools extension share, for the two mistakes that still
+highlight something: an escaping slip in the template literal it lives in, and
+the extension's vendored copy drifting behind. `tests/serve.ts` covers the
+read-only overlay server: a finding's `selector` is the whole selector and is
+absent where there is no CSS rule, and the client it ships still has both
+placeholders filled in. `tests/ui.ts` covers `loupe ui`, the one server that
+writes, and is mostly its refusals: nothing written without the secret or
+against a stale revision, and `fix` and `suppress` writing the same bytes
+`loupe fix` and the language server write. `tests/lsp.ts` drives the language
+server over a real pipe, for three failures that are silent from the inside: a
+mis-framed message, a diagnostic never cleared, and a quick fix that writes
+something other than `loupe fix`.
+
+`tests/harness.ts` holds what the suites were each carrying their own copy of —
 `check`, `assert`, the scratch-repo helpers — plus `one()` and `first()`, which
 read a single expected element out of a result list and fail with the count when
 there isn't one.
