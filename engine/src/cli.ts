@@ -1057,6 +1057,15 @@ async function main(): Promise<number> {
 			// Where the caches are and what is in them: a run that seems to ignore an
 			// edit is a question this line answers, and `--no-cache` is the remedy.
 			`${dim('cache:      ')}${useCache ? cacheLine(root) : 'off \u2014 LOUPE_NO_CACHE or --no-cache'}`,
+			// The same split as the retry counter's: a terminal's caches are not the
+			// hook's, which live under its plugin data, keyed on its project.
+			...(useCache && !process.env.CLAUDE_PLUGIN_DATA
+				? [
+						dim(
+							`            for this terminal; the Claude Code hook's are in ${toPosix(projectStateDir(hookDir, '$CLAUDE_PLUGIN_DATA'))}`,
+						),
+					]
+				: []),
 			// Asked through the same predicate the gate uses: reporting on mere truthiness
 			// meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
 			...(off ? [yellow(`hook:       OFF \u2014 ${off}`)] : []),
