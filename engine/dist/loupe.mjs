@@ -27598,30 +27598,36 @@ ${stableJson(inputs)}`).slice(0, 16);
    */
   lookup(abs, rel) {
     this.#seen.add(rel);
+    const at = Date.now();
     let stat = null;
     try {
       stat = statSync2(abs);
     } catch {
-      return { stat: null, entry: null, text: null };
+      return { at, stat: null, entry: null, text: null };
     }
     const entry = this.#entries.get(rel);
-    if (!entry || entry.s !== stat.size) return { stat, entry: null, text: null };
-    if (entry.m === stat.mtimeMs && entry.m < entry.t - RACY_MS) return { stat, entry, text: null };
+    if (!entry || entry.s !== stat.size) return { at, stat, entry: null, text: null };
+    if (entry.m === stat.mtimeMs && entry.m < entry.t - RACY_MS) return { at, stat, entry, text: null };
     let text2;
     try {
       text2 = readFileSync5(abs, "utf8");
     } catch {
-      return { stat, entry: null, text: null };
+      return { at, stat, entry: null, text: null };
     }
-    if (sha256(text2) !== entry.h) return { stat, entry: null, text: text2 };
+    if (sha256(text2) !== entry.h) return { at, stat, entry: null, text: text2 };
     entry.m = stat.mtimeMs;
-    entry.t = Date.now();
+    entry.t = at;
     this.#dirty = true;
-    return { stat, entry, text: text2 };
+    return { at, stat, entry, text: text2 };
   }
-  /** Record what a file contributed, from the bytes just analyzed. */
-  store(rel, stat, text2, data) {
-    this.#entries.set(rel, { m: stat.mtimeMs, s: stat.size, h: sha256(text2), t: Date.now(), ...data });
+  /**
+   * Record what a file contributed, from the bytes just analyzed. Stamped with
+   * the lookup's time, not the time of storing: a scan can finish seconds after
+   * the read, and the racy-mtime guard is measured from the read.
+   */
+  store(look, rel, text2, data) {
+    if (!look.stat) return;
+    this.#entries.set(rel, { m: look.stat.mtimeMs, s: look.stat.size, h: sha256(text2), t: look.at, ...data });
     this.#dirty = true;
   }
   /**
@@ -27664,7 +27670,7 @@ var loadScan = (stored) => ({
 });
 
 // src/scan-pool.ts
-import { availableParallelism } from "node:os";
+import os from "node:os";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 var TAG = "loupe-scan-worker";
 var MIN_FILES = 150;
@@ -27677,7 +27683,7 @@ function workerCount(jobs) {
   let bytes = 0;
   for (const j of jobs) bytes += j.text.length;
   if (bytes < MIN_BYTES) return 0;
-  const cores = availableParallelism();
+  const cores = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
   if (cores < 2) return 0;
   return Math.min(cores - 1, 8, Math.ceil(jobs.length / BATCH));
 }
@@ -28685,7 +28691,7 @@ async function analyze(config, {
   const cssInJs = [];
   const composites2 = [];
   const patternRules = (config.patterns ?? []).flatMap(
-    (p) => p.rules.map((spec) => ({ patternId: p.id, spec }))
+    (p) => p.rules.filter((spec) => judge || spec.rule !== "judge").map((spec) => ({ patternId: p.id, spec }))
   );
   const cache2 = useCache ? new IndexCache(config.root, {
     ds,
@@ -28736,8 +28742,8 @@ async function analyze(config, {
     const scanned = scan;
     diagnostics.filesScanned++;
     const supp = suppressionsFor(rel, text2 ?? "");
-    if (cache2 && look?.stat && !look.entry?.scan)
-      cache2.store(rel, look.stat, text2 ?? "", { d: hasDirectives(supp), scan: storeScan(scanned) });
+    if (look && !look.entry?.scan && !scanned.parseError)
+      cache2?.store(look, rel, text2 ?? "", { d: hasDirectives(supp), scan: storeScan(scanned) });
     if (scanned.parseError) diagnostics.parseErrors.push({ file: rel, message: scanned.parseError });
     for (const t of scanned.referenced) referenced.add(t);
     for (const t of scanned.stems) stems.add(t);
@@ -28759,7 +28765,7 @@ async function analyze(config, {
     cssInJs.push(...scanned.cssInJs);
     composites2.push(...scanned.composites);
     for (const h of scanned.ruleHits) ruleHits.push({ ...h, file: rel });
-    if (judge) controls.push(...scanned.controls);
+    controls.push(...scanned.controls);
     if (scanned.imports) importsByFile.set(rel, scanned.imports);
     for (const ci of scanned.componentImports) componentImports.push({ ...ci, file: rel });
   }
@@ -28790,7 +28796,7 @@ async function analyze(config, {
     const found = harvestTokens(text2);
     for (const t of found) referenced.add(t);
     diagnostics.filesScanned++;
-    if (cache2 && look?.stat) cache2.store(rel, look.stat, text2, { d: false, refs: [...found] });
+    if (look) cache2?.store(look, rel, text2, { d: false, refs: [...found] });
   }
   const styledClasses = /* @__PURE__ */ new Set();
   const layoutClasses = /* @__PURE__ */ new Set();
@@ -28842,7 +28848,7 @@ async function analyze(config, {
         failed = { error: parseMessageOf(err, abs), reason: parseReasonOf(err) };
       }
       sheet = failed ?? extractSheet(root2, src, tokenPrefixes);
-      if (cache2 && look?.stat) cache2.store(rel, look.stat, src, { d: hasDirectives(supp), sheet });
+      if (look && !failed) cache2?.store(look, rel, src, { d: hasDirectives(supp), sheet });
     }
     if ("error" in sheet) {
       unparsed(sheet.error, sheet.reason);
@@ -29556,7 +29562,7 @@ async function judgeRedirects(controls, auth, severity, fetchImpl = fetch) {
   const client = clientOf(auth, fetchImpl);
   const known = controls.map(() => ({}));
   const sure = controls.map(() => ({}));
-  await Promise.all(
+  const settled = await Promise.allSettled(
     Object.entries(LANGUAGE.vocabulary.forces).map(async ([name, force]) => {
       if (!force.judge) return;
       const asked = controls.flatMap((c, i) => tableOf(c).some((r) => r.when && name in r.when) ? [i] : []);
@@ -29574,6 +29580,7 @@ async function judgeRedirects(controls, auth, severity, fetchImpl = fetch) {
       });
     })
   );
+  for (const r of settled) if (r.status === "rejected") throw r.reason;
   return controls.flatMap((c, i) => {
     const r = resolveRule(tableOf(c), known[i] ?? {});
     if (!r?.redirect) return [];
@@ -32907,6 +32914,13 @@ async function main() {
       // Where the caches are and what is in them: a run that seems to ignore an
       // edit is a question this line answers, and `--no-cache` is the remedy.
       `${dim("cache:      ")}${useCache ? cacheLine(root2) : "off \u2014 LOUPE_NO_CACHE or --no-cache"}`,
+      // The same split as the retry counter's: a terminal's caches are not the
+      // hook's, which live under its plugin data, keyed on its project.
+      ...useCache && !process.env.CLAUDE_PLUGIN_DATA ? [
+        dim(
+          `            for this terminal; the Claude Code hook's are in ${toPosix(projectStateDir(hookDir, "$CLAUDE_PLUGIN_DATA"))}`
+        )
+      ] : [],
       // Asked through the same predicate the gate uses: reporting on mere truthiness
       // meant `LOUPE_OFF=0` printed OFF while the hook went on blocking.
       ...off ? [yellow(`hook:       OFF \u2014 ${off}`)] : [],
@@ -32927,9 +32941,9 @@ async function main() {
       const def = RULES[id];
       const sev = config.severityOf(id);
       const judgeOnly = id === "patterns/judged-redirect";
-      const verdict = config.enabled[id] ? sev === "error" && gateBlocks ? red(judgeOnly ? "BLOCKS (--judge only)" : "BLOCKS") : judgeOnly ? yellow("advisory, --judge only") : sev === "error" ? yellow("advisory in the hook (would block if enabled); fails `check`") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
+      const verdict2 = config.enabled[id] ? sev === "error" && gateBlocks ? red(judgeOnly ? "BLOCKS (--judge only)" : "BLOCKS") : judgeOnly ? yellow("advisory, --judge only") : sev === "error" ? yellow("advisory in the hook (would block if enabled); fails `check`") : yellow("advisory") : dim(`off (${sev === "off" ? "disabled in config" : `needs ${def.needs.join("+")}`})`);
       const reason = config.rules[id].reason;
-      lines.push(`  ${magenta(id.padEnd(32))} ${verdict}${reason ? dim(` \u2014 ${reason}`) : ""}`);
+      lines.push(`  ${magenta(id.padEnd(32))} ${verdict2}${reason ? dim(` \u2014 ${reason}`) : ""}`);
     }
     const blockers = RULE_IDS.filter((id) => config.enabled[id] && config.severityOf(id) === "error");
     const quiet = off ? "Nothing blocks turns: the hook is off." : "Nothing blocks turns; the hook reports every finding as advisory.";
@@ -33332,11 +33346,23 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   }
   if (args.flags.severity) result = filterSeverity(result, args.flags.severity);
   const budgetKey = `${payload.session_id ?? ""}${touched ? `\0${touched}` : ""}`;
-  const hookShows = (findings) => {
-    const blocking = findings.filter((f) => f.severity === "error");
+  let verdict = null;
+  const hookVerdict = () => verdict ??= (async () => {
+    const errors = result.findings.filter((f) => f.severity === "error");
+    if (!touched || !errors.length) return { errors, blocking: errors };
+    const stopScope = resolveScope(config, args, { defaultChanged: true });
+    if (stopScope !== null && !Array.isArray(stopScope)) return { errors, blocking: errors };
+    const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
+      judge: Boolean(apiKey),
+      suppress: !args.flags["no-suppressions"]
+    });
+    return { errors, blocking: introducedBy(errors, before) };
+  })();
+  const hookShows = async () => {
+    const { blocking } = await hookVerdict();
     if (!blocking.length) return [];
     if (!payload.session_id && payload.stop_hook_active) return [];
-    if (payload.session_id && peekAttempts(root2, budgetKey) + 1 > config.hook.maxAttempts) return [];
+    if (peekAttempts(root2, budgetKey) + 1 > config.hook.maxAttempts) return [];
     return shownFindings(blocking, config.hook.maxFindings);
   };
   let judged = null;
@@ -33359,7 +33385,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
       result.findings = dedupe(result.findings);
     };
     if (isHook) addRedirects(await redirects);
-    const targets = isHook ? hookShows(result.findings) : result.findings;
+    const targets = isHook ? await hookShows() : result.findings;
     const about = tokenDescriptions(config.profiles?.active ?? []);
     const settled = await Promise.all([
       isHook ? Promise.resolve([]) : redirects,
@@ -33388,19 +33414,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
   const spentSuffix = judged ? dim(` (${judged})`) : "";
   if (isHook) {
     const sessionId = payload.session_id ?? "";
-    const errors = result.findings.filter((f) => f.severity === "error");
-    let blocking = errors;
-    const stopSees = () => {
-      const stopScope = resolveScope(config, args, { defaultChanged: true });
-      return stopScope === null || Array.isArray(stopScope);
-    };
-    if (touched && errors.length && stopSees()) {
-      const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
-        judge: Boolean(apiKey),
-        suppress: !args.flags["no-suppressions"]
-      });
-      blocking = introducedBy(errors, before);
-    }
+    const { errors, blocking } = await hookVerdict();
     const standing = errors.length - blocking.length;
     const standingNote = standing ? ` ${standing} blocking finding(s) already in ${touched} before this edit, left for the Stop check.` : "";
     if (!blocking.length) {
@@ -33429,9 +33443,10 @@ ${report2}`, payload);
       maxFindings: config.hook.maxFindings,
       terse: true
     });
+    const spent = judged ? `; ${judged}` : "";
     return emitBlocking(`${report}
 
-(attempt ${attempts} of ${max})${standingNote}${ceilingSuffix}`);
+(attempt ${attempts} of ${max}${spent})${standingNote}${ceilingSuffix}`);
   }
   const maxFindings = Number(args.flags["max-findings"] ?? 0) || 0;
   if (format === "json") process.stdout.write(`${JSON.stringify(reportPayload(result, config), null, 2)}

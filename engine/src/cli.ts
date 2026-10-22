@@ -1729,7 +1729,7 @@ async function main(): Promise<number> {
 			(!rules || rules.has('patterns/judged-redirect'));
 		const redirects = askRedirects
 			? judgeRedirects(result.controls ?? [], client, redirectSeverity).catch((err: unknown) => {
-					note(`loupe: --judge skipped — ${messageOf(err)}\n`);
+					note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
 					return [];
 				})
 			: Promise.resolve([]);
@@ -1751,18 +1751,18 @@ async function main(): Promise<number> {
 		const settled = await Promise.all([
 			isHook ? Promise.resolve([]) : redirects,
 			judgeVariants(root, targets, config.componentRegistry, client).catch((err: unknown) => {
-				note(`loupe: --judge skipped — ${messageOf(err)}\n`);
+				note(`loupe: --judge skipped \u2014 ${messageOf(err)}\n`);
 			}),
 			// Its own note: the judgements above stand when this one cannot run. Asked
 			// without a token set too, so its refusal is said rather than skipped.
 			targets.some((f) => f.suggest?.length)
 				? judgeValues(root, targets, result.tokens, client, about).catch((err: unknown) => {
-						note(`loupe: --judge left hardcoded values unjudged — ${messageOf(err)}\n`);
+						note(`loupe: --judge left hardcoded values unjudged \u2014 ${messageOf(err)}\n`);
 					})
 				: null,
 			result.tokens && targets.some((f) => f.unknown)
 				? judgeRenames(root, targets, result.tokens, client, about).catch((err: unknown) => {
-						note(`loupe: --judge left unknown tokens unjudged — ${messageOf(err)}\n`);
+						note(`loupe: --judge left unknown tokens unjudged \u2014 ${messageOf(err)}\n`);
 					})
 				: null,
 		]);
