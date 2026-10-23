@@ -178,16 +178,18 @@ function render(abstract: Abstract, real: Realization, profileId: string): strin
 		const { id, variant, part } = keyParts(key);
 		const p = byId.get(id);
 		if (!p) return;
-		// A sub-part (`toolbar.filter`) is the profile's own subdivision, so its
-		// own note is the description; an abstract part or variant speaks for
-		// itself; the profile's note is the fallback when the abstract is silent.
-		const subPart = key.includes('#') && (key.split('#')[1] ?? '').includes('.');
+		// The column is what the agent is about to build, which is the abstract
+		// language's to say: a part or variant speaks for itself, and the
+		// pattern's problem covers the rest. A sub-part (`toolbar.filter`) has
+		// no abstract text of its own, so the part it subdivides speaks for it.
+		// The profile's note is a caveat about the realization — what replaces
+		// it, what its signature also matches — and is the fallback only when
+		// the abstract is silent.
 		const about =
-			(subPart ? firstSentence(e.note) : '') ||
 			(part ? firstSentence((p.parts ?? []).find((x) => x.role === part)?.note) : '') ||
 			(variant ? firstSentence(p.variants[variant]?.summary) : '') ||
-			firstSentence(e.note) ||
-			firstSentence(p.problem);
+			firstSentence(p.problem) ||
+			firstSentence(e.note);
 		const canonical = 'canonical' in e ? e.canonical : inheritedCanonical;
 		const pkg = e.import ?? inheritedImport;
 		const reach = canonical
