@@ -23803,17 +23803,16 @@ function ensureDir(dir) {
 var projectStateDir = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join(data || join(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`), projectKey(root2));
 var attemptsPath = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join(projectStateDir(root2, data), "attempts.json");
 var cacheDisabled = (flag) => Boolean(flag) || isOn(process.env.LOUPE_NO_CACHE);
-var DEFAULT_BASELINE = ".loupe-baseline.json";
+var DEFAULT_BASELINE = ".loupe/baseline.json";
 var baselinePath = (root2, p) => under(root2, p);
 function legacyBaseline(root2) {
+  const renamed = join(root2, ".loupe-baseline.json");
+  if (existsSync(renamed)) return { path: renamed, renamed: true };
   const data = process.env.CLAUDE_PLUGIN_DATA;
-  const candidates = [
-    join(root2, ".loupe", "baseline.json"),
-    ...data ? [join(data, "projects", projectKey(root2), "baseline.json")] : []
-  ];
-  return candidates.find((path) => existsSync(path)) ?? null;
+  const old = data ? join(data, "projects", projectKey(root2), "baseline.json") : null;
+  return old && existsSync(old) ? { path: old, renamed: false } : null;
 }
-var legacyBaselineNotice = (path) => `${path} is a 0.1.x baseline, which this version no longer reads \u2014 re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
+var legacyBaselineNotice = (legacy, target) => legacy.renamed ? `${legacy.path} is a baseline under its old name, which this version no longer reads \u2014 move it to ${target} to keep the backlog it accepted.` : `${legacy.path} is a 0.1.x baseline, which this version no longer reads \u2014 re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
 function findExistingBaseline(root2, explicit, configured) {
   if (explicit !== null) {
     const path = baselinePath(root2, explicit);
@@ -34395,7 +34394,7 @@ Options:
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn \u2014 minimum severity to report
   --baseline <path>     Read/write the baseline here instead of the configured
-                        path (default: .loupe-baseline.json in the project)
+                        path (default: .loupe/baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
   --no-suppressions     Report what suppression directives would mute; with
                         --no-baseline, the full audit
@@ -34964,7 +34963,7 @@ async function main() {
       ...blocks.length ? [`${dim("blocks:     ")}${describeBlocks(blocks)}`] : [],
       `${dim("suppress:   ")}${directive(config.suppression.keyword, "<ruleId>", "<reason>")}`,
       `${dim("baseline:   ")}${base.path}${base.found && base.baseline === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
-      ...legacy ? [yellow(`            ${legacyBaselineNotice(legacy)}`)] : [],
+      ...legacy ? [yellow(`            ${legacyBaselineNotice(legacy, base.path)}`)] : [],
       // Beside the baseline line, because the two used to share a directory and are
       // easy to assume still do: the retry counter is the one that stays out of the
       // repo. The marker is computed, not assumed — a root above the temp
@@ -35448,7 +35447,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     if (found && !baseline) note(unreadableBaseline(bPath));
     if (!found && !isHook) {
       const legacy = legacyBaseline(root2);
-      if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}
+      if (legacy) note(`loupe: ${legacyBaselineNotice(legacy, bPath)}
 `);
     }
     result = applyBaseline(result, baseline, { scoped: scope !== null, rules: rules2, enabled: config.enabled });
