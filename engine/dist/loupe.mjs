@@ -25099,9 +25099,7 @@ var wpds_default = {
       ]
     },
     tokenSources: [
-      "node_modules/@wordpress/theme/prebuilt/css/design-tokens.css",
-      "node_modules/@wordpress/theme/build-style",
-      "node_modules/@wordpress/components/build-style"
+      "node_modules/@wordpress/theme/prebuilt/css/design-tokens.css"
     ]
   },
   suppression: {
