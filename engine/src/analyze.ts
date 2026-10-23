@@ -174,7 +174,7 @@ function compoundElements(
 	compound: string,
 	carriersByClass: ReadonlyMap<string, readonly ClassCarrier[]>,
 ): string[] | null {
-	if (compound.includes('loupe-e') || compound.includes('\\')) return null;
+	if (compound.includes('__loupe_interp__') || compound.includes('\\')) return null;
 	const own = ownLevel(compound);
 	const tag = tagOf(own);
 	if (tag) return [tag];

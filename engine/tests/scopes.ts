@@ -655,8 +655,8 @@ export const A = () => (
 // records, and every misreading of either named an element the rule does not
 // style: `.a.b` took the elements of each class, a class inside `:not()` counted,
 // an attribute value split into a tag, a nested group kept its last selector,
-// an interpolation read as `<loupe-e>`, and a class shared with an unrecorded
-// element was taken to style only the recorded one.
+// an interpolation read as the element its placeholder spelled, and a class
+// shared with an unrecorded element was taken to style only the recorded one.
 await check('what a rule styles is read conservatively, and unknown where it is not shown', async () => {
 	const { findings, misapplied } = await run({
 		'src/A.jsx': `import styled from '@emotion/styled';

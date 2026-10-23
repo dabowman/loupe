@@ -282,6 +282,24 @@ await check('an interpolated value produces no finding', async () => {
 	);
 });
 
+// A value containing the interpolation placeholder is dropped as unknowable, so
+// a placeholder an author could also write would silently drop theirs: `loupe`
+// is a magnifier's name as well as this tool's.
+await check('a value that only resembles the interpolation placeholder is still read', async () => {
+	const src = [
+		"import styled from 'styled-components';",
+		'const Zoom = styled.div`',
+		'\tbackground: #f00 url(loupe-edge.png);',
+		'`;',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Zoom.tsx': src });
+	const hardcoded = at(r, 'tokens/hardcoded-value');
+	assert(
+		hardcoded.some((f) => f.line === 3),
+		`a lookalike value went unread: ${r.findings.map((f) => `${f.line} ${f.rule}`)}`,
+	);
+});
+
 await check('a descendant selector does not answer for the styled component', async () => {
 	const src = [
 		"import styled from 'styled-components';",
