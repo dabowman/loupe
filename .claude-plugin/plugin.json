@@ -5,6 +5,7 @@
   "author": {
     "name": "David Bowman"
   },
+  "license": "MIT",
   "keywords": [
     "design-system",
     "code-quality",
