@@ -8,8 +8,9 @@
  *
  * Three decisions follow, and they are the design:
  *
- * 1. It serves, it does not integrate — a stdlib HTTP server, permissive CORS,
- *    and a bookmarklet. Nothing to install in the app, no bundler config.
+ * 1. It serves, it does not integrate — a stdlib HTTP server on loopback,
+ *    permissive CORS, and a bookmarklet. Nothing to install in the app, no
+ *    bundler config.
  * 2. Re-analyze per request. No watcher, no cache, no invalidation rules to get
  *    wrong.
  * 3. The panel says what it cannot see. A finding matching nothing on this page,
@@ -318,16 +319,29 @@ and a panel over every page eats their clicks.</p>
 </main>`;
 
 /**
+ * Where the server binds unless `--host` says otherwise. Every documented client
+ * — the bookmarklet, the WordPress mu-plugin, the DevTools extension — runs in
+ * this machine's browser, and `/findings.json` has no auth behind its `*` CORS
+ * header, so the bind is what keeps the report on this machine.
+ */
+const LOOPBACK = '127.0.0.1';
+
+/**
  * Start the server. Resolves once it is listening, with the URL it actually
- * bound and a way to stop it; the CLI then simply never stops it, which is what
- * a dev-loop server is for.
+ * bound, the address under it, and a way to stop it; the CLI then simply never
+ * stops it, which is what a dev-loop server is for.
  */
 export function serve(opts: {
 	port: number;
+	/** The address to bind. Absent or empty is {@link LOOPBACK}. */
+	host?: string | undefined;
 	config: Config;
 	run: () => Promise<AnalyzeResult | BaselinedResult>;
-}): Promise<{ url: string; close: () => Promise<void> }> {
+}): Promise<{ url: string; address: string; close: () => Promise<void> }> {
 	const { port, config, run } = opts;
+	// `||`, not `??`: Node reads an empty host as no host, which binds every
+	// interface — the one bind this default exists to avoid.
+	const host = opts.host || LOOPBACK;
 	// The client is served from this origin and fetches from it, so it is told its
 	// own address — `document.currentScript` is null once the script has been
 	// `eval`'d from the console.
@@ -343,7 +357,8 @@ export function serve(opts: {
 		const server = createServer((req, res) => {
 			const origin = url;
 			// The app under inspection is on another port, and in wp-env another host
-			// entirely. The permissive header is the feature, not an oversight.
+			// entirely. The permissive header is the feature, not an oversight; the
+			// bind below is what bounds who can reach it.
 			res.setHeader('access-control-allow-origin', '*');
 			const path = (req.url ?? '/').split('?')[0];
 			/** One answer: its type, never cached, and the status it goes out under. */
@@ -383,11 +398,21 @@ export function serve(opts: {
 			send('text/plain', 'not found', 404);
 		});
 		server.on('error', reject);
-		server.listen(port, () => {
+		server.listen(port, host, () => {
 			const addr = server.address();
-			if (addr && typeof addr === 'object') url = `http://localhost:${addr.port}`;
+			let address = host;
+			if (addr && typeof addr === 'object') {
+				address = addr.address;
+				// `localhost` on the default bind, as every documented URL says. A given
+				// host is named as bound: the client fetches from this URL, so it must be
+				// the address that browser reaches, and the banner then says where the
+				// server actually is.
+				const name = !opts.host ? 'localhost' : address.includes(':') ? `[${address}]` : address;
+				url = `http://${name}:${addr.port}`;
+			}
 			resolve({
 				url,
+				address,
 				close: () =>
 					new Promise((done) => {
 						server.close(() => done());

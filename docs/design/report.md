@@ -951,6 +951,17 @@ that cannot contain a backtick is one nobody has to escape correctly forever.
   another port, and under wp-env another host entirely; these are read-only
   findings about the developer's own working tree, served to a page they just
   clicked a bookmarklet on.
+- **The bind is what bounds it.** `/findings.json` has no auth, so a server on
+  every interface — Node's default when `listen` is given no host — hands every
+  path, selector and literal in the tree to the network. Every client runs in
+  this machine's browser (the bookmarklet, the WordPress mu-plugin, whose URL is
+  printed into the page rather than fetched by the container, and the DevTools
+  extension, which reads `127.0.0.1`), so it binds loopback. `--host` is the
+  explicit opt-in for a browser on another machine. The URL then names the bound
+  address rather than `localhost`, for two reasons: the client is told that URL
+  as the one to fetch from, so it must be one the other browser reaches; and the
+  banner is where the reader learns what the server is reachable at. An empty
+  `--host=` is loopback too, because Node reads an empty host as none.
 - **A failed analysis must not read as a clean page**, so the status code keeps
   it out of `.json()` while the client shows the message.
 

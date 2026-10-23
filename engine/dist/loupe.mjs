@@ -32901,8 +32901,10 @@ It is off until you ask because browser tests usually drive the same WordPress y
 and a panel over every page eats their clicks.</p>
 <p class="dim">Endpoints: <code>/findings.json</code> &middot; <code>/overlay.js</code> &middot; <code>/loupe-overlay.php</code></p>
 </main>`;
+var LOOPBACK = "127.0.0.1";
 function serve(opts) {
   const { port, config, run } = opts;
+  const host = opts.host || LOOPBACK;
   const client = (origin) => MATCH_JS + JS2.replace("__ORIGIN__", origin).replace("__CSS__", JSON.stringify(CSS2));
   let url = `http://localhost:${port}`;
   return new Promise((resolve8, reject) => {
@@ -32938,11 +32940,17 @@ function serve(opts) {
       send("text/plain", "not found", 404);
     });
     server.on("error", reject);
-    server.listen(port, () => {
+    server.listen(port, host, () => {
       const addr = server.address();
-      if (addr && typeof addr === "object") url = `http://localhost:${addr.port}`;
+      let address = host;
+      if (addr && typeof addr === "object") {
+        address = addr.address;
+        const name = !opts.host ? "localhost" : address.includes(":") ? `[${address}]` : address;
+        url = `http://${name}:${addr.port}`;
+      }
       resolve8({
         url,
+        address,
         close: () => new Promise((done) => {
           server.close(() => done());
         })
@@ -33270,12 +33278,12 @@ async function ui(opts) {
       return { status: 403, error: "this page was not served by this process" };
     return null;
   };
-  const LOOPBACK = /* @__PURE__ */ new Set(["127.0.0.1", "localhost", "[::1]"]);
+  const LOOPBACK2 = /* @__PURE__ */ new Set(["127.0.0.1", "localhost", "[::1]"]);
   const isOurs2 = (origin) => {
     try {
       const them = new URL(origin);
       const us = new URL(url);
-      return them.protocol === "http:" && them.port === us.port && LOOPBACK.has(them.hostname);
+      return them.protocol === "http:" && them.port === us.port && LOOPBACK2.has(them.hostname);
     } catch {
       return false;
     }
@@ -34088,6 +34096,7 @@ var VALUE_FLAGS = [
   "profiles",
   "profile",
   "port",
+  "host",
   "out",
   "limit",
   "tier",
@@ -34184,6 +34193,10 @@ Options:
                         review them first. (TYPESAFE_API_KEY from the
                         environment or ~/.config/loupe/.env)
   --port <n>            Port for 'serve' (7331) or 'ui' (7332)
+  --host <addr>         Address for 'serve' to bind (default: 127.0.0.1, this
+                        machine only). Give the address another machine reaches
+                        this one at when the browser is there: anything that
+                        can reach it reads every finding. 'ui' is loopback only
   --editor <t>          What a location in 'ui' links to. {path} is the file's
                         absolute path and {line} its line
                         (default: vscode://file{path}:{line}; for Cursor or Zed,
@@ -34906,7 +34919,7 @@ ${green(`Wrote ${target}`)}
     const run = baselinedRun(note);
     let url;
     try {
-      ({ url } = await serve({ port, config, run }));
+      ({ url } = await serve({ port, host: args.flags.host, config, run }));
     } catch (err) {
       fail(listenFailure(err, "serve", port));
       return EXIT.CANNOT_RUN;

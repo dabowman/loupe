@@ -1014,10 +1014,12 @@ which asks for a reason before it writes the directive — the quick fix leaves
 that blank because it has nowhere to ask, and a page does. `accept as baseline`
 is a button.
 
-Because it writes to your files it is not `loupe serve`: it binds loopback, sends
-no CORS header, and every write carries a secret minted at startup plus the run
-it was aimed at, so a click against a page the tree has moved past is refused
-rather than applied to whatever now sits at that index.
+Because it writes to your files it is not `loupe serve`. Both bind loopback, but
+`serve` answers any origin and takes `--host <addr>` for a browser on another
+machine; `ui` takes no `--host`, sends no CORS header, and every write carries a
+secret minted at startup plus the run it was aimed at, so a click against a page
+the tree has moved past is refused rather than applied to whatever now sits at
+that index.
 
 ### In the browser's inspector
 

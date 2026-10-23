@@ -38,6 +38,14 @@ Two entries in `.wp-env.json`:
 Then `wp-env start` — the constant is read at boot, so an edit made while the
 container is up does nothing until it restarts.
 
+The `localhost` in that URL is your browser's, not the container's: WordPress
+only prints it into the page, and the browser fetches the overlay. So the
+container never has to reach `loupe serve`, which binds loopback. If the browser
+is on a different machine from `loupe serve`, run `loupe serve --host <addr>`
+with the address that browser reaches this machine at, and set the constant to
+the URL it prints. Anything else that can reach that address can read the
+findings too.
+
 Map the **directory**, not the file. Docker cannot bind-mount a single file into
 a parent that does not exist in the container, and `wp-content/mu-plugins/`
 usually does not. Mapping the directory creates it.

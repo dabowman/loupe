@@ -310,6 +310,7 @@ const VALUE_FLAGS = [
 	'profiles',
 	'profile',
 	'port',
+	'host',
 	'out',
 	'limit',
 	'tier',
@@ -449,6 +450,10 @@ Options:
                         review them first. (TYPESAFE_API_KEY from the
                         environment or ~/.config/loupe/.env)
   --port <n>            Port for 'serve' (7331) or 'ui' (7332)
+  --host <addr>         Address for 'serve' to bind (default: 127.0.0.1, this
+                        machine only). Give the address another machine reaches
+                        this one at when the browser is there: anything that
+                        can reach it reads every finding. 'ui' is loopback only
   --editor <t>          What a location in 'ui' links to. {path} is the file's
                         absolute path and {line} its line
                         (default: vscode://file{path}:{line}; for Cursor or Zed,
@@ -1628,7 +1633,7 @@ async function main(): Promise<number> {
 		const run = baselinedRun(note);
 		let url: string;
 		try {
-			({ url } = await serve({ port, config, run }));
+			({ url } = await serve({ port, host: args.flags.host, config, run }));
 		} catch (err) {
 			fail(listenFailure(err, 'serve', port));
 			return EXIT.CANNOT_RUN;
