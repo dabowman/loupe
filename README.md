@@ -601,7 +601,10 @@ profiles are read as well — see [Your own profile](#your-own-profile).
   "preset": "wpds",
   "packages": ["@wordpress/components", "@wordpress/ui"],
   "patterns": "./patterns/index.json",
-  "components": "./components/index.json"
+  "components": "./components/index.json",
+  "tokenDescriptions": "./token-descriptions.json",
+  "tokenScopes": "./token-scopes.json",
+  "delivery": "./delivery.json"
 }
 ```
 
@@ -1216,9 +1219,11 @@ Configured where you enable the plugin, read by the hook from the environment:
 | --- | --- |
 | **Block turns on findings** | Governs the hook only. Off by default: the gate reports, it doesn't stop the turn. On, error-severity findings hand the report back. An inferred config never blocks unless this is on. `loupe check` is unaffected — it exits 1 on error-severity findings either way, so CI and pre-commit still gate. |
 | **Silence the hook** | Off by default. On, the hook checks nothing in any project and says only that it was skipped. `"env": { "LOUPE_OFF": "1" }` in a project's `.claude/settings.local.json` does the same for that project. |
+| **Loupe pane** | On by default. Draws the report beside the transcript, re-run after each edit to a UI file, in a project that opted the hooks in; `/loupe-pane` opens it anywhere. Off, the hooks are unaffected. |
 | **Preset** | `auto` infers per project. A project's own `loupe.config.json` always wins over both. |
 | **Project class prefixes** | Comma-separated, e.g. `vip-workflow-, wf-`. Empty infers them. Only these can be reported dead. |
 | **Fix attempts** / **Findings shown** | The retry budget and the per-report cap. |
+| **TypeSafe API key** | Empty skips judging. Set, the hooks judge with it (see [Judging in the hook](#judging-in-the-hook)); it is kept in your system keychain. Hooks only: for `/loupe-fix --judge` and the terminal, also put `TYPESAFE_API_KEY=...` in `~/.config/loupe/.env`. |
 
 ## Hooks
 
