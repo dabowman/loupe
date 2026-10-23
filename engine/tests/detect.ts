@@ -140,7 +140,7 @@ const CASES: Case[] = [
 ];
 
 for (const c of CASES) {
-	const root = scratch('dsh-detect-');
+	const root = scratch('loupe-detect-');
 	try {
 		c.files(root);
 		const got = detectConfig(root);
@@ -185,7 +185,7 @@ await check('the shipped ceiling is the one that was measured', () => {
 });
 
 await check('the walk stops at its entry ceiling and says that it did', () => {
-	const root = scratch('dsh-ceiling-');
+	const root = scratch('loupe-ceiling-');
 	try {
 		// Sixty files that match nothing and three that do. A budget counting
 		// matches rather than entries would walk all sixty-three for free — and a
@@ -211,7 +211,7 @@ await check('the walk stops at its entry ceiling and says that it did', () => {
 // of directories holding almost nothing. Counting only files let the walk
 // through all of them, and the reported repro was `cd ~ && loupe detect`.
 await check('directories count against the ceiling too', () => {
-	const root = scratch('dsh-ceiling-dirs-');
+	const root = scratch('loupe-ceiling-dirs-');
 	try {
 		for (let i = 0; i < 60; i++) mkdirSync(join(root, `empty${i}`), { recursive: true });
 		write(root, 'only.css', '.pj-a{color:#111}');
@@ -230,7 +230,7 @@ await check('directories count against the ceiling too', () => {
 // project whose own files lost that race came back with no namespaces at all —
 // which reads exactly like a project that has none.
 await check('a dot-directory neither answers the walk nor spends its budget', () => {
-	const root = scratch('dsh-ceiling-dot-');
+	const root = scratch('loupe-ceiling-dot-');
 	try {
 		write(root, 'src/App.jsx', 'export const App = () => <div className="own-box own-card own-hero" />;');
 		write(root, 'styles/a.css', '.own-box{color:#111}\n.own-card{color:#222}\n.own-hero{color:#333}');
@@ -256,7 +256,7 @@ await check('a dot-directory neither answers the walk nor spends its budget', ()
 // was read. Confidence is the only thing that separates them, so a truncated
 // walk can never come back high.
 await check('a truncated inference is never high confidence', () => {
-	const root = scratch('dsh-ceiling-detect-');
+	const root = scratch('loupe-ceiling-detect-');
 	try {
 		// The namespace evidence sits in the root and the filler below it, so the
 		// bounded run below reads enough to accept `own-` and still stops early —
@@ -293,7 +293,7 @@ await check('a truncated inference is never high confidence', () => {
 // and found nothing" and "we looked and there is nothing" are different claims,
 // and collapsing them printed `(none found)  [low confidence]`.
 await check('a truncated walk that found nothing still answers none', () => {
-	const root = scratch('dsh-ceiling-none-');
+	const root = scratch('loupe-ceiling-none-');
 	try {
 		write(root, 'package.json', '{}');
 		for (let i = 0; i < 40; i++) write(root, `filler/f${i}.txt`, 'filler\n');
@@ -323,7 +323,7 @@ const ownProject = (root: string): void => {
 };
 
 await check('a stylesheet over the size cap is skipped, and the confidence says so', () => {
-	const root = scratch('dsh-budget-bytes-');
+	const root = scratch('loupe-budget-bytes-');
 	try {
 		ownProject(root);
 		const whole = detectConfig(root);
@@ -355,7 +355,7 @@ await check('a stylesheet over the size cap is skipped, and the confidence says 
 });
 
 await check('stylesheets past the count cap are not read, and the confidence says so', () => {
-	const root = scratch('dsh-budget-count-');
+	const root = scratch('loupe-budget-count-');
 	try {
 		ownProject(root);
 		// Deeper than the project's own stylesheet, so the walk finds it first.
@@ -373,7 +373,7 @@ await check('stylesheets past the count cap are not read, and the confidence say
 });
 
 await check('the count cap reads shallowest first, not alphabetically first', () => {
-	const root = scratch('dsh-budget-depth-');
+	const root = scratch('loupe-budget-depth-');
 	try {
 		write(root, 'package.json', '{}');
 		write(root, 'src/A.jsx', 'export const A = () => <div className="acme-a acme-b acme-c acme-d" />;');
@@ -413,7 +413,7 @@ const vendoredProject = (root: string): void => {
 };
 
 await check('detection proposes external prefixes, and writes none of them', () => {
-	const root = scratch('dsh-external-');
+	const root = scratch('loupe-external-');
 	try {
 		vendoredProject(root);
 		const got = detectConfig(root);
@@ -438,7 +438,7 @@ await check('detection proposes external prefixes, and writes none of them', () 
 
 /** The CLI, isolated from the developer's own plugin settings. */
 const cli = (argv: readonly string[]): { status: number | null; stdout: string; stderr: string } => {
-	const home = scratch('dsh-home-');
+	const home = scratch('loupe-home-');
 	try {
 		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
 		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_PLUGIN_OPTION_')) delete env[k];
@@ -451,7 +451,7 @@ const cli = (argv: readonly string[]): { status: number | null; stdout: string; 
 };
 
 await check('detect reports the possible external list in text and in JSON', () => {
-	const root = scratch('dsh-external-cli-');
+	const root = scratch('loupe-external-cli-');
 	try {
 		vendoredProject(root);
 		const text = cli(['detect', '--root', root, '--no-color']).stdout;
@@ -494,7 +494,7 @@ const externalsPlugin = (root: string): void => {
 };
 
 await check('init refuses a guessed design system, and says what it saw instead', () => {
-	const root = scratch('dsh-init-guess-');
+	const root = scratch('loupe-init-guess-');
 	try {
 		externalsPlugin(root);
 		const { status, stdout } = cli(['init', '--root', root, '--no-color']);
@@ -517,7 +517,7 @@ await check('init refuses a guessed design system, and says what it saw instead'
 });
 
 await check('init --preset names the design system and writes it; --force writes the guess', () => {
-	const root = scratch('dsh-init-named-');
+	const root = scratch('loupe-init-named-');
 	try {
 		externalsPlugin(root);
 		const named = cli(['init', '--root', root, '--preset', 'wpds']);
@@ -543,7 +543,7 @@ await check('init --preset names the design system and writes it; --force writes
 // overwrites, so following the advice replaced a hand-written config with
 // `generic`.
 await check('init on a guess says a config exists before it suggests --force', () => {
-	const root = scratch('dsh-init-exists-');
+	const root = scratch('loupe-init-exists-');
 	try {
 		externalsPlugin(root);
 		const own = JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } });
@@ -559,7 +559,7 @@ await check('init on a guess says a config exists before it suggests --force', (
 });
 
 await check('a recognised design system is written without being asked twice', () => {
-	const root = scratch('dsh-init-sure-');
+	const root = scratch('loupe-init-sure-');
 	try {
 		externalsPlugin(root);
 		write(root, 'package.json', JSON.stringify({ dependencies: { '@wordpress/components': '*' } }));
@@ -574,7 +574,7 @@ await check('a recognised design system is written without being asked twice', (
 // The other half: with no config, that same guess ran on every check, and the
 // only place it said so was `status`.
 await check('check on a guessed generic config points at init, in the agent format only', () => {
-	const root = scratch('dsh-init-hint-');
+	const root = scratch('loupe-init-hint-');
 	try {
 		externalsPlugin(root);
 		const agent = cli(['check', '--all', '--root', root, '--no-color']).stdout;
@@ -616,7 +616,7 @@ const blockPlugin = (root: string): void => {
 const BLOCKS_LINE = /^blocks: {5}wp-block-acme- \(block\.json: acme\/card, acme\/hero\)$/m;
 
 await check("detect and status name the blocks whose wrappers are the project's, and init writes none", () => {
-	const root = scratch('dsh-blocks-');
+	const root = scratch('loupe-blocks-');
 	try {
 		blockPlugin(root);
 		const got = detectConfig(root);
