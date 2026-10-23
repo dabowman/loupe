@@ -71,6 +71,7 @@ import { lsp } from './lsp.ts';
 import { serve } from './serve.ts';
 import { ui } from './ui.ts';
 import { messageOf, oneLine } from './text.ts';
+import { readTokenSources } from './tokens.ts';
 import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
 import {
 	NO_PROFILE,
@@ -181,6 +182,31 @@ function cacheLine(root: string): string {
 		`${answers} judgement${answers === 1 ? '' : 's'}`,
 	];
 	return `${dir}  (${parts.join(', ')})`;
+}
+
+/**
+ * `status`'s tokens line: the prefixes, and what the configured sources yielded,
+ * from the same read the analysis seeds its token set with. Yellow when that is
+ * nothing, because `tokens/unknown-token` is then off.
+ */
+function tokensLine(config: Config): string {
+	const ds = config.designSystem;
+	if (!ds.tokenPrefixes?.length) return `${dim('tokens:     ')}(none \u2014 token rules inactive)`;
+	const prefixes = ds.tokenPrefixes.map((p) => `${p}*`).join(', ');
+	if (!ds.tokenSources.length) return yellow(`tokens:     ${prefixes} (no token sources configured)`);
+	const { read } = readTokenSources(config.root, ds.tokenSources, ds.tokenPrefixes);
+	// "171 definitions from A, 19 from B": the noun once, on the first count.
+	const counts = read
+		.filter((r) => r.definitions)
+		.map((r, i) => `${r.definitions}${i ? '' : r.definitions === 1 ? ' definition' : ' definitions'} from ${r.path}`);
+	if (counts.length) return `${dim('tokens:     ')}${prefixes} (${counts.join(', ')})`;
+	const missing = read.filter((r) => !r.files).map((r) => r.path);
+	const empty = read.filter((r) => r.files).map((r) => r.path);
+	const why = [
+		...(missing.length ? [`${missing.join(', ')} not found`] : []),
+		...(empty.length ? [`${empty.join(', ')} ${empty.length === 1 ? 'defines' : 'define'} none`] : []),
+	];
+	return yellow(`tokens:     ${prefixes} (0 definitions read; ${why.join('; ')})`);
 }
 
 /**
@@ -1370,7 +1396,7 @@ async function main(): Promise<number> {
 			`${dim('packages:   ')}${orNone(ds.packages)}`,
 			`${dim('layout:     ')}${components(ds.layoutComponents)}`,
 			`${dim('text:       ')}${components(ds.textComponents)}`,
-			`${dim('tokens:     ')}${ds.tokenPrefixes?.length ? ds.tokenPrefixes.map((p) => `${p}*`).join(', ') : '(none \u2014 token rules inactive)'}`,
+			tokensLine(config),
 			`${dim('namespaces: ')}${(config.raw.namespaces?.project ?? []).join(', ') || '(none \u2014 css/dead-class inactive)'}`,
 			...(blocks.length ? [`${dim('blocks:     ')}${describeBlocks(blocks)}`] : []),
 			`${dim('suppress:   ')}${directive(config.suppression.keyword, '<ruleId>', '<reason>')}`,

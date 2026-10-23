@@ -924,6 +924,11 @@ fields are printed as such**: "no layout primitive" is a fact about the system,
 and inferring it from a missing line is how a skill ends up recommending one
 that isn't there.
 
+The `tokens:` line says what the `tokenSources` yielded, per path, from the
+same `readTokenSources` read the analysis seeds its set with: a source that is
+not installed leaves `tokens/unknown-token` off and every hardcoded value
+unnamed, and `--wpds-*` printed alone read as a working set.
+
 And the blocks whose wrapper classes the analysis takes as the project's own,
 read off a walk with the analysis's own source globs and ceiling — for a
 config file too, where nothing else in `status` walks — because an exemption

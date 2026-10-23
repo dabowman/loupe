@@ -264,6 +264,16 @@ project defines itself is added to the set. Findings then name the token:
       12  padding: 12px → --wpds-dimension-padding-md
 ```
 
+With none of those stylesheets installed the set is empty: findings name no
+token and `tokens/unknown-token` stays off. `loupe status` says which on its
+`tokens:` line:
+
+```
+tokens:     --wpds-* (171 definitions from node_modules/@wordpress/theme/prebuilt/css/design-tokens.css)
+```
+
+or `0 definitions read` and each path that was not found.
+
 Only an on-role token is offered. `1px` is both `--wpds-border-radius-xs` and
 `--wpds-border-width-xs`; suggesting the wrong one gives the right pixels and the
 wrong meaning, which survives review precisely because it looks correct. When

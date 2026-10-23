@@ -393,11 +393,26 @@ export interface TokenSet {
 	byValue: Map<string, string[]>;
 	sources: number;
 	/**
+	 * What each configured `tokenSources` path yielded, in the order configured.
+	 * Present on a set `readTokenSources` returned, and only there.
+	 */
+	read?: TokenSourceRead[] | undefined;
+	/**
 	 * What the active profiles declare each token is for. Absent: the generic
 	 * property→token table decides everything, as it did before profiles could
 	 * say.
 	 */
 	scopes?: TokenScopes | undefined;
+}
+
+/** One `designSystem.tokenSources` path, and what reading it yielded. */
+export interface TokenSourceRead {
+	/** As configured, relative to the project root or absolute. */
+	path: string;
+	/** The stylesheets found under it. 0: not installed, or no stylesheet there. */
+	files: number;
+	/** The token names first defined here. The set keeps a token's first definition. */
+	definitions: number;
 }
 
 // ── markup ──────────────────────────────────────────────────────────────────

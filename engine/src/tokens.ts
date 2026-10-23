@@ -23,7 +23,7 @@ import { scopedFamily } from './scopes.ts';
 import type { TokenScopes } from './scopes.ts';
 import { COLOR_SHORTHANDS, isColorLiteral } from './styles.ts';
 import { messageParts, snippet } from './text.ts';
-import type { Suggestion, TokenSet } from './types.ts';
+import type { Suggestion, TokenSet, TokenSourceRead } from './types.ts';
 
 /**
  * Which token names could plausibly answer for this property, when no profile
@@ -151,16 +151,21 @@ export function cssFilesUnder(
  * Read the declared token set from `designSystem.tokenSources`. These paths
  * deliberately reach into `node_modules`, which the project walk prunes. A path
  * is the root's unless it is absolute, as a `styleSources` path is.
+ *
+ * `read` records what each path yielded, so `status` reports the same read the
+ * analysis seeds its set from.
  */
 export function readTokenSources(
 	root: string,
 	sources: readonly string[] | undefined,
 	prefixes: readonly string[],
-): TokenSet {
-	const set = emptyTokenSet();
+): TokenSet & { read: TokenSourceRead[] } {
+	const set = { ...emptyTokenSet(), read: [] as TokenSourceRead[] };
 	if (!prefixes.length) return set;
 	for (const src of sources ?? []) {
-		for (const file of cssFilesUnder(under(root, src))) {
+		const files = cssFilesUnder(under(root, src));
+		const before = set.known.size;
+		for (const file of files) {
 			try {
 				harvestTokenDefs(postcss.parse(readFileSync(file, 'utf8'), { from: file }), prefixes, set);
 				set.sources++;
@@ -168,6 +173,7 @@ export function readTokenSources(
 				/* an unparseable vendored stylesheet just contributes nothing */
 			}
 		}
+		set.read.push({ path: src, files: files.length, definitions: set.known.size - before });
 	}
 	return set;
 }
