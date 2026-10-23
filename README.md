@@ -46,6 +46,13 @@ fresh install is a working install on any machine with Node 18 or newer — no
 [Working on the engine](#working-on-the-engine) if you are changing it rather
 than using it.
 
+Loupe needs Claude Code 2.1.83 or newer, the release that added plugin options,
+and Node 18 or newer for the engine. The [pane](#the-pane) needs Claude Code
+2.1.299 or newer; all of it is tested on 2.1.308. On a build in between, the
+hooks, skills and commands work as described and only the pane is missing.
+Below 2.1.83 Claude Code rejects the manifest's options and loads none of the
+plugin.
+
 ## What's in it
 
 | | |
@@ -1031,7 +1038,9 @@ tally, the rules in frequency order, where the drift sits, the densest files,
 and the composites rebuilt across files. A line in the status bar carries the
 count; a toast says once when the blocking count reaches zero; a notification
 fires when a turn ends with blocking findings still standing, which is the
-case you want to hear about without watching.
+case you want to hear about without watching. Mods are on by default from
+Claude Code 2.1.287, and this one needs 2.1.299 for the text weights it draws;
+on an older build the pane is absent and the hooks run as before.
 
 What it draws depends on where Claude Code is drawing. The desktop app and the
 VS Code panel get the engine's SVG charts, with a tooltip per bar. The terminal
