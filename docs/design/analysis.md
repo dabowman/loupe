@@ -514,10 +514,10 @@ using Navigator. And a `canonical` is matched against a file's local import
 names, so it has to be a name the code binds — a part written as
 `Navigator.Button` can never be one.
 
-Both registry formats load through the same reader. v1 keys an entry by `id`
-with one `signature`; v2 keys it by `pattern` (`id.variant` or `id#part`), may
-nest `parts` and `rendered_signature`, and says in `detector` how it is checked.
-The fields the matcher needs are the same, so a registry written before v2
-existed keeps working. In `detector`, a bare string is documentation of how the
-entry is checked and nothing acts on it; only an object carries parameters a
+A registry entry is keyed by `pattern` (`id.variant` or `id#part`), may nest
+`parts` and `rendered_signature`, and says in `detector` how it is checked. The
+v1 form, a flat list keyed by `id`, was read beside it until 0.8.0; now it is
+refused with the fix in the error, because read as empty it would switch the
+rules off and report clean. In `detector`, a bare string is documentation of how
+the entry is checked and nothing acts on it; only an object carries parameters a
 shipped rule runs with.

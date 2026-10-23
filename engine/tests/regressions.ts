@@ -409,10 +409,12 @@ await check('a registry file that does not load is a config error, and a missing
 		}
 
 		// Parsed, but nothing where the loader looks for entries: a misspelled list key
-		// is the same silent switch-off.
+		// is the same silent switch-off, and so is the flat v1 form, whose error
+		// carries the fix.
 		for (const [key, body, says] of [
 			['componentRegistry', '{ "component": [] }', 'not a component registry'],
 			['patterns', '{ "pattern": [] }', 'not a pattern registry'],
+			['patterns', '{ "patterns": [ { "id": "x", "signature": ["A", "B", "C", "D"] } ] }', 'removed in 0.8.0'],
 		] as const) {
 			writeFileSync(join(root, 'loupe.config.json'), configWith({ [key]: './registry.json' }));
 			writeFileSync(path, body);
@@ -450,6 +452,10 @@ await check('a registry file that does not load is a config error, and a missing
 			error.startsWith('could not read profile acme components') && error.includes('not a component registry'),
 			`the profile reader disagreed: ${error}`,
 		);
+		// The label names the source; the file is what has to be opened.
+		writeFileSync(path, '{ "patterns": [] }');
+		const flat = one(applyRegistries(config, [{ label: 'profile acme', patterns: path }]).errors, 'one v1 error');
+		assert(flat.includes(path) && flat.includes('removed in 0.8.0'), `the v1 registry error: ${flat}`);
 
 		// No file at all is no registry: the rules that need one are off, and the run is clean.
 		writeFileSync(
@@ -2908,7 +2914,7 @@ await check('a profile naming an uninstalled preset says so and carries on', () 
 await check('a skipped registry names the config that rejected it', () => {
 	const root = tmpRepo({
 		'package.json': JSON.stringify({ name: 'plain' }),
-		'registry.json': JSON.stringify({ packages: ['@acme/ui'], patterns: [] }),
+		'registry.json': JSON.stringify({ packages: ['@acme/ui'], realizations: [] }),
 		'src/a.tsx': 'export const A = () => <div />;\n',
 	});
 	try {

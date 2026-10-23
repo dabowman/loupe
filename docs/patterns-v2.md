@@ -138,19 +138,19 @@ different pick is not something the judge reports.
 | --- | --- | --- | --- |
 | `version` | `2` | note | The format version. |
 | `scope` | `"realization"` | note | Which layer the file is. |
-| `extends` | path | generator | The abstract file, relative to this one (`../../../patterns/index.json`). A registry without it is v1, and the generator skips it. The judge does not follow it: it reads the copy of the root file embedded at build. |
+| `extends` | path | generator | The abstract file, relative to this one (`../../../patterns/index.json`). The generator fails a profile whose registry has none, since there is nothing to check it against; a project's own registry needs none, because nothing generates a table from it. The judge does not follow it: it reads the copy of the root file embedded at build. |
 | `packages` | string[] | engine | The packages the registry is about (`engine/src/registry.ts`). It applies only to a project importing one of them, because signatures are component names and names are the one thing design systems do not keep to themselves. A registry declaring none applies everywhere. |
 | `note` | string | note | The format in brief, for whoever edits the file. |
 | `detectors` | `{ [kind]: string }` | note | A definition of each detector kind. The kinds themselves are fixed — see [detectors](#detectors). |
 | `rules` | `{ [name]: string }` | generator | Every rule a detector object may name, with what it does. A description beginning "Shipped" lists the rule under "Checked by rule" as one the engine runs; any other lists it as specified but not shipped. A detector object naming a rule missing here fails the run. |
 | `containers` | `{ [name]: { import?, canonical?, note? } }` | generator | The component this system realizes each abstract container with, printed as the Containers table beside the vocabulary's definition. |
-| `realizations` | Entry[] | loader, generator | The entries. |
+| `realizations` | Entry[] | loader, generator | The entries. An inline array of them, in a config's `patterns`, loads the same. A file holding a `patterns` list instead, or an entry keyed by `id`, is the flat version-1 form: removed in 0.8.0, and a config error naming the file and what replaced it. |
 
 ### `realizations[]`
 
 | field | type | read by | meaning |
 | --- | --- | --- | --- |
-| `pattern` | key | loader, generator | What the entry realizes: an abstract id (`confirm`), a variant (`choose.segmented`) or a part (`navigate-hierarchy#descend`). The generator fails the run when it names nothing in the abstract file. The loader uses it as the entry's id: findings name it, a project's own registry wins over the shipped one on it, and the judge finds the abstract pattern by cutting it at the first `#` or `.`. |
+| `pattern` | key | loader, generator | What the entry realizes: an abstract id (`confirm`), a variant (`choose.segmented`) or a part (`navigate-hierarchy#descend`), which the profile may subdivide after a dot as it does under `parts` (`screen#header.breadcrumb`). The generator fails the run when it names nothing in the abstract file. The loader uses it as the entry's id: findings name it, a project's own registry wins over the shipped one on it, and the judge finds the abstract pattern by cutting it at the first `#` or `.`. |
 | `import` | string | generator | The package `canonical` comes from, printed beside it. Parts inherit it. |
 | `canonical` | string or `null` | loader, generator | The component that is the answer. The loader cuts a dotted name to its root (`Navigator.Button` → `Navigator`), because it is compared with the names a file imports: a file that imports it is using it rather than rebuilding it, and is not reported, and a finding's remedy names it. An entry whose `canonical` is the root of its own `signature` records anatomy, so a composite made only of that component's parts is never reported as unregistered. Absent or `null`, the generated row reads "not shipped; extract the project's own". Parts inherit it; a part that sets `null` opts out. |
 | `verify` | boolean | generator | `true` marks a component name taken from the abstract layer and not yet checked against the system's source. The generated row says "(unverified)". |
@@ -243,17 +243,6 @@ The next force is data plus an eval, not code: a `judge` block on the force, a
 for the eval. Label pagination first; it is what `represents` gets wrong on
 Gutenberg.
 
-## v1 registries
-
-The Archer and VIP profiles are still on v1: one `patterns[]` list, each entry
-keyed by `id`, with `signature`, `rendered_signature`, `instead_of_signature`,
-`canonical`, `import`, `instead_of` and `note` meaning what they mean above,
-plus `summary`, which the loader keeps ahead of `note`, and `use`, a note. The
-loader takes either format — it reads `realizations` if the file has it and
-`patterns` otherwise, keying each entry by `pattern` or else `id` — and the
-generator skips any registry without `extends`, so a v1 profile's `patterns.md`
-is written by hand.
-
 ## Limits
 
 An interface built from divs and utility classes has no composite tree. Nor
@@ -275,5 +264,6 @@ and why, so that it is not grown back by accident:
 | A `declared` detector and `@pattern` tags | Deferred | A commitment device the agent controls. The one case it exists for, confirm versus form dialog, is decided by `confirm-pair`'s label rule. `declared` loads as documentation; revisit when a shape appears that no rule can decide. |
 | `patterns/extract-candidate` | Dropped | It was `unregistered-composite` at a threshold of two. Two is a coincidence; three is house style. |
 | Five AST rules | Two shipped, three specified | `few-static-options` and `confirm-pair` cover the two cases that carried most drift. `button-that-navigates`, `unconditional-optional-controls` and `hand-managed-selection` need handler-body or state tracing, and stay under `rules` as specified. `judge` came later, for the force no rule can read. |
-| Archer's anatomy as `components[].parts` | Deferred | Cosmetic for the engine, since anatomy-as-pattern already works. Do it when Archer moves to v2. |
+| Archer's anatomy as `components[].parts` | Deferred | Cosmetic for the engine, since anatomy-as-pattern already works. When Archer moved to v2, each anatomy entry became the realization of the pattern its component realizes (`Dialog` is `screen.overlay`, `Table` is `browse-collection#items`), and the components that had none to stand under — Autocomplete, Accordion and Popover, NavigationMenu, List — added `choose.autocomplete`, `disclose`, `navigate-sections` and `group.list` to the language. Revisit if anatomy turns up that no pattern could honestly hold. |
 | v2 files through the v1 matcher | Loader rewritten | The proposal said the matcher would keep working. It would not: entries are keyed by `pattern`, not `id`, and `parts` nest signatures, so loaded as-is seven checkable shapes went dark. |
+| Reading v1 beside v2 | Removed in 0.8.0 | Two formats were two things to document and keep working, and the v1 profiles' hand-written tables were the ones that drifted. Every shipped registry is a realization now, and a v1 file is refused with the fix in the error rather than read as empty, which would switch the rules off and report clean. |

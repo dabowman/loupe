@@ -121,17 +121,12 @@ export function partsOf(root: string, tree: PatternNode): boolean {
 }
 
 /**
- * A registry entry as authored, in either format.
- *
- * v1 keys an entry by `id` and carries one `signature`. v2 keys it by `pattern`
- * (`id.variant` or `id#part`), may nest `parts`, may carry a second shape as
- * `rendered_signature`, and says in `detector` how it is checked at all. The
- * fields the matcher needs are the same in both.
+ * A registry entry as authored: keyed by `pattern` (`confirm`, `id.variant` or
+ * `id#part`), it may nest `parts`, may carry a second shape as
+ * `rendered_signature`, and says in `detector` how it is checked at all.
  */
 interface RawPattern {
-	id?: string;
 	pattern?: string;
-	summary?: string;
 	note?: string;
 	canonical?: string | null;
 	signature?: unknown;
@@ -169,20 +164,32 @@ export const numParam = (spec: RuleSpec, key: string, fallback: number): number 
 export const listParam = (spec: RuleSpec, key: string): string[] =>
 	Array.isArray(spec[key]) ? (spec[key] as unknown[]).filter((x): x is string => typeof x === 'string') : [];
 
+/** The fix for a registry written in the removed version-1 form, carried in its error. */
+const KEY_BY_PATTERN = 'key each entry by "pattern", the pattern it realizes ("confirm", "choose.segmented")';
+
 /**
  * Normalize a registry file or inline array into matchable patterns.
  *
  * Throws on a registry with no entry list where one belongs: read as empty, it
- * switches the `patterns/*` rules off and reports clean.
+ * switches the `patterns/*` rules off and reports clean. Version 1's flat
+ * `patterns` list keyed by `id` throws too, for the same reason, and says what
+ * replaced it.
  */
 export function loadPatterns(raw: unknown): Pattern[] {
 	const rec = raw as { patterns?: unknown; realizations?: unknown } | null;
-	const found: unknown = Array.isArray(raw) ? raw : (rec?.realizations ?? rec?.patterns);
-	if (!Array.isArray(found))
+	if (!Array.isArray(raw) && rec?.realizations === undefined && Array.isArray(rec?.patterns))
 		throw new Error(
-			'not a pattern registry: expected an array of entries, or an object with a "realizations" or "patterns" array',
+			`a flat "patterns" list keyed by "id" is the version-1 registry, removed in 0.8.0: list the entries under "realizations" and ${KEY_BY_PATTERN}`,
 		);
+	const found: unknown = Array.isArray(raw) ? raw : rec?.realizations;
+	if (!Array.isArray(found))
+		throw new Error('not a pattern registry: expected an array of entries, or an object with a "realizations" array');
 	const list: RawPattern[] = found;
+	for (const p of list) {
+		const v1 = p as { id?: unknown } | null;
+		if (v1 && typeof v1 === 'object' && p.pattern === undefined && v1.id !== undefined)
+			throw new Error(`entry ${JSON.stringify(v1.id)} is keyed by "id", removed in 0.8.0: ${KEY_BY_PATTERN}`);
+	}
 	const out: Pattern[] = [];
 	const load = (p: RawPattern, id: string | null, inheritedCanonical: string | null): void => {
 		// An explicit null opts a part out of its parent's canonical: a toolbar
@@ -205,7 +212,7 @@ export function loadPatterns(raw: unknown): Pattern[] {
 			.map((shape) => toNode(shape))
 			.filter((n): n is PatternNode => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes);
 		const rules = ruleSpecs(p?.detector);
-		const summary = p?.summary ?? p?.note ?? '';
+		const summary = p?.note ?? '';
 		const own = id ?? (shapes[0] ? signatureOf(shapes[0]) : null);
 		if (own) {
 			// One entry per shape, all under one id: `rendered_signature` is the same
@@ -230,7 +237,7 @@ export function loadPatterns(raw: unknown): Pattern[] {
 		if (own && parts && typeof parts === 'object')
 			for (const [name, part] of Object.entries(parts)) load(part, `${own}#${name}`, canonical);
 	};
-	for (const p of list) load(p, p?.pattern ?? p?.id ?? null, null);
+	for (const p of list) load(p, p?.pattern ?? null, null);
 	return out;
 }
 

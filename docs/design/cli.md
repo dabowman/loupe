@@ -1238,6 +1238,10 @@ pattern. That is as much of the registration rule as a machine can check —
 "does this occupy an empty cell" is a judgement, but "does this point at
 anything" is not.
 
+A profile registry that names no `extends` fails the run rather than being
+skipped. Skipping it was how the Archer and VIP tables stayed hand-written while
+`--check` passed, and nothing checked either against its registry.
+
 A force `check --judge` asks about must define every value it can answer with:
 an option missing from the criteria is one the model cannot pick, and the
 redirect that needs it never fires.

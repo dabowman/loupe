@@ -64,7 +64,7 @@ const PAGE_HEADER_SIG = ['Stack', ['Stack', 'Text', 'Text'], ['Stack', 'Button']
 const registryFile = (packages: string[]): string =>
 	JSON.stringify({
 		packages,
-		patterns: [{ id: 'page-header', summary: 'header', signature: PAGE_HEADER_SIG }],
+		realizations: [{ pattern: 'screen#header', note: 'header', signature: PAGE_HEADER_SIG }],
 	});
 
 const configFor = (pkg: string): string =>
@@ -115,7 +115,7 @@ await check('the same registry reaches the design system it names', async () => 
 });
 
 await check('a registry naming no packages still applies anywhere', () => {
-	assert(registryApplies({ patterns: [] }, ['@acme/ui']), 'an unscoped registry must keep working');
+	assert(registryApplies({ realizations: [] }, ['@acme/ui']), 'an unscoped registry must keep working');
 	assert(registryApplies({ packages: [] }, ['@acme/ui']), 'an empty scope is no scope');
 	assert(!registryApplies({ packages: ['@a/b'] }, []), 'a project with no packages has no component layer');
 });
@@ -431,7 +431,7 @@ await check('a forced registry the project already covers is not reported as fin
 			designSystem: { packages: ['@wordpress/components'], components: { layout: ['Stack'], text: ['Text'] } },
 			patterns: './own.json',
 		}),
-		'own.json': JSON.stringify([{ id: 'page-header', summary: 'ours', signature: PAGE_HEADER_SIG }]),
+		'own.json': JSON.stringify([{ pattern: 'screen#header', note: 'ours', signature: PAGE_HEADER_SIG }]),
 		'registry.json': registryFile(['@wordpress/components']),
 	});
 	try {
@@ -655,6 +655,72 @@ export const A = () => (
 	}
 });
 
+// The archer and vip registries were rewritten from the flat form into
+// realizations of the pattern language. What their anatomy entries are for has
+// to survive the move: a component's own parts, used correctly in three files,
+// report nothing — under the new keys an entry that lost its canonical would
+// turn them into extraction requests — and the anti-shape each registry
+// records still reports, now naming the pattern it realizes.
+const SHIPPED_SHAPES = {
+	archer: {
+		pkg: '@dabowman/archer',
+		uses: [
+			'<Dialog><DialogTrigger /><DialogPopup><DialogTitle>t</DialogTitle><DialogDescription>d</DialogDescription></DialogPopup></Dialog>',
+			'<Popover><PopoverTrigger /><PopoverPopup><PopoverTitle>t</PopoverTitle><PopoverDescription>d</PopoverDescription></PopoverPopup></Popover>',
+			'<Accordion><AccordionItem><AccordionHeader><AccordionTrigger>t</AccordionTrigger></AccordionHeader><AccordionPanel>p</AccordionPanel></AccordionItem></Accordion>',
+			'<Autocomplete><AutocompleteInput /><AutocompletePopup><AutocompleteList><AutocompleteItem /></AutocompleteList></AutocompletePopup></Autocomplete>',
+			'<NavigationMenu><NavigationMenuList><NavigationMenuItem><NavigationMenuTrigger /><NavigationMenuContent /></NavigationMenuItem></NavigationMenuList></NavigationMenu>',
+			'<List><ListItem>a</ListItem><ListItem>b</ListItem><ListItem>c</ListItem></List>',
+			'<TableRow><TableCell /><TableCell /><TableCell /></TableRow>',
+		],
+		anti: '<Stack><Button>a</Button><Button>b</Button><Separator /><Button>c</Button></Stack>',
+		replaces: 'action-cluster.toolbar',
+	},
+	vip: {
+		pkg: '@automattic/vip-design-system',
+		uses: [
+			'<Accordion.Root><Accordion.Item><Accordion.TriggerWithIcon>t</Accordion.TriggerWithIcon><Accordion.Content>c</Accordion.Content></Accordion.Item></Accordion.Root>',
+			'<Dropdown.Root><Dropdown.Item /><Dropdown.Item /><Dropdown.Item /></Dropdown.Root>',
+			'<Tabs><TabsList><TabsTrigger /><TabsTrigger /></TabsList><TabsContent /></Tabs>',
+			'<TableRow><TableCell /><TableCell /><TableCell /></TableRow>',
+		],
+		anti: '<Flex><Button>a</Button><Button><Spinner />b</Button></Flex>',
+		replaces: 'report.loading',
+	},
+};
+
+for (const [id, shapes] of Object.entries(SHIPPED_SHAPES))
+	await check(`the ${id} registry absorbs its components' anatomy and names what it replaces`, async () => {
+		const jsx = [...shapes.uses, shapes.anti];
+		const names = [...new Set(jsx.flatMap((s) => [...s.matchAll(/<([A-Z]\w*)/g)].map((m) => m[1])))];
+		const file = (body: string): string => `import { ${names.join(', ')} } from '${shapes.pkg}';\n${body}`;
+		const uses = shapes.uses.map((u, i) => `export const U${i} = () => (${u});`).join('\n');
+		const root = repo({
+			'loupe.config.json': JSON.stringify({ extends: id, designSystem: { packages: [shapes.pkg] } }),
+			'src/A.jsx': file(uses),
+			'src/B.jsx': file(uses),
+			'src/C.jsx': file(uses),
+			'src/Anti.jsx': file(`export const Anti = () => (${shapes.anti});`),
+		});
+		try {
+			const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
+			const profile = readProfiles(PROFILES).find((p) => p.id === id);
+			assert(profile?.patterns, `the ${id} profile should ship a pattern registry`);
+			const out = applyRegistries(config, [{ label: `profile ${id}`, patterns: profile.patterns, forced: true }]);
+			assert(!out.errors.length, `the ${id} registry did not load: ${out.errors}`);
+			const found = (await analyze(config, { scope: null })).findings.filter((f) => f.rule.startsWith('patterns/'));
+			const hit = one(found, `only the anti-shape should report: ${found.map((f) => `${f.file} ${f.message}`)}`);
+			assert(
+				hit.rule === 'patterns/superseded-composite' &&
+					hit.file.endsWith('Anti.jsx') &&
+					hit.message.includes(`\`${shapes.replaces}\``),
+				`the anti-shape should report against ${shapes.replaces}: ${hit.rule} ${hit.message}`,
+			);
+		} finally {
+			cleanup(root);
+		}
+	});
+
 // #13 narrowed the per-declaration form to what a registry `surface` says the
 // component owns, failing safe to advisory where none is recorded. That is
 // right for a registry read for surfaces, whose gaps are gaps; for one that
@@ -871,12 +937,12 @@ export const ${name} = () => (
 	const withCanonical = repo({
 		...files,
 		'registry.json': JSON.stringify({
-			patterns: [{ id: 'dlg', summary: 'anatomy', canonical: 'Dlg', signature: sig }],
+			realizations: [{ pattern: 'screen.overlay', note: 'anatomy', canonical: 'Dlg', signature: sig }],
 		}),
 	});
 	const without = repo({
 		...files,
-		'registry.json': JSON.stringify({ patterns: [{ id: 'dlg', summary: 'anatomy', signature: sig }] }),
+		'registry.json': JSON.stringify({ realizations: [{ pattern: 'screen.overlay', note: 'anatomy', signature: sig }] }),
 	});
 	try {
 		const quiet = await analyzeWith(withCanonical, join(withCanonical, 'registry.json'));
@@ -919,7 +985,13 @@ export const ${name}Board = () => (
 	const root = repo({
 		'loupe.config.json': JSON.stringify({ extends: 'generic', designSystem: { packages: ['@acme/ui'] } }),
 		'registry.json': JSON.stringify({
-			patterns: [{ id: 'table', canonical: 'Table', signature: ['Table', ['TableBody', ['TableRow', 'TableCell']]] }],
+			realizations: [
+				{
+					pattern: 'browse-collection#items',
+					canonical: 'Table',
+					signature: ['Table', ['TableBody', ['TableRow', 'TableCell']]],
+				},
+			],
 		}),
 		'src/A.jsx': file('A'),
 		'src/B.jsx': file('B'),

@@ -78,7 +78,9 @@ signature to look checkable:
 | A rule object | An AST rule the engine ships, parameterised here: `few-static-options` reads a select's option count and label width; `confirm-pair` reads a modal's button labels and looks for form controls. Either reports `patterns/superseded-composite` on the file that made the choice. `judge` names the elements that are instances of the entry's pattern, for `check --judge` to read a force off and run the abstract `resolve` table on; a redirect reports `patterns/judged-redirect`. |
 | `declared` | Documentation only, until a declaration tag exists. |
 
-A registry written before this format existed, keyed by `id`, still loads.
+The flat form that came before, a `patterns` list keyed by `id`, was removed in
+0.8.0. The engine refuses one with a config error that says what to write
+instead.
 
 `signature` is the normalized component tree. A node is `[name, ...children]`;
 each child is either a bare component name or another node. Only design-system
@@ -188,16 +190,10 @@ A shape that would land in an occupied cell with no new force is a variant or a
 realization, not a pattern. That is the vocabulary doing the work a "be
 concise" rule cannot: there is nowhere to put a fourth copy of one idea.
 
-Those levels assume a registry that names the abstract file in `extends`. A v1
-registry has no `extends`: it is a flat `patterns` list of `{ id, summary,
-signature, … }` entries, as Archer's and VIP's are, and
-`profiles/vip/patterns/index.json` is the small example. The engine still reads
-it — `signature`, `rendered_signature`, `canonical` and `instead_of_signature`
-mean what they mean above, and `summary` falls back to `note` — while `use`,
-`import` and `instead_of` are prose for whoever reads the file next. Adding to
-one is appending an entry under a new `id`. Its `patterns.md` is written by
-hand, since there is no abstract layer to generate a table from, so update that
-too.
+A project's own registry is written the same way: a `realizations` list keyed
+by `pattern`. It needs no `extends`, since nothing generates a table from it,
+but its keys name the shared language all the same, which is what lets an entry
+of its own replace the profile's under the same key.
 
 Then keep the entry honest:
 
@@ -218,8 +214,8 @@ Then keep the entry honest:
   stops reporting files that already use it, and starts naming it as the remedy.
 - **Regenerate the table.** `npm run patterns-doc` in `engine/` validates the
   entry against the abstract language and rewrites the profile's reach-for
-  table. A key that names nothing fails the run. It skips a v1 registry, so
-  `--check` never covers a hand-written `patterns.md`.
+  table. A key that names nothing fails the run, and so does a profile registry
+  with no `extends`, so `--check` covers every shipped `patterns.md`.
 
 ## When a pattern does not fit
 

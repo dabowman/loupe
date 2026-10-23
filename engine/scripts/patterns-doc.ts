@@ -8,7 +8,7 @@
  * declares with a value the vocabulary lists, and every redirect must land on a
  * real pattern.
  *
- *   node scripts/patterns-doc.ts            # rewrite every profile that extends the abstract file
+ *   node scripts/patterns-doc.ts            # rewrite every profile's patterns.md
  *   node scripts/patterns-doc.ts --check    # exit 1 if any patterns.md is stale (CI)
  *
  * Design notes: docs/design/cli.md#the-generated-reach-for-table
@@ -250,7 +250,15 @@ function main(): void {
 		const regPath = join(profilesDir, id, 'patterns', 'index.json');
 		if (!existsSync(regPath)) continue;
 		const real = readJson<Realization>(regPath);
-		if (!real.extends) continue; // a v1 registry has no abstract layer to project
+		// Skipping it would leave a hand-written table nothing checks, which is
+		// how two profiles' tables drifted from their registries.
+		if (!real.extends) {
+			failed = true;
+			console.error(
+				`${id}: patterns/index.json names no "extends", so there is no abstract language to check it against`,
+			);
+			continue;
+		}
 		const abstract = readJson<Abstract>(resolve(dirname(regPath), real.extends));
 		const errors = validate(abstract, real);
 		if (errors.length) {
