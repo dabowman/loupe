@@ -1446,24 +1446,25 @@ await check('the hook keeps its retry counter out of the repo, and status says w
 		'styles/a.css': '/* ds-disable */\n.a { color: #f00; }',
 	});
 	// The suite's own plugin data would hide the fallback this is about, so the
-	// shell's empty one; the counter it writes is removed below, by the path
-	// `status` names, so the run leaves nothing in the user's temp directory.
-	let where = '';
+	// shell's empty one, and a temp directory of the test's own: the fallback's
+	// `loupe-<uid>/` is made there, where `cleanup` reaches it, not in the user's.
+	const tmp = scratch('dsh-tmp-');
+	const shell = { CLAUDE_PLUGIN_DATA: '', TMPDIR: tmp };
 	try {
 		const r = runCli(
 			['hook', '--root', root],
-			{ CLAUDE_PLUGIN_DATA: '', CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
+			{ ...shell, CLAUDE_PLUGIN_OPTION_BLOCKING: 'true' },
 			'{"session_id":"tmp","tool_input":{"file_path":"styles/a.css"}}',
 		);
 		assert(r.status === 2, `the fixture should block (and so count an attempt), got ${r.status}:\n${r.stderr}`);
 		assert(!existsSync(join(root, '.loupe')), 'the hook wrote a .loupe/ directory into the project');
 
-		const status = runCli(['status', '--root', root], { CLAUDE_PLUGIN_DATA: '' }).stdout;
+		const status = runCli(['status', '--root', root], shell).stdout;
 		const line = /state:\s+(\S+)(.*)/.exec(status);
 		assert(line, `status does not report the retry counter:\n${status}`);
-		const [, named = '', marker = ''] = line;
-		where = named;
+		const [, where = '', marker = ''] = line;
 		assert(existsSync(where), `status names ${where}, which the hook did not write`);
+		assert(where.startsWith(tmp), `the retry counter is not under the temp directory: ${where}`);
 		assert(relative(root, where).startsWith('..'), `the retry counter is inside the repo: ${where}`);
 		assert(/outside your repo/.test(marker), `status did not mark the location:\n${status}`);
 		// Typed in a terminal, status has no CLAUDE_PLUGIN_DATA while the Claude
@@ -1486,7 +1487,7 @@ await check('the hook keeps its retry counter out of the repo, and status says w
 		}
 	} finally {
 		cleanup(root);
-		if (where.endsWith('attempts.json')) cleanup(dirname(where));
+		cleanup(tmp);
 	}
 });
 
@@ -3675,6 +3676,7 @@ cleanup(EMPTY_HOME);
 // the package, the hook's file was one it never writes.
 await check("status names the hook's retry counter by the Claude Code project, not the package", () => {
 	const top = scratch('dsh-monorepo-');
+	const home = scratch('dsh-home-');
 	try {
 		writeAll(top, {
 			'.claude/settings.local.json': '{}',
@@ -3682,7 +3684,7 @@ await check("status names the hook's retry counter by the Claude Code project, n
 			'packages/ui/package.json': '{}',
 		});
 		const pkg = join(top, 'packages', 'ui');
-		const env: NodeJS.ProcessEnv = { ...process.env, HOME: scratch('dsh-home-'), CLAUDE_PLUGIN_DATA: '' };
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, CLAUDE_PLUGIN_DATA: '' };
 		delete env.CLAUDE_PROJECT_DIR;
 		// The suites run uncached; this one asks where the caches are.
 		delete env.LOUPE_NO_CACHE;
@@ -3699,6 +3701,7 @@ await check("status names the hook's retry counter by the Claude Code project, n
 		assert(inClaude.includes(want), `with CLAUDE_PROJECT_DIR, expected ${want}:\n${inClaude}`);
 	} finally {
 		cleanup(top);
+		cleanup(home);
 	}
 });
 
