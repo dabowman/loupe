@@ -1,0 +1,14 @@
+{
+  "note": "A rule is keyed on its rightmost compound, cut only at a combinator outside brackets, parentheses and quotes, and on the classes that compound puts on the element itself. li:not(.acme-btn) styles no .acme-btn, so the <Button> carrying it reports no system/override (line 1); a combinator inside :not() is not a cut, so line 2 keys to the live .acme-row, not .acme-ghost. :nth-child(2n+1), a quoted attribute with a space and :is(.a .b) keep their compound whole, so .acme-orphan, .acme-gone and .acme-stale are dead (lines 4-6) while .acme-item is live (line 3).",
+  "findings": [
+    { "rule": "css/dead-class", "file": "styles/list.css", "line": 4 },
+    { "rule": "css/dead-class", "file": "styles/list.css", "line": 5 },
+    { "rule": "css/dead-class", "file": "styles/list.css", "line": 6 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/list.css", "line": 1 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/list.css", "line": 2 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/list.css", "line": 3 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/list.css", "line": 4 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/list.css", "line": 5 },
+    { "rule": "tokens/hardcoded-value", "file": "styles/list.css", "line": 6 }
+  ]
+}

@@ -79,7 +79,7 @@ import {
 	isHardcodedTokenValue,
 	isLayoutDecl,
 	isMarginProp,
-	keyCompound,
+	keyClassesIn,
 	keySelector,
 	mediaQuery,
 	ownDecls,
@@ -153,7 +153,7 @@ const realPath = (path: string): string | null => {
  * is missed — a missed override, never a false one.
  */
 const partClass = (sel: string): string | undefined =>
-	keySelector(sel.replace(/\[[^\]]*\]|\([^)]*\)/g, '')).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
+	ownLevel(keySelector(sel)).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
 
 /** The element a compound selector names, lowercased: `button.primary:hover` → `button`. */
 const tagOf = (compound: string): string | null => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
@@ -688,7 +688,7 @@ export async function analyze(
 		if (!scopes) return [];
 		const out = new Set<string>();
 		for (const sel of selectors) {
-			const found = compoundElements(keyCompound(sel), carriersByClass);
+			const found = compoundElements(keySelector(sel), carriersByClass);
 			if (!found) return [];
 			for (const e of found) out.add(e);
 		}
@@ -701,7 +701,7 @@ export async function analyze(
 	 */
 	const nestedElements = (selector: string): string[] => {
 		const selectors = list.comma(selector);
-		return selectors.some((sel) => keyCompound(sel).includes('&')) ? [] : elementsOf(selectors);
+		return selectors.some((sel) => keySelector(sel).includes('&')) ? [] : elementsOf(selectors);
 	};
 
 	for (const { abs, rel } of files.references) {
@@ -810,12 +810,13 @@ export async function analyze(
 			const allClasses = [...new Set(selectors.flatMap(classesIn))];
 			// Kept per selector as well as pooled: deleting the rule for one dead
 			// class is only safe if every selector in the list names that class.
-			const keyClassesPer = selectors.map((s) => classesIn(keySelector(s)));
+			const keyClassesPer = selectors.map(keyClassesIn);
 			const keyClasses = [...new Set(keyClassesPer.flat())];
 			if (!allClasses.length) continue;
 
 			// Bindings correlate against the KEY selector only: `.card .title`
-			// styles `.title`, so `.card`'s component must not answer for it.
+			// styles `.title`, so `.card`'s component must not answer for it, and
+			// `li:not(.btn)` styles no `.btn`.
 			const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
 			const boundSystem = bound.filter((b) => b.isSystem);
 			const boundText = bound.filter((b) => b.isText);
