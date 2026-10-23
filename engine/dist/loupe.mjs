@@ -23747,6 +23747,22 @@ var messageLine = (body2, tail = "") => {
   return clip(body2, MESSAGE_MAX - [...end].length) + end;
 };
 var boundMessage = (message, tail = "") => messageLine(tail && message.endsWith(tail) ? message.slice(0, -tail.length) : message, tail);
+var CLAUSE = /\. |; | -- |: /g;
+var clausesFront = (text2, max) => {
+  const line = oneLine(text2);
+  if ([...line].length <= max) return line;
+  for (const m of line.matchAll(CLAUSE)) {
+    if (line.slice(0, m.index).split("`").length % 2 === 0) continue;
+    const rest = line.slice(m.index + m[0].length);
+    if ([...rest].length < max) return `\u2026${rest}`;
+  }
+  return "";
+};
+var noteLine = (message, note2) => {
+  const room = Math.min(TAIL_MAX, MESSAGE_MAX - [...message].length) - " ()".length;
+  const kept = clausesFront(note2, room);
+  return kept ? `${message} (${kept})` : message;
+};
 var JOIN = "; ";
 var messageParts = (parts, tail = "") => {
   const budget = MESSAGE_MAX - [...clipFront(tail, TAIL_MAX)].length;
@@ -28792,7 +28808,8 @@ function undelivered({
       // The remedy, short enough to survive as the line's tail. The profile's
       // own prose on it is `loupe explain`'s to print, whole. With fallbacks
       // the page does render, so the note says why that is not enough, and
-      // stays short enough for both clauses to survive the tail's bound.
+      // stays short enough for both clauses to fit the tail's bound — the
+      // remedy last, so it is the one kept when the message leaves less.
       note: fallbacks ? `${FALLBACKS}${tokens.handle ? `; add '${tokens.handle}' to this CSS's enqueue dependencies` : ""}` : tokens.handle ? `list '${tokens.handle}' in the dependencies of the enqueue loading this CSS` : void 0,
       scopeLines: anchor.scopeLines
     }
@@ -31030,7 +31047,7 @@ function suppressionLine(directives) {
   const files = new Set(directives.map((d) => d.file)).size;
   return `${directives.length} active suppression(s) in ${files} file(s), silencing ${rules2.slice(0, TOP).map(([rule2, n]) => `${rule2} (${n})`).join(", ")}${rest > 0 ? `, +${rest} more rule(s)` : ""} \u2014 run \`loupe suppressions\` to read them.`;
 }
-var withNote = (f) => f.note ? messageLine(f.message, ` (${f.note})`) : f.message;
+var withNote = (f) => f.note ? noteLine(f.message, f.note) : f.message;
 var GROUP_BYS = ["rule", "file"];
 var isGroupBy = (g) => GROUP_BYS.includes(g);
 function bucket(findings, key) {

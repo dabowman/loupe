@@ -181,10 +181,20 @@ survives is deliberate.
 **`tail` is the part that must survive the cap rather than be eaten by it**: the
 marker naming which of the three channels a finding came from, or the prose
 remedy on a rule whose message leads with an unbounded source-derived signature.
-Neither is recoverable from the rest of the line. A registry note rides as a
-tail too, and is shortened from the front like any other, because a note is read
-for its last clause — "…it wanted Stack, not Grid" is the instruction and
-"planned for deprecation" is the background.
+Neither is recoverable from the rest of the line.
+
+**A registry note is shortened from the front too, but by whole clauses, and it
+gives way to the message.** A note is read for its last clause — "…it wanted
+Stack, not Grid" is the instruction and "planned for deprecation" is the
+background — so the clauses kept are the ones that end it. It is cut only after
+`. `, `; `, ` -- ` or `: `, and never inside a backtick span: cut by character
+count, a `system/superseded-component` note opened on
+`` …t` names a typographic scale ``, mid-word inside a name, and no longer
+parsed. The note spends what the message leaves of `MESSAGE_MAX`, up to
+`TAIL_MAX`; the message is never cut to make room, because the finalize pass has
+bounded it already and a second cut lands mid-word just the same. A note no
+whole clause of which fits is left off the line, and `--format json` and SARIF
+ship it whole.
 
 **Surviving is not the same as being unbounded.** A tail carrying a selector is
 source-derived too, and left to itself would spend the line the body is supposed

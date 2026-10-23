@@ -144,6 +144,41 @@ export const messageLine = (body: string, tail = ''): string => {
 export const boundMessage = (message: string, tail = ''): string =>
 	messageLine(tail && message.endsWith(tail) ? message.slice(0, -tail.length) : message, tail);
 
+/** Where a note may be cut: after a sentence or a clause, and nowhere else. */
+const CLAUSE = /\. |; | -- |: /g;
+
+/**
+ * `text`, bounded from the FRONT by whole clauses: the longest run of them that
+ * ends it and fits `max` with its ellipsis, or nothing when not even the last
+ * one does.
+ *
+ * The end `clipFront` keeps, cut only where a clause ends. A boundary inside a
+ * backtick span is not one — `a: b` is a value, not two clauses.
+ */
+const clausesFront = (text: string, max: number): string => {
+	const line = oneLine(text);
+	if ([...line].length <= max) return line;
+	for (const m of line.matchAll(CLAUSE)) {
+		if (line.slice(0, m.index).split('`').length % 2 === 0) continue;
+		const rest = line.slice(m.index + m[0].length);
+		if ([...rest].length < max) return `\u2026${rest}`;
+	}
+	return '';
+};
+
+/**
+ * A finding's message with its note in brackets, still within `MESSAGE_MAX`.
+ *
+ * The note spends only what the message leaves, up to `TAIL_MAX`: the message
+ * was bounded once already, and cutting it again for a note would land mid-word.
+ * A note no whole clause of which fits is left off the line.
+ */
+export const noteLine = (message: string, note: string): string => {
+	const room = Math.min(TAIL_MAX, MESSAGE_MAX - [...message].length) - ' ()'.length;
+	const kept = clausesFront(note, room);
+	return kept ? `${message} (${kept})` : message;
+};
+
 /** What separates one composed part of a message from the next. */
 const JOIN = '; ';
 
