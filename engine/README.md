@@ -244,8 +244,8 @@ them under `blocks:`; nothing is written into `namespaces.project`.
 A rule takes a bare severity, or `{ "severity", "reason" }` to say why; any
 other key is a config error. The `["warn", { … }]` form was removed in 0.8.0,
 and a config still using it does not load — under the hook that means the gate
-checks nothing until it is fixed. The rewrite is one line per rule; see
-[MIGRATION.md](MIGRATION.md#upgrading-a-loupe-config-from-before-080).
+checks nothing until it is fixed. The error names the line to write instead,
+and `loupe status` shows it before a session does.
 
 Turning a rule off in config is a suppression of the whole rule, everywhere, so
 `loupe suppressions` lists it beside the inline directives —
