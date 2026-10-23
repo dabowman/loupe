@@ -26199,23 +26199,14 @@ var patterns_default = {
 var package_default = {
   name: "@dabowman/loupe",
   version: "0.8.0",
+  private: true,
   description: "Design-system conformance checking: correlates markup bindings with the CSS that styles them.",
   type: "module",
   bin: {
     loupe: "./bin/loupe.mjs"
   },
-  exports: {
-    "./presets/*": "./presets/*.json"
-  },
-  files: [
-    "bin",
-    "src",
-    "dist",
-    "presets",
-    "README.md"
-  ],
   engines: {
-    node: ">=18"
+    node: ">=20"
   },
   scripts: {
     build: "node build.mjs",
