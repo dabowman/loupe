@@ -116,9 +116,13 @@ Three things were measured on `evals/values` (`node evals/values/run.ts`):
 
 | change | result |
 |---|---|
-| sending `tokenDescriptions` as each option's meaning | **85% → 92%**, and the wrong tokens it would act on at 0.5 fell from 16 to 3 over three runs |
+| sending `tokenDescriptions` as each option's meaning | **85% → 96–97%**, and the wrong tokens it would act on at 0.5 fell from 16 to 3 over three runs |
 | narrowing colours to the tokens within sight of the value | **95% → 91%** — *worse*, so colours get the whole family |
 | labelling each colour option with its OKLab distance | **96% → 94%**, and keeps got worse (precision 93% → 82%) |
+
+The first row is the current measurement, as
+[the engine README](../../engine/README.md#judged-values) reports it. The 92%
+this note used to give for it came from an earlier run of the question.
 
 The descriptions matter because the name alone says `track`; the description
 says "eg. scrollbar track", which is what stops `#f0f0f1` on a badge becoming
@@ -131,11 +135,11 @@ fails for the same reason: the misses it was aimed at were never about distance.
 Most are content against interactive at the same hex, and in the rest the
 nearest token is the wrong one.
 
-**The floor is 0.70 on the pick's confidence.** At that floor the question acts
+**The floor is 0.5 on the pick's confidence.** At that floor the question acts
 on 71% of the literals with three wrong tokens in three runs and no wrong keep.
 Gating on probability instead — keep on P(keep), else the likeliest token on
 P(any token) — was scored on the same answers and is no better: at 0.90 it acts
-on 52% with none wrong, which the floor at 0.70 matches.
+on 52% with none wrong, which raising the floor to 0.70 matches.
 
 Spacing the scale covers is exempt from the floor entirely: it snaps whatever
 the confidence, because a low confidence there is only 6px sitting exactly
@@ -292,7 +296,7 @@ fires on it, so a false positive sends an agent to the wrong pattern entirely.
 Calibration is scored per picked class, because a redirect acts on one class and
 its floor is that class's precision, not the whole question's.
 
-**`evals/values`** — 145 hand-labelled literals, every one `check --judge` asks
+**`evals/values`** — 157 hand-labelled literals, every one `check --judge` asks
 about in `vip-digital-asset-manager`: an un-remediated WPDS plugin whose
 stylesheets were written against the wp-admin palette (`#1d2327`, `#646970`,
 `#2271b1`), so nearly none of its values are exactly a WPDS token and most are

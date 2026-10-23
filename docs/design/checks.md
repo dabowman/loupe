@@ -329,13 +329,13 @@ reporting moved.
 `system/superseded-component` offers no fix, and `dropIn` on a registry entry is
 what would license one.
 
-Eight of the twenty-nine `legacy` entries name a replacement with the same
+Nine of the thirty-one `legacy` entries name a replacement with the same
 exported name in the other package — `Text`, `Card`, `Icon`, `Spinner`,
-`Tooltip`, `VisuallyHidden`, `TextareaControl`, `InputControl`, all
-`@wordpress/components` → `@wordpress/ui`. A matching name is what makes a
-mechanical rewrite *look* available, and it is the only thing about those eight
-that is mechanical. The rest need a new prop, a structural rewrite or a
-judgement call, and nothing claims otherwise.
+`Tooltip`, `VisuallyHidden`, `SelectControl`, `TextareaControl`,
+`InputControl`, all `@wordpress/components` → `@wordpress/ui`. A matching name
+is what makes a mechanical rewrite *look* available, and it is the only thing
+about those nine that is mechanical. The rest need a new prop, a structural
+rewrite or a judgement call, and nothing claims otherwise.
 
 **`dropIn` is the claim that moving the import changes the specifier and nothing
 else.** Every prop the old component accepts, accepted by the new one with the
@@ -355,8 +355,9 @@ behind trunk. Where the source does not settle it, the answer is no. There is no
 the same trace: a fix that fires on a recorded guess is the failure this field
 exists to prevent.
 
-**No WPDS entry carries it.** All eight were checked against Gutenberg trunk at
-037f7ed and all eight failed, for reasons that are not close calls: `Card` and
+**No WPDS entry carries it.** The eight other than `SelectControl`, which became
+`legacy` later, were checked against Gutenberg trunk at 037f7ed and all eight
+failed, for reasons that are not close calls: `Card` and
 `Tooltip` are namespaces in `@wordpress/ui` (`Card.Root`, `Tooltip.Trigger`), so
 the old element does not render at all; `Text` keeps the name `variant` for an
 entirely different set of values; `Icon` requires an SVG element where the old

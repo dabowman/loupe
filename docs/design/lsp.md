@@ -35,7 +35,7 @@ implemented in the extension would be a second answer that only VS Code users
 see, and it would drift silently, because both halves look right read on their
 own.
 
-This is also why `editors/vscode/extension.js` is under sixty lines and should
+This is also why `editors/vscode/extension.js` is a 96-line launcher and should
 stay that way. The question to ask before adding behaviour there is why every
 other editor should not have it.
 
