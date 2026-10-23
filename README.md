@@ -74,6 +74,7 @@ plugin.
 | `integrations/wordpress/` | A dev mu-plugin that loads the `serve` overlay itself, so wp-admin is not a bookmarklet click per screen |
 | `integrations/devtools/` | A Chrome DevTools extension: a panel listing every finding resolved against the page, and an Elements sidebar saying what is wrong with the selected node |
 | `docs/design/` | Design notes: why the engine is built the way it is, and the measurements behind its tuned numbers |
+| `pi/` | Experimental. The extension that ports the hooks and commands to the pi coding agent (`@earendil-works/pi-coding-agent`) — see [In pi](#in-pi) |
 
 The three skills are design-system agnostic: each one starts at `loupe status`
 to learn which system is in play, then reads that system's own notes —
@@ -1258,6 +1259,22 @@ the case is a home directory with a stray `package.json`, not a project. Point
 the root at the project, or narrow `sources` in `loupe.config.json`; a
 project that really is that large raises the ceiling with `"maxEntries"` there
 (`LOUPE_MAX_ENTRIES` overrides it for one run).
+
+### In pi
+
+Experimental: `pi/extensions/loupe.ts` ports the hooks and the five commands to
+the pi coding agent (`@earendil-works/pi-coding-agent`), and the `pi` field in
+the root `package.json` makes this repo a pi package. A pi `edit` or `write` on
+a UI file gets the `PostToolUse` check on what the edit introduced, and the end
+of each agent run gets the `Stop` check across the UI files the run wrote;
+`/loupe-init`, `/loupe-audit`, `/loupe-fix`, `/loupe-baseline` and
+`/loupe-report` are pi commands. The three skills load from `skills/` unchanged.
+It runs the same `loupe hook`, so it is off until the project opts in with the
+same `LOUPE=on` switch, read today from the `env` in Claude Code's
+`.claude/settings.local.json` or from the environment pi starts in. Its known
+gaps are tracked in [#115](https://github.com/dabowman/loupe/issues/115): it
+never passes `--judge`, so it judges nothing, and `/loupe-report` writes
+`/tmp/loupe-report.html` rather than `.loupe/report.html`.
 
 ## Status
 
