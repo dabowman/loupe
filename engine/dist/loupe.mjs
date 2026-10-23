@@ -24453,10 +24453,72 @@ var isMarginProp = (prop) => prop === "margin" || prop.startsWith("margin-");
 var isFlexDecl = (prop, value) => FLEX_PROPS.has(prop) || prop === "display" && /\b(inline-)?(flex|grid)\b/.test(value);
 var isGridDecl = (prop, value) => prop === "display" && /\bgrid\b/.test(value) || prop === "grid" || prop.startsWith("grid-template") || prop.startsWith("grid-auto");
 var isLayoutDecl = ({ prop, value }) => isFlexDecl(prop, value) || GAP_PROPS.has(prop) || isGridDecl(prop, value);
+var CALC_TOKEN = /[a-z-]*\(|\)|[+-]?\d*\.?\d+[a-z%]*|[-+*/]|[^\s()]+/g;
+var CALC_NUMBER = /^[+-]?\d*\.?\d+[a-z%]*$/;
+function calcSign(value) {
+  const t = value.match(CALC_TOKEN) ?? [];
+  let i = 0;
+  const factor = () => {
+    const tok = t[i++] ?? "";
+    if (CALC_NUMBER.test(tok)) return Math.sign(Number.parseFloat(tok));
+    if (tok === "(" || tok === "calc(") {
+      const s2 = sum();
+      return t[i++] === ")" ? s2 : null;
+    }
+    if (tok !== "var(") return null;
+    for (let depth = 1; depth > 0; ) {
+      const next = t[i++];
+      if (next === void 0) return null;
+      depth += next.endsWith("(") ? 1 : next === ")" ? -1 : 0;
+    }
+    return 1;
+  };
+  const product = () => {
+    let s2 = factor();
+    while (s2 !== null && (t[i] === "*" || t[i] === "/")) {
+      const divides = t[i++] === "/";
+      const f = factor();
+      s2 = f === null || divides && f === 0 ? null : s2 * f;
+    }
+    return s2;
+  };
+  const sum = () => {
+    let s2 = product();
+    while (s2 !== null && (t[i] === "+" || t[i] === "-")) {
+      const minus = t[i++] === "-";
+      const term = product();
+      if (term === null) return null;
+      const signed = minus ? -term : term;
+      s2 = s2 === 0 ? signed : signed === 0 || signed === s2 ? s2 : null;
+    }
+    return s2;
+  };
+  const s = sum();
+  return i === t.length ? s : null;
+}
+function topLevelParts(value) {
+  const parts = [];
+  let depth = 0;
+  let part = "";
+  for (const ch of value) {
+    if (depth === 0 && /\s/.test(ch)) {
+      if (part) parts.push(part);
+      part = "";
+      continue;
+    }
+    if (ch === "(") depth++;
+    else if (ch === ")" && depth > 0) depth--;
+    part += ch;
+  }
+  if (part) parts.push(part);
+  return parts;
+}
 function classifyMargin(value) {
-  const parts = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const v = value.trim().toLowerCase();
+  const parts = v.split(/\s+/).filter(Boolean);
   if (!parts.length) return null;
   if (parts.some((p) => /^-(?!-)/.test(p) && !ZERO.test(p))) return "negative";
+  if (topLevelParts(v).some((p) => p.startsWith("calc(") && calcSign(p) === -1)) return "negative";
   if (parts.some((p) => p === "auto")) return null;
   if (parts.every(isInertPart)) return null;
   return "spacing";

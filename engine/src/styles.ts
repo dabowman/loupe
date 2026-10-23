@@ -273,6 +273,79 @@ export const isGridDecl = (prop: string, value: string): boolean =>
 export const isLayoutDecl = ({ prop, value }: Decl): boolean =>
 	isFlexDecl(prop, value) || GAP_PROPS.has(prop) || isGridDecl(prop, value);
 
+/** A sign by inspection: -1, 0 or 1, or null when it cannot be told. */
+type Sign = -1 | 0 | 1 | null;
+
+const CALC_TOKEN = /[a-z-]*\(|\)|[+-]?\d*\.?\d+[a-z%]*|[-+*/]|[^\s()]+/g;
+const CALC_NUMBER = /^[+-]?\d*\.?\d+[a-z%]*$/;
+
+/**
+ * The sign of a lower-cased `calc()`, by inspection. A `var()` is a token, and a
+ * dimension token is positive, so `calc(-1 * var(--x))` is negative and
+ * `calc(var(--a) - var(--b))` cannot be told. Nor can a sum of mixed signs, any
+ * other function, or anything that does not parse: those are null, not guessed.
+ */
+function calcSign(value: string): Sign {
+	const t = value.match(CALC_TOKEN) ?? [];
+	let i = 0;
+	const factor = (): Sign => {
+		const tok = t[i++] ?? '';
+		if (CALC_NUMBER.test(tok)) return Math.sign(Number.parseFloat(tok)) as Sign;
+		if (tok === '(' || tok === 'calc(') {
+			const s = sum();
+			return t[i++] === ')' ? s : null;
+		}
+		if (tok !== 'var(') return null;
+		for (let depth = 1; depth > 0; ) {
+			const next = t[i++];
+			if (next === undefined) return null;
+			depth += next.endsWith('(') ? 1 : next === ')' ? -1 : 0;
+		}
+		return 1;
+	};
+	const product = (): Sign => {
+		let s = factor();
+		while (s !== null && (t[i] === '*' || t[i] === '/')) {
+			const divides = t[i++] === '/';
+			const f = factor();
+			s = f === null || (divides && f === 0) ? null : ((s * f) as Sign);
+		}
+		return s;
+	};
+	const sum = (): Sign => {
+		let s = product();
+		while (s !== null && (t[i] === '+' || t[i] === '-')) {
+			const minus = t[i++] === '-';
+			const term = product();
+			if (term === null) return null;
+			const signed = (minus ? -term : term) as Sign;
+			s = s === 0 ? signed : signed === 0 || signed === s ? s : null;
+		}
+		return s;
+	};
+	const s = sum();
+	return i === t.length ? s : null;
+}
+
+/** A value's space-separated parts, each parenthesised group kept whole. */
+function topLevelParts(value: string): string[] {
+	const parts: string[] = [];
+	let depth = 0;
+	let part = '';
+	for (const ch of value) {
+		if (depth === 0 && /\s/.test(ch)) {
+			if (part) parts.push(part);
+			part = '';
+			continue;
+		}
+		if (ch === '(') depth++;
+		else if (ch === ')' && depth > 0) depth--;
+		part += ch;
+	}
+	if (part) parts.push(part);
+	return parts;
+}
+
 /**
  * Classify a margin declaration.
  *
@@ -280,15 +353,21 @@ export const isLayoutDecl = ({ prop, value }: Decl): boolean =>
  *   margin: 0 auto        centering, `gap` cannot express it    → null
  *   margin-inline: auto   same, logical form                    → null
  *   any negative part     a bleed, a technique to confirm       → 'negative'
+ *   a `calc()` part negative by inspection, same                → 'negative'
  *   anything else                                               → 'spacing'
  */
 export function classifyMargin(value: string): MarginKind {
-	const parts = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+	const v = value.trim().toLowerCase();
+	const parts = v.split(/\s+/).filter(Boolean);
 	if (!parts.length) return null;
 	// `var(--x)` on a margin is still margin, but its sign is invisible. A leading
 	// `--` is a custom property name, not a minus: `var( --gap )` splits on the
 	// spaces prettier writes.
 	if (parts.some((p) => /^-(?!-)/.test(p) && !ZERO.test(p))) return 'negative';
+	// The spaces inside a `calc()` cut it apart above, so a bleed written as
+	// arithmetic on a token is read whole: `calc(-1 * var(--x))`. One the engine
+	// cannot sign keeps the reading above.
+	if (topLevelParts(v).some((p) => p.startsWith('calc(') && calcSign(p) === -1)) return 'negative';
 	if (parts.some((p) => p === 'auto')) return null;
 	if (parts.every(isInertPart)) return null;
 	return 'spacing';

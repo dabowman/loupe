@@ -30,6 +30,27 @@ Negative margins split out on their own: a bleed is a real technique, so it
 warrants a "confirm this" rather than the "move it to `gap`" remedy, which
 would be wrong advice.
 
+A bleed is often arithmetic on a token — `margin: calc(-1 *
+var(--wpds-dimension-padding-md))`, out of a padded parent — and it is a bleed
+all the same. Read as spacing, it drew `layout/margin-on-child`, an error under
+`wpds`, and the advice to move it to a `gap`, which cannot express it. So a
+`calc()` is negative when its sign is plain by inspection, taking a `var()` as a
+token and a dimension token as positive:
+
+    calc(-1 * var(--x))        negative times a token
+    calc(var(--x) * -1)        same, either order, `/ -2` too
+    calc(-8px - var(--x))      every term negative
+    calc(0px - var(--x))       zero less a token
+
+One such part makes a shorthand negative, as a literal `-16px` part does:
+`margin: 0 calc(-1 * var(--x))` is a bleed, and so is `calc(-1 * var(--x))
+auto`. What cannot be signed is not guessed at — terms of mixed sign
+(`calc(var(--a) - var(--b))`, `calc(-8px + var(--x))`), or any function but
+`var()` and `calc()` (`min()`, `clamp()`, `env()`), or a Sass variable. Such a
+`calc()` keeps the reading its space-separated pieces give it, and that reading
+takes a lone binary minus for a negative part: `calc(var(--a) - var(--b))`
+reads as a negative margin, `calc(-8px + var(--x))` as spacing.
+
 ### A margin on a bare element is prose
 
 `.wp-block-acme-card p { margin: 0 0 1em }` spaces paragraphs, not parts. The

@@ -7,3 +7,11 @@
 .wf-space-var  { margin-top: var(--wpds-dimension-gap-sm); }
 .wf-bleed      { margin-inline: -16px; }
 .wf-bleed-one  { margin-left: -8px; }
+.wf-calc-bleed     { margin-inline: calc(-1 * var(--wpds-dimension-padding-md)); }
+.wf-calc-bleed-end { margin-left: calc(var(--wpds-dimension-padding-md) * -1); }
+.wf-calc-bleed-len { margin-top: calc(-8px - var(--wpds-dimension-gap-sm)); }
+.wf-calc-bleed-0   { margin-right: calc(0px - var(--wpds-dimension-padding-md)); }
+.wf-calc-bleed-sh  { margin: 0 calc(-1 * var(--wpds-dimension-padding-md)); }
+.wf-calc-tight     { margin-bottom: calc(-1*var(--wpds-dimension-gap-sm)); }
+.wf-calc-mixed     { margin-top: calc(-8px + var(--wpds-dimension-gap-sm)); }
+.wf-calc-unsigned  { margin-top: calc(var(--wpds-dimension-gap-md) - var(--wpds-dimension-gap-sm)); }

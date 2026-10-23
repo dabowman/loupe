@@ -10,6 +10,7 @@
  * Logic, per declaration:
  *   not `margin` or `margin-*`                       → not ours, next check
  *   some part is negative (a `--var` name is not)    → layout/negative-margin
+ *   some `calc()` part is negative by inspection     → layout/negative-margin
  *   some part is `auto`                              → clean, claimed
  *   every part is `0` or a CSS-wide keyword          → clean, claimed
  *   the rule keys on a bare element (`.card p`)      → clean, claimed: prose
