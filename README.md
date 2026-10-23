@@ -1249,8 +1249,11 @@ project that really is that large raises the ceiling with `"maxEntries"` there
 ## Status
 
 Working: all three channels (stylesheets, `style={{ … }}`, CSS-in-JS template
-literals), the token set, both composite rules, all three skills, commands,
-hooks, the registries, profile selection, and the language server.
+literals), every rule in the [Rules](#rules) table, `--judge`, the token set,
+the registries, profile selection, `loupe fix`, the skills, commands and hooks,
+and every surface a report reaches — the HTML page and `/loupe-report`, SARIF
+in CI, the language server, the `loupe serve` overlay, `loupe ui`, the DevTools
+extension and the pane. `loupe map` works too, and is experimental.
 
 A whole-repo scan of Gutenberg — 6,100 markup files, 1,300 stylesheets — takes
 about four seconds.
