@@ -477,9 +477,16 @@ Stop hook then looked in plugin data, found nothing, and blocked on every
 finding it had just been told to accept — with nothing in the log to say the two
 runs were reading different files.
 
+It is `.loupe/baseline.json`, beside everything else loupe writes into a project
+(`profiles/`, `report.html`, `mu-plugins/`). It was `.loupe-baseline.json` at the
+root until just before the beta, and that name is not read: there were no users
+to migrate. Where no current baseline exists and that file does, `check` and
+`status` say to move it — moved, not re-recorded, because re-recording accepts
+today's backlog, drift since included.
+
 A named path is honored as given, because someone who names a file wants it
 where they named it. When the config names a file that isn't there, the
-project's own `.loupe-baseline.json` answers instead and the fallback is
+project's own `.loupe/baseline.json` answers instead and the fallback is
 reported: dropping it lost every accepted finding in the window between a config
 change landing and the file actually moving.
 
@@ -792,8 +799,8 @@ is exactly the lie that would let an unknown id reach a lookup unchecked.
 
 The hook roots at `CLAUDE_PROJECT_DIR`; a typed command used to root at the cwd,
 so the same repo had two roots and everything keyed off one of them disagreed.
-`loupe baseline` in `packages/app` of a monorepo wrote
-`packages/app/.loupe-baseline.json` with subdirectory-relative keys, and the
+`loupe baseline` in `packages/app` of a monorepo wrote its baseline under
+`packages/app/` with subdirectory-relative keys, and the
 hook — rooted at the repo — never read it and blocked on the findings that had
 just been accepted. Anchoring to the config the run is actually governed by
 makes the two agree, because it is the same config file the hook resolves.

@@ -76,7 +76,7 @@ interface Fixture {
 
 /** Analyze a throwaway repo, apply fixes, hand back what the files now say. */
 async function fixture(files: Record<string, string>, components?: Map<string, ComponentEntry>): Promise<Fixture> {
-	const root = scratch('dsh-fix-');
+	const root = scratch('loupe-fix-');
 	try {
 		const all = { 'loupe.config.json': CONFIG, [DS_TOKENS]: TOKENS, ...files };
 		writeAll(root, all);
@@ -245,7 +245,7 @@ await check('`loupe fix` deletes nothing for a dead class', async () => {
 // since the scan. A column is not self-checking the way a match is, so what
 // stands at it is checked against what was reported there.
 await check('a span that has moved skips rather than rewriting the wrong bytes', () => {
-	const root = scratch('dsh-fix-');
+	const root = scratch('loupe-fix-');
 	try {
 		const scanned = 'export const H = () => <div style={{ padding: 13 }} />;';
 		// The same line, re-indented since: every column past the indent moved.
@@ -283,7 +283,7 @@ await check('a stale line number skips rather than guesses', async () => {
 			suggest: [{ prop: 'border-radius', value: '4px', tokens: ['--wpds-border-radius-md'] }],
 		},
 	];
-	const root = scratch('dsh-fix-');
+	const root = scratch('loupe-fix-');
 	try {
 		write(root, 'styles/f.css', '.wf-f { border-radius: 4px; }');
 		const { applied, skipped } = applyTokenFixes(root, findings);
@@ -295,7 +295,7 @@ await check('a stale line number skips rather than guesses', async () => {
 });
 
 await check('--dry-run reports without writing', async () => {
-	const root = scratch('dsh-fix-');
+	const root = scratch('loupe-fix-');
 	try {
 		write(root, 'styles/g.css', '.wf-g { border-radius: 4px; }');
 		const findings: FixCandidate[] = [
@@ -320,7 +320,7 @@ await check('--dry-run reports without writing', async () => {
 // is the one place the flattening belongs at the print site rather than at
 // capture.
 await check('a skipped multi-line declaration is reported on one line', async () => {
-	const root = scratch('dsh-fix-');
+	const root = scratch('loupe-fix-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
@@ -521,7 +521,7 @@ await check('a misspelled token in an inline style is renamed too', async () => 
 // What a spelling cannot settle, put to a stub: what is asked, and that a judged
 // rename is written exactly as a spelled one, on every line naming it.
 await check('fix --judge renames what the judgement settled, and nothing under the floor', async () => {
-	const root = scratch('dsh-judge-rename-');
+	const root = scratch('loupe-judge-rename-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
@@ -703,7 +703,7 @@ await check('--judge refuses an empty token set rather than calling every value 
 // project stylesheet defines under the prefix to the set it judges against, so
 // the set was not empty and every value with no token was suppressed as tokenless.
 await check("--judge refuses a token set only the project's own definitions filled", async () => {
-	const root = scratch('dsh-judge-project-tokens-');
+	const root = scratch('loupe-judge-project-tokens-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': JSON.stringify({
@@ -740,7 +740,7 @@ await check("--judge refuses a token set only the project's own definitions fill
 await check(
 	'fix --judge rewrites what it settled, suppresses what has no token at all, and leaves the rest',
 	async () => {
-		const root = scratch('dsh-judge-fix-');
+		const root = scratch('loupe-judge-fix-');
 		try {
 			writeAll(root, {
 				'loupe.config.json': CONFIG,
@@ -872,7 +872,7 @@ await check(
 // when the one request failed. `fetch` is replaced before the CLI loads, so the
 // outage is the command's own call, not a stub handed to it.
 await check('fix --judge still writes what needed no model when the judge cannot be reached', () => {
-	const root = scratch('dsh-judge-down-');
+	const root = scratch('loupe-judge-down-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
@@ -904,7 +904,7 @@ await check('fix --judge still writes what needed no model when the judge cannot
 // message after that. A css-in-js selector rides in the tail, so a long one
 // came back whole and past the cap once the judgement was written in.
 await check('a judged css-in-js finding with a long selector is still one bounded line', async () => {
-	const root = scratch('dsh-judge-bound-');
+	const root = scratch('loupe-judge-bound-');
 	try {
 		const selector = `.Styled-${'x'.repeat(200)}-tail`;
 		writeAll(root, {
@@ -934,7 +934,7 @@ await check('a judged css-in-js finding with a long selector is still one bounde
 // The same for a judged rename: the unknown name is source text, and the line
 // was rewritten after `analyze` bounded it.
 await check('a judged rename of a long unknown name is still one bounded line', async () => {
-	const root = scratch('dsh-judge-rename-bound-');
+	const root = scratch('loupe-judge-rename-bound-');
 	try {
 		const long = `--wpds-dimension-space-${'x'.repeat(220)}`;
 		writeAll(root, {
@@ -971,7 +971,7 @@ await check('a judged rename of a long unknown name is still one bounded line', 
 // The judgement recomposes the line, and the channel marker is the part of it
 // nothing else can recover.
 await check('a judged rename in an inline style still names the channel', async () => {
-	const root = scratch('dsh-judge-rename-inline-');
+	const root = scratch('loupe-judge-rename-inline-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
@@ -1003,7 +1003,7 @@ await check('a judged rename in an inline style still names the channel', async 
 // The rule `--judge` was widened to, and the shape the widening is about: one
 // finding, three declarations, three different outcomes on three lines.
 await check('a collapsed typography finding is judged and fixed declaration by declaration', async () => {
-	const root = scratch('dsh-judge-type-');
+	const root = scratch('loupe-judge-type-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,
@@ -1124,7 +1124,7 @@ await check('a value is planned by what it measures, and a part is only what its
 });
 
 await check('a keep beside a part that settled on a token leaves the value for review', async () => {
-	const root = scratch('dsh-halfkeep-');
+	const root = scratch('loupe-halfkeep-');
 	try {
 		write(root, 'a.css', '.wf-a {\n\tpadding: 6px 48px;\n}\n');
 		const stub = (async (_url: string, init: { body: string }) => {
@@ -1158,7 +1158,7 @@ await check('a keep beside a part that settled on a token leaves the value for r
 await check(
 	"a kept value is not suppressed from its rule's opening line or under someone else's directive, and keeps the line ending",
 	() => {
-		const root = scratch('dsh-keeps-');
+		const root = scratch('loupe-keeps-');
 		try {
 			writeAll(root, {
 				'styles/open.css': '.wf-a { background: #f0c;\n\tcolor: #0cf;\n}\n',
@@ -1213,7 +1213,7 @@ await check(
 // directive mutes its whole line, so a tokenless value beside one left for
 // review is left too.
 await check('a value judged deliberate is left for review, and so is anything on its line', () => {
-	const root = scratch('dsh-keeps-deliberate-');
+	const root = scratch('loupe-keeps-deliberate-');
 	try {
 		writeAll(root, {
 			'styles/a.css': '.wf-a {\n\tbackground: #f0c;\n\tbox-shadow: 0 1px 2px #000; color: #0cf;\n}\n',
@@ -1269,7 +1269,7 @@ await check('a superseded component import is reported and never rewritten', asy
 // not rewrite what the baseline accepted: it runs `fix --changed`, which has to
 // leave every file the working tree has not touched alone.
 await check('fix --changed rewrites only the files the working tree changed', () => {
-	const root = scratch('dsh-fix-changed-');
+	const root = scratch('loupe-fix-changed-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG,

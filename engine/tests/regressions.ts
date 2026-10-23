@@ -14,7 +14,7 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { harvestPhpStems, harvestStems } from '../src/markup.ts';
@@ -54,7 +54,7 @@ function runCli(
 	extra: NodeJS.ProcessEnv = {},
 	input?: string,
 ): { status: number | null; stdout: string; stderr: string } {
-	const home = scratch('dsh-home-');
+	const home = scratch('loupe-home-');
 	try {
 		// Opted in, and not silenced: the gate is off until a project turns it on.
 		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, LOUPE: 'on', CLAUDE_PLUGIN_DATA: PLUGIN_DATA };
@@ -114,7 +114,7 @@ const checkAll = (root: string, extra: string[] = []): string => {
 };
 
 const tmpRepo = (files: Record<string, string>): string => {
-	const root = scratch('dsh-regress-');
+	const root = scratch('loupe-regress-');
 	writeAll(root, files);
 	return root;
 };
@@ -138,7 +138,7 @@ const tmpRepo = (files: Record<string, string>): string => {
  * instead of at the shell — so the helper closes every door, and a test that
  * wants one open passes it in `extra`.
  */
-const EMPTY_HOME = scratch('dsh-home-');
+const EMPTY_HOME = scratch('loupe-home-');
 
 const env = (extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => {
 	// The gate is off until a project opts in; every test here is about a gate
@@ -370,6 +370,16 @@ await check("an error in the project's own config reaches the agent, without blo
 	}
 });
 
+/** A project importing `@acme/ui`, with `registry` as its registry settings. */
+const configWith = (registry: object): string =>
+	JSON.stringify({ extends: 'generic', designSystem: { packages: ['@acme/ui'] }, ...registry });
+/** Why the config at `root` does not load, or `loaded`. */
+const configError = (root: string): Promise<string> =>
+	loadConfig({ root }).then(
+		() => 'loaded',
+		(err: unknown) => (err instanceof Error ? err.message : String(err)),
+	);
+
 // A config's `componentRegistry` or `patterns` path read every failure as "no
 // registry", so a JSON syntax error in the project's own registry switched off
 // `system/locked-component`, `system/superseded-component` and `patterns/*` and
@@ -384,13 +394,6 @@ await check('a registry file that does not load is a config error, and a missing
 		parseMessage = err instanceof Error ? err.message : String(err);
 	}
 	assert(parseMessage, 'the fixture has to be malformed JSON');
-	const configWith = (registry: object): string =>
-		JSON.stringify({ extends: 'generic', designSystem: { packages: ['@acme/ui'] }, ...registry });
-	const configError = (root: string): Promise<string> =>
-		loadConfig({ root }).then(
-			() => 'loaded',
-			(err: unknown) => (err instanceof Error ? err.message : String(err)),
-		);
 	const root = tmpRepo({
 		'package.json': '{}',
 		'loupe.config.json': configWith({ componentRegistry: './registry.json' }),
@@ -466,6 +469,48 @@ await check('a registry file that does not load is a config error, and a missing
 	}
 });
 
+// An inline `componentRegistry` or `patterns` that was neither an array nor a
+// path read as no registry, so the object a registry file holds, pasted into
+// the config, switched the currency rules off as quietly as a broken file did.
+await check('an inline registry object is read, and a value of no registry shape is a config error', async () => {
+	const inline = { components: [{ name: 'OldButton', package: '@acme/ui', status: 'locked' }] };
+	const root = tmpRepo({
+		'package.json': '{}',
+		'loupe.config.json': configWith({ componentRegistry: inline }),
+		'src/App.jsx': "import { OldButton } from '@acme/ui';\nexport const App = () => <OldButton />;",
+	});
+	try {
+		const config = await loadConfig({ root });
+		assert(config.enabled['system/locked-component'], 'an inline registry should turn the currency rules on');
+		const { findings } = await analyze(config, { scope: null });
+		const locked = one(
+			findings.filter((f) => f.rule === 'system/locked-component'),
+			'the locked component in the inline registry is reported',
+		);
+		assert(locked.message.includes('OldButton'), `the finding names another component: ${locked.message}`);
+
+		// Inline is the config itself, so a malformed one is a config error naming the key.
+		for (const [key, body, says] of [
+			['componentRegistry', { component: [] }, 'not a component registry'],
+			['patterns', { pattern: [] }, 'not a pattern registry'],
+		] as const) {
+			writeFileSync(join(root, 'loupe.config.json'), configWith({ [key]: body }));
+			const message = await configError(root);
+			assert(message.startsWith(`${key}:`) && message.includes(says), `${key} ${JSON.stringify(body)}: ${message}`);
+		}
+
+		// No shape a registry is written in.
+		writeFileSync(join(root, 'loupe.config.json'), configWith({ patterns: 5 }));
+		const message = await configError(root);
+		assert(
+			message.startsWith('patterns must be') && message.includes('an object, or null') && message.includes('got: 5'),
+			`"patterns": 5 should name the key and the accepted shapes: ${message}`,
+		);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // The wordpress-components markup glob was `**/src/**`, which made 59% of a real
 // repo invisible — and every class referenced only there reported as dead.
 await check('markup outside src/ still counts as a reference', async () => {
@@ -493,7 +538,7 @@ await check('markup outside src/ still counts as a reference', async () => {
 // diagnostic that cannot observe the setting it diagnoses sends you hunting for
 // the bug somewhere else.
 await check('status reports the blocking switch it cannot see in the environment', () => {
-	const home = scratch('dsh-home-');
+	const home = scratch('loupe-home-');
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx': 'export const A = () => <div className="acme-a" />;',
@@ -520,7 +565,7 @@ await check('status reports the blocking switch it cannot see in the environment
 // keys — and a terminal — which sees only the file — resolved different options
 // for the same project, and produced finding keys no shared baseline covers.
 await check('plugin options merge per key, environment over settings', () => {
-	const home = scratch('dsh-home-');
+	const home = scratch('loupe-home-');
 	const root = inferrableRepo();
 	try {
 		mkdirSync(join(home, '.claude'), { recursive: true });
@@ -814,7 +859,7 @@ await check('a baseline recorded from a shell is visible to the plugin hook', ()
 			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { color: #f00; }',
 	});
-	const pluginData = scratch('dsh-plugin-data-');
+	const pluginData = scratch('loupe-plugin-data-');
 	try {
 		const shell = env({ CLAUDE_PLUGIN_DATA: undefined });
 
@@ -872,7 +917,7 @@ await check('baseline reports the findings recorded and the entries they collaps
 		assert(both, `baseline did not report both counts:\n${recorded}`);
 		const [, findings, entries, noun] = both;
 		assert(noun === (entries === '1' ? 'entry' : 'entries'), `wrong plural for ${entries}: ${recorded}`);
-		const written = JSON.parse(readFileSync(join(root, '.loupe-baseline.json'), 'utf8')) as { entries: string[] };
+		const written = JSON.parse(readFileSync(join(root, '.loupe/baseline.json'), 'utf8')) as { entries: string[] };
 		assert(
 			Number(entries) === written.entries.length,
 			`entry count is not what was written: ${entries} vs ${written.entries.length}`,
@@ -1102,7 +1147,7 @@ await check('LOUPE_OFF silences a hook that would otherwise block', () => {
 // the `off` plugin option, and `LOUPE_OFF` — from the environment or the
 // project's own Claude Code settings — feeds that same field.
 await check('the off switch is a plugin option, settable per project, reported with its source', () => {
-	const home = scratch('dsh-home-');
+	const home = scratch('loupe-home-');
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
@@ -1186,7 +1231,7 @@ await check('an unreadable baseline is named, not silently ignored', () => {
 			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { font-size: 13px; }',
 	});
-	const baseline = join(root, '.loupe-baseline.json');
+	const baseline = join(root, '.loupe/baseline.json');
 	try {
 		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
 		const clean = checkAll(root);
@@ -1246,42 +1291,56 @@ await check('an unreadable baseline is named, not silently ignored', () => {
 	}
 });
 
-// 0.8.0 stopped reading the 0.1.x baseline locations, and said nothing: the
-// backlog a project accepted came back as live findings with no reason given.
-// Not read again — just named, where a person reads, and never in a stream a
-// parser reads or in the hook.
-await check('a 0.1.x baseline is named as no longer read, outside JSON and the hook', () => {
+// Two baselines nothing reads any more: `.loupe-baseline.json` at the root, the
+// name before the baseline moved under `.loupe/`, and 0.1.x's in plugin data.
+// Dropping one silently put the backlog a project accepted back as live
+// findings with no reason given. Not read again — just named, where a person
+// reads, and never in a stream a parser reads or in the hook.
+await check('a baseline at an old location is named as no longer read, outside JSON and the hook', () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
 			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { font-size: 13px; }',
-		'.loupe/baseline.json': '{"version":1,"createdAt":"","count":1,"entries":["x"]}\n',
 	});
-	const pluginData = scratch('dsh-legacy-data-');
+	const pluginData = scratch('loupe-legacy-data-');
+	const oldName = join(root, '.loupe-baseline.json');
+	const renamed =
+		/\.loupe-baseline\.json is a baseline under its old name, which this version no longer reads — move it to .*\.loupe\/baseline\.json to keep the backlog it accepted/;
 	const said =
-		/\.loupe\/baseline\.json is a 0\.1\.x baseline, which this version no longer reads.*loupe baseline.*delete the old file/;
+		/projects\/.*\/baseline\.json is a 0\.1\.x baseline, which this version no longer reads.*loupe baseline.*delete the old file/;
 	try {
+		// A real backlog under the old name, so "not read" shows as findings.
+		runCli(['baseline', '--root', root, '--baseline', '.loupe-baseline.json']);
+		assert(existsSync(oldName), 'the fixture baseline was not recorded');
 		const text = runCli(['check', '--all', '--root', root]);
-		assert(text.status === 1, `check exited ${text.status}:\n${text.stderr}`);
-		assert(said.test(text.stderr), `check did not name the legacy baseline:\n${text.stderr}`);
+		assert(text.status === 1, `check exited ${text.status} — the old name was read:\n${text.stdout}${text.stderr}`);
+		assert(renamed.test(text.stderr), `check did not name the old baseline:\n${text.stderr}`);
 
 		for (const format of ['json', 'sarif']) {
 			const r = runCli(['check', '--all', '--root', root, '--format', format]);
 			JSON.parse(r.stdout);
-			assert(!/0\.1\.x/.test(r.stdout), `the notice reached ${format} on stdout`);
-			assert(said.test(r.stderr), `${format}: the notice was dropped from stderr:\n${r.stderr}`);
+			assert(!/old name/.test(r.stdout), `the notice reached ${format} on stdout`);
+			assert(renamed.test(r.stderr), `${format}: the notice was dropped from stderr:\n${r.stderr}`);
 		}
 
 		const status = runCli(['status', '--root', root]);
-		assert(said.test(status.stdout), `status did not name the legacy baseline:\n${status.stdout}`);
+		assert(renamed.test(status.stdout), `status did not name the old baseline:\n${status.stdout}`);
 
 		const hook = runCli(
 			['hook', '--root', root],
 			{},
 			'{"session_id":"legacy","tool_input":{"file_path":"styles/a.css"}}',
 		);
-		assert(!/0\.1\.x/.test(hook.stdout + hook.stderr), `the hook said it:\n${hook.stdout}${hook.stderr}`);
+		assert(!/old name/.test(hook.stdout + hook.stderr), `the hook said it:\n${hook.stdout}${hook.stderr}`);
+
+		// Moved where it says, the file is read as it stands, and nothing is said.
+		mkdirSync(join(root, '.loupe'));
+		renameSync(oldName, join(root, '.loupe', 'baseline.json'));
+		const moved = runCli(['check', '--all', '--root', root]);
+		assert(moved.status === 0, `the moved baseline was not read (${moved.status}):\n${moved.stdout}`);
+		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(moved.stdout), `nothing was hidden:\n${moved.stdout}`);
+		assert(!/old name/.test(moved.stderr), `named an old baseline that was moved:\n${moved.stderr}`);
 
 		// The plugin data directory's location, keyed as 0.1.x keyed it.
 		rmSync(join(root, '.loupe'), { recursive: true });
@@ -1289,14 +1348,17 @@ await check('a 0.1.x baseline is named as no longer read, outside JSON and the h
 		const key = `${basename(full).replace(/[^\w.-]/g, '-')}-${createHash('sha256').update(full).digest('hex').slice(0, 10)}`;
 		writeAll(pluginData, { [`projects/${key}/baseline.json`]: '{"version":1,"entries":[]}\n' });
 		const data = runCli(['check', '--all', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
-		assert(/projects\/.*\/baseline\.json is a 0\.1\.x baseline/.test(data.stderr), `plugin data:\n${data.stderr}`);
+		assert(said.test(data.stderr), `plugin data:\n${data.stderr}`);
+		const dataStatus = runCli(['status', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
+		assert(said.test(dataStatus.stdout), `status, plugin data:\n${dataStatus.stdout}`);
 
-		// Once a current baseline exists, the old file is moot and nothing is said.
+		// Once a current baseline exists, the old files are moot and nothing is said.
+		writeFileSync(oldName, '{"version":1,"createdAt":"","count":1,"entries":["x"]}\n');
 		runCli(['baseline', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
 		const after = runCli(['check', '--all', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
-		assert(!/0\.1\.x/.test(after.stderr), `named a legacy baseline beside a current one:\n${after.stderr}`);
+		assert(!/0\.1\.x|old name/.test(after.stderr), `named an old baseline beside a current one:\n${after.stderr}`);
 		const quiet = runCli(['status', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
-		assert(!/0\.1\.x/.test(quiet.stdout), `status named it beside a current one:\n${quiet.stdout}`);
+		assert(!/0\.1\.x|old name/.test(quiet.stdout), `status named it beside a current one:\n${quiet.stdout}`);
 	} finally {
 		cleanup(root);
 		cleanup(pluginData);
@@ -1360,7 +1422,7 @@ await check('an empty config `baseline` means the default name, for the writer a
 	});
 	try {
 		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
-		assert(recorded.includes(join(root, '.loupe-baseline.json')), `wrote somewhere else:\n${recorded}`);
+		assert(recorded.includes(join(root, '.loupe/baseline.json')), `wrote somewhere else:\n${recorded}`);
 		const read = checkAll(root);
 		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(read), `readers missed the default name:\n${read}`);
 	} finally {
@@ -1476,7 +1538,7 @@ await check('the hook keeps its retry counter out of the repo, and status says w
 			status.includes(`$CLAUDE_PLUGIN_DATA/${key}/attempts.json`),
 			`status does not say where the Claude Code hook keeps its counter:\n${status}`,
 		);
-		const data = scratch('dsh-plugin-data-');
+		const data = scratch('loupe-plugin-data-');
 		try {
 			const inPlugin = runCli(['status', '--root', root], env({ CLAUDE_PLUGIN_DATA: data })).stdout;
 			assert(
@@ -1807,7 +1869,7 @@ await check('PostToolUse for a file outside the project is clean and spends no S
 		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
 		'styles/a.css': '.b { margin-bottom: 16px; }\n',
 	});
-	const elsewhere = scratch('dsh-notes-');
+	const elsewhere = scratch('loupe-notes-');
 	const link = `${root}-link`;
 	try {
 		execFileSync('git', ['init'], { cwd: root, stdio: 'ignore' });
@@ -1861,7 +1923,7 @@ await check('PostToolUse for a file outside the project is clean and spends no S
 // and nothing in it ever matched a finding — the gate reported clean without
 // checking anything.
 await check('--changed finds a modified file when the project is a git subdirectory', () => {
-	const repo = scratch('dsh-mono-');
+	const repo = scratch('loupe-mono-');
 	const app = join(repo, 'packages', 'app');
 	const gitIn = (dir: string, args: string[]): void => {
 		execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'ignore', 'ignore'] });
@@ -1900,7 +1962,7 @@ await check('--changed finds a modified file when the project is a git subdirect
 // subdirectory-relative keys that the hook never read — and the gate blocked on
 // the findings that had just been accepted.
 await check('a baseline recorded from a subdirectory is the one the hook reads', () => {
-	const repo = scratch('dsh-anchor-');
+	const repo = scratch('loupe-anchor-');
 	const app = join(repo, 'packages', 'app');
 	try {
 		mkdirSync(app, { recursive: true });
@@ -1909,7 +1971,7 @@ await check('a baseline recorded from a subdirectory is the one the hook reads',
 
 		const recorded = execFileSync('node', [CLI, 'baseline'], { encoding: 'utf8', cwd: app, env: env() });
 		assert(
-			recorded.includes(join(repo, '.loupe-baseline.json')),
+			recorded.includes(join(repo, '.loupe/baseline.json')),
 			`baseline anchored to the cwd, not the project:\n${recorded}`,
 		);
 
@@ -1974,7 +2036,7 @@ await check('re-recording an unchanged backlog rewrites the same bytes', () => {
 		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
 		'styles/a.css': '.a { color: #f00; }',
 	});
-	const file = join(root, '.loupe-baseline.json');
+	const file = join(root, '.loupe/baseline.json');
 	try {
 		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
 		const first = readFileSync(file, 'utf8');
@@ -2000,7 +2062,7 @@ await check('baseline --dry-run shows what would be recorded, new and fixed, and
 		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
 		'styles/a.css': '.a { color: #f00; }\n.b { margin: 3px; }',
 	});
-	const file = join(root, '.loupe-baseline.json');
+	const file = join(root, '.loupe/baseline.json');
 	const dry = (): string =>
 		execFileSync('node', [CLI, 'baseline', '--dry-run', '--root', root], { encoding: 'utf8', env: env() });
 	try {
@@ -2047,7 +2109,9 @@ await check('baseline says to commit the file, and warns when git ignores it', (
 	};
 	const plain = tmpRepo(files);
 	const tracked = tmpRepo(files);
-	const ignored = tmpRepo({ ...files, '.gitignore': '.loupe-baseline.json\n' });
+	// The whole directory, as the report's guidance once said to: the likeliest
+	// way a baseline under `.loupe/` ends up ignored.
+	const ignored = tmpRepo({ ...files, '.gitignore': '.loupe/\n' });
 	try {
 		const outside = record(plain);
 		assert(/Commit this file/.test(outside), `no commit reminder outside git:\n${outside}`);
@@ -2059,15 +2123,16 @@ await check('baseline says to commit the file, and warns when git ignores it', (
 		assert(!/gitignored/.test(inRepo), `warned about a file git does not ignore:\n${inRepo}`);
 
 		gitIn(ignored, ['init']);
+		// Before writing too: the dry run is where the decision is made, and it is
+		// asked before the write has made `.loupe/`.
+		assert(/is gitignored/.test(record(ignored, true)), 'the dry run did not warn about an ignored baseline');
 		const warned = record(ignored);
 		assert(
-			/Warning: \.loupe-baseline\.json is gitignored/.test(warned),
+			/Warning: \.loupe\/baseline\.json is gitignored/.test(warned),
 			`no warning for an ignored baseline:\n${warned}`,
 		);
 		assert(/report all 1 finding\(s\)/.test(warned), `the warning does not say what it costs:\n${warned}`);
 		assert(!/Commit this file/.test(warned), `told to commit a file git will not take:\n${warned}`);
-		// Before writing too: the dry run is where the decision is made.
-		assert(/is gitignored/.test(record(ignored, true)), 'the dry run did not warn about an ignored baseline');
 	} finally {
 		cleanup(plain);
 		cleanup(tracked);
@@ -2638,7 +2703,7 @@ await check('the hook stands aside on a non-project root instead of indexing it'
 // "clean" for the part it never read. The issue's repro, scaled down by lowering
 // the ceiling rather than by building the tree.
 await check('a walk that hits the ceiling refuses instead of reporting clean', async () => {
-	const root = scratch('dsh-huge-');
+	const root = scratch('loupe-huge-');
 	const build = (dir: string, depth: number): void => {
 		mkdirSync(dir, { recursive: true });
 		for (let i = 0; i < 25; i++) writeFileSync(join(dir, `f${i}.${i % 10 ? 'txt' : 'css'}`), '.pj-a{color:#111}\n');
@@ -2698,7 +2763,7 @@ await check('a walk that hits the ceiling refuses instead of reporting clean', a
 // rather than exporting a variable in every shell and CI job that runs it. The
 // variable still outranks the config: it is the per-run escape hatch.
 await check('maxEntries in the config moves the ceiling, and LOUPE_MAX_ENTRIES outranks it', async () => {
-	const root = scratch('dsh-max-entries-');
+	const root = scratch('loupe-max-entries-');
 	const files: Record<string, string> = { 'package.json': '{"name":"x"}' };
 	for (let i = 0; i < 40; i++) files[`d${i % 4}/f${i}.css`] = '.pj-a{color:#111}\n';
 	writeAll(root, files);
@@ -2887,7 +2952,7 @@ await check('--changed outside a worktree still refuses with exit 2', () => {
 // not a broken project: its registries are still worth merging, so the run goes
 // on — but silently going on would leave the ruleset a mystery.
 await check('a profile naming an uninstalled preset says so and carries on', () => {
-	const profiles = scratch('dsh-prof-');
+	const profiles = scratch('loupe-prof-');
 	const root = inferrableRepo();
 	try {
 		writeAll(profiles, {
@@ -3124,7 +3189,7 @@ await check('a --profile that matches nothing says so', () => {
 // strips the `loupe/presets/` prefix and the other did not. A profile written
 // the way the docs spell an extends target was told its preset is not installed.
 await check('a profile may name its preset the way extends spells it', () => {
-	const profiles = scratch('dsh-pref-');
+	const profiles = scratch('loupe-pref-');
 	const root = inferrableRepo();
 	try {
 		writeAll(profiles, {
@@ -3594,7 +3659,7 @@ await check('a hook with an unknown --rule stands down instead of blocking every
 // run here under `sh` with a PATH that holds the shim's tools and nothing else.
 await check('the PATH shim finds the engine through either symlink, with no realpath', () => {
 	const repo = join(HERE, '..', '..');
-	const dir = scratch('dsh-shim-');
+	const dir = scratch('loupe-shim-');
 	try {
 		const tools = join(dir, 'tools');
 		mkdirSync(tools);
@@ -3641,7 +3706,7 @@ await check('the PATH shim finds the engine through either symlink, with no real
 // there was none — or, under `node_modules`, dumped a raw Node stack trace.
 await check('an engine copied out of the repo runs its bundle, not its source', () => {
 	const engine = join(HERE, '..');
-	const dir = scratch('dsh-vendor-');
+	const dir = scratch('loupe-vendor-');
 	const copy = (to: string, parts: readonly string[]): string => {
 		for (const part of parts) cpSync(join(engine, part), join(to, part), { recursive: true });
 		mkdirSync(join(to, 'node_modules'), { recursive: true });
@@ -3681,7 +3746,7 @@ cleanup(EMPTY_HOME);
 // `status` typed in a monorepo package roots at the package's config. Named from
 // the package, the hook's file was one it never writes.
 await check("status names the hook's retry counter by the Claude Code project, not the package", () => {
-	const top = scratch('dsh-monorepo-');
+	const top = scratch('loupe-monorepo-');
 	try {
 		writeAll(top, {
 			'.claude/settings.local.json': '{}',
@@ -3689,7 +3754,7 @@ await check("status names the hook's retry counter by the Claude Code project, n
 			'packages/ui/package.json': '{}',
 		});
 		const pkg = join(top, 'packages', 'ui');
-		const env: NodeJS.ProcessEnv = { ...process.env, HOME: scratch('dsh-home-'), CLAUDE_PLUGIN_DATA: '' };
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: scratch('loupe-home-'), CLAUDE_PLUGIN_DATA: '' };
 		delete env.CLAUDE_PROJECT_DIR;
 		// The suites run uncached; this one asks where the caches are.
 		delete env.LOUPE_NO_CACHE;

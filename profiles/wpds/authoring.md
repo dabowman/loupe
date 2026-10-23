@@ -97,6 +97,13 @@ select you compose yourself): both are `recommended` there since 0.23.0, and
 The `@wordpress/ui` `Menu` is real but `experimental` — same
 not-yet-safe-alongside-`@wordpress/components` gate as the Button family.
 
+**Notice** — `@wordpress/ui`'s `Notice` is `recommended`; `@wordpress/components`'
+`Notice` and `NoticeList` are `legacy`. It is a compound (`Notice.Root` with
+`intent`, holding `Notice.Title`, `Notice.Description`, `Notice.Actions` and
+`Notice.CloseIconButton`), there is no list (several notices are a `Stack` of
+`Notice.Root`s), and it announces nothing: where the old `Notice` spoke its
+message, call `speak()` from `@wordpress/a11y` where the update happens.
+
 **Field, Fieldset** — low-level form primitives (`@wordpress/ui`,
 `recommended`, no caution flag — they're stable, just low-altitude). Check
 for a higher-level `*Control` component (either package) or `DataForm` first;

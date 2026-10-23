@@ -29,10 +29,12 @@ On confirmation:
 node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" baseline --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
-Then tell the user to commit `.loupe-baseline.json` — the command's output ends
+Then tell the user to commit `.loupe/baseline.json` — the command's output ends
 by saying so. If it warns instead that the file is gitignored, lead with that:
 CI and every other clone will run without the baseline and report the whole
-backlog, so the file has to be un-ignored or force-added. Note that entries
+backlog, so the file has to be un-ignored or force-added. When the ignore is
+`.loupe/` itself, `!.loupe/baseline.json` cannot re-include it: replace it with
+the development files by name, such as `.loupe/report.html`. Note that entries
 key on rule + file + normalized code rather than line number, so reformatting
 will not resurrect the whole file. Say plainly that every later audit now reports
 new drift only, printing `N baselined finding(s) hidden` under it — the backlog

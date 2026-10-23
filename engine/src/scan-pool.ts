@@ -53,8 +53,9 @@ export function workerCount(jobs: readonly ScanJob[]): number {
 	let bytes = 0;
 	for (const j of jobs) bytes += j.text.length;
 	if (bytes < MIN_BYTES) return 0;
-	// `availableParallelism` is Node 18.14: named, it would fail the whole bundle
-	// at link time on an older 18, which `engines` still admits.
+	// `availableParallelism` is Node 18.14: named, it would have failed the whole
+	// bundle at link time on an older 18. The floor is now Node 20, so every Node
+	// `engines` admits has it and the `cpus()` fallback stays only for now.
 	const cores = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
 	if (cores < 2) return 0;
 	// One core stays with the main thread, which is reading files and will

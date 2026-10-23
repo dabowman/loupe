@@ -305,7 +305,7 @@ On confirmation:
 ${loupe("baseline")}
 \`\`\`
 
-Then tell the user to commit \`.loupe-baseline.json\`, and note that entries key on rule + file + normalized code rather than line number, so reformatting will not resurrect the whole file.
+Then tell the user to commit \`.loupe/baseline.json\`, and note that entries key on rule + file + normalized code rather than line number, so reformatting will not resurrect the whole file.
 
 Suggest burning the backlog down one rule at a time with \`/loupe-fix <rule-id>\`, which works that rule's baselined findings deliberately — naming a rule makes its check run with \`--no-baseline\` — while a bare \`/loupe-fix\` keeps respecting the baseline and fixes new drift only. Delete the baseline once it is empty. \`${loupe("check", "--no-baseline", "--rule <rule-id>")}\` shows how much of one rule the baseline is holding; \`fix\` reads no baseline at all.`;
 
