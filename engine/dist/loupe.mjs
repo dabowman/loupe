@@ -24198,14 +24198,22 @@ var ruleSpecs = (detector) => {
 var stringParam = (spec, key, fallback) => typeof spec[key] === "string" && spec[key] ? spec[key] : fallback;
 var numParam = (spec, key, fallback) => typeof spec[key] === "number" ? spec[key] : fallback;
 var listParam = (spec, key) => Array.isArray(spec[key]) ? spec[key].filter((x) => typeof x === "string") : [];
+var KEY_BY_PATTERN = 'key each entry by "pattern", the pattern it realizes ("confirm", "choose.segmented")';
 function loadPatterns(raw) {
   const rec = raw;
-  const found = Array.isArray(raw) ? raw : rec?.realizations ?? rec?.patterns;
-  if (!Array.isArray(found))
+  if (!Array.isArray(raw) && rec?.realizations === void 0 && Array.isArray(rec?.patterns))
     throw new Error(
-      'not a pattern registry: expected an array of entries, or an object with a "realizations" or "patterns" array'
+      `a flat "patterns" list keyed by "id" is the version-1 registry, removed in 0.8.0: list the entries under "realizations" and ${KEY_BY_PATTERN}`
     );
+  const found = Array.isArray(raw) ? raw : rec?.realizations;
+  if (!Array.isArray(found))
+    throw new Error('not a pattern registry: expected an array of entries, or an object with a "realizations" array');
   const list2 = found;
+  for (const p of list2) {
+    const v1 = p;
+    if (v1 && typeof v1 === "object" && p.pattern === void 0 && v1.id !== void 0)
+      throw new Error(`entry ${JSON.stringify(v1.id)} is keyed by "id", removed in 0.8.0: ${KEY_BY_PATTERN}`);
+  }
   const out = [];
   const load = (p, id, inheritedCanonical) => {
     const canonical = "canonical" in (p ?? {}) ? bindName(p.canonical) : inheritedCanonical;
@@ -24214,7 +24222,7 @@ function loadPatterns(raw) {
     const antiShapes = !Array.isArray(authored2) ? [] : typeof authored2[0] === "string" ? [authored2] : authored2;
     const avoid = antiShapes.map((shape) => toNode(shape)).filter((n) => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes);
     const rules2 = ruleSpecs(p?.detector);
-    const summary = p?.summary ?? p?.note ?? "";
+    const summary = p?.note ?? "";
     const own = id ?? (shapes[0] ? signatureOf(shapes[0]) : null);
     if (own) {
       const nodes = shapes.length ? shapes : [null];
@@ -24234,7 +24242,7 @@ function loadPatterns(raw) {
     if (own && parts && typeof parts === "object")
       for (const [name, part2] of Object.entries(parts)) load(part2, `${own}#${name}`, canonical);
   };
-  for (const p of list2) load(p, p?.pattern ?? p?.id ?? null, null);
+  for (const p of list2) load(p, p?.pattern ?? null, null);
   return out;
 }
 function systemTree(el, isSystemName, childrenOf, nameOf, packageOf = () => null, line) {
@@ -25302,6 +25310,13 @@ var patterns_default = {
         ],
         about: "For groups: whether the grouping needs a visible box or just rhythm."
       },
+      series: {
+        values: [
+          true,
+          false
+        ],
+        about: "For groups: whether the content is a run of like items \u2014 points, steps, entries \u2014 rather than one piece."
+      },
       structure: {
         values: [
           "fields",
@@ -25370,7 +25385,7 @@ var patterns_default = {
           when: {
             set: "open"
           },
-          variant: "combobox"
+          variant: "autocomplete"
         },
         {
           when: {
@@ -25428,8 +25443,12 @@ var patterns_default = {
           consequences: "Costs a click to see the options. Buys space. The default, not the reflex."
         },
         combobox: {
-          summary: "Typed filtering over the set; may accept values the set lacks.",
-          consequences: "Justified only when the set is large or open."
+          summary: "Typed filtering over a long set; the value is one of its options.",
+          consequences: "Justified only when the set is too long to scan. A typed value the set lacks is not a value here; where it should stand, that is autocomplete."
+        },
+        autocomplete: {
+          summary: "A text input that suggests known values as the user types; what was typed stands even when nothing matches.",
+          consequences: "Right only when the set is open. Where the value has to be one of the options, an unmatched entry gets through here and fails later; that is combobox."
         },
         rendered: {
           summary: "The option is its rendering \u2014 a swatch, a word set in its face, a live preview \u2014 laid out as a grid of tiles with the active one marked; the name is secondary, in a tooltip or caption.",
@@ -25957,6 +25976,46 @@ var patterns_default = {
       }
     },
     {
+      id: "navigate-sections",
+      intent: "navigate",
+      scale: "region",
+      problem: "The user moves between the top-level sections of an app or site from anywhere in it, and must be able to tell which section they are in.",
+      forces: [
+        "grouped"
+      ],
+      parts: [
+        {
+          role: "links",
+          note: "One link per section, each to its own route; the section the user is in is marked current to assistive technology, not by colour alone."
+        },
+        {
+          role: "group",
+          note: "A named set of sections behind one trigger, which opens a panel of their links."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            grouped: true
+          },
+          variant: "panels"
+        },
+        {
+          default: "list"
+        }
+      ],
+      variants: {
+        list: {
+          summary: "Every section as one link in one list \u2014 a row in a top bar or a column at the side \u2014 with the current one marked.",
+          consequences: "One list, laid out for the width it has: a second navigation built for small screens disagrees with the first the day a section is added."
+        },
+        panels: {
+          summary: "Sections in named groups; each group's trigger opens a panel of its links, and choosing one closes it.",
+          consequences: "Costs a click or a hover to see a group. Right when the sections are too many for one list, or a link needs a line of description before anyone can choose it."
+        }
+      }
+    },
+    {
       id: "browse-collection",
       intent: "view",
       scale: "region",
@@ -26036,6 +26095,64 @@ var patterns_default = {
       }
     },
     {
+      id: "disclose",
+      intent: "view",
+      scale: "composite",
+      problem: "Some content is wanted only some of the time, and shown at rest it crowds out what is wanted every time.",
+      forces: [
+        "context",
+        "grouped"
+      ],
+      parts: [
+        {
+          role: "trigger",
+          note: "The control that shows and hides the panel: it names what the panel holds and says whether it is open."
+        },
+        {
+          role: "panel",
+          note: "What the trigger reveals. Nothing in it is needed to make sense of the rest of the view."
+        }
+      ],
+      resolve: [
+        {
+          when: {
+            context: "own-screen"
+          },
+          redirect: "navigate-hierarchy",
+          because: "Content big enough for a screen of its own is a level to descend to, not a panel to unfold."
+        },
+        {
+          when: {
+            context: "overlay"
+          },
+          variant: "anchored"
+        },
+        {
+          when: {
+            grouped: true
+          },
+          variant: "accordion"
+        },
+        {
+          default: "collapsible"
+        }
+      ],
+      variants: {
+        collapsible: {
+          summary: "One panel shown and hidden in place by the control that names it; what follows moves to make room.",
+          consequences: "Costs a click to see what is inside, so nothing the task needs belongs there. A heading with a click handler over a hidden div looks the same and tells assistive technology nothing."
+        },
+        accordion: {
+          summary: "Several named sections, each heading the trigger for its own panel, opened in place.",
+          consequences: "An accordion of one section is a collapsible with an accordion's markup."
+        },
+        anchored: {
+          summary: "The panel opens over the view, anchored to its trigger and non-modal; moving on closes it.",
+          consequences: "Small, and about the control that opened it. Anything the user has to scroll inside, or must finish before going on, belongs in a dialog or a drawer."
+        }
+      }
+    },
+    {
       id: "report",
       intent: "report",
       scale: "composite",
@@ -26110,7 +26227,8 @@ var patterns_default = {
       scale: "composite",
       problem: "Related content and its actions should read as one thing.",
       forces: [
-        "boundary"
+        "boundary",
+        "series"
       ],
       parts: [
         {
@@ -26128,6 +26246,12 @@ var patterns_default = {
           variant: "card"
         },
         {
+          when: {
+            series: true
+          },
+          variant: "list"
+        },
+        {
           default: "section"
         }
       ],
@@ -26138,6 +26262,10 @@ var patterns_default = {
         },
         section: {
           summary: "A heading and its content, rhythm from the parent, no box."
+        },
+        list: {
+          summary: "Like items in a run, bulleted, or numbered when their order means something; the list spaces them, not each item.",
+          consequences: "Lines that start with a typed bullet or number look like a list and are not one to assistive technology: no count, and no way to skip past it."
         }
       }
     },
@@ -27166,7 +27294,7 @@ function applyRegistries(config, sources) {
         saw[kind] = used = true;
         if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
       } catch (err) {
-        errors.push(`could not read ${src.label} ${kind} \u2014 ${messageOf(err)}`);
+        errors.push(`could not read ${src.label} ${kind} at ${resolve4(path)} \u2014 ${messageOf(err)}`);
       }
     }
     if (used) applied.push(src.label);
