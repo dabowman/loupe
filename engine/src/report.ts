@@ -375,10 +375,11 @@ function findingLines(group: readonly Finding[]): string[] {
 /**
  * The report a reader gets.
  *
- * `terse` is the hook's version: blocking findings handed back mid-turn. The
- * lines it drops answer questions only somebody auditing a whole repo asks, and
- * the suppression inventory is repo-wide where a hook run has looked at two
- * files. The tally, the severity words and the next-step line stay.
+ * `terse` is the hook's version, handed to the agent mid-turn: the blocking
+ * findings, or on a PostToolUse that blocks nothing, what the edit introduced.
+ * The lines it drops answer questions only somebody auditing a whole repo
+ * asks, and the suppression inventory is repo-wide where a hook run has looked
+ * at two files. The tally, the severity words and the next-step line stay.
  *
  * `concise` withholds the findings: the tally, then one heading per group on
  * whichever axis {@link GroupBy} heads on. The next-step lines go with them —

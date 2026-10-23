@@ -622,6 +622,110 @@ await check('with blocking off, check still exits 1 and status says so', () => {
 	}
 });
 
+// With blocking off — the plugin's default — both hooks printed only a
+// `systemMessage` tally, which Claude Code shows the person and not the model,
+// so no rule, file or line reached the agent at write time. PostToolUse hands
+// it the report as `additionalContext`; Stop has no channel to the agent that
+// does not block the turn, so it keeps the tally.
+type HookOut = { systemMessage?: string; hookSpecificOutput?: { hookEventName?: string; additionalContext?: string } };
+
+/** The stylesheet before the edit the tests make: font-size and color on `<Text>`. */
+const TWO_FINDINGS = '.acme-t { font-size: 13px; color: #f00; }\n';
+
+/** A written config whose findings would block with blocking on, and the hook run with it off. */
+function advisoryProject(): {
+	root: string;
+	hook: (payload: object, extra?: NodeJS.ProcessEnv) => HookOut;
+	write: (originalFile: string | null) => object;
+} {
+	const root = tmpRepo({
+		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
+		'src/A.jsx':
+			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
+		// Three blocking findings with blocking on, demoted here: typography/in-css
+		// twice (font-size, line-height) and system/override once (color).
+		'styles/a.css': `${TWO_FINDINGS}.acme-t { line-height: 1.4; }\n`,
+	});
+	const css = join(root, 'styles', 'a.css');
+	// A worktree, so Stop has changed files to check rather than standing down.
+	execFileSync('git', ['init', '-q'], { cwd: root, stdio: 'ignore' });
+	const hook = (payload: object, extra: NodeJS.ProcessEnv = {}): HookOut => {
+		const r = runCli(
+			['hook'],
+			{ CLAUDE_PROJECT_DIR: root, CLAUDE_PLUGIN_OPTION_BLOCKING: 'false', ...extra },
+			JSON.stringify({ session_id: 'adv', cwd: root, ...payload }),
+		);
+		assert(r.status === 0, `an advisory run blocked the turn: exit ${r.status}\n${r.stderr}`);
+		return JSON.parse(r.stdout) as HookOut;
+	};
+	const write = (originalFile: string | null): object => ({
+		hook_event_name: 'PostToolUse',
+		tool_name: 'Write',
+		tool_input: { file_path: css },
+		tool_response: { filePath: css, originalFile },
+	});
+	return { root, hook, write };
+}
+
+await check('with blocking off, PostToolUse hands the agent its advisory findings and Stop keeps a tally', () => {
+	const { root, hook, write } = advisoryProject();
+	try {
+		// A file the write created: nothing to compare against, so all of it.
+		const post = hook(write(null));
+		assert(/3 advisory/.test(post.systemMessage ?? ''), `the person was not shown the tally: ${JSON.stringify(post)}`);
+		assert(
+			post.hookSpecificOutput?.hookEventName === 'PostToolUse',
+			`no context for the agent: ${JSON.stringify(post)}`,
+		);
+		const context = post.hookSpecificOutput?.additionalContext ?? '';
+		assert(
+			/system\/override/.test(context) && /typography\/in-css/.test(context) && context.includes('styles/a.css'),
+			`the agent was not handed the report:\n${context}`,
+		);
+		assert(
+			/3 advisory/.test(context) && !/blocking —/.test(context),
+			`the report is not all three, advisory:\n${context}`,
+		);
+
+		// Under the cap the blocking report has.
+		const capped = hook(write(null), { CLAUDE_PLUGIN_OPTION_MAX_FINDINGS: '1' }).hookSpecificOutput?.additionalContext;
+		assert(/2 finding\(s\) not shown/.test(capped ?? ''), `the findings cap did not apply to the context:\n${capped}`);
+
+		const stop = hook({ hook_event_name: 'Stop', stop_hook_active: false });
+		assert(/3 advisory/.test(stop.systemMessage ?? ''), `Stop did not tally the findings: ${JSON.stringify(stop)}`);
+		assert(stop.hookSpecificOutput === undefined, `a Stop hook was handed context: ${JSON.stringify(stop)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// Handing over the whole file gave every edit to a legacy file its backlog,
+// and an agent that sees a finding starts fixing it. What the edit introduced
+// is handed over; what it walked past is a count.
+await check('an advisory PostToolUse hands over what the edit introduced and counts what it walked past', () => {
+	const { root, hook, write } = advisoryProject();
+	try {
+		const post = hook(write(TWO_FINDINGS));
+		const context = post.hookSpecificOutput?.additionalContext ?? '';
+		assert(/line-height on <Text>/.test(context), `the finding the edit added was not handed over:\n${context}`);
+		assert(
+			!/font-size on <Text>/.test(context) && !/<Text> ← color/.test(context),
+			`a finding the edit walked past was handed over:\n${context}`,
+		);
+		const note = /2 advisory finding\(s\) already in styles\/a\.css before this edit/;
+		assert(note.test(context), `the agent was not told two were standing:\n${context}`);
+		const message = post.systemMessage ?? '';
+		assert(note.test(message) && /3 advisory/.test(message), `the person's tally did not say so: ${message}`);
+
+		// An edit that added nothing hands the agent nothing.
+		const none = hook(write(readFileSync(join(root, 'styles', 'a.css'), 'utf8')));
+		assert(none.hookSpecificOutput === undefined, `an edit that added nothing handed over: ${JSON.stringify(none)}`);
+		assert(/3 advisory finding\(s\) already in/.test(none.systemMessage ?? ''), `no count: ${none.systemMessage}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 // `status` printed `tokens: --wpds-*` whether or not one definition was read.
 // With `@wordpress/theme` not installed, `tokens/unknown-token` is off and
 // `tokens/hardcoded-value` names no token, and the command a reader runs first

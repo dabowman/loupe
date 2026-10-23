@@ -77,21 +77,23 @@ never stored, or the gap would be served forever. A bare key string where a
 client is expected builds a private client with no cache: the evals and the unit
 tests want every request real.
 
-**The hook pays only for what it prints.** A hook run that does not block prints
-a tally, so it judges nothing; one that blocks prints the blocking findings its
-`maxFindings` cap has room for, so it judges exactly those (`shownFindings` in
-`report.ts` is the same selection the report makes); one that has stood down
-prints a summary, so it judges nothing. A redirect configured to block is the
-one question asked before the rest, because its answer decides which of those
-the run is. A typed `check --judge` prints everything, so it judges everything.
+**The hook pays only for what it prints.** A Stop that does not block prints a
+tally, so it judges nothing; a PostToolUse that does not block hands the agent
+the findings the edit introduced that its `maxFindings` cap has room for, and a
+run that blocks prints the blocking ones the cap has room for, so each judges
+exactly those (`shownFindings` in `report.ts` is the same selection the report
+makes); one that has stood down prints a summary, so it judges nothing. A
+redirect configured to block is the one question asked before the rest, because
+its answer decides which of those the run is. A typed `check --judge` prints
+everything, so it judges everything.
 
 **The spend is said.** `judge: 4 asked, 37 from cache` closes a typed run's
 stderr and rides on the hook's summary line. `tests/judge-cache.ts` runs the CLI
 against a local stand-in endpoint (`LOUPE_JUDGE_ENDPOINT`, accepted only for
 `127.0.0.1` or `localhost`, since a project's own settings can put variables in
 the hook's environment and this is where the key is sent) and counts requests:
-an advisory hook sends none, a repeat run sends none, a blocking hook sends
-what it prints.
+an advisory Stop sends none, an advisory PostToolUse and a blocking hook send
+what they print, and a repeat run sends none.
 
 ## Which variant (`judge/variant.ts`)
 
