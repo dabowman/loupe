@@ -370,6 +370,16 @@ await check("an error in the project's own config reaches the agent, without blo
 	}
 });
 
+/** A project importing `@acme/ui`, with `registry` as its registry settings. */
+const configWith = (registry: object): string =>
+	JSON.stringify({ extends: 'generic', designSystem: { packages: ['@acme/ui'] }, ...registry });
+/** Why the config at `root` does not load, or `loaded`. */
+const configError = (root: string): Promise<string> =>
+	loadConfig({ root }).then(
+		() => 'loaded',
+		(err: unknown) => (err instanceof Error ? err.message : String(err)),
+	);
+
 // A config's `componentRegistry` or `patterns` path read every failure as "no
 // registry", so a JSON syntax error in the project's own registry switched off
 // `system/locked-component`, `system/superseded-component` and `patterns/*` and
@@ -384,13 +394,6 @@ await check('a registry file that does not load is a config error, and a missing
 		parseMessage = err instanceof Error ? err.message : String(err);
 	}
 	assert(parseMessage, 'the fixture has to be malformed JSON');
-	const configWith = (registry: object): string =>
-		JSON.stringify({ extends: 'generic', designSystem: { packages: ['@acme/ui'] }, ...registry });
-	const configError = (root: string): Promise<string> =>
-		loadConfig({ root }).then(
-			() => 'loaded',
-			(err: unknown) => (err instanceof Error ? err.message : String(err)),
-		);
 	const root = tmpRepo({
 		'package.json': '{}',
 		'loupe.config.json': configWith({ componentRegistry: './registry.json' }),
@@ -461,6 +464,48 @@ await check('a registry file that does not load is a config error, and a missing
 		assert(!none.enabled['system/locked-component'], 'no registry, so the currency rules are off');
 		const clean = runCli(['check', '--all', '--root', root]);
 		assert(clean.status === 0, `a missing registry should not stop the run: exit ${clean.status}\n${clean.stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// An inline `componentRegistry` or `patterns` that was neither an array nor a
+// path read as no registry, so the object a registry file holds, pasted into
+// the config, switched the currency rules off as quietly as a broken file did.
+await check('an inline registry object is read, and a value of no registry shape is a config error', async () => {
+	const inline = { components: [{ name: 'OldButton', package: '@acme/ui', status: 'locked' }] };
+	const root = tmpRepo({
+		'package.json': '{}',
+		'loupe.config.json': configWith({ componentRegistry: inline }),
+		'src/App.jsx': "import { OldButton } from '@acme/ui';\nexport const App = () => <OldButton />;",
+	});
+	try {
+		const config = await loadConfig({ root });
+		assert(config.enabled['system/locked-component'], 'an inline registry should turn the currency rules on');
+		const { findings } = await analyze(config, { scope: null });
+		const locked = one(
+			findings.filter((f) => f.rule === 'system/locked-component'),
+			'the locked component in the inline registry is reported',
+		);
+		assert(locked.message.includes('OldButton'), `the finding names another component: ${locked.message}`);
+
+		// Inline is the config itself, so a malformed one is a config error naming the key.
+		for (const [key, body, says] of [
+			['componentRegistry', { component: [] }, 'not a component registry'],
+			['patterns', { pattern: [] }, 'not a pattern registry'],
+		] as const) {
+			writeFileSync(join(root, 'loupe.config.json'), configWith({ [key]: body }));
+			const message = await configError(root);
+			assert(message.startsWith(`${key}:`) && message.includes(says), `${key} ${JSON.stringify(body)}: ${message}`);
+		}
+
+		// No shape a registry is written in.
+		writeFileSync(join(root, 'loupe.config.json'), configWith({ patterns: 5 }));
+		const message = await configError(root);
+		assert(
+			message.startsWith('patterns must be') && message.includes('an object, or null') && message.includes('got: 5'),
+			`"patterns": 5 should name the key and the accepted shapes: ${message}`,
+		);
 	} finally {
 		cleanup(root);
 	}

@@ -497,20 +497,33 @@ function ruleSetting(rawId: string, value: unknown): RuleSetting {
  * other design system that happens to name its components the same.
  *
  * A file that is there and does not load — unreadable, not JSON, or not a
- * registry — is a config error, naming the file.
+ * registry — is a config error, naming the file. So is a value of no shape a
+ * registry is written in: read as none, it switches the same rules off.
  */
 function readRegistry<T>(
 	key: 'patterns' | 'componentRegistry',
-	spec: string | unknown[] | null,
+	spec: unknown,
 	root: string,
 	packages: readonly string[],
 	load: (raw: unknown) => T,
 	empty: T,
 ): T {
 	// Inline, it is the config itself, and a malformed one is a config error.
-	if (Array.isArray(spec)) return load(spec);
+	// The object form is what a registry file holds, pasted in.
+	if (Array.isArray(spec) || isObj(spec)) {
+		try {
+			return load(spec);
+		} catch (err) {
+			throw new Error(`${key}: ${messageOf(err)}`);
+		}
+	}
+	if (spec === null || spec === undefined) return empty;
+	if (typeof spec !== 'string')
+		throw new Error(
+			`${key} must be a path to a registry file, an array of entries, an object, or null, got: ${JSON.stringify(spec)}`,
+		);
 	// An empty path names nothing, as an empty `baseline` does.
-	if (typeof spec !== 'string' || !spec) return empty;
+	if (!spec) return empty;
 	const path = under(root, spec);
 	// Not `readJson`: it reads every failure as "no file", and the one failure
 	// that means that here is ENOENT. The rest are the error this reports.
