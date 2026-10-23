@@ -250,11 +250,7 @@
       "pattern": "edit-record.data-form",
       "import": "@wordpress/dataviews",
       "canonical": "DataForm",
-      "detector": "signature",
-      "signature": [
-        "Page",
-        "DataForm"
-      ],
+      "detector": "import",
       "instead_of": [
         "A stack of TextControls with a useState per field and a hand-written onChange each",
         "Media pickers wired up individually instead of a field of type 'media'",
