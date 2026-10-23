@@ -12,7 +12,9 @@ token."*
 one command that does, and only for substitutions with a single right answer.
 
 The package is not published to npm; run it from a checkout (or from the
-installed plugin) rather than through `npx`.
+installed plugin) rather than through `npx`. Once it is
+([#82](https://github.com/dabowman/loupe/issues/82)), a project installs it with
+`npm i -D @dabowman/loupe`, on Node 20 or newer.
 
 This README says what the engine does. Why it is built this way — the failures
 that shaped each decision, and the eval numbers behind the tuned ones — is in

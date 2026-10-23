@@ -5,15 +5,22 @@
   "license": "MIT",
   "keywords": ["pi-package"],
   "type": "module",
+  "bin": {
+    "loupe": "engine/bin/loupe.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "pi": {
     "extensions": ["./pi/extensions/loupe.ts"],
     "skills": ["./skills"]
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/dabowman/loupe"
+    "url": "git+https://github.com/dabowman/loupe.git"
   },
   "files": [
+    "bin",
     "pi",
     "engine/bin",
     "engine/dist",
