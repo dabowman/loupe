@@ -355,11 +355,22 @@ overridden, and it is declared as returning the base's type: merging *onto*
 `DEFAULTS` is what makes every field present, and that is what keeps a settled
 config strict downstream.
 
-**A registry that does not resolve leaves itself empty rather than throwing.**
-The engine has to keep working in a project that ships no patterns; an unresolved
-path disables the rules that need one. The same is true of a registry scoped to
+**A registry that is not there leaves itself empty rather than throwing.**
+The engine has to keep working in a project that ships no patterns; a path naming
+no file disables the rules that need one. The same is true of a registry scoped to
 packages this project does not import — it describes some other design system
 that happens to name its components the same.
+
+**A registry that is there and does not load throws.** Every failure used to read
+as "not there", so a trailing comma in the project's own registry switched off
+`system/locked-component`, `system/superseded-component` and `patterns/*`, and the
+run reported clean — a gate's worst failure, silence. Only a missing file is no
+registry now. One that cannot be read, is not JSON, or is JSON with no entry list
+where the loader looks for one (a misspelled `components` key is the same silent
+switch-off) is a config error naming the file, which takes the path every config
+error takes: `check` and `status` exit 2, and the hook stands aside and tells the
+agent. The shape check lives in the loaders, so a profile's registry failing it
+is reported exactly as a profile's unparseable one always was.
 
 **The compositional rules need the packages and nothing else.** A composite is
 built from every name imported out of `designSystem.packages`, whether or not it
