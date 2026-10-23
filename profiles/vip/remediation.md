@@ -103,13 +103,13 @@ says what the text is. Nothing else is scoped — spacing, radii and shadows are
   `Dropdown.Root` when it was a menu anchored to a trigger (`DialogMenu` /
   `DialogMenuItem` / `DialogDivider` map to `Dropdown.Item` / `Dropdown.Separator`).
 
-## `patterns/superseded-composite` on `busy-button`
+## `patterns/superseded-composite` on `report.loading`
 
 Delete the `Spinner` from the button's children and pass `loading` instead
 (`ButtonSubmit` for a form's submit). `loading` also disables the button and
 sets `aria-busy`, so a hand-written `disabled={ loading }` beside it can go.
 
-## `patterns/duplicate-composite` on `labelled-toggle`
+## `patterns/duplicate-composite` on `field`
 
 Extract the row once — label, toggle and help text, with the `htmlFor` / `id` /
 `aria-describedby` wiring taking one `id` — then fill `import` and `canonical`
@@ -119,8 +119,9 @@ imports it. Do not reach for `ToggleRow`: it has no `<label>`.
 ## `patterns/unregistered-composite` on component anatomy
 
 If this fires on the parts of a VIP component used correctly, the anatomy entry
-for it is missing from `patterns/index.json`. Add it, with `canonical` set to the
-root import name. Do not reshape correct markup to dodge the match.
+for it is missing from `patterns/index.json`. Add it, keyed by the pattern the
+component realizes, with `canonical` set to the root import name. Do not reshape
+correct markup to dodge the match.
 
 ## Suppressing
 
