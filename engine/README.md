@@ -1421,21 +1421,29 @@ off for everyone.
 ## Tests
 
 ```bash
-npm test        # typecheck, then every suite
+npm test        # lint, typecheck, then every suite
 ```
 
-Eleven suites, in the order `npm test` runs them: `tests/run.ts` (fixtures, one
-directory per behaviour), `tests/detect.ts` (inference), `tests/regressions.ts`
-(failures that reported success), `tests/features.ts` (the three channels and the
-two cross-file rules), `tests/autofix.ts` (the fix path, where a wrong
-substitution is invisible), `tests/multi-ds.ts` (registry scoping and profile
-selection — which design system answers for a file), `tests/scopes.ts` (token
-scopes: the schema's validation, the generic table's parity with what it
-replaced, `fix` holding back an off-role token, and `tokens/misapplied-token`),
-`tests/report.ts` (the formatters and the HTML artifact), `tests/dom-match.ts`
-(the shared matcher's escaping, and whether the extension's vendored copy has
-drifted), `tests/serve.ts` (the read-only overlay server), `tests/ui.ts` (the
-writing server, mostly its refusals), and `tests/lsp.ts` (the language server).
+After the lint and the typecheck, `npm test` runs every suite, in this order:
+`tests/run.ts` (fixtures, one directory per behaviour), `tests/detect.ts`
+(inference), `tests/regressions.ts` (failures that reported success),
+`tests/features.ts` (the three channels and the two cross-file rules),
+`tests/autofix.ts` (the fix path, where a wrong substitution is invisible),
+`tests/judge-cache.ts` (what a judged run spends: the shared client, the answer
+cache, and the hook paying only for what it prints), `tests/index-cache.ts` (a
+cached run equal, byte for byte, to an uncached one after every kind of change),
+`tests/scan-pool.ts` (worker scans equal to in-process ones, from source and
+from the bundle), `tests/multi-ds.ts` (registry scoping and profile selection —
+which design system answers for a file), `tests/scopes.ts` (token scopes: the
+schema's validation, the generic table's parity with what it replaced, `fix`
+holding back an off-role token, and `tokens/misapplied-token`),
+`tests/delivery.ts` (the profile's delivery block read strictly, and each
+consumer failing safe), `tests/map.ts` (mapping one token set onto another, with
+the model stubbed), `tests/report.ts` (the formatters and the HTML artifact),
+`tests/dom-match.ts` (the shared matcher's escaping, and whether the extension's
+vendored copy has drifted), `tests/serve.ts` (the read-only overlay server),
+`tests/ui.ts` (the writing server, mostly its refusals), and `tests/lsp.ts` (the
+language server).
 `tests/harness.ts` is not a suite: it holds the `check`/`assert`/scratch-repo
 helpers they share, typed once instead of copied into each.
 Once behaviour is config-driven, these are the only thing standing between a
