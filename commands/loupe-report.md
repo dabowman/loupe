@@ -79,7 +79,8 @@ than scattering a new link per run:
 
 - `file_path`: `/tmp/loupe-report-fragment.html`
 - `title`: `Loupe Report` — the fragment carries no `<title>`, so this names it
-- `favicon`: 🔍 — keep it, across every redeploy
+- `icon`: `search` — on the first publish only; a redeploy that leaves it out
+  keeps it
 - `description`: one sentence with the real numbers, e.g. "46 findings across 12
   files — 14 blocking, dominated by system/superseded-component."
 

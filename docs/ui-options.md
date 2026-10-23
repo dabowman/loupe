@@ -153,8 +153,9 @@ the right call for a bookmarklet. A live UI needs the opposite, and the cost is
 real — a watcher is the classic source of a tool that reports on a tree that no
 longer exists.
 
-**Incremental analysis, eventually.** The numbers are already measured. A warm
-LSP re-runs a 613-file project in ~115ms and Gutenberg's 9,531 in ~2.4s, against
+**Incremental analysis, eventually.** The numbers are already measured, on
+2026-09-21 and before the index cache. A warm LSP re-ran a 613-file project in
+~115ms and Gutenberg, 9,531 files at the time, in ~2.4s, against
 380ms and 5.9s cold through the CLI. 115ms is instant; 2.4s is not, and a UI
 that re-renders on every save makes that felt. `lsp.ts` already names the fix in
 its own ponytail: split `analyze` into index and check phases and keep the index
@@ -219,7 +220,7 @@ wants.
 - **Costs** Rust in the repo, seven more CI targets, code signing and Apple
   notarization (a paid developer account and a notarization step per release),
   Windows signing, and an update channel to keep alive. Bundle size is dominated
-  by the sidecar: the binaries are 60–100 MB each, so the shell's own few MB are
+  by the sidecar: the binaries are 60–110 MB each, so the shell's own few MB are
   a rounding error.
 - **Forecloses** nothing, but it is the option that adds the most permanent
   operational surface. A release pipeline with signing in it is a thing you own

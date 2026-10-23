@@ -7,7 +7,7 @@
  * the engine's TypeScript as-is and cross-compiles to every target from one
  * machine; nothing about the produced binary depends on Bun elsewhere.
  *
- * Output is deliberately not `dist/`, which is committed: these are 60-100 MB
+ * Output is deliberately not `dist/`, which is committed: these are 60-110 MB
  * each and belong on a release.
  *
  * NO CREDENTIAL IS EVER COMPILED IN, and nothing here may change that. The

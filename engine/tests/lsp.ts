@@ -200,21 +200,21 @@ await check('initialize advertises what the client has to know to use any of it'
 
 send({ method: 'initialized', params: {} });
 const published = await until(
-	(m) => m.method === 'textDocument/publishDiagnostics' && (m.params?.['uri'] as string) === cssUri,
+	(m) => m.method === 'textDocument/publishDiagnostics' && (m.params?.uri as string) === cssUri,
 	'the first publish for the stylesheet',
 );
 
 await check('a finding arrives as a diagnostic on its own line, with its rule as the code', () => {
-	const diags = published.params?.['diagnostics'] as Record<string, unknown>[];
+	const diags = published.params?.diagnostics as Record<string, unknown>[];
 	assert(diags.length > 0, 'the stylesheet published an empty diagnostic list');
 	const d = first(
-		diags.filter((x) => x['code'] === 'tokens/hardcoded-value'),
+		diags.filter((x) => x.code === 'tokens/hardcoded-value'),
 		'no hardcoded-value diagnostic',
 	);
-	const range = d['range'] as { start: { line: number; character: number }; end: { line: number; character: number } };
+	const range = d.range as { start: { line: number; character: number }; end: { line: number; character: number } };
 	// `color: #1e1e1e` is on source line 2, which is 1 zero-based.
 	assert(range.start.line === 1, `diagnostic landed on line ${range.start.line}, expected 1`);
-	assert(d['source'] === 'loupe', `source was ${String(d['source'])}`);
+	assert(d.source === 'loupe', `source was ${String(d.source)}`);
 	// Narrowed to the declaration rather than spanning the whole line: the line
 	// is indented, so a whole-line range would start at character 0.
 	assert(range.start.character > 0, 'the range was not narrowed to the declaration');
@@ -222,10 +222,10 @@ await check('a finding arrives as a diagnostic on its own line, with its rule as
 });
 
 await check('the range is valid against the line it points into', () => {
-	const diags = published.params?.['diagnostics'] as Record<string, unknown>[];
+	const diags = published.params?.diagnostics as Record<string, unknown>[];
 	const lines = readFileSync(appCss, 'utf8').split('\n');
 	for (const d of diags) {
-		const r = d['range'] as { start: { line: number; character: number }; end: { line: number; character: number } };
+		const r = d.range as { start: { line: number; character: number }; end: { line: number; character: number } };
 		const text = lines[r.start.line] ?? '';
 		// A range past the end of its line is rejected by the client, and a
 		// rejected range takes its diagnostic with it — silently.
@@ -499,13 +499,13 @@ await check('a fixed file has its diagnostics cleared, not merely omitted', asyn
 	const cleared = await until(
 		(m) =>
 			m.method === 'textDocument/publishDiagnostics' &&
-			(m.params?.['uri'] as string) === cssUri &&
-			((m.params?.['diagnostics'] as unknown[]) ?? []).every(
+			(m.params?.uri as string) === cssUri &&
+			((m.params?.diagnostics as unknown[]) ?? []).every(
 				(d) => (d as { code: string }).code !== 'tokens/hardcoded-value',
 			),
 		'the publish that clears the fixed finding',
 	);
-	const diags = (cleared.params?.['diagnostics'] as unknown[]) ?? [];
+	const diags = (cleared.params?.diagnostics as unknown[]) ?? [];
 	assert(
 		!diags.some((d) => (d as { code: string }).code === 'tokens/hardcoded-value'),
 		'the fixed finding was still published',

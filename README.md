@@ -174,16 +174,17 @@ there. A plain terminal reports `command not found` until you symlink it
 somewhere on your `PATH`:
 
 ```bash
-ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe
+ln -s ~/.claude/plugins/marketplaces/loupe/bin/loupe ~/.local/bin/loupe   # a plugin install
+ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe                               # a checkout, from its root
 ```
 
-Link the marketplace clone, not the copy Claude Code runs: that one sits under
-`~/.claude/plugins/cache/loupe/loupe/<commit>/`, and the commit changes on every
-update. The clone moves with `/plugin marketplace update`, so it can be a
-commit ahead of the installed plugin between updates. From a checkout of this
-repository, link its `bin/loupe` the same way. Loupe is not on npm yet, so a
-`lint:loupe` script in a project's `package.json` works only for people who
-have made this link.
+Either link works: the shim follows its own symlinks to find the engine. For a
+plugin install, link the marketplace clone, not the copy Claude Code runs: that
+one sits under `~/.claude/plugins/cache/loupe/loupe/<commit>/`, and the commit
+changes on every update. The clone moves with `/plugin marketplace update`, so
+it can be a commit ahead of the installed plugin between updates. Loupe is not
+on npm yet, so a `lint:loupe` script in a project's `package.json` works only
+for people who have made this link.
 
 A terminal sees none of the plugin's settings (blocking, preset, API key) —
 Claude Code passes them to hooks only. `loupe status` says where it found its
@@ -964,8 +965,10 @@ timeout — 60s on `PostToolUse`, 120s on `Stop`. What leaves the machine is the
 file's path and the lines around each flagged element or declaration — never a
 whole file — posted to TypeSafe's API at `api.typesafe.ai`, and only for what
 the run prints (below). Each request gives up after 20 seconds and the run keeps
-the deterministic findings it already had. To stay offline, drop `--judge` from
-`hooks/hooks.json`, or just leave the key unset.
+the deterministic findings it already had. To stay offline, leave the key unset.
+Dropping `--judge` from `hooks/hooks.json` holds only in a checkout: a
+marketplace install runs the copy under
+`~/.claude/plugins/cache/loupe/loupe/<commit>/`, which every update replaces.
 
 The hook only pays for what it prints. A blocking run asks only about the
 findings its cap has room to show. A `PostToolUse` that does not block hands the
@@ -1092,12 +1095,14 @@ on an older build the pane is absent and the hooks run as before.
 
 What it draws depends on where Claude Code is drawing. The desktop app and the
 VS Code panel get the engine's SVG charts, with a tooltip per bar. The terminal
-gets the same rows as block-glyph bars sized to the pane, docked beside the
-transcript in a fullscreen terminal from 110 columns and inline above the
-prompt otherwise. Pressing a rule drafts `/loupe-fix <rule>` into the prompt —
-it never sends it. A `show` picker narrows the list to blocking or advisory,
-and `HTML report` writes `.loupe/report.html` and puts the path on the
-clipboard.
+gets the same rows as block-glyph bars sized to the pane. Where the pane sits is
+Claude Code's call, not this module's; checked against 2.1.308, it docks beside
+the transcript in a fullscreen terminal from 110 columns and sits inline above
+the prompt otherwise, and the pane that opens itself waits undrawn below 144
+columns (110 once you have opened it with `/loupe-pane`). Pressing a rule
+drafts `/loupe-fix <rule>` into the prompt — it never sends it. A `show` picker
+narrows the list to blocking or advisory, and `HTML report` writes
+`.loupe/report.html` and puts the path on the clipboard.
 
 `/loupe-pane` opens it in any project, opted in or not, and from then on edits
 refresh it. The plugin's `pane` option turns the automatic pane off while
@@ -1186,8 +1191,8 @@ check what you downloaded — every release carries `SHA256SUMS`:
     chmod +x loupe-linux-x64
 ```
 
-Verified equivalent, not assumed: the Linux binary and macOS Node produce
-byte-identical reports over Gutenberg's 9,822 files.
+Verified equivalent, not assumed: the Linux binary and macOS Node produced
+byte-identical reports over Gutenberg, 9,822 files at the time (September 2026).
 
 ## Remediation
 
@@ -1222,7 +1227,7 @@ class, the only rule inside an `@media`, a class several rules declare — no
 action is offered and nothing says why.
 
 ```bash
-ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe
+ln -s "$(pwd)/bin/loupe" ~/.local/bin/loupe   # or the marketplace clone; either works
 cd editors/vscode && npm install && npx @vscode/vsce package
 code --install-extension loupe-vscode-*.vsix   # * is the version in editors/vscode/package.json; or: cursor --install-extension
 ```
@@ -1236,7 +1241,8 @@ Neovim and Helix need no extension at all, just `loupe lsp` as the command.
 Use `bin/loupe` rather than `engine/bin/loupe.mjs`, here as everywhere: the shim
 is what passes the shipped profiles, and without them the component and
 composite rules are silently off — the editor would show a thinner report than
-CI does, and nothing would say so.
+CI does, and nothing would say so. The shim is a POSIX `sh` script, so on
+Windows neither PATH nor the extension's `loupe.path` can start it outside WSL.
 
 Two things are deliberate and both are visible the first time they bite.
 
@@ -1245,9 +1251,10 @@ correlates across files, so an unsaved buffer is a verdict on a tree that does
 not exist; a dirty file shows the last saved verdict until it is written. That
 is also why this doubles as the push channel for an agent working in the editor
 — every edit an agent makes *is* a save, so there is nothing to approximate.
-The cost was measured rather than assumed before settling on re-analyzing whole:
-a warm server re-runs a 613-file project in ~115ms and Gutenberg's 9,531 in
-~2.4s, against 380ms and 5.9s for the same runs cold through the CLI.
+The cost was measured rather than assumed before settling on re-analyzing whole,
+on 2026-09-21 and before the index cache: a warm server re-ran a 613-file
+project in ~115ms and Gutenberg, 9,531 files at the time, in ~2.4s, against
+380ms and 5.9s for the same runs cold through the CLI.
 
 **The suppress quick fix leaves the reason blank.** A directive with no reason
 does not mute — it reports as `suppression/malformed`, an error. So taking that
@@ -1299,8 +1306,8 @@ a README, a lockfile — returns without indexing anything. And a file over 1.5M
 is treated as generated and skipped, because a checked-in emscripten blob costs
 more to parse than every finding it could produce. A skipped *stylesheet* still
 reports as `stylesheet/unparsed`; a skipped markup file just contributes
-nothing. Gutenberg — 6,100 markup files, 1,300 stylesheets — indexes in about
-five seconds.
+nothing. On Gutenberg — 6,100 markup files, 1,300 stylesheets — a hook run takes
+about four seconds cold and about 0.8s once the index cache is warm.
 
 Past 200,000 entries the walk stops and the hook stands aside with a `skipped`
 message saying so, rather than reporting "clean" for the part it never read —
@@ -1335,7 +1342,7 @@ in CI, the language server, the `loupe serve` overlay, `loupe ui`, the DevTools
 extension and the pane. `loupe map` works too, and is experimental.
 
 A whole-repo scan of Gutenberg — 6,100 markup files, 1,300 stylesheets — takes
-about four seconds.
+about four seconds cold.
 
 Known limits, in rough priority order:
 
