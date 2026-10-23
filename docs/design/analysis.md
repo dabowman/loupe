@@ -124,7 +124,7 @@ is left for `--judge` rather than resolved by array order.
 Lengths and durations are narrowed arithmetically to the scale steps either side
 of the literal — closeness on a scale is arithmetic, and there is no role left to
 choose once the property has picked its family. Everything else gets the whole
-family. See [judge.md](judge.md#which-token) for what was measured about that.
+family. See [judge.md](judge.md#which-token-judgevaluets) for what was measured about that.
 
 **Spacing snaps rather than keeps.** A spacing value the scale covers is snapped:
 the scale is how the system spaces things, and "6px is deliberate" is the
