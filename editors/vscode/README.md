@@ -28,7 +28,7 @@ Then the extension:
 cd editors/vscode
 npm install
 npx @vscode/vsce package
-code --install-extension loupe-vscode-0.7.0.vsix
+code --install-extension loupe-vscode-*.vsix   # * is the version in package.json
 ```
 
 Cursor and Windsurf are VS Code forks — the same `.vsix` installs with

@@ -7,5 +7,21 @@
   "pi": {
     "extensions": ["./pi/extensions/loupe.ts"],
     "skills": ["./skills"]
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dabowman/loupe"
+  },
+  "files": [
+    "pi",
+    "engine/bin",
+    "engine/dist",
+    "engine/presets",
+    "engine/package.json",
+    "profiles",
+    "skills",
+    "patterns",
+    "README.md",
+    "LICENSE"
+  ]
 }

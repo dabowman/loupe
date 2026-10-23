@@ -3291,7 +3291,7 @@ await check('an engine copied out of the repo runs its bundle, not its source', 
 		const whole = ['bin', 'src', 'dist', 'presets', 'package.json'];
 		for (const at of [
 			copy(join(dir, 'vendor', 'loupe-engine'), whole),
-			copy(join(dir, 'node_modules', '@dvdbwmn', 'loupe'), whole),
+			copy(join(dir, 'node_modules', '@dabowman', 'loupe'), whole),
 		]) {
 			const r = run(at);
 			assert(r.status === 0, `${at}: exit ${r.status}\n${r.stderr}`);
@@ -3300,7 +3300,7 @@ await check('an engine copied out of the repo runs its bundle, not its source', 
 
 		// With no bundle to fall back on, the failure says so in a sentence.
 		const bare = copy(
-			join(dir, 'node_modules', '@dvdbwmn', 'bare'),
+			join(dir, 'node_modules', '@dabowman', 'bare'),
 			whole.filter((part) => part !== 'dist'),
 		);
 		const r = run(bare);
