@@ -6,7 +6,8 @@
  * data directory, or a temp directory of this user's own, keyed by project path.
  *
  * The baseline is the opposite: a statement about *this repo*, so it lives
- * beside the code, always, and can be committed.
+ * beside the code, always, and can be committed — under `.loupe/`, with
+ * everything else loupe writes into a project.
  *
  * Design notes: docs/design/cli.md#where-state-lives
  */
@@ -75,7 +76,7 @@ export const attemptsPath = (root: string, data = process.env.CLAUDE_PLUGIN_DATA
 export const cacheDisabled = (flag: boolean | undefined): boolean => Boolean(flag) || isOn(process.env.LOUPE_NO_CACHE);
 
 /** Where a baseline goes when nothing names one. Overridable via config `baseline`. */
-export const DEFAULT_BASELINE = '.loupe-baseline.json';
+export const DEFAULT_BASELINE = '.loupe/baseline.json';
 
 /**
  * Resolve the baseline path — always project-relative, never plugin data. The
@@ -88,34 +89,48 @@ export const DEFAULT_BASELINE = '.loupe-baseline.json';
  */
 export const baselinePath = (root: string, p: string): string => under(root, p);
 
-/**
- * A 0.1.x baseline, which nothing reads any more: `<root>/.loupe/baseline.json`,
- * or the plugin data directory's `projects/<key>/baseline.json`. Null when
- * neither is there.
- *
- * Asked only where no current baseline exists, so a backlog accepted under
- * 0.1.x does not come back as live findings with no word as to why. Two stats,
- * and never from the hook: the hook's own feedback is the agent's, and the
- * remedy is a person's decision.
- */
-export function legacyBaseline(root: string): string | null {
-	const data = process.env.CLAUDE_PLUGIN_DATA;
-	const candidates = [
-		join(root, '.loupe', 'baseline.json'),
-		...(data ? [join(data, 'projects', projectKey(root), 'baseline.json')] : []),
-	];
-	return candidates.find((path) => existsSync(path)) ?? null;
+/** A baseline at a location nothing reads any more. See {@link legacyBaseline}. */
+export interface LegacyBaseline {
+	path: string;
+	/** The old default name, in the current format: moved, it is read as it stands. */
+	renamed: boolean;
 }
 
-/** What `check` and `status` say about a {@link legacyBaseline}. */
-export const legacyBaselineNotice = (path: string): string =>
-	`${path} is a 0.1.x baseline, which this version no longer reads — re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
+/**
+ * A baseline at a location nothing reads any more:
+ * `<root>/.loupe-baseline.json`, the default before the baseline moved under
+ * `.loupe/`, or 0.1.x's in the plugin data directory's
+ * `projects/<key>/baseline.json`. Null when neither is there.
+ *
+ * Asked only where no current baseline exists, so a backlog accepted there does
+ * not come back as live findings with no word as to why. Two stats, and never
+ * from the hook: the hook's own feedback is the agent's, and the remedy is a
+ * person's decision.
+ */
+export function legacyBaseline(root: string): LegacyBaseline | null {
+	const renamed = join(root, '.loupe-baseline.json');
+	if (existsSync(renamed)) return { path: renamed, renamed: true };
+	const data = process.env.CLAUDE_PLUGIN_DATA;
+	const old = data ? join(data, 'projects', projectKey(root), 'baseline.json') : null;
+	return old && existsSync(old) ? { path: old, renamed: false } : null;
+}
+
+/**
+ * What `check` and `status` say about a {@link legacyBaseline}, given the path
+ * this run reads. The renamed file is moved, not re-recorded: re-recording
+ * accepts today's backlog, drift since included, where moving keeps the one
+ * that was accepted.
+ */
+export const legacyBaselineNotice = (legacy: LegacyBaseline, target: string): string =>
+	legacy.renamed
+		? `${legacy.path} is a baseline under its old name, which this version no longer reads — move it to ${target} to keep the backlog it accepted.`
+		: `${legacy.path} is a 0.1.x baseline, which this version no longer reads — re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
 
 /**
  * The baseline to read, or the one to write if none exists yet.
  *
  * `fallback` is 'default-name' when the config names a file that isn't there, so
- * the project's own `.loupe-baseline.json` answered instead — dropping that lost
+ * the project's own `.loupe/baseline.json` answered instead — dropping that lost
  * every accepted finding while a config change and a file move were out of step.
  *
  * `found` comes back for the same reason `path` does: this function already

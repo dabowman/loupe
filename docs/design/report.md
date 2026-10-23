@@ -566,12 +566,13 @@ findings it hid, not the entries that hid them. A file reporting only entries
 under a name a reader hears as "findings" is how 194 came to be quoted against
 `check`'s 253. `count` keeps its meaning so 0.1.x files still parse; `findings`
 says the rest. Nothing reads `count` any more, and it is removed in 0.9.0: the
-0.1.x baseline locations, its other reason to stay, are already gone — they are
-not read, so a deleted baseline cannot be replaced by one an older version
-wrote.
+0.1.x baseline locations, its other reason to stay, are already gone. The plugin
+data one is not read, so a deleted baseline cannot be replaced by one an older
+version wrote; `.loupe/baseline.json` is the default location again, and read as
+any baseline is.
 
-A *configured* baseline may name a directory that doesn't exist yet; the default
-one sits in the project root, which the caller already proved exists. The
+The default baseline sits in `.loupe/`, which the first write makes, and a
+*configured* one may name a directory that doesn't exist yet. The
 directory is created via a helper rather than a bare `mkdirSync` so a bad path
 fails on the write that wanted it: mkdir on a path whose parent is a file
 reports `EEXIST … a.css`, which names the wrong problem, where the write reports

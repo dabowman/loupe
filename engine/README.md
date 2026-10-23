@@ -998,7 +998,7 @@ rather than what would change.
 Entries key on rule + file + normalized code, not line number, so reformatting
 doesn't resurrect the whole file.
 
-The baseline goes to `.loupe-baseline.json` in the project, whatever the tool was
+The baseline goes to `.loupe/baseline.json` in the project, whatever the tool was
 invoked as, and is meant to be committed. One location is the point: `loupe
 baseline` from a shell and the Stop hook running as a plugin are different
 processes with different environments, and a backlog only one of them can see is
@@ -1009,20 +1009,24 @@ the path in use, and says so when that path is a fallback.
 The hook's retry counter is the opposite case, and never lands in the project:
 it goes in `$CLAUDE_PLUGIN_DATA` under the plugin, and otherwise in a temp
 directory of this user's own, keyed by project — so running the engine directly
-from `.claude/settings.local.json` leaves no `.loupe/` in your tree. `loupe
+from `.claude/settings.local.json` writes nothing into your tree. `loupe
 status` prints the location on its `state:` line.
 
 `loupe baseline` ends by saying to commit the file: until it is tracked, CI and
 every other clone run with no baseline at all. When the path is ignored it says
 that instead, with the number of findings those runs will report; outside a
-repository it does not ask.
+repository it does not ask. Ignore the development files beside it by name
+(`.loupe/report.html`, `.loupe/mu-plugins/`), not `.loupe/`: git cannot
+re-include a file whose directory is ignored, so after `.loupe/` a
+`!.loupe/baseline.json` does nothing.
 
-A committed `.loupe-baseline.json` the config has since pointed away from is
-still read. 0.1.x baseline locations (`.loupe/baseline.json`, the plugin data
-directory) are not: re-run `loupe baseline` to record one in the project, then
-delete the old file. Until a current baseline exists, `check` says so on stderr
-(never in JSON or SARIF on stdout) and `status` says so under its `baseline:`
-line; the hook does not.
+A committed `.loupe/baseline.json` the config has since pointed away from is
+still read. Two old locations are not: `.loupe-baseline.json` at the root, the
+name before the baseline moved under `.loupe/`, and 0.1.x's in the plugin data
+directory. Move the first to the path in use, which keeps the backlog it
+accepted; re-record the second with `loupe baseline`, then delete it. Until a
+current baseline exists, `check` says so on stderr (never in JSON or SARIF on
+stdout) and `status` says so under its `baseline:` line; the hook does not.
 
 ## Claude Code hook
 

@@ -454,7 +454,7 @@ Options:
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn — minimum severity to report
   --baseline <path>     Read/write the baseline here instead of the configured
-                        path (default: .loupe-baseline.json in the project)
+                        path (default: .loupe/baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
   --no-suppressions     Report what suppression directives would mute; with
                         --no-baseline, the full audit
@@ -1411,7 +1411,7 @@ async function main(): Promise<number> {
 							? ''
 							: '  (none recorded yet)'
 			}`,
-			...(legacy ? [yellow(`            ${legacyBaselineNotice(legacy)}`)] : []),
+			...(legacy ? [yellow(`            ${legacyBaselineNotice(legacy, base.path)}`)] : []),
 			// Beside the baseline line, because the two used to share a directory and are
 			// easy to assume still do: the retry counter is the one that stays out of the
 			// repo. The marker is computed, not assumed — a root above the temp
@@ -2065,12 +2065,13 @@ async function main(): Promise<number> {
 		// backlog it accepted, with no reason given. `emitBlocking` already writes to
 		// stderr, and Claude Code feeds that back on exit 2.
 		if (found && !baseline) note(unreadableBaseline(bPath));
-		// A 0.1.x baseline is no longer read, and dropping it was silent: the backlog
-		// it held came back as live findings with nothing to say why. On stderr, so
-		// JSON and SARIF on stdout stay what a parser expects; not from the hook.
+		// A baseline at an old location is not read, and dropping it was silent: the
+		// backlog it held came back as live findings with nothing to say why. On
+		// stderr, so JSON and SARIF on stdout stay what a parser expects; not from
+		// the hook.
 		if (!found && !isHook) {
 			const legacy = legacyBaseline(root);
-			if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}\n`);
+			if (legacy) note(`loupe: ${legacyBaselineNotice(legacy, bPath)}\n`);
 		}
 		result = applyBaseline(result, baseline, { scoped: scope !== null, rules, enabled: config.enabled });
 	}
