@@ -14,10 +14,11 @@ None of it is an error. All of it is drift, and it is expensive to unwind once
 the pattern is load-bearing — because by then every argument for keeping it is
 locally true.
 
-Three design systems ship with it — the WordPress Design System,
-[Archer](#profiles), a Base UI–based system, and the
-[VIP Design System](#profiles), built on Theme UI — and a fourth is a directory
-rather than a fork: nothing about any of them is compiled into the engine.
+Two design systems ship with it — the WordPress Design System and the
+[VIP Design System](#profiles), built on Theme UI — plus [Archer](#profiles),
+built on Base UI, as a reference profile for a personal system whose package,
+`@dabowman/archer`, is not published. A fourth is a directory rather than a
+fork: nothing about any of them is compiled into the engine.
 
 This plugin works at two moments: **before** the code is written (skills that
 set the rules and the sanctioned compositions) and **as** it is written (hooks
@@ -65,7 +66,7 @@ plugin.
 | `hooks/hooks.json` | `PostToolUse` on what the edit just introduced, `Stop` across changed files |
 | `hooks/register.tsx` | The Loupe pane — the report drawn beside the transcript, re-run after each edit, with a status-line tally; `/loupe-pane` opens it by hand |
 | `profiles/wpds/` | The WPDS profile — the packages that identify it, its preset, its two registries and its three authoring docs |
-| `profiles/archer/` | The Archer profile — the same, for a styled system built on Base UI, with its own layout and text components |
+| `profiles/archer/` | The Archer reference profile — the same, for an unpublished styled system built on Base UI, with its own layout and text components |
 | `profiles/vip/` | The VIP Design System profile — the same, for `@automattic/vip-design-system` on Theme UI |
 | `profiles/*/patterns/index.json` | The composite registry |
 | `profiles/*/components/index.json` | The component currency registry — recommended/legacy/locked/experimental per component+package, and the styling surface each verified component owns |
@@ -641,9 +642,12 @@ being baked into it.
 
 The second profile shipped is **Archer**: a personal design system built on Base
 UI, with layout and text components Base UI does not have, flat part exports
-instead of `Dialog.Root`, and unprefixed tokens in seventeen families. It exists partly to be used and partly as the proof —
-every place the plugin still assumed WordPress showed up as something Archer
-could not express.
+instead of `Dialog.Root`, and unprefixed tokens in seventeen families. It exists
+partly to be used and partly as the proof — every place the plugin still assumed
+WordPress showed up as something Archer could not express. Its package,
+`@dabowman/archer`, is not published, so the profile cannot be selected by
+package until it is; meanwhile it is a reference profile, the worked example
+of a non-WordPress profile.
 
 The third is the **VIP Design System** (`@automattic/vip-design-system`), and
 it is the first on Theme UI. Its components are styled through an `sx` prop of

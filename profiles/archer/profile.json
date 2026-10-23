@@ -1,6 +1,7 @@
 {
   "id": "archer",
   "name": "Archer",
+  "note": "Reference profile: @dabowman/archer is not published; selection by package cannot occur until it is.",
   "preset": "archer",
   "packages": ["@dabowman/archer"],
   "patterns": "./patterns/index.json",

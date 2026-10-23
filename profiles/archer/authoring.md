@@ -1,11 +1,15 @@
 # Authoring for Archer
 
+This is a reference profile: `@dabowman/archer` is not published, so the profile
+cannot be selected by package until it is, and meanwhile it is the worked
+example of a non-WordPress profile.
+
 The design-system half of `loupe-authoring`. Load that skill first — it carries
 the order of resort, gap over margin, the inline-style rule and the escape
 hatch, all of which apply here unchanged. This file says what those rules mean
 in Archer terms.
 
-Archer is one package, `@dabowman/archer`: 56 components. 36 wrap
+Archer is one package, `@dabowman/archer`; its registry has 60 roots. 40 wrap
 [Base UI](https://base-ui.com) for behaviour and accessibility; the other 20 are
 Archer's own — layout, content, status and application regions, where Base UI
 ships nothing. All of them are styled entirely with token custom properties.
@@ -183,14 +187,14 @@ Everything else:
 
 | Need | Family |
 | --- | --- |
-| Space | `--space-{4xs…3xl}`, pair steps `--space-{s-m,l-xl,…}` for fluid container padding |
+| Space | `--space-{4xs…3xl}`, pair steps `--space-{s-m,l-xl,…}` for fluid container padding · `--spacing-*` |
 | Type | `--type-styles-<role>-{font-family,font-size,font-weight,line-height,letter-spacing}` |
 | Loose type values | `--font-size-{xs…5xl}`, `--font-weight-{extralight…extrabold}`, `--font-line-height-*`, `--font-family-{sans,serif,mono,pixel,hybrid}` |
 | Corners | `--radius-{none,1…6,full}` · Borders `--border-width-{0,1,2,4}` |
 | Elevation | `--shadow-{1…6}` |
 | Control heights | `--size-sm` `--size-md` `--size-lg` (fluid steps) · `--size-target` (24px, the minimum hit area) · `--size-icon` (16px) |
 | Layout widths | `--size-measure` (42rem) `--size-content` (72rem) — through `Center`'s `max` |
-| Motion | `--duration-{fast,base,slow}`, `--easing-ease-{in,out,in-out}`, `--delay-{none,short,medium,long}` |
+| Motion | `--duration-{fast,base,slow}`, `--easing-ease-{in,out,in-out}`, `--delay-{none,short,medium,long}`, `--transition-*` |
 | Stacking | `--z-index-{dropdown,sticky,fixed,modal-backdrop,modal,popover,tooltip}` |
 | Other | `--opacity-{0…100}`, `--cursor-*`, `--breakpoint-{xs…2xl}` |
 
