@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
 import { loadConfig } from '../src/config.ts';
 import { IndexCache } from '../src/index-cache.ts';
+import { projectStateDir } from '../src/paths.ts';
 import { readProfiles } from '../src/profiles.ts';
 import type { AnalyzeResult } from '../src/types.ts';
 import { CLI, assert, check, cleanup, finish, scratch, write } from './harness.ts';
@@ -242,7 +243,8 @@ cleanup(state);
 // What the profile-driven passes read off the walk: the elements a class lands
 // on (token scopes), the tokens the project defines (`tokens/undelivered`), a
 // parse error's reason (its key). And `contents`, the hook's "before the edit":
-// a file it stands in for is never answered from the cache, nor stored in it.
+// a file it stands in for is never answered from the cache, nor stored in it,
+// nor dropped from it.
 await check('with a profile active, and under `contents`, cached output is uncached output', async () => {
 	const root = scratch('loupe-index-profile-');
 	const PROFILES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'profiles');
@@ -293,7 +295,18 @@ await check('with a profile active, and under `contents`, cached output is uncac
 		const before = new Map([['src/app.css', '.rp-b { border-radius: 2px; }\n']]);
 		const asWas = await analyzed({ cache: false, contents: before });
 		assert(asWas !== want, 'the stand-in should change the answer, or this proves nothing');
+		/** The file's entry in the index, as the next run reads it. */
+		const entry = (): string => {
+			const dir = projectStateDir(root);
+			const read = (f: string) =>
+				JSON.parse(readFileSync(join(dir, f), 'utf8')) as { entries: Record<string, unknown> };
+			const index = readdirSync(dir).filter((f) => /^index-.*\.json$/.test(f));
+			return JSON.stringify(index.map((f) => read(f).entries['src/app.css']));
+		};
+		const onDisk = entry();
+		assert(onDisk.includes('"h"'), `the warm run cached no entry for the file: ${onDisk}`);
 		assert((await analyzed({ cache: true, contents: before })) === asWas, 'warm, under contents');
+		assert(entry() === onDisk, `the run under contents changed the file's entry: ${entry()}`);
 		// And it was not stored as the file's: the disk's answer is unchanged.
 		assert((await analyzed({ cache: true })) === want, 'after a run under contents');
 	} finally {

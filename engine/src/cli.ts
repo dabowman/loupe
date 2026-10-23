@@ -852,7 +852,7 @@ async function findingsBeforeEdit(
 	config: Config,
 	touched: string,
 	before: string | null,
-	{ judge, suppress }: { judge: boolean; suppress: boolean },
+	{ judge, suppress, cache }: { judge: boolean; suppress: boolean; cache: boolean },
 ): Promise<Identity[]> {
 	if (before === null) return [];
 	try {
@@ -860,6 +860,7 @@ async function findingsBeforeEdit(
 			scope: [touched],
 			judge,
 			suppress,
+			cache,
 			contents: new Map([[touched, before]]),
 		});
 		// A judged redirect is written after analysis, from a control the analysis
@@ -2118,6 +2119,7 @@ async function main(): Promise<number> {
 			const before = await findingsBeforeEdit(config, touched, preEditContent(payload), {
 				judge: Boolean(apiKey),
 				suppress: !args.flags['no-suppressions'],
+				cache: useCache,
 			});
 			// One pass over every finding: the keys carry the rule, so the errors
 			// among them are the ones `introducedBy(errors, before)` would answer.
