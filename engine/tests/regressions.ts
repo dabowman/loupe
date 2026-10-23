@@ -14,7 +14,7 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { harvestPhpStems, harvestStems } from '../src/markup.ts';
@@ -915,7 +915,7 @@ await check('baseline reports the findings recorded and the entries they collaps
 		assert(both, `baseline did not report both counts:\n${recorded}`);
 		const [, findings, entries, noun] = both;
 		assert(noun === (entries === '1' ? 'entry' : 'entries'), `wrong plural for ${entries}: ${recorded}`);
-		const written = JSON.parse(readFileSync(join(root, '.loupe-baseline.json'), 'utf8')) as { entries: string[] };
+		const written = JSON.parse(readFileSync(join(root, '.loupe/baseline.json'), 'utf8')) as { entries: string[] };
 		assert(
 			Number(entries) === written.entries.length,
 			`entry count is not what was written: ${entries} vs ${written.entries.length}`,
@@ -1229,7 +1229,7 @@ await check('an unreadable baseline is named, not silently ignored', () => {
 			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { font-size: 13px; }',
 	});
-	const baseline = join(root, '.loupe-baseline.json');
+	const baseline = join(root, '.loupe/baseline.json');
 	try {
 		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
 		const clean = checkAll(root);
@@ -1289,42 +1289,56 @@ await check('an unreadable baseline is named, not silently ignored', () => {
 	}
 });
 
-// 0.8.0 stopped reading the 0.1.x baseline locations, and said nothing: the
-// backlog a project accepted came back as live findings with no reason given.
-// Not read again — just named, where a person reads, and never in a stream a
-// parser reads or in the hook.
-await check('a 0.1.x baseline is named as no longer read, outside JSON and the hook', () => {
+// Two baselines nothing reads any more: `.loupe-baseline.json` at the root, the
+// name before the baseline moved under `.loupe/`, and 0.1.x's in plugin data.
+// Dropping one silently put the backlog a project accepted back as live
+// findings with no reason given. Not read again — just named, where a person
+// reads, and never in a stream a parser reads or in the hook.
+await check('a baseline at an old location is named as no longer read, outside JSON and the hook', () => {
 	const root = tmpRepo({
 		'loupe.config.json': JSON.stringify({ extends: 'wpds', namespaces: { project: ['acme-'] } }),
 		'src/A.jsx':
 			'import { __experimentalText as Text } from \'@wordpress/components\';\nexport const A = () => <Text className="acme-t">x</Text>;',
 		'styles/a.css': '.acme-t { font-size: 13px; }',
-		'.loupe/baseline.json': '{"version":1,"createdAt":"","count":1,"entries":["x"]}\n',
 	});
 	const pluginData = scratch('loupe-legacy-data-');
+	const oldName = join(root, '.loupe-baseline.json');
+	const renamed =
+		/\.loupe-baseline\.json is a baseline under its old name, which this version no longer reads — move it to .*\.loupe\/baseline\.json to keep the backlog it accepted/;
 	const said =
-		/\.loupe\/baseline\.json is a 0\.1\.x baseline, which this version no longer reads.*loupe baseline.*delete the old file/;
+		/projects\/.*\/baseline\.json is a 0\.1\.x baseline, which this version no longer reads.*loupe baseline.*delete the old file/;
 	try {
+		// A real backlog under the old name, so "not read" shows as findings.
+		runCli(['baseline', '--root', root, '--baseline', '.loupe-baseline.json']);
+		assert(existsSync(oldName), 'the fixture baseline was not recorded');
 		const text = runCli(['check', '--all', '--root', root]);
-		assert(text.status === 1, `check exited ${text.status}:\n${text.stderr}`);
-		assert(said.test(text.stderr), `check did not name the legacy baseline:\n${text.stderr}`);
+		assert(text.status === 1, `check exited ${text.status} — the old name was read:\n${text.stdout}${text.stderr}`);
+		assert(renamed.test(text.stderr), `check did not name the old baseline:\n${text.stderr}`);
 
 		for (const format of ['json', 'sarif']) {
 			const r = runCli(['check', '--all', '--root', root, '--format', format]);
 			JSON.parse(r.stdout);
-			assert(!/0\.1\.x/.test(r.stdout), `the notice reached ${format} on stdout`);
-			assert(said.test(r.stderr), `${format}: the notice was dropped from stderr:\n${r.stderr}`);
+			assert(!/old name/.test(r.stdout), `the notice reached ${format} on stdout`);
+			assert(renamed.test(r.stderr), `${format}: the notice was dropped from stderr:\n${r.stderr}`);
 		}
 
 		const status = runCli(['status', '--root', root]);
-		assert(said.test(status.stdout), `status did not name the legacy baseline:\n${status.stdout}`);
+		assert(renamed.test(status.stdout), `status did not name the old baseline:\n${status.stdout}`);
 
 		const hook = runCli(
 			['hook', '--root', root],
 			{},
 			'{"session_id":"legacy","tool_input":{"file_path":"styles/a.css"}}',
 		);
-		assert(!/0\.1\.x/.test(hook.stdout + hook.stderr), `the hook said it:\n${hook.stdout}${hook.stderr}`);
+		assert(!/old name/.test(hook.stdout + hook.stderr), `the hook said it:\n${hook.stdout}${hook.stderr}`);
+
+		// Moved where it says, the file is read as it stands, and nothing is said.
+		mkdirSync(join(root, '.loupe'));
+		renameSync(oldName, join(root, '.loupe', 'baseline.json'));
+		const moved = runCli(['check', '--all', '--root', root]);
+		assert(moved.status === 0, `the moved baseline was not read (${moved.status}):\n${moved.stdout}`);
+		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(moved.stdout), `nothing was hidden:\n${moved.stdout}`);
+		assert(!/old name/.test(moved.stderr), `named an old baseline that was moved:\n${moved.stderr}`);
 
 		// The plugin data directory's location, keyed as 0.1.x keyed it.
 		rmSync(join(root, '.loupe'), { recursive: true });
@@ -1332,14 +1346,17 @@ await check('a 0.1.x baseline is named as no longer read, outside JSON and the h
 		const key = `${basename(full).replace(/[^\w.-]/g, '-')}-${createHash('sha256').update(full).digest('hex').slice(0, 10)}`;
 		writeAll(pluginData, { [`projects/${key}/baseline.json`]: '{"version":1,"entries":[]}\n' });
 		const data = runCli(['check', '--all', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
-		assert(/projects\/.*\/baseline\.json is a 0\.1\.x baseline/.test(data.stderr), `plugin data:\n${data.stderr}`);
+		assert(said.test(data.stderr), `plugin data:\n${data.stderr}`);
+		const dataStatus = runCli(['status', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
+		assert(said.test(dataStatus.stdout), `status, plugin data:\n${dataStatus.stdout}`);
 
-		// Once a current baseline exists, the old file is moot and nothing is said.
+		// Once a current baseline exists, the old files are moot and nothing is said.
+		writeFileSync(oldName, '{"version":1,"createdAt":"","count":1,"entries":["x"]}\n');
 		runCli(['baseline', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
 		const after = runCli(['check', '--all', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
-		assert(!/0\.1\.x/.test(after.stderr), `named a legacy baseline beside a current one:\n${after.stderr}`);
+		assert(!/0\.1\.x|old name/.test(after.stderr), `named an old baseline beside a current one:\n${after.stderr}`);
 		const quiet = runCli(['status', '--root', root], { CLAUDE_PLUGIN_DATA: pluginData });
-		assert(!/0\.1\.x/.test(quiet.stdout), `status named it beside a current one:\n${quiet.stdout}`);
+		assert(!/0\.1\.x|old name/.test(quiet.stdout), `status named it beside a current one:\n${quiet.stdout}`);
 	} finally {
 		cleanup(root);
 		cleanup(pluginData);
@@ -1403,7 +1420,7 @@ await check('an empty config `baseline` means the default name, for the writer a
 	});
 	try {
 		const recorded = execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
-		assert(recorded.includes(join(root, '.loupe-baseline.json')), `wrote somewhere else:\n${recorded}`);
+		assert(recorded.includes(join(root, '.loupe/baseline.json')), `wrote somewhere else:\n${recorded}`);
 		const read = checkAll(root);
 		assert(/[1-9]\d* baselined finding\(s\) hidden/.test(read), `readers missed the default name:\n${read}`);
 	} finally {
@@ -1952,7 +1969,7 @@ await check('a baseline recorded from a subdirectory is the one the hook reads',
 
 		const recorded = execFileSync('node', [CLI, 'baseline'], { encoding: 'utf8', cwd: app, env: env() });
 		assert(
-			recorded.includes(join(repo, '.loupe-baseline.json')),
+			recorded.includes(join(repo, '.loupe/baseline.json')),
 			`baseline anchored to the cwd, not the project:\n${recorded}`,
 		);
 
@@ -2017,7 +2034,7 @@ await check('re-recording an unchanged backlog rewrites the same bytes', () => {
 		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
 		'styles/a.css': '.a { color: #f00; }',
 	});
-	const file = join(root, '.loupe-baseline.json');
+	const file = join(root, '.loupe/baseline.json');
 	try {
 		execFileSync('node', [CLI, 'baseline', '--root', root], { encoding: 'utf8', env: env() });
 		const first = readFileSync(file, 'utf8');
@@ -2043,7 +2060,7 @@ await check('baseline --dry-run shows what would be recorded, new and fixed, and
 		'loupe.config.json': JSON.stringify({ extends: 'wpds' }),
 		'styles/a.css': '.a { color: #f00; }\n.b { margin: 3px; }',
 	});
-	const file = join(root, '.loupe-baseline.json');
+	const file = join(root, '.loupe/baseline.json');
 	const dry = (): string =>
 		execFileSync('node', [CLI, 'baseline', '--dry-run', '--root', root], { encoding: 'utf8', env: env() });
 	try {
@@ -2090,7 +2107,9 @@ await check('baseline says to commit the file, and warns when git ignores it', (
 	};
 	const plain = tmpRepo(files);
 	const tracked = tmpRepo(files);
-	const ignored = tmpRepo({ ...files, '.gitignore': '.loupe-baseline.json\n' });
+	// The whole directory, as the report's guidance once said to: the likeliest
+	// way a baseline under `.loupe/` ends up ignored.
+	const ignored = tmpRepo({ ...files, '.gitignore': '.loupe/\n' });
 	try {
 		const outside = record(plain);
 		assert(/Commit this file/.test(outside), `no commit reminder outside git:\n${outside}`);
@@ -2102,15 +2121,16 @@ await check('baseline says to commit the file, and warns when git ignores it', (
 		assert(!/gitignored/.test(inRepo), `warned about a file git does not ignore:\n${inRepo}`);
 
 		gitIn(ignored, ['init']);
+		// Before writing too: the dry run is where the decision is made, and it is
+		// asked before the write has made `.loupe/`.
+		assert(/is gitignored/.test(record(ignored, true)), 'the dry run did not warn about an ignored baseline');
 		const warned = record(ignored);
 		assert(
-			/Warning: \.loupe-baseline\.json is gitignored/.test(warned),
+			/Warning: \.loupe\/baseline\.json is gitignored/.test(warned),
 			`no warning for an ignored baseline:\n${warned}`,
 		);
 		assert(/report all 1 finding\(s\)/.test(warned), `the warning does not say what it costs:\n${warned}`);
 		assert(!/Commit this file/.test(warned), `told to commit a file git will not take:\n${warned}`);
-		// Before writing too: the dry run is where the decision is made.
-		assert(/is gitignored/.test(record(ignored, true)), 'the dry run did not warn about an ignored baseline');
 	} finally {
 		cleanup(plain);
 		cleanup(tracked);

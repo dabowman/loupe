@@ -205,7 +205,7 @@ It runs against the project you are in — the directory holding the
 project is and read the same baseline. Pass `--root` when you mean the
 subdirectory itself. It needs nothing added to that project: the engine carries its own dependencies, so there is no config file to
 commit and nothing to install. Nothing appears unless you run the thing that
-writes it: `loupe baseline` records `.loupe-baseline.json`, and `loupe fix` rewrites the
+writes it: `loupe baseline` records `.loupe/baseline.json`, and `loupe fix` rewrites the
 declarations — and the misspelled token names — whose findings it can settle
 without judgment. It also passes the
 shipped pattern and component registries unless you name your own with
@@ -891,21 +891,29 @@ finding(s)` and leaves the gate blocking on findings the baseline never saw.
 Entries key on rule + file + normalized code, not line number, so reformatting
 does not resurrect the whole file.
 
-The baseline is written to `.loupe-baseline.json` in the project and is meant to
+The baseline is written to `.loupe/baseline.json` in the project and is meant to
 be committed: it is a statement about this repo, and the CLI and the hook are
 different processes that have to read the same file. Set `baseline` in the
-config, or pass `--baseline <path>`, to move it. The hook's retry counter is the
+config, or pass `--baseline <path>`, to move it. Ignore the development files
+beside it by name (`.loupe/report.html`, `.loupe/mu-plugins/`), not `.loupe/`:
+git cannot re-include a file whose directory is ignored, so after `.loupe/` a
+`!.loupe/baseline.json` does nothing. The hook's retry counter is the
 one piece of state that does not live in the project: it goes in the plugin's
 data directory, or a temp directory of your own, keyed by project, and expires
 after six hours. `loupe status` prints where, on its `state:` line.
 
 One fallback is read, and `status` says when it answered: a committed
-`.loupe-baseline.json` in a project whose config has since pointed `baseline`
+`.loupe/baseline.json` in a project whose config has since pointed `baseline`
 somewhere that does not exist yet. That file is
 already in the project, so there is nothing to move: `status` names it as the
 default-name file and says which configured path is missing. Without this
 fallback, a config change and the file move landing in separate commits would
 put every accepted finding back in between them.
+
+`.loupe-baseline.json` at the root, the name before the baseline moved under
+`.loupe/`, is not read. Until a current baseline exists, `check` (on stderr) and
+`status` say to move it to the path in use, which keeps the backlog it accepted;
+re-running `loupe baseline` would accept today's instead.
 
 ### When the gate stands down
 

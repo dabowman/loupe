@@ -27,9 +27,10 @@ different reports.
 The page goes to a stable path under the project, `.loupe/report.html`, so a
 re-run replaces the last report rather than scattering files, and so the path
 is one the desktop app and the terminal can open from the chat. (`.loupe/` is
-the directory the WordPress overlay integration already uses; it is for
-development files and belongs in the project's `.gitignore`. If it is not
-ignored, say so in one line — do not edit `.gitignore` unasked.)
+where loupe keeps what it writes into a project. The report is a development
+file and belongs in the project's `.gitignore` by name; the directory does not,
+since the baseline and the project's own profiles in it are committed. If the
+report is not ignored, say so in one line — do not edit `.gitignore` unasked.)
 
 ```bash
 mkdir -p .loupe
