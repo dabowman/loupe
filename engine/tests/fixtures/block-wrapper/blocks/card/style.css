@@ -1,0 +1,7 @@
+.wp-block-acme-card {
+	padding: 8px;
+	margin-bottom: 1em;
+	background: #fff;
+}
+.wp-block-acme-card__title { font-size: 18px; }
+.wp-block-group { color: #fff; }

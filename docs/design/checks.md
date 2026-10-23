@@ -214,6 +214,33 @@ separate reading from the currency one.
 `wp-parsely-*` matches the `wp-` external prefix, and reporting a project's own
 class as a library internal sends the agent to fix something it does not own.
 
+### A block's own wrapper is not a library internal
+
+WordPress renders every block's wrapper with a class built from its name —
+`wp-block-`, then the name with `/` as `-` and a leading `core-` dropped — so a
+block plugin's stylesheet opens with `.wp-block-acme-card`. `wp-block-` is an
+external prefix in the WordPress presets, which is right for core's
+`.wp-block-group` and was wrong for the commonest WordPress stylesheet there
+is: the plugin's own block reported as a blocking library internal on day one,
+with every finding in the rule — the hardcoded padding, the margin — hidden
+behind it and out of `loupe fix`'s reach.
+
+So the `name` in each `block.json` the walk finds is read on the reference pass
+that already opens the file, and cached with the rest of its entry. A class
+under the prefix of its namespace (`wp-block-acme-`, which covers the block's
+element classes too) is the project's own: the whole-rule form skips it, and
+its declarations get their own verdicts. A `core/` block's class carries no
+namespace, so `.wp-block-group` stays external whatever the project ships.
+Only a `block.json` the source globs list is read: the WordPress presets list
+`**/block.json`, and `generic`, which does not, has no external `wp-block-`
+to exempt a class from.
+
+**Recognised, not claimed.** The prefix is never added to `namespaces.project`,
+which is what would make the wrapper eligible for `css/dead-class`, and the
+wrapper is exactly the class no source spells. `detect` and `status` print the
+prefixes with the block names they came from, so the recognition can be seen;
+`init` writes none of them.
+
 ## `system/raw-element`
 
 A `styledOnly` mapping only earns its suggestion when the element is doing what
@@ -544,6 +571,14 @@ only ever renders there suppresses the finding with that reason.
 The reference index over-collects on purpose (see
 [markup scanning](analysis.md#markup-scanning-two-passes-two-characters)): a false "referenced"
 costs one missed finding, a false "dead" tells an agent to delete live CSS.
+
+**A block's wrapper class is never dead.** WordPress writes
+`.wp-block-acme-card` at render time, so no markup or reference file can
+mention it. The shipped presets keep it out twice over — it is under no project
+namespace, and `wp-*` is never-dead — but a config claiming `wp-block-acme-`
+keeps neither, so the wrapper of each block a `block.json` names is never-dead
+whatever the config says. Its element classes (`__title`) are spelled in
+source, and a claimed prefix still checks those.
 
 The remedy is a deletion, which is why it is the one finding the editor offers
 a quick fix for that `loupe fix` refuses — see [deleting is the editor's

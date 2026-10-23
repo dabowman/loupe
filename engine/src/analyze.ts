@@ -49,6 +49,7 @@ import { under } from './paths.ts';
 import { activeDelivery, activeProfiles } from './profiles.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
 import { harvestTokens } from './markup.ts';
+import { blockClasses, blockName, isBlockManifest } from './blocks.ts';
 import { syntaxFor } from './syntax.ts';
 import { surfaceFor, surfacesRecorded } from './components.ts';
 import { boundMessage, oneLine, parseMessageOf, parseReasonOf, snippet } from './text.ts';
@@ -706,11 +707,15 @@ export async function analyze(
 		return selectors.some((sel) => keySelector(sel).includes('&')) ? [] : elementsOf(selectors);
 	};
 
+	// The blocks the project's own `block.json` files name, read on the same
+	// pass: their wrapper classes are the project's, under an external prefix.
+	const blockNames = new Set<string>();
 	for (const { abs, rel } of files.references) {
 		const look = lookup(abs, rel);
 		if (oversized(abs, rel, look)) continue;
 		if (look?.entry?.refs) {
 			for (const t of look.entry.refs) referenced.add(t);
+			if (look.entry.block) blockNames.add(look.entry.block);
 			diagnostics.filesScanned++;
 			continue;
 		}
@@ -719,9 +724,16 @@ export async function analyze(
 		if (text === null) continue;
 		const found = harvestTokens(text);
 		for (const t of found) referenced.add(t);
+		const block = isBlockManifest(rel) ? blockName(text) : null;
+		if (block) blockNames.add(block);
 		diagnostics.filesScanned++;
-		if (look) cache?.store(look, rel, text, { d: false, refs: [...found] });
+		if (look) cache?.store(look, rel, text, { d: false, refs: [...found], ...(block ? { block } : {}) });
 	}
+	const ownBlocks = [...blockNames].flatMap((name) => blockClasses(name) ?? []);
+	/** A class under the wrapper prefix of one of the project's own blocks (`wp-block-acme-`). */
+	const isOwnBlock = (cls: string): boolean => ownBlocks.some((b) => cls.startsWith(b.prefix));
+	/** The wrapper class itself (`wp-block-acme-card`), which WordPress writes and no source spells. */
+	const isBlockWrapper = (cls: string): boolean => ownBlocks.some((b) => cls === b.wrapper);
 
 	// ── walk CSS ──────────────────────────────────────────────────────────────
 	const styledClasses = new Set<string>(); // classes CSS actually styles — feeds system/raw-element
@@ -863,10 +875,16 @@ export async function analyze(
 			if (touchesLayout) for (const c of allClasses) layoutClasses.add(c);
 
 			// Reaching into a third-party component's internals replaces the
-			// per-declaration findings rather than adding to them.
+			// per-declaration findings rather than adding to them. A class under a
+			// project block's wrapper prefix is not one: its declarations get their
+			// own verdicts.
 			const override =
 				touchesStyle && ruleIsLive('system/override')
-					? libraryOverride(keyClasses, (c) => config.isExternal(c) || library.classes.has(c), config.isProject)
+					? libraryOverride(
+							keyClasses,
+							(c) => config.isExternal(c) || library.classes.has(c),
+							(c) => config.isProject(c) || isOwnBlock(c),
+						)
 					: null;
 			if (override) emit({ ...override, line: ruleLine, scopeLines, selector, media });
 			else for (const f of collapsePerRule(pending)) emit({ ...f, selector, media, elements });
@@ -895,7 +913,8 @@ export async function analyze(
 		referenced,
 		stems: [...stems],
 		isProject: config.isProject,
-		isNeverDead: config.isNeverDead,
+		// A block's wrapper class exists only in rendered output, whatever namespace claims it.
+		isNeverDead: (c) => config.isNeverDead(c) || isBlockWrapper(c),
 	}))
 		report(f);
 
