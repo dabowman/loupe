@@ -48,7 +48,7 @@ would work as a stylelint plugin, and are included because you want one report.
 | `patterns/judged-redirect` | `--judge` only: a control read as standing for something its pattern redirects elsewhere |
 | `patterns/unregistered-composite` | The same composite in 3+ files, registered in none |
 | `tokens/hardcoded-value` | A literal colour/length where a design token exists |
-| `layout/margin-on-child` | Margin, which belongs on the parent's `gap` |
+| `layout/margin-on-child` | Margin, which belongs on the parent's `gap` — not on a bare element (`.card p`), which is prose |
 | `layout/in-css` | Flexbox in CSS that a layout primitive should own |
 | `typography/untokenized` | Raw type styling with no token and no text component |
 | `system/override` | CSS setting a property a design-system component owns (per its registry `surface`), or reaching into a library's internals |

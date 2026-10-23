@@ -24536,6 +24536,10 @@ function ownLevel(compound) {
 }
 var classesIn = (sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].flatMap((m) => m[1] === void 0 ? [] : [m[1]]);
 var keyClassesIn = (sel) => classesIn(ownLevel(keySelector(sel)));
+var keysBareElement = (sel) => {
+  const own = ownLevel(keySelector(sel));
+  return /^[a-z]/i.test(own) && !classesIn(own).length;
+};
 var ruleIsGrid = (rule2) => [...ownDecls(rule2)].some((d) => isGridDecl(d.prop.toLowerCase(), d.value));
 function deletableRule(rule2, lines) {
   const end = rule2.source?.end;
@@ -28334,12 +28338,12 @@ var layoutInCss = ({ prop, value }, { boundSystem, isGrid }) => {
 };
 
 // src/checks/layout/margin.ts
-var margin = ({ prop, value }) => {
+var margin = ({ prop, value }, { bareElement }) => {
   if (!isMarginProp(prop)) return void 0;
   const kind = classifyMargin(value);
   const decl2 = `${prop}: ${value}`;
   if (kind === "negative") return { rule: "layout/negative-margin", message: decl2, code: prop };
-  return kind ? { rule: "layout/margin-on-child", message: decl2, code: prop } : null;
+  return kind && !bareElement ? { rule: "layout/margin-on-child", message: decl2, code: prop } : null;
 };
 
 // src/checks/patterns/composites.ts
@@ -29051,12 +29055,13 @@ function classifyDeclaration({ prop, value }, {
   boundSystem = [],
   boundText = [],
   isGrid = false,
+  bareElement = false,
   surfaceOf = () => void 0,
   surfaced = () => true,
   enabled: enabled2
 }) {
   const styling = isMarginProp(prop) || isFlexDecl(prop, value) || GAP_PROPS.has(prop) || TYPE_PROPS.has(prop) || isHardcodedTokenValue(prop, value) || APPEARANCE_PROPS.has(prop);
-  const ctx = { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: enabled2 };
+  const ctx = { boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled: enabled2 };
   for (const check of DECLARATIONS) {
     const verdict2 = check({ prop, value }, ctx);
     if (verdict2 !== void 0) return { finding: verdict2, styling };
@@ -29383,6 +29388,7 @@ async function analyze(config, {
       const boundSystem = bound.filter((b) => b.isSystem);
       const boundText = bound.filter((b) => b.isText);
       const isGrid = cssRule.isGrid;
+      const bareElement = selectors.every(keysBareElement);
       const scopeLines = nearby(ruleLine);
       const selector = selectors.join(", ");
       const media = cssRule.media;
@@ -29397,7 +29403,7 @@ async function analyze(config, {
         const line = decl2.line;
         const { finding, styling } = classifyDeclaration(
           { prop, value: decl2.value },
-          { boundSystem, boundText, isGrid, surfaceOf, surfaced, enabled: ruleIsLive }
+          { boundSystem, boundText, isGrid, bareElement, surfaceOf, surfaced, enabled: ruleIsLive }
         );
         if (onRawKeys.length)
           classDecls.push({ prop, value: decl2.value, isGrid, boundSystem, boundText, now: finding?.rule ?? null });
