@@ -16,8 +16,12 @@ The engine resolved some findings to exactly one on-role token when it ran. Let
 it apply those itself rather than reading files back to retype them:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --changed
+node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --changed --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
+
+`--profiles` must always be passed: the shipped profiles carry the token scopes
+that decide which token is on-role here, and the component registries. Without
+them `fix` applies an off-scope token unattended.
 
 `fix` reads no baseline, so scope it to what this run is working on. A bare
 `/loupe-fix` works new drift only: it fixes the files the working tree changed
