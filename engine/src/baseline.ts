@@ -97,10 +97,10 @@ export function writeBaseline(
 	full: string,
 	result: AnalyzeResult,
 ): { path: string; findings: number; entries: number } {
-	// A *configured* baseline may name a directory that doesn't exist yet; for
-	// the default one this is a no-op on the project root. `ensureDir` rather than
-	// a bare `mkdirSync` so a bad path fails on the write that wanted it, naming
-	// ENOTDIR rather than `EEXIST ... a.css`.
+	// The default sits in `.loupe/`, which the first write makes, and a
+	// configured one may name a directory that doesn't exist yet. `ensureDir`
+	// rather than a bare `mkdirSync` so a bad path fails on the write that wanted
+	// it, naming ENOTDIR rather than `EEXIST ... a.css`.
 	ensureDir(dirname(full));
 	const entries = entriesOf(result);
 	// Re-recording the same backlog rewrites the same bytes. A fresh timestamp made

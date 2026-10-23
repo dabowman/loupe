@@ -662,7 +662,7 @@ await check('component names are painted, and only at print time', () => {
 		const colour = { ...process.env, FORCE_COLOR: '1' };
 		const recorded = spawnSync(process.execPath, [CLI, 'baseline'], { cwd: dir, encoding: 'utf8', env: colour });
 		assert(recorded.status === 0, `baseline failed: ${recorded.stderr}`);
-		assert(!ESC.test(readFileSync(join(dir, '.loupe-baseline.json'), 'utf8')), 'the baseline file carries ANSI');
+		assert(!ESC.test(readFileSync(join(dir, '.loupe/baseline.json'), 'utf8')), 'the baseline file carries ANSI');
 		const after = spawnSync(process.execPath, [CLI, 'check', '--all'], { cwd: dir, encoding: 'utf8', env: colour });
 		assert(
 			/clean\./.test(after.stdout),
@@ -1187,9 +1187,9 @@ await check('a baseline entry that is not a string is dropped, not thrown on', (
 	writeAll(dir, RULED);
 	try {
 		assert(cli(dir, 'baseline').status === 0, 'baseline failed');
-		const path = join(dir, '.loupe-baseline.json');
+		const path = join(dir, '.loupe/baseline.json');
 		const file = JSON.parse(readFileSync(path, 'utf8')) as { entries: unknown[] };
-		writeAll(dir, { '.loupe-baseline.json': JSON.stringify({ ...file, entries: [...file.entries, null, 3] }) });
+		writeAll(dir, { '.loupe/baseline.json': JSON.stringify({ ...file, entries: [...file.entries, null, 3] }) });
 		for (const argv of [
 			['baseline', '--dry-run'],
 			['check', '--all', '--rule', 'layout/margin-on-child'],

@@ -244,8 +244,8 @@ them under `blocks:`; nothing is written into `namespaces.project`.
 A rule takes a bare severity, or `{ "severity", "reason" }` to say why; any
 other key is a config error. The `["warn", { … }]` form was removed in 0.8.0,
 and a config still using it does not load — under the hook that means the gate
-checks nothing until it is fixed. The rewrite is one line per rule; see
-[MIGRATION.md](MIGRATION.md#upgrading-a-loupe-config-from-before-080).
+checks nothing until it is fixed. The error names the line to write instead,
+and `loupe status` shows it before a session does.
 
 Turning a rule off in config is a suppression of the whole rule, everywhere, so
 `loupe suppressions` lists it beside the inline directives —
@@ -998,7 +998,7 @@ rather than what would change.
 Entries key on rule + file + normalized code, not line number, so reformatting
 doesn't resurrect the whole file.
 
-The baseline goes to `.loupe-baseline.json` in the project, whatever the tool was
+The baseline goes to `.loupe/baseline.json` in the project, whatever the tool was
 invoked as, and is meant to be committed. One location is the point: `loupe
 baseline` from a shell and the Stop hook running as a plugin are different
 processes with different environments, and a backlog only one of them can see is
@@ -1009,20 +1009,24 @@ the path in use, and says so when that path is a fallback.
 The hook's retry counter is the opposite case, and never lands in the project:
 it goes in `$CLAUDE_PLUGIN_DATA` under the plugin, and otherwise in a temp
 directory of this user's own, keyed by project — so running the engine directly
-from `.claude/settings.local.json` leaves no `.loupe/` in your tree. `loupe
+from `.claude/settings.local.json` writes nothing into your tree. `loupe
 status` prints the location on its `state:` line.
 
 `loupe baseline` ends by saying to commit the file: until it is tracked, CI and
 every other clone run with no baseline at all. When the path is ignored it says
 that instead, with the number of findings those runs will report; outside a
-repository it does not ask.
+repository it does not ask. Ignore the development files beside it by name
+(`.loupe/report.html`, `.loupe/mu-plugins/`), not `.loupe/`: git cannot
+re-include a file whose directory is ignored, so after `.loupe/` a
+`!.loupe/baseline.json` does nothing.
 
-A committed `.loupe-baseline.json` the config has since pointed away from is
-still read. 0.1.x baseline locations (`.loupe/baseline.json`, the plugin data
-directory) are not: re-run `loupe baseline` to record one in the project, then
-delete the old file. Until a current baseline exists, `check` says so on stderr
-(never in JSON or SARIF on stdout) and `status` says so under its `baseline:`
-line; the hook does not.
+A committed `.loupe/baseline.json` the config has since pointed away from is
+still read. Two old locations are not: `.loupe-baseline.json` at the root, the
+name before the baseline moved under `.loupe/`, and 0.1.x's in the plugin data
+directory. Move the first to the path in use, which keeps the backlog it
+accepted; re-record the second with `loupe baseline`, then delete it. Until a
+current baseline exists, `check` says so on stderr (never in JSON or SARIF on
+stdout) and `status` says so under its `baseline:` line; the hook does not.
 
 ## Claude Code hook
 
@@ -1368,11 +1372,11 @@ A library call writes nothing anywhere unless it passes `cache: true`.
 | `designSystem.cssInJsPackages` | Packages whose tagged templates are CSS. Defaults cover styled-components and emotion. |
 | `designSystem.substitutionProps` | Props whose value names the element a component should render (`render={ <h4 /> }`, and the callback spelling of the same). That element is exempt from `system/raw-element` when the carrier is a `components.text` or `components.layout` name; nothing nested inside it is, and a genuine render callback on any other component is not. Defaults to `render`, `as`, `component`; `[]` exempts nothing. A list replaces the default rather than extending it. |
 | `designSystem.allowedInlineStyles` | Inline-style properties a component's own API sanctions, as `{ "Text": ["color"] }` keyed by canonical component name. A `style` on that component made only of those properties is not `system/inline-style`; its values still go through the ordinary checks, so a raw colour there is still `tokens/hardcoded-value`. Any other property, a spread, or an opaque `style={obj}` reports the element as before, naming only the unsanctioned properties. The `wpds` preset sanctions `color` on `Text`, which has no color prop. |
-| `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. A `judge` detector (`components`, `unless`) names elements for `check --judge` to ask about, and reports `patterns/judged-redirect`. |
+| `patterns` | A composite registry: an inline array, or a path. Inline, the object form a registry file holds — `{ "realizations": [ … ] }` — is accepted too. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. A `judge` detector (`components`, `unless`) names elements for `check --judge` to ask about, and reports `patterns/judged-redirect`. |
 | `maxEntries` | How many entries the analysis walk reads before it refuses (default 200,000). A positive whole number; anything else is a config error. `LOUPE_MAX_ENTRIES` outranks it for one run. |
 | `profiles` | The project's own profile directories: a path or an array of paths, each relative to the config file that wrote it. Read ahead of `.loupe/profiles/` and `--profiles`, and merged with them; see [A project's own profiles](#a-projects-own-profiles). Anything but non-empty strings is a config error. |
 | `profile` | Pins profile selection: a profile id, or `"none"` for no profile at all, without emptying `designSystem.packages`. `--profile` outranks it. |
-| `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package, and optionally each component's styling `surface` — `{ "properties": { "font-size": "variant", "border-radius": null } }` — which `system/override` and `typography/in-css` read; a registry recording none on any entry keeps `system/override`'s pre-surface reading, where every appearance property on a bound class blocks): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
+| `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package, and optionally each component's styling `surface` — `{ "properties": { "font-size": "variant", "border-radius": null } }` — which `system/override` and `typography/in-css` read; a registry recording none on any entry keeps `system/override`'s pre-surface reading, where every appearance property on a bound class blocks): an inline array, or a path. Inline, the object form a registry file holds — `{ "components": [ … ] }` — is accepted too. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
 A `patterns` or `componentRegistry` path naming no file is no registry, and the rules that need one stay off; a file that is there but does not parse, or is not a registry — an array of entries, or an object holding them under `components` (`realizations` or `patterns` for a composite registry) — is a config error naming the file: `check` exits 2, and the hook stands aside and tells the agent.
 

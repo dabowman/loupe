@@ -89,7 +89,7 @@ const run = (): Promise<AnalyzeResult> => analyze(config, { scope: null });
 // The CLI's own arrangement, because the split between these two is the thing
 // the last check in this file exists to prove. A presenter that read the
 // baseline once would pass every check here and still be wrong tomorrow.
-const baselineTarget = join(root, '.loupe-baseline.json');
+const baselineTarget = join(root, '.loupe/baseline.json');
 const handle = await ui({
 	port: 0,
 	config,
@@ -533,7 +533,7 @@ await check('baseline records the whole backlog, not the part still on screen', 
 	const quiet = await settled(first.rev);
 	assert(quiet.payload.summary.total === 0, 'the baseline did not quiet the backlog');
 	assert(quiet.baseline.found, 'the page does not know a baseline is in play');
-	const accepted = (JSON.parse(read('.loupe-baseline.json')) as { entries: string[] }).entries.length;
+	const accepted = (JSON.parse(read('.loupe/baseline.json')) as { entries: string[] }).entries.length;
 	assert(accepted > 0, 'the baseline recorded nothing');
 
 	// Now the case the presenter split exists for. With a baseline in play the
@@ -551,7 +551,7 @@ await check('baseline records the whole backlog, not the part still on screen', 
 
 	const second = await post('/baseline', {}, { token, rev: withNew.rev });
 	assert(second.status === 200, `second baseline answered ${second.status}`);
-	const after = JSON.parse(read('.loupe-baseline.json')) as { entries: string[] };
+	const after = JSON.parse(read('.loupe/baseline.json')) as { entries: string[] };
 	assert(
 		after.entries.length > accepted,
 		`the second baseline recorded ${after.entries.length} entries, not the ${accepted} already accepted plus the new one — it baselined the remainder`,
