@@ -15,8 +15,8 @@
 
 import { readFileSync, statSync } from 'node:fs';
 import type { Stats } from 'node:fs';
-import { join } from 'node:path';
 import { filesUnder } from './discover.ts';
+import { under } from './paths.ts';
 import postcss from 'postcss';
 import type { Root } from 'postcss';
 import { scopedFamily } from './scopes.ts';
@@ -149,7 +149,8 @@ export function cssFilesUnder(
 
 /**
  * Read the declared token set from `designSystem.tokenSources`. These paths
- * deliberately reach into `node_modules`, which the project walk prunes.
+ * deliberately reach into `node_modules`, which the project walk prunes. A path
+ * is the root's unless it is absolute, as a `styleSources` path is.
  */
 export function readTokenSources(
 	root: string,
@@ -158,8 +159,8 @@ export function readTokenSources(
 ): TokenSet {
 	const set = emptyTokenSet();
 	if (!prefixes.length) return set;
-	for (const rel of sources ?? []) {
-		for (const file of cssFilesUnder(join(root, rel))) {
+	for (const src of sources ?? []) {
+		for (const file of cssFilesUnder(under(root, src))) {
 			try {
 				harvestTokenDefs(postcss.parse(readFileSync(file, 'utf8'), { from: file }), prefixes, set);
 				set.sources++;

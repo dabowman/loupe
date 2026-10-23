@@ -118,7 +118,9 @@ anything against it. Reading the real set — the design system ships its tokens
 as plain custom properties in a stylesheet; `@wordpress/theme` emits 190 of them
 — is what lets a finding name a token instead of a namespace. Token source paths
 deliberately reach into `node_modules`, which the project walk prunes: the
-design system's tokens are the whole point, and they live there.
+design system's tokens are the whole point, and they live there. A path is the
+project root's unless it is absolute, the same as a `styleSources` path, so a
+system kept outside the project can be named directly.
 
 Everything degrades to the old behaviour when no definitions are found: no
 annotation on hardcoded values, and `tokens/unknown-token` stays silent rather
