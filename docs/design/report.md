@@ -353,6 +353,17 @@ charts from the JSON on each surface:
 The pane is for the person. The model keeps the budgeted agent format: a pane
 the model read would be the context cost the agent format exists to avoid.
 
+The pane is on by default and rides the early-access mod API, the surface most
+likely to move under a Claude Code release, so what a failing module takes with
+it matters — and it is only itself. Claude Code loads the module apart from the
+command hooks in the same `hooks.json`: on 2.1.308 and 2.1.309 a module that
+throws at import, throws in `register` or imports an export `claude-code` no
+longer has is logged as `hooks module did not load` and dropped, and PostToolUse
+and Stop run as before, so the gate never depends on the pane. That is why
+`register.tsx` carries no guard of its own; a try/catch inside the module could
+not reach the missing export anyway, which fails at link time, before any of
+the module's code runs.
+
 ## Resolving a finding to elements
 
 `selector` is the one field on a finding that is not a source location. Every
