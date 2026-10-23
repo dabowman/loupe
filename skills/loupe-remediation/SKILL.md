@@ -496,11 +496,12 @@ silences existing findings and surfaces new ones immediately:
 loupe baseline
 ```
 
-If you are invoking the engine directly rather than through the `loupe` shim,
-pass `--profiles "${CLAUDE_PLUGIN_ROOT}/profiles"`: the hooks always pass it, and
-the registry-backed rules only fire when it is there. Baselining without it
-reports `baselined 0 finding(s)` and leaves the gate blocking on findings this
-backlog never recorded.
+The engine reads the shipped profiles from beside itself on every run — through
+the `loupe` shim or `node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs"` alike —
+and `--profiles <dir>` only adds a directory to them. The registry-backed rules
+fire only while they are loaded, so do not baseline with `--patterns` or
+`--profile none`: that records none of those rules' findings and leaves the
+gate blocking on findings this backlog never recorded.
 
 Then burn it down by rule (`--rule <id>` scopes both `check` and `fix`) — one
 rule across the whole codebase is a far more reviewable diff than one file

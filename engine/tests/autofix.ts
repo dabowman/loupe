@@ -81,7 +81,7 @@ async function fixture(files: Record<string, string>, components?: Map<string, C
 		const all = { 'loupe.config.json': CONFIG, [DS_TOKENS]: TOKENS, ...files };
 		writeAll(root, all);
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		// The registry rides on the profile, which only a `--profiles` run merges.
+		// The registry rides on the profile, which the CLI merges and `loadConfig` does not.
 		if (components) setComponentRegistry(config, components);
 		const result = await analyze(config, { scope: null });
 		const outcome = applyTokenFixes(root, result.findings);
