@@ -798,8 +798,8 @@ export interface MergedConfig {
 	sources: SourceGlobs;
 	suppression: SuppressionConfig;
 	rules: Record<string, AuthoredRuleSetting>;
-	patterns: string | unknown[] | null;
-	componentRegistry: string | unknown[] | null;
+	patterns: string | unknown[] | Record<string, unknown> | null;
+	componentRegistry: string | unknown[] | Record<string, unknown> | null;
 	baseline: string;
 	hook: HookConfig;
 	/** How many entries analysis walks before it refuses. Absent for the default. */
@@ -826,8 +826,8 @@ export interface AuthoredConfig {
 	sources?: Partial<SourceGlobs>;
 	suppression?: Partial<SuppressionConfig>;
 	rules?: Record<string, AuthoredRuleSetting>;
-	patterns?: string | unknown[] | null;
-	componentRegistry?: string | unknown[] | null;
+	patterns?: string | unknown[] | Record<string, unknown> | null;
+	componentRegistry?: string | unknown[] | Record<string, unknown> | null;
 	baseline?: string;
 	hook?: Partial<HookConfig>;
 	maxEntries?: number;
