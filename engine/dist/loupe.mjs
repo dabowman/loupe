@@ -26571,8 +26571,19 @@ function ruleSetting(rawId, value) {
   return { severity, reason: reason.trim() };
 }
 function readRegistry(key, spec, root2, packages, load, empty) {
-  if (Array.isArray(spec)) return load(spec);
-  if (typeof spec !== "string" || !spec) return empty;
+  if (Array.isArray(spec) || isRecord(spec)) {
+    try {
+      return load(spec);
+    } catch (err) {
+      throw new Error(`${key}: ${messageOf(err)}`);
+    }
+  }
+  if (spec === null || spec === void 0) return empty;
+  if (typeof spec !== "string")
+    throw new Error(
+      `${key} must be a path to a registry file, an array of entries, an object, or null, got: ${JSON.stringify(spec)}`
+    );
+  if (!spec) return empty;
   const path = under(root2, spec);
   try {
     const raw = JSON.parse(readFileSync2(path, "utf8"));
