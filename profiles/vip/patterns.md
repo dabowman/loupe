@@ -4,9 +4,10 @@ The design-system half of `loupe-patterns`. Load that skill first — it carries
 the look/check/search/register order, the registry format and the four-node
 floor. This file is the VIP registry's own content.
 
-The registry is `patterns/index.json`, beside this file. It was seeded from the
-composites vip-dashboard actually repeats, so it is short on purpose: an entry
-here is a shape that already recurs, not a guess at one that might.
+The registry is `patterns/index.json`, beside this file. It was seeded from
+composites that already recur in a real VIP Design System codebase, so it is
+short on purpose: an entry here is a shape that already recurs, not a guess at
+one that might.
 
 ## Anatomy entries
 
@@ -53,11 +54,11 @@ content as a prop, so the two buttons never appear as its JSX children.
 ## Not shipped — extract when you build it
 
 `labelled-toggle` is a `Label` and a `Toggle` on one row, with help text under
-them, wired by `htmlFor` / `id` / `aria-describedby`. vip-dashboard builds it by
-hand in seventeen files. It has no `canonical` because the package does not ship
-it — `ToggleRow` looks close but is a list row with a `Heading` title, an image
-and a badge, and no `<label>` association, so it is not a drop-in.
+them, wired by `htmlFor` / `id` / `aria-describedby`. Projects build it by hand,
+once per form. It has no `canonical` because the package does not ship it —
+`ToggleRow` looks close but is a list row with a `Heading` title, an image and a
+badge, and no `<label>` association, so it is not a drop-in.
 
-The next project to touch one of those files extracts the row once, and fills in
-`import` and `canonical` in the entry, so the next agent reading the registry is
-pointed at the shared implementation instead of writing an eighteenth.
+The next project to touch a file that builds it extracts the row once, and fills
+in `import` and `canonical` in the entry, so the next agent reading the registry
+is pointed at the shared implementation instead of writing another copy.
