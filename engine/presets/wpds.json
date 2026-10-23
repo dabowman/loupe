@@ -29,8 +29,7 @@
         "FlexItem",
         "Grid",
         "Spacer",
-        "Divider",
-        "__unstableMotion"
+        "Divider"
       ],
       "text": [
         "Text",

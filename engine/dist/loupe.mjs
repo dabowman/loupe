@@ -25083,8 +25083,7 @@ var wpds_default = {
         "FlexItem",
         "Grid",
         "Spacer",
-        "Divider",
-        "__unstableMotion"
+        "Divider"
       ],
       text: [
         "Text",
