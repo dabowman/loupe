@@ -36,7 +36,7 @@ Use `get_component_details`
 once you've picked the component. It has **no maturity signal at all** — it
 shows an `experimental` component with the same confidence as a `recommended`
 one, and it's measurably behind trunk for several newer `@wordpress/ui`
-additions (`Dialog`, `AlertDialog`, `Drawer`, `IconButton`, `LinkButton`
+additions (`Dialog`, `AlertDialog`, `Drawer`, `IconButton`, `ButtonLink`
 return nothing from it). Before asserting a prop or a token's name, or that
 something "doesn't exist," check `get_components`/`get_component_details`/
 `get_design_tokens` rather than recalling it — this doc's own examples have
@@ -52,7 +52,7 @@ not a lookup. Check `components/index.json` for current status before
 treating any of these as settled — WPDS ships twice yearly and this
 section's calls can go stale.
 
-**Button, IconButton, Link, LinkButton** — choose by what happens on
+**Button, IconButton, Link, ButtonLink** — choose by what happens on
 activation, not appearance:
 
 | Goal | Component |
@@ -60,7 +60,7 @@ activation, not appearance:
 | Action on the current page (submit, open an overlay, run JS) | `Button` |
 | Same, icon-only | `IconButton` |
 | Navigate to another page/URL | `Link` |
-| Navigate, styled as a button (standalone CTA, card action) | `LinkButton` |
+| Navigate, styled as a button (standalone CTA, card action) | `ButtonLink` |
 
 `Button` and `IconButton` (`@wordpress/ui`) are `experimental` — not yet safe
 alongside `@wordpress/components`, which is most real codebases today. Use
