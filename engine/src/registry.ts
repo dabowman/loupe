@@ -2,10 +2,10 @@
  * Which registries apply to which projects.
  *
  * Pattern signatures are component *names*, and names are the one thing design
- * systems do not keep to themselves — the WPDS `page-header` signature matches a
- * Chakra page header exactly. So a registry declaring `packages` applies only to
- * a project importing at least one of them; one declaring none applies anywhere,
- * which is what a project's own registry wants.
+ * systems do not keep to themselves — the WPDS `screen.page#header` signature
+ * matches a Chakra page header exactly. So a registry declaring `packages`
+ * applies only to a project importing at least one of them; one declaring none
+ * applies anywhere, which is what a project's own registry wants.
  *
  * Design notes: docs/design/cli.md#profiles
  */
