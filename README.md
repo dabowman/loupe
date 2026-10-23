@@ -1107,6 +1107,16 @@ case you want to hear about without watching. Mods are on by default from
 Claude Code 2.1.287, and this one needs 2.1.299 for the text weights it draws;
 on an older build the pane is absent and the hooks run as before.
 
+The same holds when the module itself fails, the likelier break on an
+early-access API: checked on 2.1.308 and 2.1.309 with a module that throws at
+import, throws inside `register`, or imports a name `claude-code` does not
+export, Claude Code dropped the module alone, and the PostToolUse and Stop
+hooks beside it in `hooks.json` ran on every edit and at the end of every turn.
+Nothing announces it in an installed session — the pane never opens and
+`/loupe-pane` answers `Unknown command` — and the reason, `loupe: hooks module
+did not load: …`, is in the `claude --debug` log (a `claude -p` printing text
+also says it once on stderr).
+
 What it draws depends on where Claude Code is drawing. The desktop app and the
 VS Code panel get the engine's SVG charts, with a tooltip per bar. The terminal
 gets the same rows as block-glyph bars sized to the pane. Where the pane sits is
