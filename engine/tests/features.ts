@@ -888,10 +888,10 @@ await check('a part inherits its parent canonical, cut to the name the code bind
 
 await check('an entry checked by import alone loads with no tree and never matches a composite', async () => {
 	const notice = registry.find((p) => p.id === 'report.notice');
-	assert(notice && notice.node === null && notice.canonical === 'NoticeList', 'report.notice is import-only');
+	assert(notice && notice.node === null && notice.canonical === 'Notice', 'report.notice is import-only');
 	const src = [
-		"import { __experimentalVStack as VStack, Notice } from '@wordpress/components';",
-		'export const A = () => (<VStack><Notice>a</Notice><Notice>b</Notice><Notice>c</Notice></VStack>);',
+		"import { Stack, Notice } from '@wordpress/ui';",
+		'export const A = () => (<Stack><Notice.Root>a</Notice.Root><Notice.Root>b</Notice.Root><Notice.Root>c</Notice.Root></Stack>);',
 	].join('\n');
 	const r = await run(
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/B.jsx': src.replace('A', 'B') },
@@ -1083,6 +1083,41 @@ await check('the select moved to @wordpress/ui, and BaseControl to Field', async
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	const f = one(at(r, 'system/superseded-component'), 'only the @wordpress/components import is stale');
 	assert(f.message.includes('SelectControl (@wordpress/ui)'), `names the replacement: ${f.message}`);
+});
+
+// The 2026-08-25 reading had the Notice pair the wrong way round. @wordpress/ui
+// 0.25.0 marks its Notice `recommended`, and @wordpress/components 43.0.0 marks
+// its own `not-recommended`, NoticeList with it. A legacy entry whose only
+// replacement was experimental was skipped; now the replacement is current, so
+// both old imports report.
+await check('Notice moved to @wordpress/ui, and the old Notice and NoticeList report it', async () => {
+	const entry = (key: string) => componentRegistry.get(key);
+	assert(entry('@wordpress/ui::Notice')?.status === 'recommended', 'ui Notice is the current notice');
+	for (const name of ['Notice', 'NoticeList']) {
+		const old = entry(`@wordpress/components::${name}`);
+		assert(old?.status === 'legacy' && old.supersededBy === 'Notice (@wordpress/ui)', `${JSON.stringify(old)}`);
+	}
+
+	const stale = [
+		"import { Notice, NoticeList } from '@wordpress/components';",
+		'export const A = () => (<><Notice>a</Notice><NoticeList notices={ [] } /></>);',
+	].join('\n');
+	const current = [
+		"import { Notice } from '@wordpress/ui';",
+		'export const B = () => <Notice.Root><Notice.Description>b</Notice.Description></Notice.Root>;',
+	].join('\n');
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': stale, 'src/B.jsx': current },
+		{ components: componentRegistry },
+	);
+	const got = at(r, 'system/superseded-component')
+		.map((f) => `${f.file} ${f.message}`)
+		.sort();
+	const want = [
+		'src/A.jsx Notice (@wordpress/components) → Notice (@wordpress/ui)',
+		'src/A.jsx NoticeList (@wordpress/components) → Notice (@wordpress/ui)',
+	];
+	assert(JSON.stringify(got) === JSON.stringify(want), `only the two @wordpress/components imports: ${got.join('; ')}`);
 });
 
 await check('a locked component is reported, its recommended sibling is not', async () => {

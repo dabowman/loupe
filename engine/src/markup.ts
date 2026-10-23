@@ -300,7 +300,7 @@ function systemImports(
 	const canonicals = new Map<string, string>();
 	// One entry per imported local: which package it actually came from, since
 	// the same canonical name can mean a stable component in one package and an
-	// experimental one in the other (Button, Notice, Popover, ...).
+	// experimental one in the other (Button, Popover, ...).
 	const componentImports: ComponentImport[] = [];
 	// local name -> the package it came from, so a composite signature can say
 	// *whose* `Stack` this is. Names are the one thing design systems share.
