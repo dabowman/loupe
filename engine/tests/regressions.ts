@@ -741,7 +741,15 @@ await check('status says whether the token sources resolved', async () => {
 			[sheet]: ':root { --wpds-a: 1px; --wpds-b: 2px; --wpds-a: 3px; }',
 			...css,
 		}),
-		missing: tmpRepo({ 'loupe.config.json': wpds, ...css }),
+		// Two configured paths, neither there: the line names every one of them.
+		missing: tmpRepo({
+			'loupe.config.json': JSON.stringify({
+				extends: 'wpds',
+				namespaces: { project: ['acme-'] },
+				designSystem: { tokenSources: [sheet, 'vendor/theme/tokens.css'] },
+			}),
+			...css,
+		}),
 		empty: tmpRepo({
 			'loupe.config.json': JSON.stringify({
 				extends: 'wpds',
@@ -770,12 +778,9 @@ await check('status says whether the token sources resolved', async () => {
 		assert((await known(roots.read)) === 2, 'status and the analysis read different token sets');
 
 		// Every configured path, as configured: the reader checks each against the install.
-		const config = await loadConfig({ root: roots.missing, configPath: join(roots.missing, 'loupe.config.json') });
-		const paths = config.designSystem.tokenSources;
-		assert(paths[0] === sheet && paths.length > 1, `the wpds preset's sources moved: ${paths.join(', ')}`);
 		const missing = tokensLine(roots.missing);
 		assert(
-			missing === `tokens:     --wpds-* (0 definitions read; ${paths.join(', ')} not found)`,
+			missing === `tokens:     --wpds-* (0 definitions read; ${sheet}, vendor/theme/tokens.css not found)`,
 			`unexpected tokens line:\n${missing}`,
 		);
 		assert((await known(roots.missing)) === 0, 'the analysis read tokens status says are not there');
