@@ -12,7 +12,9 @@ token."*
 one command that does, and only for substitutions with a single right answer.
 
 The package is not published to npm; run it from a checkout (or from the
-installed plugin) rather than through `npx`.
+installed plugin) rather than through `npx`. Once it is
+([#82](https://github.com/dabowman/loupe/issues/82)), a project installs it with
+`npm i -D @dabowman/loupe`, on Node 20 or newer.
 
 This README says what the engine does. Why it is built this way — the failures
 that shaped each decision, and the eval numbers behind the tuned ones — is in
@@ -1452,9 +1454,9 @@ The data the engine ships — the presets, and the pattern language `--judge`
 reads — is imported rather than read from disk, so it is inside whichever
 artifact the bundler produced. Disk still wins wherever a `presets/` directory
 exists, so an ordinary install behaves exactly as it did and a preset dropped in
-by hand still takes effect. A side effect worth knowing: `patterns/index.json`
-sits above the package and `files` never shipped it, so `--judge` from a
-published npm install used to fail; embedding it fixes that too.
+by hand still takes effect. `patterns/index.json` sits above `engine/`, and the
+root package ships it beside the profiles; `--judge` reads the compiled-in copy
+either way, so it does not depend on the file being there.
 
 Two things the compiled binary does not inherit from a directory install. It
 reports its own path from `execPath` rather than from `import.meta.url`, which
