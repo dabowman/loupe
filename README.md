@@ -29,17 +29,26 @@ that report drift on the file just touched, not forty tool calls later).
 ```
 /plugin marketplace add dabowman/loupe
 /plugin install loupe@loupe
+/loupe-init
 ```
 
-The hooks are off until a project opts in. In each project you want gated, add
-this to `.claude/settings.local.json` and start a new session:
+The first two once per machine; `/loupe-init` once in each project you want
+checked. It settles the design system with you, writes `loupe.config.json`, and
+— since the hooks are off in a project until it opts in — asks where to turn
+them on: `.claude/settings.json`, committed, so everyone on the project gets
+them (the default in a git repository); `.claude/settings.local.json`, for this
+machine only; or neither. It ends on `loupe status`, which prints a `hook: OFF`
+line, with the reason, whenever the hook will say nothing.
+
+By hand, the opt-in is this, in either file:
 
 ```json
 { "env": { "LOUPE": "on" } }
 ```
 
-The skills, the commands and `loupe` typed by hand work everywhere without it.
-`loupe status` prints a `hook: OFF` line in a project that hasn't opted in.
+The hook reads it on its next run; the [pane](#the-pane) opens itself from the
+next session. The skills, the commands and `loupe` typed by hand work everywhere
+without it.
 
 Nothing else to run. The engine ships pre-bundled with its dependencies, so a
 fresh install is a working install on any machine with Node 18 or newer — no
@@ -910,10 +919,14 @@ again.
 ### Turning it on, and off for a session
 
 The hook is off until a project opts in with `"env": { "LOUPE": "on" }` in
-`.claude/settings.local.json` (see [Install](#install)). A gate that runs in
-every repo the plugin is installed for puts findings into sessions that are
-about something else. Claude Code passes that setting to the hook as an
-environment variable, so `LOUPE=on claude` turns it on for one session as well.
+`.claude/settings.json`, for everyone on the project, or
+`.claude/settings.local.json`, for one machine; `/loupe-init` offers to write
+either (see [Install](#install)). A gate that runs in every repo the plugin is
+installed for puts findings into sessions that are about something else. Claude
+Code passes that setting to the hook as an environment variable, so
+`LOUPE=on claude` turns it on for one session as well. The first of the
+environment, `.claude/settings.local.json`, `.claude/settings.json` and
+`~/.claude/settings.json` to set `LOUPE` decides.
 
 To silence a project that has opted in, for one session:
 
@@ -921,11 +934,12 @@ To silence a project that has opted in, for one session:
 LOUPE_OFF=1 claude
 ```
 
-Or for one project, mid-session — the hook reads this file on every run:
+Or for one project on this machine, mid-session, whichever file opted it in —
+the hook reads this one on every run:
 
 ```jsonc
 // .claude/settings.local.json
-{ "env": { "LOUPE": "on", "LOUPE_OFF": "1" } }
+{ "env": { "LOUPE_OFF": "1" } }
 ```
 
 Or everywhere, with the plugin's *Silence the hook* option. All three set the
