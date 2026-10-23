@@ -188,6 +188,17 @@ A shape that would land in an occupied cell with no new force is a variant or a
 realization, not a pattern. That is the vocabulary doing the work a "be
 concise" rule cannot: there is nowhere to put a fourth copy of one idea.
 
+Those levels assume a registry that names the abstract file in `extends`. A v1
+registry has no `extends`: it is a flat `patterns` list of `{ id, summary,
+signature, … }` entries, as Archer's and VIP's are, and
+`profiles/vip/patterns/index.json` is the small example. The engine still reads
+it — `signature`, `rendered_signature`, `canonical` and `instead_of_signature`
+mean what they mean above, and `summary` falls back to `note` — while `use`,
+`import` and `instead_of` are prose for whoever reads the file next. Adding to
+one is appending an entry under a new `id`. Its `patterns.md` is written by
+hand, since there is no abstract layer to generate a table from, so update that
+too.
+
 Then keep the entry honest:
 
 - **`note` says what it is for**, not what it contains. "Destructive-action
@@ -207,7 +218,8 @@ Then keep the entry honest:
   stops reporting files that already use it, and starts naming it as the remedy.
 - **Regenerate the table.** `npm run patterns-doc` in `engine/` validates the
   entry against the abstract language and rewrites the profile's reach-for
-  table. A key that names nothing fails the run.
+  table. A key that names nothing fails the run. It skips a v1 registry, so
+  `--check` never covers a hand-written `patterns.md`.
 
 ## When a pattern does not fit
 
