@@ -22,8 +22,8 @@ Given a token in set A, which token in set B is the same decision?
 
 Answer that for every token and two design systems become comparable. A design
 expressed in one can be read in the other, a migration has a lookup table
-instead of a spreadsheet, and the decisions B has not made are exactly the rows
-that come back with no counterpart.
+instead of a hand-kept one, and the decisions B has not made are exactly the
+rows that come back with no counterpart.
 
 Nothing else in loupe works across two systems. The checks all ask "does this
 code conform to *its* design system"; profiles exist so that several systems can

@@ -71,7 +71,7 @@ export function templateText(quasi: TemplateLiteral): string {
 		out += quasi.quasis[i]?.value.raw ?? '';
 		if (i < quasi.expressions.length) {
 			const prev = out.replace(/\s+$/, '').slice(-1);
-			out += prev === '' || prev === ';' || prev === '{' || prev === '}' ? '/*dsh*/' : 'dsh-e';
+			out += prev === '' || prev === ';' || prev === '{' || prev === '}' ? '/*loupe*/' : 'loupe-e';
 		}
 	}
 	return out;
@@ -87,7 +87,7 @@ export function templateText(quasi: TemplateLiteral): string {
 export function parseTemplate(cssText: string, startLine: number): { groups: TemplateGroup[]; error: string | null } {
 	let root: Root;
 	try {
-		root = postcss.parse(`.dsh-root{${cssText}\n}`, { from: undefined });
+		root = postcss.parse(`.loupe-root{${cssText}\n}`, { from: undefined });
 	} catch (err) {
 		return { groups: [], error: messageLineOf(err) };
 	}
@@ -103,7 +103,7 @@ export function parseTemplate(cssText: string, startLine: number): { groups: Tem
 				if (node.type === 'decl') {
 					// A value from an interpolation is unknowable, and naming a property
 					// whose value we cannot see is noise.
-					if (node.value.includes('dsh-e')) continue;
+					if (node.value.includes('loupe-e')) continue;
 					decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
 				} else if (node.type === 'atrule')
 					walk(node); // @media keeps the enclosing selector
