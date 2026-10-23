@@ -1001,11 +1001,18 @@ line; the hook does not.
   "env": { "LOUPE": "on" },
   "hooks": {
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "node /abs/path/to/engine/bin/loupe.mjs hook" }] }
+      { "hooks": [{ "type": "command", "command": "node /abs/path/to/engine/bin/loupe.mjs hook --profiles /abs/path/to/profiles" }] }
     ]
   }
 }
 ```
+
+Pass `--profiles` as the plugin's own hook does, pointed at the `profiles/`
+directory beside `engine/`: without the shipped profiles the component and
+composite rules and the token scopes are off, the report is thinner than the
+plugin's, and nothing says so. `--judge`, which the plugin also passes, is
+optional and judges only with a `TYPESAFE_API_KEY` (see [Judging](#judging));
+in the hook a missing key leaves the run unjudged rather than failing it.
 
 Hook mode reads the payload on stdin, scopes to changed files, and emits the
 hook protocol directly — no `jq`, no wrapper script.
