@@ -93,7 +93,7 @@ Most bad choices are the wrong pattern, not the wrong variant. Each row is a for
 | Grouped, live-rendered items as the reference — not screenshots, not names — with real group semantics; previews are inert. | `browse-collection.gallery` → `Composite` (`@wordpress/components`) | A grid of static images standing in for live output; A list of names with the rendering left to the reader's imagination; Sections built from headings with no grouping semantics |
 | Items sectioned by an attribute that decides what may be done to them, each section with its own add and overflow, each row descending to its own editor. | `browse-collection.grouped-list` — not shipped; extract the project's own | An editable table of presets with inline delete buttons; A repeater of TextControl + NumberControl rows; One flat list that hides which origin a preset came from |
 | Why the region is empty and the action that fills it, centred in the space the content would occupy. | `report.empty` → `EmptyState` (`@wordpress/ui`) | A centred div (or hand-built Stack + Text + Button) with a paragraph and a button |
-| Persistent and region-level, stacked by one container that owns order, spacing and dismissal. | `report.notice` → `NoticeList` (`@wordpress/components`) | Individually placed Notice components with local margins — NoticeList already takes notices + onRemove |
+| Persistent and region-level, stacked by one container that owns order, spacing and dismissal. | `report.notice` → `Notice` (`@wordpress/ui`) | Individually placed notices with local margins — map them onto Notice.Root inside one Stack, whose gap spaces them; NoticeList or Notice from @wordpress/components |
 | Transient, raised from anywhere, queued and dismissed by a manager the app mounts once; carries undo when the action was reversible. | `report.toast` → `SnackbarList` (`@wordpress/components`) (unverified) | A hand-managed array of messages in component state, rendered into a fixed-position Stack; A confirm dialog on a reversible action |
 | A placeholder shaped like the content, or a spinner when the shape is unknown. | `report.loading` → `Spinner` (`@wordpress/ui`) |  |
 | A bounded surface with an optional header, title and actions. | `group.card` → `Card` (`@wordpress/ui`) | A styled div with a border/shadow rebuilt per surface |
@@ -129,13 +129,14 @@ No wpds realization yet: `choose.autocomplete`, `choose.checklist`, `enter-value
 Before assembling anything from primitives, check whether the shape you're
 about to hand-roll (an empty state, a form field, a card) already ships as a
 single real compound component (`EmptyState.*`, `Field.*`, `Card.*`) — and
-check its `status`, not just that it exists. `report.empty` and `field` turned
-out to be this case (both `recommended`); `confirm` and `report.notice` do too,
-in the other direction — `@wordpress/ui` ships newer `AlertDialog`/`Notice`
-compounds that *look* like the obvious replacement, but the registry marks both
-`experimental`, so the pattern correctly stays on `ConfirmDialog`/`NoticeList`
-(`@wordpress/components`) until that clears. Existence alone is not the
-signal — current status is.
+check its `status`, not just that it exists. `report.empty`, `field` and
+`report.notice` turned out to be this case (all `recommended`; `report.notice`
+moved from `NoticeList` to `@wordpress/ui`'s `Notice` once the packages said
+so). `confirm` is the other direction — `@wordpress/ui` ships a newer
+`AlertDialog` compound that *looks* like the obvious replacement, but the
+registry marks it `experimental`, so the pattern correctly stays on
+`ConfirmDialog` (`@wordpress/components`) until that clears. Existence alone
+is not the signal — current status is.
 
 A compound component's sub-parts (`Card.Root`, `Card.Header`,
 `EmptyState.Title`, `Field.Control`, …) are distinct signature nodes even

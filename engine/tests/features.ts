@@ -47,7 +47,7 @@ async function run(
 		suppress,
 	}: { patterns?: Pattern[]; components?: Map<string, ComponentEntry>; judge?: boolean; suppress?: boolean } = {},
 ): Promise<AnalyzeResult> {
-	const root = scratch('dsh-feat-');
+	const root = scratch('loupe-feat-');
 	try {
 		writeAll(root, files);
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
@@ -114,7 +114,7 @@ await check("a property's own token family wins, and a mode's value is not the t
 // checkout — is named by an absolute path. Joined onto the root instead, it read
 // nothing, and every token check went quiet with no error to say why.
 await check('an absolute token source reads the same tokens as a relative one', async () => {
-	const outer = scratch('dsh-feat-');
+	const outer = scratch('loupe-feat-');
 	try {
 		writeAll(outer, { 'ds/tokens.css': TOKENS, 'app/src/A.jsx': 'export const A = () => <div />;' });
 		const root = join(outer, 'app');
@@ -279,6 +279,24 @@ await check('an interpolated value produces no finding', async () => {
 	assert(
 		!r.findings.some((f) => f.line === 6),
 		`guessed at an opaque value: ${r.findings.filter((f) => f.line === 6).map((f) => f.message)}`,
+	);
+});
+
+// A value containing the interpolation placeholder is dropped as unknowable, so
+// a placeholder an author could also write would silently drop theirs: `loupe`
+// is a magnifier's name as well as this tool's.
+await check('a value that only resembles the interpolation placeholder is still read', async () => {
+	const src = [
+		"import styled from 'styled-components';",
+		'const Zoom = styled.div`',
+		'\tbackground: #f00 url(loupe-edge.png);',
+		'`;',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/Zoom.tsx': src });
+	const hardcoded = at(r, 'tokens/hardcoded-value');
+	assert(
+		hardcoded.some((f) => f.line === 3),
+		`a lookalike value went unread: ${r.findings.map((f) => `${f.line} ${f.rule}`)}`,
 	);
 });
 
@@ -893,10 +911,10 @@ await check('a part inherits its parent canonical, cut to the name the code bind
 
 await check('an entry checked by import alone loads with no tree and never matches a composite', async () => {
 	const notice = registry.find((p) => p.id === 'report.notice');
-	assert(notice && notice.node === null && notice.canonical === 'NoticeList', 'report.notice is import-only');
+	assert(notice && notice.node === null && notice.canonical === 'Notice', 'report.notice is import-only');
 	const src = [
-		"import { __experimentalVStack as VStack, Notice } from '@wordpress/components';",
-		'export const A = () => (<VStack><Notice>a</Notice><Notice>b</Notice><Notice>c</Notice></VStack>);',
+		"import { Stack, Notice } from '@wordpress/ui';",
+		'export const A = () => (<Stack><Notice.Root>a</Notice.Root><Notice.Root>b</Notice.Root><Notice.Root>c</Notice.Root></Stack>);',
 	].join('\n');
 	const r = await run(
 		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/B.jsx': src.replace('A', 'B') },
@@ -1100,6 +1118,41 @@ await check('the select moved to @wordpress/ui, and BaseControl to Field', async
 	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src }, { components: componentRegistry });
 	const f = one(at(r, 'system/superseded-component'), 'only the @wordpress/components import is stale');
 	assert(f.message.includes('SelectControl (@wordpress/ui)'), `names the replacement: ${f.message}`);
+});
+
+// The 2026-08-25 reading had the Notice pair the wrong way round. @wordpress/ui
+// 0.25.0 marks its Notice `recommended`, and @wordpress/components 43.0.0 marks
+// its own `not-recommended`, NoticeList with it. A legacy entry whose only
+// replacement was experimental was skipped; now the replacement is current, so
+// both old imports report.
+await check('Notice moved to @wordpress/ui, and the old Notice and NoticeList report it', async () => {
+	const entry = (key: string) => componentRegistry.get(key);
+	assert(entry('@wordpress/ui::Notice')?.status === 'recommended', 'ui Notice is the current notice');
+	for (const name of ['Notice', 'NoticeList']) {
+		const old = entry(`@wordpress/components::${name}`);
+		assert(old?.status === 'legacy' && old.supersededBy === 'Notice (@wordpress/ui)', `${JSON.stringify(old)}`);
+	}
+
+	const stale = [
+		"import { Notice, NoticeList } from '@wordpress/components';",
+		'export const A = () => (<><Notice>a</Notice><NoticeList notices={ [] } /></>);',
+	].join('\n');
+	const current = [
+		"import { Notice } from '@wordpress/ui';",
+		'export const B = () => <Notice.Root><Notice.Description>b</Notice.Description></Notice.Root>;',
+	].join('\n');
+	const r = await run(
+		{ 'loupe.config.json': CONFIG(), 'src/A.jsx': stale, 'src/B.jsx': current },
+		{ components: componentRegistry },
+	);
+	const got = at(r, 'system/superseded-component')
+		.map((f) => `${f.file} ${f.message}`)
+		.sort();
+	const want = [
+		'src/A.jsx Notice (@wordpress/components) → Notice (@wordpress/ui)',
+		'src/A.jsx NoticeList (@wordpress/components) → Notice (@wordpress/ui)',
+	];
+	assert(JSON.stringify(got) === JSON.stringify(want), `only the two @wordpress/components imports: ${got.join('; ')}`);
 });
 
 await check('a locked component is reported, its recommended sibling is not', async () => {
@@ -1316,7 +1369,7 @@ await check('a heading is sent to Text rendered as that heading', async () => {
 // `render` is printed into the suggestion as JSX; anything but a tag name would
 // hand the agent a remedy that does not parse.
 await check('an element-map render that is not an element name is refused', async () => {
-	const root = scratch('dsh-render-');
+	const root = scratch('loupe-render-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': JSON.stringify({
@@ -1402,7 +1455,7 @@ for (const profile of readProfiles(join(HERE, '..', '..', 'profiles'))) {
 	if (!profile.preset || !profile.components) continue;
 	const { preset, components } = profile;
 	await check(`every ${preset} element-map analog is one the ${profile.id} registry recommends`, async () => {
-		const root = scratch('dsh-map-');
+		const root = scratch('loupe-map-');
 		try {
 			writeAll(root, { 'loupe.config.json': JSON.stringify({ extends: preset }) });
 			const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
@@ -1501,7 +1554,7 @@ await check('a state, context or module class is not a part the system styles', 
 // string compare of the two spellings checked its own sheets as project code —
 // where every rule then reported an override of itself.
 await check("the system's sheets are recognised through a link, and their tokens still count", async () => {
-	const root = scratch('dsh-feat-');
+	const root = scratch('loupe-feat-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG({
@@ -1619,7 +1672,7 @@ await check('a block wrapper is never dead, even where a config claims its prefi
 await check(
 	'--judge asks only about analogs with variants, and writes only what clears the floor into the suggestion',
 	async () => {
-		const root = scratch('dsh-judge-');
+		const root = scratch('loupe-judge-');
 		try {
 			writeAll(root, {
 				'src/A.jsx':
@@ -1696,7 +1749,7 @@ await check(
 // A heading's suggestion already carries `render`; the variant goes into the
 // same tag rather than trailing it as prose.
 await check('--judge writes the variant into a suggestion that carries render', async () => {
-	const root = scratch('dsh-judge-render-');
+	const root = scratch('loupe-judge-render-');
 	try {
 		writeAll(root, { 'src/A.jsx': '<h4>Site details</h4>' });
 		const registry = loadComponents([
@@ -1730,7 +1783,7 @@ await check('--judge writes the variant into a suggestion that carries render', 
 // after the arrow, `.Text-label` on a button cost a Text-variant question, and
 // its answer rewrote the Button remedy to "no analog, not Text content".
 await check('--judge asks a variant only of the analog itself, not of the tail after it', async () => {
-	const root = scratch('dsh-judge-target-');
+	const root = scratch('loupe-judge-target-');
 	try {
 		writeAll(root, { 'src/A.jsx': '<button className="Text-label">Go</button>' });
 		const registry = loadComponents([
@@ -1764,7 +1817,7 @@ await check('--judge asks a variant only of the analog itself, not of the tail a
 // remedy, "no analog, not Text content (bundling required: …)" names a cost
 // of nothing.
 await check('a withdrawn remedy drops the reach note that priced it', async () => {
-	const root = scratch('dsh-judge-reach-');
+	const root = scratch('loupe-judge-reach-');
 	try {
 		writeAll(root, { 'src/A.jsx': '<span>Hi</span>\n<p>Hi</p>' });
 		const registry = loadComponents([
@@ -1800,7 +1853,7 @@ await check('a withdrawn remedy drops the reach note that priced it', async () =
 // `analyze` bounded the line before the variant was spliced into it, so a long
 // suggestion came back past the cap with the judgement at the end of it.
 await check('a judged variant is still one bounded line, with the judgement kept last', async () => {
-	const root = scratch('dsh-judge-variant-bound-');
+	const root = scratch('loupe-judge-variant-bound-');
 	try {
 		writeAll(root, { 'src/A.jsx': '<p className="description">Help</p>' });
 		const registry = loadComponents([
@@ -2146,7 +2199,7 @@ await check(
 // Through the CLI, with `fetch` replaced before it loads, because the push it
 // has to dedupe is the command's own.
 await check('two controls on one line judged alike are one redirect', () => {
-	const root = scratch('dsh-judge-dedupe-');
+	const root = scratch('loupe-judge-dedupe-');
 	try {
 		writeAll(root, {
 			'loupe.config.json': CONFIG(),
@@ -2266,7 +2319,7 @@ await check('a directive that mutes nothing is reported stale', async () => {
 // lists are consulted, so a listed name the pattern would rewrite can never
 // match: `__unstableMotion` sat in the wpds layout list as `Motion` (#108).
 await check('every shipped preset lists its layout and text components by canonical name', async () => {
-	const root = scratch('dsh-feat-');
+	const root = scratch('loupe-feat-');
 	try {
 		for (const name of listPresets()) {
 			const { designSystem: ds } = await loadConfig({ root, preset: name });

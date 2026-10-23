@@ -353,6 +353,17 @@ charts from the JSON on each surface:
 The pane is for the person. The model keeps the budgeted agent format: a pane
 the model read would be the context cost the agent format exists to avoid.
 
+The pane is on by default and rides the early-access mod API, the surface most
+likely to move under a Claude Code release, so what a failing module takes with
+it matters — and it is only itself. Claude Code loads the module apart from the
+command hooks in the same `hooks.json`: on 2.1.308 and 2.1.309 a module that
+throws at import, throws in `register` or imports an export `claude-code` no
+longer has is logged as `hooks module did not load` and dropped, and PostToolUse
+and Stop run as before, so the gate never depends on the pane. That is why
+`register.tsx` carries no guard of its own; a try/catch inside the module could
+not reach the missing export anyway, which fails at link time, before any of
+the module's code runs.
+
 ## Resolving a finding to elements
 
 `selector` is the one field on a finding that is not a source location. Every
@@ -506,10 +517,12 @@ silence that nobody signed.
 ### Watching is reported, never implied
 
 One `fs.watch` per directory rather than one recursive watch on the root.
-Recursive is unsupported on Linux before Node 20 and this floor is Node 18, so
-the choice is between a platform branch and a set that is the same code
-everywhere. Per-directory is also self-healing: a new directory is a new entry in
-a directory already watched, which fires, which rebuilds the set.
+Recursive is unsupported on Linux before Node 20, and the floor was Node 18 when
+this was decided, so the choice was between a platform branch and a set that is
+the same code everywhere. The floor is now Node 20, which makes recursive
+available on Linux too; per-directory stays for now. It is also self-healing: a
+new directory is a new entry in a directory already watched, which fires, which
+rebuilds the set.
 
 The set is rebuilt after every run rather than once at boot, because a project
 grows directories while it is being worked on and a watcher pinned to the tree as
@@ -566,12 +579,13 @@ findings it hid, not the entries that hid them. A file reporting only entries
 under a name a reader hears as "findings" is how 194 came to be quoted against
 `check`'s 253. `count` keeps its meaning so 0.1.x files still parse; `findings`
 says the rest. Nothing reads `count` any more, and it is removed in 0.9.0: the
-0.1.x baseline locations, its other reason to stay, are already gone — they are
-not read, so a deleted baseline cannot be replaced by one an older version
-wrote.
+0.1.x baseline locations, its other reason to stay, are already gone. The plugin
+data one is not read, so a deleted baseline cannot be replaced by one an older
+version wrote; `.loupe/baseline.json` is the default location again, and read as
+any baseline is.
 
-A *configured* baseline may name a directory that doesn't exist yet; the default
-one sits in the project root, which the caller already proved exists. The
+The default baseline sits in `.loupe/`, which the first write makes, and a
+*configured* one may name a directory that doesn't exist yet. The
 directory is created via a helper rather than a bare `mkdirSync` so a bad path
 fails on the write that wanted it: mkdir on a path whose parent is a file
 reports `EEXIST … a.css`, which names the wrong problem, where the write reports

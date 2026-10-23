@@ -42,7 +42,7 @@ const result = await build({
 	bundle: true,
 	platform: 'node',
 	format: 'esm',
-	target: 'node18',
+	target: 'node20',
 	write: false,
 	banner: { js: `#!/usr/bin/env node\n${banner}` },
 	logOverride: {

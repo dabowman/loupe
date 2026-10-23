@@ -23803,17 +23803,16 @@ function ensureDir(dir) {
 var projectStateDir = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join(data || join(tmpdir(), `loupe-${process.getuid?.() ?? "user"}`), projectKey(root2));
 var attemptsPath = (root2, data = process.env.CLAUDE_PLUGIN_DATA) => join(projectStateDir(root2, data), "attempts.json");
 var cacheDisabled = (flag) => Boolean(flag) || isOn(process.env.LOUPE_NO_CACHE);
-var DEFAULT_BASELINE = ".loupe-baseline.json";
+var DEFAULT_BASELINE = ".loupe/baseline.json";
 var baselinePath = (root2, p) => under(root2, p);
 function legacyBaseline(root2) {
+  const renamed = join(root2, ".loupe-baseline.json");
+  if (existsSync(renamed)) return { path: renamed, renamed: true };
   const data = process.env.CLAUDE_PLUGIN_DATA;
-  const candidates = [
-    join(root2, ".loupe", "baseline.json"),
-    ...data ? [join(data, "projects", projectKey(root2), "baseline.json")] : []
-  ];
-  return candidates.find((path) => existsSync(path)) ?? null;
+  const old = data ? join(data, "projects", projectKey(root2), "baseline.json") : null;
+  return old && existsSync(old) ? { path: old, renamed: false } : null;
 }
-var legacyBaselineNotice = (path) => `${path} is a 0.1.x baseline, which this version no longer reads \u2014 re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
+var legacyBaselineNotice = (legacy, target) => legacy.renamed ? `${legacy.path} is a baseline under its old name, which this version no longer reads \u2014 move it to ${target} to keep the backlog it accepted.` : `${legacy.path} is a 0.1.x baseline, which this version no longer reads \u2014 re-run \`loupe baseline\` to record the backlog in the project, then delete the old file.`;
 function findExistingBaseline(root2, explicit, configured) {
   if (explicit !== null) {
     const path = baselinePath(root2, explicit);
@@ -24199,22 +24198,14 @@ var ruleSpecs = (detector) => {
 var stringParam = (spec, key, fallback) => typeof spec[key] === "string" && spec[key] ? spec[key] : fallback;
 var numParam = (spec, key, fallback) => typeof spec[key] === "number" ? spec[key] : fallback;
 var listParam = (spec, key) => Array.isArray(spec[key]) ? spec[key].filter((x) => typeof x === "string") : [];
-var KEY_BY_PATTERN = 'key each entry by "pattern", the pattern it realizes ("confirm", "choose.segmented")';
 function loadPatterns(raw) {
   const rec = raw;
-  if (!Array.isArray(raw) && rec?.realizations === void 0 && Array.isArray(rec?.patterns))
-    throw new Error(
-      `a flat "patterns" list keyed by "id" is the version-1 registry, removed in 0.8.0: list the entries under "realizations" and ${KEY_BY_PATTERN}`
-    );
-  const found = Array.isArray(raw) ? raw : rec?.realizations;
+  const found = Array.isArray(raw) ? raw : rec?.realizations ?? rec?.patterns;
   if (!Array.isArray(found))
-    throw new Error('not a pattern registry: expected an array of entries, or an object with a "realizations" array');
+    throw new Error(
+      'not a pattern registry: expected an array of entries, or an object with a "realizations" or "patterns" array'
+    );
   const list2 = found;
-  for (const p of list2) {
-    const v1 = p;
-    if (v1 && typeof v1 === "object" && p.pattern === void 0 && v1.id !== void 0)
-      throw new Error(`entry ${JSON.stringify(v1.id)} is keyed by "id", removed in 0.8.0: ${KEY_BY_PATTERN}`);
-  }
   const out = [];
   const load = (p, id, inheritedCanonical) => {
     const canonical = "canonical" in (p ?? {}) ? bindName(p.canonical) : inheritedCanonical;
@@ -24223,7 +24214,7 @@ function loadPatterns(raw) {
     const antiShapes = !Array.isArray(authored2) ? [] : typeof authored2[0] === "string" ? [authored2] : authored2;
     const avoid = antiShapes.map((shape) => toNode(shape)).filter((n) => n !== null && nodeCount(n) >= SUBSTANTIAL.minNodes);
     const rules2 = ruleSpecs(p?.detector);
-    const summary = p?.note ?? "";
+    const summary = p?.summary ?? p?.note ?? "";
     const own = id ?? (shapes[0] ? signatureOf(shapes[0]) : null);
     if (own) {
       const nodes = shapes.length ? shapes : [null];
@@ -24243,7 +24234,7 @@ function loadPatterns(raw) {
     if (own && parts && typeof parts === "object")
       for (const [name, part] of Object.entries(parts)) load(part, `${own}#${name}`, canonical);
   };
-  for (const p of list2) load(p, p?.pattern ?? null, null);
+  for (const p of list2) load(p, p?.pattern ?? p?.id ?? null, null);
   return out;
 }
 function systemTree(el, isSystemName, childrenOf, nameOf, packageOf = () => null, line) {
@@ -25311,13 +25302,6 @@ var patterns_default = {
         ],
         about: "For groups: whether the grouping needs a visible box or just rhythm."
       },
-      series: {
-        values: [
-          true,
-          false
-        ],
-        about: "For groups: whether the content is a run of like items \u2014 points, steps, entries \u2014 rather than one piece."
-      },
       structure: {
         values: [
           "fields",
@@ -25386,7 +25370,7 @@ var patterns_default = {
           when: {
             set: "open"
           },
-          variant: "autocomplete"
+          variant: "combobox"
         },
         {
           when: {
@@ -25444,12 +25428,8 @@ var patterns_default = {
           consequences: "Costs a click to see the options. Buys space. The default, not the reflex."
         },
         combobox: {
-          summary: "Typed filtering over a long set; the value is one of its options.",
-          consequences: "Justified only when the set is too long to scan. A typed value the set lacks is not a value here; where it should stand, that is autocomplete."
-        },
-        autocomplete: {
-          summary: "A text input that suggests known values as the user types; what was typed stands even when nothing matches.",
-          consequences: "Right only when the set is open. Where the value has to be one of the options, an unmatched entry gets through here and fails later; that is combobox."
+          summary: "Typed filtering over the set; may accept values the set lacks.",
+          consequences: "Justified only when the set is large or open."
         },
         rendered: {
           summary: "The option is its rendering \u2014 a swatch, a word set in its face, a live preview \u2014 laid out as a grid of tiles with the active one marked; the name is secondary, in a tooltip or caption.",
@@ -25977,46 +25957,6 @@ var patterns_default = {
       }
     },
     {
-      id: "navigate-sections",
-      intent: "navigate",
-      scale: "region",
-      problem: "The user moves between the top-level sections of an app or site from anywhere in it, and must be able to tell which section they are in.",
-      forces: [
-        "grouped"
-      ],
-      parts: [
-        {
-          role: "links",
-          note: "One link per section, each to its own route; the section the user is in is marked current to assistive technology, not by colour alone."
-        },
-        {
-          role: "group",
-          note: "A named set of sections behind one trigger, which opens a panel of their links."
-        }
-      ],
-      resolve: [
-        {
-          when: {
-            grouped: true
-          },
-          variant: "panels"
-        },
-        {
-          default: "list"
-        }
-      ],
-      variants: {
-        list: {
-          summary: "Every section as one link in one list \u2014 a row in a top bar or a column at the side \u2014 with the current one marked.",
-          consequences: "One list, laid out for the width it has: a second navigation built for small screens disagrees with the first the day a section is added."
-        },
-        panels: {
-          summary: "Sections in named groups; each group's trigger opens a panel of its links, and choosing one closes it.",
-          consequences: "Costs a click or a hover to see a group. Right when the sections are too many for one list, or a link needs a line of description before anyone can choose it."
-        }
-      }
-    },
-    {
       id: "browse-collection",
       intent: "view",
       scale: "region",
@@ -26096,64 +26036,6 @@ var patterns_default = {
       }
     },
     {
-      id: "disclose",
-      intent: "view",
-      scale: "composite",
-      problem: "Some content is wanted only some of the time, and shown at rest it crowds out what is wanted every time.",
-      forces: [
-        "context",
-        "grouped"
-      ],
-      parts: [
-        {
-          role: "trigger",
-          note: "The control that shows and hides the panel: it names what the panel holds and says whether it is open."
-        },
-        {
-          role: "panel",
-          note: "What the trigger reveals. Nothing in it is needed to make sense of the rest of the view."
-        }
-      ],
-      resolve: [
-        {
-          when: {
-            context: "own-screen"
-          },
-          redirect: "navigate-hierarchy",
-          because: "Content big enough for a screen of its own is a level to descend to, not a panel to unfold."
-        },
-        {
-          when: {
-            context: "overlay"
-          },
-          variant: "anchored"
-        },
-        {
-          when: {
-            grouped: true
-          },
-          variant: "accordion"
-        },
-        {
-          default: "collapsible"
-        }
-      ],
-      variants: {
-        collapsible: {
-          summary: "One panel shown and hidden in place by the control that names it; what follows moves to make room.",
-          consequences: "Costs a click to see what is inside, so nothing the task needs belongs there. A heading with a click handler over a hidden div looks the same and tells assistive technology nothing."
-        },
-        accordion: {
-          summary: "Several named sections, each heading the trigger for its own panel, opened in place.",
-          consequences: "An accordion of one section is a collapsible with an accordion's markup."
-        },
-        anchored: {
-          summary: "The panel opens over the view, anchored to its trigger and non-modal; moving on closes it.",
-          consequences: "Small, and about the control that opened it. Anything the user has to scroll inside, or must finish before going on, belongs in a dialog or a drawer."
-        }
-      }
-    },
-    {
       id: "report",
       intent: "report",
       scale: "composite",
@@ -26228,8 +26110,7 @@ var patterns_default = {
       scale: "composite",
       problem: "Related content and its actions should read as one thing.",
       forces: [
-        "boundary",
-        "series"
+        "boundary"
       ],
       parts: [
         {
@@ -26247,12 +26128,6 @@ var patterns_default = {
           variant: "card"
         },
         {
-          when: {
-            series: true
-          },
-          variant: "list"
-        },
-        {
           default: "section"
         }
       ],
@@ -26263,10 +26138,6 @@ var patterns_default = {
         },
         section: {
           summary: "A heading and its content, rhythm from the parent, no box."
-        },
-        list: {
-          summary: "Like items in a run, bulleted, or numbered when their order means something; the list spaces them, not each item.",
-          consequences: "Lines that start with a typed bullet or number look like a list and are not one to assistive technology: no count, and no way to skip past it."
         }
       }
     },
@@ -26327,23 +26198,14 @@ var patterns_default = {
 var package_default = {
   name: "@dabowman/loupe",
   version: "0.8.0",
+  private: true,
   description: "Design-system conformance checking: correlates markup bindings with the CSS that styles them.",
   type: "module",
   bin: {
     loupe: "./bin/loupe.mjs"
   },
-  exports: {
-    "./presets/*": "./presets/*.json"
-  },
-  files: [
-    "bin",
-    "src",
-    "dist",
-    "presets",
-    "README.md"
-  ],
   engines: {
-    node: ">=18"
+    node: ">=20"
   },
   scripts: {
     build: "node build.mjs",
@@ -26699,8 +26561,19 @@ function ruleSetting(rawId, value) {
   return { severity, reason: reason.trim() };
 }
 function readRegistry(key, spec, root2, packages, load, empty) {
-  if (Array.isArray(spec)) return load(spec);
-  if (typeof spec !== "string" || !spec) return empty;
+  if (Array.isArray(spec) || isRecord(spec)) {
+    try {
+      return load(spec);
+    } catch (err) {
+      throw new Error(`${key}: ${messageOf(err)}`);
+    }
+  }
+  if (spec === null || spec === void 0) return empty;
+  if (typeof spec !== "string")
+    throw new Error(
+      `${key} must be a path to a registry file, an array of entries, an object, or null, got: ${JSON.stringify(spec)}`
+    );
+  if (!spec) return empty;
   const path = under(root2, spec);
   try {
     const raw = JSON.parse(readFileSync2(path, "utf8"));
@@ -27153,7 +27026,7 @@ function applyRegistries(config, sources) {
         saw[kind] = used = true;
         if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
       } catch (err) {
-        errors.push(`could not read ${src.label} ${kind} at ${resolve4(path)} \u2014 ${messageOf(err)}`);
+        errors.push(`could not read ${src.label} ${kind} \u2014 ${messageOf(err)}`);
       }
     }
     if (used) applied.push(src.label);
@@ -27415,7 +27288,7 @@ function templateText(quasi) {
     out += quasi.quasis[i]?.value.raw ?? "";
     if (i < quasi.expressions.length) {
       const prev = out.replace(/\s+$/, "").slice(-1);
-      out += prev === "" || prev === ";" || prev === "{" || prev === "}" ? "/*dsh*/" : "dsh-e";
+      out += prev === "" || prev === ";" || prev === "{" || prev === "}" ? "/*__loupe_interp__*/" : "__loupe_interp__";
     }
   }
   return out;
@@ -27423,7 +27296,7 @@ function templateText(quasi) {
 function parseTemplate(cssText, startLine) {
   let root2;
   try {
-    root2 = postcss_default.parse(`.dsh-root{${cssText}
+    root2 = postcss_default.parse(`.loupe-root{${cssText}
 }`, { from: void 0 });
   } catch (err) {
     return { groups: [], error: messageLineOf(err) };
@@ -27436,7 +27309,7 @@ function parseTemplate(cssText, startLine) {
     const walk = (container) => {
       for (const node of container.nodes ?? []) {
         if (node.type === "decl") {
-          if (node.value.includes("dsh-e")) continue;
+          if (node.value.includes("__loupe_interp__")) continue;
           decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
         } else if (node.type === "atrule")
           walk(node);
@@ -29252,7 +29125,7 @@ var realPath = (path) => {
 var partClass = (sel) => ownLevel(keySelector(sel)).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
 var tagOf = (compound) => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
 function compoundElements(compound, carriersByClass) {
-  if (compound.includes("dsh-e") || compound.includes("\\")) return null;
+  if (compound.includes("__loupe_interp__") || compound.includes("\\")) return null;
   const own = ownLevel(compound);
   const tag = tagOf(own);
   if (tag) return [tag];
@@ -34523,7 +34396,7 @@ Options:
   --max-findings <n>    Cap findings shown; 0 = no cap (default: 0)
   --severity <s>        error | warn \u2014 minimum severity to report
   --baseline <path>     Read/write the baseline here instead of the configured
-                        path (default: .loupe-baseline.json in the project)
+                        path (default: .loupe/baseline.json in the project)
   --no-baseline         Ignore the baseline file for this run
   --no-suppressions     Report what suppression directives would mute; with
                         --no-baseline, the full audit
@@ -35092,7 +34965,7 @@ async function main() {
       ...blocks.length ? [`${dim("blocks:     ")}${describeBlocks(blocks)}`] : [],
       `${dim("suppress:   ")}${directive(config.suppression.keyword, "<ruleId>", "<reason>")}`,
       `${dim("baseline:   ")}${base.path}${base.found && base.baseline === null ? "  (unreadable \u2014 every finding in it is live again)" : base.fallback === "default-name" ? `  (the default name \u2014 ${config.baselinePath} is configured but not there yet)` : base.found ? "" : "  (none recorded yet)"}`,
-      ...legacy ? [yellow(`            ${legacyBaselineNotice(legacy)}`)] : [],
+      ...legacy ? [yellow(`            ${legacyBaselineNotice(legacy, base.path)}`)] : [],
       // Beside the baseline line, because the two used to share a directory and are
       // easy to assume still do: the retry counter is the one that stays out of the
       // repo. The marker is computed, not assumed — a root above the temp
@@ -35576,7 +35449,7 @@ loupe: ${(applied.length ? green : dim)(`${verb} ${applied.length} substitution(
     if (found && !baseline) note(unreadableBaseline(bPath));
     if (!found && !isHook) {
       const legacy = legacyBaseline(root2);
-      if (legacy) note(`loupe: ${legacyBaselineNotice(legacy)}
+      if (legacy) note(`loupe: ${legacyBaselineNotice(legacy, bPath)}
 `);
     }
     result = applyBaseline(result, baseline, { scoped: scope !== null, rules: rules2, enabled: config.enabled });

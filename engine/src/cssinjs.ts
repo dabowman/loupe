@@ -63,7 +63,9 @@ export function cssInJsLocals(ast: File, packages: readonly string[] | undefined
  * A placeholder has to parse where it sits: after `;`, `{`, `}` or at the start
  * an interpolation stands in for whole statements, so it becomes a comment;
  * anywhere else it is part of a value or selector, so it becomes an identifier.
- * Neither introduces a newline, which is what keeps the line map exact.
+ * Neither introduces a newline, which is what keeps the line map exact. A value
+ * or selector containing the identifier is read as unknown, so it is spelled as
+ * no author would write it, or the author's own would go unread with it.
  */
 export function templateText(quasi: TemplateLiteral): string {
 	let out = '';
@@ -71,7 +73,7 @@ export function templateText(quasi: TemplateLiteral): string {
 		out += quasi.quasis[i]?.value.raw ?? '';
 		if (i < quasi.expressions.length) {
 			const prev = out.replace(/\s+$/, '').slice(-1);
-			out += prev === '' || prev === ';' || prev === '{' || prev === '}' ? '/*dsh*/' : 'dsh-e';
+			out += prev === '' || prev === ';' || prev === '{' || prev === '}' ? '/*__loupe_interp__*/' : '__loupe_interp__';
 		}
 	}
 	return out;
@@ -82,12 +84,13 @@ export function templateText(quasi: TemplateLiteral): string {
  *
  * A styled template's top level is bare declarations, so the body is wrapped in
  * a synthetic rule — prepended without a newline, so every line number still
- * maps straight back to source.
+ * maps straight back to source. Its selector is never read (its groups carry
+ * none), so it cannot be taken for one of the project's classes.
  */
 export function parseTemplate(cssText: string, startLine: number): { groups: TemplateGroup[]; error: string | null } {
 	let root: Root;
 	try {
-		root = postcss.parse(`.dsh-root{${cssText}\n}`, { from: undefined });
+		root = postcss.parse(`.loupe-root{${cssText}\n}`, { from: undefined });
 	} catch (err) {
 		return { groups: [], error: messageLineOf(err) };
 	}
@@ -103,7 +106,7 @@ export function parseTemplate(cssText: string, startLine: number): { groups: Tem
 				if (node.type === 'decl') {
 					// A value from an interpolation is unknowable, and naming a property
 					// whose value we cannot see is noise.
-					if (node.value.includes('dsh-e')) continue;
+					if (node.value.includes('__loupe_interp__')) continue;
 					decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
 				} else if (node.type === 'atrule')
 					walk(node); // @media keeps the enclosing selector

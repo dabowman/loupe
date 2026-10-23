@@ -68,10 +68,11 @@ export const REV_HEADER = 'x-loupe-rev';
  * How many directories the watcher will hold open.
  *
  * One `fs.watch` per directory rather than one recursive watch on the root:
- * recursive is unsupported on Linux before Node 20, and this floor is Node 18.
- * Per-directory is the same code on every platform and it self-heals — a new
- * directory is a new entry in a directory already watched, which fires, which
- * rebuilds the set.
+ * recursive is unsupported on Linux before Node 20, and this was written when
+ * the floor was Node 18. The floor is now Node 20, so recursive is available on
+ * Linux too; per-directory stays for now. It is the same code on every
+ * platform and it self-heals — a new directory is a new entry in a directory
+ * already watched, which fires, which rebuilds the set.
  *
  * The cap is a real ceiling on file descriptors, not a guess at a reasonable
  * project: past it the watch is refused whole and said to be refused, because a

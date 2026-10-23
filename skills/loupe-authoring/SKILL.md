@@ -2,7 +2,7 @@
 name: loupe-authoring
 description: >-
   Load BEFORE writing or editing any UI built on a design system — a component library plus design tokens, whatever it is called: WordPress Design System (`@wordpress/components`, `@wordpress/ui`, `--wpds-*`), Archer (`@dabowman/archer`), the VIP Design System (`@automattic/vip-design-system`), or the system a project declares in its own `loupe.config.json`. Carries the authoring rules that keep generated code from drifting, and they are the same rules in every system: the component before the element, the prop before the stylesheet, `gap` on a layout primitive before a margin anywhere, a token chosen by role before a value that merely matches. Starts by asking `loupe status` which design system is actually in play, then reads that system's own authoring notes from its profile — so the specifics (which components exist, what the tokens are named, which escape-hatch keyword) come from the project rather than from memory. Also covers when writing CSS is legitimate and how to suppress a finding properly. Triggers on building screens, settings panels, modals, sidebars, toolbars, data tables, empty states, or any JSX importing components from a design-system package. Pair with `loupe-patterns` before assembling a composite and `loupe-remediation` when fixing findings.
-compatibility: "Any React-family design system Loupe can be configured for. Conformance checking needs the plugin's engine (node >=18)."
+compatibility: "Any React-family design system Loupe can be configured for. Conformance checking needs the plugin's engine (node >=20)."
 ---
 
 # Authoring on a design system
