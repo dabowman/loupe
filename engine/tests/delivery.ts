@@ -167,10 +167,15 @@ await check('`loupe status` names what the active profile delivers how', () => {
 
 // ── C: what a remedy naming a package costs ─────────────────────────────────
 
-/** `check --all --format json` through the CLI, the way the hook and skills run it. */
+/**
+ * `check --all --format json` through the CLI, the way the hook and skills run it.
+ * The shipped profiles load with no flag, so a run without them pins `none`.
+ */
 function checkJson(root: string, profiles: boolean = true): Finding[] {
 	const args = [CLI, 'check', '--all', '--format', 'json', '--no-baseline', '--root', root, '--preset', 'wpds'];
-	const r = spawnSync('node', profiles ? [...args, '--profiles', PROFILES] : args, { encoding: 'utf8' });
+	const r = spawnSync('node', [...args, ...(profiles ? ['--profiles', PROFILES] : ['--profile', 'none'])], {
+		encoding: 'utf8',
+	});
 	assert(r.status === 0 || r.status === 1, `loupe could not run (${r.status}): ${r.stderr}`);
 	return (JSON.parse(r.stdout) as { findings: Finding[] }).findings;
 }

@@ -555,8 +555,8 @@ var require_stringifier = __commonJS({
       }
     }
     function pushBlock(str2, stack, node, start) {
-      let between = str2.raw(node, "between", "beforeOpen");
-      str2.builder(escapeHTMLInCSS(start + between) + "{", node, "start");
+      let between2 = str2.raw(node, "between", "beforeOpen");
+      str2.builder(escapeHTMLInCSS(start + between2) + "{", node, "start");
       let hasNodes = node.nodes && node.nodes.length;
       let close = () => {
         let after = hasNodes ? str2.raw(node, "after") : str2.raw(node, "after", "emptyBody");
@@ -612,8 +612,8 @@ var require_stringifier = __commonJS({
         return value;
       }
       block(node, start) {
-        let between = this.raw(node, "between", "beforeOpen");
-        this.builder(escapeHTMLInCSS(start + between) + "{", node, "start");
+        let between2 = this.raw(node, "between", "beforeOpen");
+        this.builder(escapeHTMLInCSS(start + between2) + "{", node, "start");
         let after;
         if (node.nodes && node.nodes.length) {
           this.body(node);
@@ -658,8 +658,8 @@ var require_stringifier = __commonJS({
       }
       decl(node, semicolon) {
         let raws = node.raws;
-        let between = this.raw(node, "between", "colon");
-        let string = node.prop + between + this.rawValue(node, "value");
+        let between2 = this.raw(node, "between", "colon");
+        let string = node.prop + between2 + this.rawValue(node, "value");
         if (node.important) {
           string += raws.important || " !important";
         }
@@ -2044,14 +2044,14 @@ var require_util = __commonJS({
           }
         }
       }
-      for (var part, up = 0, i = parts.length - 1; i >= 0; i--) {
-        part = parts[i];
-        if (part === ".") {
+      for (var part2, up = 0, i = parts.length - 1; i >= 0; i--) {
+        part2 = parts[i];
+        if (part2 === ".") {
           parts.splice(i, 1);
-        } else if (part === "..") {
+        } else if (part2 === "..") {
           up++;
         } else if (up > 0) {
-          if (part === "") {
+          if (part2 === "") {
             parts.splice(i + 1, up);
             up = 0;
           } else {
@@ -2786,7 +2786,7 @@ var require_binary_search = __commonJS({
 // node_modules/source-map-js/lib/quick-sort.js
 var require_quick_sort = __commonJS({
   "node_modules/source-map-js/lib/quick-sort.js"(exports) {
-    function SortTemplate(comparator) {
+    function SortTemplate(comparator2) {
       function swap(ary, x, y) {
         var temp = ary[x];
         ary[x] = ary[y];
@@ -2795,39 +2795,39 @@ var require_quick_sort = __commonJS({
       function randomIntInRange(low, high) {
         return Math.round(low + Math.random() * (high - low));
       }
-      function doQuickSort(ary, comparator2, p, r) {
+      function doQuickSort(ary, comparator3, p, r) {
         if (p < r) {
           var pivotIndex = randomIntInRange(p, r);
           var i = p - 1;
           swap(ary, pivotIndex, r);
           var pivot = ary[r];
           for (var j = p; j < r; j++) {
-            if (comparator2(ary[j], pivot, false) <= 0) {
+            if (comparator3(ary[j], pivot, false) <= 0) {
               i += 1;
               swap(ary, i, j);
             }
           }
           swap(ary, i + 1, j);
           var q = i + 1;
-          doQuickSort(ary, comparator2, p, q - 1);
-          doQuickSort(ary, comparator2, q + 1, r);
+          doQuickSort(ary, comparator3, p, q - 1);
+          doQuickSort(ary, comparator3, q + 1, r);
         }
       }
       return doQuickSort;
     }
-    function cloneSort(comparator) {
+    function cloneSort(comparator2) {
       let template = SortTemplate.toString();
       let templateFn = new Function(`return ${template}`)();
-      return templateFn(comparator);
+      return templateFn(comparator2);
     }
     var sortCache = /* @__PURE__ */ new WeakMap();
-    exports.quickSort = function(ary, comparator, start = 0) {
-      let doQuickSort = sortCache.get(comparator);
+    exports.quickSort = function(ary, comparator2, start = 0) {
+      let doQuickSort = sortCache.get(comparator2);
       if (doQuickSort === void 0) {
-        doQuickSort = cloneSort(comparator);
-        sortCache.set(comparator, doQuickSort);
+        doQuickSort = cloneSort(comparator2);
+        sortCache.set(comparator2, doQuickSort);
       }
-      doQuickSort(ary, comparator, start, ary.length - 1);
+      doQuickSort(ary, comparator2, start, ary.length - 1);
     };
   }
 });
@@ -2971,15 +2971,15 @@ var require_source_map_consumer = __commonJS({
       if (typeof aSourceMap === "string") {
         sourceMap = util.parseSourceMapInput(aSourceMap);
       }
-      var version = util.getArg(sourceMap, "version");
+      var version2 = util.getArg(sourceMap, "version");
       var sources = util.getArg(sourceMap, "sources");
       var names = util.getArg(sourceMap, "names", []);
       var sourceRoot = util.getArg(sourceMap, "sourceRoot", null);
       var sourcesContent = util.getArg(sourceMap, "sourcesContent", null);
       var mappings = util.getArg(sourceMap, "mappings");
       var file = util.getArg(sourceMap, "file", null);
-      if (version != this._version) {
-        throw new Error("Unsupported version: " + version);
+      if (version2 != this._version) {
+        throw new Error("Unsupported version: " + version2);
       }
       if (sourceRoot) {
         sourceRoot = util.normalize(sourceRoot);
@@ -3321,10 +3321,10 @@ var require_source_map_consumer = __commonJS({
       if (typeof aSourceMap === "string") {
         sourceMap = util.parseSourceMapInput(aSourceMap);
       }
-      var version = util.getArg(sourceMap, "version");
+      var version2 = util.getArg(sourceMap, "version");
       var sections = util.getArg(sourceMap, "sections");
-      if (version != this._version) {
-        throw new Error("Unsupported version: " + version);
+      if (version2 != this._version) {
+        throw new Error("Unsupported version: " + version2);
       }
       this._sources = new ArraySet();
       this._names = new ArraySet();
@@ -3757,12 +3757,12 @@ var require_source_map = __commonJS({
 var require_previous_map = __commonJS({
   "node_modules/postcss/lib/previous-map.js"(exports, module) {
     "use strict";
-    var { existsSync: existsSync10, readFileSync: readFileSync16, realpathSync: realpathSync3 } = __require("fs");
+    var { existsSync: existsSync10, readFileSync: readFileSync16, realpathSync: realpathSync4 } = __require("fs");
     var { dirname: dirname10, isAbsolute: isAbsolute6, join: join17, relative: relative7, sep: sep3 } = __require("path");
     var { SourceMapConsumer, SourceMapGenerator } = require_source_map();
     function realPath2(path) {
       try {
-        return realpathSync3(path);
+        return realpathSync4(path);
       } catch {
         return path;
       }
@@ -22527,8 +22527,8 @@ var require_scss_stringifier = __commonJS({
         if (!node.isNested) {
           super.decl(node, semicolon);
         } else {
-          let between = this.raw(node, "between", "colon");
-          let string = node.prop + between + this.rawValue(node, "value");
+          let between2 = this.raw(node, "between", "colon");
+          let string = node.prop + between2 + this.rawValue(node, "value");
           if (node.important) {
             string += node.raws.important || " !important";
           }
@@ -23502,7 +23502,7 @@ import { parseArgs as parseArgv } from "node:util";
 import { isMainThread as isMainThread2 } from "node:worker_threads";
 
 // src/analyze.ts
-import { readFileSync as readFileSync8, realpathSync, statSync as statSync4 } from "node:fs";
+import { readFileSync as readFileSync8, realpathSync as realpathSync2, statSync as statSync4 } from "node:fs";
 
 // node_modules/postcss/lib/postcss.mjs
 var import_postcss = __toESM(require_postcss(), 1);
@@ -24139,7 +24139,7 @@ function changedFiles(root2) {
 }
 
 // src/profiles.ts
-import { existsSync as existsSync5, readFileSync as readFileSync3 } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync3, realpathSync } from "node:fs";
 import { join as join6, resolve as resolve4 } from "node:path";
 
 // src/patterns.ts
@@ -24232,7 +24232,7 @@ function loadPatterns(raw) {
     }
     const parts = p?.parts;
     if (own && parts && typeof parts === "object")
-      for (const [name, part] of Object.entries(parts)) load(part, `${own}#${name}`, canonical);
+      for (const [name, part2] of Object.entries(parts)) load(part2, `${own}#${name}`, canonical);
   };
   for (const p of list2) load(p, p?.pattern ?? p?.id ?? null, null);
   return out;
@@ -24412,8 +24412,8 @@ function withLonghands(prop) {
 }
 function propsOverlap(a, b) {
   if (a === b) return true;
-  const below = withLonghands(a);
-  for (const p of withLonghands(b)) if (below.has(p)) return true;
+  const below2 = withLonghands(a);
+  for (const p of withLonghands(b)) if (below2.has(p)) return true;
   return false;
 }
 var KEYWORD = /^(inherit|initial|unset|revert|revert-layer|none|auto|transparent|currentcolor|normal)$/i;
@@ -24424,7 +24424,7 @@ var COLOR_FUNCTIONS = "(?:rgb|hsl|hwb|lab|lch|oklab|oklch|color)a?\\(";
 var HEX = /^#[0-9a-f]{3,8}$/i;
 var COLOR_FUNCTION_AT_START = new RegExp(`^${COLOR_FUNCTIONS}`, "i");
 var COLOR_FUNCTION_WITHIN = new RegExp(`\\b${COLOR_FUNCTIONS}`, "i");
-var isColorLiteral = (part) => HEX.test(part) || COLOR_FUNCTION_AT_START.test(part);
+var isColorLiteral = (part2) => HEX.test(part2) || COLOR_FUNCTION_AT_START.test(part2);
 var isLiteralColor = (v) => /#[0-9a-f]{3,8}\b/i.test(v) || COLOR_FUNCTION_WITHIN.test(v);
 function withoutRefs(value) {
   let out = "";
@@ -24498,18 +24498,18 @@ function calcSign(value) {
 function topLevelParts(value) {
   const parts = [];
   let depth = 0;
-  let part = "";
+  let part2 = "";
   for (const ch of value) {
     if (depth === 0 && /\s/.test(ch)) {
-      if (part) parts.push(part);
-      part = "";
+      if (part2) parts.push(part2);
+      part2 = "";
       continue;
     }
     if (ch === "(") depth++;
     else if (ch === ")" && depth > 0) depth--;
-    part += ch;
+    part2 += ch;
   }
-  if (part) parts.push(part);
+  if (part2) parts.push(part2);
   return parts;
 }
 function classifyMargin(value) {
@@ -24530,7 +24530,7 @@ function isHardcodedTokenValue(prop, value) {
   const v = value.trim();
   if (COLOR_PROPS.has(prop) || COLOR_SHORTHANDS.has(prop)) return isLiteralColor(withoutRefs(value));
   if (usesToken(value) || KEYWORD.test(v)) return false;
-  if (v.split(/\s+/).every((part) => ZERO.test(part))) return false;
+  if (v.split(/\s+/).every((part2) => ZERO.test(part2))) return false;
   if (SPACING_PROPS.has(prop) || RADIUS_PROPS.has(prop) || BORDER_WIDTH_PROPS.has(prop)) return isLiteralLength(value);
   if (MOTION_PROPS.has(prop)) return isLiteralDuration(value) || isLiteralEasing(value);
   if (CURSOR_PROPS.has(prop)) return true;
@@ -26221,7 +26221,7 @@ var package_default = {
     "eval:represents": "node evals/represents/run.ts",
     "eval:values": "node evals/values/run.ts",
     "eval:renames": "node evals/renames/run.ts",
-    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/judge-cache.ts && node tests/index-cache.ts && node tests/scan-pool.ts && node tests/multi-ds.ts && node tests/scopes.ts && node tests/delivery.ts && node tests/map.ts && node tests/report.ts && node tests/dom-match.ts && node tests/serve.ts && node tests/ui.ts && node tests/lsp.ts",
+    test: "npm run lint && npm run typecheck && node tests/run.ts && node tests/detect.ts && node tests/regressions.ts && node tests/features.ts && node tests/autofix.ts && node tests/judge-cache.ts && node tests/index-cache.ts && node tests/scan-pool.ts && node tests/semver.ts && node tests/multi-ds.ts && node tests/scopes.ts && node tests/delivery.ts && node tests/map.ts && node tests/report.ts && node tests/dom-match.ts && node tests/serve.ts && node tests/ui.ts && node tests/lsp.ts",
     "eval:counterparts": "node evals/counterparts/run.ts"
   },
   dependencies: {
@@ -26901,6 +26901,109 @@ function fitOf(scopes, token, elements) {
   return mixed ? { fit: "unknown", why: `${scope}; ${shown} do not agree`, elements: els } : { fit: "on" };
 }
 
+// src/semver.ts
+var ANY = { lo: null, hi: null };
+var version = (major, minor, patch, pre = []) => ({
+  major,
+  minor,
+  patch,
+  pre
+});
+var floor = (major, minor, patch) => version(major, minor, patch, [0]);
+var atLeast = (v, inclusive = true) => ({ lo: { v, inclusive }, hi: null });
+var below = (v, inclusive = false) => ({ lo: null, hi: { v, inclusive } });
+var between = (lo, hi) => ({
+  lo: { v: lo, inclusive: true },
+  hi: { v: hi, inclusive: false }
+});
+function compareIds(a, b) {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (typeof a === "number") return -1;
+  if (typeof b === "number") return 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+function compareVersions(a, b) {
+  const byNumber = a.major - b.major || a.minor - b.minor || a.patch - b.patch;
+  if (byNumber) return byNumber;
+  if (!a.pre.length || !b.pre.length) return b.pre.length - a.pre.length;
+  for (let i = 0; i < Math.min(a.pre.length, b.pre.length); i++) {
+    const c = compareIds(a.pre[i], b.pre[i]);
+    if (c) return c;
+  }
+  return a.pre.length - b.pre.length;
+}
+var COMPARATOR = /^(<=|>=|<|>|=|\^|~>|~)?v?(\d+|[xX*])(?:\.(\d+|[xX*]))?(?:\.(\d+|[xX*]))?(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$/;
+var part = (s) => s === void 0 || /^[xX*]$/.test(s) ? null : Number(s);
+function comparator(token) {
+  const m = COMPARATOR.exec(token);
+  if (!m) return null;
+  const op = m[1] ?? "";
+  const major = part(m[2]);
+  let minor = part(m[3]);
+  let patch = part(m[4]);
+  if (major === null) minor = patch = null;
+  else if (minor === null) patch = null;
+  const pre = m[5];
+  if (pre !== void 0 && patch === null) return null;
+  const ids = pre === void 0 ? [] : pre.split(".").map((id) => /^\d+$/.test(id) ? Number(id) : id);
+  if ([major, minor, patch].some((n) => n !== null && !Number.isSafeInteger(n))) return null;
+  if (major === null) return op === "<" || op === ">" ? [] : [ANY];
+  const lo = version(major, minor ?? 0, patch ?? 0, ids);
+  const next = minor === null ? floor(major + 1, 0, 0) : patch === null ? floor(major, minor + 1, 0) : null;
+  switch (op) {
+    case "":
+    case "=":
+      return [next ? between(lo, next) : { lo: { v: lo, inclusive: true }, hi: { v: lo, inclusive: true } }];
+    case ">=":
+      return [atLeast(lo)];
+    case ">":
+      return [next ? atLeast(version(next.major, next.minor, next.patch)) : atLeast(lo, false)];
+    case "<":
+      return [below(next ? floor(lo.major, lo.minor, lo.patch) : lo)];
+    case "<=":
+      return [next ? below(next) : below(lo, true)];
+    case "^": {
+      const hi = major > 0 || minor === null ? floor(major + 1, 0, 0) : minor > 0 || patch === null ? floor(0, minor + 1, 0) : floor(0, 0, patch + 1);
+      return [between(lo, hi)];
+    }
+    default: {
+      const hi = minor === null ? floor(major + 1, 0, 0) : floor(major, minor + 1, 0);
+      return [between(lo, hi)];
+    }
+  }
+}
+var higherLo = (a, b) => {
+  if (!a || !b) return a ?? b;
+  const c = compareVersions(a.v, b.v);
+  return c > 0 ? a : c < 0 ? b : { v: a.v, inclusive: a.inclusive && b.inclusive };
+};
+var lowerHi = (a, b) => {
+  if (!a || !b) return a ?? b;
+  const c = compareVersions(a.v, b.v);
+  return c < 0 ? a : c > 0 ? b : { v: a.v, inclusive: a.inclusive && b.inclusive };
+};
+var intersect = (a, b) => ({ lo: higherLo(a.lo, b.lo), hi: lowerHi(a.hi, b.hi) });
+var nonEmpty = ({ lo, hi }) => {
+  if (!lo || !hi) return true;
+  const c = compareVersions(lo.v, hi.v);
+  return c < 0 || c === 0 && lo.inclusive && hi.inclusive;
+};
+function parseRange(text2) {
+  const out = [];
+  for (const alternative of text2.split("||")) {
+    const tokens = alternative.trim().replace(/(<=|>=|<|>|=|\^|~>|~)\s+/g, "$1").split(/\s+/).filter(Boolean);
+    let all = [ANY];
+    for (const token of tokens) {
+      const admitted = comparator(token);
+      if (!admitted) return null;
+      all = all.flatMap((a) => admitted.map((b) => intersect(a, b))).filter(nonEmpty);
+    }
+    out.push(...all);
+  }
+  return out;
+}
+var overlaps = (a, b) => a.some((x) => b.some((y) => nonEmpty(intersect(x, y))));
+
 // src/profiles.ts
 var PROJECT_PROFILES = join6(".loupe", "profiles");
 var NO_PROFILE = "none";
@@ -26916,6 +27019,16 @@ function readScopes(dir, raw) {
       errors: [`tokenScopes: could not read ${typeof raw === "string" ? raw : "the inline block"} \u2014 ${messageOf(err)}`]
     };
   }
+}
+function readPackages2(raw) {
+  if (!isRecord(raw)) return { packages: asStrings(raw), ranges: /* @__PURE__ */ new Map() };
+  const ranges = /* @__PURE__ */ new Map();
+  for (const [pkg, range] of Object.entries(raw)) {
+    if (typeof range !== "string" || !parseRange(range))
+      throw new Error(`packages: ${JSON.stringify(range)} for ${pkg} is not a version range`);
+    if (pkg) ranges.set(pkg, range);
+  }
+  return { packages: [...ranges.keys()], ranges };
 }
 function readProfiles(root2, origin = "shipped", unreadable) {
   if (!root2 || !existsSync5(root2)) return [];
@@ -26939,7 +27052,7 @@ function readProfiles(root2, origin = "shipped", unreadable) {
         id,
         name: asString(raw.name) ?? asString(raw.id) ?? e.name,
         preset: asString(raw.preset) ?? null,
-        packages: asStrings(raw.packages),
+        ...readPackages2(raw.packages),
         patterns: patterns ? under(dir, patterns) : null,
         components: components2 ? under(dir, components2) : null,
         tokenDescriptions: tokenDescriptions2 ? under(dir, tokenDescriptions2) : null,
@@ -26958,18 +27071,29 @@ function readProfiles(root2, origin = "shipped", unreadable) {
   }
   return out.sort((a, b) => byBytes(a.id, b.id));
 }
+var realDir = (dir) => {
+  try {
+    return realpathSync(dir);
+  } catch {
+    return dir;
+  }
+};
 function profileRoots({
   root: root2,
   configured = [],
-  flag = null
+  shipped = null,
+  flags = []
 }) {
   const roots = [
     ...configured.map((dir) => ({ dir: resolve4(dir), origin: "project" })),
     { dir: resolve4(root2, PROJECT_PROFILES), origin: "project" },
-    ...flag ? [{ dir: resolve4(flag), origin: "shipped" }] : []
+    ...[...shipped ? [shipped] : [], ...flags].map((dir) => ({ dir: resolve4(dir), origin: "shipped" }))
   ];
   const seen = /* @__PURE__ */ new Set();
-  return roots.filter((r) => !seen.has(r.dir) && Boolean(seen.add(r.dir)));
+  return roots.filter((r) => {
+    const key = realDir(r.dir);
+    return !seen.has(key) && Boolean(seen.add(key));
+  });
 }
 function readProfileRoots(roots, unreadable) {
   const out = /* @__PURE__ */ new Map();
@@ -26978,16 +27102,32 @@ function readProfileRoots(roots, unreadable) {
       if (!out.has(p.id)) out.set(p.id, p);
   return [...out.values()].sort((a, b) => byBytes(a.id, b.id));
 }
-function selectProfiles(profiles, config, force = null) {
+function selectProfiles(profiles, config, force = null, {
+  declared = () => null,
+  outOfRange
+} = {}) {
   if (force === NO_PROFILE) return [];
   if (force) return profiles.filter((p) => p.id === force);
   const pkgs = config.designSystem?.packages ?? [];
   if (!pkgs.length) return [];
-  const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
-  const claimed = new Set(
-    matched.filter((p) => p.origin === "project").flatMap((p) => p.packages.filter((pkg) => pkgs.includes(pkg)))
-  );
-  return matched.filter((p) => p.origin === "project" || !p.packages.some((pkg) => claimed.has(pkg)));
+  const claims = /* @__PURE__ */ new Map();
+  for (const p of profiles) {
+    const out = [];
+    const held2 = p.packages.filter((pkg) => {
+      if (!pkgs.includes(pkg)) return false;
+      const range = p.ranges.get(pkg);
+      const want = range ? parseRange(range) : null;
+      const found = want ? declared(pkg) : null;
+      const has = found ? parseRange(found.range) : null;
+      if (!range || !want || !found || !has || overlaps(has, want)) return true;
+      out.push({ profile: p.id, pkg, range, declared: found.range, manifest: found.manifest });
+      return false;
+    });
+    if (held2.length) claims.set(p, held2);
+    else outOfRange?.push(...out);
+  }
+  const claimed = new Set([...claims].filter(([p]) => p.origin === "project").flatMap(([, held2]) => held2));
+  return [...claims].filter(([p, held2]) => p.origin === "project" || !held2.some((pkg) => claimed.has(pkg))).map(([p]) => p);
 }
 function applyRegistries(config, sources) {
   const applied = [];
@@ -27446,8 +27586,8 @@ function harvestPhpStems(text2, into = /* @__PURE__ */ new Set()) {
 }
 function runStart(text2, end) {
   let s = end;
-  const floor = Math.max(0, end - MAX_STEM);
-  while (s > floor && isWordChar(text2.charCodeAt(s - 1))) s--;
+  const floor2 = Math.max(0, end - MAX_STEM);
+  while (s > floor2 && isWordChar(text2.charCodeAt(s - 1))) s--;
   return s;
 }
 var isStem = (run) => run.includes("-") && /^[A-Za-z_]/.test(run);
@@ -28112,10 +28252,10 @@ function measure(value) {
   return isColorLiteral(v) ? { kind: "color" } : null;
 }
 var SPACING = /padding|gap$|^(inset|top|right|bottom|left)$/;
-function candidatesFor(set, prop, part) {
+function candidatesFor(set, prop, part2) {
   const family = familyFor(set, prop);
   if (!family.length) return null;
-  const v = normalizeValue(part);
+  const v = normalizeValue(part2);
   const spacing = SPACING.test(prop);
   const exact = family.filter(([, fv]) => fv === v);
   if (exact.length) return { tier: "exact", options: exact, keep: !spacing };
@@ -28130,27 +28270,27 @@ function candidatesFor(set, prop, part) {
   });
   const same = steps.filter(([, , d]) => Math.abs(d) < 1e-6).map(([n, fv]) => [n, fv]);
   if (same.length) return { tier: "exact", options: same, keep: !spacing };
-  const below = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
+  const below2 = Math.max(...steps.map(([, , d]) => d).filter((d) => d < 0));
   const above = Math.min(...steps.map(([, , d]) => d).filter((d) => d > 0));
-  const options = steps.filter(([, , d]) => d === below || d === above).map(([n, fv]) => [n, fv]);
-  const inside = Number.isFinite(below) && Number.isFinite(above);
+  const options = steps.filter(([, , d]) => d === below2 || d === above).map(([n, fv]) => [n, fv]);
+  const inside = Number.isFinite(below2) && Number.isFinite(above);
   return inside ? { tier: "near", options, keep: !spacing } : { tier: "end", options, keep: true };
 }
 function partsOf2(value) {
   const out = [];
-  let part = "";
+  let part2 = "";
   let depth = 0;
   for (const ch of value.trim()) {
     if (!depth && /\s/.test(ch)) {
-      if (part) out.push(part);
-      part = "";
+      if (part2) out.push(part2);
+      part2 = "";
       continue;
     }
     if (ch === "(") depth++;
     else if (ch === ")") depth = Math.max(0, depth - 1);
-    part += ch;
+    part2 += ch;
   }
-  if (part) out.push(part);
+  if (part2) out.push(part2);
   return out;
 }
 var isLiteralPart = (p) => /^-?\d*\.?\d+[a-z%]*$/i.test(p) && parseFloat(p) !== 0 || isColorLiteral(p);
@@ -28163,25 +28303,25 @@ function planValue(set, prop, value, hold) {
   const parts = measurable ? partsOf2(value) : [value.trim()];
   const slots = [];
   let review;
-  const settle = (at, part, token) => {
+  const settle = (at, part2, token) => {
     const why = review === void 0 ? hold?.(token) : null;
     if (why) review = `${token} ${why}`;
-    slots.push({ at, part, token });
+    slots.push({ at, part: part2, token });
   };
-  for (const [at, part] of parts.entries()) {
-    if (measurable && /^(calc|min|max|clamp)\(/i.test(part)) return null;
-    if (measurable && !isLiteralPart(part)) continue;
-    if (COLOR_SHORTHANDS.has(prop) && measure(part)?.kind !== "color") continue;
-    const [only, ...more] = tokensFor(set, prop, part);
+  for (const [at, part2] of parts.entries()) {
+    if (measurable && /^(calc|min|max|clamp)\(/i.test(part2)) return null;
+    if (measurable && !isLiteralPart(part2)) continue;
+    if (COLOR_SHORTHANDS.has(prop) && measure(part2)?.kind !== "color") continue;
+    const [only, ...more] = tokensFor(set, prop, part2);
     if (only !== void 0 && !more.length) {
-      settle(at, part, only);
+      settle(at, part2, only);
       continue;
     }
-    const candidates = candidatesFor(set, prop, part);
+    const candidates = candidatesFor(set, prop, part2);
     if (!candidates) return null;
     const [one, ...others] = candidates.tier === "exact" ? candidates.options : [];
-    if (one && !others.length) settle(at, part, one[0]);
-    else slots.push({ at, part, candidates });
+    if (one && !others.length) settle(at, part2, one[0]);
+    else slots.push({ at, part: part2, candidates });
   }
   if (!slots.length) return null;
   return review === void 0 ? { parts, slots } : { parts, slots, review };
@@ -28684,8 +28824,8 @@ var systemOverride = ({ prop }, { boundSystem, enabled: enabled2, surfaceOf, sur
   return { rule: "system/override", message: `<${unread.tag}> \u2190 ${prop} \u2014 ${UNREAD_REMEDY}`, code };
 };
 function libraryOverride(keyClasses, isLibrary, isOwn) {
-  const part = keyClasses.find((c) => isLibrary(c) && !isOwn(c));
-  return part ? { rule: "system/override", message: `.${part} (library internal)` } : null;
+  const part2 = keyClasses.find((c) => isLibrary(c) && !isOwn(c));
+  return part2 ? { rule: "system/override", message: `.${part2} (library internal)` } : null;
 }
 
 // src/checks/system/raw-element.ts
@@ -29117,7 +29257,7 @@ var untokenizedType = ({ prop, value }) => {
 // src/analyze.ts
 var realPath = (path) => {
   try {
-    return realpathSync.native(path);
+    return realpathSync2.native(path);
   } catch {
     return null;
   }
@@ -29169,8 +29309,8 @@ async function readLibrary(root2, sources, tokenPrefixes, tokenSet) {
         if (decls.length && decls.every((d) => d.prop.startsWith("--"))) return;
         for (const sel of resolvedSelectors(rule2)) {
           if (/^[.#][\w-]+\s*\(/.test(sel)) continue;
-          const part = partClass(sel);
-          if (part) classes.add(part);
+          const part2 = partClass(sel);
+          if (part2) classes.add(part2);
         }
       });
     }
@@ -30034,9 +30174,9 @@ var TIER = {
 };
 var valueQuery = (about) => ({
   element: ({ file, context_before, source }) => ({ file, context_before, source }),
-  question: ({ prop, value, part, candidates }, i) => ({
+  question: ({ prop, value, part: part2, candidates }, i) => ({
     type: "choice",
-    instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use${candidates.keep ? " \u2014 or is the value a deliberate choice the system has no token for" : ""}?`,
+    instructions: `The first line of \`elements[${i}].source\` is the CSS declaration \`${prop}: ${value}\`, from a stylesheet in a product built on a design system, and \`${part2}\` in it is hardcoded where the design system has tokens. ${TIER[candidates.tier]} Judging by what the rule styles and the role this value plays there, which token should it use${candidates.keep ? " \u2014 or is the value a deliberate choice the system has no token for" : ""}?`,
     criteria: {
       ...Object.fromEntries(candidates.options.map(([n, v]) => [n, about.has(n) ? `${v} \u2014 ${about.get(n) ?? ""}` : v])),
       ...candidates.keep ? { [KEEP]: KEEP_CRITERION } : {}
@@ -30737,8 +30877,8 @@ function parseColor(text2) {
   if (hex && (hex.length === 3 || hex.length === 4 || hex.length === 6 || hex.length === 8)) {
     const wide = hex.length <= 4;
     const at = (i) => {
-      const part = wide ? hex.slice(i, i + 1).repeat(2) : hex.slice(i * 2, i * 2 + 2);
-      return part ? Number.parseInt(part, 16) / 255 : 0;
+      const part2 = wide ? hex.slice(i, i + 1).repeat(2) : hex.slice(i * 2, i * 2 + 2);
+      return part2 ? Number.parseInt(part2, 16) / 255 : 0;
     };
     const has = wide ? hex.length === 4 : hex.length === 8;
     return { rgb: [at(0), at(1), at(2)], alpha: has ? at(3) : 1 };
@@ -33710,6 +33850,22 @@ function manifests(root2, maxDepth = 3, budget = 60) {
   walk(root2, "", 0);
   return out;
 }
+function declaredVersions(root2) {
+  let read = null;
+  return (pkg) => {
+    read ??= manifests(root2).map(({ rel }) => {
+      const m = readManifest(root2, rel);
+      const fields = [m.dependencies, m.devDependencies, m.peerDependencies].flatMap((f) => isRecord(f) ? [f] : []);
+      return { rel, fields };
+    });
+    for (const { rel, fields } of read)
+      for (const deps of fields) {
+        const range = deps[pkg];
+        if (typeof range === "string") return { range, manifest: manifestLabel(rel) };
+      }
+    return null;
+  };
+}
 function markerAt(dir, marker) {
   const name = marker.replace(/\/$/, "");
   const full = join14(dir, name);
@@ -34016,7 +34172,7 @@ function detectConfig(root2, { preset: override, limit = DETECT_ENTRY_BUDGET } =
 }
 
 // src/hook.ts
-import { existsSync as existsSync8, realpathSync as realpathSync2 } from "node:fs";
+import { existsSync as existsSync8, realpathSync as realpathSync3 } from "node:fs";
 import { isAbsolute as isAbsolute4, join as join15, relative as relative5, resolve as resolve6 } from "node:path";
 import { homedir } from "node:os";
 import { text } from "node:stream/consumers";
@@ -34071,7 +34227,7 @@ function payloadFile(payload, root2) {
   let rel = inside(root2, abs);
   if (rel === null) {
     try {
-      rel = inside(realpathSync2(root2), realpathSync2(abs));
+      rel = inside(realpathSync3(root2), realpathSync3(abs));
     } catch {
     }
   }
@@ -34296,6 +34452,9 @@ var confidence = (level) => (level === "high" ? green : level === "none" ? red :
 var guessedPreset = (level) => level === "low" || level === "none";
 var HERE = dirname9(fileURLToPath5(import.meta.url));
 var SINGLE_FILE = !existsSync9(join16(HERE, "..", "package.json"));
+var SHIPPED_PROFILES = ((dir) => !SINGLE_FILE && existsSync9(dir) ? dir : null)(
+  join16(HERE, "..", "..", "profiles")
+);
 var ENV_FILE = SINGLE_FILE ? resolve7(".env") : join16(HERE, "..", "..", ".env");
 var USER_ENV_FILE = join16(process.env.XDG_CONFIG_HOME || join16(homedir2(), ".config"), "loupe", ".env");
 var KEY_SOURCES = `the environment, the plugin's API key option, ${ENV_FILE}, or ${USER_ENV_FILE}`;
@@ -34332,10 +34491,14 @@ var VALUE_FLAGS = [
 var FORMATS = ["agent", "json", "sarif", "html", "pane"];
 var isFormat = (f) => FORMATS.includes(f);
 var LIST_FLAGS = ["files", "rule"];
+var REPEATED_FLAGS = ["profiles"];
+var isRepeated = (f) => REPEATED_FLAGS.includes(f);
 function parseArgs(args) {
   const { values, positionals } = parseArgv({
     args,
-    options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: "string", multiple: LIST_FLAGS.includes(f) }])),
+    options: Object.fromEntries(
+      VALUE_FLAGS.map((f) => [f, { type: "string", multiple: LIST_FLAGS.includes(f) || isRepeated(f) }])
+    ),
     allowPositionals: true,
     strict: false
   });
@@ -34343,10 +34506,15 @@ function parseArgs(args) {
     const given = [values[f] ?? []].flat().filter((v) => typeof v === "string");
     values[f] = given.length ? given.join(",") : void 0;
   }
+  const repeated = Object.fromEntries(
+    REPEATED_FLAGS.map(
+      (f) => [f, [values[f] ?? []].flat().filter((v) => typeof v === "string" && v !== "")]
+    ).filter(([, given]) => given.length)
+  );
   for (const f of VALUE_FLAGS) if (typeof values[f] !== "string") delete values[f];
   for (const [k, v] of Object.entries(values))
     if (typeof v === "string" && !VALUE_FLAGS.includes(k)) values[k] = v !== "false";
-  return { _: positionals, flags: values };
+  return { _: positionals, flags: { ...values, ...repeated } };
 }
 var USAGE = `loupe <command> [options]
 
@@ -34440,10 +34608,12 @@ Options:
   --preset <name>       Use a bundled preset instead of discovering config
   --patterns <path>     Composite pattern registry (JSON)
   --components <path>   Component currency registry (JSON)
-  --profiles <dir>      Directory of design-system profiles; the ones matching
+  --profiles <dir>      Another directory of design-system profiles, read after
+                        the shipped ones; repeat it for more. The ones matching
                         this project's imports supply their registries. The
                         project's own (config "profiles", .loupe/profiles/) are
-                        read as well, and win on a shared id or package
+                        read first, and win on a shared id or package.
+                        --patterns leaves the shipped profiles out
   --profile <id>        Use this profile regardless of what the project imports
                         ("none" for no profile); outranks the config's "profile"
   --config <path>       Explicit config file
@@ -34744,9 +34914,10 @@ async function main() {
 `);
     return EXIT.CANNOT_RUN;
   }
-  const flagProfiles = args.flags.profiles ? resolve7(args.flags.profiles) : null;
+  const shipped = args.flags.patterns ? null : SHIPPED_PROFILES;
+  const flagProfiles = (args.flags.profiles ?? []).map((dir) => resolve7(dir));
   let unreadable = [];
-  let profiles = readProfileRoots(profileRoots({ root: root2, flag: flagProfiles }), unreadable);
+  let profiles = readProfileRoots(profileRoots({ root: root2, shipped, flags: flagProfiles }), unreadable);
   const byId = (id) => id && id !== NO_PROFILE ? profiles.find((p) => p.id === id) ?? null : null;
   let forced = byId(args.flags.profile);
   let config;
@@ -34797,7 +34968,7 @@ async function main() {
 `);
     return EXIT.CANNOT_RUN;
   }
-  const roots = profileRoots({ root: root2, configured: config.profileDirs, flag: flagProfiles });
+  const roots = profileRoots({ root: root2, configured: config.profileDirs, shipped, flags: flagProfiles });
   if (config.profileDirs.length) {
     unreadable = [];
     profiles = readProfileRoots(roots, unreadable);
@@ -34805,12 +34976,14 @@ async function main() {
   }
   const pin = args.flags.profile ?? config.profilePin;
   const pinned = byId(pin);
+  const noShipped = shipped || flagProfiles.length ? "" : args.flags.patterns ? " (--patterns leaves the shipped profiles out, and --profiles was not given)" : " (no profiles ship beside this engine, and --profiles was not given)";
   if (pin && pin !== NO_PROFILE && !pinned && !isHook)
     note(
-      `loupe: no profile "${pin}"${args.flags.profile ? "" : ` (the config's "profile")`} in ${roots.map((r) => r.dir).join(", ")}${flagProfiles ? "" : " (--profiles was not given)"}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
+      `loupe: no profile "${pin}"${args.flags.profile ? "" : ` (the config's "profile")`} in ${roots.map((r) => r.dir).join(", ")}${noShipped}${profiles.length ? ` \u2014 available: ${profiles.map((p) => p.id).join(", ")}` : ""}
 `
     );
-  const active = selectProfiles(profiles, config, pin);
+  const outOfRange = [];
+  const active = selectProfiles(profiles, config, pin, { declared: declaredVersions(root2), outOfRange });
   const sources = active.map((p) => ({
     label: `profile ${p.id}`,
     patterns: p.patterns,
@@ -34827,7 +35000,7 @@ async function main() {
       components: args.flags.components ?? null
     });
   const registries = applyRegistries(config, sources);
-  config.profiles = { available: profiles, active, ...registries };
+  config.profiles = { available: profiles, active, outOfRange, ...registries };
   if (!isHook) {
     for (const err of registries.errors) fail(`loupe: ${err}
 `);
@@ -35002,6 +35175,14 @@ async function main() {
       // identical in a report and must not look identical here. The directory, not
       // just the id: a profile carries its authoring prose beside its registries.
       `${dim("profile:    ")}${config.profiles?.active?.length ? config.profiles.active.map((p) => `${p.id} (${p.name}) \u2014 ${p.dir}`).join(", ") : (args.flags.profile ?? config.profilePin) === NO_PROFILE ? `none selected \u2014 pinned to "${NO_PROFILE}" by ${args.flags.profile ? "--profile" : `the config's "profile"`}` : config.profiles?.available?.length ? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(", ")}` : "none available"}`,
+      // A profile its version kept out reads exactly like one never written, and
+      // what to do about it — a profile of the project's own, or a pin — starts
+      // from knowing that it was the version.
+      ...(config.profiles?.outOfRange ?? []).map(
+        (o) => dim(
+          `            ${o.profile} not selected \u2014 ${o.pkg} is ${o.declared} in ${o.manifest}, outside the ${o.range} it describes`
+        )
+      ),
       // What adopting the system costs this project: which packages the host
       // provides and which get bundled, and which sheet carries the tokens. A
       // remedy naming a bundled package is a new runtime dependency, and a token

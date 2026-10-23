@@ -19,9 +19,11 @@ it apply those itself rather than reading files back to retype them:
 node "${CLAUDE_PLUGIN_ROOT}/engine/bin/loupe.mjs" fix --changed --profiles "${CLAUDE_PLUGIN_ROOT}/profiles"
 ```
 
-`--profiles` must always be passed: the shipped profiles carry the token scopes
-that decide which token is on-role here, and the component registries. Without
-them `fix` applies an off-scope token unattended.
+The shipped profiles carry the token scopes that decide which token is on-role
+here, and the component registries. The engine reads them from beside itself on
+every run, and `--profiles` only adds a directory to them. Without them `fix`
+applies an off-scope token unattended, which is why this step never passes
+`--patterns` or `--profile none`.
 
 `fix` reads no baseline, so scope it to what this run is working on. A bare
 `/loupe-fix` works new drift only: it fixes the files the working tree changed
