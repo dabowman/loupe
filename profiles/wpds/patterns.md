@@ -52,6 +52,7 @@ Most bad choices are the wrong pattern, not the wrong variant. Each row is a for
 | `navigate-hierarchy` (navigate) | relation = siblings | `switch-view` | Tabs are for peers; depth wants navigation. |
 | `switch-view` (navigate) | relation = parent-child | `navigate-hierarchy` | Levels are not peers. |
 | `browse-collection` (view) | representation = rendered, selection = one | `choose.rendered` | A grid of previews where one is picked is a choice, not a browse. |
+| `disclose` (view) | context = own-screen | `navigate-hierarchy` | Content big enough for a screen of its own is a level to descend to, not a panel to unfold. |
 
 ### About to build
 
@@ -60,7 +61,7 @@ Most bad choices are the wrong pattern, not the wrong variant. Each row is a for
 | All options visible on one row, the active one marked; re-selecting the active one clears it when 'no opinion' is a valid state. | `choose.segmented` → `ToggleGroupControl` (`@wordpress/components`) | A SelectControl with two to five options; A RadioControl for a set that fits on one row; A row of Buttons with isPressed and hand-managed exclusivity |
 | All options visible as a labelled vertical list. | `choose.radio` → `RadioControl` (`@wordpress/components`) (unverified) |  |
 | The current value is the trigger; the set opens on demand. | `choose.select` → `SelectControl` (`@wordpress/ui`) |  |
-| Typed filtering over the set; may accept values the set lacks. | `choose.combobox` → `ComboboxControl` (`@wordpress/components`) (unverified) |  |
+| Typed filtering over a long set; the value is one of its options. | `choose.combobox` → `ComboboxControl` (`@wordpress/components`) (unverified) |  |
 | Chosen options shown as removable tokens; unchosen ones found by typing. | `choose.token-list` → `FormTokenField` (`@wordpress/components`) (unverified) |  |
 | The option is its rendering — a swatch, a word set in its face, a live preview — laid out as a grid of tiles with the active one marked; the name is secondary, in a tooltip or caption. | `choose.rendered` — not shipped; extract the project's own | A SelectControl of variation names; A RadioControl list of theme or preset names; Static thumbnails that are not the thing they preview |
 | A CSS length: a unit-aware input and a slider under one label, the slider's range derived from the unit. | `enter-value.length` — not shipped; extract the project's own | A bare RangeControl with the unit implied; A TextControl holding a CSS length as free text; A SelectControl of fixed sizes where the value is continuous |
@@ -119,7 +120,7 @@ A pattern declares where it happens; the profile picks the container.
 Below the four-node floor the engine runs `few-static-options`, `confirm-pair`, `judge`.
 Specified but not shipped: `button-that-navigates`, `unconditional-optional-controls`, `hand-managed-selection`.
 
-No wpds realization yet: `choose.checklist`, `enter-value.text`, `enter-value.number`, `enter-value.date`, `enter-value.rich-text`, `edit-record.form-screen`, `edit-graph.auto-layout`, `report.inline`. Building one of these is registering one, not inventing a pattern.
+No wpds realization yet: `choose.autocomplete`, `choose.checklist`, `enter-value.text`, `enter-value.number`, `enter-value.date`, `enter-value.rich-text`, `edit-record.form-screen`, `edit-graph.auto-layout`, `navigate-sections.list`, `navigate-sections.panels`, `disclose.collapsible`, `disclose.accordion`, `disclose.anchored`, `report.inline`, `group.list`. Building one of these is registering one, not inventing a pattern.
 
 <!-- /generated:patterns -->
 

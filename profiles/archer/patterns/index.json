@@ -1,249 +1,268 @@
 {
-  "packages": ["@dabowman/archer"],
   "version": 2,
-  "note": "Sanctioned Archer compositions. `signature` is the normalized component tree — a node is `[name, ...children]`, matching is containment rather than equality, and anything under four nodes the engine ignores as too generic to check. Archer's parts are flat sibling exports off one import (`DialogPopup`, not `Dialog.Popup`), so a signature is written in those names. Two kinds of entry live here and they do different jobs. **Anatomy entries** record a shape the library *requires* — a Dialog is a root, a trigger, a popup and a title, in every file that has one. They exist so `patterns/unregistered-composite` does not report a component's own mandatory anatomy as house style nobody wrote down; each carries `canonical` set to the root import, so any file actually using the component is skipped before either composite rule sees it, and they therefore never produce a finding. **Judgement entries** record a composite that has a right and a wrong form; those carry `instead_of` and, where the wrong form is a recognisable composite in its own right, `instead_of_signature`. Most do not — the shape reached for by default is usually one control, and a rule that fires on every `Select` is a rule people turn off, which is why reading this file before assembling matters more than the check does. Archer ships a page header (`PageHeader`) and an empty state (`Empty`), and those entries name them as `canonical`. It ships no detail sidebar or settings drilldown: those entries are here without `canonical` on purpose, so the first project that builds one extracts it and fills that in rather than rebuilding it per screen. `AppShell` and `PageHeader` take their regions as props (`nav`, `actions`, `breadcrumb`), which a signature does not see, so neither has an anatomy entry: what a file puts inside them is the page, not their structure.",
-  "patterns": [
-    {
-      "id": "dialog-anatomy",
-      "summary": "The parts a Dialog is made of.",
-      "use": "Every modal task. Recorded so the required anatomy is not reported as an unregistered composite.",
+  "scope": "realization",
+  "extends": "../../../patterns/index.json",
+  "packages": ["@dabowman/archer"],
+  "note": "How Archer realizes the abstract language in ../../../patterns/index.json. Entries are keyed by `pattern` — an abstract id (`confirm`), a variant (`choose.segmented`) or a part (`screen#header`) — and every field means what docs/patterns-v2.md says it means. The reach-for table in patterns.md is generated from this file and the abstract one: run `npm run patterns-doc` in engine/ after editing either. Archer's parts are flat sibling exports off one import (`DialogPopup`, not `Dialog.Popup`), so a signature is written in those names. Two kinds of entry live here and they do different jobs. **Anatomy entries** record a shape the library *requires* — a Dialog is a root, a trigger, a popup and a title, in every file that has one. They exist so `patterns/unregistered-composite` does not report a component's own mandatory anatomy as house style nobody wrote down; each carries `canonical` set to the root import, so any file actually using the component is skipped before either composite rule sees it, and they therefore never produce a finding. **Judgement entries** record a composite that has a right and a wrong form; those carry `instead_of` and, where the wrong form is a recognisable composite in its own right, `instead_of_signature`. Most do not — the shape reached for by default is usually one control, and a rule that fires on every `Select` is a rule people turn off, which is why reading this file before assembling matters more than the check does. Archer ships a page header (`PageHeader`) and an empty state (`Empty`), and those entries name them as `canonical`. It ships no detail sidebar or settings drilldown: those entries are here without `canonical` on purpose, so the first project that builds one extracts it and fills that in rather than rebuilding it per screen. `AppShell` and `PageHeader` take their regions as props (`nav`, `actions`, `breadcrumb`), which a signature does not see, so neither has an anatomy entry: what a file puts inside them is the page, not their structure.",
+  "containers": {
+    "modal": {
       "import": "@dabowman/archer",
       "canonical": "Dialog",
-      "signature": ["Dialog", "DialogTrigger", ["DialogPopup", "DialogTitle", "DialogDescription"]]
+      "note": "Its anatomy is screen.overlay. A destructive confirmation is AlertDialog — see confirm."
     },
-    {
-      "id": "alert-dialog-anatomy",
-      "summary": "The parts an AlertDialog is made of.",
-      "use": "Destructive or irreversible confirmation.",
-      "import": "@dabowman/archer",
-      "canonical": "AlertDialog",
-      "signature": ["AlertDialog", "AlertDialogTrigger", ["AlertDialogPopup", "AlertDialogTitle", "AlertDialogDescription", "AlertDialogClose"]],
-      "instead_of": [
-        "A Dialog with a title, a description and a Cancel/Confirm button pair — AlertDialog already is that, with the dismissal behaviour and button emphasis a destructive action needs",
-        "window.confirm()"
-      ],
-      "note": "The anti-shape is deliberately prose rather than an `instead_of_signature`: a form dialog also carries a title, a description and two buttons, and containment matching cannot tell the two apart. Decide this when you reach for the component, not from a finding."
-    },
-    {
-      "id": "drawer-anatomy",
-      "summary": "The parts a Drawer is made of.",
-      "use": "Editing something already on screen, or a flow a Dialog would cramp.",
+    "drawer": {
       "import": "@dabowman/archer",
       "canonical": "Drawer",
-      "signature": ["Drawer", "DrawerTrigger", ["DrawerPopup", "DrawerTitle", "DrawerDescription"]]
+      "note": "Its anatomy is edit-record.drawer."
     },
-    {
-      "id": "popover-anatomy",
-      "summary": "The parts a Popover is made of.",
-      "use": "Anchored, non-modal, interactive content.",
+    "popover": {
       "import": "@dabowman/archer",
       "canonical": "Popover",
-      "signature": ["Popover", "PopoverTrigger", ["PopoverPopup", "PopoverTitle", "PopoverDescription"]]
+      "note": "Its anatomy is disclose.anchored."
     },
-    {
-      "id": "menu-anatomy",
-      "summary": "The parts a Menu is made of.",
-      "use": "Commands, navigation destinations and in-menu settings.",
+    "menu": {
       "import": "@dabowman/archer",
       "canonical": "Menu",
-      "signature": ["Menu", "MenuTrigger", ["MenuPopup", "MenuItem", "MenuItem"]]
-    },
+      "note": "Commands, navigation destinations and in-menu settings. Its anatomy is action-cluster.overflow."
+    }
+  },
+  "realizations": [
     {
-      "id": "select-anatomy",
-      "summary": "The parts a Select is made of.",
-      "use": "Choosing one predefined value.",
-      "import": "@dabowman/archer",
-      "canonical": "Select",
-      "signature": ["Select", "SelectTrigger", ["SelectPopup", "SelectOption", "SelectOption"]]
-    },
-    {
-      "id": "combobox-anatomy",
-      "summary": "The parts a Combobox is made of.",
-      "use": "A value chosen from a filterable list.",
-      "import": "@dabowman/archer",
-      "canonical": "Combobox",
-      "signature": ["Combobox", ["ComboboxField", "ComboboxInput"], ["ComboboxPopup", "ComboboxList", "ComboboxItem"]]
-    },
-    {
-      "id": "autocomplete-anatomy",
-      "summary": "The parts an Autocomplete is made of.",
-      "use": "Free-form text with suggestions.",
-      "import": "@dabowman/archer",
-      "canonical": "Autocomplete",
-      "signature": ["Autocomplete", "AutocompleteInput", ["AutocompletePopup", "AutocompleteList", "AutocompleteItem"]]
-    },
-    {
-      "id": "tabs-anatomy",
-      "summary": "The parts a Tabs is made of.",
-      "use": "Peer views of one subject.",
-      "import": "@dabowman/archer",
-      "canonical": "Tabs",
-      "signature": ["Tabs", ["TabsList", "TabsTab", "TabsTab"], "TabsPanel"],
-      "instead_of": [
-        "Tabs standing in for hierarchy — peers belong in tabs, depth belongs in navigation"
-      ]
-    },
-    {
-      "id": "accordion-anatomy",
-      "summary": "The parts an Accordion is made of.",
-      "use": "Several independently expandable sections.",
-      "import": "@dabowman/archer",
-      "canonical": "Accordion",
-      "signature": ["Accordion", ["AccordionItem", ["AccordionHeader", "AccordionTrigger"], "AccordionPanel"]],
-      "instead_of": [
-        "An Accordion holding a single section — that is Collapsible"
-      ]
-    },
-    {
-      "id": "navigation-menu-anatomy",
-      "summary": "The parts a NavigationMenu is made of.",
-      "use": "Site or app navigation with rich panels.",
-      "import": "@dabowman/archer",
-      "canonical": "NavigationMenu",
-      "signature": ["NavigationMenu", ["NavigationMenuList", ["NavigationMenuItem", "NavigationMenuTrigger", "NavigationMenuContent"]]]
-    },
-    {
-      "id": "breadcrumb-anatomy",
-      "summary": "The parts a Breadcrumb is made of.",
-      "use": "The trail of pages above the current one, usually passed to `PageHeader`'s `breadcrumb`.",
-      "import": "@dabowman/archer",
-      "canonical": "Breadcrumb",
-      "signature": ["Breadcrumb", "BreadcrumbItem", "BreadcrumbItem", "BreadcrumbItem"]
-    },
-    {
-      "id": "table-anatomy",
-      "summary": "The parts a Table is made of.",
-      "use": "Tabular data.",
-      "import": "@dabowman/archer",
-      "canonical": "Table",
-      "signature": ["Table", ["TableBody", ["TableRow", "TableCell"]]],
-      "instead_of": [
-        "A Grid or a Stack of rows standing in for a table — it looks the same and is not navigable cell by cell"
-      ]
-    },
-    {
-      "id": "list-anatomy",
-      "summary": "The parts a List is made of.",
-      "use": "A bulleted or numbered list.",
-      "import": "@dabowman/archer",
-      "canonical": "List",
-      "signature": ["List", "ListItem", "ListItem", "ListItem"]
-    },
-    {
-      "id": "toggle-group-anatomy",
-      "summary": "The parts a ToggleGroup is made of.",
-      "use": "A segmented control: one value shared across a set of toggles.",
+      "pattern": "choose.segmented",
       "import": "@dabowman/archer",
       "canonical": "ToggleGroup",
-      "signature": ["ToggleGroup", "Toggle", "Toggle", "Toggle"]
+      "detector": "signature",
+      "signature": ["ToggleGroup", "Toggle", "Toggle", "Toggle"],
+      "note": "A segmented control: one value shared across a set of toggles."
     },
     {
-      "id": "radio-group-anatomy",
-      "summary": "The parts a RadioGroup is made of.",
-      "use": "Choosing one of a few options that should all stay visible.",
+      "pattern": "choose.radio",
       "import": "@dabowman/archer",
       "canonical": "RadioGroup",
-      "signature": ["RadioGroup", "Radio", "Radio", "Radio"]
+      "detector": "signature",
+      "signature": ["RadioGroup", "Radio", "Radio", "Radio"],
+      "note": "Choosing one of a few options that should all stay visible."
     },
     {
-      "id": "form-field",
-      "summary": "A labelled control with its description and validation message.",
-      "use": "Any input that needs more than a placeholder.",
+      "pattern": "choose.select",
+      "import": "@dabowman/archer",
+      "canonical": "Select",
+      "detector": "signature",
+      "signature": ["Select", "SelectTrigger", ["SelectPopup", "SelectOption", "SelectOption"]],
+      "note": "Choosing one predefined value."
+    },
+    {
+      "pattern": "choose.combobox",
+      "import": "@dabowman/archer",
+      "canonical": "Combobox",
+      "detector": "signature",
+      "signature": ["Combobox", ["ComboboxField", "ComboboxInput"], ["ComboboxPopup", "ComboboxList", "ComboboxItem"]],
+      "note": "A value chosen from a filterable list."
+    },
+    {
+      "pattern": "choose.autocomplete",
+      "import": "@dabowman/archer",
+      "canonical": "Autocomplete",
+      "detector": "signature",
+      "signature": ["Autocomplete", "AutocompleteInput", ["AutocompletePopup", "AutocompleteList", "AutocompleteItem"]],
+      "note": "Free-form text with suggestions. If the value must come from the list, that is Combobox (choose.combobox)."
+    },
+    {
+      "pattern": "field",
       "import": "@dabowman/archer",
       "canonical": "Field",
+      "detector": "signature",
       "signature": ["Field", "FieldLabel", "FieldControl", "FieldDescription"],
       "instead_of": [
         "A Stack holding a <label> above an Input, with the error message conditionally rendered beside it — Field owns the association, the aria wiring and the rhythm",
         "A placeholder standing in for a label"
-      ]
+      ],
+      "note": "A labelled control with its description and validation message, for any input that needs more than a placeholder."
     },
     {
-      "id": "toolbar",
-      "summary": "A roving-focus bar of actions, grouped and separated.",
-      "use": "An action bar with more than a couple of controls, especially one with groups.",
+      "pattern": "edit-record.drawer",
+      "import": "@dabowman/archer",
+      "canonical": "Drawer",
+      "detector": "signature",
+      "signature": ["Drawer", "DrawerTrigger", ["DrawerPopup", "DrawerTitle", "DrawerDescription"]],
+      "note": "Editing something already on screen, or a flow a Dialog would cramp."
+    },
+    {
+      "pattern": "edit-record.inspector",
+      "detector": "declared",
+      "instead_of": [
+        "One-off panel layouts, each with its own width, padding and section rhythm"
+      ],
+      "note": "Not shipped: a panel of properties beside a main region, for inspecting or editing the selected thing without leaving the view. `Stack` plus `Separator` plus `Field` is the raw material; extract the composition once two exist."
+    },
+    {
+      "pattern": "action-cluster.bar",
+      "detector": "declared",
+      "instead_of": [
+        "A div with hand-set margins between the buttons",
+        "Buttons spaced with margin-right"
+      ],
+      "note": "Two or three actions sitting together, primary last: the foot of a dialog, the end of a form, the corner of a header. Documentation, not a check — `Stack(Button,Button)` is a true description of an action bar and matches half of any codebase. There is no canonical: two buttons in a Stack with a gap is already the whole implementation. Reach for action-cluster.toolbar instead once there are groups or more than about four controls."
+    },
+    {
+      "pattern": "action-cluster.toolbar",
       "import": "@dabowman/archer",
       "canonical": "Toolbar",
+      "detector": "signature",
       "signature": ["Toolbar", ["ToolbarGroup", "ToolbarButton", "ToolbarButton"], "ToolbarSeparator"],
       "instead_of": [
         "A Stack of Buttons with a Separator between the groups — it looks the same and has no roving focus, so every control is a tab stop"
       ],
       "instead_of_signature": ["Stack", "Button", "Button", "Separator", "Button"],
-      "note": "A plain `Button` inside a `Toolbar` is the same defect one level down: it drops out of the roving-focus order. Use `ToolbarButton`."
+      "note": "A roving-focus bar of actions, grouped and separated: an action bar with more than a couple of controls, especially one with groups. A plain `Button` inside a `Toolbar` is the same defect one level down: it drops out of the roving-focus order. Use `ToolbarButton`, `ToolbarLink` or `ToolbarInput`."
     },
     {
-      "id": "action-bar",
-      "summary": "Two or three actions sitting together, primary last.",
-      "use": "The foot of a dialog, the end of a form, the corner of a header.",
-      "instead_of": [
-        "A div with hand-set margins between the buttons",
-        "Buttons spaced with margin-right"
-      ],
-      "note": "Documentation, not a check — `Stack(Button,Button)` is a true description of an action bar and matches half of any codebase. There is no canonical: two buttons in a Stack with a gap is already the whole implementation. Reach for `toolbar` instead once there are groups or more than about four controls."
-    },
-    {
-      "id": "notification-stack",
-      "summary": "Transient messages raised from anywhere in the app.",
-      "use": "Anything reporting the result of an action the user has already left behind.",
-      "import": "@dabowman/archer",
-      "canonical": "useToastManager",
-      "instead_of": [
-        "A hand-managed array of messages in component state, rendered into a fixed-position Stack — the manager already owns queueing, timing, focus and dismissal",
-        "An inline error rendered where the button was"
-      ],
-      "note": "Mount `ToastProvider` once at the app root and raise from `useToastManager()`. There is nothing to compose, which is why this entry carries no signature."
-    },
-    {
-      "id": "overflow-actions",
-      "summary": "Secondary actions on a thing — rename, duplicate, delete.",
-      "use": "A row, card or header with more actions than deserve their own button.",
+      "pattern": "action-cluster.overflow",
       "import": "@dabowman/archer",
       "canonical": "Menu",
+      "detector": "signature",
+      "signature": ["Menu", "MenuTrigger", ["MenuPopup", "MenuItem", "MenuItem"]],
       "instead_of": [
         "Three secondary Buttons sitting in the header, competing with the one action that matters"
-      ]
+      ],
+      "note": "Secondary actions on a thing — rename, duplicate, delete — on a row, card or header with more actions than deserve their own button. The signature is Menu's own anatomy, which also carries navigation destinations and in-menu settings."
     },
     {
-      "id": "page-header",
-      "summary": "Screen title, optional description, and a trailing action cluster.",
-      "use": "The top of any screen or pane.",
+      "pattern": "confirm",
       "import": "@dabowman/archer",
-      "canonical": "PageHeader",
+      "canonical": "AlertDialog",
+      "detector": "signature",
+      "signature": ["AlertDialog", "AlertDialogTrigger", ["AlertDialogPopup", "AlertDialogTitle", "AlertDialogDescription", "AlertDialogClose"]],
       "instead_of": [
-        "An ad-hoc row rebuilt per screen — a Stack holding a Heading, a Text and a Stack of Buttons — each with its own heading level and spacing"
+        "A Dialog with a title, a description and a Cancel/Confirm button pair — AlertDialog already is that, with the dismissal behaviour and button emphasis a destructive action needs",
+        "window.confirm()"
       ],
-      "note": "`PageHeader` takes `title`, `level` (1 for a screen, 2 for a pane), `description`, `breadcrumb` and `actions` as props, and its `children` are the row under the title — a `TabsList` or a horizontal `NavigationMenu`. The title is already a `Heading` with `variant=\"ui\"`, so do not pass one in. The anti-shape stays prose: a Card or a Dialog also holds a Heading beside a Stack of Buttons, and containment matching cannot tell those apart from a hand-built header."
+      "note": "Destructive or irreversible confirmation. The anti-shape is deliberately prose rather than an `instead_of_signature`: a form dialog also carries a title, a description and two buttons, and containment matching cannot tell the two apart. Decide this when you reach for the component, not from a finding."
     },
     {
-      "id": "empty-state",
-      "summary": "What a list, table or panel shows when it holds nothing yet.",
-      "use": "Any collection that can legitimately be empty.",
-      "import": "@dabowman/archer",
-      "canonical": "Empty",
-      "instead_of": [
-        "A bare 'No results' string where the rows would be",
-        "A spinner that never resolves because there is nothing to load"
-      ],
-      "note": "`Empty` takes `title`, `description` and a decorative `icon`; its `children` are the way out, usually one `Button`. An empty state is a finished, correct result — a failure is an `Alert`, and a wait is a `Spinner` or `Skeleton`."
-    },
-    {
-      "id": "detail-sidebar",
-      "summary": "A panel of properties beside a main region.",
-      "use": "Inspecting or editing the selected thing without leaving the view.",
-      "instead_of": [
-        "One-off panel layouts, each with its own width, padding and section rhythm"
-      ],
-      "note": "Not shipped. `Stack` plus `Separator` plus `Field` is the raw material; extract the composition once two exist."
-    },
-    {
-      "id": "settings-drilldown",
-      "summary": "Rows that open a further screen, rather than a wall of controls.",
-      "use": "Settings more than one level deep.",
+      "pattern": "navigate-hierarchy",
+      "detector": "declared",
       "instead_of": [
         "Tabs standing in for hierarchy",
         "One long panel showing every control at once",
         "A Select that swaps the pane beneath it"
       ],
-      "note": "Not shipped, and worth building rather than flattening: depth beats breadth, and a leaf screen that shows only what is actually set is far shorter than the panel it replaces."
+      "note": "Not shipped: rows that open a further screen, rather than a wall of controls, for settings more than one level deep. Worth building rather than flattening: depth beats breadth, and a leaf screen that shows only what is actually set is far shorter than the panel it replaces."
+    },
+    {
+      "pattern": "switch-view.tabs",
+      "import": "@dabowman/archer",
+      "canonical": "Tabs",
+      "detector": "signature",
+      "signature": ["Tabs", ["TabsList", "TabsTab", "TabsTab"], "TabsPanel"],
+      "instead_of": [
+        "Tabs standing in for hierarchy — peers belong in tabs, depth belongs in navigation"
+      ],
+      "note": "Peer views of one subject."
+    },
+    {
+      "pattern": "navigate-sections",
+      "import": "@dabowman/archer",
+      "canonical": "NavigationMenu",
+      "detector": "signature",
+      "signature": ["NavigationMenu", ["NavigationMenuList", ["NavigationMenuItem", "NavigationMenuTrigger", "NavigationMenuContent"]]],
+      "note": "Site or app navigation with rich panels."
+    },
+    {
+      "pattern": "browse-collection#items",
+      "import": "@dabowman/archer",
+      "canonical": "Table",
+      "detector": "signature",
+      "signature": ["Table", ["TableBody", ["TableRow", "TableCell"]]],
+      "instead_of": [
+        "A Grid or a Stack of rows standing in for a table — it looks the same and is not navigable cell by cell"
+      ],
+      "note": "Tabular data. Archer ships the table, not a data view, so this is the items part and not browse-collection.list: sorting, filtering and pagination are the project's."
+    },
+    {
+      "pattern": "disclose.collapsible",
+      "import": "@dabowman/archer",
+      "canonical": "Collapsible",
+      "detector": "import",
+      "instead_of": [
+        "An Accordion holding a single section"
+      ],
+      "note": "One expandable region. `Collapsible(CollapsibleTrigger, CollapsiblePanel)` is under the four-node floor, so the import is the check."
+    },
+    {
+      "pattern": "disclose.accordion",
+      "import": "@dabowman/archer",
+      "canonical": "Accordion",
+      "detector": "signature",
+      "signature": ["Accordion", ["AccordionItem", ["AccordionHeader", "AccordionTrigger"], "AccordionPanel"]],
+      "instead_of": [
+        "An Accordion holding a single section — that is Collapsible"
+      ],
+      "note": "Several independently expandable sections."
+    },
+    {
+      "pattern": "disclose.anchored",
+      "import": "@dabowman/archer",
+      "canonical": "Popover",
+      "detector": "signature",
+      "signature": ["Popover", "PopoverTrigger", ["PopoverPopup", "PopoverTitle", "PopoverDescription"]],
+      "note": "Anchored, non-modal, interactive content."
+    },
+    {
+      "pattern": "report.empty",
+      "import": "@dabowman/archer",
+      "canonical": "Empty",
+      "detector": "import",
+      "instead_of": [
+        "A bare 'No results' string where the rows would be",
+        "A spinner that never resolves because there is nothing to load"
+      ],
+      "note": "What a list, table or panel shows when it holds nothing yet, for any collection that can legitimately be empty. `Empty` takes `title`, `description` and a decorative `icon`; its `children` are the way out, usually one `Button`. An empty state is a finished, correct result — a failure is an `Alert`, and a wait is a `Spinner` or `Skeleton`."
+    },
+    {
+      "pattern": "report.toast",
+      "import": "@dabowman/archer",
+      "canonical": "useToastManager",
+      "detector": "import",
+      "instead_of": [
+        "A hand-managed array of messages in component state, rendered into a fixed-position Stack — the manager already owns queueing, timing, focus and dismissal",
+        "An inline error rendered where the button was"
+      ],
+      "note": "Transient messages raised from anywhere in the app, for anything reporting the result of an action the user has already left behind. Mount `ToastProvider` once at the app root and raise from `useToastManager()`. There is nothing to compose, which is why this entry carries no signature."
+    },
+    {
+      "pattern": "group.list",
+      "import": "@dabowman/archer",
+      "canonical": "List",
+      "detector": "signature",
+      "signature": ["List", "ListItem", "ListItem", "ListItem"],
+      "note": "A bulleted or numbered list."
+    },
+    {
+      "pattern": "screen#header",
+      "import": "@dabowman/archer",
+      "canonical": "PageHeader",
+      "detector": "import",
+      "instead_of": [
+        "An ad-hoc row rebuilt per screen — a Stack holding a Heading, a Text and a Stack of Buttons — each with its own heading level and spacing"
+      ],
+      "note": "Screen title, optional description, and a trailing action cluster, at the top of any screen or pane. `PageHeader` takes `title`, `level` (1 for a screen, 2 for a pane), `description`, `breadcrumb` and `actions` as props, and its `children` are the row under the title — a `TabsList` or a horizontal `NavigationMenu`. The title is already a `Heading` with `variant=\"ui\"`, so do not pass one in. The anti-shape stays prose: a Card or a Dialog also holds a Heading beside a Stack of Buttons, and containment matching cannot tell those apart from a hand-built header."
+    },
+    {
+      "pattern": "screen#header.breadcrumb",
+      "import": "@dabowman/archer",
+      "canonical": "Breadcrumb",
+      "detector": "signature",
+      "signature": ["Breadcrumb", "BreadcrumbItem", "BreadcrumbItem", "BreadcrumbItem"],
+      "note": "The trail of pages above the current one, usually passed to `PageHeader`'s `breadcrumb`."
+    },
+    {
+      "pattern": "screen.overlay",
+      "import": "@dabowman/archer",
+      "canonical": "Dialog",
+      "detector": "signature",
+      "signature": ["Dialog", "DialogTrigger", ["DialogPopup", "DialogTitle", "DialogDescription"]],
+      "note": "Every modal task. Recorded so the required anatomy is not reported as an unregistered composite. Dialog is the container a form dialog is built in, not a shipped edit-record.dialog."
     }
   ]
 }

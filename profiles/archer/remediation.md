@@ -137,11 +137,11 @@ role in their names (`--radius-3`, `--space-m`), so nothing reports for them.
 
 If this fires on the parts of an Archer component used correctly — a Dialog's
 root, trigger, popup and title across several files — the anatomy entry for that
-component is missing from `patterns/index.json`. Add it, with `canonical` set to
-the root import name. Do not reshape correct markup to dodge the match, and do
-not register it without a `canonical`: that converts the finding into
-`patterns/duplicate-composite` and asks for an extraction that should not
-happen.
+component is missing from `patterns/index.json`. Add it, keyed by the pattern
+the component realizes, with `canonical` set to the root import name. Do not
+reshape correct markup to dodge the match, and do not register it without a
+`canonical`: that converts the finding into `patterns/duplicate-composite` and
+asks for an extraction that should not happen.
 
 ## Suppressing
 

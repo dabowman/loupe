@@ -169,6 +169,13 @@
         ],
         "about": "For groups: whether the grouping needs a visible box or just rhythm."
       },
+      "series": {
+        "values": [
+          true,
+          false
+        ],
+        "about": "For groups: whether the content is a run of like items — points, steps, entries — rather than one piece."
+      },
       "structure": {
         "values": [
           "fields",
@@ -237,7 +244,7 @@
           "when": {
             "set": "open"
           },
-          "variant": "combobox"
+          "variant": "autocomplete"
         },
         {
           "when": {
@@ -295,8 +302,12 @@
           "consequences": "Costs a click to see the options. Buys space. The default, not the reflex."
         },
         "combobox": {
-          "summary": "Typed filtering over the set; may accept values the set lacks.",
-          "consequences": "Justified only when the set is large or open."
+          "summary": "Typed filtering over a long set; the value is one of its options.",
+          "consequences": "Justified only when the set is too long to scan. A typed value the set lacks is not a value here; where it should stand, that is autocomplete."
+        },
+        "autocomplete": {
+          "summary": "A text input that suggests known values as the user types; what was typed stands even when nothing matches.",
+          "consequences": "Right only when the set is open. Where the value has to be one of the options, an unmatched entry gets through here and fails later; that is combobox."
         },
         "rendered": {
           "summary": "The option is its rendering — a swatch, a word set in its face, a live preview — laid out as a grid of tiles with the active one marked; the name is secondary, in a tooltip or caption.",
@@ -824,6 +835,46 @@
       }
     },
     {
+      "id": "navigate-sections",
+      "intent": "navigate",
+      "scale": "region",
+      "problem": "The user moves between the top-level sections of an app or site from anywhere in it, and must be able to tell which section they are in.",
+      "forces": [
+        "grouped"
+      ],
+      "parts": [
+        {
+          "role": "links",
+          "note": "One link per section, each to its own route; the section the user is in is marked current to assistive technology, not by colour alone."
+        },
+        {
+          "role": "group",
+          "note": "A named set of sections behind one trigger, which opens a panel of their links."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "grouped": true
+          },
+          "variant": "panels"
+        },
+        {
+          "default": "list"
+        }
+      ],
+      "variants": {
+        "list": {
+          "summary": "Every section as one link in one list — a row in a top bar or a column at the side — with the current one marked.",
+          "consequences": "One list, laid out for the width it has: a second navigation built for small screens disagrees with the first the day a section is added."
+        },
+        "panels": {
+          "summary": "Sections in named groups; each group's trigger opens a panel of its links, and choosing one closes it.",
+          "consequences": "Costs a click or a hover to see a group. Right when the sections are too many for one list, or a link needs a line of description before anyone can choose it."
+        }
+      }
+    },
+    {
       "id": "browse-collection",
       "intent": "view",
       "scale": "region",
@@ -903,6 +954,64 @@
       }
     },
     {
+      "id": "disclose",
+      "intent": "view",
+      "scale": "composite",
+      "problem": "Some content is wanted only some of the time, and shown at rest it crowds out what is wanted every time.",
+      "forces": [
+        "context",
+        "grouped"
+      ],
+      "parts": [
+        {
+          "role": "trigger",
+          "note": "The control that shows and hides the panel: it names what the panel holds and says whether it is open."
+        },
+        {
+          "role": "panel",
+          "note": "What the trigger reveals. Nothing in it is needed to make sense of the rest of the view."
+        }
+      ],
+      "resolve": [
+        {
+          "when": {
+            "context": "own-screen"
+          },
+          "redirect": "navigate-hierarchy",
+          "because": "Content big enough for a screen of its own is a level to descend to, not a panel to unfold."
+        },
+        {
+          "when": {
+            "context": "overlay"
+          },
+          "variant": "anchored"
+        },
+        {
+          "when": {
+            "grouped": true
+          },
+          "variant": "accordion"
+        },
+        {
+          "default": "collapsible"
+        }
+      ],
+      "variants": {
+        "collapsible": {
+          "summary": "One panel shown and hidden in place by the control that names it; what follows moves to make room.",
+          "consequences": "Costs a click to see what is inside, so nothing the task needs belongs there. A heading with a click handler over a hidden div looks the same and tells assistive technology nothing."
+        },
+        "accordion": {
+          "summary": "Several named sections, each heading the trigger for its own panel, opened in place.",
+          "consequences": "An accordion of one section is a collapsible with an accordion's markup."
+        },
+        "anchored": {
+          "summary": "The panel opens over the view, anchored to its trigger and non-modal; moving on closes it.",
+          "consequences": "Small, and about the control that opened it. Anything the user has to scroll inside, or must finish before going on, belongs in a dialog or a drawer."
+        }
+      }
+    },
+    {
       "id": "report",
       "intent": "report",
       "scale": "composite",
@@ -977,7 +1086,8 @@
       "scale": "composite",
       "problem": "Related content and its actions should read as one thing.",
       "forces": [
-        "boundary"
+        "boundary",
+        "series"
       ],
       "parts": [
         {
@@ -995,6 +1105,12 @@
           "variant": "card"
         },
         {
+          "when": {
+            "series": true
+          },
+          "variant": "list"
+        },
+        {
           "default": "section"
         }
       ],
@@ -1005,6 +1121,10 @@
         },
         "section": {
           "summary": "A heading and its content, rhythm from the parent, no box."
+        },
+        "list": {
+          "summary": "Like items in a run, bulleted, or numbered when their order means something; the list spaces them, not each item.",
+          "consequences": "Lines that start with a typed bullet or number look like a list and are not one to assistive technology: no count, and no way to skip past it."
         }
       }
     },
