@@ -517,10 +517,12 @@ silence that nobody signed.
 ### Watching is reported, never implied
 
 One `fs.watch` per directory rather than one recursive watch on the root.
-Recursive is unsupported on Linux before Node 20 and this floor is Node 18, so
-the choice is between a platform branch and a set that is the same code
-everywhere. Per-directory is also self-healing: a new directory is a new entry in
-a directory already watched, which fires, which rebuilds the set.
+Recursive is unsupported on Linux before Node 20, and the floor was Node 18 when
+this was decided, so the choice was between a platform branch and a set that is
+the same code everywhere. The floor is now Node 20, which makes recursive
+available on Linux too; per-directory stays for now. It is also self-healing: a
+new directory is a new entry in a directory already watched, which fires, which
+rebuilds the set.
 
 The set is rebuilt after every run rather than once at boot, because a project
 grows directories while it is being worked on and a watcher pinned to the tree as

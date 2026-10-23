@@ -51,13 +51,13 @@ next session. The skills, the commands and `loupe` typed by hand work everywhere
 without it.
 
 Nothing else to run. The engine ships pre-bundled with its dependencies, so a
-fresh install is a working install on any machine with Node 18 or newer — no
+fresh install is a working install on any machine with Node 20 or newer — no
 `npm install`, no toolchain, no build step. See
 [Working on the engine](#working-on-the-engine) if you are changing it rather
 than using it.
 
 Loupe needs Claude Code 2.1.83 or newer, the release that added plugin options,
-and Node 18 or newer for the engine. The [pane](#the-pane) needs Claude Code
+and Node 20 or newer for the engine. The [pane](#the-pane) needs Claude Code
 2.1.299 or newer; all of it is tested on 2.1.308. On a build in between, the
 hooks, skills and commands work as described and only the pane is missing.
 Below 2.1.83 Claude Code rejects the manifest's options and loads none of the

@@ -1450,9 +1450,9 @@ The data the engine ships — the presets, and the pattern language `--judge`
 reads — is imported rather than read from disk, so it is inside whichever
 artifact the bundler produced. Disk still wins wherever a `presets/` directory
 exists, so an ordinary install behaves exactly as it did and a preset dropped in
-by hand still takes effect. A side effect worth knowing: `patterns/index.json`
-sits above the package and `files` never shipped it, so `--judge` from a
-published npm install used to fail; embedding it fixes that too.
+by hand still takes effect. `patterns/index.json` sits above `engine/`, and the
+root package ships it beside the profiles; `--judge` reads the compiled-in copy
+either way, so it does not depend on the file being there.
 
 Two things the compiled binary does not inherit from a directory install. It
 reports its own path from `execPath` rather than from `import.meta.url`, which
