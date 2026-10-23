@@ -77,3 +77,60 @@ jobs:
           [ "$status" -le 1 ] || { cat /tmp/scan.log; exit 1; }
           cat /tmp/scan.log
           grep -q 'across [0-9]* worker' /tmp/scan.log
+
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Pinned, so a CLI release that changes what `plugin validate` accepts
+      # cannot turn this job red on a commit that touched nothing here; bump it
+      # on purpose. Neither command below needs a login or an API key.
+      - run: npm install -g @anthropic-ai/claude-code@2.1.308
+
+      # What Claude Code reads when it loads the plugin: both manifests, the
+      # skills and commands plugin.json lists, hooks.json, and whether the hooks
+      # module parses. A path that moved or a module that no longer parses still
+      # installs from the marketplace, then fails to load — and nothing in the
+      # engine job reads any of these files. Warnings (no `version`) and the
+      # plugin directory's own checks (no LICENSE) do not fail it; errors do.
+      - run: claude plugin validate .
+
+      # The only runner for hooks/loupe-pane.test.tsx. It imports its kit from
+      # `claude-code/testing`, which only the CLI provides, so `npm test` cannot
+      # reach it: without this, a change that breaks the pane leaves CI green.
+      - run: claude plugin test .
+
+  vscode:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # The extension is unbundled: vscode-languageclient goes into the .vsix
+      # straight from node_modules. A lock out of step with package.json's
+      # dependencies is an extension nobody can package.
+      - run: npm ci
+
+      # `vsce ls` runs packaging's manifest checks — it rejects an @types/vscode
+      # newer than engines.vscode — and lists what the .vsix would carry, with no
+      # publisher login (only `publish` needs one). The grep is for the mistake
+      # .vscodeignore warns about: leaving node_modules out still lists cleanly,
+      # and packages a .vsix that installs and then fails on activation.
+      - name: the package manifest is consistent and carries its runtime dependency
+        run: |
+          npx --yes @vscode/vsce@4.0.0 ls > /tmp/vsix-files.txt
+          grep -q '^node_modules/vscode-languageclient/' /tmp/vsix-files.txt
+
+  # The DevTools extension's end-to-end check, integrations/devtools/check.mjs,
+  # is manual and has no job here. It drives both panes in Chromium through
+  # Playwright, which this repo deliberately does not depend on, so a job would
+  # install an unpinned browser stack on every push; its header says when to
+  # run it by hand. The part of the extension that can drift without a browser,
+  # its vendored copy of the matcher, is the engine job's `build.mjs --check`.
