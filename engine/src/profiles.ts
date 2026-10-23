@@ -395,7 +395,8 @@ export function applyRegistries(
 				saw[kind] = used = true;
 				if (src.forced) forced.push({ label: src.label, kind, added, offScope: inScope ? [] : declaredPackages(raw) });
 			} catch (err) {
-				errors.push(`could not read ${src.label} ${kind} — ${messageOf(err)}`);
+				// The label says which source; only the path says which file to open.
+				errors.push(`could not read ${src.label} ${kind} at ${resolve(path)} — ${messageOf(err)}`);
 			}
 		}
 		if (used) applied.push(src.label);

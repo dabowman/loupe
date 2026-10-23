@@ -727,7 +727,8 @@ await check('a signature below the floor is documentation, not a check', async (
 
 // The matcher skips a shape below the floor, so an entry that says it is checked
 // by its signature and carries a smaller one is checked by nothing. A part
-// without a detector of its own is checked the way its parent says.
+// without a detector of its own is checked the way its parent says. Every
+// shipped profile, not only this one: all of them are realizations now.
 await check('a shipped entry checked by signature carries a shape at or above the floor', () => {
 	type Raw = { pattern?: string; detector?: unknown; signature?: unknown; rendered_signature?: unknown };
 	const short: string[] = [];
@@ -738,7 +739,11 @@ await check('a shipped entry checked by signature carries a shape at or above th
 				if (shape && nodeCount(shape) < SUBSTANTIAL.minNodes) short.push(`${key} (${nodeCount(shape)} nodes)`);
 		for (const [name, part] of Object.entries(e.parts ?? {})) visit(part, `${key}#${name}`, detector);
 	};
-	for (const e of JSON.parse(readFileSync(REGISTRY, 'utf8')).realizations) visit(e, e.pattern, undefined);
+	const profiles = readProfiles(join(PROFILE, '..'));
+	assert(profiles.length >= 3, `expected every shipped profile, got ${profiles.map((p) => p.id)}`);
+	for (const p of profiles)
+		for (const e of JSON.parse(readFileSync(p.patterns ?? '', 'utf8')).realizations)
+			visit(e, `${p.id} ${e.pattern}`, undefined);
 	assert(!short.length, `checked by a signature the matcher never runs: ${short.join(', ')}`);
 });
 
@@ -918,21 +923,33 @@ await check('an entry checked by import alone loads with no tree and never match
 	assert(!at(r, 'patterns/duplicate-composite').length, 'nothing to match against');
 });
 
-await check('a v1 registry still loads unchanged', () => {
-	const v1 = loadPatterns({
-		patterns: [
-			{
-				id: 'x',
-				summary: 's',
-				canonical: 'Card',
-				signature: ['Card.Root', 'Card.Header', 'Card.Title', 'Card.Content'],
-			},
-		],
-	});
-	const [x] = v1;
+// 0.8.0 removed the flat form. Read as no entries, a registry still written that
+// way would switch the patterns/* rules off and report clean; read the old way,
+// it would be a second format to keep. So it is refused with the fix in the
+// error, and so is a single entry keyed the old way.
+await check('a v1 registry is refused, and the error says what replaced it', () => {
+	const card = ['Card.Root', 'Card.Header', 'Card.Title', 'Card.Content'];
+	const refusal = (raw: unknown): string => {
+		try {
+			loadPatterns(raw);
+			return 'loaded';
+		} catch (err) {
+			return err instanceof Error ? err.message : String(err);
+		}
+	};
+	const flat = refusal({ patterns: [{ id: 'x', summary: 's', canonical: 'Card', signature: card }] });
 	assert(
-		x && x.id === 'x' && x.size === 4 && x.canonical === 'Card' && x.rules.length === 0,
-		'v1 fields map one to one',
+		/version-1/.test(flat) && /0\.8\.0/.test(flat) && /"realizations"/.test(flat) && /"pattern"/.test(flat),
+		`the flat form should be refused with its fix: ${flat}`,
+	);
+	const entry = refusal([{ id: 'x', canonical: 'Card', signature: card }]);
+	assert(/entry "x" is keyed by "id"/.test(entry) && /0\.8\.0/.test(entry), `an id-keyed entry: ${entry}`);
+	const [x] = loadPatterns({
+		realizations: [{ pattern: 'group.card', note: 's', canonical: 'Card', signature: card }],
+	});
+	assert(
+		x && x.id === 'group.card' && x.summary === 's' && x.size === 4 && x.canonical === 'Card' && !x.rules.length,
+		'a v2 entry maps one to one',
 	);
 });
 

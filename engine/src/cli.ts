@@ -1169,8 +1169,8 @@ async function main(): Promise<number> {
 
 	// Registries reach the engine two ways: named directly, or carried by a
 	// design-system profile that the project's own imports selected. Both merge
-	// with the project winning on id, because a repo that has written down its
-	// own `page-header` means that one, not the shipped generic.
+	// with the project winning on an entry's `pattern`, because a repo that has
+	// written down its own `screen#header` means that one, not the shipped generic.
 	//
 	// The directories the config lists are read first, ahead of the convention, the
 	// shipped set and `--profiles`, so on a shared id the project's own profile is

@@ -22,6 +22,11 @@ jobs:
       # whether the source type-checks — these have to be separate gates.
       - run: npm test
 
+      # Every profile's patterns.md table is generated from its registry and
+      # the pattern language. A stale one is the prose an agent reads before it
+      # writes disagreeing with the registry the engine checks.
+      - run: npm run patterns-doc:check
+
       # dist/ is a committed build artifact, so it can go stale in exactly one
       # way: someone edits src/ and forgets to rebuild. Locally that is
       # invisible — bin/loupe.mjs runs source wherever the deps are installed —
