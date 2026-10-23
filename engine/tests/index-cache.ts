@@ -20,7 +20,7 @@ import { IndexCache } from '../src/index-cache.ts';
 import { projectStateDir } from '../src/paths.ts';
 import { readProfiles } from '../src/profiles.ts';
 import type { AnalyzeResult } from '../src/types.ts';
-import { CLI, assert, check, cleanup, finish, scratch, write } from './harness.ts';
+import { CLI, PLUGIN_DATA, assert, check, cleanup, finish, scratch, write } from './harness.ts';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -68,7 +68,9 @@ function age(root: string): void {
 	for (const f of files(root, /./)) utimesSync(f, then, then);
 }
 
-const state = scratch('loupe-index-state-');
+// The suite's plugin data, which `finish` removes once every check has run:
+// each of them stores its index files there.
+const state = PLUGIN_DATA;
 process.env.CLAUDE_PLUGIN_DATA = state;
 
 for (const name of readdirSync(FIXTURES).sort()) {
@@ -239,7 +241,6 @@ await check(
 	},
 );
 
-cleanup(state);
 // What the profile-driven passes read off the walk: the elements a class lands
 // on (token scopes), the tokens the project defines (`tokens/undelivered`), a
 // parse error's reason (its key). And `contents`, the hook's "before the edit":
