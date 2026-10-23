@@ -6,9 +6,11 @@
  * Run once every stylesheet has been read, since a set that is still being
  * built reports the design system's own tokens as unknown. An empty set means
  * nothing was found to check against, not that every token is unknown, and
- * says nothing. Once per name per file, carrying every line that names it.
+ * says nothing. Once per name per file, carrying every line that names it, at
+ * the first reference read and with that channel's marker.
  *
- * Logic, per `var(--name)` in the design system's namespace:
+ * Logic, per `var(--name)` in the design system's namespace — in any stylesheet
+ * rule, a class named or not, a `style={{ … }}` object or a CSS-in-JS template:
  *   nothing was read into the known set        → report nothing at all
  *   the name is in the known set               → clean
  *   already reported for this file             → folded into that finding
@@ -41,6 +43,8 @@ export interface TokenRef {
 	/** The property whose value names it. */
 	prop: string;
 	scopeLines: number[];
+	/** The channel marker a finding reported here carries: ` (inline)`. */
+	suffix?: string | undefined;
 }
 
 /**
@@ -120,7 +124,7 @@ export function unknownTokens(refs: readonly TokenRef[], known: ReadonlySet<stri
 		}
 		groups.set(`${ref.file}\u0000${ref.name}`, { ...ref, lines: [ref.line] });
 	}
-	return [...groups.values()].map(({ file, line, name, prop, scopeLines, lines }): Candidate => {
+	return [...groups.values()].map(({ file, line, name, prop, scopeLines, suffix, lines }): Candidate => {
 		const to = nearMiss(name, known);
 		const rename: TokenRename | undefined = to === undefined ? undefined : { from: name, to, lines };
 		return {
@@ -130,8 +134,10 @@ export function unknownTokens(refs: readonly TokenRef[], known: ReadonlySet<stri
 			// The name alone: the rule's title already says a token is being named.
 			// With the replacement beside it where one is settled, so a reader sees
 			// what `fix` would write without having to run it.
-			message: to === undefined ? name : `${name} → ${to}`,
+			message: `${to === undefined ? name : `${name} → ${to}`}${suffix ?? ''}`,
+			// Never the marker: a name's identity is not the channel it was first read in.
 			code: name,
+			suffix,
 			scopeLines,
 			rename,
 			unknown: rename ? undefined : { prop, lines },

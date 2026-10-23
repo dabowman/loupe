@@ -717,8 +717,9 @@ export async function judgeRenames(
 		const tail = judgedTail(a.confidence);
 		const span = a.choice === NONE ? 'no token means this' : a.choice;
 		// The unknown name is source text, and nothing bounds this line after here.
-		// It is what gives way: the answer is the half a reader acts on.
-		f.message = messageLine(item.name, ` \u2192 ${span} ${tail}`);
+		// It is what gives way: the answer is the half a reader acts on, and the
+		// channel marker stays last, as on every other judged finding.
+		f.message = messageLine(item.name, ` \u2192 ${span} ${tail}${f.suffix ?? ''}`);
 		f.judged = judgedAs(a, [span, tail]);
 		if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
 		settled++;

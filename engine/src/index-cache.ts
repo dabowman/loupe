@@ -44,6 +44,11 @@ export interface RuleExtract {
 	media?: string;
 	decls: { prop: string; value: string; line: number }[];
 	cut: DeadRule | null;
+	/**
+	 * No selector names a class, so no markup binds the rule: `h1 { … }`,
+	 * `:root { … }`. Read by the token checks alone.
+	 */
+	unbound?: true;
 }
 
 export type SheetExtract =

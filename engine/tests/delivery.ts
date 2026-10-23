@@ -435,6 +435,51 @@ await check('a run scoped to another file neither re-anchors tokens/undelivered 
 	}
 });
 
+// A theme's `body { … }` or a `:root` alias names no class, and a style object
+// is not a stylesheet. Either can be a project's only token use, and the tokens
+// drop there exactly as they do in a class rule.
+await check('a token used only in a rule naming no class, or only inline, is a use', () => {
+	const uses: [string, Record<string, string>, string][] = [
+		[
+			'a rule naming no class',
+			{ 'src/theme.css': 'body {\n  background: var(--wpds-color-background-surface-neutral-strong);\n}\n' },
+			'src/theme.css:2',
+		],
+		[
+			'an inline style',
+			{
+				'src/Panel.jsx':
+					"export const Panel = () => (\n  <div style={{ color: 'var(--wpds-color-foreground-content-neutral)' }} />\n);\n",
+			},
+			'src/Panel.jsx:2',
+		],
+	];
+	for (const [what, files, at] of uses) {
+		const f = one(
+			undeliveredIn({ ...files, 'includes/admin.php': enqueue("array( 'site-spec-styles' )") }),
+			`${what}: expected one finding for the project`,
+		);
+		assert(`${f.file}:${f.line}` === at, `${what}: anchored at ${f.file}:${f.line}, want ${at}`);
+	}
+	// Read outside the scope as well, as a template's are, or a run scoped to the
+	// stylesheet would anchor the finding there instead.
+	const root = scratch('loupe-undeliv-inline-');
+	try {
+		writeAll(root, {
+			'package.json': JSON.stringify({ dependencies: { '@wordpress/components': '^30.0.0' } }),
+			'src/Panel.jsx':
+				"export const Panel = () => <div style={{ color: 'var(--wpds-color-foreground-content-neutral)' }} />;\n",
+			'style.css': TOKENS_CSS,
+			'includes/admin.php': enqueue("array( 'site-spec-styles' )"),
+		});
+		const scoped = runJson(root, ['check', '--no-baseline', '--files', 'style.css']).findings;
+		const moved = scoped.filter((f) => f.rule === 'tokens/undelivered');
+		assert(!moved.length, `a scoped run re-anchored it past the inline use: ${moved.map((f) => f.file)}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('tokens/undelivered is keyed on the project, not the file it is shown at', () => {
 	const at = (file: string): string =>
 		findingKey({ rule: 'tokens/undelivered', file, code: 'tokens/undelivered:wp-theme', message: '' });

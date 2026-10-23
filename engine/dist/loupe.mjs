@@ -28990,7 +28990,7 @@ function unknownTokens(refs, known) {
     }
     groups.set(`${ref.file}\0${ref.name}`, { ...ref, lines: [ref.line] });
   }
-  return [...groups.values()].map(({ file, line, name, prop, scopeLines, lines }) => {
+  return [...groups.values()].map(({ file, line, name, prop, scopeLines, suffix, lines }) => {
     const to = nearMiss(name, known);
     const rename = to === void 0 ? void 0 : { from: name, to, lines };
     return {
@@ -29000,8 +29000,10 @@ function unknownTokens(refs, known) {
       // The name alone: the rule's title already says a token is being named.
       // With the replacement beside it where one is settled, so a reader sees
       // what `fix` would write without having to run it.
-      message: to === void 0 ? name : `${name} \u2192 ${to}`,
+      message: `${to === void 0 ? name : `${name} \u2192 ${to}`}${suffix ?? ""}`,
+      // Never the marker: a name's identity is not the channel it was first read in.
       code: name,
+      suffix,
       scopeLines,
       rename,
       unknown: rename ? void 0 : { prop, lines }
@@ -29179,6 +29181,7 @@ function classifyDeclaration({ prop, value }, {
   return { finding: null, styling };
 }
 var COLLAPSE_PER_RULE = /* @__PURE__ */ new Set(["layout/in-css", "typography/untokenized"]);
+var INLINE = " (inline)";
 var propOf = (message) => (message.split(":")[0] ?? message).trim();
 var declarationKeys = (f) => {
   if (!COLLAPSE_PER_RULE.has(f.rule)) return [findingKey(f)];
@@ -29226,7 +29229,7 @@ function extractSheet(root2, text2, tokenPrefixes) {
   const rules2 = [];
   root2.walkRules((cssRule) => {
     const selectors = resolvedSelectors(cssRule);
-    if (!selectors.some((s) => classesIn(s).length)) return;
+    const unbound = !selectors.some((s) => classesIn(s).length);
     const line = cssRule.source?.start?.line ?? 1;
     const media = mediaQuery(cssRule) || void 0;
     rules2.push({
@@ -29235,7 +29238,9 @@ function extractSheet(root2, text2, tokenPrefixes) {
       isGrid: ruleIsGrid(cssRule),
       ...media === void 0 ? {} : { media },
       decls: [...ownDecls(cssRule)].map((d) => ({ prop: d.prop, value: d.value, line: d.source?.start?.line ?? line })),
-      cut: deletableRule(cssRule, srcLines)
+      // No class, so nothing can be dead.
+      cut: unbound ? null : deletableRule(cssRule, srcLines),
+      ...unbound ? { unbound } : {}
     });
   });
   return { rules: rules2, defs: tokenDefsIn(root2, tokenPrefixes) };
@@ -29497,16 +29502,21 @@ async function analyze(config, {
     for (const cssRule of sheet.rules) {
       const ruleLine = cssRule.line;
       const selectors = cssRule.selectors;
+      const scopeLines = nearby(ruleLine);
+      if (cssRule.unbound) {
+        for (const decl2 of cssRule.decls)
+          for (const name of tokenRefsIn(decl2.value, tokenPrefixes))
+            tokenRefs.push({ file: rel, line: decl2.line, name, prop: decl2.prop.toLowerCase(), scopeLines });
+        continue;
+      }
       const allClasses = [...new Set(selectors.flatMap(classesIn))];
       const keyClassesPer = selectors.map(keyClassesIn);
       const keyClasses = [...new Set(keyClassesPer.flat())];
-      if (!allClasses.length) continue;
       const bound = keyClasses.flatMap((c) => bindings.get(c) ?? []);
       const boundSystem = bound.filter((b) => b.isSystem);
       const boundText = bound.filter((b) => b.isText);
       const isGrid = cssRule.isGrid;
       const bareElement = selectors.every(keysBareElement);
-      const scopeLines = nearby(ruleLine);
       const selector = selectors.join(", ");
       const media = cssRule.media;
       const elements = elementsOf(selectors);
@@ -29564,8 +29574,11 @@ async function analyze(config, {
   }))
     report(f);
   for (const el of inlineStyles) {
-    if (!reports(el.file)) continue;
     const scopeLines = nearby(el.line);
+    for (const d of el.decls)
+      for (const name of tokenRefsIn(d.value, tokenPrefixes))
+        tokenRefs.push({ file: el.file, line: d.line ?? el.line, name, prop: d.prop, scopeLines, suffix: INLINE });
+    if (!reports(el.file)) continue;
     const whole = ruleIsLive("system/inline-style") ? inlineStyle(el, ds.allowedInlineStyles) : null;
     if (whole) {
       report({ ...whole, file: el.file, line: el.line, code: whole.code ?? whole.message, scopeLines });
@@ -29587,7 +29600,7 @@ async function analyze(config, {
           hints: finding.hints?.map((h) => ({ ...h, span: d.span })),
           line: d.line ?? el.line,
           code: finding.code ?? finding.message,
-          suffix: " (inline)"
+          suffix: INLINE
         });
     }
     for (const f of collapsePerRule(pending))
@@ -30372,7 +30385,7 @@ async function judgeRenames(root2, findings, set, auth, about = /* @__PURE__ */ 
     if (!a || a.confidence < RENAME_FLOOR) return;
     const tail = judgedTail(a.confidence);
     const span = a.choice === NONE ? "no token means this" : a.choice;
-    f.message = messageLine(item.name, ` \u2192 ${span} ${tail}`);
+    f.message = messageLine(item.name, ` \u2192 ${span} ${tail}${f.suffix ?? ""}`);
     f.judged = judgedAs(a, [span, tail]);
     if (a.choice !== NONE) f.rename = { from: item.name, to: a.choice, lines };
     settled++;
