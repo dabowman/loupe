@@ -1288,13 +1288,19 @@ one writes to your files, so it answers only the page it served.
 
 ## Programmatic use
 
+Run this from a script at the root of a checkout. It imports the TypeScript
+sources, so it needs Node 22.18+ and an `npm install` in `engine/`:
+
 ```js
-import { analyze } from 'loupe';
-import { loadConfig } from 'loupe/config';
+import { analyze } from './engine/src/analyze.ts';
+import { loadConfig } from './engine/src/config.ts';
 
 const config = await loadConfig({ root: process.cwd() });
 const { findings, blocking, directives } = await analyze(config, { scope: null });
 ```
+
+The `@dabowman/loupe` package specifier arrives with the npm release
+([#82](https://github.com/dabowman/loupe/issues/82)).
 
 A library call writes nothing anywhere unless it passes `cache: true`.
 
