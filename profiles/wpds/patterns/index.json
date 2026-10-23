@@ -606,13 +606,14 @@
     },
     {
       "pattern": "report.notice",
-      "import": "@wordpress/components",
-      "canonical": "NoticeList",
+      "import": "@wordpress/ui",
+      "canonical": "Notice",
       "detector": "import",
       "instead_of": [
-        "Individually placed Notice components with local margins — NoticeList already takes notices + onRemove"
+        "Individually placed notices with local margins — map them onto Notice.Root inside one Stack, whose gap spaces them",
+        "NoticeList or Notice from @wordpress/components"
       ],
-      "note": "Stack(Notice) is under the floor; the import is the check. Notice (@wordpress/ui) compound is experimental — do not swap preemptively."
+      "note": "Replaces NoticeList from @wordpress/components, which 43.0.0 marks not-recommended in favour of this Notice, as it does its own Notice; system/superseded-component reports both old imports. @wordpress/ui ships no list, so the container is the caller's Stack, mapping its notices onto Notice.Root, each dismissed through Notice.CloseIconButton and, when it appears dynamically, announced with speak(). Which parts a notice uses varies, so no signature is registered; the import is the check."
     },
     {
       "pattern": "report.toast",

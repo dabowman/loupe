@@ -29,17 +29,26 @@ that report drift on the file just touched, not forty tool calls later).
 ```
 /plugin marketplace add dabowman/loupe
 /plugin install loupe@loupe
+/loupe-init
 ```
 
-The hooks are off until a project opts in. In each project you want gated, add
-this to `.claude/settings.local.json` and start a new session:
+The first two once per machine; `/loupe-init` once in each project you want
+checked. It settles the design system with you, writes `loupe.config.json`, and
+— since the hooks are off in a project until it opts in — asks where to turn
+them on: `.claude/settings.json`, committed, so everyone on the project gets
+them (the default in a git repository); `.claude/settings.local.json`, for this
+machine only; or neither. It ends on `loupe status`, which prints a `hook: OFF`
+line, with the reason, whenever the hook will say nothing.
+
+By hand, the opt-in is this, in either file:
 
 ```json
 { "env": { "LOUPE": "on" } }
 ```
 
-The skills, the commands and `loupe` typed by hand work everywhere without it.
-`loupe status` prints a `hook: OFF` line in a project that hasn't opted in.
+The hook reads it on its next run; the [pane](#the-pane) opens itself from the
+next session. The skills, the commands and `loupe` typed by hand work everywhere
+without it.
 
 Nothing else to run. The engine ships pre-bundled with its dependencies, so a
 fresh install is a working install on any machine with Node 18 or newer — no
@@ -910,10 +919,14 @@ again.
 ### Turning it on, and off for a session
 
 The hook is off until a project opts in with `"env": { "LOUPE": "on" }` in
-`.claude/settings.local.json` (see [Install](#install)). A gate that runs in
-every repo the plugin is installed for puts findings into sessions that are
-about something else. Claude Code passes that setting to the hook as an
-environment variable, so `LOUPE=on claude` turns it on for one session as well.
+`.claude/settings.json`, for everyone on the project, or
+`.claude/settings.local.json`, for one machine; `/loupe-init` offers to write
+either (see [Install](#install)). A gate that runs in every repo the plugin is
+installed for puts findings into sessions that are about something else. Claude
+Code passes that setting to the hook as an environment variable, so
+`LOUPE=on claude` turns it on for one session as well. The first of the
+environment, `.claude/settings.local.json`, `.claude/settings.json` and
+`~/.claude/settings.json` to set `LOUPE` decides.
 
 To silence a project that has opted in, for one session:
 
@@ -921,11 +934,12 @@ To silence a project that has opted in, for one session:
 LOUPE_OFF=1 claude
 ```
 
-Or for one project, mid-session — the hook reads this file on every run:
+Or for one project on this machine, mid-session, whichever file opted it in —
+the hook reads this one on every run:
 
 ```jsonc
 // .claude/settings.local.json
-{ "env": { "LOUPE": "on", "LOUPE_OFF": "1" } }
+{ "env": { "LOUPE_OFF": "1" } }
 ```
 
 Or everywhere, with the plugin's *Silence the hook* option. All three set the
@@ -1092,6 +1106,16 @@ fires when a turn ends with blocking findings still standing, which is the
 case you want to hear about without watching. Mods are on by default from
 Claude Code 2.1.287, and this one needs 2.1.299 for the text weights it draws;
 on an older build the pane is absent and the hooks run as before.
+
+The same holds when the module itself fails, the likelier break on an
+early-access API: checked on 2.1.308 and 2.1.309 with a module that throws at
+import, throws inside `register`, or imports a name `claude-code` does not
+export, Claude Code dropped the module alone, and the PostToolUse and Stop
+hooks beside it in `hooks.json` ran on every edit and at the end of every turn.
+Nothing announces it in an installed session — the pane never opens and
+`/loupe-pane` answers `Unknown command` — and the reason, `loupe: hooks module
+did not load: …`, is in the `claude --debug` log (a `claude -p` printing text
+also says it once on stderr).
 
 What it draws depends on where Claude Code is drawing. The desktop app and the
 VS Code panel get the engine's SVG charts, with a tooltip per bar. The terminal

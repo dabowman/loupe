@@ -26562,8 +26562,19 @@ function ruleSetting(rawId, value) {
   return { severity, reason: reason.trim() };
 }
 function readRegistry(key, spec, root2, packages, load, empty) {
-  if (Array.isArray(spec)) return load(spec);
-  if (typeof spec !== "string" || !spec) return empty;
+  if (Array.isArray(spec) || isRecord(spec)) {
+    try {
+      return load(spec);
+    } catch (err) {
+      throw new Error(`${key}: ${messageOf(err)}`);
+    }
+  }
+  if (spec === null || spec === void 0) return empty;
+  if (typeof spec !== "string")
+    throw new Error(
+      `${key} must be a path to a registry file, an array of entries, an object, or null, got: ${JSON.stringify(spec)}`
+    );
+  if (!spec) return empty;
   const path = under(root2, spec);
   try {
     const raw = JSON.parse(readFileSync2(path, "utf8"));
@@ -27278,7 +27289,7 @@ function templateText(quasi) {
     out += quasi.quasis[i]?.value.raw ?? "";
     if (i < quasi.expressions.length) {
       const prev = out.replace(/\s+$/, "").slice(-1);
-      out += prev === "" || prev === ";" || prev === "{" || prev === "}" ? "/*dsh*/" : "dsh-e";
+      out += prev === "" || prev === ";" || prev === "{" || prev === "}" ? "/*__loupe_interp__*/" : "__loupe_interp__";
     }
   }
   return out;
@@ -27286,7 +27297,7 @@ function templateText(quasi) {
 function parseTemplate(cssText, startLine) {
   let root2;
   try {
-    root2 = postcss_default.parse(`.dsh-root{${cssText}
+    root2 = postcss_default.parse(`.loupe-root{${cssText}
 }`, { from: void 0 });
   } catch (err) {
     return { groups: [], error: messageLineOf(err) };
@@ -27299,7 +27310,7 @@ function parseTemplate(cssText, startLine) {
     const walk = (container) => {
       for (const node of container.nodes ?? []) {
         if (node.type === "decl") {
-          if (node.value.includes("dsh-e")) continue;
+          if (node.value.includes("__loupe_interp__")) continue;
           decls.push({ prop: node.prop.toLowerCase(), value: node.value, line: at(node) });
         } else if (node.type === "atrule")
           walk(node);
@@ -29115,7 +29126,7 @@ var realPath = (path) => {
 var partClass = (sel) => ownLevel(keySelector(sel)).match(/\.(-?[_a-zA-Z][\w-]*)(?![\w\\-])/)?.[1];
 var tagOf = (compound) => /^[a-z][a-z0-9-]*/i.exec(compound)?.[0]?.toLowerCase() ?? null;
 function compoundElements(compound, carriersByClass) {
-  if (compound.includes("dsh-e") || compound.includes("\\")) return null;
+  if (compound.includes("__loupe_interp__") || compound.includes("\\")) return null;
   const own = ownLevel(compound);
   const tag = tagOf(own);
   if (tag) return [tag];
