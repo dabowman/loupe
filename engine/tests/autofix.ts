@@ -81,7 +81,7 @@ async function fixture(files: Record<string, string>, components?: Map<string, C
 		const all = { 'loupe.config.json': CONFIG, [DS_TOKENS]: TOKENS, ...files };
 		writeAll(root, all);
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		// The registry rides on the profile, which only a `--profiles` run merges.
+		// The registry rides on the profile, which the CLI merges and `loadConfig` does not.
 		if (components) setComponentRegistry(config, components);
 		const result = await analyze(config, { scope: null });
 		const outcome = applyTokenFixes(root, result.findings);
@@ -883,7 +883,10 @@ await check('fix --judge still writes what needed no model when the judge cannot
 		const outage = `data:text/javascript,${encodeURIComponent(
 			"globalThis.fetch = async () => { throw new TypeError('fetch failed (simulated outage)'); };",
 		)}`;
-		const r = spawnSync(process.execPath, ['--import', outage, CLI, 'fix', '--judge', '--root', root], {
+		// No profile: the shipped WPDS scopes hold this radius token for review, and
+		// what is under test is the exact substitution surviving the outage.
+		const argv = ['--import', outage, CLI, 'fix', '--judge', '--root', root, '--profile', 'none'];
+		const r = spawnSync(process.execPath, argv, {
 			encoding: 'utf8',
 			env: { ...process.env, TYPESAFE_API_KEY: 'key' },
 		});

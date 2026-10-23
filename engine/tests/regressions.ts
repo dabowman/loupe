@@ -702,7 +702,9 @@ function advisoryProject(): {
 	execFileSync('git', ['init', '-q'], { cwd: root, stdio: 'ignore' });
 	const hook = (payload: object, extra: NodeJS.ProcessEnv = {}): HookOut => {
 		const r = runCli(
-			['hook'],
+			// No profile: the tallies below are the stylesheet's three, and the shipped
+			// registry would add a fourth for the superseded `__experimentalText`.
+			['hook', '--profile', 'none'],
 			{ CLAUDE_PROJECT_DIR: root, CLAUDE_PLUGIN_OPTION_BLOCKING: 'false', ...extra },
 			JSON.stringify({ session_id: 'adv', cwd: root, ...payload }),
 		);
@@ -3174,13 +3176,17 @@ await check('a --profile that matches nothing says so', () => {
 		// test about a typo'd flag. Adding a profile is supposed to be adding a
 		// directory.
 		assert(/available:.*\bwpds\b/.test(typo.stderr), `the warning should name what is on offer:\n${typo.stderr}`);
-		// The other way to reach the same state: the id is real, the directory it
-		// lives in was never passed.
-		const noDir = runCli(['status', '--root', root, '--profile', 'wpds']);
+		// The other way to reach the same state: the id is real, and the directory
+		// it lives in was left out — `--patterns` leaves out the shipped set.
+		writeFileSync(join(root, 'registry.json'), JSON.stringify({ realizations: [] }));
+		const noDir = runCli(['status', '--root', root, '--profile', 'wpds', '--patterns', join(root, 'registry.json')]);
 		assert(
-			/--profiles was not given/.test(noDir.stderr),
+			/--patterns leaves the shipped profiles out, and --profiles was not given/.test(noDir.stderr),
 			`a profile with nowhere to look said nothing:\n${noDir.stderr}`,
 		);
+		// With neither, the shipped directory is found with no flag at all.
+		const shipped = runCli(['status', '--root', root, '--profile', 'wpds']);
+		assert(!/no profile "wpds"/.test(shipped.stderr), `the shipped wpds was not found:\n${shipped.stderr}`);
 	} finally {
 		cleanup(root);
 	}
@@ -3231,11 +3237,12 @@ await check('init --force over an existing config still honours the prefixes opt
 	}
 });
 
-// The shim adds `--profiles <shipped>` unless the caller named a registry
+// The shim used to add `--profiles <shipped>` unless the caller named a registry
 // source itself, and `--profile` was on that opt-out list. It names one *among*
 // the profiles that flag supplies rather than supplying any, so `loupe --profile
 // wpds` reached the engine with no profiles directory, found nothing to force,
-// and ran a weaker check than the same command without the flag.
+// and ran a weaker check than the same command without the flag. The engine
+// finds the shipped set itself now; this holds the shim to reaching it.
 await check('the shim still supplies its profiles directory under --profile', () => {
 	const shim = join(HERE, '..', '..', 'bin', 'loupe');
 	const root = inferrableRepo();

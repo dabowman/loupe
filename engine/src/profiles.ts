@@ -17,34 +17,40 @@
  *
  * A profile with no `packages` is never selected automatically — there is
  * nothing to recognize it by — and has to be named with `--profile <id>`.
+ * `packages` is a list, claiming each package at any version, or an object
+ * mapping each to the range it describes: `{ "@acme/ui": "<3" }`.
  *
- * Profiles come from two places. `--profiles` hands over the shipped set; the
- * project adds its own, from the directories its config lists under `profiles`
- * and from `.loupe/profiles/`. A project's own profile outranks a shipped one
- * claiming the same id or the same package: a design system rebuilt under its
- * old package name ships the profile that describes it *now*, and the shipped
- * one describes what it used to be.
+ * Profiles come from two places. The shipped set is the `profiles/` directory
+ * beside the engine, and every `--profiles` adds one more after it; the project
+ * adds its own, from the directories its config lists under `profiles` and from
+ * `.loupe/profiles/`. A project's own profile outranks a shipped one claiming
+ * the same id or the same package: a design system rebuilt under its old
+ * package name ships the profile that describes it *now*, and the shipped one
+ * describes what it used to be.
  *
  * Design notes: docs/design/cli.md#profiles
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { byBytes, readDir } from './discover.ts';
 import { join, resolve } from 'node:path';
 import { loadPatterns } from './patterns.ts';
 import { loadComponents } from './components.ts';
 import { mergeDeliveries, readDelivery } from './delivery.ts';
 import { setComponentRegistry, setPatterns } from './config.ts';
-import { asString, asStrings } from './json.ts';
+import { asString, asStrings, isRecord } from './json.ts';
 import { under } from './paths.ts';
 import { declaredPackages, registryApplies } from './registry.ts';
 import { rulesNeeding } from './rules.ts';
 import { parseTokenScopes } from './scopes.ts';
+import { overlaps, parseRange } from './semver.ts';
 import { messageOf } from './text.ts';
 import type {
 	ComponentEntry,
 	Config,
+	DeclaredVersion,
 	Delivery,
+	OutOfRange,
 	Pattern,
 	Profile,
 	ProfileOrigin,
@@ -52,7 +58,7 @@ import type {
 	SkippedRegistry,
 } from './types.ts';
 
-export type { Profile, ProfileOrigin, RegistryNote, SkippedRegistry };
+export type { DeclaredVersion, OutOfRange, Profile, ProfileOrigin, RegistryNote, SkippedRegistry };
 
 /** Where a project keeps its own profiles when its config does not say. */
 export const PROJECT_PROFILES = join('.loupe', 'profiles');
@@ -127,6 +133,24 @@ function readScopes(dir: string, raw: unknown): ReturnType<typeof parseTokenScop
 }
 
 /**
+ * A profile's `packages`: a list claims each package at any version, an object
+ * maps each to the range of versions it describes. A range that does not read
+ * is thrown, for `readProfiles` to name — a profile that cannot say which
+ * versions it covers would be selected on all of them, which is the v2 profile
+ * on a v3 project again.
+ */
+function readPackages(raw: unknown): Pick<Profile, 'packages' | 'ranges'> {
+	if (!isRecord(raw)) return { packages: asStrings(raw), ranges: new Map() };
+	const ranges = new Map<string, string>();
+	for (const [pkg, range] of Object.entries(raw)) {
+		if (typeof range !== 'string' || !parseRange(range))
+			throw new Error(`packages: ${JSON.stringify(range)} for ${pkg} is not a version range`);
+		if (pkg) ranges.set(pkg, range);
+	}
+	return { packages: [...ranges.keys()], ranges };
+}
+
+/**
  * Every `<root>/<id>/profile.json`. A malformed or unreadable profile is
  * skipped rather than thrown: one bad directory must not take the gate down.
  * Skipped is not silent, though, when `unreadable` is passed: each one is named
@@ -167,7 +191,7 @@ export function readProfiles(
 				id,
 				name: asString(raw.name) ?? asString(raw.id) ?? e.name,
 				preset: asString(raw.preset) ?? null,
-				packages: asStrings(raw.packages),
+				...readPackages(raw.packages),
 				patterns: patterns ? under(dir, patterns) : null,
 				components: components ? under(dir, components) : null,
 				tokenDescriptions: tokenDescriptions ? under(dir, tokenDescriptions) : null,
@@ -193,30 +217,48 @@ export function readProfiles(
 	return out.sort((a, b) => byBytes(a.id, b.id));
 }
 
+/** A directory as the filesystem names it, so two spellings of one are one. */
+const realDir = (dir: string): string => {
+	try {
+		return realpathSync(dir);
+	} catch {
+		return dir;
+	}
+};
+
 /**
  * Where profiles are read from, most authoritative first: the directories the
- * config lists, then `.loupe/profiles/` under the root, then `--profiles`.
+ * config lists, then `.loupe/profiles/` under the root, then the shipped set,
+ * then each `--profiles` in the order given.
  *
  * The convention is read whether or not the config names other directories —
  * it is where a profile is found with no config at all — and a directory named
- * twice is read once, under the first, most authoritative, origin.
+ * twice is read once, under the first, most authoritative, origin. Twice is the
+ * normal case for the shipped set: the hooks and commands still pass it as
+ * `--profiles`, through `${CLAUDE_PLUGIN_ROOT}`, which can be a symlink to the
+ * directory the engine found on its own — so the comparison is by real path.
  */
 export function profileRoots({
 	root,
 	configured = [],
-	flag = null,
+	shipped = null,
+	flags = [],
 }: {
 	root: string;
 	configured?: readonly string[];
-	flag?: string | null;
+	shipped?: string | null;
+	flags?: readonly string[];
 }): ProfileRoot[] {
 	const roots: ProfileRoot[] = [
 		...configured.map((dir) => ({ dir: resolve(dir), origin: 'project' as const })),
 		{ dir: resolve(root, PROJECT_PROFILES), origin: 'project' },
-		...(flag ? [{ dir: resolve(flag), origin: 'shipped' as const }] : []),
+		...[...(shipped ? [shipped] : []), ...flags].map((dir) => ({ dir: resolve(dir), origin: 'shipped' as const })),
 	];
 	const seen = new Set<string>();
-	return roots.filter((r) => !seen.has(r.dir) && Boolean(seen.add(r.dir)));
+	return roots.filter((r) => {
+		const key = realDir(r.dir);
+		return !seen.has(key) && Boolean(seen.add(key));
+	});
 }
 
 /**
@@ -240,9 +282,19 @@ export function readProfileRoots(roots: readonly ProfileRoot[], unreadable?: str
  *
  * Selection is by package: the project imports `@wordpress/components`, so the
  * profile that claims it is the one whose composites can legitimately match.
- * `force` names a profile explicitly and skips the question; `none` names no
- * profile, without the project having to stop declaring its packages — which
- * would switch off every rule that needs them.
+ * Any one of the packages a profile lists selects it. `force` names a profile
+ * explicitly and skips the question; `none` names no profile, without the
+ * project having to stop declaring its packages — which would switch off every
+ * rule that needs them.
+ *
+ * A profile that claims a package for a range of versions is selected only
+ * where the range the project declares for it, as `declared` reads it, admits
+ * some version the profile's range does too. Overlap, not containment: `^2.3.0`
+ * may resolve to a 2.x, which a `<3` profile describes. A package with no
+ * declared range, or one that is not a range at all (`workspace:*`, a git URL),
+ * is taken at any version — that says nothing the profile can check. Each
+ * profile a declared range kept out is pushed onto `outOfRange`, for the CLI to
+ * say: a profile missing for that reason reads exactly like one never written.
  *
  * A shipped profile claiming a package that a selected project profile also
  * claims is left out: two descriptions of one package, and the project wrote
@@ -254,19 +306,40 @@ export function selectProfiles(
 	// nothing else.
 	config: { designSystem?: { packages?: readonly string[] } },
 	force: string | null = null,
+	{
+		declared = () => null,
+		outOfRange,
+	}: { declared?: (pkg: string) => DeclaredVersion | null; outOfRange?: OutOfRange[] } = {},
 ): Profile[] {
 	if (force === NO_PROFILE) return [];
 	if (force) return profiles.filter((p) => p.id === force);
 	const pkgs = config.designSystem?.packages ?? [];
 	if (!pkgs.length) return [];
-	const matched = profiles.filter((p) => p.packages.some((pkg) => pkgs.includes(pkg)));
-	// Only the packages the project imports: a project profile also claiming one
-	// it does not import describes nothing here, and must not shadow a shipped
+	// What each profile claims of the packages the project imports, at a version
+	// the project can be on. Only those: a project profile also claiming one it
+	// does not import describes nothing here, and must not shadow a shipped
 	// profile over it.
-	const claimed = new Set(
-		matched.filter((p) => p.origin === 'project').flatMap((p) => p.packages.filter((pkg) => pkgs.includes(pkg))),
-	);
-	return matched.filter((p) => p.origin === 'project' || !p.packages.some((pkg) => claimed.has(pkg)));
+	const claims = new Map<Profile, string[]>();
+	for (const p of profiles) {
+		const out: OutOfRange[] = [];
+		const held = p.packages.filter((pkg) => {
+			if (!pkgs.includes(pkg)) return false;
+			const range = p.ranges.get(pkg);
+			const want = range ? parseRange(range) : null;
+			const found = want ? declared(pkg) : null;
+			const has = found ? parseRange(found.range) : null;
+			// Only two ranges that both read can rule a profile out.
+			if (!range || !want || !found || !has || overlaps(has, want)) return true;
+			out.push({ profile: p.id, pkg, range, declared: found.range, manifest: found.manifest });
+			return false;
+		});
+		if (held.length) claims.set(p, held);
+		else outOfRange?.push(...out);
+	}
+	const claimed = new Set([...claims].filter(([p]) => p.origin === 'project').flatMap(([, held]) => held));
+	return [...claims]
+		.filter(([p, held]) => p.origin === 'project' || !held.some((pkg) => claimed.has(pkg)))
+		.map(([p]) => p);
 }
 
 /**

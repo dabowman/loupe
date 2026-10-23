@@ -546,9 +546,9 @@ in `docs/patterns-v2.md`. The flat v1 form, entries keyed by `id`, was removed
 in 0.8.0: a registry still written that way is a config error that says what
 replaced it.
 
-A registry reaches the engine through its profile, which the hooks and
-commands pass automatically and which applies only to projects importing that
-system's packages — `@wordpress/components` or `@wordpress/ui` for `wpds` — see
+A registry reaches the engine through its profile, which the engine reads on
+every run and applies only to projects importing that system's packages —
+`@wordpress/components` or `@wordpress/ui` for `wpds` — see
 [Profiles](#profiles). A project's own registry is merged over the shipped one,
 winning on `pattern`.
 
@@ -617,9 +617,11 @@ design system is never mistaken for one of these.
 
 Everything above that is specific to WPDS — the two registries, the preset that
 configures them, the packages that identify it — lives in `profiles/wpds/`. The
-engine takes `--profiles`, which the hooks, commands and `bin/loupe` all pass,
-and applies a profile only to a project importing its packages. A project's own
-profiles are read as well — see [Your own profile](#your-own-profile).
+engine reads `profiles/` from beside itself on every run, however it was
+started, and applies a profile only to a project importing one of its packages.
+`--profiles <dir>` adds another directory to the shipped one rather than
+replacing it, and can be repeated. A project's own profiles are read as well —
+see [Your own profile](#your-own-profile).
 
 ```jsonc
 // profiles/wpds/profile.json
@@ -712,6 +714,12 @@ shadowed profile is still there to name with `--profile`.
 
 `"profile"` pins the choice outright: an id, or `"none"` for no profile, while
 `designSystem.packages` — and every rule that needs it — stays as it is.
+
+A profile can also say which versions it describes, `"packages": {
+"@automattic/vip-design-system": "<3" }`, and the shipped `vip` profile does:
+it is selected only where the range the project's `package.json` declares can
+be a 2.x. On a v3 project `loupe status` says the version kept it out. See
+[Profiles](engine/README.md#profiles) in the engine README.
 
 `loupe status` prints the chosen profile's directory, and the skills read its
 `authoring.md`, `patterns.md` and `remediation.md` from there.
@@ -879,11 +887,12 @@ backlog and ratchet from there:
 ./bin/loupe baseline
 ```
 
-Use the `bin/loupe` shim (or pass `--profiles` yourself). The hooks always run
-with the shipped design-system profiles, and rules that need a registry —
-`system/locked-component`, `system/superseded-component` — only fire when the
-profiles are loaded. Recording a backlog without them reports `baselined 0
-finding(s)` and leaves the gate blocking on findings the baseline never saw.
+The shipped design-system profiles load on every run, from the shim, the hooks
+and `node engine/bin/loupe.mjs` alike, and rules that need a registry —
+`system/locked-component`, `system/superseded-component` — only fire when they
+are loaded. A binary carries none (see [Without Node](#without-node)): recording
+a backlog with one and no `--profiles` reports `baselined 0 finding(s)` and
+leaves the gate blocking on findings the baseline never saw.
 
 Entries key on rule + file + normalized code, not line number, so reformatting
 does not resurrect the whole file.
@@ -1267,11 +1276,10 @@ languages worth syncing, and stops. Everything a reader sees is decided in
 Neovim and Helix need no extension at all, just `loupe lsp` as the command.
 `editors/vscode/README.md` has the per-editor configuration.
 
-Use `bin/loupe` rather than `engine/bin/loupe.mjs`, here as everywhere: the shim
-is what passes the shipped profiles, and without them the component and
-composite rules are silently off — the editor would show a thinner report than
-CI does, and nothing would say so. The shim is a POSIX `sh` script, so on
-Windows neither PATH nor the extension's `loupe.path` can start it outside WSL.
+The shim and `engine/bin/loupe.mjs` read the same shipped profiles — the engine
+finds them beside itself — so the editor shows the report CI does. The shim is
+a POSIX `sh` script, so on Windows neither PATH nor the extension's
+`loupe.path` can start it outside WSL.
 
 Two things are deliberate and both are visible the first time they bite.
 
@@ -1498,6 +1506,8 @@ cache could miss, the cached result must equal an uncached run byte for byte.
 ones from source and from the bundle, and checks that the workers actually ran —
 a pool that quietly fell back would pass every comparison.
 
+`tests/semver.ts` covers the version ranges profile selection compares, against
+the cases where reading a range wrong hands a project the wrong profile.
 `tests/multi-ds.ts` covers registry scoping and profile selection — which design
 system answers for a file, in a repo that has more than one. `tests/scopes.ts`
 covers token scopes, where a suggestion from the wrong family is the right

@@ -26,7 +26,7 @@
         "loupe.path": {
           "type": "string",
           "default": "loupe",
-          "description": "The loupe executable. The default resolves `loupe` on PATH \u2014 the plugin's own bin/loupe shim, which is what passes the shipped design-system profiles. Point this at that file directly if it is not on your PATH."
+          "description": "The loupe executable. The default resolves `loupe` on PATH \u2014 the plugin's own bin/loupe shim; the engine reads the shipped design-system profiles on its own either way. Point this at that file directly if it is not on your PATH."
         },
         "loupe.enable": {
           "type": "boolean",

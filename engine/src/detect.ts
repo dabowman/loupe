@@ -20,8 +20,8 @@ import type { BlockPrefix } from './blocks.ts';
 import { DEFAULTS, compilePatterns, merge } from './config.ts';
 import { byBytes, discover, readDir } from './discover.ts';
 import { presetKey, presetNames, readPreset } from './embedded.ts';
-import { listOf, readJson } from './json.ts';
-import type { AuthoredConfig } from './types.ts';
+import { isRecord, listOf, readJson } from './json.ts';
+import type { AuthoredConfig, DeclaredVersion } from './types.ts';
 
 /** How much a match is worth. Presets name these; nothing else interprets them. */
 export type Confidence = 'high' | 'low' | 'none' | (string & {});
@@ -171,6 +171,36 @@ function manifests(root: string, maxDepth = 3, budget = 60): { dir: string; rel:
 	};
 	walk(root, '', 0);
 	return out;
+}
+
+/**
+ * What the project's manifests declare for a package: the range, and the
+ * manifest it came from. The manifests are the ones detection reads, and the
+ * shallowest naming the package answers for it, as it does when a preset is
+ * matched — so a monorepo's package a directory down is found the same way.
+ *
+ * Within one manifest the field installed from wins over the one only promised:
+ * `dependencies`, then `devDependencies`, then `peerDependencies`. A library
+ * declaring `"^2 || ^3"` as a peer and developing against `^3` is on v3.
+ *
+ * The walk is paid on the first question, not on the call: most runs select no
+ * profile that limits a version, and never ask.
+ */
+export function declaredVersions(root: string): (pkg: string) => DeclaredVersion | null {
+	let read: { rel: string; fields: Record<string, unknown>[] }[] | null = null;
+	return (pkg) => {
+		read ??= manifests(root).map(({ rel }) => {
+			const m = readManifest(root, rel);
+			const fields = [m.dependencies, m.devDependencies, m.peerDependencies].flatMap((f) => (isRecord(f) ? [f] : []));
+			return { rel, fields };
+		});
+		for (const { rel, fields } of read)
+			for (const deps of fields) {
+				const range = deps[pkg];
+				if (typeof range === 'string') return { range, manifest: manifestLabel(rel) };
+			}
+		return null;
+	};
 }
 
 /**

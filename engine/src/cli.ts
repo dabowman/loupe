@@ -72,7 +72,7 @@ import { serve } from './serve.ts';
 import { ui } from './ui.ts';
 import { messageOf, oneLine } from './text.ts';
 import { readTokenSources } from './tokens.ts';
-import { DETECT_ENTRY_BUDGET, detectConfig, detectPreset } from './detect.ts';
+import { DETECT_ENTRY_BUDGET, declaredVersions, detectConfig, detectPreset } from './detect.ts';
 import {
 	NO_PROFILE,
 	activeDelivery,
@@ -84,7 +84,7 @@ import {
 } from './profiles.ts';
 import { deliverySummary, REMEDY_RULES } from './delivery.ts';
 import { directive } from './suppressions.ts';
-import type { Profile, RegistrySource } from './profiles.ts';
+import type { OutOfRange, Profile, RegistrySource } from './profiles.ts';
 import {
 	attemptsPath,
 	baselinePath,
@@ -278,6 +278,16 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  */
 const SINGLE_FILE = !existsSync(join(HERE, '..', 'package.json'));
 
+/**
+ * The profiles that ship with this engine: `profiles/` beside `engine/`, in a
+ * checkout and in the plugin alike, which `src/` and `dist/` both reach at the
+ * same depth. Null where there is none — an engine installed on its own, or a
+ * binary, which carries none and whose module URL names nothing on disk.
+ */
+const SHIPPED_PROFILES = ((dir: string): string | null => (!SINGLE_FILE && existsSync(dir) ? dir : null))(
+	join(HERE, '..', '..', 'profiles'),
+);
+
 /** A `.env` beside the checkout; for a binary, one in the working directory. */
 const ENV_FILE = SINGLE_FILE ? resolve('.env') : join(HERE, '..', '..', '.env');
 
@@ -360,11 +370,19 @@ const isFormat = (f: string): f is Format => (FORMATS as readonly string[]).incl
 const LIST_FLAGS: readonly ValueFlag[] = ['files', 'rule'];
 
 /**
+ * The value flags that may repeat and keep each occurrence whole, in order: a
+ * directory is not a comma list, since a path may carry a comma.
+ */
+const REPEATED_FLAGS = ['profiles'] as const satisfies readonly ValueFlag[];
+type RepeatedFlag = (typeof REPEATED_FLAGS)[number];
+const isRepeated = (f: string): f is RepeatedFlag => (REPEATED_FLAGS as readonly string[]).includes(f);
+
+/**
  * Parsed command-line flags. Written out rather than left as a string-keyed
  * record: `--files` carries a path list and `--all` carries nothing, and a
  * record typing both as `string | boolean` pushes that to every read site.
  */
-type Flags = { [K in ValueFlag]?: string } & {
+type Flags = { [K in Exclude<ValueFlag, RepeatedFlag>]?: string } & { [K in RepeatedFlag]?: string[] } & {
 	help?: boolean;
 	version?: boolean;
 	all?: boolean;
@@ -388,7 +406,9 @@ interface Args {
 function parseArgs(args: string[]): Args {
 	const { values, positionals } = parseArgv({
 		args,
-		options: Object.fromEntries(VALUE_FLAGS.map((f) => [f, { type: 'string', multiple: LIST_FLAGS.includes(f) }])),
+		options: Object.fromEntries(
+			VALUE_FLAGS.map((f) => [f, { type: 'string', multiple: LIST_FLAGS.includes(f) || isRepeated(f) }]),
+		),
 		allowPositionals: true,
 		strict: false,
 	});
@@ -397,13 +417,19 @@ function parseArgs(args: string[]): Args {
 		const given = [values[f] ?? []].flat().filter((v) => typeof v === 'string');
 		values[f] = given.length ? given.join(',') : undefined;
 	}
-	// A value flag given no value parses as `true`; treat it as not given.
+	// A value flag given no value parses as `true`; treat it as not given. The
+	// repeated ones are lists, and are set aside before that would drop them.
+	const repeated = Object.fromEntries(
+		REPEATED_FLAGS.map(
+			(f) => [f, [values[f] ?? []].flat().filter((v) => typeof v === 'string' && v !== '')] as const,
+		).filter(([, given]) => given.length),
+	);
 	for (const f of VALUE_FLAGS) if (typeof values[f] !== 'string') delete values[f];
 	// A switch is undeclared, so `--judge=false` arrives as the string 'false',
 	// which is truthy: it would turn judging on. `=false` means off.
 	for (const [k, v] of Object.entries(values))
 		if (typeof v === 'string' && !(VALUE_FLAGS as readonly string[]).includes(k)) values[k] = v !== 'false';
-	return { _: positionals, flags: values as Flags };
+	return { _: positionals, flags: { ...values, ...repeated } as Flags };
 }
 
 const USAGE = `loupe <command> [options]
@@ -498,10 +524,12 @@ Options:
   --preset <name>       Use a bundled preset instead of discovering config
   --patterns <path>     Composite pattern registry (JSON)
   --components <path>   Component currency registry (JSON)
-  --profiles <dir>      Directory of design-system profiles; the ones matching
+  --profiles <dir>      Another directory of design-system profiles, read after
+                        the shipped ones; repeat it for more. The ones matching
                         this project's imports supply their registries. The
                         project's own (config "profiles", .loupe/profiles/) are
-                        read as well, and win on a shared id or package
+                        read first, and win on a shared id or package.
+                        --patterns leaves the shipped profiles out
   --profile <id>        Use this profile regardless of what the project imports
                         ("none" for no profile); outranks the config's "profile"
   --config <path>       Explicit config file
@@ -1030,10 +1058,17 @@ async function main(): Promise<number> {
 	// of them passes anything but the shipped directory. The directories a config
 	// lists can only be added once it is loaded, below — but the preset a profile
 	// names matters only to a project with no config, which lists none.
-	const flagProfiles = args.flags.profiles ? resolve(args.flags.profiles) : null;
+	//
+	// The shipped set is found here rather than handed over, so every entry point
+	// gets it, and each `--profiles` adds to it instead of replacing it. A registry
+	// named by hand with `--patterns` leaves it out: a profile's registry merges
+	// first and would win every id the two share, so the registry being tried
+	// would lose to the one it was written to replace.
+	const shipped = args.flags.patterns ? null : SHIPPED_PROFILES;
+	const flagProfiles = (args.flags.profiles ?? []).map((dir) => resolve(dir));
 	// Refilled by every read, so it names the failures of the read that counted.
 	let unreadable: string[] = [];
-	let profiles = readProfileRoots(profileRoots({ root, flag: flagProfiles }), unreadable);
+	let profiles = readProfileRoots(profileRoots({ root, shipped, flags: flagProfiles }), unreadable);
 	const byId = (id: string | null | undefined): Profile | null =>
 		id && id !== NO_PROFILE ? (profiles.find((p) => p.id === id) ?? null) : null;
 	let forced = byId(args.flags.profile);
@@ -1137,9 +1172,10 @@ async function main(): Promise<number> {
 	// with the project winning on an entry's `pattern`, because a repo that has
 	// written down its own `screen#header` means that one, not the shipped generic.
 	//
-	// The directories the config lists are read first, ahead of the convention and
-	// of `--profiles`, so on a shared id the project's own profile is the one kept.
-	const roots = profileRoots({ root, configured: config.profileDirs, flag: flagProfiles });
+	// The directories the config lists are read first, ahead of the convention, the
+	// shipped set and `--profiles`, so on a shared id the project's own profile is
+	// the one kept.
+	const roots = profileRoots({ root, configured: config.profileDirs, shipped, flags: flagProfiles });
 	if (config.profileDirs.length) {
 		unreadable = [];
 		profiles = readProfileRoots(roots, unreadable);
@@ -1149,6 +1185,14 @@ async function main(): Promise<number> {
 	// the config's `profile`, over the packages the config declares.
 	const pin = args.flags.profile ?? config.profilePin;
 	const pinned = byId(pin);
+	// Where the shipped set went, when it is not among the directories named: the
+	// first place anyone would expect the profile to be.
+	const noShipped =
+		shipped || flagProfiles.length
+			? ''
+			: args.flags.patterns
+				? ' (--patterns leaves the shipped profiles out, and --profiles was not given)'
+				: ' (no profiles ship beside this engine, and --profiles was not given)';
 	// A named profile that resolves to nothing is not a no-op: it also suppresses
 	// the profile *selection* would have made, so a typo checks strictly less than
 	// no pin at all.
@@ -1156,11 +1200,10 @@ async function main(): Promise<number> {
 		note(
 			`loupe: no profile "${pin}"${args.flags.profile ? '' : ' (the config\'s "profile")'} in ${roots
 				.map((r) => r.dir)
-				.join(', ')}${flagProfiles ? '' : ' (--profiles was not given)'}${
-				profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''
-			}\n`,
+				.join(', ')}${noShipped}${profiles.length ? ` — available: ${profiles.map((p) => p.id).join(', ')}` : ''}\n`,
 		);
-	const active = selectProfiles(profiles, config, pin);
+	const outOfRange: OutOfRange[] = [];
+	const active = selectProfiles(profiles, config, pin, { declared: declaredVersions(root), outOfRange });
 	const sources: RegistrySource[] = active.map((p) => ({
 		label: `profile ${p.id}`,
 		patterns: p.patterns,
@@ -1178,7 +1221,7 @@ async function main(): Promise<number> {
 		});
 
 	const registries = applyRegistries(config, sources);
-	config.profiles = { available: profiles, active, ...registries };
+	config.profiles = { available: profiles, active, outOfRange, ...registries };
 	if (!isHook) {
 		for (const err of registries.errors) fail(`loupe: ${err}\n`);
 		for (const u of unreadable) note(`loupe: project profile skipped, could not load ${u}\n`);
@@ -1462,6 +1505,14 @@ async function main(): Promise<number> {
 							? `none selected \u2014 available: ${config.profiles.available.map((p) => p.id).join(', ')}`
 							: 'none available'
 			}`,
+			// A profile its version kept out reads exactly like one never written, and
+			// what to do about it — a profile of the project's own, or a pin — starts
+			// from knowing that it was the version.
+			...(config.profiles?.outOfRange ?? []).map((o) =>
+				dim(
+					`            ${o.profile} not selected \u2014 ${o.pkg} is ${o.declared} in ${o.manifest}, outside the ${o.range} it describes`,
+				),
+			),
 			// What adopting the system costs this project: which packages the host
 			// provides and which get bundled, and which sheet carries the tokens. A
 			// remedy naming a bundled package is a new runtime dependency, and a token
