@@ -47,7 +47,20 @@ import type {
 	ScanResult,
 } from './types.ts';
 
-const PLUGINS: ParserPlugin[] = ['jsx', 'typescript', 'decorators-legacy', 'classProperties', 'importAttributes'];
+const TS_PLUGINS: ParserPlugin[] = ['typescript', 'decorators-legacy', 'classProperties', 'importAttributes'];
+const JSX_PLUGINS: ParserPlugin[] = ['jsx', ...TS_PLUGINS];
+
+/**
+ * The parser plugins for a file, chosen by its extension.
+ *
+ * TypeScript proper (`.ts`, `.mts`, `.cts`) has no JSX, and with `jsx` on,
+ * `<HTMLInputElement>el` — an angle-bracket type assertion — reads as an
+ * element that never closes: the parse throws and the whole file, its imports
+ * and templates with it, drops out of the index. Every other extension keeps
+ * `jsx`: `.tsx` needs both, and a `.js` file in a WordPress plugin routinely
+ * holds JSX.
+ */
+const pluginsFor = (relPath: string): ParserPlugin[] => (/\.[cm]?ts$/i.test(relPath) ? TS_PLUGINS : JSX_PLUGINS);
 
 /**
  * Narrow reads of the shapes a CSS-in-JS tag can take: `styled.div`,
@@ -425,7 +438,7 @@ export function scanMarkup(
 			sourceType: 'unambiguous',
 			errorRecovery: true,
 			attachComment: false,
-			plugins: PLUGINS,
+			plugins: pluginsFor(relPath),
 		});
 	} catch (err) {
 		return { ...result, parseError: messageLineOf(err) };

@@ -9,7 +9,7 @@
  *
  *   tests/fixtures/<name>/
  *     loupe.config.json   config for the fixture
- *     expected.json            { note, findings: [{ rule, file, line }] }
+ *     expected.json            { note, parseErrors?, findings: [{ rule, file, line }] }
  *     <sources>
  */
 
@@ -26,10 +26,13 @@ const FIXTURES = join(HERE, 'fixtures');
 /** A fixture's recorded expectation: identity only, never message prose. */
 interface Expected {
 	note?: string;
+	/** The files that may not parse, when a fixture pins it; `[]` means every file parses. */
+	parseErrors?: string[];
 	findings: Pick<Finding, 'rule' | 'file' | 'line'>[];
 }
 
 const key = (f: Pick<Finding, 'rule' | 'file' | 'line'>): string => `${f.rule} @ ${f.file}:${f.line}`;
+const files = (paths: readonly string[]): string => [...new Set(paths)].sort().join(', ');
 const only = process.argv[2];
 
 let failed = 0;
@@ -54,8 +57,10 @@ for (const name of readdirSync(FIXTURES).sort()) {
 	const got = new Set(actual.findings.map(key));
 	const missing = [...want].filter((k) => !got.has(k));
 	const extra = [...got].filter((k) => !want.has(k));
+	const unparsed = files(actual.diagnostics.parseErrors.map((p) => p.file));
+	const parseDrift = expected.parseErrors !== undefined && unparsed !== files(expected.parseErrors);
 
-	if (!missing.length && !extra.length) {
+	if (!missing.length && !extra.length && !parseDrift) {
 		passed++;
 		console.log(`ok   ${name}  (${actual.findings.length} finding(s))`);
 		continue;
@@ -69,6 +74,7 @@ for (const name of readdirSync(FIXTURES).sort()) {
 		const f = actual.findings.find((x) => key(x) === e);
 		console.log(`  +  unexpected: ${e}  "${f?.message ?? ''}"`);
 	}
+	if (parseDrift) console.log(`  !  unparsed: want [${files(expected.parseErrors ?? [])}], got [${unparsed}]`);
 	if (actual.diagnostics.parseErrors.length)
 		for (const p of actual.diagnostics.parseErrors) console.log(`  !  parse error ${p.file}: ${p.message}`);
 }

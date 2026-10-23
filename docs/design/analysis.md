@@ -243,6 +243,13 @@ characters and turned a whole-repo scan into a hundred seconds.
 
 Other decisions in that scanner:
 
+- **The parser's plugins follow the extension.** `.ts`, `.mts` and `.cts` parse
+  as TypeScript without JSX; every other markup file, `.tsx`, `.js` and `.jsx`
+  among them, parses with both. With one list for every file, an angle-bracket
+  type assertion (`<HTMLInputElement>el`) read as an element that never closes,
+  so the whole file dropped out of the index and was reported unparsed on every
+  run. JSX stays on for `.js` because a `.js` file in a
+  WordPress plugin routinely holds it.
 - **Export names are normalized before matching.** `@wordpress/components`
   publishes `__experimentalText`; matching the raw specifier against `Text`
   never hits, and `typography/in-css` silently degraded into a generic override.
