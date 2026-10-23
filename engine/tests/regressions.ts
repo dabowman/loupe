@@ -17,7 +17,7 @@ import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { harvestStems } from '../src/markup.ts';
+import { harvestPhpStems, harvestStems } from '../src/markup.ts';
 import { TreeTooLarge, isSource } from '../src/discover.ts';
 import { loadConfig } from '../src/config.ts';
 import { applyRegistries } from '../src/profiles.ts';
@@ -169,6 +169,39 @@ await check('harvestStems still finds interpolated stems', () => {
 	const got = [...harvestStems('`wf-item-${id}` `x${y}` `deep-nested-${z}`')];
 	assert(got.includes('wf-item-') && got.includes('deep-nested-'), `got ${JSON.stringify(got)}`);
 	assert(!got.includes('x'), 'a stem with no hyphen is not a class stem');
+});
+
+// A PHP reference file builds its class names without `${`: its own stems are
+// harvested beside it, and a JS file never reads PHP's spellings.
+await check('harvestPhpStems finds the stems PHP builds class names from', () => {
+	const php = [
+		"'wf-a-' . $v",
+		"'wf-b-'\n\t\t. $v",
+		'"wf-c-$v"',
+		'"card wf-d-{$v->name}"',
+		"sprintf( 'wf-e-%s', $v )",
+		'printf( \'<i class="wf-f-%d">\', $n )',
+		"sprintf( 'wf-g-%1$s', $v )",
+	].join(';\n');
+	const got = [...harvestPhpStems(php)].sort();
+	const want = ['wf-a-', 'wf-b-', 'wf-c-', 'wf-d-', 'wf-e-', 'wf-f-', 'wf-g-'];
+	assert(JSON.stringify(got) === JSON.stringify(want), `got ${JSON.stringify(got)}`);
+	// Not literal text before the variable part: a trailing space, a variable's
+	// own name, a format specifier, no hyphen, a leading hyphen.
+	const none = [
+		...harvestPhpStems(`'wf-a ' . $v; "$base-item-$id"; sprintf( '%s-%s', $a, $b ); 'card' . $v; "-wf-$v"`),
+	];
+	assert(none.length === 0, `got ${JSON.stringify(none)}`);
+	assert(harvestStems(php).size === 0, 'harvestStems reads `${` only');
+});
+
+await check('harvestPhpStems stays linear on long runs', () => {
+	const t = Date.now();
+	harvestPhpStems(`${'a'.repeat(4_000_000)}$x`);
+	harvestPhpStems(`'${' '.repeat(4_000_000)}`);
+	harvestPhpStems(`%${'1'.repeat(4_000_000)}`);
+	const ms = Date.now() - t;
+	assert(ms < 1000, `4MB runs took ${ms}ms — the PHP stem scan is not linear`);
 });
 
 // The PostToolUse hook fires on every Edit and Write. Without this, a README

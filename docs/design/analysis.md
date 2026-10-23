@@ -242,13 +242,29 @@ their siblings on the generic table, which is worse than either.
    harvesting**, and over-collects on purpose. A false "referenced" costs one
    missed finding; a false "dead" tells an agent to delete live CSS.
 
+**A class built at runtime is live by its stem.** `wf-item-${id}` yields
+`wf-item-`, and every class that starts with it counts as referenced. A
+reference file is read for `${` too — it is PHP's interpolation as well as JS's,
+and a template's `<script>` is JS — and for the three other ways PHP builds a
+name: a literal followed by `.` (`'wf-item-' . $id`), a variable or expression
+interpolated into a double-quoted string (`"wf-item-$id"`, `"wf-item-{$id}"`),
+and a format specifier (`sprintf( 'wf-item-%s', $id )`, `%d`, `%1$s`). Each is
+found anywhere in the file, not only inside a string or a `sprintf` call:
+telling those apart takes a PHP tokenizer, and a stem found where there is none
+costs one missed dead class. In those three, a run right after `$` is a
+variable's name (`"$base-item-$id"`) and one right after `%` starts with a
+specifier (`'%s-%s'`): neither is text, and neither yields a stem. Markup files
+are read for `${` alone, because `.` after a string and `$name` inside one mean
+nothing in JS.
+
 A file larger than `MAX_BYTES` is skipped: nothing a person wrote is that big, a
 generated blob costs more to parse than every finding it could produce, and one
 10MB checked-in emscripten file was on its own enough to push a repo scan past
 every hook timeout. The same file is why the class-stem scanner walks
 identifiers backwards from `${` by hand — the obvious
 `/([A-Za-z_][\w-]*)\$\{/g` backtracks quadratically on a long run of word
-characters and turned a whole-repo scan into a hundred seconds.
+characters and turned a whole-repo scan into a hundred seconds. PHP's stems are
+walked back the same way, from patterns that each open on one character.
 
 Other decisions in that scanner:
 

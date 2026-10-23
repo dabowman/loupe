@@ -59,6 +59,13 @@ would work as a stylelint plugin, and are included because you want one report.
 | `system/locked-component` | A private API the design system does not recommend outside its own core |
 | `system/superseded-component` | A current, recommended component now covers this job |
 
+`css/dead-class` reads the markup and every `sources.references` file — PHP,
+HTML and Twig in each bundled preset — for the class names they mention. A
+class built at runtime is live by its prefix, so every `.acme-item-*` rule is
+kept by `acme-item-${id}` in either, and in a reference file by PHP's
+`'acme-item-' . $id`, `"acme-item-$id"`, `"acme-item-{$id}"` or
+`sprintf( 'acme-item-%s', $id )`.
+
 `loupe explain <rule>` prints the guidance and whether the rule is active
 under your config.
 

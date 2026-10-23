@@ -48,7 +48,7 @@ import { TreeTooLarge, analyzeEntryBudget, byBytes, discover, toPosix } from './
 import { under } from './paths.ts';
 import { activeDelivery, activeProfiles } from './profiles.ts';
 import { MuteLedger, makeSuppressionParser } from './suppressions.ts';
-import { harvestTokens } from './markup.ts';
+import { harvestPhpStems, harvestStems, harvestTokens } from './markup.ts';
 import { blockClasses, blockName, isBlockManifest } from './blocks.ts';
 import { syntaxFor } from './syntax.ts';
 import { surfaceFor, surfacesRecorded } from './components.ts';
@@ -721,6 +721,7 @@ export async function analyze(
 		if (oversized(abs, rel, look)) continue;
 		if (look?.entry?.refs) {
 			for (const t of look.entry.refs) referenced.add(t);
+			for (const t of look.entry.stems ?? []) stems.add(t);
 			if (look.entry.block) blockNames.add(look.entry.block);
 			diagnostics.filesScanned++;
 			continue;
@@ -729,11 +730,14 @@ export async function analyze(
 		const text = look?.text ?? readOrNull(abs, rel);
 		if (text === null) continue;
 		const found = harvestTokens(text);
+		const built = harvestPhpStems(text, harvestStems(text));
 		for (const t of found) referenced.add(t);
+		for (const t of built) stems.add(t);
 		const block = isBlockManifest(rel) ? blockName(text) : null;
 		if (block) blockNames.add(block);
 		diagnostics.filesScanned++;
-		if (look) cache?.store(look, rel, text, { d: false, refs: [...found], ...(block ? { block } : {}) });
+		if (look)
+			cache?.store(look, rel, text, { d: false, refs: [...found], stems: [...built], ...(block ? { block } : {}) });
 	}
 	const ownBlocks = [...blockNames].flatMap((name) => blockClasses(name) ?? []);
 	/** A class under the wrapper prefix of one of the project's own blocks (`wp-block-acme-`). */

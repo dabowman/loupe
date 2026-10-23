@@ -4,3 +4,8 @@
 .wf-orphan { color: #fff; }
 .has-text-color { color: #fff; }
 .wp-block-group { color: #fff; }
+.wf-card-featured { color: inherit; }
+.wf-title-large { color: inherit; }
+.wf-body-muted { color: inherit; }
+.wf-link-primary { color: inherit; }
+.wf-from-twig { color: inherit; }
