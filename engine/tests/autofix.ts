@@ -883,7 +883,10 @@ await check('fix --judge still writes what needed no model when the judge cannot
 		const outage = `data:text/javascript,${encodeURIComponent(
 			"globalThis.fetch = async () => { throw new TypeError('fetch failed (simulated outage)'); };",
 		)}`;
-		const r = spawnSync(process.execPath, ['--import', outage, CLI, 'fix', '--judge', '--root', root], {
+		// No profile: the shipped WPDS scopes hold this radius token for review, and
+		// what is under test is the exact substitution surviving the outage.
+		const argv = ['--import', outage, CLI, 'fix', '--judge', '--root', root, '--profile', 'none'];
+		const r = spawnSync(process.execPath, argv, {
 			encoding: 'utf8',
 			env: { ...process.env, TYPESAFE_API_KEY: 'key' },
 		});

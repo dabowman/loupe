@@ -17,7 +17,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../src/analyze.ts';
@@ -28,9 +28,9 @@ import { matches, toNode } from '../src/patterns.ts';
 import { registryApplies } from '../src/registry.ts';
 import { renderTitle } from '../src/rules.ts';
 import { readProfiles, selectProfiles, applyRegistries, profileRoots, readProfileRoots } from '../src/profiles.ts';
-import { detectPreset } from '../src/detect.ts';
+import { declaredVersions, detectPreset } from '../src/detect.ts';
 import { CLI, assert, check, cleanup, finish, first, one, scratch, writeAll } from './harness.ts';
-import type { AnalyzeResult, DesignSystem, PatternNode } from '../src/types.ts';
+import type { AnalyzeResult, DesignSystem, OutOfRange, PatternNode } from '../src/types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRESET_DIR = join(HERE, '..', 'presets');
@@ -1032,7 +1032,9 @@ await check('.loupe/profiles is read with no config key and no flag', () => {
 await check('project profiles are merged with the shipped set, not swapped for it', () => {
 	const root = vipV3({});
 	try {
-		const all = readProfileRoots(profileRoots({ root, configured: [join(root, 'loupe', 'profiles')], flag: PROFILES }));
+		const all = readProfileRoots(
+			profileRoots({ root, configured: [join(root, 'loupe', 'profiles')], shipped: PROFILES }),
+		);
 		const ids = all.map((p) => p.id);
 		for (const id of ['vip-v3', 'vip', 'wpds', 'archer'])
 			assert(ids.includes(id), `expected ${id} among the merged profiles, got ${ids.join(', ')}`);
@@ -1050,8 +1052,8 @@ await check('project profiles are merged with the shipped set, not swapped for i
 
 await check('a project profile shadows a shipped one only over packages the project imports', () => {
 	const all = [
-		{ id: 'acme', packages: ['@acme/ui', '@wordpress/components'], origin: 'project' },
-		{ id: 'wpds', packages: ['@wordpress/components', '@wordpress/ui'], origin: 'shipped' },
+		{ id: 'acme', packages: ['@acme/ui', '@wordpress/components'], ranges: new Map(), origin: 'project' },
+		{ id: 'wpds', packages: ['@wordpress/components', '@wordpress/ui'], ranges: new Map(), origin: 'shipped' },
 	] as unknown as Parameters<typeof selectProfiles>[0];
 	const ids = (pkgs: string[]): string =>
 		selectProfiles(all, { designSystem: { packages: pkgs } })
@@ -1140,7 +1142,7 @@ await check('"profile": "none" keeps the rules that need packages on', async () 
 		assert(config.profilePin === 'none', `got ${config.profilePin}`);
 		assert(config.designSystem.packages.join() === VIP, 'the packages survive the pin');
 		assert(config.enabled['patterns/unregistered-composite'], 'unregistered-composite stays on');
-		const all = readProfileRoots(profileRoots({ root, flag: PROFILES }));
+		const all = readProfileRoots(profileRoots({ root, shipped: PROFILES }));
 		assert(selectProfiles(all, config, config.profilePin).length === 0, 'none selects nothing');
 	} finally {
 		cleanup(root);
@@ -1161,6 +1163,8 @@ await check('a project profile that fails to load says so, rather than leaving t
 	const root = vipV3({ profiles: './loupe/profiles' });
 	try {
 		writeFileSync(join(root, 'loupe', 'profiles', 'vip-v3', 'profile.json'), '{ "id": "vip-v3", ');
+		// On v2, which the shipped profile covers: on v3 its range keeps it out anyway.
+		writeFileSync(join(root, 'package.json'), JSON.stringify({ dependencies: { [VIP]: '^2.30.0' } }));
 		const { line, stderr } = profileLine(root);
 		assert(
 			stderr.includes(
@@ -1187,6 +1191,278 @@ await check('a malformed profiles or profile key is a config error, not "none"',
 		} finally {
 			cleanup(root);
 		}
+	}
+});
+
+// ── any listed package selects (#187) ───────────────────────────────────────
+//
+// The wpds profile lists five packages. The two newest are the design system's
+// too, and a project on either alone is on WPDS — so either one, declared on
+// its own, selects the profile.
+
+for (const pkg of ['@wordpress/admin-ui', '@wordpress/ui'])
+	await check(`a config declaring only ${pkg} selects the wpds profile`, async () => {
+		const root = repo({
+			'loupe.config.json': JSON.stringify({ extends: 'generic', designSystem: { packages: [pkg] } }),
+		});
+		try {
+			const config = await loadConfig({ root });
+			const ids = selectProfiles(readProfiles(PROFILES), config).map((p) => p.id);
+			assert(ids.join() === 'wpds', `expected wpds alone, got ${ids.join(', ') || 'nothing'}`);
+		} finally {
+			cleanup(root);
+		}
+	});
+
+// ── the shipped profiles need no flag (#80) ─────────────────────────────────
+//
+// `bin/loupe` added `--profiles <shipped>` only when the caller named none, so a
+// `--profiles` typed to try one directory silently dropped the shipped set —
+// and the registries of any shipped system the project also imports with it.
+
+/** `loupe status` with exactly the flags given: no `--profiles` unless the caller passes one. */
+function statusOf(root: string, ...args: string[]): { stdout: string; stderr: string; line: string } {
+	const home = scratch('loupe-st-home-');
+	try {
+		const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, NO_COLOR: '1' };
+		for (const k of Object.keys(env)) if (k.startsWith('CLAUDE_')) delete env[k];
+		const r = spawnSync(process.execPath, [CLI, 'status', ...args], { cwd: root, encoding: 'utf8', env });
+		if (r.error) throw r.error;
+		const stdout = r.stdout ?? '';
+		return { stdout, stderr: r.stderr ?? '', line: stdout.split('\n').find((l) => l.startsWith('profile:')) ?? '' };
+	} finally {
+		cleanup(home);
+	}
+}
+
+/** A directory holding one profile, `acme`, for `@acme/ui`. */
+function acmeProfiles(name = 'Acme'): string {
+	const dir = scratch('loupe-acme-');
+	writeAll(dir, { 'acme/profile.json': JSON.stringify({ id: 'acme', name, packages: ['@acme/ui'] }) });
+	return dir;
+}
+
+/** A project on two systems: one the shipped set describes, one it does not. */
+const bothSystems = (): string =>
+	repo({
+		'loupe.config.json': JSON.stringify({
+			extends: 'generic',
+			designSystem: { packages: ['@acme/ui', '@wordpress/components'] },
+		}),
+	});
+
+await check('the engine reads the shipped profiles with no --profiles at all', () => {
+	const root = bothSystems();
+	try {
+		const { line } = statusOf(root);
+		assert(line.includes(`wpds (WordPress Design System) — ${join(PROFILES, 'wpds')}`), `got: ${line}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('--profiles adds to the shipped profiles instead of replacing them', () => {
+	const root = bothSystems();
+	const extra = acmeProfiles();
+	try {
+		const { line } = statusOf(root, '--profiles', extra);
+		assert(/\bacme \(Acme\)/.test(line), `the directory passed should be read: ${line}`);
+		assert(/\bwpds \(/.test(line), `the shipped wpds profile should still select: ${line}`);
+	} finally {
+		cleanup(root);
+		cleanup(extra);
+	}
+});
+
+await check('--profiles repeats, read in order, the first to carry an id keeping it', () => {
+	const root = bothSystems();
+	const before = acmeProfiles('Acme, first');
+	const after = acmeProfiles('Acme, second');
+	try {
+		writeAll(after, { 'beta/profile.json': JSON.stringify({ id: 'beta', packages: ['@acme/ui'] }) });
+		const { line } = statusOf(root, '--profiles', before, '--profiles', after);
+		assert(/\bacme \(Acme, first\)/.test(line) && !line.includes('second'), `the first acme should win: ${line}`);
+		assert(/\bbeta \(/.test(line), `the second directory should still be read: ${line}`);
+		assert(/\bwpds \(/.test(line), `and the shipped set: ${line}`);
+	} finally {
+		cleanup(root);
+		cleanup(before);
+		cleanup(after);
+	}
+});
+
+await check('the shipped directory passed again, by any path to it, is read once', () => {
+	const root = bothSystems();
+	const link = join(scratch('loupe-link-'), 'profiles');
+	try {
+		symlinkSync(PROFILES, link);
+		const roots = profileRoots({ root, shipped: PROFILES, flags: [PROFILES, link] });
+		assert(roots.filter((r) => r.origin === 'shipped').length === 1, `got ${roots.map((r) => r.dir).join(', ')}`);
+		// The hooks and commands still pass it, as `${CLAUDE_PLUGIN_ROOT}/profiles`.
+		const { line, stderr } = statusOf(root, '--profiles', link);
+		assert(line.includes(`wpds (WordPress Design System) — ${join(PROFILES, 'wpds')}`), `got: ${line}`);
+		assert(!stderr.includes('loupe:'), `reading it twice should say nothing: ${stderr}`);
+	} finally {
+		cleanup(root);
+		cleanup(dirname(link));
+	}
+});
+
+await check('--patterns leaves the shipped profiles out, and a pin says that is why', () => {
+	const root = bothSystems();
+	try {
+		writeAll(root, { 'registry.json': JSON.stringify({ patterns: [] }) });
+		const { line, stderr } = statusOf(root, '--patterns', join(root, 'registry.json'), '--profile', 'wpds');
+		assert(!/\bwpds \(/.test(line), `the shipped set should be left out: ${line}`);
+		assert(/--patterns leaves the shipped profiles out/.test(stderr), `got: ${stderr}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
+// ── version ranges (#79) ────────────────────────────────────────────────────
+//
+// Selection by name alone gave a VIP v3 project the profile written for v2.
+
+/** One profile claiming `@acme/ui` for `range`, read the way the CLI reads it. */
+function rangedProfile(range: unknown, origin: 'project' | 'shipped' = 'shipped') {
+	const dir = scratch('loupe-ranged-');
+	try {
+		writeAll(dir, { 'acme/profile.json': JSON.stringify({ id: 'acme', packages: { '@acme/ui': range } }) });
+		const unreadable: string[] = [];
+		return { profiles: readProfiles(dir, origin, unreadable), unreadable };
+	} finally {
+		cleanup(dir);
+	}
+}
+
+const acme = { designSystem: { packages: ['@acme/ui'] } };
+const declares = (range: string) => () => ({ range, manifest: 'package.json' });
+
+await check('packages may map each package to the range it describes', () => {
+	const { profiles } = rangedProfile('<3');
+	const p = one(profiles, 'the object form should read');
+	assert(p.packages.join() === '@acme/ui', `got ${p.packages.join()}`);
+	assert(p.ranges.get('@acme/ui') === '<3', `got ${p.ranges.get('@acme/ui')}`);
+	const dir = profileDir();
+	try {
+		const listed = one(readProfiles(dir), 'the list form should still read');
+		assert(listed.ranges.size === 0, 'a listed package is claimed at any version');
+	} finally {
+		cleanup(dir);
+	}
+});
+
+await check('a range that does not read is a profile that does not load, and says so', () => {
+	for (const bad of ['=>3', 'latest', 3, null]) {
+		const { profiles, unreadable } = rangedProfile(bad, 'project');
+		assert(!profiles.length, `${JSON.stringify(bad)} should not load`);
+		assert(
+			unreadable.some((u) => u.includes(`${JSON.stringify(bad)} for @acme/ui is not a version range`)),
+			`got: ${unreadable.join('; ')}`,
+		);
+	}
+});
+
+await check('a declared range selects a ranged profile where the two overlap', () => {
+	const { profiles } = rangedProfile('<3');
+	const pick = (range: string, outOfRange: OutOfRange[] = []): string =>
+		selectProfiles(profiles, acme, null, { declared: declares(range), outOfRange })
+			.map((p) => p.id)
+			.join();
+	for (const range of ['^2.3.0', '~2.9.1', '>=2', '*', '^1 || ^3', 'workspace:*', 'latest', 'github:acme/ui'])
+		assert(pick(range) === 'acme', `${range} overlaps <3, or says nothing a range can check`);
+	const outOfRange: OutOfRange[] = [];
+	assert(pick('^3.0.0', outOfRange) === '', '^3.0.0 does not overlap <3');
+	assert(
+		JSON.stringify(outOfRange) ===
+			JSON.stringify([{ profile: 'acme', pkg: '@acme/ui', range: '<3', declared: '^3.0.0', manifest: 'package.json' }]),
+		`the profile left out should be recorded: ${JSON.stringify(outOfRange)}`,
+	);
+	assert(selectProfiles(profiles, acme).length === 1, 'nothing declared is any version');
+	assert(
+		selectProfiles(profiles, acme, 'acme', { declared: declares('^3.0.0') }).length === 1,
+		'a pin skips the range',
+	);
+});
+
+await check('a profile out of range on one package still selects on another', () => {
+	const dir = scratch('loupe-two-');
+	try {
+		writeAll(dir, {
+			'acme/profile.json': JSON.stringify({ id: 'acme', packages: { '@acme/ui': '<3', '@acme/icons': '*' } }),
+		});
+		const outOfRange: OutOfRange[] = [];
+		const ids = selectProfiles(readProfiles(dir), { designSystem: { packages: ['@acme/ui', '@acme/icons'] } }, null, {
+			declared: declares('^3.0.0'),
+			outOfRange,
+		}).map((p) => p.id);
+		assert(ids.join() === 'acme' && !outOfRange.length, `got ${ids.join()} / ${JSON.stringify(outOfRange)}`);
+	} finally {
+		cleanup(dir);
+	}
+});
+
+await check('a project profile out of range shadows nothing', () => {
+	const { profiles: own } = rangedProfile('>=4', 'project');
+	const { profiles: shipped } = rangedProfile('<4');
+	const picked = selectProfiles([...own, ...shipped], acme, null, { declared: declares('^3.1.0') });
+	const origins = picked.map((p) => p.origin).join();
+	assert(origins === 'shipped', `the shipped profile covers ^3.1.0 and should select alone: ${origins}`);
+});
+
+await check('the declared range is the shallowest manifest naming the package, installed field first', () => {
+	const root = repo({
+		'package.json': JSON.stringify({ name: 'mono', devDependencies: { '@wordpress/env': '^10' } }),
+		'apps/web/package.json': JSON.stringify({
+			peerDependencies: { [VIP]: '^2 || ^3' },
+			devDependencies: { [VIP]: '^3.1.0' },
+		}),
+		'apps/web/old/package.json': JSON.stringify({ dependencies: { [VIP]: '^2.0.0' } }),
+	});
+	try {
+		const declared = declaredVersions(root);
+		const vip = declared(VIP);
+		assert(vip?.range === '^3.1.0' && vip.manifest === 'apps/web/package.json', `got ${JSON.stringify(vip)}`);
+		assert(declared('@acme/ui') === null, 'a package no manifest names has no declared range');
+	} finally {
+		cleanup(root);
+	}
+});
+
+await check('the shipped vip profile describes v2 only', () => {
+	const vip = first(
+		readProfiles(PROFILES).filter((p) => p.id === 'vip'),
+		'the vip profile ships',
+	);
+	assert(vip.ranges.get(VIP) === '<3', `got ${vip.ranges.get(VIP)}`);
+});
+
+await check('a v3 project does not get the v2 profile, and status names the range that kept it out', () => {
+	const config = JSON.stringify({ extends: 'generic', designSystem: { packages: [VIP] } });
+	const v3 = repo({
+		'package.json': JSON.stringify({ dependencies: { [VIP]: '^3.0.0' } }),
+		'loupe.config.json': config,
+	});
+	const v2 = repo({
+		'package.json': JSON.stringify({ dependencies: { [VIP]: '^2.23.0' } }),
+		'loupe.config.json': config,
+	});
+	try {
+		const out = statusOf(v3);
+		assert(/^profile:\s+none selected/.test(out.line), `got: ${out.line}`);
+		const why = out.stdout.split('\n').filter((l) => l.includes('not selected'));
+		assert(
+			why.length === 1 &&
+				why[0]?.trim() === `vip not selected — ${VIP} is ^3.0.0 in package.json, outside the <3 it describes`,
+			`expected one line naming the range, got:\n${why.join('\n')}`,
+		);
+		const on = statusOf(v2);
+		assert(/^profile:\s+vip \(/.test(on.line), `a v2 project should still get it: ${on.line}`);
+		assert(!on.stdout.includes('not selected'), `nothing was kept out on v2:\n${on.stdout}`);
+	} finally {
+		cleanup(v3);
+		cleanup(v2);
 	}
 });
 

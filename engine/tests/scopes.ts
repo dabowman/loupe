@@ -364,7 +364,7 @@ async function run(
 			...files,
 		});
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		config.profiles = { available: shipped, active, applied: [], skipped: [], notes: [], errors: [] };
+		config.profiles = { available: shipped, active, outOfRange: [], applied: [], skipped: [], notes: [], errors: [] };
 		const { findings } = await analyze(config, { scope: null });
 		return { findings, misapplied: findings.filter((f) => f.rule === 'tokens/misapplied-token') };
 	} finally {

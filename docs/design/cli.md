@@ -636,12 +636,33 @@ claiming it was dropped too.
 Sorting, here as in `discover`, is what makes "the first one wins" a fact rather
 than a filesystem accident.
 
-**A project can bring its own profile, and it outranks the shipped one.** Every
-entry point passes the shipped directory as `--profiles`, and nothing else; a
-project-local profile was reachable only by typing `--profiles` by hand, which
-also *replaced* the shipped set. So the engine reads the project's profiles
-itself, wherever it runs: the directories the config lists under `profiles`,
-then `.loupe/profiles/` under the root, then `--profiles`. No hook, command or
+**The engine finds the shipped profiles itself, and `--profiles` adds to
+them.** The shipped set used to arrive only as `--profiles`: the hooks and
+commands passed it, and `bin/loupe` added it when the caller had named no
+`--profiles` of their own. So `loupe check --profiles ./mine` ran with *only*
+`./mine` — the shipped profiles gone, and with them the registries of any
+shipped system the project also imports. Now the engine reads the `profiles/`
+beside `engine/` on every run, found from its own module URL (`src/` and
+`dist/` sit at the same depth, so either entry finds the same directory), and
+each `--profiles` — the flag repeats — is one more directory after it. The
+shim adds nothing. A compiled binary has no directory beside it and carries no
+profiles, so there `--profiles` is the only source.
+
+`--patterns` is the one opt-out, as it was in the shim. A profile's registry
+merges ahead of the one named by flag and the first to carry an id keeps it,
+so with the shipped set read the registry being tried would lose every id it
+shares with the one it was written to replace.
+
+The hooks and commands still pass `--profiles "${CLAUDE_PLUGIN_ROOT}/profiles"`,
+which is now the shipped directory a second time. A directory named twice is
+read once — compared by real path, since `${CLAUDE_PLUGIN_ROOT}` can reach it
+through a symlink the engine's own URL does not.
+
+**A project can bring its own profile, and it outranks the shipped one.** A
+project-local profile used to be reachable only by typing `--profiles` by hand.
+So the engine reads the project's profiles itself, wherever it runs: the
+directories the config lists under `profiles`, then `.loupe/profiles/` under
+the root, then the shipped set, then each `--profiles`. No hook, command or
 skill had to change. The order is the precedence — the first directory to
 carry an id keeps it — and a directory named twice is read once, under the
 more authoritative origin.
@@ -672,8 +693,44 @@ merged past the scope check like the flag's. The flag, typed at the moment of
 use, outranks it, and a pin naming nothing says so, for the same reason a
 mistyped `--profile` does. `none` is a reserved id.
 
-Selection is still by name, not version. A profile that could say it describes
-`<3` of a package would let the shipped `vip` claim only v2 — left for later.
+**A profile can say which versions it describes.** `packages` may map each
+package to a range, `{ "@automattic/vip-design-system": "<3" }`, and the
+shipped `vip` profile does; the list form still claims any version. A project
+profile was the fix for a v3 project, but every v3 project had to write one,
+or pin `"profile": "none"`, to get the v2 profile off.
+
+The range is compared with the one the project declares, not with an installed
+version: the declared range is there on a fresh checkout, the installed version
+is not, and one source is one answer rather than two that can disagree. It
+comes from the manifests detection reads, the shallowest naming the package
+answering for it, and within one from `dependencies`, then `devDependencies`,
+then `peerDependencies` — what is installed before what is only promised. The
+walk is paid only when a profile that limits a version could select, which on
+the shipped set is only VIP.
+
+Two ranges are compared by overlap, not containment: a declared range that
+admits a version the profile describes may be on it. Containment would drop
+the profile from every range that merely reaches past it — `>=2.9.0`, a peer
+range of `^2 || ^3` — taking its registries with it. A declared value that is
+not a range — `workspace:*`, a git URL, `latest` — says nothing to check, and
+is taken as any version, which is what selection did before ranges. A profile
+range that does not read is a profile that does not load, named on stderr for a
+project's own: taking it as any version would select the v2 profile on v3
+again, silently.
+
+The matcher is `engine/src/semver.ts`, written rather than taken from `semver`:
+the bundle is committed and carries no runtime dependency it can avoid, and
+overlap needs a fraction of that package. It reads each range into the
+intervals of versions it admits and intersects them, agreeing with `semver`'s
+`intersects` and `satisfies` except on one rule it skips: a prerelease is
+ordered, never excluded for sitting on another `major.minor.patch`. Partial
+upper bounds desugar as `semver` does (`<3` is `<3.0.0-0`), so a v3 prerelease
+is still outside `<3`.
+
+A profile its version kept out reads exactly like one never written, so
+`loupe status` says so under the `profile:` line, naming both ranges and the
+manifest. The preset's `detect.dependencies` still match by name: a v3 project
+with no config is still inferred onto the `vip` preset, without its profile.
 
 **The project always wins a registry merge**: a repo that has written down its
 own `page-header` means that one, not the shipped generic. What was applied and

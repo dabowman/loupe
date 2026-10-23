@@ -890,7 +890,14 @@ export interface Profile {
 	id: string;
 	name: string;
 	preset: string | null;
+	/** The packages that identify it. Any one of them, imported, selects it. */
 	packages: string[];
+	/**
+	 * The versions of each package the profile describes, as the range it wrote.
+	 * A package absent here — every one, for a profile that lists its packages —
+	 * is claimed at any version.
+	 */
+	ranges: ReadonlyMap<string, string>;
 	patterns: string | null;
 	components: string | null;
 	/** `{ token: description }`, the design system's own words for what each token is for. */
@@ -1013,10 +1020,34 @@ export interface RegistryNote {
 	note: string;
 }
 
+/** The range a project's manifest declares for a package, and which manifest said so. */
+export interface DeclaredVersion {
+	range: string;
+	/** As a reason names it: `package.json`, or `apps/web/package.json` below the root. */
+	manifest: string;
+}
+
+/**
+ * A profile left out because the version a project declares for its package is
+ * outside the range the profile describes. Said, because a profile missing for
+ * that reason looks exactly like one that was never there.
+ */
+export interface OutOfRange {
+	profile: string;
+	pkg: string;
+	/** The range the profile claims the package for. */
+	range: string;
+	/** The range the project declares for it, and the manifest that declares it. */
+	declared: string;
+	manifest: string;
+}
+
 /** Which profiles were on offer, which applied, and what they contributed. */
 export interface ProfileState {
 	available: Profile[];
 	active: Profile[];
+	/** The profiles a declared version kept out. */
+	outOfRange: OutOfRange[];
 	applied: string[];
 	skipped: SkippedRegistry[];
 	notes: RegistryNote[];

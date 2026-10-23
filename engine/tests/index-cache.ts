@@ -252,7 +252,15 @@ await check('with a profile active, and under `contents`, cached output is uncac
 	assert(wpds.length === 1, 'the wpds profile ships');
 	const analyzed = async (opts: { cache: boolean; contents?: ReadonlyMap<string, string> }): Promise<string> => {
 		const config = await loadConfig({ root, configPath: join(root, 'loupe.config.json') });
-		config.profiles = { available: wpds, active: wpds, applied: [], skipped: [], notes: [], errors: [] };
+		config.profiles = {
+			available: wpds,
+			active: wpds,
+			outOfRange: [],
+			applied: [],
+			skipped: [],
+			notes: [],
+			errors: [],
+		};
 		return snapshot(await analyze(config, { scope: null, ...opts }));
 	};
 	try {

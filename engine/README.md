@@ -400,7 +400,7 @@ be resolved never blocks a match — qualifying narrows a match, it never invent
 one.
 
 **3. A profile**, if the registries ship with the tool rather than the project.
-See `--profiles` below.
+See [Profiles](#profiles) below.
 
 The one hard limit is the markup parser: Babel with the JSX and TypeScript
 plugins, so any React-family design system works and Vue SFCs, Svelte and
@@ -435,9 +435,45 @@ never opens them — it prints the profile's directory in `loupe status`, and th
 plugin's skills read them from there, which is what lets one set of skills serve
 whatever design system a project is on.
 
-`--profiles <dir>` reads them all and applies the ones whose packages the
-project actually imports; `--profile <id>` forces one. A profile declaring no
-packages is never selected automatically — there is nothing to recognize it by.
+The shipped profiles are the `profiles/` directory beside `engine/`, and the
+engine reads it on every run, wherever it was started from: the shim, a hook, a
+command, or `node engine/bin/loupe.mjs` typed by hand. `--profiles <dir>` adds
+a directory after it — repeat the flag for more, read in order — rather than
+replacing it, so trying a profile directory by hand never drops the shipped
+set. Naming a registry with `--patterns` is the one thing that leaves the
+shipped set out: a profile's registry merges first and would win every id the
+two share. A compiled binary carries no profiles, so there `--profiles` is the
+only source.
+
+Of every profile read, the run applies the ones whose packages the project
+actually imports; `--profile <id>` forces one. Any one of a profile's packages
+selects it — `wpds` lists five, and a project declaring only `@wordpress/ui`
+is on WPDS. A profile declaring no packages is never selected automatically —
+there is nothing to recognize it by.
+
+`packages` is a list, which claims each package at any version, or an object
+mapping each package to the range of versions the profile describes:
+
+```jsonc
+{ "id": "vip", "packages": { "@automattic/vip-design-system": "<3" } }
+```
+
+A ranged profile is selected only where the range the project declares for the
+package — in `dependencies`, then `devDependencies`, then `peerDependencies`,
+of the shallowest `package.json` naming it — admits a version the profile's
+range does too. Overlap, not containment: `^2.3.0` overlaps `<3`, since it may
+resolve to a 2.x, and `^3.0.0` does not. A package declared as something that
+is not a range (`workspace:*`, a git URL, `latest`), or not declared in any
+manifest, is taken at any version. Ranges read `<`, `<=`, `>`, `>=`, `=`, `^`,
+`~`, `x`/`*`, spaces for "and" and `||` for "or"; a profile range outside that
+is a profile that does not load, named on stderr when it is the project's own.
+When a version keeps a profile out, `loupe status` says so under its
+`profile:` line:
+
+```
+profile:    none selected — available: archer, vip, wpds
+            vip not selected — @automattic/vip-design-system is ^3.0.0 in package.json, outside the <3 it describes
+```
 
 #### A project's own profiles
 
@@ -445,10 +481,10 @@ A project can carry profiles of its own, beside the shipped ones rather than
 instead of them. They are read from every directory the config lists under
 `profiles` (a path or an array of paths, each relative to the config file that
 wrote it) and from `.loupe/profiles/` under the project root, with no flag —
-so the hooks, the commands and a typed `loupe` all see them while still passing
-only the shipped `--profiles`. Like every array in the config, a `profiles` list
-in a config that `extends` another replaces the base's list rather than adding
-to it: repeat the base's directory if you mean both.
+so the hooks, the commands and a typed `loupe` all see them. Like every array
+in the config, a `profiles` list in a config that `extends` another replaces
+the base's list rather than adding to it: repeat the base's directory if you
+mean both.
 
 ```jsonc
 {
@@ -462,7 +498,8 @@ to it: repeat the base's directory if you mean both.
 The project's profile wins:
 
 - **on an id** — the config's directories are read first, in order, then
-  `.loupe/profiles/`, then `--profiles`, and the first to carry an id keeps it;
+  `.loupe/profiles/`, then the shipped set, then each `--profiles`, and the
+  first to carry an id keeps it;
 - **on a package** — a shipped profile claiming a package that a selected
   project profile also claims is not selected. That is the case of a design
   system rebuilt under its old package name: the shipped profile describes what
@@ -476,9 +513,6 @@ selects no profile while every rule that needs the packages stays on, and an id
 applies that profile as `--profile <id>` would — registries merged past the
 scope check, notes on stderr where that matters. `--profile` on the command line
 outranks it. A pin naming no profile says so on stderr.
-
-Selection is still by package name, not version: a profile cannot yet say it
-describes only `<3` of a package.
 
 Forcing one applies the whole bundle: its registries merge without the scope
 check the flag has already answered, and its preset configures the run. That
@@ -500,8 +534,8 @@ the flag asks for. It is not silent: stderr names both sides of the mismatch, an
 `--profile <id>` matching no profile at all now says so rather than checking
 less than the same command with no flag.
 
-This is what keeps a shipped registry off the wrong repo. Point `--profiles` at
-every project you like: one on a different design system selects nothing and is
+This is what keeps a shipped registry off the wrong repo. The shipped set is
+read for every project: one on a different design system selects nothing and is
 checked by the rules that need no registry at all. `loupe status` prints which
 profile is active, and a registry passed but not applied says so on stderr
 rather than looking like a registry that found nothing.
@@ -1032,18 +1066,18 @@ line; the hook does not.
   "env": { "LOUPE": "on" },
   "hooks": {
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "node /abs/path/to/engine/bin/loupe.mjs hook --profiles /abs/path/to/profiles" }] }
+      { "hooks": [{ "type": "command", "command": "node /abs/path/to/engine/bin/loupe.mjs hook" }] }
     ]
   }
 }
 ```
 
-Pass `--profiles` as the plugin's own hook does, pointed at the `profiles/`
-directory beside `engine/`: without the shipped profiles the component and
-composite rules and the token scopes are off, the report is thinner than the
-plugin's, and nothing says so. `--judge`, which the plugin also passes, is
-optional and judges only with a `TYPESAFE_API_KEY` (see [Judging](#judging));
-in the hook a missing key leaves the run unjudged rather than failing it.
+The engine reads the shipped profiles from the `profiles/` beside `engine/`
+on its own, so the hook needs no `--profiles` to match the plugin's; without
+those profiles the component and composite rules and the token scopes are off.
+`--judge`, which the plugin also passes, is optional and judges only with a
+`TYPESAFE_API_KEY` (see [Judging](#judging)); in the hook a missing key leaves
+the run unjudged rather than failing it.
 
 Hook mode reads the payload on stdin, scopes to changed files, and emits the
 hook protocol directly — no `jq`, no wrapper script.
@@ -1370,7 +1404,7 @@ A library call writes nothing anywhere unless it passes `cache: true`.
 | `designSystem.allowedInlineStyles` | Inline-style properties a component's own API sanctions, as `{ "Text": ["color"] }` keyed by canonical component name. A `style` on that component made only of those properties is not `system/inline-style`; its values still go through the ordinary checks, so a raw colour there is still `tokens/hardcoded-value`. Any other property, a spread, or an opaque `style={obj}` reports the element as before, naming only the unsanctioned properties. The `wpds` preset sanctions `color` on `Text`, which has no color prop. |
 | `patterns` | A composite registry: an inline array, or a path. `--patterns` merges a second registry over it, the config's own winning on id. Two formats load: version 1 keys an entry by `id` with one `signature`; version 2 keys it by `pattern` (`confirm`, `choose.segmented`, `navigate-hierarchy#descend`), may nest `parts` (loaded as `id#part`, inheriting `canonical` unless a part sets it to `null`), may carry `rendered_signature` as a second shape under the same id, and says in `detector` how it is checked. A detector object names an AST rule the engine ships — `few-static-options` (`components`, `prop`, `min`, `max`, `maxLabelChars`) or `confirm-pair` (`container`, `button`, `labels`, `controls`) — and a hit reports `patterns/superseded-composite` against that file, skipped when the file imports the entry's `canonical`. A `judge` detector (`components`, `unless`) names elements for `check --judge` to ask about, and reports `patterns/judged-redirect`. |
 | `maxEntries` | How many entries the analysis walk reads before it refuses (default 200,000). A positive whole number; anything else is a config error. `LOUPE_MAX_ENTRIES` outranks it for one run. |
-| `profiles` | The project's own profile directories: a path or an array of paths, each relative to the config file that wrote it. Read ahead of `.loupe/profiles/` and `--profiles`, and merged with them; see [A project's own profiles](#a-projects-own-profiles). Anything but non-empty strings is a config error. |
+| `profiles` | The project's own profile directories: a path or an array of paths, each relative to the config file that wrote it. Read ahead of `.loupe/profiles/`, the shipped profiles and `--profiles`, and merged with them; see [A project's own profiles](#a-projects-own-profiles). Anything but non-empty strings is a config error. |
 | `profile` | Pins profile selection: a profile id, or `"none"` for no profile at all, without emptying `designSystem.packages`. `--profile` outranks it. |
 | `componentRegistry` | A component-currency registry (recommended/legacy/locked/experimental per component+package, and optionally each component's styling `surface` — `{ "properties": { "font-size": "variant", "border-radius": null } }` — which `system/override` and `typography/in-css` read; a registry recording none on any entry keeps `system/override`'s pre-surface reading, where every appearance property on a bound class blocks): an inline array, or a path. `--components` merges a second registry over it, the config's own winning on `package::name`. Distinct from `designSystem.components` (the layout/text categorization) — same word, unrelated concern. |
 
@@ -1496,7 +1530,8 @@ After the lint and the typecheck, `npm test` runs every suite, in this order:
 cache, and the hook paying only for what it prints), `tests/index-cache.ts` (a
 cached run equal, byte for byte, to an uncached one after every kind of change),
 `tests/scan-pool.ts` (worker scans equal to in-process ones, from source and
-from the bundle), `tests/multi-ds.ts` (registry scoping and profile selection —
+from the bundle), `tests/semver.ts` (the version ranges profile selection
+compares), `tests/multi-ds.ts` (registry scoping and profile selection —
 which design system answers for a file), `tests/scopes.ts` (token scopes: the
 schema's validation, the generic table's parity with what it replaced, `fix`
 holding back an off-role token, and `tokens/misapplied-token`),
