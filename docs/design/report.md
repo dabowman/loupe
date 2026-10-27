@@ -87,7 +87,8 @@ finding: their consumers count, fingerprint and fix findings, not lines.
 
 ### Misplaced directives are reported
 
-`isSuppressed` anchors to the finding's line and the one above it, so a
+`isSuppressed` anchors to the finding's line and the one above it (a directive
+that trails code anchors to its own line only), so a
 directive naming the right rule in the right file, a few lines off, mutes
 nothing and says nothing. Every failure mode that produces one is silent: a
 comment below the element rather than above it, one inside a JSX attribute list,
@@ -97,13 +98,17 @@ one on an import specifier whose finding anchors elsewhere.
 single most expensive thing to debug from the report alone**: the hint is
 already followed, the finding is still there, and nothing says the placement is
 what failed. Retrying blind is what an agent does next, and the retry message is
-identical. Naming the two line numbers turns a blind retry into a move.
+identical. Naming the two line numbers turns a blind retry into a move. When
+the directive trails the line above the finding, the note also says why it
+missed: a directive at the end of a line covers that line alone.
 
 Where the line a correct directive would occupy is already taken by a directive
 for a different rule on the same node, the remedy is the comma list rather than
 a move — only the nearest line is consulted, so stacking a second comment does
 not work, and displacing one would silence a suppression someone else signed
-off.
+off. A directive trailing code on that line doesn't count as occupying it: it
+covers only its own line, so a new directive can go above the finding without
+displacing anything. `fix --judge` and the UI's mute read it the same way.
 
 ### The terse (hook) report
 
@@ -610,6 +615,15 @@ limit of that defence — an *indented* example inside a doc comment is still
 first in its comment once the asterisks are stripped, so a file quoting the
 grammar verbatim under a scanned `src/` is writing a live directive.
 
+**The comment may start its line or trail code.** A directive written after the
+code it excuses (`padding: 0; /* <keyword> <ids> -- <reason> */`) is the form
+most hand-written exceptions take, and the form css-hygiene accepted. Reading it
+as prose turned a signed-off exception into a finding without saying why, and
+`loupe suppressions` didn't list it either. A trailing comment is found only on
+a line that is not itself a comment, so a comment quoting the grammar partway
+through stays prose. `#` is not a trailing opener, because mid-line it is
+usually a colour or an id.
+
 **Read aliases keep a rename from orphaning written directives.** Every keyword
 the engine knows *mutes*, whichever one the active config asks people to write.
 What an alias does not widen is prose: a comment that merely opens with another
@@ -619,11 +633,20 @@ halves are load-bearing — prose must not become an error, and a directive
 someone signed off must never go silent. **Silence is the one outcome a
 written-down reason can never have.**
 
-A directive mutes its own line and the one above — the two natural spots for a
-trailing or leading comment. `scopeLines` lets a CSS rule's selector line mute
-findings on its own declarations, so muting a whole block doesn't require one
-comment per declaration, which is precisely the friction that pushes people
-toward a blanket disable.
+A directive on its own line mutes findings on that line and the next. A finding
+is muted by a directive on its own line or the line above, which are the two
+natural spots for a leading or trailing comment. `scopeLines` lets a CSS rule's
+selector line mute findings on its own declarations, so muting a whole block
+doesn't require one comment per declaration, which is precisely the friction
+that pushes people toward a blanket disable.
+
+**A directive trailing code covers its own line, never the next one.** Written
+at the end of a declaration, it is about that declaration. If it reached the
+next line too, it would silently mute a finding nobody signed off. It is still
+read as its scope's own line (a selector, an element, an import), which
+`scopeLines` lists first. So `.x { /* <keyword> … */` covers the rule, the same
+as a directive above the selector. A trailing directive's block comment doesn't
+extend over the lines it wraps onto either.
 
 A block comment's continuation lines are covered, but **the closer is searched
 for within a bound**: a comment that never closes is a broken file, and

@@ -9,7 +9,9 @@
  * keyword — is not a mute but its own violation (`suppression/malformed`).
  *
  * The directive must be the first thing in its comment, which is what stops the
- * checker flagging its own documentation. Note the limit of that defence: an
+ * checker flagging its own documentation. The comment may start its own line,
+ * where it covers that line and the next, or trail code, where it covers its own
+ * line alone: `padding: 0; /* <keyword> <ids> -- <reason> *\/`. Note the limit of that defence: an
  * *indented* example inside a doc comment is still first in its comment once the
  * asterisks are stripped, so a file that quotes the grammar verbatim under a
  * scanned `src/` is writing a live directive. Write it the way this comment does.
@@ -39,6 +41,9 @@ export const directive = (keyword: string, rules: string, reason: string): strin
 // opener admits a space before the comment (`{ /* … */ }`), the form WordPress's
 // prettier config mandates.
 const OPENER = /^[\s*]*(?:\/\/+|\/\*+|\{\s*\/\*+|<!--|#+)?\s*/;
+// The same openers, met after code on the line. `#` is left out: mid-line it is a
+// colour or an id far more often than a comment.
+const TRAIL_OPENER = '(?:\\{\\s*\\/\\*+|\\/\\*+|\\/\\/+|<!--)\\s*';
 
 /**
  * The lines after `i` that a directive's own block comment still covers.
@@ -108,16 +113,36 @@ export function makeSuppressionParser({
 	const written = new RegExp(`^(?:${alternation([keyword, ...blanket])})(?![\\w-])`);
 	// The cheap whole-line filter — everything that could reach either gate.
 	const anyHead = [...heads, ...blanket];
+	// A comment opened after code, whose first word is a head.
+	const trailer = new RegExp(`${TRAIL_OPENER}(?=(?:${alternation(anyHead)})(?![\\w-]))`);
+
+	/**
+	 * The directive text of a comment that trails code on `raw`, or null.
+	 *
+	 * Not on a line that is itself a comment: a keyword after an opener there is
+	 * prose quoting the grammar, and stays prose.
+	 *
+	 * ponytail: like `spannedLines`, read off the line, so `"// <keyword> …"` in a
+	 * string literal after code reads as a comment.
+	 */
+	const trailing = (raw: string): string | null => {
+		const lead = OPENER.exec(raw)?.[0] ?? '';
+		if (lead.trim() !== '') return null;
+		const m = trailer.exec(raw);
+		return m ? raw.slice(m.index + m[0].length) : null;
+	};
 
 	/**
 	 * Logic, per line of the file:
 	 *   the line contains no keyword at all                → prose, skipped cheaply
 	 *   a keyword is not the first thing on it, once the
-	 *   comment opener is stripped                         → prose, skipped
+	 *   comment opener is stripped, and it is not the first
+	 *   thing in a comment trailing code either            → prose, skipped
 	 *   `<kw> <ruleIds> -- <reason>`, the reason being
 	 *   something other than the comment terminator        → a directive: it mutes those
 	 *                                                        rules on this line and on
-	 *                                                        every line its comment spans
+	 *                                                        every line its comment spans;
+	 *                                                        trailing code, on this line only
 	 *   the line opens with the configured keyword or one
 	 *   of the blanket forms, in any shape                 → suppression/malformed
 	 *   it has a directive's shape — a keyword, optionally
@@ -131,13 +156,16 @@ export function makeSuppressionParser({
 		const owners = new Map<number, Directive[]>();
 		const directives: Directive[] = [];
 		const malformed: MalformedDirective[] = [];
+		const trailers = new Set<number>();
 		const lines = text.split('\n');
 		for (let i = 0; i < lines.length; i++) {
 			const raw = lines[i];
 			if (raw === undefined || !anyHead.some((p) => raw.includes(p))) continue;
-			const stripped = raw.replace(OPENER, '');
+			const own = raw.replace(OPENER, '');
 			// Every gate below is `^`-anchored on a member of `anyHead`, so this is
 			// output-identical and keeps prose that mentions a keyword off the regex.
+			const trail = anyHead.some((p) => own.startsWith(p)) ? null : trailing(raw);
+			const stripped = trail ?? own;
 			if (!anyHead.some((p) => stripped.startsWith(p))) continue; // prose, not a directive
 			const line = i + 1;
 			const m = stripped.match(strict);
@@ -154,13 +182,16 @@ export function makeSuppressionParser({
 					// Carried only when it is not the keyword the config asks for, so
 					// `loupe suppressions` can name the rename.
 					...(used === keyword ? {} : { alias: used }),
+					...(trail === null ? {} : { trailing: true }),
 				};
 				directives.push(directive);
+				if (trail !== null) trailers.add(line);
 				// A block comment covers every line it spans, not just the one the keyword
 				// sits on. `isSuppressed` looks only at the finding's line and the one
 				// above, so a directive whose comment closes two lines higher anchors to
 				// nothing — and a formatter wraps a reason worth writing.
-				for (const l of [line, ...spannedLines(lines, i, raw, stripped)]) {
+				// A trailing directive covers its own line, so a wrapped one covers nothing more.
+				for (const l of trail === null ? [line, ...spannedLines(lines, i, raw, stripped)] : [line]) {
 					const set = byLine.get(l) ?? new Set<string>();
 					for (const id of ids) set.add(id);
 					byLine.set(l, set);
@@ -179,7 +210,7 @@ export function makeSuppressionParser({
 				});
 			}
 		}
-		return { byLine, owners, directives, malformed };
+		return { byLine, owners, trailing: trailers, directives, malformed };
 	};
 }
 
@@ -189,14 +220,20 @@ export function makeSuppressionParser({
  * CSS rule's selector line mute findings on its own declarations, so muting a
  * whole block doesn't require one comment per declaration (which is precisely
  * the friction that pushes people toward a blanket disable).
+ *
+ * A directive trailing code (a line in `trailing`) is about the code it trails:
+ * read for the finding's own line, and for the scope's own line — a selector, an
+ * element, an import — which `scopeLines` names first. Never as the line above
+ * anything, so one at the end of a declaration does not reach the next.
  */
 export function isSuppressed(
 	byLine: Map<number, Set<string>>,
 	line: number,
 	ruleId: string,
 	scopeLines: readonly number[] = [],
+	trailing: ReadonlySet<number> = new Set(),
 ): boolean {
-	return mutingLine(byLine, line, ruleId, scopeLines) !== null;
+	return mutingLine(byLine, line, ruleId, scopeLines, trailing) !== null;
 }
 
 /** The line whose directive mutes a finding, by the same lookup as `isSuppressed`; null if none does. */
@@ -205,8 +242,10 @@ export function mutingLine(
 	line: number,
 	ruleId: string,
 	scopeLines: readonly number[] = [],
+	trailing: ReadonlySet<number> = new Set(),
 ): number | null {
 	for (const L of [line, line - 1, ...scopeLines]) {
+		if (trailing.has(L) && L !== line && L !== scopeLines[0]) continue;
 		const s = byLine.get(L);
 		if (s?.has(ruleId)) return L;
 	}
@@ -225,7 +264,7 @@ export class MuteLedger {
 
 	/** Mute `ruleId` at `line` if a directive covers it, crediting that directive. */
 	mute(supp: Suppressions, line: number, ruleId: string, scopeLines: readonly number[] = []): boolean {
-		const L = mutingLine(supp.byLine, line, ruleId, scopeLines);
+		const L = mutingLine(supp.byLine, line, ruleId, scopeLines, supp.trailing);
 		if (L === null) return false;
 		for (const d of supp.owners.get(L) ?? [])
 			if (d.rules.includes(ruleId)) this.used.set(d, (this.used.get(d) ?? new Set()).add(ruleId));

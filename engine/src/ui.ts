@@ -742,7 +742,7 @@ export async function ui(opts: UiOptions): Promise<UiHandle> {
 				// decline the same writes or the two surfaces disagree about what a mute
 				// means.
 				const why = directiveRefusal(lines, finding.line, (line) =>
-					(shown?.directives ?? []).some((d) => d.file === finding.file && d.line === line),
+					(shown?.directives ?? []).some((d) => d.file === finding.file && d.line === line && !d.trailing),
 				);
 				if (why) return send(res, 409, { error: why });
 				writeAbove(
