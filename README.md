@@ -857,7 +857,26 @@ being skipped in silence — a clean run should mean *checked and clean*, never
 ```
 
 Rule id and reason are both mandatory; anything looser is its own finding. That
-inversion keeps the escape hatch available and legible. Audit with
+inversion keeps the escape hatch available and legible.
+
+A directive can sit in either of two places. On a line of its own, it covers
+that line and the next. At the end of a line of code, it covers that line only.
+On a selector line, it covers that rule's declarations:
+
+```css
+.acme-panel {
+	padding: 0; /* wpds-allow system/override -- Stack exposes no padding prop */
+	margin: 0;  /* not covered by the directive above */
+}
+```
+
+```jsx
+<div className="acme-chrome" /> { /* wpds-allow system/raw-element -- third-party mount point */ }
+```
+
+The same comment forms work in both places: `/* */`, `//` and `{ /* */ }`.
+Malformed trailing directives report as `suppression/malformed` in the same way
+as own-line ones. Audit with
 `loupe suppressions`, which also lists every rule turned off in config, with
 the reason its setting gives (`"<rule>": { "severity": "off", "reason": "..." }`)
 or `no reason given`; `loupe suppressions --stale` lists only the directives
