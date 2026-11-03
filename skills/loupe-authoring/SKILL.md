@@ -203,6 +203,11 @@ keyword `loupe status` printed under `suppress:`:
 .acme-panel { padding: var(--space-l); }
 ```
 
+A directive on its own line covers that line and the next. One at the end of a
+line of code (`padding: 0; /* <keyword> system/override -- … */`, or
+`{ /* … */ }` after a JSX element) covers that line only. On a selector line,
+either form covers the rule's declarations.
+
 The rule id and the reason are both mandatory; a bare or blanket disable is
 itself a blocking finding. This inversion is deliberate — the escape hatch stays
 available and stays legible, so suppressions can be audited later with

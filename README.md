@@ -857,7 +857,26 @@ being skipped in silence — a clean run should mean *checked and clean*, never
 ```
 
 Rule id and reason are both mandatory; anything looser is its own finding. That
-inversion keeps the escape hatch available and legible. Audit with
+inversion keeps the escape hatch available and legible.
+
+A directive can sit in either of two places. On a line of its own, it covers
+that line and the next. At the end of a line of code, it covers that line only.
+On a selector line, it covers that rule's declarations:
+
+```css
+.acme-panel {
+	padding: 0; /* wpds-allow system/override -- Stack exposes no padding prop */
+	margin: 0;  /* not covered by the directive above */
+}
+```
+
+```jsx
+<div className="acme-chrome" /> { /* wpds-allow system/raw-element -- third-party mount point */ }
+```
+
+The same comment forms work in both places: `/* */`, `//` and `{ /* */ }`.
+Malformed trailing directives report as `suppression/malformed` in the same way
+as own-line ones. Audit with
 `loupe suppressions`, which also lists every rule turned off in config, with
 the reason its setting gives (`"<rule>": { "severity": "off", "reason": "..." }`)
 or `no reason given`; `loupe suppressions --stale` lists only the directives
@@ -1194,7 +1213,7 @@ pattern registries that `system/locked-component`, `system/superseded-component`
 and the composite rules read — so pass them with `--profiles`: without them
 those rules are off, and the report is silently clean of them.
 
-Every tagged release carries these binaries, and the first is v0.8.0, so before
+Every tagged release carries these binaries, and the first is v0.8.1, so before
 that tag is pushed — or on a fork that has not pushed one of its own — the URLs
 below return 404.
 
@@ -1223,7 +1242,7 @@ check what you downloaded — every release carries `SHA256SUMS`:
 
 ```yaml
 - run: |
-    base=https://github.com/dabowman/loupe/releases/download/v0.8.0
+    base=https://github.com/dabowman/loupe/releases/download/v0.8.1
     curl -fsSL -O "$base/loupe-linux-x64" -O "$base/SHA256SUMS"
     sha256sum --ignore-missing -c SHA256SUMS
     chmod +x loupe-linux-x64

@@ -2,7 +2,7 @@
   "name": "loupe-vscode",
   "displayName": "Loupe",
   "description": "Design-system conformance, in the editor. Findings on save, the rule's guidance on hover, its fix as a quick fix.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "dabowman",
   "license": "MIT",
   "repository": {

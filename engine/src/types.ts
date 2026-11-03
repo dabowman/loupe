@@ -295,6 +295,8 @@ export interface Directive {
 	reason: string;
 	/** The read alias it was written with, when that is not the active keyword. */
 	alias?: string;
+	/** Written after code on its line, so it covers that line alone rather than the next one too. */
+	trailing?: true;
 	/**
 	 * The rule ids it names that muted nothing on this run: dead weight, or a
 	 * typo. Set only by a run that applied suppressions to the directive's file,
@@ -315,6 +317,8 @@ export interface Suppressions {
 	byLine: Map<number, Set<string>>;
 	/** The directives covering each line of `byLine`, for crediting a mute to the one that did it. */
 	owners: Map<number, Directive[]>;
+	/** Lines whose directive trails code: read for findings on that line only. */
+	trailing: Set<number>;
 	directives: Directive[];
 	malformed: MalformedDirective[];
 }

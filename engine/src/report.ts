@@ -105,7 +105,8 @@ const MAX_NEAR_MISSES = 5;
 /**
  * Directives written for a finding that is still firing — the placement missed.
  *
- * `isSuppressed` anchors to the finding's line and the one above it, so a
+ * `isSuppressed` anchors to the finding's line and the one above it (a
+ * directive trailing code, to its own line alone), so a
  * directive naming the right rule in the right file, a few lines off, mutes
  * nothing and says nothing. Every failure mode that produces one is silent, so
  * naming the two line numbers turns a blind retry into a move.
@@ -121,8 +122,9 @@ function nearMisses(result: AnalyzeResult | BaselinedResult): string[] {
 		// The line a correct directive would occupy may already be taken by a directive
 		// for a different rule on the same node. Only the nearest line is consulted, so
 		// the remedy there is the comma list, not a move that displaces it.
+		// A directive trailing code on that line covers only its own, so it occupies nothing.
 		const occupant = result.directives.find(
-			(d) => d.file === f.file && d.line === f.line - 1 && !d.rules.includes(f.rule),
+			(d) => d.file === f.file && d.line === f.line - 1 && !d.trailing && !d.rules.includes(f.rule),
 		);
 		out.push(
 			occupant
@@ -130,7 +132,10 @@ function nearMisses(result: AnalyzeResult | BaselinedResult): string[] {
 						`\`${occupant.rules.join(', ')}\` — only the nearest line is read, so name both on it: ` +
 						`\`${occupant.rules.join(', ')}, ${f.rule} -- <reason>\`.`
 				: `a \`${f.rule}\` directive is on ${f.file}:${near.line}, but this finding anchors to line ${f.line} — ` +
-						`move it to line ${f.line}, or the line directly above it.`,
+						(near.trailing && near.line === f.line - 1
+							? 'a directive at the end of a line covers that line alone: move it to the end of line ' +
+								`${f.line}, or onto its own line directly above it.`
+							: `move it to the end of line ${f.line}, or onto its own line directly above it.`),
 		);
 	}
 	return out;

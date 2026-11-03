@@ -459,6 +459,9 @@ honest answer is that the finding should be fixed.
 /* <keyword> system/override -- Notice exposes no dismissible-icon slot */
 ```
 
+Write it on its own line above the finding's line, or at the end of that line.
+A directive at the end of a line covers that line only, never the one below it.
+
 A good reason names the constraint that makes the finding wrong here. "Legacy
 code", "intentional", "matches existing style" are not reasons — the first two
 describe nothing and the third is the drift restating itself.

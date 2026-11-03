@@ -727,6 +727,32 @@ await check('a taken anchor line is answered with the comma form, not a move', a
 	}
 });
 
+// A trailing directive covers its own line alone. One trailing the line above
+// its finding is the near miss; one trailing the finding's own line is no miss
+// at all, and must not be sent anywhere.
+await check('a directive trailing the line above is told it covers its own line only', async () => {
+	const { result, config, root } = await run({
+		'loupe.config.json': CONFIG,
+		'src/A.jsx': [
+			'export const A = () => (',
+			'\t<> { /* wpds-allow system/raw-element -- trails the wrong line */ }',
+			'\t\t<p className="wf-note">x</p>',
+			'\t\t<p className="wf-note">y</p> { /* wpds-allow system/raw-element -- trails the right one */ }',
+			'\t</>',
+			');',
+		].join('\n'),
+		'styles/a.css': '.wf-note { color: red }',
+	});
+	try {
+		const out = formatAgent(result, config);
+		assert(/directive is on src\/A\.jsx:2/.test(out), `did not name where the directive sits:\n${out}`);
+		assert(/covers that line alone: move it to the end of line 3/.test(out), `did not say why:\n${out}`);
+		assert(!/anchors to line 4/.test(out), `sent a directive that applies somewhere else:\n${out}`);
+	} finally {
+		cleanup(root);
+	}
+});
+
 await check('a clean report carries no near-miss noise', async () => {
 	const { result, config, root } = await run({
 		'loupe.config.json': CONFIG,

@@ -279,9 +279,13 @@ export function applyKeeps(
 	root: string,
 	findings: readonly FixCandidate[],
 	keyword: string,
-	{ dry = false, directives = [] }: { dry?: boolean; directives?: readonly Pick<Directive, 'file' | 'line'>[] } = {},
+	{
+		dry = false,
+		directives = [],
+	}: { dry?: boolean; directives?: readonly Pick<Directive, 'file' | 'line' | 'trailing'>[] } = {},
 ): { applied: KeptValue[]; skipped: SkippedKeep[] } {
-	const taken = new Set(directives.map((d) => `${d.file}\u0000${d.line}`));
+	// A directive trailing code covers only its own line, so writing above the next one displaces nothing.
+	const taken = new Set(directives.filter((d) => !d.trailing).map((d) => `${d.file}\u0000${d.line}`));
 	// One entry per flagged declaration, at the line it is actually written on:
 	// a collapsed finding is a whole CSS rule, and its parts are not all on the
 	// line it was reported at.

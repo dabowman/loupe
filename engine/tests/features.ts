@@ -1313,6 +1313,99 @@ await check('a block comment that runs too long stops covering what follows', as
 	assert(at(r, 'system/raw-element').length > 0, 'a directive that far away must not still be muting');
 });
 
+// The form css-hygiene accepted and most hand-written directives use: the reason
+// at the end of the line it is about. It parsed as prose, so a signed-off
+// exception reported as a finding and the directive was not even listed.
+await check('a directive trailing a declaration mutes that declaration and not the next', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': [
+			'.acme-a {',
+			'\tcolor: #dcdcde; /* wpds-allow tokens/hardcoded-value -- brand hairline, no token */',
+			'\tbackground: #826200;',
+			'\tborder-color: #826200; /* wpds-allow R2 -- the legacy id resolves the same */',
+			'}',
+			'.acme-c { /* wpds-allow tokens/hardcoded-value -- on the selector, it covers the rule */',
+			'\tcolor: #dcdcde;',
+			'}',
+			'.acme-d { display: block; } /* wpds-allow tokens/hardcoded-value -- not the next rule */',
+			'.acme-e { color: #826200; }',
+		].join('\n'),
+		'styles/b.scss': '.acme-b {\n\tcolor: #dcdcde; // wpds-allow tokens/hardcoded-value -- scss line comment\n}\n',
+		'src/A.jsx': 'export const A = () => <div className="acme-a acme-b acme-c acme-d acme-e" />;',
+	});
+	const lines = at(r, 'tokens/hardcoded-value').map((f) => `${f.file}:${f.line}`);
+	assert(
+		lines.join() === 'styles/a.css:3,styles/a.css:10',
+		`only the undirected declarations should report: ${lines.join(', ')}`,
+	);
+	assert(r.directives.length === 5, `every trailing directive is listed: ${JSON.stringify(r.directives)}`);
+	assert(
+		r.directives.every((d) => d.trailing),
+		`all of them trail: ${JSON.stringify(r.directives)}`,
+	);
+	assert(
+		r.directives.map((d) => (d.stale ? d.line : '')).join() === ',,,9,',
+		`only the one before the next rule is stale: ${JSON.stringify(r.directives)}`,
+	);
+	assert(r.directives[1]?.rules.join() === 'tokens/hardcoded-value', 'R2 is read as its rule');
+});
+
+await check('a directive trailing a JSX element mutes that element and not the next', async () => {
+	const src = [
+		'export const A = () => (',
+		'\t<>',
+		'\t\t<p className="acme-note">x</p> { /* wpds-allow system/raw-element -- third-party markup */ }',
+		'\t\t<p className="acme-note">y</p>',
+		'\t</>',
+		');',
+		'export const B = () => <p className="acme-note">z</p>; // wpds-allow system/raw-element -- line comment',
+		'export const C = () => <p className="acme-note">w</p>; /* wpds-allow system/raw-element -- block */',
+	].join('\n');
+	const r = await run({ 'loupe.config.json': CONFIG(), 'src/A.jsx': src, 'src/a.css': '.acme-note { color: red }' });
+	const lines = at(r, 'system/raw-element').map((f) => f.line);
+	assert(lines.join() === '4', `only the element after the directive's line should report: ${lines.join(', ')}`);
+	assert(r.directives.length === 3 && r.directives.every((d) => !d.stale), JSON.stringify(r.directives));
+});
+
+await check('a malformed trailing directive is malformed, and prose quoting one is prose', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': [
+			'.acme-a {',
+			'\tcolor: #dcdcde; /* wpds-allow tokens/hardcoded-value */',
+			'\tbackground: #dcdcde; /* wpds-allow -- no rule named */',
+			'\tborder-color: #dcdcde; /* wpds-allow-file */',
+			'}',
+			'/* Write it at the end of the line: color: red; /* wpds-allow tokens/hardcoded-value -- why */',
+		].join('\n'),
+		'src/A.jsx': 'export const A = () => <div className="acme-a" />; // wpds-disable',
+	});
+	const bad = at(r, 'suppression/malformed').map((f) => `${f.file}:${f.line}`);
+	assert(
+		bad.join() === 'src/A.jsx:1,styles/a.css:2,styles/a.css:3,styles/a.css:4',
+		`expected four malformed: ${bad.join(', ')}`,
+	);
+	assert(at(r, 'tokens/hardcoded-value').length === 3, 'a malformed directive mutes nothing');
+	assert(!r.directives.length, `the quoted grammar is not a directive: ${JSON.stringify(r.directives)}`);
+});
+
+await check('a trailing directive with nothing on its own line is stale', async () => {
+	const r = await run({
+		'loupe.config.json': CONFIG(),
+		'styles/a.css': [
+			'.acme-a {',
+			'\tdisplay: block; /* wpds-allow tokens/hardcoded-value -- was above the colour */',
+			'\tcolor: #dcdcde;',
+			'}',
+		].join('\n'),
+		'src/A.jsx': 'export const A = () => <div className="acme-a" />;',
+	});
+	one(at(r, 'tokens/hardcoded-value'), 'a trailing directive does not reach the next line');
+	const [d] = r.directives;
+	assert(d?.stale?.join() === 'tokens/hardcoded-value', `it muted nothing: ${JSON.stringify(d)}`);
+});
+
 // ── a replacement has to be one you could actually adopt ──────────────────────
 
 await check('a component whose only replacements are locked or in flux does not fire', async () => {
