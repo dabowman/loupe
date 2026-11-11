@@ -70,6 +70,7 @@ plugin.
 | `skills/loupe-authoring` | The authoring rules — order of resort, gap over margin, props over CSS, tokens by role. Load before writing UI. |
 | `skills/loupe-patterns` | How the composite registry works, and the discipline of checking it. Load before assembling a header, modal, action bar, sidebar. |
 | `skills/loupe-remediation` | Per-rule remedies, and the checks that stop a "fix" from silently changing rendering. |
+| `skills/loupe-interactions` | Interaction Redirects: whether to answer, ask or show UI, which control, who acts, and how much checking a surface needs. Includes a Slack profile for chat agents. Load before designing how a person and an agent hand work back and forth. |
 | `agents/loupe-fixer` | Per-file remediation agent. `/loupe-fix` fans it out once the work spans enough files to be worth it. |
 | `commands/` | `/loupe-init`, `/loupe-audit`, `/loupe-fix`, `/loupe-baseline`, `/loupe-report` |
 | `hooks/hooks.json` | `PostToolUse` on what the edit just introduced, `Stop` across changed files |
@@ -86,7 +87,7 @@ plugin.
 | `docs/design/` | Design notes: why the engine is built the way it is, and the measurements behind its tuned numbers |
 | `pi/` | Experimental. The extension that ports the hooks and commands to the pi coding agent (`@earendil-works/pi-coding-agent`) — see [In pi](#in-pi) |
 
-The three skills are design-system agnostic: each one starts at `loupe status`
+The three conformance skills are design-system agnostic: each one starts at `loupe status`
 to learn which system is in play, then reads that system's own notes —
 `authoring.md`, `patterns.md`, `remediation.md` — out of the active profile.
 The rules are the same everywhere; the component names, token families and
@@ -662,7 +663,7 @@ profiles/
     …the same
 ```
 
-The three skills carry the rules — order of resort, gap over margin, tokens by
+The three conformance skills carry the rules — order of resort, gap over margin, tokens by
 role — and nothing else. Each starts at `loupe status`, reads which system is in
 play and where its profile is, and loads the matching `.md`. So the same skill
 that keeps a WordPress admin screen on `Stack` and `--wpds-dimension-gap-*`
@@ -1380,7 +1381,7 @@ the root `package.json` makes this repo a pi package. A pi `edit` or `write` on
 a UI file gets the `PostToolUse` check on what the edit introduced, and the end
 of each agent run gets the `Stop` check across the UI files the run wrote;
 `/loupe-init`, `/loupe-audit`, `/loupe-fix`, `/loupe-baseline` and
-`/loupe-report` are pi commands. The three skills load from `skills/` unchanged.
+`/loupe-report` are pi commands. The skills load from `skills/` unchanged.
 It runs the same `loupe hook`, so it is off until the project opts in with the
 same `LOUPE=on` switch, read today from the `env` in Claude Code's
 `.claude/settings.local.json` or from the environment pi starts in. Its known
