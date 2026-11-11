@@ -19,7 +19,8 @@
   "skills": [
     "./skills/loupe-authoring",
     "./skills/loupe-patterns",
-    "./skills/loupe-remediation"
+    "./skills/loupe-remediation",
+    "./skills/loupe-interactions"
   ],
   "commands": [
     "./commands/loupe-init.md",

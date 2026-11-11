@@ -22,8 +22,11 @@ points at it.
 | [lsp.md](lsp.md) | the language server: on-save analysis, repo-wide diagnostics, the quick fix shared with `loupe fix`, JSON-RPC framing |
 | [report.md](report.md) | the agent format, message bounding, JSON/SARIF/HTML, baseline, the suppression grammar, `fix`, `loupe serve`, `loupe ui` |
 
-Two other documents sit outside this set:
+Three other documents sit outside this set:
 
+- [interaction-redirects.md](../../skills/loupe-interactions/references/interaction-redirects.md) — the
+  Interaction Redirects spec: choosing the interaction (answer, ask or show UI;
+  which control; who acts; how much checking), with a Slack profile beside it.
 - [patterns-v2.md](../patterns-v2.md) — the pattern-language format: every field
   of the abstract file and of a realization, what reads it, and what was
   deliberately left out.
